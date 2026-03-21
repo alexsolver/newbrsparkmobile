@@ -49,6 +49,14 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Mensagens',
+          tabBarIcon: ({ color }) => <Ionicons name="chatbubbles" size={24} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
         name="notifications"
         options={{
           title: 'Avisos',
@@ -76,40 +84,24 @@ export default function TabLayout() {
 
       <Tabs.Screen
         name="scanner"
-        options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={{
-              position: 'absolute',
-              top: -18,
-              backgroundColor: colors.primary,
-              width: 60, height: 60,
-              borderRadius: 30,
-              justifyContent: 'center',
-              alignItems: 'center',
-              shadowColor: colors.primary,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 6,
-              elevation: 6,
-              borderWidth: 3,
-              borderColor: colors.cardWhite,
-            }}>
-              <Ionicons name="qr-code-outline" size={26} color="#fff" />
-            </View>
-          ),
-        }}
+        options={{ href: null }}
       />
 
       {/* Tabs ocultas */}
       <Tabs.Screen name="calendar"   options={{ href: null }} />
       <Tabs.Screen name="documents"  options={{ href: null }} />
+      <Tabs.Screen name="profile"    options={{ href: null }} />
 
       <Tabs.Screen
-        name="profile"
+        name="family"
         options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
+          title: 'Família',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ position: 'relative' }}>
+              <Ionicons name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={24} color={focused ? '#D97706' : color} />
+            </View>
+          ),
+          tabBarActiveTintColor: '#D97706',
         }}
       />
     </Tabs>

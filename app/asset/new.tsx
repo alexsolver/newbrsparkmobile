@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Switch, ActivityIndicator } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,10 @@ const ASSET_TYPES = [
 
 export default function NewAssetScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ parentId?: string; parentTitle?: string }>();
+  const parentId    = params.parentId    || null;
+  const parentTitle = params.parentTitle ? decodeURIComponent(params.parentTitle) : null;
+
   const [type, setType] = useState<string | null>(null);
 
   // Core Fields
@@ -119,34 +123,29 @@ export default function NewAssetScreen() {
       type: type as any,
       status: 'OPERACIONAL',
       statusType: 'success',
+      parentId: parentId || null,
       imageUrl: photos.length > 0 ? photos[0] : undefined,
-      details: { 
-        inventoryId,
-        brand,
-        model,
-        serialNumber,
-        costCenter,
-        acquisitionValue,
-        cep,
-        street,
-        streetNumber,
-        complement,
-        neighborhood,
-        city,
-        state,
-        gpsCoordinates,
-        owner,
-        department,
-        customFields, 
-        photos
+      details: {
+        inventoryId, brand, model, serialNumber,
+        costCenter, acquisitionValue,
+        cep, street, streetNumber, complement, neighborhood, city, state,
+        gpsCoordinates, owner, department, customFields, photos
       }
     };
-    
-    const existing = getLocalAssets();
-    saveAssetsLocal([newAsset, ...existing]);
+
+    // Insere apenas o novo ativo (INSERT OR REPLACE é idempotente)
+    saveAssetsLocal([newAsset]);
     queueOfflineAction('CREATE_ASSET', newAsset);
-    logAssetHistory(newId, 'Inventário Efetuado (Onboarding)', 'Ingresso corporativo na base de dados global através de formulário eletrônico.');
-    Alert.alert('Ficha Criptografada \ud83d\udca5', 'A ficha técnica oficial do seu ativo foi implantada localmente e enviada ao servidor B2B central.');
+    logAssetHistory(newId, 'Inventário Efetuado (Onboarding)',
+      parentId
+        ? `Sub-ativo vinculado a: ${parentTitle || parentId}`
+        : 'Ingresso corporativo na base de dados global.');
+    Alert.alert(
+      parentId ? `✅ Sub-ativo Criado` : 'Ficha Criptografada 💥',
+      parentId
+        ? `"${title}" foi vinculado a "${parentTitle || parentId}".`
+        : 'A ficha do ativo foi implantada localmente.'
+    );
     ApiService.sync();
     router.back();
   };
@@ -204,12 +203,24 @@ export default function NewAssetScreen() {
     <SafeAreaView edges={['top']} style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { type ? setType(null) : router.back() }} style={styles.backButton}>
+        <TouchableOpacity onPress={() => { type ? setType(null) : router.back(); }} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">Nova Ficha de Ativo</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+          {parentId ? `Sub-ativo de "${parentTitle || '...'}"` : 'Nova Ficha de Ativo'}
+        </Text>
         <View style={{ width: 32 }} />
       </View>
+
+      {/* Banner de sub-ativo */}
+      {parentId && (
+        <View style={styles.parentBanner}>
+          <Ionicons name="git-branch-outline" size={15} color={colors.primary} />
+          <Text style={styles.parentBannerText}>
+            Vinculado a: <Text style={{ fontWeight: '800' }}>{parentTitle || parentId}</Text>
+          </Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.content}>
         
@@ -485,4 +496,6 @@ const styles = StyleSheet.create({
   photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: colors.border },
   photoAddBtn: { width: 110, height: 110, borderRadius: 12, marginRight: 12, borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.primary + '0A' },
   deletePhotoBadge: { position: 'absolute', top: 4, right: 16, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  parentBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary + '12', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.primary + '25' },
+  parentBannerText: { fontSize: 13, color: colors.primary, fontWeight: '600', flex: 1 },
 });

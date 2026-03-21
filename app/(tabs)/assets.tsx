@@ -19,29 +19,37 @@ export default function AssetsScreen() {
     }, [])
   );
 
-  const filteredAssets = assets.filter(a => a.title.toLowerCase().includes(search.toLowerCase()) || a.details?.address?.toLowerCase().includes(search.toLowerCase()));
+  const filteredAssets = assets.filter(a =>
+    a.title.toLowerCase().includes(search.toLowerCase()) ||
+    a.details?.address?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <View style={styles.container}>
       <Header />
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={colors.textLight} style={styles.searchIcon} />
-        <TextInput 
+        <TextInput
           style={styles.searchInput}
           placeholder="Buscar ativos..."
           placeholderTextColor={colors.textLight}
           value={search}
           onChangeText={setSearch}
         />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={18} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
-      <FlatList 
+      <FlatList
         data={filteredAssets}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <AssetCard 
-            asset={item} 
-            onPress={() => router.push(`/asset/${item.id}` as any)} 
+          <AssetCard
+            asset={item}
+            onPress={() => router.push(`/asset/${item.id}` as any)}
           />
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>Nenhum ativo encontrado.</Text>}

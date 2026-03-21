@@ -5,6 +5,8 @@ export interface Asset {
   imageUrl?: string;
   status: 'MAINTENANCE OK' | 'INSURANCE RENEWAL SOON' | string;
   statusType: 'success' | 'warning';
+  parentId?: string | null;       // null = ativo raiz
+  childrenCount?: number;         // calculado na query
   details?: {
     address?: string;
     mileage?: number;

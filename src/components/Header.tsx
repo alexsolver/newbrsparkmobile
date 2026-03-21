@@ -24,6 +24,9 @@ export function Header() {
           resizeMode="contain" 
         />
         
+        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/scanner' as any)}>
+          <Ionicons name="qr-code-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/assets')}>
           <Ionicons name="search" size={24} color={colors.primary} />
         </TouchableOpacity>

@@ -36,6 +36,43 @@ db.serialize(() => {
     )
   `);
 
+  // ─── Chat ───────────────────────────────────────────────────────────────────
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      avatarColor TEXT DEFAULT '#2563EB',
+      created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      roomId TEXT NOT NULL,
+      senderId TEXT NOT NULL,
+      senderName TEXT NOT NULL,
+      type TEXT DEFAULT 'text',
+      content TEXT,
+      mediaUrl TEXT,
+      timestamp INTEGER NOT NULL,
+      FOREIGN KEY (roomId) REFERENCES chat_rooms(id)
+    )
+  `);
+
+  // Salas padrão
+  db.get('SELECT COUNT(*) as count FROM chat_rooms', (err, row) => {
+    if (row && row.count === 0) {
+      const stmt = db.prepare(`INSERT INTO chat_rooms (id,name,description,avatarColor) VALUES (?,?,?,?)`);
+      stmt.run('room-geral', 'Geral',          'Canal corporativo geral',            '#2563EB');
+      stmt.run('room-manut', 'Manutenção',     'Equipe de manutenção e operações',   '#D97706');
+      stmt.run('room-tec',   'Técnico & TI',   'Suporte técnico e infraestrutura',   '#7C3AED');
+      stmt.run('room-logis', 'Logística',      'Frotas e expedição de ativos',       '#059669');
+      stmt.finalize();
+    }
+  });
+
   // Semeando o Banco Cloud caso seja a primeira vez rodando
   db.get('SELECT COUNT(*) as count FROM assets', (err, row) => {
     if (row && row.count === 0) {
@@ -90,6 +127,50 @@ app.post('/api/sync/push', (req, res) => {
 });
 
 const PORT = 3000;
+
+// ─── Chat Routes ─────────────────────────────────────────────────────────────
+// GET /api/chat/rooms
+app.get('/api/chat/rooms', (req, res) => {
+  db.all(`
+    SELECT r.*, 
+      (SELECT content FROM chat_messages WHERE roomId=r.id ORDER BY timestamp DESC LIMIT 1) as lastMessage,
+      (SELECT timestamp FROM chat_messages WHERE roomId=r.id ORDER BY timestamp DESC LIMIT 1) as lastMessageAt,
+      (SELECT senderName FROM chat_messages WHERE roomId=r.id ORDER BY timestamp DESC LIMIT 1) as lastSender
+    FROM chat_rooms r ORDER BY r.created_at ASC
+  `, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// GET /api/chat/rooms/:roomId/messages?since=timestamp
+app.get('/api/chat/rooms/:roomId/messages', (req, res) => {
+  const since = req.query.since ? parseInt(req.query.since) : 0;
+  db.all(
+    `SELECT * FROM chat_messages WHERE roomId=? AND timestamp>? ORDER BY timestamp ASC LIMIT 100`,
+    [req.params.roomId, since],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    }
+  );
+});
+
+// POST /api/chat/rooms/:roomId/messages
+app.post('/api/chat/rooms/:roomId/messages', (req, res) => {
+  const { senderId, senderName, type, content, mediaUrl } = req.body;
+  const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  const timestamp = Date.now();
+  db.run(
+    `INSERT INTO chat_messages (id,roomId,senderId,senderName,type,content,mediaUrl,timestamp) VALUES (?,?,?,?,?,?,?,?)`,
+    [id, req.params.roomId, senderId, senderName, type || 'text', content || '', mediaUrl || null, timestamp],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id, timestamp, success: true });
+    }
+  );
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n================================`);
   console.log(`🔥 BrSpark API - SaaS Backend Online`);

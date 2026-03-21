@@ -136,6 +136,7 @@ export default function NotificationsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         {categories.map(cat => {
@@ -147,7 +148,7 @@ export default function NotificationsScreen() {
               style={[styles.filterChip, active && styles.filterChipActive]}
               onPress={() => setFilter(cat)}
             >
-              {cfg && <Ionicons name={cfg.icon} size={13} color={active ? '#fff' : cfg.color} style={{ marginRight: 4 }} />}
+              {cfg && <Ionicons name={cfg.icon} size={11} color={active ? '#fff' : cfg.color} style={{ marginRight: 4 }} />}
               <Text style={[styles.filterText, active && styles.filterTextActive]}>
                 {cat === 'all' ? 'Todos' : cfg!.label}
               </Text>
@@ -194,15 +195,21 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
 
-  filterRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+  filterScroll: { flexGrow: 0, flexShrink: 0, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.cardWhite },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', flexDirection: 'row' },
   filterChip: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1.5, borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     backgroundColor: colors.cardWhite,
+    height: 32,
   },
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  filterText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
   filterTextActive: { color: '#fff' },
 
   list: { paddingHorizontal: 16, paddingBottom: 32 },

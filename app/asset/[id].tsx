@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Dimensions, TextInput, Switch, ActivityIndicator, Modal } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Dimensions, TextInput, Switch, ActivityIndicator, Modal, Clipboard } from 'react-native';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Asset } from '../../src/types/asset';
-import { getLocalAssets, queueOfflineAction, saveAssetsLocal, softDeleteAssetLocal, logAssetHistory, getAssetHistoryLocal } from '../../src/database';
+import { getLocalAssets, getChildAssets, getAssetAncestors, updateAssetParent, queueOfflineAction, saveAssetsLocal, softDeleteAssetLocal, logAssetHistory, getAssetHistoryLocal } from '../../src/database';
 import { colors } from '../../src/theme/colors';
 import { Badge } from '../../src/components/Badge';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,19 +11,24 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { ApiService } from '../../src/services/api';
 import QRCode from 'react-native-qrcode-svg';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as LocalAuthentication from 'expo-local-authentication';
+import Constants from 'expo-constants';
+import { AssetVaultService, VaultEntry, VaultCategory, VAULT_CATEGORIES } from '../../src/services/assetVault';
+import { VaultModule } from '../../src/components/VaultModule';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 const MODULES = [
   { id: 'info', title: 'Ficha Geral', subtitle: 'Registros', icon: 'information-circle-outline' as const, color: '#3B82F6' },
   { id: 'docs', title: 'Documentos', subtitle: 'Vault (PDFs)', icon: 'folder-open-outline' as const, color: '#8B5CF6' },
   { id: 'maint', title: 'Manutenção', subtitle: 'Workflow SOS', icon: 'build-outline' as const, color: '#F59E0B' },
-  { id: 'wifi', title: 'Rede & Sensores', subtitle: 'Equip IoT', icon: 'wifi-outline' as const, color: '#06B6D4' },
-  { id: 'costs', title: 'Custos', subtitle: 'Métricas TCO', icon: 'cash-outline' as const, color: '#10B981' },
-  { id: 'insurance', title: 'Seguros', subtitle: 'Apólices Ativas', icon: 'shield-checkmark-outline' as const, color: '#EF4444' },
-  { id: 'contacts', title: 'Equipe', subtitle: 'Prestadores', icon: 'people-outline' as const, color: '#6366F1' },
-  { id: 'history', title: 'Histórico', subtitle: 'Eventos GMS', icon: 'time-outline' as const, color: '#64748B' },
-  { id: 'reports', title: 'Relatórios', subtitle: 'KPIs PDF', icon: 'document-text-outline' as const, color: '#EC4899' },
+  { id: 'vault',   title: 'Vault',         subtitle: 'Cofre de Senhas',  icon: 'lock-closed' as const,            color: '#7C3AED' },
+  { id: 'costs',   title: 'Custos',         subtitle: 'Métricas TCO',   icon: 'cash-outline' as const,           color: '#10B981' },
+  { id: 'insurance', title: 'Seguros',      subtitle: 'Apólices Ativas', icon: 'shield-checkmark-outline' as const, color: '#EF4444' },
+  { id: 'contacts',  title: 'Equipe',       subtitle: 'Prestadores',     icon: 'people-outline' as const,         color: '#6366F1' },
+  { id: 'hier',    title: 'Hierarquia',     subtitle: 'Sub-ativos',      icon: 'git-branch-outline' as const,     color: '#0891B2' },
+  { id: 'history', title: 'Histórico',      subtitle: 'Eventos GMS',    icon: 'time-outline' as const,           color: '#64748B' },
+  { id: 'reports', title: 'Relatórios',     subtitle: 'KPIs PDF',       icon: 'document-text-outline' as const,  color: '#EC4899' },
 ];
 
 export default function AssetDetailScreen() {
@@ -32,9 +37,28 @@ export default function AssetDetailScreen() {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const [children,    setChildren]    = useState<Asset[]>([]);
+  const [ancestors,   setAncestors]   = useState<Asset[]>([]);
+  const [subExpanded, setSubExpanded] = useState(true);
 
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const svgRef = useRef<any>(null);
+
+  // ── Vault State ───────────────────────────────────────────────────────────────
+  const [vaultUnlocked,  setVaultUnlocked]  = useState(false);
+  const [vaultEntries,   setVaultEntries]   = useState<VaultEntry[]>([]);
+  const [vaultForm,      setVaultForm]      = useState<Partial<VaultEntry & { showPass: boolean }>>({
+    category: 'wifi', label: '', username: '', password: '', note: '',
+  });
+  const [vaultModal,     setVaultModal]     = useState(false);
+  const [editEntry,      setEditEntry]      = useState<VaultEntry | null>(null);
+  const [revealedIds,    setRevealedIds]    = useState<Set<string>>(new Set());
+  const [vaultPinModal,  setVaultPinModal]  = useState(false);
+  const [vaultPin,       setVaultPin]       = useState('');
+  const VAULT_PIN = '1234';
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const [linkModalVisible, setLinkModalVisible] = useState(false);
+  const [linkSearch, setLinkSearch] = useState('');
 
   // Ficha Geral Master
   const [editForm, setEditForm] = useState<any>({
@@ -46,11 +70,13 @@ export default function AssetDetailScreen() {
   const [fetchingCep, setFetchingCep] = useState(false);
   const [fetchingGps, setFetchingGps] = useState(false);
 
-  useEffect(() => {
+  const loadAssetData = useCallback(() => {
     const localDb = getLocalAssets();
     const found = localDb.find(a => a.id === id);
     if (found) {
       setAsset(found);
+      setChildren(getChildAssets(found.id));
+      setAncestors(getAssetAncestors(found.id));
       setEditForm({
          title: found.title || '',
          inventoryId: found.details?.inventoryId || '',
@@ -75,6 +101,14 @@ export default function AssetDetailScreen() {
       setHistoryLogs(getAssetHistoryLocal(found.id));
     }
   }, [id]);
+
+  useFocusEffect(useCallback(() => {
+    loadAssetData();
+  }, [loadAssetData]));
+
+  useEffect(() => {
+    loadAssetData();
+  }, [loadAssetData]);
 
   const fetchCepData = async () => {
      if (editForm.cep.length < 8) return;
@@ -238,8 +272,8 @@ export default function AssetDetailScreen() {
              if (dataURL.includes('base64,')) {
                 base64Code = dataURL.split('base64,')[1];
              }
-             const filepath = FileSystem.documentDirectory + `brspark_qr_${id}.png`;
-             await FileSystem.writeAsStringAsync(filepath, base64Code, { encoding: 'base64' });
+             const filepath = (FileSystem as any).documentDirectory + `brspark_qr_${id}.png`;
+             await (FileSystem as any).writeAsStringAsync(filepath, base64Code, { encoding: 'base64' });
              await Sharing.shareAsync(filepath);
           } catch(e) {
              Alert.alert('Erro Técnico', `Falha ao exportar código: ${e}`);
@@ -441,6 +475,75 @@ export default function AssetDetailScreen() {
                </View>
             ))}
 
+            {/* ─── Seção Hierarquia ─────────────────────────────────────── */}
+            <View style={[styles.formSectionHeader, {marginTop: 24, justifyContent: 'space-between'}]}>
+              <View style={{flexDirection:'row', alignItems:'center'}}>
+                <Ionicons name="git-branch-outline" size={18} color={colors.primary} />
+                <Text style={styles.formSectionTitle}>Hierarquia</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSubExpanded(v => !v)}>
+                <Ionicons name={subExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textLight} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Ativo pai atual */}
+            {asset.parentId ? (
+              <View style={styles.parentBox}>
+                <Ionicons name="arrow-up-circle-outline" size={16} color={colors.primary} />
+                <Text style={styles.parentBoxText}>
+                  Pertence a: {getLocalAssets().find(a => a.id === asset.parentId)?.title || asset.parentId}
+                </Text>
+                <TouchableOpacity onPress={() => {
+                  updateAssetParent(asset.id, null);
+                  setAsset(prev => prev ? {...prev, parentId: null} : prev);
+                }}>
+                  <Ionicons name="close-circle-outline" size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.parentSelectBtn} onPress={() => {
+                const all = getLocalAssets().filter(a => a.id !== asset.id);
+                Alert.alert('Vincular Ativo Pai', 'Selecione o ativo pai:', [
+                  ...all.map(a => ({ text: a.title, onPress: () => {
+                    updateAssetParent(asset.id, a.id);
+                    setAsset(prev => prev ? {...prev, parentId: a.id} : prev);
+                    logAssetHistory(asset.id, 'VINCULADO A PAI', `Vinculado a: ${a.title}`);
+                  }})),
+                  { text: 'Cancelar', style: 'cancel' as const }
+                ]);
+              }}>
+                <Ionicons name="link-outline" size={15} color={colors.primary} />
+                <Text style={{color: colors.primary, fontWeight: '700', fontSize: 13, marginLeft: 6}}>Vincular a Ativo Pai</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Sub-ativos */}
+            {subExpanded && (
+              <View style={styles.childrenSection}>
+                {children.length === 0 ? (
+                  <Text style={{fontSize: 13, color: colors.textLight, fontStyle: 'italic', marginBottom: 8}}>Sem sub-ativos vinculados</Text>
+                ) : (
+                  children.map(child => (
+                    <TouchableOpacity key={child.id} style={styles.childRow}
+                      onPress={() => router.push(`/asset/${child.id}` as any)}>
+                      <Ionicons name="cube-outline" size={16} color={colors.primary} style={{marginRight: 8}} />
+                      <Text style={{flex:1, fontWeight:'700', color: colors.primary, fontSize: 13}} numberOfLines={1}>{child.title}</Text>
+                      {child.childrenCount! > 0 && (
+                        <Text style={styles.childBadge}>{child.childrenCount} sub</Text>
+                      )}
+                      <Ionicons name="chevron-forward" size={14} color={colors.textLight} />
+                    </TouchableOpacity>
+                  ))
+                )}
+                <TouchableOpacity style={styles.addChildBtn}
+                  onPress={() => router.push(`/asset/new?parentId=${asset.id}&parentTitle=${encodeURIComponent(asset.title)}` as any)}>
+                  <Ionicons name="add" size={16} color={colors.primary} />
+                  <Text style={{color: colors.primary, fontWeight:'800', fontSize: 13, marginLeft: 6}}>Adicionar Sub-ativo</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Fotos */}
             <View style={[styles.formSectionHeader, {marginTop: 24}]}>
                <Ionicons name="images-outline" size={18} color={colors.primary} />
                <Text style={styles.formSectionTitle}>Mídia In Loco</Text>
@@ -490,6 +593,88 @@ export default function AssetDetailScreen() {
             </TouchableOpacity>
           </View>
         );
+      case 'vault':
+        return (
+          <VaultModule
+            assetId={asset.id}
+            unlocked={vaultUnlocked}
+            entries={vaultEntries}
+            revealedIds={revealedIds}
+            vaultModal={vaultModal}
+            vaultForm={vaultForm}
+            editEntry={editEntry}
+            vaultPinModal={vaultPinModal}
+            vaultPin={vaultPin}
+            isExpoGo={isExpoGo}
+            VAULT_PIN={VAULT_PIN}
+            onLockOpen={async () => {
+              if (isExpoGo) { setVaultPin(''); setVaultPinModal(true); return; }
+              const { success } = await LocalAuthentication.authenticateAsync({
+                promptMessage: 'Autentique para acessar o Vault',
+                cancelLabel: 'Cancelar',
+              });
+              if (success) {
+                const data = await AssetVaultService.getEntries(asset.id);
+                setVaultEntries(data);
+                setVaultUnlocked(true);
+              } else {
+                Alert.alert('Acesso Negado', 'Biometria não reconhecida.');
+              }
+            }}
+            onToggleReveal={(id) => setRevealedIds(prev => {
+              const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+            })}
+            onOpenAdd={() => {
+              setEditEntry(null);
+              setVaultForm({ category: 'wifi', label: '', username: '', password: '', note: '' });
+              setVaultModal(true);
+            }}
+            onOpenEdit={(e) => {
+              setEditEntry(e);
+              setVaultForm({ ...e });
+              setVaultModal(true);
+            }}
+            onDelete={async (entryId) => {
+              Alert.alert('Excluir?', 'Remover esta credencial do Vault?', [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Excluir', style: 'destructive', onPress: async () => {
+                  await AssetVaultService.deleteEntry(asset.id, entryId);
+                  setVaultEntries(await AssetVaultService.getEntries(asset.id));
+                }},
+              ]);
+            }}
+            onSave={async () => {
+              if (!vaultForm.label?.trim() || !vaultForm.password?.trim()) {
+                Alert.alert('Atenção', 'Preencha o nome e a senha.'); return;
+              }
+              if (editEntry) {
+                await AssetVaultService.updateEntry(asset.id, editEntry.id, vaultForm as any);
+              } else {
+                await AssetVaultService.saveEntry(asset.id, vaultForm as any);
+              }
+              setVaultEntries(await AssetVaultService.getEntries(asset.id));
+              setVaultModal(false);
+            }}
+            onPinInput={(k) => {
+              const next = vaultPin + k;
+              setVaultPin(next);
+              if (next.length === 4) {
+                if (next === VAULT_PIN) {
+                  setVaultPinModal(false);
+                  AssetVaultService.getEntries(asset.id).then(data => {
+                    setVaultEntries(data); setVaultUnlocked(true);
+                  });
+                } else {
+                  Alert.alert('PIN Incorreto'); setVaultPin('');
+                }
+              }
+            }}
+            onPinDelete={() => setVaultPin(p => p.slice(0, -1))}
+            onPinClose={() => setVaultPinModal(false)}
+            onFormChange={(patch) => setVaultForm(f => ({ ...f, ...patch }))}
+            onVaultModalClose={() => setVaultModal(false)}
+          />
+        );
       case 'costs':
         return (
           <View style={styles.modContainer}>
@@ -500,6 +685,133 @@ export default function AssetDetailScreen() {
              <View style={[styles.docRow, {backgroundColor: '#ECFDF5', borderColor: '#A7F3D0'}]}><Text style={{flex: 1, fontWeight: '700', color: '#065F46'}}>Rentabilidade</Text><Text style={{fontWeight: '800', color: '#059669'}}>+ R$ 65.810</Text></View>
           </View>
         );
+      case 'hier': {
+        const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
+          REAL_ESTATE: { icon: 'business',  color: '#3B82F6' },
+          VEHICLE:     { icon: 'car',       color: '#F59E0B' },
+          COLLECTION:  { icon: 'diamond',   color: '#8B5CF6' },
+          OTHER:       { icon: 'cube',      color: '#10B981' },
+        };
+        const parentAsset = asset.parentId
+          ? getLocalAssets().find(a => a.id === asset.parentId)
+          : null;
+        const allAncestors = getAssetAncestors(asset.id);
+        return (
+          <View style={styles.modContainer}>
+            {/* Breadcrumb ancestral */}
+            {allAncestors.length > 1 && (
+              <View style={{marginBottom: 20}}>
+                <Text style={[styles.formSectionTitle, {marginBottom: 8, fontSize: 12, color: colors.textSecondary}]}>ÁRVORE ANCESTRAL</Text>
+                <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4}}>
+                  {allAncestors.map((anc, i) => (
+                    <React.Fragment key={anc.id}>
+                      <TouchableOpacity
+                        onPress={() => anc.id !== asset.id && router.push(`/asset/${anc.id}` as any)}
+                        style={[{paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8},
+                          anc.id === asset.id
+                            ? {backgroundColor: colors.primary + '20'}
+                            : {backgroundColor: '#F1F5F9'}]}
+                      >
+                        <Text style={{fontSize: 12, fontWeight: '700',
+                          color: anc.id === asset.id ? colors.primary : colors.textSecondary}}>
+                          {anc.title}
+                        </Text>
+                      </TouchableOpacity>
+                      {i < allAncestors.length - 1 && (
+                        <Ionicons name="chevron-forward" size={12} color={colors.textLight} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Ativo pai */}
+            {parentAsset && (
+              <View style={{marginBottom: 20}}>
+                <Text style={[styles.formSectionTitle, {marginBottom: 8, fontSize: 12, color: colors.textSecondary}]}>ATIVO PAI</Text>
+                <TouchableOpacity
+                  style={[styles.parentBox]}
+                  onPress={() => router.push(`/asset/${parentAsset.id}` as any)}
+                >
+                  <View style={[{width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center'},
+                    {backgroundColor: (TYPE_ICONS[parentAsset.type]?.color || '#64748B') + '20'}]}>
+                    <Ionicons name={TYPE_ICONS[parentAsset.type]?.icon || 'cube'} size={16} color={TYPE_ICONS[parentAsset.type]?.color || '#64748B'} />
+                  </View>
+                  <Text style={[styles.parentBoxText]}>{parentAsset.title}</Text>
+                  <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Sub-ativos Section */}
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+              <Text style={[styles.formSectionTitle, {fontSize: 12, color: colors.textSecondary}]}>
+                SUB-ATIVOS ({children.length})
+              </Text>
+              <TouchableOpacity
+                style={{backgroundColor: colors.primary + '15', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5}}
+                onPress={() => {
+                  Alert.alert('Adicionar Sub-ativo', 'Evolução da Hierarquia Brspark. Como deseja prosseguir?', [
+                    { 
+                      text: 'Cadastrar Novo', 
+                      onPress: () => router.push(`/asset/new?parentId=${asset.id}&parentTitle=${encodeURIComponent(asset.title)}` as any) 
+                    },
+                    { 
+                      text: 'Vincular Existente', 
+                      onPress: () => {
+                        setLinkSearch('');
+                        setLinkModalVisible(true);
+                      }
+                    },
+                    { text: 'Cancelar', style: 'cancel' }
+                  ]);
+                }}
+              >
+                <Text style={{color: colors.primary, fontWeight: '800', fontSize: 11}}>+ SUB-ATIVO</Text>
+              </TouchableOpacity>
+            </View>
+
+            {children.length === 0 ? (
+              <View style={{alignItems: 'center', paddingVertical: 32, gap: 10,
+                backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed'}}>
+                <Ionicons name="git-branch-outline" size={36} color={colors.border} />
+                <Text style={{color: colors.textSecondary, fontWeight: '600', fontSize: 13, textAlign: 'center'}}>
+                  Sem sub-ativos vinculados{`\n`}Toque em "+ SUB-ATIVO" para estruturar
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.childrenSection}>
+                {children.map((child, idx) => {
+                  const cfg = TYPE_ICONS[child.type] || { icon: 'cube', color: '#64748B' };
+                  return (
+                    <TouchableOpacity
+                      key={child.id}
+                      style={[styles.childRow, idx === children.length - 1 && {borderBottomWidth: 0}]}
+                      onPress={() => router.push(`/asset/${child.id}` as any)}
+                    >
+                      <View style={[{width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 10},
+                        {backgroundColor: cfg.color + '20'}]}>
+                        <Ionicons name={cfg.icon} size={15} color={cfg.color} />
+                      </View>
+                      <View style={{flex: 1}}>
+                        <Text style={{fontWeight: '800', color: colors.primary, fontSize: 14}}>{child.title}</Text>
+                        <Text style={{fontSize: 11, color: colors.textSecondary, fontWeight: '600', marginTop: 1}}>
+                          {child.type === 'REAL_ESTATE' ? 'Imóvel' : child.type === 'VEHICLE' ? 'Veículo' : child.type === 'COLLECTION' ? 'Patrimônio' : 'Máq./Equip.'}
+                          {(child.childrenCount ?? 0) > 0 ? `  ·  ${child.childrenCount} sub` : ''}
+                        </Text>
+                      </View>
+                      <View style={[{width: 8, height: 8, borderRadius: 4, marginRight: 8},
+                        {backgroundColor: child.statusType === 'success' ? '#10B981' : '#F59E0B'}]} />
+                      <Ionicons name="chevron-forward" size={14} color={colors.textLight} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      }
       case 'history':
         return (
           <View style={styles.modContainer}>
@@ -690,4 +1002,13 @@ const styles = StyleSheet.create({
   photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: colors.border },
   photoAddBtn: { width: 110, height: 110, borderRadius: 12, marginRight: 12, borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.primary + '0A' },
   deletePhotoBadge: { position: 'absolute', top: 4, right: 16, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+
+  // Hierarquia
+  parentBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary + '10', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: colors.primary + '30' },
+  parentBoxText: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.primary },
+  parentSelectBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed' },
+  childrenSection: { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+  childRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  childBadge: { backgroundColor: colors.primary + '15', color: colors.primary, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: 6 },
+  addChildBtn: { flexDirection: 'row', alignItems: 'center', paddingTop: 12, justifyContent: 'center' },
 });

@@ -4,7 +4,7 @@ import { colors } from '../../src/theme/colors';
 import { Header } from '../../src/components/Header';
 import { AssetCard } from '../../src/components/AssetCard';
 import { Asset } from '../../src/types/asset';
-import { getLocalAssets, saveAssetsLocal } from '../../src/database';
+import { getLocalAssets, getRootAssets, saveAssetsLocal } from '../../src/database';
 import { ApiService } from '../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,25 +18,14 @@ export default function DashboardScreen() {
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
 
   const loadAssets = () => {
-    let local = getLocalAssets();
-    // Preenche automaticamente o banco com mock local se estiver vazio pela 1a vez
+    let local = getRootAssets();
     if (local.length === 0) {
-      const MOCK_ASSETS: Asset[] = [
-        {
-          id: '1', title: 'Bel Air Residence', type: 'REAL_ESTATE',
-          imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-4.0.3&w=800&q=80',
-          status: 'MAINTENANCE OK', statusType: 'success',
-          details: { address: 'Los Angeles, CA' },
-        },
-        {
-          id: '2', title: 'Toyota Corolla Hybrid', type: 'VEHICLE',
-          imageUrl: 'https://images.unsplash.com/photo-1629897048514-3dd741530282?ixlib=rb-4.0.3&w=800&q=80',
-          status: 'INSURANCE RENEWAL SOON', statusType: 'warning',
-          details: { mileage: 12450, year: 2023 },
-        }
+      const MOCK_ASSETS: any[] = [
+        { id: '1', title: 'Bel Air Residence', type: 'REAL_ESTATE', imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-4.0.3&w=800&q=80', status: 'MAINTENANCE OK', statusType: 'success', parentId: null, details: { address: 'Los Angeles, CA' } },
+        { id: '2', title: 'Toyota Corolla Hybrid', type: 'VEHICLE', imageUrl: 'https://images.unsplash.com/photo-1629897048514-3dd741530282?ixlib=rb-4.0.3&w=800&q=80', status: 'INSURANCE RENEWAL SOON', statusType: 'warning', parentId: null, details: { mileage: 12450, year: 2023 } }
       ];
       saveAssetsLocal(MOCK_ASSETS);
-      local = MOCK_ASSETS;
+      local = getRootAssets();
     }
     setAssets(local);
   };
@@ -103,8 +92,13 @@ export default function DashboardScreen() {
       >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Portfólio Ativo</Text>
-
           <View style={styles.selectorGroup}>
+            <TouchableOpacity
+              style={styles.selectorBtn}
+              onPress={() => router.push('/asset/tree' as any)}
+            >
+              <Ionicons name="git-branch-outline" size={20} color={colors.primary} />
+            </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.selectorBtn, viewMode === 'list' && styles.selectorBtnActive]}
               onPress={() => setViewMode('list')}
