@@ -3,7 +3,11 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Dim
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Asset } from '../../src/types/asset';
 import { getLocalAssets, getChildAssets, getAssetAncestors, updateAssetParent, queueOfflineAction, saveAssetsLocal, softDeleteAssetLocal, logAssetHistory, getAssetHistoryLocal } from '../../src/database';
+import { CostService } from '../../src/services/costService';
+import { CostSummary, RecurringCost } from '../../src/types/costs';
+
 import { colors } from '../../src/theme/colors';
+
 import { Badge } from '../../src/components/Badge';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,10 +33,10 @@ const MODULES = [
   { id: 'costs',     title: 'Custos',      subtitle: 'Métricas TCO',   icon: 'wallet' as const,                 color: '#10B981' },
   { id: 'insurance', title: 'Seguros',     subtitle: 'Apólices',       icon: 'umbrella' as const,               color: '#EF4444' },
   { id: 'contacts',  title: 'Equipe',      subtitle: 'Prestadores',    icon: 'people' as const,                 color: '#6366F1' },
-  { id: 'hier',      title: 'Parcial',     subtitle: 'Hierarquia',     icon: 'git-network' as const,            color: '#0891B2' },
+  { id: 'hier',      title: 'Hierarquia',  subtitle: 'Estrutura Fís.', icon: 'git-network' as const,            color: '#0891B2' },
   { id: 'reports',   title: 'Relatórios',  subtitle: 'KPIs PDF',       icon: 'document-text' as const,          color: '#EC4899' },
-  { id: 'history',   title: 'Histórico',   subtitle: 'Eventos GMS',    icon: 'time' as const,                   color: '#64748B' },
   { id: 'stock',     title: 'Estoque',     subtitle: 'Peças e Insumos', icon: 'cube' as const,                   color: '#00C4CC' },
+  { id: 'history',   title: 'Histórico',   subtitle: 'Eventos GMS',    icon: 'time' as const,                   color: '#64748B' },
 ];
 
 export default function AssetDetailScreen() {
@@ -44,6 +48,10 @@ export default function AssetDetailScreen() {
   const [children,    setChildren]    = useState<Asset[]>([]);
   const [ancestors,   setAncestors]   = useState<Asset[]>([]);
   const [subExpanded, setSubExpanded] = useState(true);
+  const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
+  const [assetRecurring, setAssetRecurring] = useState<RecurringCost[]>([]);
+
+
 
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const svgRef = useRef<any>(null);
@@ -123,7 +131,13 @@ export default function AssetDetailScreen() {
       });
       setHistoryLogs(getAssetHistoryLocal(found.id));
       AssetDocService.getDocuments(found.id).then(setDocuments);
+      CostService.getAssetCostSummary(found.id, new Date().toISOString().substring(0, 7)).then(setCostSummary);
+      CostService.getRecurringCosts().then(rec => {
+        setAssetRecurring(rec.filter(r => r.assetId === found.id && r.status === 'ACTIVE'));
+      });
     }
+
+
   }, [id]);
 
   useFocusEffect(useCallback(() => {
@@ -741,21 +755,75 @@ export default function AssetDetailScreen() {
           />
         );
       case 'costs':
+        const netValue = costSummary ? (costSummary.totalRevenues - costSummary.totalExpenses) : 0;
         return (
           <View style={styles.modContainer}>
-             <Text style={{fontSize: 32, fontWeight: '800', color: colors.primary, marginBottom: 4}}>R$ 48.910,20</Text>
-             <Text style={{color: colors.textSecondary, marginBottom: 24, fontWeight: '600'}}>Custo Total Associado TCO / Depreciação</Text>
-             <View style={styles.docRow}><Text style={{flex: 1, fontWeight: '500'}}>Licenças / Apólice Bradesco</Text><Text style={{fontWeight: '700', color: colors.warning.text}}>- R$ 1.200</Text></View>
-             <View style={styles.docRow}><Text style={{flex: 1, fontWeight: '500'}}>MRO e Manutenções</Text><Text style={{fontWeight: '700', color: colors.warning.text}}>- R$ 4.500</Text></View>
-             <View style={[styles.docRow, {backgroundColor: '#ECFDF5', borderColor: '#A7F3D0'}]}><Text style={{flex: 1, fontWeight: '700', color: '#065F46'}}>Rentabilidade</Text><Text style={{fontWeight: '800', color: '#059669'}}>+ R$ 65.810</Text></View>
+             <Text style={[{fontSize: 32, fontWeight: '800', color: colors.primary, marginBottom: 4}, netValue < 0 && {color: colors.warning.text}]}>
+               R$ {netValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+             </Text>
+
+             <Text style={{color: colors.textSecondary, marginBottom: 24, fontWeight: '600'}}>Saldo Financeiro Mensal (TCO + Receitas)</Text>
+             
+             <View style={styles.docRow}>
+               <View style={{flex: 1}}>
+                 <Text style={{fontWeight: '500'}}>Receitas Totais</Text>
+                 <Text style={{fontSize: 11, color: colors.textSecondary}}>Faturamento direto do ativo</Text>
+               </View>
+               <Text style={{fontWeight: '700', color: colors.accent}}>+ R$ {costSummary?.totalRevenues.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
+             </View>
+
+             <View style={styles.docRow}>
+               <View style={{flex: 1}}>
+                 <Text style={{fontWeight: '500'}}>Despesas Operacionais</Text>
+                 <Text style={{fontSize: 11, color: colors.textSecondary}}>Custo direto + Consumo de estoque</Text>
+               </View>
+               <Text style={{fontWeight: '700', color: colors.warning.text}}>- R$ {costSummary?.totalExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
+             </View>
+
+             <View style={[styles.docRow, {backgroundColor: '#F8FAFC'}]}>
+               <View style={{flex: 1}}>
+                 <Text style={{fontWeight: '700', color: colors.primary}}>Orçamento (Budget)</Text>
+                 <Text style={{fontSize: 11, color: colors.textSecondary}}>Meta de gastos para o período</Text>
+               </View>
+               <Text style={{fontWeight: '800', color: colors.primary}}>R$ {costSummary?.totalBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
+             </View>
+
+             <View style={{marginTop: 10, height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden'}}>
+               <View style={{
+                 height: '100%', 
+                 width: `${Math.min((costSummary?.totalExpenses || 0) / (costSummary?.totalBudget || 1) * 100, 100)}%`,
+                 backgroundColor: (costSummary?.totalExpenses || 0) > (costSummary?.totalBudget || 0) ? '#EF4444' : colors.primary
+               }} />
+             </View>
+             <Text style={{fontSize: 10, color: colors.textSecondary, textAlign: 'right', marginTop: 4, fontWeight: '700'}}>
+               Consumo do Budget: {((costSummary?.totalExpenses || 0) / (costSummary?.totalBudget || 1) * 100).toFixed(1)}%
+             </Text>
+
+             {assetRecurring.length > 0 && (
+                <View style={{marginTop: 20}}>
+                   <Text style={{fontSize: 11, fontWeight: '900', color: colors.textLight, letterSpacing: 1, marginBottom: 12, marginTop: 10}}>VENCIMENTOS PRÓXIMOS</Text>
+                   {assetRecurring.slice(0, 3).map(r => (
+                     <View key={r.id} style={[styles.docRow, {borderColor: colors.warning.background, backgroundColor: colors.warning.background}]}>
+                       <Ionicons name="notifications" size={18} color={colors.warning.text} style={{marginRight: 10}} />
+                       <View style={{flex: 1}}>
+                         <Text style={{fontWeight: '800', color: colors.primary}}>{r.description}</Text>
+                         <Text style={{fontSize: 11, color: colors.warning.text, fontWeight: '700'}}>Vencimento: {new Date(r.nextDueDate).toLocaleDateString('pt-BR')}</Text>
+                       </View>
+                       <Text style={{fontWeight: '900', color: colors.primary}}>R$ {r.amount.toFixed(2)}</Text>
+                     </View>
+                   ))}
+
+                </View>
+              )}
           </View>
         );
+
       case 'hier': {
         const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
           REAL_ESTATE: { icon: 'business',  color: '#3B82F6' },
           VEHICLE:     { icon: 'car',       color: '#F59E0B' },
           COLLECTION:  { icon: 'diamond',   color: '#8B5CF6' },
-          OTHER:       { icon: 'cube',      color: '#10B981' },
+          OTHER:       { icon: 'cube',      color: colors.accent },
         };
         const parentAsset = asset.parentId
           ? getLocalAssets().find(a => a.id === asset.parentId)
@@ -775,8 +843,9 @@ export default function AssetDetailScreen() {
                         style={[{paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8},
                           anc.id === asset.id
                             ? {backgroundColor: colors.primary + '20'}
-                            : {backgroundColor: '#F1F5F9'}]}
+                            : {backgroundColor: colors.divider}]}
                       >
+
                         <Text style={{fontSize: 12, fontWeight: '700',
                           color: anc.id === asset.id ? colors.primary : colors.textSecondary}}>
                           {anc.title}
@@ -922,7 +991,7 @@ export default function AssetDetailScreen() {
 
         {!activeModule ? (
           <TouchableOpacity style={styles.backButton} onPress={handleSoftDelete}>
-             <Ionicons name="trash-outline" size={24} color={'#EF4444'} />
+             <Ionicons name="trash-outline" size={24} color={colors.warning.text} />
           </TouchableOpacity>
         ) : (
           <View style={{width: 40}} />
@@ -1151,7 +1220,7 @@ const styles = StyleSheet.create({
   dashedBox: { borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', marginBottom: 24, backgroundColor: colors.primary + '0A' },
   docRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: 10, backgroundColor: colors.background },
   logRow: { flexDirection: 'row', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#EF4444' },
+  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.warning.text },
   logText: { flex: 1, marginLeft: 12, fontWeight: '700', color: colors.primary },
   logTime: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
   

@@ -1,5 +1,5 @@
-import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Dimensions, TouchableOpacity, TouchableWithoutFeedback } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Asset } from '../types/asset';
 import { colors } from '../theme/colors';
 import { Badge } from './Badge';
@@ -12,11 +12,13 @@ const CARD_MARGIN = 32;
 interface AssetCardProps {
   asset: Asset;
   onPress?: () => void;
+  hasStock?: boolean;
+  hasLowStock?: boolean;
 }
 
-export function AssetCard({ asset, onPress }: AssetCardProps) {
+export function AssetCard({ asset, onPress, hasStock, hasLowStock }: AssetCardProps) {
   // Coletamos a galeria inteira, senão usamos a string padrao, senão array vazio.
-  const photos = asset.details?.photos?.length > 0 ? asset.details.photos : (asset.imageUrl ? [asset.imageUrl] : []);
+  const photos = asset.details?.photos && asset.details.photos.length > 0 ? asset.details.photos : (asset.imageUrl ? [asset.imageUrl] : []);
 
   return (
     <View style={styles.card}>
@@ -49,6 +51,14 @@ export function AssetCard({ asset, onPress }: AssetCardProps) {
         <View style={styles.badgeContainer} pointerEvents="none">
           <Badge label={asset.status} type={asset.statusType} />
         </View>
+
+        {/* Indicativo de Estoque (Selo de Logística) */}
+        {hasStock && (
+           <View style={[styles.stockIndicator, hasLowStock && styles.stockIndicatorAlert]} pointerEvents="none">
+              <Ionicons name="cube" size={16} color="#fff" />
+              {hasLowStock && <View style={styles.alertDot} />}
+           </View>
+        )}
 
         {/* Indicativo de que o ativo possui múltiplas fotos se length > 1 */}
         {photos.length > 1 && (
@@ -140,6 +150,39 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     alignSelf: 'flex-start'
+  },
+  stockIndicator: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: colors.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#fff'
+  },
+  stockIndicatorAlert: {
+    backgroundColor: '#EF4444',
+    borderColor: '#fff'
+  },
+  alertDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+    borderWidth: 2,
+    borderColor: '#fff'
   },
   infoText: {
     fontSize: 12,

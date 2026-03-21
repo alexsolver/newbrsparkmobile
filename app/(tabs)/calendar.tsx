@@ -1,58 +1,112 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
-import { AssetDocService, AssetDocument } from '../../src/services/assetDocs';
+import { AssetDocService } from '../../src/services/assetDocs';
 import { getLocalAssets } from '../../src/database';
 import { useFocusEffect } from 'expo-router';
+import { StockService } from '../../src/services/stockService';
+import { CostService } from '../../src/services/costService';
+
 
 export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [viewMode, setViewMode] = useState<'DAY' | 'WEEK' | 'MONTH'>('DAY');
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'DOC' | 'MAINT'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'DOC' | 'MAINT' | 'STOCK'>('ALL');
   const [currentPivot, setCurrentPivot] = useState(new Date());
   
   const loadEvents = async () => {
     setLoading(true);
-    const docs = await AssetDocService.getAllDocuments();
-    const assets = getLocalAssets();
-    const assetMap = new Map(assets.map(a => [a.id, a.title]));
-    
-    let formatted: any[] = docs
-      .filter(d => d.expirationDate)
-      .map(d => ({
-        id: d.id,
-        date: d.expirationDate!.split('T')[0],
-        title: d.title,
-        assetName: assetMap.get(d.assetId) || 'Ativo Desconhecido',
-        type: 'DOC',
-        color: '#E11D48',
-        tag: 'VENCIMENTO DOC'
-      }));
-
-    // Mock de manutenções para popular a agenda
-    formatted.push({
-      id: 'm1', date: new Date().toISOString().split('T')[0], title: 'Troca de Óleo Preventiva',
-      assetName: 'Toyota Corolla', type: 'MAINT', color: '#10B981', tag: 'MANUTENÇÃO'
-    });
+    try {
+      const docs = await AssetDocService.getAllDocuments();
+      const stock = await StockService.getItems();
+      const movements = await StockService.getMovements();
+      const assets = getLocalAssets();
+      const assetMap = new Map(assets.map(a => [a.id, a.title]));
       
-    if (activeFilter !== 'ALL') {
-      formatted = formatted.filter(e => e.type === activeFilter);
-    }
+      let formatted: any[] = docs
+        .filter(d => d.expirationDate)
+        .map(d => ({
+          id: d.id,
+          date: d.expirationDate!.split('T')[0],
+          title: d.title,
+          assetName: assetMap.get(d.assetId) || 'Ativo Desconhecido',
+          type: 'DOC',
+          color: '#3B82F6', 
+          tag: 'VENCIMENTO',
+          icon: 'document-text'
+        }));
 
-    setEvents(formatted);
+      // Manutenção Mock (Em breve real)
+      formatted.push({
+        id: 'm1', date: new Date().toISOString().split('T')[0], title: 'Revisão Motor de Popa',
+        assetName: 'Lancha Brspark', type: 'MAINT', color: '#10B981', tag: 'MANUTENÇÃO', icon: 'build'
+      });
+      
+      // Eventos Dinâmicos de Estoque (Items Críticos)
+      const criticalItems = stock.filter(i => i.currentStock <= i.minStock);
+      criticalItems.forEach(i => {
+        const assetName = assetMap.get(i.locationId) || 'Geral';
+        formatted.push({
+          id: `stock-${i.id}`,
+          date: new Date().toISOString().split('T')[0], 
+          title: `Reposição: ${i.name} (Saldo: ${i.currentStock} ${i.unit})`,
+          assetName: assetName,
+          type: 'STOCK',
+          color: '#F59E0B',
+          tag: 'CRÍTICO',
+          icon: 'warning'
+        });
+      });
+
+      // Movimentações de Estoque (Histórico Logístico)
+      movements.forEach(m => {
+        const it = stock.find(i => i.id === m.itemId);
+        const assetName = assetMap.get(it?.locationId || '1') || 'Geral';
+        formatted.push({
+          id: `mov-${m.id}`,
+          date: m.timestamp.split('T')[0],
+          title: `${m.type === 'TRANSFER' ? 'Transferência' : m.type === 'IN' ? 'Entrada' : 'Saída'}: ${it?.name || 'Item'} (${m.quantity})`,
+          assetName: assetName,
+          type: 'STOCK',
+          color: m.type === 'TRANSFER' ? '#6366F1' : m.type === 'IN' ? '#10B981' : '#EF4444',
+          tag: 'LOGÍSTICA',
+          icon: m.type === 'TRANSFER' ? 'swap-horizontal' : m.type === 'IN' ? 'chevron-down' : 'chevron-up'
+        });
+      });
+
+      // Contas Recorrentes (Financeiro)
+      const recurring = await CostService.getRecurringCosts();
+      recurring.forEach(r => {
+        if (r.status === 'ACTIVE' && r.nextDueDate) {
+          formatted.push({
+            id: `rec-${r.id}`,
+            date: r.nextDueDate,
+            title: `${r.type === 'REVENUE' ? 'Receber' : 'Pagar'}: ${r.description}`,
+            assetName: assetMap.get(r.assetId) || 'Geral',
+            type: 'DOC', 
+            color: r.type === 'REVENUE' ? '#10B981' : '#F59E0B',
+            tag: r.type === 'REVENUE' ? 'RECEITA' : 'CONTA',
+            icon: r.type === 'REVENUE' ? 'trending-up' : 'calendar-number'
+          });
+        }
+      });
+
+      if (activeFilter !== 'ALL') {
+        formatted = formatted.filter(e => e.type === activeFilter);
+      }
+
+
+      setEvents(formatted);
+    } catch (e) {
+      console.log('Error loading events:', e);
+    }
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadEvents();
-  }, [activeFilter]);
-
-  useFocusEffect(useCallback(() => {
-    loadEvents();
-  }, []));
+  useEffect(() => { loadEvents(); }, [activeFilter]);
+  useFocusEffect(useCallback(() => { loadEvents(); }, []));
 
   const daysInMonth = new Date(currentPivot.getFullYear(), currentPivot.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentPivot.getFullYear(), currentPivot.getMonth(), 1).getDay();
@@ -70,11 +124,7 @@ export default function CalendarScreen() {
 
   const renderMonthGrid = () => {
     const days = [];
-    // Espaços vazios
-    for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<View key={`empty-${i}`} style={S.gridCellEmpty} />);
-    }
-    // Dias do mês
+    for (let i = 0; i < firstDayOfMonth; i++) { days.push(<View key={`empty-${i}`} style={S.gridCellEmpty} />); }
     for (let d = 1; d <= daysInMonth; d++) {
       const dStr = `${year}-${String(currentPivot.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const hasEvent = datesWithEvents.has(dStr);
@@ -84,192 +134,128 @@ export default function CalendarScreen() {
       days.push(
         <TouchableOpacity 
           key={d} 
-          style={[
-            S.gridCell, 
-            isSelected && S.gridCellActive,
-            isToday && !isSelected && { borderColor: colors.primary, borderWidth: 1 }
-          ]} 
+          style={[S.gridCell, isSelected && S.gridCellActive]} 
           onPress={() => setSelectedDate(dStr)}
         >
-          <Text style={[S.gridCellText, isSelected && { color: '#fff' }, isToday && !isSelected && { color: colors.primary }]}>{d}</Text>
+          <Text style={[S.gridCellText, isSelected && { color: '#fff' }, isToday && !isSelected && { color: colors.primary, fontWeight: '900' }]}>{d}</Text>
           {hasEvent && <View style={[S.dot, isSelected && { backgroundColor: '#fff' }]} />}
+          {isToday && !isSelected && <View style={S.todayIndicator} />}
         </TouchableOpacity>
       );
     }
     return days;
   };
 
-  const weekDayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-  const getWeekDays = () => {
-    const sel = new Date(selectedDate + 'T12:00:00'); // Evita timezone issue
-    const day = sel.getDay();
-    const start = new Date(sel);
-    start.setDate(sel.getDate() - day);
-    
-    return Array.from({ length: 7 }).map((_, i) => {
-       const d = new Date(start);
-       d.setDate(start.getDate() + i);
-       return d;
-    });
-  };
+  const weekDayNames = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
 
   return (
     <SafeAreaView style={S.container}>
-      <View style={S.header}>
+      <View style={S.pHeader}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-           <View>
-              <Text style={S.headerTitle}>Agenda Brspark</Text>
-              <Text style={S.headerSubtitle}>{monthName} de {year}</Text>
-           </View>
-           <View style={S.viewToggle}>
-              {(['DAY', 'WEEK', 'MONTH'] as const).map(m => (
-                <TouchableOpacity key={m} style={[S.toggleBtn, viewMode === m && S.toggleBtnActive]} onPress={() => setViewMode(m)}>
-                   <Text style={[S.toggleBtnText, viewMode === m && { color: '#fff' }]}>{m === 'DAY' ? 'Dia' : m === 'WEEK' ? 'Sem' : 'Mês'}</Text>
-                </TouchableOpacity>
-              ))}
-           </View>
+           <View><Text style={S.pTitle}>Agenda</Text></View>
+           <TouchableOpacity style={S.addBtn}><Ionicons name="calendar-outline" size={24} color="#fff" /></TouchableOpacity>
         </View>
 
         <View style={S.filterRow}>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.filterScroll}>
               {[
-                { id: 'ALL', label: 'Todos', icon: 'apps' },
-                { id: 'DOC', label: 'Docs', icon: 'document-text' },
-                { id: 'MAINT', label: 'Manutenção', icon: 'build' },
+                { id: 'ALL', label: 'TUDO', icon: 'apps' },
+                { id: 'MAINT', label: 'OPERACIONAL', icon: 'construct' },
+                { id: 'DOC', label: 'VENCIMENTOS', icon: 'shield-checkmark' },
+                { id: 'STOCK', label: 'SUPRIMENTOS', icon: 'cart' },
               ].map(f => (
                 <TouchableOpacity key={f.id} style={[S.filterChip, activeFilter === f.id && S.filterChipActive]} onPress={() => setActiveFilter(f.id as any)}>
-                   <Ionicons name={f.icon as any} size={14} color={activeFilter === f.id ? '#fff' : colors.primary} />
-                   <Text style={[S.filterChipText, activeFilter === f.id && { color: '#fff' }]}>{f.label}</Text>
+                   <Text style={[S.filterChipText, activeFilter === f.id && S.filterChipTextActive]}>{f.label}</Text>
                 </TouchableOpacity>
               ))}
            </ScrollView>
         </View>
       </View>
 
-      {viewMode === 'MONTH' ? (
-        <View style={S.calendarGridContainer}>
-          <View style={S.gridHeader}>
-             <TouchableOpacity onPress={() => changeMonth(-1)} style={S.navBtn}><Ionicons name="chevron-back" size={20} color={colors.primary} /></TouchableOpacity>
-             <Text style={S.gridHeaderTitle}>{monthName} / {year}</Text>
-             <TouchableOpacity onPress={() => changeMonth(1)} style={S.navBtn}><Ionicons name="chevron-forward" size={20} color={colors.primary} /></TouchableOpacity>
-          </View>
-          <View style={S.weekLabels}>
-             {weekDayNames.map((l, i) => <Text key={i} style={S.weekLabelText}>{l[0]}</Text>)}
-          </View>
-          <View style={S.gridBody}>
-             {renderMonthGrid()}
-          </View>
+      <View style={S.calendarCard}>
+        <View style={S.monthNav}>
+           <TouchableOpacity onPress={() => changeMonth(-1)} style={S.navIcon}><Ionicons name="chevron-back" size={20} color={colors.primary} /></TouchableOpacity>
+           <Text style={S.monthTitle}>{monthName.toUpperCase()} {year}</Text>
+           <TouchableOpacity onPress={() => changeMonth(1)} style={S.navIcon}><Ionicons name="chevron-forward" size={20} color={colors.primary} /></TouchableOpacity>
         </View>
-      ) : (
-        <View style={S.calendarStrip}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {(viewMode === 'WEEK' ? getWeekDays() : Array.from({ length: daysInMonth }).map((_, i) => {
-               const d = new Date(currentPivot);
-               d.setDate(i + 1);
-               return d;
-            })).map((d, i) => {
-              const dStr = d.toISOString().split('T')[0];
-              const active = dStr === selectedDate;
-              const hasEvent = datesWithEvents.has(dStr);
-              const isToday = new Date().toISOString().split('T')[0] === dStr;
-              
-              return (
-                <TouchableOpacity 
-                   key={i} 
-                   style={[
-                     S.dayChip, 
-                     active && S.dayChipActive,
-                     isToday && !active && { borderColor: colors.primary, borderWidth: 1.5 }
-                   ]} 
-                   onPress={() => setSelectedDate(dStr)}
-                >
-                  <Text style={[S.dayName, active && { color: '#fff' }]}>{weekDayNames[d.getDay()]}</Text>
-                  <Text style={[S.dayText, active && S.dayTextActive]}>{d.getDate()}</Text>
-                  {hasEvent && <View style={[S.dot, active && { backgroundColor: '#fff' }]} />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        <View style={S.weekLabels}>
+           {weekDayNames.map((l, i) => <Text key={i} style={S.weekLabelText}>{l}</Text>)}
         </View>
-      )}
+        <View style={S.gridBody}>
+           {renderMonthGrid()}
+        </View>
+      </View>
 
-      <ScrollView style={S.eventList} showsVerticalScrollIndicator={false}>
-        <Text style={S.selectionLabel}>Eventos em {new Date(selectedDate).toLocaleDateString('pt-BR')}</Text>
+      <View style={S.listContainer}>
+        <Text style={S.sectionLabel}>AGENDA PARA {new Date(selectedDate).toLocaleDateString('pt-BR', { day:'2-digit', month: 'long' })}</Text>
         
         {loading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
         ) : selectedDayEvents.length === 0 ? (
-          <View style={S.empty}>
-             <Ionicons name="calendar-outline" size={64} color={colors.border} />
-             <Text style={S.emptyText}>Zona de Silêncio Operacional.{'\n'}Nenhum vencimento ou atividade detectada no radar para este dia.</Text>
+          <View style={S.emptyState}>
+             <Ionicons name="sparkles-outline" size={48} color={colors.border} />
+             <Text style={S.emptyText}>Zona de Silêncio Operacional.{'\n'}Nada agendado para este radar hoje.</Text>
           </View>
         ) : (
-          selectedDayEvents.map(ev => (
-            <View key={ev.id} style={S.eventCard}>
-              <View style={[S.indicator, { backgroundColor: ev.color }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={S.eventTitle}>{ev.title}</Text>
-                <Text style={S.eventMeta}>Ativo: <Text style={{ color: colors.primary }}>{ev.assetName}</Text></Text>
-                <View style={[S.typeBadge, { backgroundColor: ev.color + '15' }]}>
-                   <Text style={[S.typeBadgeText, { color: ev.color }]}>{ev.tag}</Text>
+          <FlatList 
+            data={selectedDayEvents}
+            keyExtractor={ev => ev.id}
+            renderItem={({item: ev}) => (
+              <TouchableOpacity style={S.eventCard}>
+                <View style={[S.eventIcon, { backgroundColor: ev.color + '10' }]}>
+                   <Ionicons name={ev.icon} size={20} color={ev.color} />
                 </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.border} />
-            </View>
-          ))
+                <View style={{ flex: 1 }}>
+                  <Text style={S.eventTitle}>{ev.title}</Text>
+                  <View style={S.metaRow}>
+                    <Text style={S.metaText}>{ev.assetName}</Text>
+                    <View style={S.tagPH}><Text style={[S.tagT, { color: ev.color }]}>{ev.tag}</Text></View>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.border} />
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingBottom: 100 }}
+          />
         )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const S = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { padding: 24, paddingBottom: 16 },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: colors.primary },
-  headerSubtitle: { fontSize: 13, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginTop: 4, fontWeight: '700' },
-  
-  viewToggle: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 10, padding: 4, gap: 4 },
-  toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  toggleBtnActive: { backgroundColor: colors.primary },
-  toggleBtnText: { fontSize: 11, fontWeight: '800', color: colors.textSecondary },
-  
-  filterRow: { marginTop: 20 },
-  filterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, backgroundColor: colors.cardWhite, borderWidth: 1, borderColor: colors.border },
+  container: { flex: 1, backgroundColor: '#fff' },
+  pHeader: { padding: 16, paddingTop: 60, backgroundColor: '#fff' },
+  pTitle: { color: colors.primary, fontSize: 28, fontWeight: '900' },
+  addBtn: { width: 45, height: 45, borderRadius: 12, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  filterRow: { marginTop: 15 },
+  filterScroll: { gap: 10, paddingBottom: 5 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterChipText: { fontSize: 13, fontWeight: '800', color: colors.primary },
-  
-  calendarStrip: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.cardWhite },
-  dayChip: { width: 56, height: 74, justifyContent: 'center', alignItems: 'center', marginRight: 10, borderRadius: 16, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: colors.border },
-  dayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  dayName: { fontSize: 10, fontWeight: '700', color: colors.textLight, textTransform: 'uppercase', marginBottom: 2 },
-  dayText: { fontSize: 18, fontWeight: '800', color: colors.textSecondary },
-  dayTextActive: { color: '#fff' },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#E11D48', marginTop: 4 },
-
-  calendarGridContainer: { backgroundColor: colors.cardWhite, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
-  gridHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12 },
-  navBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  gridHeaderTitle: { fontSize: 16, fontWeight: '900', color: colors.primary, textTransform: 'capitalize' },
-  weekLabels: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
-  weekLabelText: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '800', color: colors.textLight },
+  filterChipText: { fontSize: 11, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5 },
+  filterChipTextActive: { color: '#fff' },
+  calendarCard: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 15 },
+  monthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  monthTitle: { fontSize: 15, fontWeight: '900', color: colors.primary, letterSpacing: 1 },
+  navIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  weekLabels: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10 },
+  weekLabelText: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '900', color: '#94A3B8' },
   gridBody: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16 },
-  gridCell: { width: '14.28%', height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
-  gridCellEmpty: { width: '14.28%', height: 44 },
+  gridCell: { width: '14.28%', height: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
+  gridCellEmpty: { width: '14.28%', height: 48 },
   gridCellActive: { backgroundColor: colors.primary },
   gridCellText: { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
-  
-  eventList: { flex: 1, padding: 24 },
-  selectionLabel: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', marginBottom: 20 },
-  empty: { paddingVertical: 80, alignItems: 'center', gap: 16 },
-  emptyText: { color: colors.textLight, textAlign: 'center', fontSize: 13, lineHeight: 20, fontWeight: '600' },
-  
-  eventCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardWhite, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border, elevation: 1 },
-  indicator: { width: 4, height: '80%', borderRadius: 2, marginRight: 16 },
-  eventTitle: { fontSize: 16, fontWeight: '900', color: colors.primary },
-  eventMeta: { fontSize: 13, color: colors.textSecondary, marginTop: 4, fontWeight: '600' },
-  typeBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginTop: 10 },
-  typeBadgeText: { fontSize: 10, fontWeight: '900' }
+  dot: { position:'absolute', bottom: 8, width: 4, height: 4, borderRadius: 2, backgroundColor: '#EF4444' },
+  todayIndicator: { position:'absolute', bottom: 4, width: 12, height: 2, borderRadius: 1, backgroundColor: colors.primary },
+  listContainer: { flex: 1, paddingHorizontal: 16, backgroundColor: '#FBFBFE', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: 10, paddingTop: 24 },
+  sectionLabel: { fontSize: 11, fontWeight: '900', color: colors.textLight, letterSpacing: 1, marginBottom: 20 },
+  eventCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 16, borderRadius: 20, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  eventIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  eventTitle: { fontSize: 15, fontWeight: '800', color: colors.primary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  metaText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
+  tagPH: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#F8FAFC' },
+  tagT: { fontSize: 9, fontWeight: '900' },
+  emptyState: { alignItems: 'center', marginTop: 60, gap: 15 },
+  emptyText: { textAlign: 'center', color: colors.textLight, fontSize: 13, lineHeight: 20, fontWeight: '600' }
 });

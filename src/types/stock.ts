@@ -9,12 +9,12 @@ export interface StockItem {
   sku: string;
   name: string;
   category: string;
-  unit: 'un' | 'lt' | 'kg' | 'mt';
+  unit: 'un' | 'lt' | 'kg' | 'mt' | 'pct';
   currentStock: number;
   minStock: number;
   targetStock: number;
-  locationId: string; // Ref ao Ativo (ID do Patrimônio)
-  subLocation?: string; // Endereçamento interno: Gaveta X, Prateleira Y
+  locationId: string;
+  subLocation?: string;
   costPrice?: number;
   photoUri?: string;
 }
@@ -22,10 +22,13 @@ export interface StockItem {
 export interface StockMovement {
   id: string;
   itemId: string;
-  type: 'IN' | 'OUT';
+  type: 'IN' | 'OUT' | 'ADJUST' | 'TRANSFER'; // <-- TRANSFERÊNCIA ADICIONADA ✅
   quantity: number;
   timestamp: string;
   responsibleId: string;
   reason?: string;
-  assetId?: string; // Se vinculado a um consumo de ativo específico
+  assetId?: string; // Ativo de origem/contexto
+  destinationAssetId?: string; // APENAS PARA TRANSFERÊNCIA ✅
+  subLocation?: string;
+  unitPrice?: number; // Preço pago na transação (IN ou ADJUST) ✅
 }
