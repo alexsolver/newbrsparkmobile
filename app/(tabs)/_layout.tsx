@@ -1,3 +1,4 @@
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Tabs } from 'expo-router';
 import { colors } from '../../src/theme/colors';
@@ -41,10 +42,35 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="scanner"
+        options={{
+          title: '', // Título vazio
+          tabBarIcon: ({ focused }) => (
+            <View style={{
+                position: 'absolute',
+                top: -18,
+                backgroundColor: colors.primary,
+                width: 60, height: 60,
+                borderRadius: 30,
+                justifyContent: 'center',
+                alignItems: 'center',
+                shadowColor: colors.primary,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 6,
+                elevation: 6,
+                borderWidth: 3,
+                borderColor: colors.cardWhite
+            }}>
+              <Ionicons name="qr-code-outline" size={26} color="#fff" />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="documents"
         options={{
-          title: 'Arquivos',
-          tabBarIcon: ({ color }) => <Ionicons name="document-text" size={24} color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen

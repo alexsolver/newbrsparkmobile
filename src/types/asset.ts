@@ -9,5 +9,6 @@ export interface Asset {
     address?: string;
     mileage?: number;
     year?: number;
+    [key: string]: any;
   };
 }

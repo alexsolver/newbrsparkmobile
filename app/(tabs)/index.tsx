@@ -15,6 +15,7 @@ export default function DashboardScreen() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [activeFilter, setActiveFilter] = useState<string>('ALL');
 
   const loadAssets = () => {
     let local = getLocalAssets();
@@ -54,10 +55,12 @@ export default function DashboardScreen() {
   };
 
   const renderContent = () => {
+    const visibleAssets = assets.filter(a => activeFilter === 'ALL' || a.type === activeFilter);
+
     if (viewMode === 'list') {
       return (
         <View style={{ paddingHorizontal: 16 }}>
-          {assets.map((asset) => (
+          {visibleAssets.map((asset) => (
             <TouchableOpacity 
               key={asset.id} 
               activeOpacity={0.8}
@@ -80,14 +83,12 @@ export default function DashboardScreen() {
     // Default 'cards' mode
     return (
       <View style={{ paddingHorizontal: 16 }}>
-        {assets.map((asset) => (
-          <TouchableOpacity 
+        {visibleAssets.map((asset) => (
+          <AssetCard 
             key={asset.id} 
-            activeOpacity={0.8}
+            asset={asset} 
             onPress={() => router.push(`/asset/${asset.id}` as any)}
-          >
-            <AssetCard asset={asset} />
-          </TouchableOpacity>
+          />
         ))}
       </View>
     );
@@ -119,9 +120,27 @@ export default function DashboardScreen() {
           </View>
         </View>
         
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll} style={{marginBottom: 16}}>
+           {[
+              { id: 'ALL', label: 'Todos' },
+              { id: 'REAL_ESTATE', label: 'Imóveis' },
+              { id: 'VEHICLE', label: 'Veículos' },
+              { id: 'COLLECTION', label: 'Patrimônios' },
+              { id: 'OTHER', label: 'Máquinas' }
+           ].map(f => (
+             <TouchableOpacity 
+               key={f.id} 
+               style={[styles.filterChip, activeFilter === f.id && styles.filterChipActive]}
+               onPress={() => setActiveFilter(f.id)}
+             >
+                <Text style={[styles.filterChipText, activeFilter === f.id && styles.filterChipTextActive]}>{f.label}</Text>
+             </TouchableOpacity>
+           ))}
+        </ScrollView>
+        
         {renderContent()}
 
-        <View style={{height: 40}} />
+        <View style={{height: 100}} />
       </ScrollView>
     </View>
   );
@@ -141,4 +160,10 @@ const styles = StyleSheet.create({
   listInfo: { flex: 1, paddingRight: 12 },
   listTitle: { fontSize: 16, fontWeight: '700', color: colors.primary, marginBottom: 4 },
   listType: { fontSize: 12, color: colors.textSecondary },
+  
+  filterScroll: { paddingHorizontal: 16, paddingBottom: 8 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', marginRight: 8 },
+  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  filterChipTextActive: { color: '#fff', fontWeight: '800' },
 });

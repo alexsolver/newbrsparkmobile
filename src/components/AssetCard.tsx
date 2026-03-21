@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, Dimensions, TouchableOpacity, TouchableWithoutFeedback } from 'react-native';
 import { Asset } from '../types/asset';
 import { colors } from '../theme/colors';
 import { Badge } from './Badge';
@@ -11,9 +11,10 @@ const CARD_MARGIN = 32;
 
 interface AssetCardProps {
   asset: Asset;
+  onPress?: () => void;
 }
 
-export function AssetCard({ asset }: AssetCardProps) {
+export function AssetCard({ asset, onPress }: AssetCardProps) {
   // Coletamos a galeria inteira, senão usamos a string padrao, senão array vazio.
   const photos = asset.details?.photos?.length > 0 ? asset.details.photos : (asset.imageUrl ? [asset.imageUrl] : []);
 
@@ -25,21 +26,23 @@ export function AssetCard({ asset }: AssetCardProps) {
              horizontal 
              pagingEnabled 
              showsHorizontalScrollIndicator={true}
-             indicatorStyle="white" // Deixa claro que há mais fotos roláveis no iOS
-             style={{ flex: 1 }}
-             // Para não engolir infinitamente o clique pai (TouchableOpacity do index), repassar toques:
-             pointerEvents="box-none" 
+             indicatorStyle="white"
+             style={{ width: '100%', height: '100%' }}
           >
              {photos.map((uri: string, idx: number) => (
-                <View key={idx} style={{ width: width - CARD_MARGIN, height: '100%', pointerEvents: 'none' }}>
-                  <Image source={{ uri }} style={styles.image} resizeMode="cover" />
-                </View>
+                <TouchableWithoutFeedback key={idx} onPress={onPress}>
+                  <View style={{ width: width - CARD_MARGIN, height: '100%' }}>
+                    <Image source={{ uri }} style={styles.image} resizeMode="cover" />
+                  </View>
+                </TouchableWithoutFeedback>
              ))}
           </ScrollView>
         ) : (
-          <View style={styles.imagePlaceholder}>
-            <Text style={{color: colors.textLight, fontWeight: '600'}}>Sem Fotos Físicas Acopladas</Text>
-          </View>
+          <TouchableWithoutFeedback onPress={onPress}>
+            <View style={styles.imagePlaceholder}>
+              <Text style={{color: colors.textLight, fontWeight: '600'}}>Sem Fotos Físicas Acopladas</Text>
+            </View>
+          </TouchableWithoutFeedback>
         )}
         
         {/* Mostra a Badge de status oficial por cima das fotos na esquerda inferior */}
@@ -55,7 +58,7 @@ export function AssetCard({ asset }: AssetCardProps) {
         )}
       </View>
 
-      <View style={styles.details} pointerEvents="none">
+      <TouchableOpacity style={styles.details} onPress={onPress} activeOpacity={0.8}>
         <Text style={styles.title}>{asset.title}</Text>
         <Text style={styles.typeTag}>
           {asset.type === 'REAL_ESTATE' ? 'Imóvel Nativo' : asset.type === 'VEHICLE' ? 'Veículo Terrestre' : asset.type === 'COLLECTION' ? 'Artefato Físico' : 'Dispositivo Eletrônico'}
@@ -64,7 +67,7 @@ export function AssetCard({ asset }: AssetCardProps) {
         <View style={styles.infoRow}>
           <Text style={styles.infoText}>Cód SaaS: {asset.id}</Text>
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }

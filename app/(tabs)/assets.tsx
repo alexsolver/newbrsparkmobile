@@ -39,9 +39,10 @@ export default function AssetsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <TouchableOpacity activeOpacity={0.8} onPress={() => router.push(`/asset/${item.id}` as any)}>
-             <AssetCard asset={item} />
-          </TouchableOpacity>
+          <AssetCard 
+            asset={item} 
+            onPress={() => router.push(`/asset/${item.id}` as any)} 
+          />
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>Nenhum ativo encontrado.</Text>}
       />

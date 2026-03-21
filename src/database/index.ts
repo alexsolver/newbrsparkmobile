@@ -1,11 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 import { Asset } from '../types/asset';
 
-// Abrir ou criar a base local SQLite de forma síncrona
 const db = SQLite.openDatabaseSync('brspark.db');
 
 export function initDatabase() {
   db.execSync(`
+    DROP TABLE IF EXISTS assets;
+    DROP TABLE IF EXISTS assets_history;
+
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY NOT NULL,
       title TEXT NOT NULL,
@@ -13,9 +15,8 @@ export function initDatabase() {
       imageUrl TEXT,
       status TEXT,
       statusType TEXT,
-      details_address TEXT,
-      details_mileage INTEGER,
-      details_year INTEGER
+      details TEXT,
+      deleted_at TEXT DEFAULT NULL
     );
     
     CREATE TABLE IF NOT EXISTS sync_queue (
@@ -24,17 +25,30 @@ export function initDatabase() {
       payload TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS assets_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
 export function saveAssetsLocal(assets: Asset[]) {
   const stmt = db.prepareSync(`
     INSERT OR REPLACE INTO assets 
-    (id, title, type, imageUrl, status, statusType, details_address, details_mileage, details_year) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, title, type, imageUrl, status, statusType, details, deleted_at) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   assets.forEach(asset => {
+    let detailsBlob = '{}';
+    try {
+      detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}';
+    } catch(e) {}
+
     stmt.executeSync([
       asset.id,
       asset.title,
@@ -42,37 +56,54 @@ export function saveAssetsLocal(assets: Asset[]) {
       asset.imageUrl || null,
       asset.status,
       asset.statusType,
-      asset.details?.address || null,
-      asset.details?.mileage || null,
-      asset.details?.year || null
+      detailsBlob,
+      (asset as any).deletedAt || null
     ]);
   });
 }
 
 export function getLocalAssets(): Asset[] {
-  const result = db.getAllSync('SELECT * FROM assets');
-  return result.map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    type: row.type as any,
-    imageUrl: row.imageUrl,
-    status: row.status,
-    statusType: row.statusType,
-    details: {
-      address: row.details_address,
-      mileage: row.details_mileage,
-      year: row.details_year,
+  const result = db.getAllSync('SELECT * FROM assets WHERE deleted_at IS NULL');
+  return result.map((row: any) => {
+    let parsedDetails = {};
+    if (row.details) {
+       try { parsedDetails = JSON.parse(row.details); } catch(e) {}
     }
-  }));
+    
+    return {
+      id: row.id,
+      title: row.title,
+      type: row.type as any,
+      imageUrl: row.imageUrl,
+      status: row.status,
+      statusType: row.statusType,
+      details: parsedDetails
+    };
+  });
 }
 
-// Quando o aplicativo está "offline", as ações do usuário vão para uma Fila (Queue)
+// LOG HISTÓRICO CONTÍNUO
+export function logAssetHistory(assetId: string, action: string, details: string = '') {
+  const stmt = db.prepareSync('INSERT INTO assets_history (asset_id, action, details) VALUES (?, ?, ?)');
+  stmt.executeSync([assetId, action, details]);
+}
+
+export function getAssetHistoryLocal(assetId: string) {
+  return db.getAllSync('SELECT * FROM assets_history WHERE asset_id = ? ORDER BY created_at DESC', [assetId]);
+}
+
+// SOFT DELETE
+export function softDeleteAssetLocal(assetId: string) {
+  const stmt = db.prepareSync("UPDATE assets SET deleted_at = datetime('now') WHERE id = ?");
+  stmt.executeSync([assetId]);
+  logAssetHistory(assetId, 'EXCLUSÃO LÓGICA', 'Ativo removido do inventário via Soft Delete pelo usuário.');
+}
+
 export function queueOfflineAction(action: string, payload: any) {
   const stmt = db.prepareSync('INSERT INTO sync_queue (action, payload) VALUES (?, ?)');
   stmt.executeSync([action, JSON.stringify(payload)]);
 }
 
-// Função para buscar o que falta sincronizar com o provedor B2B (Back-end)
 export function getSyncQueue() {
   return db.getAllSync('SELECT * FROM sync_queue ORDER BY created_at ASC');
 }
