@@ -56,8 +56,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logo: {
-    width: 120,
-    height: 30,
+    width: 180,
+    height: 48,
   },
   searchButton: {
     padding: 4,
