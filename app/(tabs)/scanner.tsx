@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
+import { getLocalAssets } from '../../src/database';
 
 export default function ScannerScreen() {
    const [permission, requestPermission] = useCameraPermissions();
@@ -25,11 +26,16 @@ export default function ScannerScreen() {
    const handleBarcode = ({ data }: any) => {
       if (scanned) return;
       setScanned(true);
-      if (data && data.startsWith('brsp-')) {
-          router.push(`/asset/${data}`); // Redireciona direto da aba
+      
+      const cleanData = data ? data.trim() : '';
+      const localAssets = getLocalAssets();
+      const assetExists = localAssets.find(a => a.id === cleanData);
+
+      if (assetExists) {
+          router.push(`/asset/${cleanData}` as any);
       } else {
-          Alert.alert('Etiqueta Inválida', 'Este QrCode não é um selo B2B corporativo válido.', [
-             { text: 'Tentar Novamente', onPress: () => setScanned(false) },
+          Alert.alert('Etiqueta Invisível ou Fraude', 'O equipamento não foi encontrado na malha de dados corporativa e pode ser um objeto não homologado.', [
+             { text: 'Continuar Patrulha', onPress: () => setScanned(false) },
              { text: 'Cancelar Visão', style: 'cancel', onPress: () => router.push('/') }
           ]);
       }
@@ -43,8 +49,8 @@ export default function ScannerScreen() {
             </View>
             <Text style={{color: colors.primary, textAlign: 'center', marginBottom: 24, fontSize: 18, fontWeight: '800'}}>Sincronização Física</Text>
             <Text style={{color: '#94a3b8', textAlign: 'center', marginBottom: 32, fontSize: 14, lineHeight: 22}}>Para rastrear ativos no mundo real usando os selos emitidos, o BrSpark necessita invocar as lentes do seu hardware.</Text>
-            <TouchableOpacity onPress={requestPermission} style={{backgroundColor: colors.primary, paddingVertical: 18, paddingHorizontal: 32, borderRadius: 16, width: '100%', alignItems: 'center'}}>
-               <Text style={{color: '#fff', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5}}>ATIVAR DETECTOR VISUAL</Text>
+            <TouchableOpacity onPress={requestPermission} style={{backgroundColor: '#2563EB', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center'}}>
+               <Text style={{color: '#ffffff', fontWeight: '700'}}>Ativar Lente Óptica</Text>
             </TouchableOpacity>
             
             <TouchableOpacity onPress={() => router.push('/')} style={{paddingVertical: 18, marginTop: 12}}>

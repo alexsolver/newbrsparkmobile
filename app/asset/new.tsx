@@ -34,7 +34,12 @@ export default function NewAssetScreen() {
   
   // Localização
   const [cep, setCep] = useState('');
-  const [address, setAddress] = useState('');
+  const [street, setStreet] = useState('');
+  const [streetNumber, setStreetNumber] = useState('');
+  const [complement, setComplement] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [gpsCoordinates, setGpsCoordinates] = useState('');
   const [fetchingGps, setFetchingGps] = useState(false);
   const [fetchingCep, setFetchingCep] = useState(false);
@@ -56,10 +61,13 @@ export default function NewAssetScreen() {
        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
        const data = await res.json();
        if (!data.erro) {
-          setAddress(`${data.logradouro}, Bairro ${data.bairro} - ${data.localidade}/${data.uf}`);
-       } else {
-          Alert.alert('CEP Inválido', 'O CEP inserido não foi encontrado na base.');
-       }
+           setStreet(data.logradouro || '');
+           setNeighborhood(data.bairro || '');
+           setCity(data.localidade || '');
+           setState(data.uf || '');
+        } else {
+           Alert.alert('CEP Inválido', 'O CEP inserido não foi encontrado na base.');
+        }
      } catch (e) {
        Alert.alert('Erro', 'Falha ao buscar CEP. Verifique sua conexão.');
      }
@@ -77,7 +85,19 @@ export default function NewAssetScreen() {
 
     try {
        let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-       setGpsCoordinates(`${loc.coords.latitude.toFixed(6)}, ${loc.coords.longitude.toFixed(6)}`);
+       const { latitude, longitude } = loc.coords;
+       setGpsCoordinates(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+       // Geocodificação reversa
+       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+       if (place) {
+         if (place.street) setStreet(place.street);
+         if (place.streetNumber) setStreetNumber(place.streetNumber);
+         if (place.subregion || place.district) setNeighborhood(place.subregion || place.district || '');
+         if (place.city) setCity(place.city);
+         if (place.region) setState(place.region);
+         if (place.postalCode) setCep(place.postalCode.replace('-', ''));
+         Alert.alert('GPS Capturado ✅', 'Coordenadas e endereço preenchidos automaticamente.');
+       }
     } catch (e) {
        Alert.alert('Falha de GPS', 'Não foi possível rastrear as coordenadas.');
     }
@@ -107,8 +127,13 @@ export default function NewAssetScreen() {
         serialNumber,
         costCenter,
         acquisitionValue,
-        address,
         cep,
+        street,
+        streetNumber,
+        complement,
+        neighborhood,
+        city,
+        state,
         gpsCoordinates,
         owner,
         department,
@@ -182,7 +207,7 @@ export default function NewAssetScreen() {
         <TouchableOpacity onPress={() => { type ? setType(null) : router.back() }} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{type ? 'Criação de Ativo' : 'Selecione a Estrutura'}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">Nova Ficha de Ativo</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -283,35 +308,60 @@ export default function NewAssetScreen() {
                <Text style={styles.formSectionTitle}>Geolocalização / Endereçamento</Text>
             </View>
 
-            <Text style={styles.modLabel}>CEP Postal (Brasil)</Text>
+            <Text style={styles.modLabel}>CEP Postal</Text>
             <View style={{flexDirection: 'row', gap: 12, marginBottom: 20}}>
                <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0}]} value={cep} onChangeText={setCep} placeholder="Ex: 01001-000" keyboardType="numeric" maxLength={9} />
                <TouchableOpacity style={styles.actionBtn} onPress={fetchCepData} disabled={fetchingCep}>
-                  {fetchingCep ? <ActivityIndicator color="#fff" /> : <Text style={{color:'#fff', fontWeight: '700'}}>Buscar ZIP</Text>}
+                  {fetchingCep ? <ActivityIndicator color="#fff" /> : <Text style={{color:'#fff', fontWeight: '700'}}>Buscar</Text>}
                </TouchableOpacity>
             </View>
 
-            <Text style={styles.modLabel}>Edificação / Despacho / Cidade</Text>
-            <TextInput style={[styles.modInput, {minHeight: 60}]} multiline value={address} onChangeText={setAddress} placeholder="Avenida, Rua, Condomínio Físico..." />
+            <Text style={styles.modLabel}>Logradouro (Rua / Avenida)</Text>
+            <TextInput style={styles.modInput} value={street} onChangeText={setStreet} placeholder="Ex: Av. Paulista" />
 
-            <Text style={styles.modLabel}>Assinatura Global GPS (Lat/Long)</Text>
+            <View style={{flexDirection: 'row', gap: 12}}>
+               <View style={{flex: 1}}>
+                  <Text style={styles.modLabel}>Número</Text>
+                  <TextInput style={styles.modInput} value={streetNumber} onChangeText={setStreetNumber} placeholder="Ex: 1001" keyboardType="numeric" />
+               </View>
+               <View style={{flex: 2}}>
+                  <Text style={styles.modLabel}>Complemento</Text>
+                  <TextInput style={styles.modInput} value={complement} onChangeText={setComplement} placeholder="Sala 12, Bloco B" />
+               </View>
+            </View>
+
+            <Text style={styles.modLabel}>Bairro</Text>
+            <TextInput style={styles.modInput} value={neighborhood} onChangeText={setNeighborhood} placeholder="Ex: Centro" />
+
+            <View style={{flexDirection: 'row', gap: 12}}>
+               <View style={{flex: 2}}>
+                  <Text style={styles.modLabel}>Cidade</Text>
+                  <TextInput style={styles.modInput} value={city} onChangeText={setCity} placeholder="São Paulo" />
+               </View>
+               <View style={{flex: 1}}>
+                  <Text style={styles.modLabel}>Estado (UF)</Text>
+                  <TextInput style={styles.modInput} value={state} onChangeText={setState} placeholder="SP" maxLength={2} autoCapitalize="characters" />
+               </View>
+            </View>
+
+            <Text style={styles.modLabel}>Assinatura GPS (Lat/Long)</Text>
             <View style={{flexDirection: 'row', gap: 12, marginBottom: 20}}>
-               <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0, backgroundColor: '#f1f5f9', color: '#64748b'}]} value={gpsCoordinates} editable={false} placeholder="Aguardando scanner de satélite..." />
+               <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0, backgroundColor: '#f1f5f9', color: '#64748b'}]} value={gpsCoordinates} editable={false} placeholder="Toque no botão para capturar..." />
                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#14B8A6'}]} onPress={fetchGps} disabled={fetchingGps}>
                   {fetchingGps ? <ActivityIndicator color="#fff" /> : <Ionicons name="locate" size={24} color="#fff" />}
                </TouchableOpacity>
             </View>
 
-            {/* HEADER 4: Custom Fields Limpos */}
-            <View style={[styles.formSectionHeader, {marginTop: 16, justifyContent: 'space-between'}]}>
-               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                 <Ionicons name="construct-outline" size={18} color={colors.primary} />
-                 <Text style={styles.formSectionTitle}>Campos Customizados</Text>
-               </View>
-               <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: colors.primary+'15', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12}}>
-                 <Text style={{color:colors.primary, fontWeight:'800', fontSize: 13}}>+ NOVO EIXO</Text>
-               </TouchableOpacity>
-            </View>
+            {/* HEADER Custom Fields */}
+          <View style={[styles.formSectionHeader, {justifyContent: 'space-between', marginTop: 16, flexWrap: 'wrap', gap: 12}]}>
+             <View style={{flexDirection: 'row', alignItems: 'center', flexShrink: 1}}>
+               <Ionicons name="construct-outline" size={18} color={colors.primary} />
+               <Text style={[styles.formSectionTitle, {flexShrink: 1, fontSize: 15}]} numberOfLines={1}>Atributos Extras</Text>
+             </View>
+             <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: colors.primary+'15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12}}>
+               <Text style={{color:colors.primary, fontWeight:'800', fontSize: 11}}>+ INCLUIR ATRIBUTO</Text>
+             </TouchableOpacity>
+          </View>
             
             {customFields.length === 0 && (
                <Text style={{color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20, fontStyle: 'italic'}}>A interface de campos modulares está inativada. Insira um eixo de propriedade específico usando o botão acima.</Text>
@@ -404,7 +454,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border },
   backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: colors.primary },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800', color: colors.primary, marginHorizontal: 12 },
   content: { padding: 16 },
   
   // Categorias (Step 1)
@@ -428,8 +478,8 @@ const styles = StyleSheet.create({
   
   customFieldPill: { backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 16 },
   
-  submitBtn: { backgroundColor: colors.primary, borderRadius: 16, paddingVertical: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
-  submitBtnText: { color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  submitBtn: { backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  submitBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   
   // Fotos Slider da Vistoria
   photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: colors.border },

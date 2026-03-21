@@ -11,8 +11,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { ApiService } from '../../src/services/api';
 import QRCode from 'react-native-qrcode-svg';
-import { cacheDirectory, writeAsStringAsync, EncodingType } from 'expo-file-system';
-import { shareAsync } from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 const MODULES = [
   { id: 'info', title: 'Ficha Geral', subtitle: 'Registros', icon: 'information-circle-outline' as const, color: '#3B82F6' },
@@ -38,7 +38,9 @@ export default function AssetDetailScreen() {
 
   // Ficha Geral Master
   const [editForm, setEditForm] = useState<any>({
-     title: '', inventoryId: '', brand: '', model: '', serialNumber: '', costCenter: '', acquisitionValue: '', cep: '', address: '', gpsCoordinates: '', owner: '', department: '', customFields: [], photos: []
+     title: '', inventoryId: '', brand: '', model: '', serialNumber: '', costCenter: '', acquisitionValue: '',
+     cep: '', street: '', streetNumber: '', complement: '', neighborhood: '', city: '', state: '',
+     gpsCoordinates: '', owner: '', department: '', customFields: [], photos: []
   });
 
   const [fetchingCep, setFetchingCep] = useState(false);
@@ -58,7 +60,12 @@ export default function AssetDetailScreen() {
          costCenter: found.details?.costCenter || '',
          acquisitionValue: found.details?.acquisitionValue || '',
          cep: found.details?.cep || '',
-         address: found.details?.address || '',
+         street: found.details?.street || '',
+         streetNumber: found.details?.streetNumber || '',
+         complement: found.details?.complement || '',
+         neighborhood: found.details?.neighborhood || '',
+         city: found.details?.city || '',
+         state: found.details?.state || '',
          gpsCoordinates: found.details?.gpsCoordinates || '',
          owner: found.details?.owner || '',
          department: found.details?.department || '',
@@ -79,12 +86,18 @@ export default function AssetDetailScreen() {
        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
        const data = await res.json();
        if (!data.erro) {
-          setEditForm({...editForm, address: `${data.logradouro}, Bairro ${data.bairro} - ${data.localidade}/${data.uf}`});
+          setEditForm((f: any) => ({
+            ...f,
+            street: data.logradouro || f.street,
+            neighborhood: data.bairro || f.neighborhood,
+            city: data.localidade || f.city,
+            state: data.uf || f.state,
+          }));
        } else {
           Alert.alert('CEP Inválido', 'O CEP inserido não foi encontrado na base.');
        }
      } catch (e) {
-       Alert.alert('Aviso', 'O Corretor falhou devido à ausência de rede.');
+       Alert.alert('Aviso', 'Falha ao buscar CEP. Verifique sua conexão.');
      }
      setFetchingCep(false);
   };
@@ -98,12 +111,28 @@ export default function AssetDetailScreen() {
       return;
     }
     try {
-       let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-       setEditForm({...editForm, gpsCoordinates: `${loc.coords.latitude.toFixed(6)}, ${loc.coords.longitude.toFixed(6)}`});
-    } catch (e) {
-       Alert.alert('Falha', 'Não foi possível detectar a antena do celular.');
-    }
-    setFetchingGps(false);
+       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+       const { latitude, longitude } = loc.coords;
+       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+       setEditForm((f: any) => ({
+         ...f,
+         gpsCoordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+         ...(place ? {
+           street: place.street || f.street,
+           streetNumber: place.streetNumber || f.streetNumber,
+           neighborhood: place.subregion || place.district || f.neighborhood,
+           city: place.city || f.city,
+           state: place.region || f.state,
+           cep: place.postalCode ? place.postalCode.replace(/\D/g,'') : f.cep,
+           country: place.country || f.country,
+           stateCode: place.isoCountryCode || f.stateCode, // Using isoCountryCode as a proxy for stateCode if available
+         } : {})
+       }));
+       if (place) Alert.alert('GPS Capturado ✅', 'Coordenadas e endereço preenchidos automaticamente.');
+     } catch (e) {
+        Alert.alert('Falha', 'Não foi possível detectar a antena do celular.');
+     }
+     setFetchingGps(false);
   };
 
   const scheduleMaintenance = () => {
@@ -128,7 +157,12 @@ export default function AssetDetailScreen() {
           costCenter: editForm.costCenter,
           acquisitionValue: editForm.acquisitionValue,
           cep: editForm.cep,
-          address: editForm.address,
+          street: editForm.street,
+          streetNumber: editForm.streetNumber,
+          complement: editForm.complement,
+          neighborhood: editForm.neighborhood,
+          city: editForm.city,
+          state: editForm.state,
           gpsCoordinates: editForm.gpsCoordinates,
           owner: editForm.owner,
           department: editForm.department,
@@ -200,13 +234,19 @@ export default function AssetDetailScreen() {
     if (svgRef.current) {
        svgRef.current.toDataURL(async (dataURL: string) => {
           try {
-             const filepath = cacheDirectory + `brspark_qr_${id}.png`;
-             await writeAsStringAsync(filepath, dataURL, { encoding: EncodingType.Base64 });
-             await shareAsync(filepath);
+             let base64Code = dataURL;
+             if (dataURL.includes('base64,')) {
+                base64Code = dataURL.split('base64,')[1];
+             }
+             const filepath = FileSystem.documentDirectory + `brspark_qr_${id}.png`;
+             await FileSystem.writeAsStringAsync(filepath, base64Code, { encoding: 'base64' });
+             await Sharing.shareAsync(filepath);
           } catch(e) {
-             Alert.alert('Erro', 'Não foi possível exportar a imagem da etiqueta.');
+             Alert.alert('Erro Técnico', `Falha ao exportar código: ${e}`);
           }
        });
+    } else {
+       Alert.alert('Aviso', 'Componente não pôde ser renderizado.');
     }
   };
 
@@ -305,29 +345,54 @@ export default function AssetDetailScreen() {
             <View style={{flexDirection: 'row', gap: 12, marginBottom: 20}}>
                <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0}]} value={editForm.cep} onChangeText={(t)=>setEditForm({...editForm, cep:t})} placeholder="00000-000" keyboardType="numeric" maxLength={9} />
                <TouchableOpacity style={styles.actionBtn} onPress={fetchCepData} disabled={fetchingCep}>
-                  {fetchingCep ? <ActivityIndicator color="#fff" /> : <Text style={{color:'#fff', fontWeight: '700'}}>Obter</Text>}
+                  {fetchingCep ? <ActivityIndicator color="#fff" /> : <Text style={{color:'#fff', fontWeight: '700'}}>Buscar</Text>}
                </TouchableOpacity>
             </View>
 
-            <Text style={styles.modLabel}>Edificação / Despacho Coleta</Text>
-            <TextInput style={[styles.modInput, {minHeight: 60}]} multiline value={editForm.address} onChangeText={(t)=>setEditForm({...editForm, address:t})} placeholder="Av..." />
+            <Text style={styles.modLabel}>Logradouro (Rua / Avenida)</Text>
+            <TextInput style={styles.modInput} value={editForm.street} onChangeText={(t)=>setEditForm({...editForm, street:t})} placeholder="Ex: Av. Paulista" />
 
-            <Text style={styles.modLabel}>Assinatura GPS Geográfica</Text>
+            <View style={{flexDirection: 'row', gap: 12}}>
+               <View style={{flex: 1}}>
+                  <Text style={styles.modLabel}>Número</Text>
+                  <TextInput style={styles.modInput} value={editForm.streetNumber} onChangeText={(t)=>setEditForm({...editForm, streetNumber:t})} placeholder="Ex: 1001" keyboardType="numeric" />
+               </View>
+               <View style={{flex: 2}}>
+                  <Text style={styles.modLabel}>Complemento</Text>
+                  <TextInput style={styles.modInput} value={editForm.complement} onChangeText={(t)=>setEditForm({...editForm, complement:t})} placeholder="Sala 12, Bloco B" />
+               </View>
+            </View>
+
+            <Text style={styles.modLabel}>Bairro</Text>
+            <TextInput style={styles.modInput} value={editForm.neighborhood} onChangeText={(t)=>setEditForm({...editForm, neighborhood:t})} placeholder="Ex: Centro" />
+
+            <View style={{flexDirection: 'row', gap: 12}}>
+               <View style={{flex: 2}}>
+                  <Text style={styles.modLabel}>Cidade</Text>
+                  <TextInput style={styles.modInput} value={editForm.city} onChangeText={(t)=>setEditForm({...editForm, city:t})} placeholder="São Paulo" />
+               </View>
+               <View style={{flex: 1}}>
+                  <Text style={styles.modLabel}>Estado (UF)</Text>
+                  <TextInput style={styles.modInput} value={editForm.state} onChangeText={(t)=>setEditForm({...editForm, state:t})} placeholder="SP" maxLength={2} autoCapitalize="characters" />
+               </View>
+            </View>
+
+            <Text style={styles.modLabel}>Assinatura GPS (Lat/Long)</Text>
             <View style={{flexDirection: 'row', gap: 12, marginBottom: 20}}>
-               <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0, backgroundColor: '#f1f5f9'}]} value={editForm.gpsCoordinates} editable={false} placeholder="Aguardando Pin..." />
+               <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0, backgroundColor: '#f1f5f9'}]} value={editForm.gpsCoordinates} editable={false} placeholder="Toque no botão para capturar..." />
                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#14B8A6'}]} onPress={fetchGps} disabled={fetchingGps}>
                   {fetchingGps ? <ActivityIndicator color="#fff" /> : <Ionicons name="locate" size={24} color="#fff" />}
                </TouchableOpacity>
             </View>
 
             {/* HEADER Custom Fields */}
-            <View style={[styles.formSectionHeader, {marginTop: 16, justifyContent: 'space-between'}]}>
-               <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <View style={[styles.formSectionHeader, {marginTop: 16, justifyContent: 'space-between', flexWrap: 'wrap', gap: 12}]}>
+               <View style={{flexDirection: 'row', alignItems: 'center', flexShrink: 1}}>
                  <Ionicons name="construct-outline" size={18} color={colors.primary} />
-                 <Text style={styles.formSectionTitle}>Campos Customizados</Text>
+                 <Text style={[styles.formSectionTitle, {flexShrink: 1, fontSize: 15}]} numberOfLines={1}>Atributos Extras</Text>
                </View>
-               <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: colors.primary+'15', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12}}>
-                 <Text style={{color:colors.primary, fontWeight:'800', fontSize: 13}}>+ NOVO EIXO</Text>
+               <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: colors.primary+'15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12}}>
+                 <Text style={{color:colors.primary, fontWeight:'800', fontSize: 11}}>+ INCLUIR ATRIBUTO</Text>
                </TouchableOpacity>
             </View>
 
@@ -470,7 +535,7 @@ export default function AssetDetailScreen() {
         <TouchableOpacity onPress={()=>activeModule?setActiveModule(null):router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{activeModule ? MODULES.find(m=>m.id===activeModule)?.title : 'Gestão do Ativo Corporativo'}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{activeModule ? MODULES.find(m=>m.id===activeModule)?.title : 'Gestão de Ativo'}</Text>
         <TouchableOpacity style={styles.backButton} onPress={handleSoftDelete}>
            <Ionicons name="trash-outline" size={24} color={'#EF4444'} />
         </TouchableOpacity>
@@ -479,7 +544,18 @@ export default function AssetDetailScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <View style={styles.imageContainer}>
-            {asset.imageUrl ? (
+            {asset.details?.photos && asset.details.photos.length > 0 ? (
+               <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ width: '100%', height: '100%' }}>
+                  {asset.details!.photos!.map((uri: string, idx: number) => (
+                      <View key={idx} style={{ width: Dimensions.get('window').width, height: 240 }}>
+                         <Image source={{ uri }} style={styles.image} />
+                         <View style={styles.carouselIndicator}>
+                            <Text style={styles.carouselText}>{idx + 1} / {asset.details!.photos!.length}</Text>
+                         </View>
+                      </View>
+                  ))}
+               </ScrollView>
+            ) : asset.imageUrl ? (
                <Image source={{ uri: asset.imageUrl }} style={styles.image} />
             ) : (
                <View style={styles.imagePlaceholder}>
@@ -496,7 +572,7 @@ export default function AssetDetailScreen() {
                <View style={{flex: 1}}>
                  <Text style={styles.title}>{asset.title}</Text>
                  <Text style={styles.typeTag}>
-                   {asset.type === 'REAL_ESTATE' ? 'Imóvel Raiz' : asset.type === 'VEHICLE' ? 'Veículo / Frota' : asset.type === 'COLLECTION' ? 'Artefato Físico' : 'Dispositivo / Equip.'} • ID: {asset.id.split('-')[1].toUpperCase()}
+                   {asset.type === 'REAL_ESTATE' ? 'Imóvel Raiz' : asset.type === 'VEHICLE' ? 'Veículo / Frota' : asset.type === 'COLLECTION' ? 'Artefato Físico' : 'Dispositivo / Equip.'} • ID: {asset.id.includes('-') ? asset.id.split('-')[1].toUpperCase() : asset.id.toUpperCase()}
                  </Text>
                </View>
                <TouchableOpacity onPress={() => setQrModalVisible(true)} style={{backgroundColor: colors.primary+'10', padding: 12, borderRadius: 12}}>
@@ -545,7 +621,7 @@ export default function AssetDetailScreen() {
                <Text style={{fontSize: 20, fontWeight: '800', color: colors.primary, marginBottom: 24, marginTop: 8}}>Selo Patrimonial Físico</Text>
                
                <View style={{backgroundColor: '#F8FAFC', padding: 16, borderRadius: 16, borderWidth: 2, borderColor: colors.primary, marginBottom: 24}}>
-                  <QRCode value={asset.id} size={220} getRef={(c) => { svgRef.current = c; }} color={colors.primary} backgroundColor="transparent" />
+                  <QRCode value={asset.id} size={220} getRef={(c) => { svgRef.current = c; }} color="#000000" backgroundColor="#FFFFFF" />
                </View>
 
                <Text style={{textAlign: 'center', marginBottom: 24, color: colors.textSecondary, fontWeight: '600', fontSize: 13, lineHeight: 18}}>Afixe fisicamente esta etiqueta gerada a partir do QrCode no objeto operacional para permitir fiscalizações e auditorias à jato.</Text>
@@ -568,13 +644,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.cardWhite },
   backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: colors.primary },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800', color: colors.primary, marginHorizontal: 12 },
   content: { paddingBottom: 40 },
   
   heroCard: { backgroundColor: colors.cardWhite, marginBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   imageContainer: { width: '100%', height: 240, position: 'relative' },
   image: { width: '100%', height: '100%', backgroundColor: colors.border },
   imagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  carouselIndicator: { position: 'absolute', top: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  carouselText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   badgeContainer: { position: 'absolute', bottom: 12, left: 16 },
   heroDetails: { padding: 20 },
   title: { fontSize: 26, fontWeight: '800', color: colors.primary, marginBottom: 4 },
@@ -599,8 +677,8 @@ const styles = StyleSheet.create({
   
   customFieldPill: { backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 16 },
   
-  saveBtn: { backgroundColor: colors.primary, borderRadius: 16, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
-  saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  saveBtn: { backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  saveBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   
   dashedBox: { borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', marginBottom: 24, backgroundColor: colors.primary + '0A' },
   docRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: 10, backgroundColor: colors.background },

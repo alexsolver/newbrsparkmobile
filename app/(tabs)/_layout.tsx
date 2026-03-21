@@ -1,9 +1,20 @@
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { colors } from '../../src/theme/colors';
+import { NotificationService } from '../../src/services/notifications';
 
 export default function TabLayout() {
+  const [unread, setUnread] = useState(NotificationService.getUnreadCount());
+
+  useEffect(() => {
+    const unsub = NotificationService.subscribe(() => {
+      setUnread(NotificationService.getUnreadCount());
+    });
+    return unsub;
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -20,6 +31,7 @@ export default function TabLayout() {
         },
         headerShown: false,
       }}>
+
       <Tabs.Screen
         name="index"
         options={{
@@ -27,6 +39,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="grid" size={24} color={color} />,
         }}
       />
+
       <Tabs.Screen
         name="assets"
         options={{
@@ -34,45 +47,64 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="card" size={24} color={color} />,
         }}
       />
+
       <Tabs.Screen
-        name="calendar"
+        name="notifications"
         options={{
-          title: 'Agenda',
-          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} />,
+          title: 'Avisos',
+          tabBarIcon: ({ color }) => (
+            <View style={{ position: 'relative' }}>
+              <Ionicons name="notifications" size={24} color={color} />
+              {unread > 0 && (
+                <View style={{
+                  position: 'absolute', top: -4, right: -6,
+                  backgroundColor: '#EF4444',
+                  minWidth: 16, height: 16, borderRadius: 8,
+                  justifyContent: 'center', alignItems: 'center',
+                  paddingHorizontal: 3,
+                  borderWidth: 1.5, borderColor: colors.cardWhite,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>
+                    {unread > 9 ? '9+' : unread}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
         }}
       />
+
       <Tabs.Screen
         name="scanner"
         options={{
-          title: '', // Título vazio
-          tabBarIcon: ({ focused }) => (
+          title: '',
+          tabBarIcon: () => (
             <View style={{
-                position: 'absolute',
-                top: -18,
-                backgroundColor: colors.primary,
-                width: 60, height: 60,
-                borderRadius: 30,
-                justifyContent: 'center',
-                alignItems: 'center',
-                shadowColor: colors.primary,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 6,
-                elevation: 6,
-                borderWidth: 3,
-                borderColor: colors.cardWhite
+              position: 'absolute',
+              top: -18,
+              backgroundColor: colors.primary,
+              width: 60, height: 60,
+              borderRadius: 30,
+              justifyContent: 'center',
+              alignItems: 'center',
+              shadowColor: colors.primary,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 6,
+              elevation: 6,
+              borderWidth: 3,
+              borderColor: colors.cardWhite,
             }}>
               <Ionicons name="qr-code-outline" size={26} color="#fff" />
             </View>
           ),
         }}
       />
-      <Tabs.Screen
-        name="documents"
-        options={{
-          href: null,
-        }}
-      />
+
+      {/* Tabs ocultas */}
+      <Tabs.Screen name="calendar"   options={{ href: null }} />
+      <Tabs.Screen name="documents"  options={{ href: null }} />
+
       <Tabs.Screen
         name="profile"
         options={{
