@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -22,6 +22,13 @@ export default function ChatScreen() {
   const [rooms,      setRooms]      = useState<ChatRoom[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const CONTACTS = [
+    { id: 'sup', name: 'Suporte Brspark', role: 'Central de Engenharia', color: '#7C3AED' },
+    { id: 'man', name: 'Gestor de Manutenção', role: 'Logística', color: '#10B981' },
+    { id: 'adm', name: 'Administração', role: 'Faturamento', color: '#3B82F6' },
+  ];
 
   const loadRooms = useCallback(async () => {
     const data = await ChatService.getRooms();
@@ -54,10 +61,9 @@ export default function ChatScreen() {
           <Text style={styles.headerTitle}>Mensagens</Text>
           <Text style={styles.headerSub}>{rooms.length} canais corporativos</Text>
         </View>
-        <View style={styles.onlineIndicator}>
-          <View style={styles.onlineDot} />
-          <Text style={styles.onlineText}>Online</Text>
-        </View>
+        <TouchableOpacity style={styles.headerAction} onPress={() => setModalVisible(true)}>
+          <Ionicons name="create-outline" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -104,6 +110,39 @@ export default function ChatScreen() {
           </TouchableOpacity>
         )}
       />
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selecionar Destinatário</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                 <Ionicons name="close" size={26} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {CONTACTS.map(c => (
+                <TouchableOpacity 
+                   key={c.id} 
+                   style={styles.contactRow}
+                   onPress={() => {
+                     setModalVisible(false);
+                     router.push(`/chat/${c.id}?name=${encodeURIComponent(c.name)}&color=${encodeURIComponent(c.color)}` as any);
+                   }}
+                >
+                  <View style={[styles.miniAvatar, { backgroundColor: c.color }]}>
+                     <Text style={styles.avatarTextSmall}>{c.name[0]}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                     <Text style={styles.contactName}>{c.name}</Text>
+                     <Text style={styles.contactSub}>{c.role}</Text>
+                  </View>
+                  <Ionicons name="paper-plane-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -118,9 +157,18 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: colors.primary },
   headerSub:   { fontSize: 13, color: colors.textSecondary, fontWeight: '600', marginTop: 2 },
-  onlineIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  onlineText: { fontSize: 12, fontWeight: '700', color: '#10B981' },
+  headerAction: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: colors.cardWhite, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.primary },
+  
+  contactRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+  miniAvatar: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarTextSmall: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  contactName: { fontSize: 15, fontWeight: '800', color: colors.primary },
+  contactSub: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
 
   list: { paddingBottom: 40 },
   roomRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.cardWhite },

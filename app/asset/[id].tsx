@@ -17,18 +17,22 @@ import { AssetVaultService, VaultEntry, VaultCategory, VAULT_CATEGORIES } from '
 import { VaultModule } from '../../src/components/VaultModule';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { AssetDocService, AssetDocument } from '../../src/services/assetDocs';
+import { DocumentModule } from '../../src/components/DocumentModule';
+import { StockModule } from '../../src/components/StockModule';
 
 const MODULES = [
-  { id: 'info', title: 'Ficha Geral', subtitle: 'Registros', icon: 'information-circle-outline' as const, color: '#3B82F6' },
-  { id: 'docs', title: 'Documentos', subtitle: 'Vault (PDFs)', icon: 'folder-open-outline' as const, color: '#8B5CF6' },
-  { id: 'maint', title: 'Manutenção', subtitle: 'Workflow SOS', icon: 'build-outline' as const, color: '#F59E0B' },
-  { id: 'vault',   title: 'Vault',         subtitle: 'Cofre de Senhas',  icon: 'lock-closed' as const,            color: '#7C3AED' },
-  { id: 'costs',   title: 'Custos',         subtitle: 'Métricas TCO',   icon: 'cash-outline' as const,           color: '#10B981' },
-  { id: 'insurance', title: 'Seguros',      subtitle: 'Apólices Ativas', icon: 'shield-checkmark-outline' as const, color: '#EF4444' },
-  { id: 'contacts',  title: 'Equipe',       subtitle: 'Prestadores',     icon: 'people-outline' as const,         color: '#6366F1' },
-  { id: 'hier',    title: 'Hierarquia',     subtitle: 'Sub-ativos',      icon: 'git-branch-outline' as const,     color: '#0891B2' },
-  { id: 'history', title: 'Histórico',      subtitle: 'Eventos GMS',    icon: 'time-outline' as const,           color: '#64748B' },
-  { id: 'reports', title: 'Relatórios',     subtitle: 'KPIs PDF',       icon: 'document-text-outline' as const,  color: '#EC4899' },
+  { id: 'info',      title: 'Informações', subtitle: 'Ficha Geral',    icon: 'information-circle' as const,     color: '#3B82F6' },
+  { id: 'docs',      title: 'Arquivos',    subtitle: 'Documentos',     icon: 'folder-open' as const,            color: '#8B5CF6' },
+  { id: 'maint',     title: 'Manutenção',  subtitle: 'Workflow SOS',   icon: 'build' as const,                  color: '#F59E0B' },
+  { id: 'vault',     title: 'Segurança',   subtitle: 'Cofre Vault',    icon: 'finger-print' as const,           color: '#7C3AED' },
+  { id: 'costs',     title: 'Custos',      subtitle: 'Métricas TCO',   icon: 'wallet' as const,                 color: '#10B981' },
+  { id: 'insurance', title: 'Seguros',     subtitle: 'Apólices',       icon: 'umbrella' as const,               color: '#EF4444' },
+  { id: 'contacts',  title: 'Equipe',      subtitle: 'Prestadores',    icon: 'people' as const,                 color: '#6366F1' },
+  { id: 'hier',      title: 'Parcial',     subtitle: 'Hierarquia',     icon: 'git-network' as const,            color: '#0891B2' },
+  { id: 'reports',   title: 'Relatórios',  subtitle: 'KPIs PDF',       icon: 'document-text' as const,          color: '#EC4899' },
+  { id: 'history',   title: 'Histórico',   subtitle: 'Eventos GMS',    icon: 'time' as const,                   color: '#64748B' },
+  { id: 'stock',     title: 'Estoque',     subtitle: 'Peças e Insumos', icon: 'cube' as const,                   color: '#00C4CC' },
 ];
 
 export default function AssetDetailScreen() {
@@ -59,6 +63,25 @@ export default function AssetDetailScreen() {
   const isExpoGo = Constants.appOwnership === 'expo';
   const [linkModalVisible, setLinkModalVisible] = useState(false);
   const [linkSearch, setLinkSearch] = useState('');
+  const [documents, setDocuments] = useState<AssetDocument[]>([]);
+
+  const handleAddSubAsset = () => {
+    if (!asset) return;
+    Alert.alert('Adicionar Sub-ativo', 'Evolução da Hierarquia Brspark. Como deseja prosseguir?', [
+      { 
+        text: 'Cadastrar Novo', 
+        onPress: () => router.push(`/asset/new?parentId=${asset.id}&parentTitle=${encodeURIComponent(asset.title)}` as any) 
+      },
+      { 
+        text: 'Vincular Existente', 
+        onPress: () => {
+          setLinkSearch('');
+          setLinkModalVisible(true);
+        }
+      },
+      { text: 'Cancelar', style: 'cancel' }
+    ]);
+  };
 
   // Ficha Geral Master
   const [editForm, setEditForm] = useState<any>({
@@ -99,6 +122,7 @@ export default function AssetDetailScreen() {
          photos: found.details?.photos || []
       });
       setHistoryLogs(getAssetHistoryLocal(found.id));
+      AssetDocService.getDocuments(found.id).then(setDocuments);
     }
   }, [id]);
 
@@ -329,19 +353,68 @@ export default function AssetDetailScreen() {
             <Text style={styles.modLabel}>Cód. de Patrimônio (Tombamento)</Text>
             <TextInput style={styles.modInput} value={editForm.inventoryId} onChangeText={(t)=>setEditForm({...editForm, inventoryId:t})} placeholder="Ex: PT-48810-A" />
 
-            <View style={{flexDirection: 'row', gap: 12}}>
-               <View style={{flex: 1}}>
-                  <Text style={styles.modLabel}>Fabricante</Text>
-                  <TextInput style={styles.modInput} value={editForm.brand} onChangeText={(t)=>setEditForm({...editForm, brand:t})} placeholder="Marca" />
-               </View>
-               <View style={{flex: 1}}>
-                  <Text style={styles.modLabel}>Modelo Comercial</Text>
-                  <TextInput style={styles.modInput} value={editForm.model} onChangeText={(t)=>setEditForm({...editForm, model:t})} placeholder="Versão/Model" />
-               </View>
-            </View>
-
-            <Text style={styles.modLabel}>Número de Série (S/N) / Chassi</Text>
-            <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>setEditForm({...editForm, serialNumber:t})} placeholder="Ex: ABC12345678" />
+            {/* Campos Dinâmicos por Tipo de Ativo */}
+            {asset.type === 'REAL_ESTATE' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Matrícula / Registro</Text>
+                      <TextInput style={styles.modInput} value={editForm.brand} onChangeText={(t)=>setEditForm({...editForm, brand:t})} placeholder="N° da Matrícula" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Área Total (m²)</Text>
+                      <TextInput style={styles.modInput} value={editForm.model} onChangeText={(t)=>setEditForm({...editForm, model:t})} placeholder="Ex: 500" keyboardType="numeric" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Tipo de Uso / Destinação</Text>
+                <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>setEditForm({...editForm, serialNumber:t})} placeholder="Residencial, Comercial, Industrial..." />
+              </>
+            ) : asset.type === 'VEHICLE' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Marca / Fabricante</Text>
+                      <TextInput style={styles.modInput} value={editForm.brand} onChangeText={(t)=>setEditForm({...editForm, brand:t})} placeholder="Ex: Toyota, BMW..." />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Modelo Comercial</Text>
+                      <TextInput style={styles.modInput} value={editForm.model} onChangeText={(t)=>setEditForm({...editForm, model:t})} placeholder="Ex: Corolla XEI" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>N° do Chassi (VIN) / Placa</Text>
+                <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>setEditForm({...editForm, serialNumber:t})} placeholder="Placa ou Código VIN" />
+              </>
+            ) : asset.type === 'COLLECTION' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Autor / Artista</Text>
+                      <TextInput style={styles.modInput} value={editForm.brand} onChangeText={(t)=>setEditForm({...editForm, brand:t})} placeholder="Nome do Criador" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Material / Técnica</Text>
+                      <TextInput style={styles.modInput} value={editForm.model} onChangeText={(t)=>setEditForm({...editForm, model:t})} placeholder="Ex: Óleo sobre Tela" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Estado de Conservação</Text>
+                <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>setEditForm({...editForm, serialNumber:t})} placeholder="Excelente, Bom, Requer Restauro..." />
+              </>
+            ) : (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Fabricante</Text>
+                      <TextInput style={styles.modInput} value={editForm.brand} onChangeText={(t)=>setEditForm({...editForm, brand:t})} placeholder="Marca" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Modelo Comercial</Text>
+                      <TextInput style={styles.modInput} value={editForm.model} onChangeText={(t)=>setEditForm({...editForm, model:t})} placeholder="Versão/Model" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Número de Série (S/N)</Text>
+                <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>setEditForm({...editForm, serialNumber:t})} placeholder="Ex: ABC12345678" />
+              </>
+            )}
 
             <View style={[styles.formSectionHeader, {marginTop: 16}]}>
                <Ionicons name="cash-outline" size={18} color={colors.primary} />
@@ -535,8 +608,7 @@ export default function AssetDetailScreen() {
                     </TouchableOpacity>
                   ))
                 )}
-                <TouchableOpacity style={styles.addChildBtn}
-                  onPress={() => router.push(`/asset/new?parentId=${asset.id}&parentTitle=${encodeURIComponent(asset.title)}` as any)}>
+                <TouchableOpacity style={styles.addChildBtn} onPress={handleAddSubAsset}>
                   <Ionicons name="add" size={16} color={colors.primary} />
                   <Text style={{color: colors.primary, fontWeight:'800', fontSize: 13, marginLeft: 6}}>Adicionar Sub-ativo</Text>
                 </TouchableOpacity>
@@ -574,14 +646,7 @@ export default function AssetDetailScreen() {
         );
       case 'docs':
         return (
-          <View style={styles.modContainer}>
-            <TouchableOpacity style={styles.dashedBox} onPress={() => Alert.alert('Anexado', 'PDF enviado com hash criptografado para o servidor B2B central.')}>
-               <Ionicons name="document-attach" size={36} color={colors.primary} />
-               <Text style={{marginTop: 8, color: colors.primary, fontWeight: '700'}}>Alocar PDF Oficial</Text>
-            </TouchableOpacity>
-            <View style={styles.docRow}><Ionicons name="document-text" size={24} color={'#E11D48'} /><Text style={{flex: 1, marginLeft: 12, fontWeight: '600'}}>Apolice_Sinistro_Gerada.pdf</Text></View>
-            <View style={styles.docRow}><Ionicons name="document-text" size={24} color={'#3B82F6'} /><Text style={{flex: 1, marginLeft: 12, fontWeight: '600'}}>Averbacao_Placa_1234.pdf</Text></View>
-          </View>
+          <DocumentModule assetId={asset.id} />
         );
       case 'maint':
         return (
@@ -751,22 +816,7 @@ export default function AssetDetailScreen() {
               </Text>
               <TouchableOpacity
                 style={{backgroundColor: colors.primary + '15', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5}}
-                onPress={() => {
-                  Alert.alert('Adicionar Sub-ativo', 'Evolução da Hierarquia Brspark. Como deseja prosseguir?', [
-                    { 
-                      text: 'Cadastrar Novo', 
-                      onPress: () => router.push(`/asset/new?parentId=${asset.id}&parentTitle=${encodeURIComponent(asset.title)}` as any) 
-                    },
-                    { 
-                      text: 'Vincular Existente', 
-                      onPress: () => {
-                        setLinkSearch('');
-                        setLinkModalVisible(true);
-                      }
-                    },
-                    { text: 'Cancelar', style: 'cancel' }
-                  ]);
-                }}
+                onPress={handleAddSubAsset}
               >
                 <Text style={{color: colors.primary, fontWeight: '800', fontSize: 11}}>+ SUB-ATIVO</Text>
               </TouchableOpacity>
@@ -831,6 +881,10 @@ export default function AssetDetailScreen() {
              )}
           </View>
         );
+      case 'stock':
+        return (
+          <StockModule assetId={asset.id} />
+        );
       default: 
         return (
            <View style={styles.modContainer}>
@@ -844,13 +898,35 @@ export default function AssetDetailScreen() {
     <SafeAreaView edges={['top']} style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={()=>activeModule?setActiveModule(null):router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+        <TouchableOpacity 
+          onPress={() => activeModule ? setActiveModule(null) : router.back()} 
+          style={styles.backButton}
+        >
+          <Ionicons 
+            name={activeModule ? "chevron-back" : "arrow-back"} 
+            size={26} 
+            color={colors.primary} 
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{activeModule ? MODULES.find(m=>m.id===activeModule)?.title : 'Gestão de Ativo'}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={handleSoftDelete}>
-           <Ionicons name="trash-outline" size={24} color={'#EF4444'} />
-        </TouchableOpacity>
+        
+        <View style={{flex: 1, alignItems: 'center', paddingHorizontal: 8}}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {activeModule ? MODULES.find(m => m.id === activeModule)?.title : 'Gestão de Ativo'}
+          </Text>
+          {activeModule && asset && (
+            <Text style={{fontSize: 10, color: colors.textSecondary, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8}} numberOfLines={1}>
+              {asset.title}
+            </Text>
+          )}
+        </View>
+
+        {!activeModule ? (
+          <TouchableOpacity style={styles.backButton} onPress={handleSoftDelete}>
+             <Ionicons name="trash-outline" size={24} color={'#EF4444'} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{width: 40}} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -908,8 +984,7 @@ export default function AssetDetailScreen() {
                     <View style={[styles.iconBox, { backgroundColor: mod.color + '15' }]}>
                        <Ionicons name={mod.icon} size={28} color={mod.color} />
                     </View>
-                    <Text style={styles.modTitle}>{mod.title}</Text>
-                    <Text style={styles.modSubtitle} numberOfLines={1}>{mod.subtitle}</Text>
+                    <Text style={styles.modTitle} numberOfLines={1}>{mod.title}</Text>
                  </TouchableOpacity>
               ))}
             </View>
@@ -969,26 +1044,45 @@ export default function AssetDetailScreen() {
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false}>
-                {getLocalAssets()
-                  .filter(a => a.id !== asset.id && a.parentId !== asset.id)
-                  .filter(a => a.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .map(a => (
+                {(() => {
+                  const ancestorIds = new Set(ancestors.map(anc => anc.id));
+                  const available = getLocalAssets().filter(a => {
+                    // Exclui o próprio ativo
+                    if (a.id === asset.id) return false;
+                    // Exclui quem já é filho direto
+                    if (a.parentId === asset.id) return false;
+                    // Exclui todos os ancestrais para evitar loop circular
+                    if (ancestorIds.has(a.id)) return false;
+                    // Filtro de busca
+                    if (linkSearch && !a.title.toLowerCase().includes(linkSearch.toLowerCase())) return false;
+                    return true;
+                  });
+
+                  if (available.length === 0) {
+                    return <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: 40, fontStyle: 'italic'}}>Nenhum ativo disponível para vincular.</Text>;
+                  }
+
+                  return available.map(a => (
                     <TouchableOpacity
                       key={a.id}
                       style={{
                         flexDirection: 'row', alignItems: 'center', padding: 15,
                         backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 10,
-                        borderWidth: 1, borderColor: colors.border
+                        borderWidth: 1.2, borderColor: colors.border
                       }}
                       onPress={() => {
                         Alert.alert('Confirmar Vínculo', `Deseja que "${a.title}" se torne um sub-ativo de "${asset.title}"?`, [
                           { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Confirmar', onPress: async () => {
-                            updateAssetParent(a.id, asset.id);
-                            loadAssetData();
-                            setLinkModalVisible(false);
-                            logAssetHistory(asset.id, 'VÍNCULO HIERÁRQUICO', `Ativo "${a.title}" vinculado como sub-ativo.`);
-                            Alert.alert('Sucesso ✅', `Vínculo estabelecido com sucesso na rede Brspark.`);
+                          { text: 'Vincular', onPress: async () => {
+                            try {
+                              updateAssetParent(a.id, asset.id);
+                              loadAssetData();
+                              setLinkModalVisible(false);
+                              logAssetHistory(asset.id, 'VÍNCULO HIERÁRQUICO', `Ativo "${a.title}" vinculado como sub-ativo.`);
+                              Alert.alert('Sucesso ✅', `"${a.title}" agora é um sub-ativo de "${asset.title}".`);
+                            } catch (err) {
+                              Alert.alert('Erro', `Falha ao persistir vínculo no banco offline: ${err}`);
+                            }
                           }}
                         ]);
                       }}
@@ -998,15 +1092,12 @@ export default function AssetDetailScreen() {
                       </View>
                       <View style={{flex: 1}}>
                         <Text style={{fontWeight: '700', color: colors.primary}}>{a.title}</Text>
-                        <Text style={{fontSize: 11, color: colors.textSecondary}}>{a.type}</Text>
+                        <Text style={{fontSize: 11, color: colors.textSecondary}}>{a.type === 'REAL_ESTATE' ? 'Imóvel' : a.type === 'VEHICLE' ? 'Veículo' : 'Patrimônio'}</Text>
                       </View>
                       <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
                     </TouchableOpacity>
-                  ))
-                }
-                {getLocalAssets().filter(a => a.id !== asset.id && a.parentId !== asset.id).length === 0 && (
-                   <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: 40, fontStyle: 'italic'}}>Não há ativos disponíveis para vincular.</Text>
-                )}
+                  ));
+                })()}
               </ScrollView>
            </View>
         </View>
@@ -1016,7 +1107,7 @@ export default function AssetDetailScreen() {
 }
 
 const { width } = Dimensions.get('window');
-const ITEM_WIDTH = (width - (16 * 2) - (12 * 2)) / 3;
+const ITEM_WIDTH = (width - 32 - 16) / 3; // 32 largura de padding lateral + 16 de gaps acumulados (8*2)
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -1036,12 +1127,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: colors.primary, marginBottom: 4 },
   typeTag: { fontSize: 13, color: colors.textSecondary, fontWeight: '700' },
   
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.primary, paddingHorizontal: 16, marginBottom: 16 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 12 },
-  gridItem: { width: ITEM_WIDTH, backgroundColor: colors.cardWhite, paddingVertical: 18, paddingHorizontal: 4, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
-  iconBox: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  modTitle: { fontSize: 13, fontWeight: '800', color: colors.primary, textAlign: 'center', marginBottom: 4 },
-  modSubtitle: { fontSize: 10, color: colors.textSecondary, textAlign: 'center', fontWeight: '500' },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: colors.primary, paddingHorizontal: 16, marginBottom: 12, marginTop: 8 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8, justifyContent: 'space-between' },
+  gridItem: { width: ITEM_WIDTH, backgroundColor: colors.cardWhite, paddingVertical: 14, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  iconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  modTitle: { fontSize: 9, fontWeight: '900', color: colors.primary, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
   
   // Painel Interno
   innerModuleView: { backgroundColor: colors.cardWhite, marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 20 },

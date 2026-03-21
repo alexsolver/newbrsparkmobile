@@ -138,8 +138,7 @@ export function saveAssetsLocal(assets: Asset[]) {
 }
 
 export function updateAssetParent(assetId: string, parentId: string | null) {
-  const stmt = db.prepareSync('UPDATE assets SET parent_id = ? WHERE id = ?');
-  stmt.executeSync([parentId, assetId]);
+  db.runSync('UPDATE assets SET parent_id = ? WHERE id = ?', [parentId, assetId]);
 }
 
 // ── Histórico ─────────────────────────────────────────────────────────────────

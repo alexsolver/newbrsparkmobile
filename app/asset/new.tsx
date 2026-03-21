@@ -271,19 +271,68 @@ export default function NewAssetScreen() {
             <Text style={styles.modLabel}>Cód. de Patrimônio (Tombamento)</Text>
             <TextInput style={styles.modInput} value={inventoryId} onChangeText={setInventoryId} placeholder="Ex: PT-48810-A" />
 
-            <View style={{flexDirection: 'row', gap: 12}}>
-               <View style={{flex: 1}}>
-                  <Text style={styles.modLabel}>Fabricante</Text>
-                  <TextInput style={styles.modInput} value={brand} onChangeText={setBrand} placeholder="Marca" />
-               </View>
-               <View style={{flex: 1}}>
-                  <Text style={styles.modLabel}>Modelo Comercial</Text>
-                  <TextInput style={styles.modInput} value={model} onChangeText={setModel} placeholder="Versão/Model" />
-               </View>
-            </View>
-
-            <Text style={styles.modLabel}>Número de Série (S/N) / Chassi</Text>
-            <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder="Ex: ABC12345678" />
+            {/* Campos Dinâmicos por Tipo de Ativo (Polimorfismo Brspark) */}
+            {type === 'REAL_ESTATE' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Matrícula / Registro IPTU</Text>
+                      <TextInput style={styles.modInput} value={brand} onChangeText={setBrand} placeholder="N° da Matrícula" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Área Total (m²)</Text>
+                      <TextInput style={styles.modInput} value={model} onChangeText={setModel} placeholder="Ex: 500" keyboardType="numeric" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Tipo de Uso / Destinação</Text>
+                <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder="Residencial, Comercial, Industrial..." />
+              </>
+            ) : type === 'VEHICLE' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Marca / Fabricante</Text>
+                      <TextInput style={styles.modInput} value={brand} onChangeText={setBrand} placeholder="Ex: Toyota, BMW..." />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Modelo Comercial</Text>
+                      <TextInput style={styles.modInput} value={model} onChangeText={setModel} placeholder="Ex: Corolla XEI" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>N° do Chassi (VIN) / Placa</Text>
+                <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder="Placa ou Código VIN" />
+              </>
+            ) : type === 'COLLECTION' ? (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Autor / Artista</Text>
+                      <TextInput style={styles.modInput} value={brand} onChangeText={setBrand} placeholder="Nome do Criador" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Material / Técnica</Text>
+                      <TextInput style={styles.modInput} value={model} onChangeText={setModel} placeholder="Ex: Óleo sobre Tela" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Estado de Conservação</Text>
+                <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder="Excelente, Bom, Requer Restauro..." />
+              </>
+            ) : (
+              <>
+                <View style={{flexDirection: 'row', gap: 12}}>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Fabricante</Text>
+                      <TextInput style={styles.modInput} value={brand} onChangeText={setBrand} placeholder="Marca" />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <Text style={styles.modLabel}>Modelo Comercial</Text>
+                      <TextInput style={styles.modInput} value={model} onChangeText={setModel} placeholder="Versão/Model" />
+                   </View>
+                </View>
+                <Text style={styles.modLabel}>Número de Série (S/N)</Text>
+                <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder="Ex: ABC12345678" />
+              </>
+            )}
 
             {/* HEADER 2: Finanças e Dept */}
             <View style={[styles.formSectionHeader, {marginTop: 16}]}>

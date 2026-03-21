@@ -5,6 +5,13 @@ import { Tabs } from 'expo-router';
 import { colors } from '../../src/theme/colors';
 import { NotificationService } from '../../src/services/notifications';
 
+/**
+ * PADRÃO DE DESIGN BRSPARK (UX/UI GUIDELINES)
+ * 1. Ícones Solid para estado FOCUSED, Outline para estado INATIVO.
+ * 2. Tintura Principal: colors.primary (#1e293b).
+ * 3. Menu centralizado em 4-5 itens essenciais para evitar confusão.
+ */
+
 export default function TabLayout() {
   const [unread, setUnread] = useState(NotificationService.getUnreadCount());
 
@@ -26,33 +33,52 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '600',
+          fontWeight: '900',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
           paddingBottom: 4,
         },
         headerShown: false,
+        tabBarHideOnKeyboard: true,
       }}>
 
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Início',
-          tabBarIcon: ({ color }) => <Ionicons name="grid" size={24} color={color} />,
+          title: 'Ativos',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'cube' : 'cube-outline'} size={24} color={color} />
+          ),
         }}
       />
 
       <Tabs.Screen
-        name="assets"
+        name="calendar"
         options={{
-          title: 'Ativos',
-          tabBarIcon: ({ color }) => <Ionicons name="card" size={24} color={color} />,
+          title: 'Agenda',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="stock"
+        options={{
+          title: 'Estoque',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'archive' : 'archive-outline'} size={24} color={color} />
+          ),
         }}
       />
 
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Mensagens',
-          tabBarIcon: ({ color }) => <Ionicons name="chatbubbles" size={24} color={color} />,
+          title: 'Chat',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={24} color={color} />
+          ),
         }}
       />
 
@@ -60,9 +86,9 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: 'Avisos',
-          tabBarIcon: ({ color }) => (
+          tabBarIcon: ({ color, focused }) => (
             <View style={{ position: 'relative' }}>
-              <Ionicons name="notifications" size={24} color={color} />
+              <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={24} color={color} />
               {unread > 0 && (
                 <View style={{
                   position: 'absolute', top: -4, right: -6,
@@ -82,28 +108,12 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="scanner"
-        options={{ href: null }}
-      />
-
-      {/* Tabs ocultas */}
-      <Tabs.Screen name="calendar"   options={{ href: null }} />
+      {/* Telas auxiliares (ocultas da navegação principal) */}
+      <Tabs.Screen name="assets"     options={{ href: null }} />
+      <Tabs.Screen name="scanner"    options={{ href: null }} />
       <Tabs.Screen name="documents"  options={{ href: null }} />
       <Tabs.Screen name="profile"    options={{ href: null }} />
-
-      <Tabs.Screen
-        name="family"
-        options={{
-          title: 'Família',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={{ position: 'relative' }}>
-              <Ionicons name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={24} color={focused ? '#D97706' : color} />
-            </View>
-          ),
-          tabBarActiveTintColor: '#D97706',
-        }}
-      />
+      <Tabs.Screen name="family"     options={{ href: null }} />
     </Tabs>
   );
 }

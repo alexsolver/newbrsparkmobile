@@ -277,12 +277,12 @@ const S = StyleSheet.create({
 
   // Vault aberto
   container: { paddingBottom: 20 },
-  vaultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  vaultHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  vaultHeaderTitle: { fontSize: 15, fontWeight: '800', color: PURPLE },
-  greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: PURPLE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  addBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  vaultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 },
+  vaultHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  vaultHeaderTitle: { fontSize: 13, fontWeight: '800', color: PURPLE },
+  greenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: PURPLE, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, gap: 4 },
+  addBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   empty: { alignItems: 'center', paddingVertical: 40, gap: 12 },
   emptyText: { color: colors.textSecondary, fontWeight: '600', fontSize: 14, textAlign: 'center', lineHeight: 22 },
