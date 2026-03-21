@@ -945,6 +945,72 @@ export default function AssetDetailScreen() {
             </View>
          </View>
       </Modal>
+
+      {/* Modal de Vínculo de Ativo Existente */}
+      <Modal visible={linkModalVisible} transparent={true} animationType="slide">
+        <View style={{flex:1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end'}}>
+           <View style={{backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%', padding: 20}}>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
+                <Text style={{fontSize: 20, fontWeight: '900', color: colors.primary}}>Vincular Ativo Existente</Text>
+                <TouchableOpacity onPress={() => setLinkModalVisible(false)}>
+                  <Ionicons name="close-circle" size={28} color={colors.textLight} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginBottom: 16}}>
+                <Ionicons name="search" size={18} color={colors.textLight} style={{marginRight: 8}} />
+                <TextInput
+                  style={{flex: 1, height: 44, fontSize: 15, color: colors.primary, fontWeight: '600'}}
+                  placeholder="Pesquisar para vincular..."
+                  placeholderTextColor={colors.textLight}
+                  value={linkSearch}
+                  onChangeText={setLinkSearch}
+                />
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {getLocalAssets()
+                  .filter(a => a.id !== asset.id && a.parentId !== asset.id)
+                  .filter(a => a.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  .map(a => (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', padding: 15,
+                        backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 10,
+                        borderWidth: 1, borderColor: colors.border
+                      }}
+                      onPress={() => {
+                        Alert.alert('Confirmar Vínculo', `Deseja que "${a.title}" se torne um sub-ativo de "${asset.title}"?`, [
+                          { text: 'Cancelar', style: 'cancel' },
+                          { text: 'Confirmar', onPress: async () => {
+                            updateAssetParent(a.id, asset.id);
+                            loadAssetData();
+                            setLinkModalVisible(false);
+                            logAssetHistory(asset.id, 'VÍNCULO HIERÁRQUICO', `Ativo "${a.title}" vinculado como sub-ativo.`);
+                            Alert.alert('Sucesso ✅', `Vínculo estabelecido com sucesso na rede Brspark.`);
+                          }}
+                        ]);
+                      }}
+                    >
+                      <View style={{width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary + '15', justifyContent: 'center', alignItems: 'center', marginRight: 12}}>
+                        <Ionicons name="cube-outline" size={20} color={colors.primary} />
+                      </View>
+                      <View style={{flex: 1}}>
+                        <Text style={{fontWeight: '700', color: colors.primary}}>{a.title}</Text>
+                        <Text style={{fontSize: 11, color: colors.textSecondary}}>{a.type}</Text>
+                      </View>
+                      <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                  ))
+                }
+                {getLocalAssets().filter(a => a.id !== asset.id && a.parentId !== asset.id).length === 0 && (
+                   <Text style={{textAlign: 'center', color: colors.textSecondary, marginTop: 40, fontStyle: 'italic'}}>Não há ativos disponíveis para vincular.</Text>
+                )}
+              </ScrollView>
+           </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
