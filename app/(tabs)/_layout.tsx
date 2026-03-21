@@ -11,44 +11,46 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.cardWhite,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          paddingBottom: 4,
         },
         headerShown: false,
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'DASHBOARD',
+          title: 'Início',
           tabBarIcon: ({ color }) => <Ionicons name="grid" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="assets"
         options={{
-          title: 'ASSETS',
+          title: 'Ativos',
           tabBarIcon: ({ color }) => <Ionicons name="card" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'CALENDAR',
+          title: 'Agenda',
           tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="documents"
         options={{
-          title: 'DOCUMENTS',
+          title: 'Arquivos',
           tabBarIcon: ({ color }) => <Ionicons name="document-text" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'PROFILE',
+          title: 'Perfil',
           tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
         }}
       />
