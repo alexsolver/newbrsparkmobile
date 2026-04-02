@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Planos &amp; Billing</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Planos &amp; Billing</span>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="openNewPlanModal()">+ Novo Plano</button>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <!-- MRR Stats -->
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+        <div class="stat-card" style="--accent-color:var(--green)">
+          <div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></div>
+          <div class="stat-value" id="stat-mrr">—</div><div class="stat-label">MRR (estimado)</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--blue)">
+          <div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="document-outline" style="vertical-align:-2px"></ion-icon></div>
+          <div class="stat-value" id="stat-subs">—</div><div class="stat-label">Assinaturas ativas</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--amber)">
+          <div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)">⏰</div>
+          <div class="stat-value" id="stat-trial">—</div><div class="stat-label">Em trial</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--red)">
+          <div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
+          <div class="stat-value" id="stat-overdue">—</div><div class="stat-label">Inadimplentes</div>
+        </div>
+      </div>
+
+      <!-- Plans -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Disponíveis</span></div>
+        <div class="panel-body">
+          <div class="grid-3" id="plans-grid"><div style="color:var(--text3)">Carregando…</div></div>
+        </div>
+      </div>
+
+      <!-- Subscriptions Table -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title"><ion-icon name="card-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Assinaturas</span>
+          <div style="display:flex;gap:8px">
+            <select class="form-control" style="width:130px;padding:5px 8px;font-size:11px" id="sub-filter">
+              <option value="">Todos</option>
+              <option value="ACTIVE">Ativas</option>
+              <option value="TRIALING">Trial</option>
+              <option value="PAST_DUE">Inadimplentes</option>
+              <option value="CANCELLED">Canceladas</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Conta</th><th>Plano</th><th>Ciclo</th><th>Valor</th><th>Status</th><th>Vencimento</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody id="subs-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Plan Modal -->
+<div class="modal-overlay" id="plan-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="plan-modal-title">Novo Plano</span>
+      <button class="modal-close" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="plan-id" />
+      <div class="form-group"><label class="form-label">Nome do Plano *</label><input class="form-control" id="plan-name" placeholder="Ex: Pro" /></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Preço Mensal (R$) *</label><input class="form-control" id="plan-price-monthly" type="number" step="0.01" placeholder="99.00" /></div>
+        <div class="form-group"><label class="form-label">Preço Anual (R$) *</label><input class="form-control" id="plan-price-yearly" type="number" step="0.01" placeholder="990.00" /></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Limite de Bens (-1 = ilimitado)</label><input class="form-control" id="plan-max-assets" type="number" placeholder="100" /></div>
+        <div class="form-group"><label class="form-label">Limite de Usuários</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Storage (GB)</label><input class="form-control" id="plan-storage" type="number" placeholder="10" /></div>
+      <div class="form-group"><label class="form-label">Features (JSON)</label>
+        <textarea class="form-control" id="plan-features" rows="3" placeholder='{"stock":true,"vault":false,"ai":true}'></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-plan-btn">Salvar Plano</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Plan Modal -->
+<div class="modal-overlay" id="change-plan-modal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><span class="modal-title">Alterar Plano</span><button class="modal-close" onclick="closeModal('change-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="change-sub-id" />
+      <div class="form-group"><label class="form-label">Novo Plano</label>
+        <select class="form-control" id="change-plan-id"></select>
+      </div>
+      <div class="form-group"><label class="form-label">Ciclo</label>
+        <select class="form-control" id="change-billing">
+          <option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('change-plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="confirm-change-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const statusMap = { ACTIVE:'badge-green', TRIALING:'badge-amber', PAST_DUE:'badge-red', CANCELLED:'badge-gray' };
+  const statusLbl = { ACTIVE:'<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Ativa', TRIALING:'⏰ Trial', PAST_DUE:'<ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vencida', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelada' };
+  const cycleMap  = { MONTHLY:'Mensal', YEARLY:'Anual' };
+  let allPlans = [];
+
+  async function loadPlans() {
+    const plans = await CONFIG.get('/plans') || [];
+    allPlans = plans;
+
+    // Populate change-plan dropdown
+    const sel = document.getElementById('change-plan-id');
+    sel.innerHTML = plans.map(p => `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(2)}/mês</option>`).join('');
+
+    const planColors = ['var(--text3)', 'var(--blue)', 'var(--accent)', 'var(--green)'];
+    document.getElementById('plans-grid').innerHTML = plans.map((p, i) => {
+      const color = planColors[i] || 'var(--accent)';
+      const fmt   = n => n === -1 ? 'Ilimitado' : n;
+      return `<div class="stat-card" style="--accent-color:${color}">
+        <div style="font-size:16px;font-weight:900;color:${color};margin-bottom:4px">${p.name}</div>
+        <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:12px">R$ ${Number(p.priceMonthly).toFixed(2)}<span style="font-size:11px;color:var(--text3)">/mês</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Bens: ${fmt(p.maxAssets)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Usuários: ${fmt(p.maxUsers)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:14px"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> ${p.storageGb} GB</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span class="badge badge-gray">${p.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '○ Inativo'}</span>
+          <button class="btn btn-ghost btn-sm" onclick="openEditPlan('${p.id}')">Editar</button>
+        </div>
+      </div>`;
+    }).join('') || '<div style="color:var(--text3)">Nenhum plano cadastrado.</div>';
+  }
+
+  async function loadSubscriptions() {
+    const filter = document.getElementById('sub-filter').value;
+    const params = filter ? `?status=${filter}` : '';
+    const data   = await CONFIG.get(`/subscriptions${params}`) || [];
+    const subs   = Array.isArray(data) ? data : (data.data || []);
+
+    // Compute MRR from active subscriptions
+    const active   = subs.filter(s => s.status === 'ACTIVE');
+    const trialing = subs.filter(s => s.status === 'TRIALING');
+    const overdue  = subs.filter(s => s.status === 'PAST_DUE');
+    const mrr = active.reduce((sum, s) => {
+      const price = s.billingCycle === 'YEARLY' ? Number(s.plan?.priceYearly || 0) / 12 : Number(s.plan?.priceMonthly || 0);
+      return sum + price;
+    }, 0);
+
+    document.getElementById('stat-mrr').textContent  = `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits:2 })}`;
+    document.getElementById('stat-subs').textContent  = active.length;
+    document.getElementById('stat-trial').textContent = trialing.length;
+    document.getElementById('stat-overdue').textContent = overdue.length;
+
+    const fmt = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+    document.getElementById('subs-tbody').innerHTML = subs.length
+      ? subs.map(s => `<tr>
+          <td class="bold">${s.tenant?.name || '—'}<div style="font-size:10px;color:var(--text3)">${s.tenant?.email || ''}</div></td>
+          <td><span class="badge badge-gray">${s.plan?.name || '—'}</span></td>
+          <td>${cycleMap[s.billingCycle] || s.billingCycle}</td>
+          <td style="color:var(--green);font-weight:700">R$ ${s.billingCycle === 'YEARLY' ? Number(s.plan?.priceYearly || 0).toFixed(2) : Number(s.plan?.priceMonthly || 0).toFixed(2)}</td>
+          <td><span class="badge ${statusMap[s.status] || 'badge-gray'}">${statusLbl[s.status] || s.status}</span></td>
+          <td style="color:var(--text3);font-size:11px">${fmt(s.currentEnd)}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="openChangePlan('${s.id}')">Alterar plano</button>
+            ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick="cancelSub('${s.id}')">Cancelar</button>` : ''}
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma assinatura encontrada.</td></tr>';
+  }
+
+  window.openEditPlan = async (id) => {
+    const p = allPlans.find(p => p.id === id);
+    if (!p) return;
+    document.getElementById('plan-id').value            = p.id;
+    document.getElementById('plan-modal-title').textContent = 'Editar: ' + p.name;
+    document.getElementById('plan-name').value          = p.name;
+    document.getElementById('plan-price-monthly').value = p.priceMonthly;
+    document.getElementById('plan-price-yearly').value  = p.priceYearly;
+    document.getElementById('plan-max-assets').value    = p.maxAssets;
+    document.getElementById('plan-max-users').value     = p.maxUsers;
+    document.getElementById('plan-storage').value       = p.storageGb;
+    document.getElementById('plan-features').value      = JSON.stringify(p.features || {}, null, 2);
+    openModal('plan-modal');
+  };
+
+  window.openNewPlanModal = () => {
+    document.getElementById('plan-id').value = '';
+    document.getElementById('plan-modal-title').textContent = 'Novo Plano';
+    ['plan-name','plan-price-monthly','plan-price-yearly','plan-max-assets','plan-max-users','plan-storage','plan-features']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    openModal('plan-modal');
+  };
+
+  document.getElementById('save-plan-btn').addEventListener('click', async () => {
+    const id = document.getElementById('plan-id').value;
+    let features = {};
+    try { features = JSON.parse(document.getElementById('plan-features').value || '{}'); } catch { features = {}; }
+    const body = {
+      name:          document.getElementById('plan-name').value.trim(),
+      priceMonthly:  parseFloat(document.getElementById('plan-price-monthly').value),
+      priceYearly:   parseFloat(document.getElementById('plan-price-yearly').value),
+      maxAssets:     parseInt(document.getElementById('plan-max-assets').value) || 100,
+      maxUsers:      parseInt(document.getElementById('plan-max-users').value) || 5,
+      storageGb:     parseInt(document.getElementById('plan-storage').value) || 10,
+      features,
+    };
+    if (!body.name) return alert('Nome é obrigatório.');
+    const res = id ? await CONFIG.patch(`/plans/${id}`, body) : await CONFIG.post('/plans', body);
+    if (res?.id || res?.name) { closeModal('plan-modal'); loadPlans(); loadSubscriptions(); }
+    else alert('Erro: ' + (res?.error || 'Falha ao salvar plano.'));
+  });
+
+  window.openChangePlan = (subId) => {
+    document.getElementById('change-sub-id').value = subId;
+    openModal('change-plan-modal');
+  };
+
+  document.getElementById('confirm-change-btn').addEventListener('click', async () => {
+    const subId  = document.getElementById('change-sub-id').value;
+    const planId = document.getElementById('change-plan-id').value;
+    const cycle  = document.getElementById('change-billing').value;
+    await CONFIG.patch(`/subscriptions/${subId}`, { planId, billingCycle: cycle });
+    closeModal('change-plan-modal');
+    loadSubscriptions();
+  });
+
+  window.cancelSub = async (id) => {
+    if (!confirm('Cancelar esta assinatura?')) return;
+    await CONFIG.patch(`/subscriptions/${id}`, { status: 'CANCELLED', cancelledAt: new Date() });
+    loadSubscriptions();
+  };
+
+  document.getElementById('sub-filter').addEventListener('change', loadSubscriptions);
+
+  loadPlans();
+  loadSubscriptions();
+</script>
+</body>
+</html>

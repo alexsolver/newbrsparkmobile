@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>BrSpark Admin — Config. Regionais</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="admin-body">
+  <div class="main-content">
+    <div class="container">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Configurações Regionais</h1>
+          <p class="page-subtitle">Gerencie moeda, formato de data, fuso horário e idiomas por localidade.</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" id="save-all-btn">
+            <ion-icon name="save-outline" style="margin-right:8px"></ion-icon>
+            Salvar Alterações
+          </button>
+          <button class="btn btn-ghost" id="ai-translate-btn" title="Traduz campos vazios com IA" style="display:flex;align-items:center;gap:6px;border:1px solid var(--accent);color:var(--accent)">
+            <ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Traduzir com IA
+          </button>
+        </div>
+      </header>
+
+      <div class="search-bar" style="margin-bottom:20px; display:flex; gap:12px; align-items:center;">
+        <div style="flex:1; position:relative">
+          <ion-icon name="search-outline" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)"></ion-icon>
+          <input type="text" id="search-input" class="form-control" placeholder="Buscar por chave ou conteúdo..." style="padding-left:36px">
+        </div>
+        <select id="source-filter" class="form-control" style="width:200px">
+          <option value="app">Dicionário do App</option>
+          <option value="db-metatags">Metatags (Categorias)</option>
+          <option value="db-flags">Feature Flags</option>
+          <option value="locales">Configurações Regionais</option>
+          <option value="overrides">Customização por Tenant</option>
+        </select>
+        <select class="form-control" id="tenant-selector" style="display:none;width:200px">
+          <option value="">Selecione o Tenant...</option>
+        </select>
+        <div class="badge badge-accent" id="counter-badge">0 entradas</div>
+      </div>
+
+      <div class="panel" id="table-panel">
+        <div class="table-wrap" style="max-height: calc(100vh - 280px); overflow-y: auto;">
+          <table style="table-layout: fixed; width: 100%;">
+            <thead id="i18n-thead" style="position: sticky; top: 0; background: var(--surface); z-index: 10;">
+              <tr>
+                <th style="width: 25%;">Chave / ID</th>
+                <th>Português (PT-BR)</th>
+                <th>Inglês (EN-US)</th>
+                <th>Espanhol (ES-ES)</th>
+              </tr>
+            </thead>
+            <tbody id="i18n-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text3)">Carregando traduções...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Regional Profiles Card View (Alternative if selected) -->
+      <div id="locales-grid" style="display:none; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+        <!-- Card templates injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Progress Modal -->
+  <div id="ai-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border-radius:16px;padding:32px;width:420px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:20px;font-weight:900;margin-bottom:4px"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Traducão com IA</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Preenchendo campos vazios via MyMemory API...</div>
+      <div style="background:var(--border);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px">
+        <div id="ai-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
+      </div>
+      <div id="ai-progress-txt" style="font-size:12px;color:var(--text3);text-align:center">0 / 0</div>
+      <div id="ai-log" style="font-size:11px;margin-top:12px;max-height:120px;overflow-y:auto;color:var(--text2)"></div>
+      <button id="ai-cancel-btn" class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%">Cancelar</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initPage } from './js/sidebar.js';
+    import { CONFIG }   from './js/config.js';
+    initPage();
+
+    let allEntries = [];
+    let modifiedEntries = new Set();
+    const sourceFilter = document.getElementById('source-filter');
+    const tenantSelector = document.getElementById('tenant-selector');
+    const tbody = document.getElementById('i18n-tbody');
+    const localesGrid = document.getElementById('locales-grid');
+    const tablePanel = document.getElementById('table-panel');
+    const badge = document.getElementById('counter-badge');
+
+    async function fetchTenants() {
+      const data = await CONFIG.get('/tenants?limit=500');
+      (data.data || []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id; opt.textContent = t.name;
+        tenantSelector.appendChild(opt);
+      });
+    }
+    fetchTenants();
+
+    async function loadEntries() {
+      const source = sourceFilter.value;
+      tenantSelector.style.display = (source === 'overrides') ? 'block' : 'none';
+      
+      if (source === 'locales') {
+        tablePanel.style.display = 'none';
+        localesGrid.style.display = 'grid';
+        localesGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">Buscando configurações regionais...</div>';
+        try {
+          const locales = await CONFIG.get('/i18n/entries?source=locales') || [];
+          badge.textContent = `${locales.length} perfis`;
+          localesGrid.innerHTML = locales.map(l => `
+            <div class="panel" style="padding:20px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:24px">${getFlag(l.countryCode)}</span>
+                  <strong style="color:var(--text)">${l.name}</strong>
+                  <span class="badge badge-gray">${l.countryCode}</span>
+                </div>
+                <button class="btn btn-ghost btn-sm" onclick="saveLocale('${l.id}', this)">Salvar</button>
+              </div>
+              <div class="grid-2" style="gap:10px; font-size:12px">
+                <div class="form-group"><label class="form-label">Moeda</label><input class="form-control sm locale-in" data-field="currencySymbol" value="${l.currencySymbol}"></div>
+                <div class="form-group"><label class="form-label">Cód. Moeda</label><input class="form-control sm locale-in" data-field="currency" value="${l.currency}"></div>
+                <div class="form-group"><label class="form-label">Formato Data</label><input class="form-control sm locale-in" data-field="dateFormat" value="${l.dateFormat}"></div>
+                <div class="form-group"><label class="form-label">Doc. ID Label</label><input class="form-control sm locale-in" data-field="taxIdLabel" value="${l.taxIdLabel}"></div>
+                <div class="form-group"><label class="form-label">Postal Label</label><input class="form-control sm locale-in" data-field="postalCodeLabel" value="${l.postalCodeLabel}"></div>
+                <div class="form-group"><label class="form-label">Sistema</label>
+                  <select class="form-control sm locale-in" data-field="measureSystem">
+                    <option value="METRIC" ${l.measureSystem === 'METRIC' ? 'selected' : ''}>Métrico</option>
+                    <option value="IMPERIAL" ${l.measureSystem === 'IMPERIAL' ? 'selected' : ''}>Imperial</option>
+                  </select>
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                  <label class="form-label">Timezone</label>
+                  <input class="form-control sm locale-in" data-field="timezone" value="${l.timezone}">
+                </div>
+              </div>
+            </div>
+          `).join('');
+          
+          window.saveLocale = async (id, btn) => {
+             const card = btn.closest('.panel');
+             const data = { id };
+             card.querySelectorAll('.locale-in').forEach(input => {
+                data[input.dataset.field] = input.value;
+             });
+             btn.disabled = true; btn.textContent = 'Salvando...';
+             await CONFIG.post('/i18n/locales', data);
+             btn.disabled = false; btn.textContent = 'Salvar';
+             alert('Perfil atualizado!');
+          };
+        } catch (err) {
+          localesGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--danger)">Erro: ${err.message}</div>`;
+        }
+        return;
+      }
+
+      tablePanel.style.display = 'block';
+      localesGrid.style.display = 'none';
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text3)">Carregando...</td></tr>';
+      
+      try {
+        const urlSuffix = (source === 'overrides') ? 'app' : source;
+        const resp = await CONFIG.get(`/i18n/entries?source=${urlSuffix}`);
+        
+        if (resp && resp.error) throw new Error(resp.error);
+        allEntries = Array.isArray(resp) ? resp : [];
+        
+        if (source === 'overrides' && tenantSelector.value) {
+          const tenantId = tenantSelector.value;
+          const tenantOverrides = await CONFIG.get(`/i18n/entries?source=overrides&tenantId=${tenantId}`) || [];
+          if (Array.isArray(tenantOverrides)) {
+            allEntries = allEntries.map(e => {
+              const row = { ...e, isOverride: false };
+              tenantOverrides.forEach(o => {
+                if (o.key === e.key) {
+                  if (o.language === 'pt-BR') { row.ptBr = o.value; row.isOverride = true; }
+                  if (o.language === 'en-US') { row.enUs = o.value; row.isOverride = true; }
+                  if (o.language === 'es-ES') { row.esEs = o.value; row.isOverride = true; }
+                }
+              });
+              return row;
+            });
+          }
+        }
+        renderEntries();
+      } catch (err) { tbody.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`; }
+    }
+
+    function renderEntries() {
+      if (!Array.isArray(allEntries)) {
+         tbody.innerHTML = '<tr><td colspan="4">Erro ao carregar dados.</td></tr>';
+         return;
+      }
+      const query = document.getElementById('search-input').value.toLowerCase();
+      const filtered = allEntries.filter(e => 
+        (e.key && e.key.toLowerCase().includes(query)) || 
+        (e.ptBr && e.ptBr.toString().toLowerCase().includes(query))
+      );
+      badge.textContent = `${filtered.length} entradas`;
+
+      tbody.innerHTML = filtered.map(e => `
+        <tr data-key="${e.key}" ${e.isOverride ? 'style="background:var(--accent)08"' : ''}>
+          <td class="mono" style="font-size:11px; word-break:break-all">
+            ${e.isOverride ? '<span class="badge badge-accent" style="font-size:9px">Override</span><br>' : ''}
+            <span style="color:var(--text3)">${e.group || ''}</span> ${e.key}
+            <button class="btn btn-ghost btn-sm" onclick="translateRow('${e.key}')" title="Traduzir esta linha com IA" style="padding:2px 6px;margin-left:4px;font-size:10px;opacity:.7"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon></button>
+          </td>
+          <td><textarea class="form-control i18n-input" data-lang="pt-BR" data-key="${e.key}">${e.ptBr}</textarea></td>
+          <td><textarea class="form-control i18n-input" data-lang="en-US" data-key="${e.key}">${e.enUs}</textarea></td>
+          <td><textarea class="form-control i18n-input" data-lang="es-ES" data-key="${e.key}">${e.esEs}</textarea></td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.i18n-input').forEach(el => {
+        el.addEventListener('change', () => { 
+          modifiedEntries.add(el.dataset.key); 
+          el.closest('tr').style.background = 'var(--accent)05';
+        });
+      });
+    }
+
+    async function saveAll() {
+      if (modifiedEntries.size === 0) return alert('Sem alterações.');
+      const source = sourceFilter.value;
+      const btn = document.getElementById('save-all-btn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'Salvando...';
+
+      try {
+        const changes = [];
+        modifiedEntries.forEach(key => {
+          const rowInputs = tbody.querySelectorAll(`.i18n-input[data-key="${key}"]`);
+          const entry = { key, ptBr: '', enUs: '', esEs: '' };
+          rowInputs.forEach(i => {
+             if (i.dataset.lang === 'pt-BR') entry.ptBr = i.value;
+             if (i.dataset.lang === 'en-US') entry.enUs = i.value;
+             if (i.dataset.lang === 'es-ES') entry.esEs = i.value;
+          });
+          const original = allEntries.find(e => e.key === key);
+          if (original && original.id) entry.id = original.id;
+          changes.push(entry);
+        });
+
+        if (source === 'overrides') {
+          const tenantId = tenantSelector.value;
+          if (!tenantId) throw new Error('Selecione um Tenant para os Overrides.');
+          const overrideBatch = [];
+          changes.forEach(c => {
+            overrideBatch.push({ key: c.key, language: 'pt-BR', value: c.ptBr });
+            overrideBatch.push({ key: c.key, language: 'en-US', value: c.enUs });
+            overrideBatch.push({ key: c.key, language: 'es-ES', value: c.esEs });
+          });
+          await CONFIG.post('/i18n/overrides', { tenantId, entries: overrideBatch });
+        } else {
+          await CONFIG.post('/i18n/update', { source, entries: changes });
+        }
+        
+        alert('Alterações salvas!'); modifiedEntries.clear(); loadEntries();
+      } catch (err) { alert(`Erro: ${err.message}`); }
+      finally { btn.disabled = false; btn.innerHTML = originalText; }
+    }
+
+    function getFlag(code) {
+      const map = { BR:'🇧🇷', US:'🇺🇸', ES:'🇪🇸', AR:'🇦🇷', CL:'🇨🇱', PT:'🇵🇹' };
+      return map[code] || '<ion-icon name="globe-outline" style="vertical-align:-2px"></ion-icon>';
+    }
+
+    sourceFilter.onchange = loadEntries;
+    tenantSelector.onchange = loadEntries;
+    document.getElementById('search-input').oninput = renderEntries;
+    document.getElementById('save-all-btn').onclick = saveAll;
+    document.getElementById('ai-translate-btn').onclick = translateAll;
+    loadEntries();
+
+    // ── AI Translation ──────────────────────────────────────────────────────────
+    let aiCancelled = false;
+
+    async function myMemoryTranslate(text, fromLang, toLang) {
+      if (!text || !text.trim()) return '';
+      const langPair = `${fromLang}|${toLang}`;
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langPair}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      return d.responseData?.translatedText || text;
+    }
+
+    async function translateRow(key) {
+      const ptEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="pt-BR"]`);
+      const enEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="en-US"]`);
+      const esEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="es-ES"]`);
+      if (!ptEl || !enEl || !esEl) return;
+
+      const ptVal = ptEl.value.trim();
+      const enVal = enEl.value.trim();
+      const esVal = esEl.value.trim();
+
+      // Use the first non-empty value as source, then translate to the others
+      const source = ptVal || enVal || esVal;
+      if (!source) return alert('Nenhum valor para traduzir nesta linha.');
+
+      const srcLang = ptVal ? 'pt-BR' : enVal ? 'en' : 'es';
+
+      if (!ptVal) { ptEl.value = await myMemoryTranslate(source, srcLang, 'pt-BR'); modifiedEntries.add(key); }
+      if (!enVal) { enEl.value = await myMemoryTranslate(source, srcLang, 'en');    modifiedEntries.add(key); }
+      if (!esVal) { esEl.value = await myMemoryTranslate(source, srcLang, 'es');    modifiedEntries.add(key); }
+
+      const row = tbody.querySelector(`tr[data-key="${key}"]`);
+      if (row) row.style.background = 'var(--accent)08';
+    }
+
+    async function translateAll() {
+      const toTranslate = [];
+      tbody.querySelectorAll('tr[data-key]').forEach(row => {
+        const key    = row.dataset.key;
+        const ptEl   = row.querySelector('.i18n-input[data-lang="pt-BR"]');
+        const enEl   = row.querySelector('.i18n-input[data-lang="en-US"]');
+        const esEl   = row.querySelector('.i18n-input[data-lang="es-ES"]');
+        if (!ptEl || !enEl || !esEl) return;
+        const hasMissing = !ptEl.value.trim() || !enEl.value.trim() || !esEl.value.trim();
+        const hasSource  = ptEl.value.trim() || enEl.value.trim() || esEl.value.trim();
+        if (hasMissing && hasSource) toTranslate.push({ key, ptEl, enEl, esEl });
+      });
+
+      if (toTranslate.length === 0) return alert('Nenhum campo vazio encontrado nos resultados visíveis.');
+
+      // Show modal
+      aiCancelled = false;
+      const modal   = document.getElementById('ai-modal');
+      const bar     = document.getElementById('ai-progress-bar');
+      const txt     = document.getElementById('ai-progress-txt');
+      const log     = document.getElementById('ai-log');
+      const cancel  = document.getElementById('ai-cancel-btn');
+      modal.style.display = 'flex';
+      bar.style.width = '0%';
+      log.innerHTML = '';
+      cancel.onclick = () => { aiCancelled = true; };
+
+      let done = 0;
+      for (const { key, ptEl, enEl, esEl } of toTranslate) {
+        if (aiCancelled) break;
+        const ptVal  = ptEl.value.trim();
+        const enVal  = enEl.value.trim();
+        const esVal  = esEl.value.trim();
+        const source = ptVal || enVal || esVal;
+        const srcLang = ptVal ? 'pt-BR' : enVal ? 'en' : 'es';
+        try {
+          if (!ptVal) { ptEl.value = await myMemoryTranslate(source, srcLang, 'pt-BR'); modifiedEntries.add(key); }
+          if (!enVal) { enEl.value = await myMemoryTranslate(source, srcLang, 'en');    modifiedEntries.add(key); }
+          if (!esVal) { esEl.value = await myMemoryTranslate(source, srcLang, 'es');    modifiedEntries.add(key); }
+          log.innerHTML += `<div style="color:var(--green)"><ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> ${key}</div>`;
+          log.scrollTop = log.scrollHeight;
+        } catch(e) {
+          log.innerHTML += `<div style="color:var(--red)"><ion-icon name="close" style="color:var(--red);vertical-align:-2px"></ion-icon> ${key}: ${e.message}</div>`;
+        }
+        done++;
+        const pct = Math.round((done / toTranslate.length) * 100);
+        bar.style.width = pct + '%';
+        txt.textContent = `${done} / ${toTranslate.length} (${pct}%)`;
+        await new Promise(r => setTimeout(r, 80)); // small delay to avoid rate limiting
+      }
+
+      cancel.textContent = 'Fechar';
+      cancel.onclick = () => { modal.style.display = 'none'; cancel.textContent = 'Cancelar'; };
+      if (!aiCancelled) txt.textContent = `<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Concluído! ${done} entradas traduzidas. Clique em Salvar.`;
+    }
+  </script>
+
+  <style>
+    .i18n-input { resize: vertical; min-height: 40px; font-size: 13px; background: transparent; border: 1px solid transparent; width:100% }
+    .i18n-input:focus { border-color: var(--accent); background: var(--surface); }
+    tr:hover .i18n-input { border-color: var(--border); }
+  </style>
+</body>
+</html>

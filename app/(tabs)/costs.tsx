@@ -2,21 +2,33 @@ import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
   Modal, TextInput, Alert, ActivityIndicator, FlatList,
-  KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard 
+  KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Image,
+  RefreshControl
 } from 'react-native';
 import { DirectExpense, AssetBudget, CostSummary, RecurringCost } from '../../src/types/costs';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { ValueInput } from '../../src/components/ValueInput';
 import { CostService } from '../../src/services/costService';
 import { getRootAssets } from '../../src/database';
+import { useAuth } from '../../src/hooks/useAuth';
 import { colors } from '../../src/theme/colors';
 import { Asset } from '../../src/types/asset';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { processReceiptImage } from '../../src/services/ocrService';
+import { useTranslation } from 'react-i18next';
+import { useManualSync } from '../../src/hooks/useManualSync';
+import { formatCurrency, formatCurrencyShort, formatDate, formatDateShort, formatMonthYear } from '../../src/i18n/formatters';
+import DatePickerButton from '../../src/components/DatePickerButton';
 
 
 const EXPENSE_CATEGORIES = ['MANUTENÇÃO', 'CONTAS', 'TAXAS', 'LIMPEZA', 'LOGÍSTICA', 'OUTROS'];
 const REVENUE_CATEGORIES = ['VENDA', 'SERVIÇO', 'LOCAÇÃO', 'OUTROS'];
 
 export default function CostsScreen() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const [summaries, setSummaries] = useState<CostSummary[]>([]);
   const [expenses, setExpenses] = useState<DirectExpense[]>([]);
   const [recurring, setRecurring] = useState<RecurringCost[]>([]);
@@ -28,7 +40,7 @@ export default function CostsScreen() {
   // Modal Expense/Revenue
   const [recordModalVisible, setRecordModalVisible] = useState(false);
   const [newRecord, setNewRecord] = useState<Partial<DirectExpense>>({
-    category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PAID', type: 'EXPENSE'
+    category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PENDING', type: 'EXPENSE'
   });
 
   // Modal Recurring
@@ -45,19 +57,23 @@ export default function CostsScreen() {
   // Menu de Adição
   const [addMenuVisible, setAddMenuVisible] = useState(false);
 
+  // OCR
+  const [ocrProcessing, setOcrProcessing] = useState(false);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
 
   const venues = getRootAssets();
 
   const loadData = async () => {
     setLoading(true);
+    const email = user?.email || undefined;
     const [allExp, allRec, allAssets] = await Promise.all([
-      CostService.getExpenses(),
-      CostService.getRecurringCosts(),
-      getRootAssets()
+      CostService.getExpenses(email),
+      CostService.getRecurringCosts(email),
+      getRootAssets(email)
     ]);
     
     const summs = await Promise.all(allAssets.map(a => 
-      CostService.getAssetCostSummary(a.id, currentMonth)
+      CostService.getAssetCostSummary(a.id, currentMonth, email)
     ));
 
     setExpenses(allExp.sort((a,b) => b.date.localeCompare(a.date)));
@@ -66,57 +82,106 @@ export default function CostsScreen() {
     setLoading(false);
   };
 
+  const { refreshing, onRefresh } = useManualSync(loadData);
+
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
   const handleSaveRecord = async () => {
     if (!newRecord.amount || !newRecord.assetId || !newRecord.description) {
-      return Alert.alert('Atenção', 'Preencha os campos obrigatórios.');
+      return Alert.alert(t('common.attention'), t('common.fillRequired'));
     }
+    if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
+
     await CostService.saveExpense({
       ...newRecord as DirectExpense,
       id: Math.random().toString(36).substring(7),
-    });
+    }, user.email);
     setRecordModalVisible(false);
+    setReceiptImage(null);
     loadData();
-    Alert.alert('Sucesso', 'Registro financeiro salvo!');
+    Alert.alert(t('common.success'), t('assetDetail.financialSaved'));
+  };
+
+  const handlePickCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return Alert.alert(t('common.error'), t('newAsset.cameraPermError'));
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+    if (!result.canceled) processOcr(result.assets[0].uri);
+  };
+
+  const handlePickGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+    if (!result.canceled) processOcr(result.assets[0].uri);
+  };
+
+  const handlePickFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ['image/*', 'application/pdf'] });
+    if (!result.canceled && result.assets?.[0]) processOcr(result.assets[0].uri);
+  };
+
+  const processOcr = async (uri: string) => {
+    setReceiptImage(uri);
+    setOcrProcessing(true);
+    try {
+      const data = await processReceiptImage(uri);
+      setNewRecord(prev => ({
+        ...prev,
+        description: data.description,
+        amount: data.amount,
+        date: data.date,
+        category: data.category,
+      }));
+      Alert.alert(
+        '✅ ' + t('common.success'),
+        `${data.description}\n${formatCurrency(data.amount)}\n${data.category}\n${(data.confidence * 100).toFixed(0)}%`
+      );
+    } catch (err: any) {
+      Alert.alert(t('common.error'), err?.message || '');
+    } finally {
+      setOcrProcessing(false);
+    }
   };
 
   const handleSaveRecurring = async () => {
     if (!newRec.amount || !newRec.assetId || !newRec.description || !newRec.nextDueDate) {
-      return Alert.alert('Atenção', 'Preencha os campos obrigatórios.');
+      return Alert.alert(t('common.attention'), t('common.fillRequired'));
     }
+    if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
     await CostService.saveRecurringCost({
       ...newRec as RecurringCost,
       id: Math.random().toString(36).substring(7),
-    });
+    }, user.email);
     setRecurringModalVisible(false);
     loadData();
-    Alert.alert('Sucesso', 'Conta recorrente agendada!');
+    Alert.alert(t('common.success'), t('assetDetail.recurringScheduled'));
   };
 
   const handleSaveBudget = async () => {
     if (!selectedBudgetAsset || !budgetLimit) return;
+    if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
     await CostService.saveBudget({
       id: Math.random().toString(36).substring(7),
       assetId: selectedBudgetAsset,
       monthlyLimit: parseFloat(budgetLimit) || 0,
       category: 'GERAL'
-    });
+    }, user.email);
     setBudgetModalVisible(false);
     loadData();
   };
 
   const handleMarkPaid = async (id: string) => {
     Alert.alert(
-      'Confirmar Pagamento',
-      'Deseja registrar o pagamento desta conta agora?',
+      t('costs.confirmPayment'),
+      t('costs.confirmPaymentMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         { 
-          text: 'Confirmar', 
+          text: t('common.confirm'), 
           onPress: async () => {
-            await CostService.markRecurringAsPaid(id);
-            loadData();
+            if (user?.email) {
+              await CostService.markRecurringAsPaid(id, user.email);
+              loadData();
+            }
           }
         }
       ]
@@ -141,7 +206,7 @@ export default function CostsScreen() {
     <View style={S.container}>
       <View style={S.pHeader}>
         <View style={S.headerRow}>
-          <View><Text style={S.pTitle}>Finanças</Text><Text style={S.pSub}>{new Date().toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}</Text></View>
+          <View><Text style={S.pTitle}>{t('costs.title')}</Text><Text style={S.pSub}>{formatMonthYear(new Date()).toUpperCase()}</Text></View>
           <TouchableOpacity style={S.addBtn} onPress={() => setAddMenuVisible(true)}>
              <Ionicons name="add" size={28} color="#fff" />
           </TouchableOpacity>
@@ -150,39 +215,43 @@ export default function CostsScreen() {
 
         <View style={S.cardMain}>
           <View style={S.cardRow}>
-             <View><Text style={S.cardL}>Saldo do Mês</Text><Text style={[S.cardV, balance < 0 && {color: colors.warning.text}]}>R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text></View>
-             <View style={{alignItems:'flex-end'}}><Text style={S.cardL}>Receita Total</Text><Text style={S.cardBudget}>R$ {totalRev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text></View>
+             <View><Text style={S.cardL}>{t('costs.monthlyBalance')}</Text><Text style={[S.cardV, balance < 0 && {color: colors.warning.text}]}>{formatCurrency(balance)}</Text></View>
+             <View style={{alignItems:'flex-end'}}><Text style={S.cardL}>{t('costs.totalRevenue')}</Text><Text style={S.cardBudget}>{formatCurrency(totalRev)}</Text></View>
           </View>
           <View style={S.progressC}><View style={[S.progressB, { width: `${Math.min(budgetProgress, 100)}%`, backgroundColor: budgetProgress > 90 ? colors.warning.text : colors.accent } as any]} /></View>
-          <View style={{flexDirection:'row', justifyContent:'space-between'}}><Text style={S.progressT}>Despesas: R$ {totalExp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text><Text style={S.progressT}>Budget: {budgetProgress.toFixed(0)}%</Text></View>
+          <View style={{flexDirection:'row', justifyContent:'space-between'}}><Text style={S.progressT}>{t('asset.expenses')}: {formatCurrency(totalExp)}</Text><Text style={S.progressT}>{t('costs.budget')}: {budgetProgress.toFixed(0)}%</Text></View>
         </View>
 
       </View>
 
       <View style={S.tabBar}>
          <TouchableOpacity style={[S.tab, activeTab === 'DASHBOARD' && S.tabA]} onPress={() => setActiveTab('DASHBOARD')}><Text style={[S.tabT, activeTab === 'DASHBOARD' && S.tabTA]}>DASHBOARD</Text></TouchableOpacity>
-         <TouchableOpacity style={[S.tab, activeTab === 'EXPENSES' && S.tabA]} onPress={() => setActiveTab('EXPENSES')}><Text style={[S.tabT, activeTab === 'EXPENSES' && S.tabTA]}>EXTRATO</Text></TouchableOpacity>
-         <TouchableOpacity style={[S.tab, activeTab === 'RECURRING' && S.tabA]} onPress={() => setActiveTab('RECURRING')}><Text style={[S.tabT, activeTab === 'RECURRING' && S.tabTA]}>FIXOS</Text></TouchableOpacity>
+         <TouchableOpacity style={[S.tab, activeTab === 'EXPENSES' && S.tabA]} onPress={() => setActiveTab('EXPENSES')}><Text style={[S.tabT, activeTab === 'EXPENSES' && S.tabTA]}>{t('costs.statement')}</Text></TouchableOpacity>
+         <TouchableOpacity style={[S.tab, activeTab === 'RECURRING' && S.tabA]} onPress={() => setActiveTab('RECURRING')}><Text style={[S.tabT, activeTab === 'RECURRING' && S.tabTA]}>{t('costs.fixedBills')}</Text></TouchableOpacity>
       </View>
 
       <View style={S.locBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.filterScroll}>
-            <TouchableOpacity style={[S.filterChip, selectedAsset === 'ALL' && S.filterChipA]} onPress={() => setSelectedAsset('ALL')}><Text style={[S.filterChipT, selectedAsset === 'ALL' && S.filterChipTA]}>TODOS</Text></TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.filterScroll} keyboardShouldPersistTaps="handled">
+            <TouchableOpacity style={[S.filterChip, selectedAsset === 'ALL' && S.filterChipA]} onPress={() => setSelectedAsset('ALL')}><Text style={[S.filterChipT, selectedAsset === 'ALL' && S.filterChipTA]}>{t('common.all').toUpperCase()}</Text></TouchableOpacity>
             {venues.map(v => (<TouchableOpacity key={v.id} style={[S.filterChip, selectedAsset === v.id && S.filterChipA]} onPress={() => setSelectedAsset(v.id)}><Text style={[S.filterChipT, selectedAsset === v.id && S.filterChipTA]}>{v.title.toUpperCase()}</Text></TouchableOpacity>))}
         </ScrollView>
       </View>
 
       {activeTab === 'DASHBOARD' ? (
-        <ScrollView style={S.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={S.content} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           {upcomingBills.length > 0 && (
             <View style={S.alertBox}>
-              <View style={S.alertH}><Ionicons name="notifications" size={16} color="#B45309" /><Text style={S.alertHT}>PRÓXIMOS VENCIMENTOS</Text></View>
+              <View style={S.alertH}><Ionicons name="notifications" size={16} color="#B45309" /><Text style={S.alertHT}>{t('costs.upcomingBills').toUpperCase()}</Text></View>
               {upcomingBills.slice(0,3).map(b => (
                 <TouchableOpacity key={b.id} style={S.alertItem} onPress={() => handleMarkPaid(b.id)}>
                    <Text style={S.alertDesc}>{b.description}</Text>
                    <View style={{alignItems:'flex-end'}}>
-                      <Text style={S.alertVal}>R$ {b.amount.toFixed(2)}</Text>
-                      <Text style={S.alertDate}>Vence {new Date(b.nextDueDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})}</Text>
+                       <Text style={S.alertVal}>{formatCurrency(b.amount)}</Text>
+                       <Text style={S.alertDate}>{t('costs.dueDate')} {formatDateShort(b.nextDueDate)}</Text>
                    </View>
                    <Ionicons name="checkmark-circle-outline" size={20} color="#B45309" style={{marginLeft: 10}} />
                 </TouchableOpacity>
@@ -191,7 +260,7 @@ export default function CostsScreen() {
             </View>
           )}
 
-          <Text style={S.secTitle}>DESEMPENHO POR ATIVO</Text>
+          <Text style={S.secTitle}>{t('costs.performanceByAsset').toUpperCase()}</Text>
           {summaries.filter(s => selectedAsset === 'ALL' || s.assetId === selectedAsset).map(s => {
             const venue = venues.find(v => v.id === s.assetId);
             const net = s.totalRevenues - s.totalExpenses;
@@ -200,10 +269,10 @@ export default function CostsScreen() {
               <TouchableOpacity key={s.assetId} style={S.assetCard} onPress={() => { setSelectedBudgetAsset(s.assetId); setBudgetLimit(String(s.totalBudget)); setBudgetModalVisible(true); }}>
                 <View style={S.assetInfo}>
                   <Text style={S.assetName}>{venue?.title}</Text>
-                  <View style={S.costRow}><Text style={[S.costItem, {color: '#10B981'}]}>Rec: R$ {s.totalRevenues.toFixed(0)}</Text><Text style={S.costDivider}>•</Text><Text style={[S.costItem, {color: '#EF4444'}]}>Desp: R$ {s.totalExpenses.toFixed(0)}</Text></View>
+                  <View style={S.costRow}><Text style={[S.costItem, {color: '#10B981'}]}>{formatCurrencyShort(s.totalRevenues)}</Text><Text style={S.costDivider}>•</Text><Text style={[S.costItem, {color: '#EF4444'}]}>{formatCurrencyShort(s.totalExpenses)}</Text></View>
                   <View style={S.minProgress}><View style={[S.minBar, { width: `${Math.min(p, 100)}%`, backgroundColor: p > 100 ? colors.warning.text : colors.accent } as any]} /></View>
                 </View>
-                <View style={S.assetVal}><Text style={[S.assetTotal, net < 0 && {color: colors.warning.text}]}>R$ {net.toFixed(0)}</Text><Text style={S.assetPerc}>{p.toFixed(0)}% budget</Text></View>
+                <View style={S.assetVal}><Text style={[S.assetTotal, net < 0 && {color: colors.warning.text}]}>{formatCurrencyShort(net)}</Text><Text style={S.assetPerc}>{p.toFixed(0)}% {t('costs.budget').toLowerCase()}</Text></View>
               </TouchableOpacity>
 
             )
@@ -214,6 +283,7 @@ export default function CostsScreen() {
           data={filteredExpenses}
           keyExtractor={e => e.id}
           contentContainerStyle={S.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item }) => (
             <View style={S.expenseItem}>
               <View style={[S.expIcon, { backgroundColor: item.type === 'REVENUE' ? '#ECFDF5' : item.category === 'MANUTENÇÃO' ? '#FEF2F2' : '#F8FAFC' }]}><Ionicons name={item.type === 'REVENUE' ? 'trending-up' : item.category === 'MANUTENÇÃO' ? 'build' : 'receipt'} size={20} color={item.type === 'REVENUE' ? '#10B981' : item.category === 'MANUTENÇÃO' ? '#EF4444' : colors.primary} /></View>
@@ -221,7 +291,7 @@ export default function CostsScreen() {
                 <Text style={S.expTitle}>{item.description}</Text>
                 <Text style={S.expMeta}>{venues.find(v=>v.id===item.assetId)?.title} • {item.category}</Text>
               </View>
-              <Text style={[S.expAmount, { color: item.type === 'REVENUE' ? '#10B981' : colors.primary }]}>{(item.type === 'REVENUE' ? '+ ' : '- ')}R$ {item.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
+              <Text style={[S.expAmount, { color: item.type === 'REVENUE' ? '#10B981' : colors.primary }]}>{(item.type === 'REVENUE' ? '+ ' : '- ')}{formatCurrency(item.amount)}</Text>
             </View>
           )}
         />
@@ -230,6 +300,7 @@ export default function CostsScreen() {
           data={recurring.filter(r => selectedAsset === 'ALL' || r.assetId === selectedAsset)}
           keyExtractor={r => r.id}
           contentContainerStyle={S.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item: r }) => (
             <View style={S.expenseItem}>
                <View style={[S.expIcon, { backgroundColor: '#F5F3FF' }]}><Ionicons name="refresh" size={20} color="#6366F1" /></View>
@@ -239,16 +310,27 @@ export default function CostsScreen() {
                </View>
                <View style={{flexDirection:'row', alignItems:'center', gap: 12}}>
                   <View style={{alignItems:'flex-end'}}>
-                     <Text style={S.expAmount}>R$ {r.amount.toFixed(2)}</Text>
-                     <Text style={S.alertDate}>Vence: {new Date(r.nextDueDate).toLocaleDateString('pt-BR')}</Text>
+                     <Text style={S.expAmount}>{formatCurrency(r.amount)}</Text>
+                     <Text style={S.alertDate}>{t('costs.dueDate')}: {formatDate(r.nextDueDate)}</Text>
+                     {r.totalInstallments ? (
+                       <Text style={[S.alertDate, {color: colors.textSecondary}]}>{t('costs.installment') || 'Parcela'}: {(r.totalInstallments - (r.remainingInstallments || 0)) + 1} de {r.totalInstallments}</Text>
+                     ) : (
+                       <Text style={[S.alertDate, {color: colors.textSecondary}]}>{t('costs.installment') || 'Parcela'}: Contínuo (∞)</Text>
+                     )}
                   </View>
+
                   <TouchableOpacity onPress={() => handleMarkPaid(r.id)} style={{backgroundColor: '#10B981', padding: 8, borderRadius: 8}}>
                      <Ionicons name="card-outline" size={20} color="#fff" />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => {
-                    Alert.alert('Excluir?', 'Remover esta conta recorrente?', [
-                      { text: 'Cancelar', style: 'cancel' },
-                      { text: 'Excluir', style: 'destructive', onPress: async () => { await CostService.deleteRecurringCost(r.id); loadData(); }}
+                    Alert.alert(t('common.delete') + '?', t('costs.removeRecurringBill'), [
+                     { text: t('common.cancel'), style: 'cancel' },
+                       { text: t('common.delete'), style: 'destructive', onPress: async () => { 
+                        if (user?.email) {
+                          await CostService.deleteRecurringCost(r.id, user.email); 
+                          loadData(); 
+                        }
+                      }}
                     ]);
                   }} style={{backgroundColor: '#FEE2E2', padding: 8, borderRadius: 8}}>
                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
@@ -267,7 +349,7 @@ export default function CostsScreen() {
                <View style={S.menuContent}>
                   <Text style={S.menuTitle}>O QUE DESEJA LANÇAR?</Text>
                   
-                  <TouchableOpacity style={S.menuItem} onPress={() => { setAddMenuVisible(false); setNewRecord({ category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PAID', description: '', type: 'EXPENSE' }); setRecordModalVisible(true); }}>
+                  <TouchableOpacity style={S.menuItem} onPress={() => { setAddMenuVisible(false); setReceiptImage(null); setNewRecord({ category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PENDING', description: '', type: 'EXPENSE' }); setRecordModalVisible(true); }}>
                      <View style={[S.menuIcon, {backgroundColor: '#ECFDF5'}]}><Ionicons name="receipt-outline" size={24} color="#10B981"/></View>
                      <View><Text style={S.menuItemT}>Registro Único</Text><Text style={S.menuItemS}>Despesa ou Receita pontual</Text></View>
                   </TouchableOpacity>
@@ -291,78 +373,143 @@ export default function CostsScreen() {
       </Modal>
 
 
-      {/* MODAL ADICIONAR REGISTRO (RECEITA/DESPESA) */}
       <Modal visible={recordModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}><View style={S.modalO}><View style={S.modalC}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-              <View style={S.modalH}><Text style={S.modalT}>NOVO REGISTRO FINANCEIRO</Text><TouchableOpacity onPress={() => setRecordModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.newFinancialRecord')}</Text><TouchableOpacity onPress={() => setRecordModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={S.typeToggle}>
-                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRecord({...newRecord, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRecord.type === 'EXPENSE' && {color:'#fff'}]}>DESPESA</Text></TouchableOpacity>
-                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRecord({...newRecord, type:'REVENUE'})}><Text style={[S.typeBtnT, newRecord.type === 'REVENUE' && {color:'#fff'}]}>RECEITA</Text></TouchableOpacity>
+                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRecord({...newRecord, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRecord.type === 'EXPENSE' && {color:'#fff'}]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
+                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRecord({...newRecord, type:'REVENUE'})}><Text style={[S.typeBtnT, newRecord.type === 'REVENUE' && {color:'#fff'}]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
                 </View>
 
-                <View style={S.inputG}><Text style={S.inputL}>DESCRIÇÃO</Text><TextInput style={S.input} value={newRecord.description} onChangeText={t=>setNewRecord({...newRecord, description:t})} placeholder="Ex: Venda de Passeio" /></View>
-                <View style={S.inputG}><Text style={S.inputL}>ATIVO VINCULADO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{venues.map(v => (<TouchableOpacity key={v.id} style={[S.pChip, newRecord.assetId === v.id && S.pChipA]} onPress={()=>setNewRecord({...newRecord, assetId:v.id})}><Text style={[S.pChipT, newRecord.assetId === v.id && S.pChipTA]}>{v.title.toUpperCase()}</Text></TouchableOpacity>))}</ScrollView></View>
-                <View style={S.inputG}><Text style={S.inputL}>CATEGORIA</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{(newRecord.type === 'EXPENSE' ? EXPENSE_CATEGORIES : REVENUE_CATEGORIES).map(c => (<TouchableOpacity key={c} style={[S.pChip, newRecord.category === c && S.pChipA]} onPress={()=>setNewRecord({...newRecord, category:c})}><Text style={[S.pChipT, newRecord.category === c && S.pChipTA]}>{c}</Text></TouchableOpacity>))}</ScrollView></View>
-                <View style={{flexDirection:'row', gap:10}}><View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>VALOR (R$)</Text><TextInput style={S.input} keyboardType="numeric" value={String(newRecord.amount)} onChangeText={t=>setNewRecord({...newRecord, amount:parseFloat(t)||0})} placeholder="0.00" /></View><View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>DATA</Text><TextInput style={S.input} value={newRecord.date} onChangeText={t=>setNewRecord({...newRecord, date:t})} placeholder="AAAA-MM-DD" /></View></View>
-                <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRecord.type === 'REVENUE' ? '#10B981' : colors.primary}]} onPress={handleSaveRecord}><Text style={S.confirmText}>SALVAR REGISTRO</Text></TouchableOpacity>
+                {/* Fonte do Comprovante - Estilo DocumentModule */}
+                <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: colors.textLight, marginBottom: 10, letterSpacing: 1 }}>{t('costs.receiptSource')}</Text>
+                  {ocrProcessing ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 10 }}>
+                      <ActivityIndicator size="small" color={colors.accent} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>{t('costs.processingOcr')}</Text>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickFile}>
+                        <Ionicons name="document-attach" size={24} color={colors.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.file')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickGallery}>
+                        <Ionicons name="images" size={24} color={colors.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.gallery')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickCamera}>
+                        <Ionicons name="camera" size={24} color={colors.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.camera')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {receiptImage && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#F0FDF4', padding: 8, borderRadius: 8 }}>
+                      <Ionicons name="checkmark-circle" size={16} color="#166534" />
+                      <Text style={{ fontSize: 11, color: '#166534', fontWeight: '700', flex: 1 }} numberOfLines={1}>{t('costs.receiptAttached')}</Text>
+                      <Image source={{ uri: receiptImage }} style={{ width: 40, height: 40, borderRadius: 6 }} resizeMode="cover" />
+                    </View>
+                  )}
+                </View>
+
+                <View style={S.inputG}><Text style={S.inputL}>{t('assetDetail.description')}</Text><TextInput style={S.input} value={newRecord.description} onChangeText={t=>setNewRecord({...newRecord, description:t})} placeholder={t('assetDetail.descriptionPlaceholder')} returnKeyType="done"
+                      /></View>
+                <View style={S.inputG}><Text style={S.inputL}>{t('costs.linkedAsset')}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">{venues.map(v => (<TouchableOpacity key={v.id} style={[S.pChip, newRecord.assetId === v.id && S.pChipA]} onPress={()=>setNewRecord({...newRecord, assetId:v.id})}><Text style={[S.pChipT, newRecord.assetId === v.id && S.pChipTA]}>{v.title.toUpperCase()}</Text></TouchableOpacity>))}</ScrollView></View>
+                <View style={S.inputG}><Text style={S.inputL}>{t('assetDetail.category')}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">{(newRecord.type === 'EXPENSE' ? EXPENSE_CATEGORIES : REVENUE_CATEGORIES).map(c => (<TouchableOpacity key={c} style={[S.pChip, newRecord.category === c && S.pChipA]} onPress={()=>setNewRecord({...newRecord, category:c})}><Text style={[S.pChipT, newRecord.category === c && S.pChipTA]}>{c}</Text></TouchableOpacity>))}</ScrollView></View>
+                <View style={S.inputG}>
+                  <DatePickerButton
+                    label={t('assetDetail.date')}
+                    value={newRecord.date}
+                    onChange={(d) => setNewRecord({ ...newRecord, date: d })}
+                    accentColor={newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444'}
+                  />
+                </View>
+                <View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>{t('assetDetail.valueAmount')}</Text><ValueInput style={S.input} value={String(newRecord.amount || "")} onChangeText={v => setNewRecord({...newRecord, amount: parseFloat(v) || 0})} placeholder="0,00" currency /></View>
+                <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRecord.type === 'REVENUE' ? '#10B981' : colors.accent}]} onPress={handleSaveRecord}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.saveRecord')}</Text></TouchableOpacity>
+
               </ScrollView>
-            </KeyboardAvoidingView>
         </View></View></TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL CONTA RECORRENTE */}
       <Modal visible={recurringModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}><View style={S.modalO}><View style={S.modalC}>
-            <View style={S.modalH}><Text style={S.modalT}>AGENDAR CONTA RECORRENTE</Text><TouchableOpacity onPress={() => setRecurringModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.scheduleRecurring')}</Text><TouchableOpacity onPress={() => setRecurringModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                <View style={S.typeToggle}>
-                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRec({...newRec, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRec.type === 'EXPENSE' && {color:'#fff'}]}>DESPESA</Text></TouchableOpacity>
-                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRec({...newRec, type:'REVENUE'})}><Text style={[S.typeBtnT, newRec.type === 'REVENUE' && {color:'#fff'}]}>RECEITA</Text></TouchableOpacity>
+                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRec({...newRec, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRec.type === 'EXPENSE' && {color:'#fff'}]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
+                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRec({...newRec, type:'REVENUE'})}><Text style={[S.typeBtnT, newRec.type === 'REVENUE' && {color:'#fff'}]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
                </View>
 
-               <View style={S.inputG}><Text style={S.inputL}>CONTA / DESCRIÇÃO</Text><TextInput style={S.input} value={newRec.description} onChangeText={t=>setNewRec({...newRec, description:t})} placeholder="Ex: Aluguel da Vaga" /></View>
+               <View style={S.inputG}><Text style={S.inputL}>{t('assetDetail.billDescription')}</Text><TextInput style={S.input} value={newRec.description} onChangeText={t=>setNewRec({...newRec, description:t})} placeholder={t('assetDetail.billPlaceholder')} returnKeyType="done"
+                      /></View>
 
-               <View style={S.inputG}><Text style={S.inputL}>ATIVO VINCULADO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{venues.map(v => (<TouchableOpacity key={v.id} style={[S.pChip, newRec.assetId === v.id && S.pChipA]} onPress={()=>setNewRec({...newRec, assetId:v.id})}><Text style={[S.pChipT, newRec.assetId === v.id && S.pChipTA]}>{v.title.toUpperCase()}</Text></TouchableOpacity>))}</ScrollView></View>
-               <View style={{flexDirection:'row', gap:10}}>
-                  <View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>VALOR (R$)</Text><TextInput style={S.input} keyboardType="numeric" value={String(newRec.amount)} onChangeText={t=>setNewRec({...newRec, amount:parseFloat(t)||0})} /></View>
-                  <View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>DIA VENCIMENTO</Text><TextInput style={S.input} value={newRec.nextDueDate} onChangeText={t=>setNewRec({...newRec, nextDueDate:t})} placeholder="AAAA-MM-DD" /></View>
-               </View>
-               <View style={S.inputG}><Text style={S.inputL}>FREQUÊNCIA</Text><View style={{flexDirection:'row', gap:10}}>{['WEEKLY','MONTHLY','YEARLY'].map(f => (<TouchableOpacity key={f} style={[S.pChip, newRec.frequency === f && S.pChipA]} onPress={()=>setNewRec({...newRec, frequency:f as any})}><Text style={[S.pChipT, newRec.frequency === f && S.pChipTA]}>{f}</Text></TouchableOpacity>))}</View></View>
-               
+               <View style={S.inputG}><Text style={S.inputL}>{t('costs.linkedAsset')}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">{venues.map(v => (<TouchableOpacity key={v.id} style={[S.pChip, newRec.assetId === v.id && S.pChipA]} onPress={()=>setNewRec({...newRec, assetId:v.id})}><Text style={[S.pChipT, newRec.assetId === v.id && S.pChipTA]}>{v.title.toUpperCase()}</Text></TouchableOpacity>))}</ScrollView></View>
                <View style={S.inputG}>
-                  <Text style={S.inputL}>ALERTAR VENCIMENTO</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {[
-                      { l: 'Não alertar', v: undefined },
-                      { l: 'No dia', v: 0 },
-                      { l: '1 dia antes', v: 1 },
-                      { l: '3 dias antes', v: 3 },
-                      { l: '5 dias antes', v: 5 },
-                      { l: '10 dias antes', v: 10 }
-                    ].map(opt => (
-                      <TouchableOpacity key={String(opt.v)} style={[S.pChip, newRec.alertDaysBefore === opt.v && S.pChipA]} onPress={()=>setNewRec({...newRec, alertDaysBefore: opt.v})}>
-                        <Text style={[S.pChipT, newRec.alertDaysBefore === opt.v && S.pChipTA]}>{opt.l}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                  <DatePickerButton
+                    label={t('assetDetail.dueDay')}
+                    value={newRec.nextDueDate}
+                    onChange={(d) => setNewRec({ ...newRec, nextDueDate: d })}
+                  />
                </View>
+               <View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>{t('assetDetail.valueAmount')}</Text><ValueInput style={S.input} value={String(newRec.amount || "")} onChangeText={v => setNewRec({...newRec, amount: parseFloat(v) || 0})} currency /></View>
+               <View style={S.inputG}><Text style={S.inputL}>{t('assetDetail.frequency')}</Text><View style={{flexDirection:'row', gap:10}}>{['WEEKLY','MONTHLY','YEARLY'].map(f => (<TouchableOpacity key={f} style={[S.pChip, newRec.frequency === f && S.pChipA]} onPress={()=>setNewRec({...newRec, frequency:f as any})}><Text style={[S.pChipT, newRec.frequency === f && S.pChipTA]}>{f}</Text></TouchableOpacity>))}</View></View>
+               
+                <View style={S.inputG}>
+                   <Text style={S.inputL}>{t('assetDetail.alertDue')}</Text>
+                   <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                     {[
+                       { l: t('assetDetail.noAlert'), v: undefined },
+                       { l: t('assetDetail.onDay'), v: 0 },
+                       { l: t('assetDetail.daysBefore', { count: 1 }), v: 1 },
+                       { l: t('assetDetail.daysBefore', { count: 3 }), v: 3 },
+                       { l: t('assetDetail.daysBefore', { count: 5 }), v: 5 },
+                       { l: t('assetDetail.daysBefore', { count: 10 }), v: 10 }
+                     ].map(opt => (
+                       <TouchableOpacity key={String(opt.v)} style={[S.pChip, newRec.alertDaysBefore === opt.v && S.pChipA]} onPress={()=>setNewRec({...newRec, alertDaysBefore: opt.v})}>
+                         <Text style={[S.pChipT, newRec.alertDaysBefore === opt.v && S.pChipTA]}>{opt.l}</Text>
+                       </TouchableOpacity>
+                     ))}
+                   </ScrollView>
+                </View>
 
-               <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRec.type === 'REVENUE' ? '#10B981' : colors.primary}]} onPress={handleSaveRecurring}><Text style={S.confirmText}>AGENDAR {newRec.type === 'REVENUE' ? 'RECEITA' : 'PAGAMENTO'}</Text></TouchableOpacity>
+                <View style={S.inputG}>
+                   <Text style={S.inputL}>{t('assetDetail.installments')}</Text>
+                   <TextInput 
+                    style={S.input} 
+                    keyboardType="numeric" 
+                    value={newRec.totalInstallments ? String(newRec.totalInstallments) : ''} 
+                    onChangeText={t => {
+                      const val = parseInt(t) || undefined;
+                      setNewRec({...newRec, totalInstallments: val, remainingInstallments: val});
+                    }} 
+                    placeholder={t('assetDetail.installmentsPlaceholder')} 
+                   returnKeyType="done"
+                      />
+                </View>
+               <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRec.type === 'REVENUE' ? '#10B981' : colors.accent}]} onPress={handleSaveRecurring}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.schedule')} {newRec.type === 'REVENUE' ? t('assetDetail.revenue') : t('assetDetail.payment')}</Text></TouchableOpacity>
+
 
             </ScrollView>
         </View></View></TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* MODAL DEFINIR BUDGET */}
       <Modal visible={budgetModalVisible} transparent animationType="fade">
-        <View style={S.modalO}><View style={[S.modalC, { marginBottom: '50%' }]}>
-           <View style={S.modalH}><Text style={S.modalT}>ORÇAMENTO MENSAL</Text><TouchableOpacity onPress={() => setBudgetModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
-           <Text style={S.assetName}>{venues.find(v=>v.id===selectedBudgetAsset)?.title}</Text>
-           <View style={[S.inputG, {marginTop:15}]}><Text style={S.inputL}>LIMITE DE GASTOS (R$)</Text><TextInput style={S.input} keyboardType="numeric" value={budgetLimit} onChangeText={setBudgetLimit} placeholder="Ex: 5000" autoFocus /></View>
-           <TouchableOpacity style={S.confirmBtn} onPress={handleSaveBudget}><Text style={S.confirmText}>DEFINIR BUDGET</Text></TouchableOpacity>
-        </View></View>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 24 }}>
+            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.monthlyBudget')}</Text><TouchableOpacity onPress={() => setBudgetModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+            <Text style={S.assetName}>{venues.find(v=>v.id===selectedBudgetAsset)?.title}</Text>
+            <View style={[S.inputG, {marginTop:15}]}><Text style={S.inputL}>{t('assetDetail.spendingLimit')}</Text><ValueInput style={S.input} value={budgetLimit} onChangeText={setBudgetLimit} placeholder="5000" currency /></View>
+            <TouchableOpacity style={S.confirmBtn} onPress={handleSaveBudget}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.defineBudget')}</Text></TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -372,81 +519,82 @@ const S = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   pHeader: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 25, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.border },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  pTitle: { color: colors.primary, fontSize: 32, fontWeight: '900', letterSpacing: -1 },
-  pSub: { fontSize: 11, fontWeight: '900', color: colors.textLight, letterSpacing: 1, textTransform: 'uppercase' },
-  addBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  pTitle: { color: colors.primary, fontSize: 24, fontWeight: '900', letterSpacing: -0.6 },
+  pSub: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
+  addBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
+
   cardMain: { backgroundColor: '#fff', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   cardRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  cardL: { fontSize: 10, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardV: { fontSize: 28, fontWeight: '900', color: colors.primary, marginTop: 4 },
-  cardBudget: { fontSize: 18, fontWeight: '800', color: colors.accent, marginTop: 4 },
+  cardL: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardV: { fontSize: 24, fontWeight: '900', color: colors.primary, marginTop: 4, letterSpacing: -0.4 },
+  cardBudget: { fontSize: 16, fontWeight: '900', color: colors.accent, marginTop: 4 },
   progressC: { height: 10, backgroundColor: colors.divider, borderRadius: 5, marginVertical: 12, overflow:'hidden' },
   progressB: { height: '100%', borderRadius: 5 },
-  progressT: { fontSize: 11, fontWeight: '800', color: colors.textSecondary },
+  progressT: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
 
   tabBar: { flexDirection: 'row', gap: 20, paddingHorizontal: 25, marginTop: 25 },
   tab: { paddingBottom: 8 },
   tabA: { borderBottomWidth: 3, borderBottomColor: colors.accent },
-  tabT: { fontSize: 12, fontWeight: '800', color: colors.textLight },
+  tabT: { fontSize: 11, fontWeight: '900', color: colors.textLight, letterSpacing: 0.5 },
   tabTA: { color: colors.accent },
 
   locBar: { marginTop: 15 },
   filterScroll: { paddingHorizontal: 20, paddingBottom: 15 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, marginRight: 8 },
   filterChipA: { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterChipT: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  filterChipT: { fontSize: 11, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase' },
   filterChipTA: { color: '#fff' },
 
   content: { padding: 20 },
-  secTitle: { fontSize: 10, fontWeight: '900', color: colors.textLight, letterSpacing: 1, marginBottom: 15 },
+  secTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, marginBottom: 15, textTransform: 'uppercase' },
   assetCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   assetInfo: { flex: 1 },
-  assetName: { fontSize: 16, fontWeight: '900', color: colors.primary },
+  assetName: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
   costRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  costItem: { fontSize: 11, fontWeight: '700' },
+  costItem: { fontSize: 9, fontWeight: '900' },
   costDivider: { color: colors.border },
   minProgress: { height: 3, backgroundColor: '#F1F5F9', borderRadius: 2, marginTop: 10, width: '80%' },
   minBar: { height: '100%', borderRadius: 2 },
   assetVal: { alignItems: 'flex-end', marginRight: 15 },
-  assetTotal: { fontSize: 16, fontWeight: '900', color: colors.primary },
-  assetPerc: { fontSize: 9, fontWeight: '800', color: colors.textLight, marginTop: 2 },
+  assetTotal: { fontSize: 14, fontWeight: '900', color: colors.primary },
+  assetPerc: { fontSize: 8, fontWeight: '900', color: colors.textLight, marginTop: 2, textTransform: 'uppercase' },
   expenseItem: { flexDirection: 'row', backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   expIcon: { width: 44, height: 44, borderRadius: 12, justifyContent:'center', alignItems:'center', marginRight: 15 },
-  expTitle: { fontSize: 14, fontWeight: '800', color: colors.primary },
-  expMeta: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: '600' },
-  expAmount: { fontSize: 16, fontWeight: '900', color: colors.primary },
+  expTitle: { fontSize: 12, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
+  expMeta: { fontSize: 9, color: colors.textSecondary, marginTop: 2, fontWeight: '700', textTransform: 'uppercase' },
+  expAmount: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.3 },
   modalO: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalC: { backgroundColor: '#fff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 25, paddingBottom: 60, maxHeight: '90%' },
   modalH: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  modalT: { fontSize: 10, fontWeight: '900', color: colors.textLight, letterSpacing: 1 },
+  modalT: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
   inputG: { marginBottom: 20 },
-  inputL: { fontSize: 10, fontWeight: '900', color: colors.textLight, marginBottom: 8 },
-  input: { backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, fontSize: 14, fontWeight: '700', borderWidth: 1, borderColor: colors.border },
+  inputL: { fontSize: 9, fontWeight: '900', color: colors.textLight, marginBottom: 8, textTransform: 'uppercase' },
+  input: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: colors.border },
   pChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   pChipA: { backgroundColor: colors.accent, borderColor: colors.accent },
-  pChipT: { fontSize: 12, fontWeight: '800', color: colors.textSecondary },
+  pChipT: { fontSize: 10, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
   pChipTA: { color: '#fff' },
-  confirmBtn: { backgroundColor: colors.accent, padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  confirmText: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1 },
+  confirmBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
+  confirmText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' },
 
   typeToggle: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   typeBtn: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  typeBtnT: { fontSize: 11, fontWeight: '900', color: colors.textLight },
+  typeBtnT: { fontSize: 9, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase' },
   alertBox: { backgroundColor: '#FFF7ED', padding: 16, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: '#FED7AA' },
   alertH: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  alertHT: { fontSize: 10, fontWeight: '900', color: '#B45309', letterSpacing: 1 },
+  alertHT: { fontSize: 9, fontWeight: '900', color: '#B45309', letterSpacing: 1.2, textTransform: 'uppercase' },
   alertItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  alertDesc: { fontSize: 12, fontWeight: '700', color: colors.primary, flex: 1 },
-  alertDate: { fontSize: 11, fontWeight: '800', color: '#B45309', marginRight: 15 },
-  alertVal: { fontSize: 12, fontWeight: '900', color: colors.primary },
+  alertDesc: { fontSize: 11, fontWeight: '800', color: colors.primary, flex: 1 },
+  alertDate: { fontSize: 9, fontWeight: '800', color: '#B45309', marginRight: 15, textTransform: 'uppercase' },
+  alertVal: { fontSize: 11, fontWeight: '900', color: colors.primary },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   menuContent: { backgroundColor: '#fff', borderRadius: 32, padding: 24, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 },
-  menuTitle: { fontSize: 10, fontWeight: '900', color: colors.textLight, letterSpacing: 1.5, textAlign: 'center', marginBottom: 25 },
+  menuTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.5, textAlign: 'center', marginBottom: 25, textTransform: 'uppercase' },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', gap: 16 },
-  menuIcon: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  menuItemT: { fontSize: 16, fontWeight: '800', color: colors.primary },
-  menuItemS: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  menuIcon: { width: 44, height: 44, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  menuItemT: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
+  menuItemS: { fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
   menuClose: { marginTop: 20, alignItems: 'center', padding: 10 },
-  menuCloseT: { fontSize: 12, fontWeight: '900', color: '#EF4444', letterSpacing: 1 },
+  menuCloseT: { fontSize: 11, fontWeight: '900', color: '#EF4444', letterSpacing: 1, textTransform: 'uppercase' },
 });
 

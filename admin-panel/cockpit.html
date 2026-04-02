@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Global Ops Cockpit</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Ionicons -->
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  
+  <style>
+    /* Premium Datadog/Grafana Inspired Global NOC Theme */
+    :root {
+      --bg-dash: #0f111a;
+      --surface-dash: #161925;
+      --border-dash: #24283b;
+      --text-main: #f8f8f2;
+      --text-muted: #8b92b3;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --stat-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+
+    body {
+      background-color: var(--bg-dash);
+      color: var(--text-main);
+      margin: 0; font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    .cockpit-header {
+      background: var(--surface-dash);
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-dash);
+      display: flex; justify-content: space-between; align-items: center;
+      /* Removendo shadow pesada que conflita com o layout admin */
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2); 
+    }
+
+    .cockpit-title {
+      font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 12px;
+      color: #fff; letter-spacing: 0.5px;
+    }
+    
+    .pulse-dot {
+      width: 10px; height: 10px; background: var(--accent-green);
+      border-radius: 50%; box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    .last-update { font-size: 12px; color: var(--accent-cyan); font-family: monospace; font-weight: 600; }
+
+    .dash-container { padding: 24px; max-width: 1600px; margin: 0 auto; overflow-y: auto; height: calc(100vh - 80px); }
+
+    /* Main Grid */
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 24px; }
+
+    /* Premium Stat Card */
+    .stat-card {
+      background: var(--surface-dash); border: 1px solid var(--border-dash);
+      border-radius: 12px; padding: 20px; box-shadow: var(--stat-shadow);
+      position: relative; overflow: hidden; transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.1); }
+    
+    .card-top { display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .card-title { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .card-icon { font-size: 20px; opacity: 0.8; }
+    
+    .card-value { font-size: 32px; font-weight: 900; letter-spacing: -1px; margin-bottom: 4px; display:flex; align-items: baseline; gap: 8px;}
+    .card-value small { font-size: 14px; font-weight: 500; opacity: 0.6; }
+    
+    .card-footer { font-size: 12px; color: var(--text-muted); font-weight: 500; display:flex; justify-content: space-between;}
+    .badge-mini { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.05); }
+
+    /* Specfic colors */
+    .green { color: var(--accent-green); }
+    .blue { color: var(--accent-blue); }
+    .cyan { color: var(--accent-cyan); }
+    .amber { color: var(--accent-amber); }
+    .red { color: var(--accent-red); }
+
+    /* Component Sections */
+    .section-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 1px;}
+    
+    .chart-box { background: var(--surface-dash); border: 1px solid var(--border-dash); border-radius: 12px; padding: 20px; }
+    
+    .terminal-box { background: #000; border: 1px solid #333; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; height: 180px; overflow-y: auto; color: #0f0; }
+    .terminal-row { padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px dashed #222; }
+    .terminal-row:last-child { border: none;}
+    .err-ts { color: #888; }
+    .err-dev { color: #facc15; }
+    .err-msg { color: #f87171; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content" style="background-color: var(--bg-dash); height: 100vh; overflow: hidden; display: flex; flex-direction: column;">
+    <div class="cockpit-header">
+      <div class="cockpit-title">
+    <div class="pulse-dot"></div>
+    <ion-icon name="planet-outline"></ion-icon>
+    <span>OP CENTER / GLOBAL COMMAND</span>
+  </div>
+  <div class="topbar-actions">
+    <span class="last-update" id="last-update">SYNCING...</span>
+  </div>
+</div>
+
+<div class="dash-container">
+  
+  <!-- ROW 1: NETWORK & INFRAHEALTH -->
+  <div class="section-title"><ion-icon name="hardware-chip-outline"></ion-icon> Network Ingress & Core Health</div>
+  <div class="grid-4">
+    <div class="stat-card">
+      <div class="card-top">
+        <span class="card-title">Live Sync Rate</span>
+        <ion-icon name="swap-vertical-outline" class="card-icon cyan"></ion-icon>
+      </div>
+      <div class="card-value cyan"><span id="metric-rpm">0</span><small>req/min</small></div>
+      <div class="card-footer">Throughput em tempo real</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="card-top">
+        <span class="card-title">Bandwidth In</span>
+        <ion-icon name="cloud-download-outline" class="card-icon blue"></ion-icon>
+      </div>
+      <div class="card-value blue"><span id="metric-volume">0.00</span><small>MB</small></div>
+      <div class="card-footer">Volume da Sessão Atual</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="card-top">
+        <span class="card-title">Event Failures</span>
+        <ion-icon name="warning-outline" class="card-icon red"></ion-icon>
+      </div>
+      <div class="card-value red"><span id="metric-failures">0</span></div>
+      <div class="card-footer">
+        <span>Taxa de Erro:</span>
+        <span class="badge-mini" style="color:var(--accent-red);" id="metric-error-rate">0.00%</span>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="card-top">
+        <span class="card-title">Core Uptime</span>
+        <ion-icon name="server-outline" class="card-icon green"></ion-icon>
+      </div>
+      <div class="card-value green"><span id="metric-uptime">0s</span></div>
+      <div class="card-footer">Broker API Health: <span style="color:#10b981">100% PASS</span></div>
+    </div>
+  </div>
+
+  <!-- ROW 2: FIELD OPERATIONS & WORKFORCE -->
+  <div class="section-title" style="margin-top: 24px;"><ion-icon name="people-outline"></ion-icon> Field Service Operations FSM</div>
+  <div class="grid-3">
+    
+    <div class="stat-card" style="border-top: 3px solid var(--accent-amber);">
+      <div class="card-top"><span class="card-title">Pipeline: On Devices</span><ion-icon name="phone-portrait-outline" class="card-icon amber"></ion-icon></div>
+      <div class="card-value amber"><span id="metric-os-devices">0</span><small>OS</small></div>
+      <div class="card-footer">Em andamento / Aguardando Sync</div>
+    </div>
+
+    <div class="stat-card" style="border-top: 3px solid var(--border-dash);">
+      <div class="card-top"><span class="card-title">Pipeline: Cloud Queue</span><ion-icon name="cloud-offline-outline" class="card-icon text-muted"></ion-icon></div>
+      <div class="card-value text-muted" style="color: var(--text-muted);"><span id="metric-os-queue">0</span><small>OS</small></div>
+      <div class="card-footer">Aguardando download (Unclaimed)</div>
+    </div>
+
+    <div class="stat-card" style="border-top: 3px solid var(--accent-green);">
+      <div class="card-top"><span class="card-title">Historical Finalized</span><ion-icon name="checkmark-done-outline" class="card-icon green"></ion-icon></div>
+      <div class="card-value green"><span id="metric-os-done">0</span></div>
+      <div class="card-footer">Total OS fechadas com sucesso (DB)</div>
+    </div>
+
+  </div>
+
+  <!-- ROW 3: CHARTS & LOGS -->
+  <div class="grid-1-2">
+    <!-- Worker Stats -->
+    <div class="chart-box" style="display:flex;flex-direction:column;gap:16px;">
+      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Fleet Analytics</h3>
+      
+      <div style="background:rgba(255,255,255,0.03); padding:16px; border-radius:8px; border-left: 3px solid var(--accent-blue);">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">DISPOSITIVOS CONECTADOS HOJE</div>
+        <div style="font-size:24px;font-weight:800;color:#fff;" id="metric-fleet-active">0</div>
+      </div>
+      
+      <div style="background:rgba(255,255,255,0.03); padding:16px; border-radius:8px; border-left: 3px solid var(--accent-cyan);">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">TOTAL WORKERS CADASTRADOS</div>
+        <div style="font-size:24px;font-weight:800;color:#fff;" id="metric-total-workers">0</div>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Graph -->
+    <div class="chart-box">
+      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Telemetry Flow (Packets/min)</h3>
+      <div style="height: 200px;">
+        <canvas id="liveChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECURITY LOGS -->
+  <div class="section-title"><ion-icon name="terminal-outline"></ion-icon> Dead Letter Queue & Drop Logs</div>
+  <div class="terminal-box" id="error-console">
+    <div style="color:#555;">[SYS] Listening for packet drops and unhandled rejections..._</div>
+  </div>
+</div>
+  </div>
+</div>
+
+<script type="module" src="js/cockpit.js"></script>
+</body>
+</html>

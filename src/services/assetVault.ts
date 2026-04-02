@@ -4,6 +4,8 @@
  * Em produção: substituir por expo-secure-store ou AES local.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { enqueueMutation } from './syncService';
+import { AuthService } from './auth';
 
 export type VaultCategory =
   | 'wifi'
@@ -25,6 +27,7 @@ export interface VaultEntry {
   password: string;
   note?: string;
   lastUpdated: number;
+  ownerEmail?: string;
 }
 
 export const VAULT_CATEGORIES: Record<VaultCategory, { label: string; icon: string; color: string }> = {
@@ -40,36 +43,46 @@ export const VAULT_CATEGORIES: Record<VaultCategory, { label: string; icon: stri
   other:     { label: 'Outro',          icon: 'key',                     color: '#64748B' },
 };
 
-const KEY = (assetId: string) => `@vault:asset:${assetId}`;
+const KEY = (assetId: string, email: string) => AuthService.getUserKey(`vault:${assetId}`, email);
 
 export const AssetVaultService = {
-  async getEntries(assetId: string): Promise<VaultEntry[]> {
+  async getEntries(assetId: string, ownerEmail?: string): Promise<VaultEntry[]> {
+    if (!ownerEmail) return [];
     try {
-      const raw = await AsyncStorage.getItem(KEY(assetId));
-      return raw ? JSON.parse(raw) : [];
+      const raw = await AsyncStorage.getItem(KEY(assetId, ownerEmail));
+      const all: VaultEntry[] = raw ? JSON.parse(raw) : [];
+      return all; // No need to filter anymore, key is already isolated
     } catch { return []; }
   },
 
-  async saveEntry(assetId: string, entry: Omit<VaultEntry, 'id' | 'lastUpdated'>): Promise<VaultEntry> {
-    const entries = await this.getEntries(assetId);
+  async saveEntry(assetId: string, entry: Omit<VaultEntry, 'id' | 'lastUpdated'>, ownerEmail: string): Promise<VaultEntry> {
+    if (!ownerEmail) throw new Error('ownerEmail required for vaulted data');
+    const entries = await this.getEntries(assetId, ownerEmail);
     const newEntry: VaultEntry = {
       ...entry,
       id: `vault_${Date.now()}`,
       lastUpdated: Date.now(),
+      ownerEmail,
     };
-    await AsyncStorage.setItem(KEY(assetId), JSON.stringify([...entries, newEntry]));
+    await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify([...entries, newEntry]));
+    enqueueMutation('vault', 'CREATE', { assetId, entry: newEntry }, ownerEmail);
     return newEntry;
   },
 
-  async updateEntry(assetId: string, entryId: string, patch: Partial<VaultEntry>): Promise<void> {
-    const entries = await this.getEntries(assetId);
-    const updated = entries.map(e => e.id === entryId ? { ...e, ...patch, lastUpdated: Date.now() } : e);
-    await AsyncStorage.setItem(KEY(assetId), JSON.stringify(updated));
+  async updateEntry(assetId: string, entryId: string, patch: Partial<VaultEntry>, ownerEmail: string): Promise<void> {
+    if (!ownerEmail) return;
+    const entries = await this.getEntries(assetId, ownerEmail);
+    const updated = entries.map(e => e.id === entryId ? { ...e, ...patch, lastUpdated: Date.now(), ownerEmail: ownerEmail || e.ownerEmail } : e);
+    await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify(updated));
+    const entryPatch = updated.find(e => e.id === entryId) || patch;
+    enqueueMutation('vault', 'UPDATE', { assetId, entryId, patch: entryPatch }, ownerEmail);
   },
 
-  async deleteEntry(assetId: string, entryId: string): Promise<void> {
-    const entries = await this.getEntries(assetId);
+  async deleteEntry(assetId: string, entryId: string, ownerEmail: string): Promise<void> {
+    if (!ownerEmail) return;
+    const entries = await this.getEntries(assetId, ownerEmail);
     const filtered = entries.filter(e => e.id !== entryId);
-    await AsyncStorage.setItem(KEY(assetId), JSON.stringify(filtered));
+    await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify(filtered));
+    enqueueMutation('vault', 'DELETE', { assetId, entryId }, ownerEmail);
   },
 };

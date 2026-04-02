@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Notificações</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Notificações</span>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="window.newTemplate()">+ Novo Template</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="grid-2">
+
+        <!-- Templates -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="mail-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Templates de Notificação</span><span class="badge badge-accent" id="tmpl-count">—</span></div>
+          <div class="panel-body" id="template-list"><div style="color:var(--text3)">Carregando…</div></div>
+        </div>
+
+        <!-- Logs -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="send-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Histórico de Envios</span></div>
+          <div class="panel-body" id="log-list"><div style="color:var(--text3)">Carregando…</div></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Template Modal -->
+<div class="modal-overlay" id="template-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="modal-title">Novo Template</span><button class="modal-close" onclick="closeModal('template-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="tmpl-id" />
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Chave (key)</label><input class="form-control" id="tmpl-key" placeholder="Ex: password_reset" /></div>
+        <div class="form-group"><label class="form-label">Label</label><input class="form-control" id="tmpl-label" placeholder="Resetar Senha" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Canal</label>
+        <select class="form-control" id="tmpl-channel">
+          <option value="EMAIL">E-mail</option><option value="PUSH">Push</option>
+          <option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Assunto (e-mail)</label><input class="form-control" id="tmpl-subject" placeholder="{{name}}, sua senha foi resetada" /></div>
+      <div class="form-group"><label class="form-label">Corpo (use {{variavel}} para vars)</label>
+        <textarea class="form-control" id="tmpl-body" rows="6" placeholder="Olá {{name}},&#10;&#10;Sua senha foi resetada..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('template-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-tmpl-btn">Salvar Template</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const chanIcon  = { EMAIL:'<ion-icon name="mail-outline"></ion-icon>', PUSH:'<ion-icon name="smartphone-outline"></ion-icon>', WHATSAPP:'<ion-icon name="logo-whatsapp"></ion-icon>', SMS:'<ion-icon name="chatbox-ellipses-outline"></ion-icon>' };
+  const statusMap = { SENT:'badge-green', DELIVERED:'badge-blue', FAILED:'badge-red', BOUNCED:'badge-amber' };
+
+  async function loadTemplates() {
+    const templates = await CONFIG.get('/notifications/templates');
+    if (!templates) return;
+    document.getElementById('tmpl-count').textContent = `${templates.length} templates`;
+    document.getElementById('template-list').innerHTML = templates.map(t => `
+      <div class="flag-item">
+        <span class="flag-icon">${chanIcon[t.channel] || chanIcon.EMAIL}</span>
+        <div class="flag-info">
+          <div class="flag-name">${t.label} <span class="badge badge-gray">${t.channel}</span></div>
+          <div class="flag-desc">Chave: <code>${t.key}</code></div>
+          ${t.subject ? `<div class="flag-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">Assunto: ${t.subject}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="btn btn-ghost btn-sm" onclick="editTemplate(${JSON.stringify(t).replace(/"/g,'&quot;')})">Editar</button>
+          <label class="toggle">
+            <input type="checkbox" ${t.isActive ? 'checked' : ''} onclick="toggleTemplate('${t.id}', this.checked)" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>`).join('') || '<div style="color:var(--text3);text-align:center">Nenhum template.</div>';
+  }
+
+  window.newTemplate = () => {
+    document.getElementById('modal-title').textContent = 'Novo Template';
+    document.getElementById('tmpl-id').value = '';
+    document.getElementById('tmpl-key').value = '';
+    document.getElementById('tmpl-label').value = '';
+    document.getElementById('tmpl-channel').value = 'EMAIL';
+    document.getElementById('tmpl-subject').value = '';
+    document.getElementById('tmpl-body').value = '';
+    openModal('template-modal');
+  };
+
+  window.editTemplate = (t) => {
+    document.getElementById('modal-title').textContent = 'Editar Template';
+    document.getElementById('tmpl-id').value = t.id;
+    document.getElementById('tmpl-key').value = t.key;
+    document.getElementById('tmpl-label').value = t.label;
+    document.getElementById('tmpl-channel').value = t.channel;
+    document.getElementById('tmpl-subject').value = t.subject || '';
+    document.getElementById('tmpl-body').value = t.body || '';
+    openModal('template-modal');
+  };
+
+  window.toggleTemplate = async (id, isActive) => {
+    await CONFIG.put(`/notifications/templates/${id}`, { isActive });
+  };
+
+  async function loadLogs() {
+    const data = await CONFIG.get('/notifications/logs');
+    if (!data) return;
+    document.getElementById('log-list').innerHTML = data.data.map(l => `
+      <div class="activity-item">
+        <div class="activity-icon">${chanIcon[l.channel] || chanIcon.EMAIL}</div>
+        <div class="activity-content">
+          <div class="activity-text"><strong>${l.template?.label || l.templateId}</strong> → ${l.recipient}</div>
+          <div class="activity-time">
+            ${new Date(l.sentAt).toLocaleString('pt-BR')} 
+            <span class="badge ${statusMap[l.status]}">${l.status}</span>
+          </div>
+        </div>
+      </div>`).join('') || '<div style="color:var(--text3);text-align:center;padding:24px">Nenhum envio registrado.</div>';
+  }
+
+  loadTemplates();
+  loadLogs();
+
+  document.getElementById('save-tmpl-btn').onclick = async () => {
+    const id = document.getElementById('tmpl-id').value;
+    const body = {
+      key:     document.getElementById('tmpl-key').value,
+      label:   document.getElementById('tmpl-label').value,
+      channel: document.getElementById('tmpl-channel').value,
+      subject: document.getElementById('tmpl-subject').value,
+      body:    document.getElementById('tmpl-body').value,
+    };
+    if (!body.key || !body.label || !body.body) return alert('Preencha os campos obrigatórios.');
+    
+    if (id) {
+       await CONFIG.put(`/notifications/templates/${id}`, body);
+    } else {
+       await CONFIG.post('/notifications/templates', body);
+    }
+    
+    closeModal('template-modal');
+    loadTemplates();
+  };
+</script>
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+</body>
+</html>

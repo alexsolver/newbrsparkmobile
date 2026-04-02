@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Assinaturas</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Planos & Assinaturas</span>
+      <div class="topbar-actions">
+        <select class="form-control" style="width:140px;padding:7px 10px;font-size:12px" id="filter-status">
+          <option value="">Todos os status</option>
+          <option value="ACTIVE">Ativo</option><option value="TRIALING">Trial</option>
+          <option value="PAST_DUE">Em atraso</option><option value="CANCELLED">Cancelado</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModal('assign-plan-modal')">+ Atribuir Plano</button>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <!-- Plan Cards pulled from DB -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Ativos</span><button class="btn btn-ghost btn-sm" onclick="window.location.href='billing.html'">Ver Billing →</button></div>
+        <div class="panel-body"><div class="grid-3" id="plans-grid"><div style="color:var(--text3)">Carregando…</div></div></div>
+      </div>
+
+      <!-- Subscriptions Table -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Assinaturas</span>
+          <span class="badge badge-accent" id="count-badge">—</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tenant</th><th>Plano</th><th>Ciclo</th><th>Status</th><th>Início</th><th>Vencimento</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody id="subs-tbody"><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Assign Plan Modal -->
+<div class="modal-overlay" id="assign-plan-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Atribuir Plano</span><button class="modal-close" onclick="closeModal('assign-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Tenant</label><select class="form-control" id="sub-tenant"></select></div>
+      <div class="form-group"><label class="form-label">Plano</label><select class="form-control" id="sub-plan"></select></div>
+      <div class="form-group"><label class="form-label">Ciclo de Cobrança</label>
+        <select class="form-control" id="sub-cycle"><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual (10% desconto)</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('assign-plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-sub-btn">Atribuir</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const statusMap = { ACTIVE:'badge-green', TRIALING:'badge-amber', PAST_DUE:'badge-red', CANCELLED:'badge-gray' };
+  const statusLbl = { ACTIVE:'<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo', TRIALING:'◐ Trial', PAST_DUE:'<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Em Atraso', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelado' };
+  const cycleMap  = { MONTHLY:'Mensal', YEARLY:'Anual' };
+
+  // Load plans
+  const plans = await CONFIG.get('/plans') || [];
+  const plansGrid = document.getElementById('plans-grid');
+  const subPlanSel = document.getElementById('sub-plan');
+  plansGrid.innerHTML = plans.map(p => `
+    <div class="stat-card" style="--accent-color:var(--accent)">
+      <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${p.name}</div>
+      <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">/mês</span></div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? 'Ilimitado' : p.maxAssets} bens</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} usuários</div>
+      <span class="badge badge-accent">${p._count?.subscriptions || 0} tenants</span>
+    </div>`).join('') || '<div style="color:var(--text3)">Nenhum plano cadastrado.</div>';
+  plans.forEach(p => { subPlanSel.innerHTML += `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
+
+  // Load tenants for modal
+  const tenants = await CONFIG.get('/tenants?limit=200') || { data: [] };
+  tenants.data.forEach(t => { document.getElementById('sub-tenant').innerHTML += `<option value="${t.id}">${t.name}</option>`; });
+
+  // Load subscriptions
+  async function loadSubs() {
+    const status = document.getElementById('filter-status').value;
+    const data = await CONFIG.get(`/subscriptions${status ? `?status=${status}` : ''}`);
+    if (!data) return;
+    document.getElementById('count-badge').textContent = `${data.total} assinaturas`;
+    document.getElementById('subs-tbody').innerHTML = data.data.map(s => `
+      <tr>
+        <td class="bold">${s.tenant?.name || '—'}</td>
+        <td><span class="badge badge-accent">${s.plan?.name || '—'}</span></td>
+        <td>${cycleMap[s.billingCycle]}</td>
+        <td><span class="badge ${statusMap[s.status]}">${statusLbl[s.status]}</span></td>
+        <td style="color:var(--text3);font-size:11px">${new Date(s.currentStart).toLocaleDateString('pt-BR')}</td>
+        <td style="color:var(--text3);font-size:11px">${new Date(s.currentEnd).toLocaleDateString('pt-BR')}</td>
+        <td style="text-align:right">
+          ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick="cancelSub('${s.id}')">Cancelar</button>` : ''}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma assinatura.</td></tr>';
+  }
+
+  loadSubs();
+  document.getElementById('filter-status').addEventListener('change', loadSubs);
+
+  window.cancelSub = async (id) => {
+    if (!confirm('Cancelar esta assinatura?')) return;
+    await CONFIG.patch(`/subscriptions/${id}/cancel`, {});
+    loadSubs();
+  };
+
+  document.getElementById('save-sub-btn').addEventListener('click', async () => {
+    const body = { tenantId: document.getElementById('sub-tenant').value, planId: document.getElementById('sub-plan').value, billingCycle: document.getElementById('sub-cycle').value };
+    if (!body.tenantId || !body.planId) return alert('Selecione tenant e plano.');
+    await CONFIG.post('/subscriptions', body);
+    closeModal('assign-plan-modal');
+    loadSubs();
+  });
+</script>
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+</body>
+</html>

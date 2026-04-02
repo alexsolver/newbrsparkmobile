@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "MetatagType" ADD VALUE 'MEDIA_CATEGORY';

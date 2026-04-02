@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { NotificationService, AppNotification } from '../../src/services/notifications';
 import { colors } from '../../src/theme/colors';
+import { useAuth } from '../../src/hooks/useAuth';
 
 const CATEGORY_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
   maintenance: { icon: 'build',              color: '#F59E0B', label: 'Manutenção'  },
@@ -30,10 +31,19 @@ function timeAgo(ts: number): string {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [items, setItems]         = useState<AppNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter]       = useState<string>('all');
   const fadeAnim                  = useRef(new Animated.Value(0)).current;
+
+  const fetchAndReload = useCallback(async () => {
+    if (user?.email) {
+      await NotificationService.syncRealNotifications(user.email);
+    } else {
+      reload();
+    }
+  }, [user]);
 
   const reload = useCallback(() => {
     setItems(NotificationService.getAll());
@@ -41,7 +51,7 @@ export default function NotificationsScreen() {
   }, [fadeAnim]);
 
   useEffect(() => {
-    reload();
+    fetchAndReload();
     const unsub = NotificationService.subscribe(reload);
 
     // Inicializa push
@@ -54,12 +64,12 @@ export default function NotificationsScreen() {
     });
 
     return () => { unsub(); sub.remove(); };
-  }, [reload]);
+  }, [fetchAndReload, reload]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    reload();
-    setTimeout(() => setRefreshing(false), 800);
+    await fetchAndReload();
+    setTimeout(() => setRefreshing(false), 500);
   };
 
   const handleMarkRead = (id: string) => NotificationService.markAsRead(id);
@@ -110,8 +120,21 @@ export default function NotificationsScreen() {
     );
   };
 
+  if (!user) {
+    return (
+      <SafeAreaView edges={['left', 'right']} style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+        <Ionicons name="notifications-outline" size={56} color={colors.textLight} />
+        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.primary, marginTop: 20 }}>Avisos</Text>
+        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>Crie uma conta para receber avisos e alertas importantes.</Text>
+        <TouchableOpacity style={{ backgroundColor: colors.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
+          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Criar Conta ou Entrar</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
+    <SafeAreaView edges={['left', 'right']} style={styles.container}>
       {/* ── Header ── */}
       <View style={styles.header}>
         <View>
@@ -122,7 +145,8 @@ export default function NotificationsScreen() {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerBtn} onPress={testPush}>
-            <Ionicons name="paper-plane-outline" size={20} color={colors.primary} />
+            <Ionicons name="paper-plane-outline" size={20} color={colors.accent} />
+
           </TouchableOpacity>
           {unread > 0 && (
             <TouchableOpacity style={styles.headerBtn} onPress={handleMarkAll}>
@@ -138,7 +162,7 @@ export default function NotificationsScreen() {
         showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
-      >
+       keyboardShouldPersistTaps="handled">
         {categories.map(cat => {
           const active = filter === cat;
           const cfg = cat !== 'all' ? CATEGORY_CONFIG[cat] : null;
@@ -187,8 +211,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardWhite,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.primary },
-  headerSub:   { fontSize: 13, color: colors.textSecondary, fontWeight: '600', marginTop: 2 },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: colors.primary, letterSpacing: -0.4 },
+  headerSub:   { fontSize: 11, color: colors.textSecondary, fontWeight: '800', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerBtn: {
     backgroundColor: colors.background, padding: 10, borderRadius: 12,
@@ -208,8 +232,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardWhite,
     height: 32,
   },
-  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
+  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+
+  filterText: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   filterTextActive: { color: '#fff' },
 
   list: { paddingHorizontal: 16, paddingBottom: 32 },
@@ -222,25 +247,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   cardUnread: {
-    borderLeftWidth: 4, borderLeftColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 4, borderLeftColor: colors.accent,
+    backgroundColor: colors.accent + '08',
   },
+
   iconWrap: {
     width: 44, height: 44, borderRadius: 22,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
   cardContent: { flex: 1 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: colors.primary, flex: 1, marginRight: 6 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2563EB' },
-  cardBody: { fontSize: 13, color: colors.textSecondary, lineHeight: 18, marginBottom: 8 },
+  cardTitle: { fontSize: 12, fontWeight: '900', color: colors.primary, flex: 1, marginRight: 6, letterSpacing: -0.2 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
+
+  cardBody: { fontSize: 11, color: colors.textSecondary, lineHeight: 16, marginBottom: 8, fontWeight: '500' },
   cardMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   categoryChip: {
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
   },
-  categoryLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
-  cardTime: { fontSize: 11, color: colors.textLight, fontWeight: '600' },
+  categoryLabel: { fontSize: 8, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardTime: { fontSize: 9, color: colors.textLight, fontWeight: '800', textTransform: 'uppercase' },
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 16 },
-  emptyText: { fontSize: 15, color: colors.textSecondary, fontWeight: '600' },
+  emptyText: { fontSize: 13, color: colors.textSecondary, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
 });

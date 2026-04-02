@@ -1,62 +1,128 @@
 import { Asset } from '../types/asset';
-import { getSyncQueue, clearSyncQueueItem, saveAssetsLocal } from '../database';
+import { getSyncQueue, clearSyncQueueItem, saveAssetsLocal, saveConfigLocal, saveProviders, getProviders } from '../database';
+import { apiFetch, API_BASE } from './auth';
+import { fullSync } from './syncService';
 
-// Como o aplicativo usa o modo Tunnel (Ngrok), se a sua rede bloqueia o tráfego 
-// interno, teremos que usar o seu IP local real para o Celular achar o Laptop.
-// Pelo log anterior do metro, seu IP da máquina era 192.168.15.73 e a API é 3000.
-const MAC_IP = '192.168.15.73';
-const API_BASE_URL = `http://${MAC_IP}:3000/api`;
+export { API_BASE };
 
-export class ApiService {
-  private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
+const PROVIDERS_CACHE_MAX = 50;
 
-    if (!response.ok) {
-      throw new Error(`API Request failed: ${response.statusText}`);
-    }
-    return response.json();
-  }
+/**
+ * On-demand provider search — paginated, server-side.
+ * Caches the last PROVIDERS_CACHE_MAX viewed providers in SQLite for offline fallback.
+ */
+export const ProviderService = {
+  async search(params: {
+    q?: string;
+    category?: string;
+    city?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: any[]; total: number; totalPages: number; fromCache: boolean }> {
+    const { q = '', category = '', city = '', page = 1, limit = 20 } = params;
+    const qs = new URLSearchParams();
+    if (q)        qs.set('q', q);
+    if (category) qs.set('category', category);
+    if (city)     qs.set('city', city);
+    qs.set('page',  String(page));
+    qs.set('limit', String(Math.min(limit, 50)));
 
-  static async sync() {
-    console.log('[SYNC] Iniciando comunicação bidirecional com Node Backend...');
     try {
-      // 1. O App lê as ações que você fez na Fila "Offline" local (Ex: Agendar Manutenção, Criar Ativo)
-      const queue = getSyncQueue();
-      if (queue.length > 0) {
-        console.log(`[SYNC] Empurrando ${queue.length} pacotes offline para o Cloud...`);
-        // Dispara pacote pesado (BULK PUSH) pro Node/Express Backend
-        await this.request('/sync/push', { 
-          method: 'POST', 
-          body: JSON.stringify({ queue }) 
-        });
+      const res = await fetch(`${API_BASE}/api/providers?${qs.toString()}`);
 
-        // Como a nuvem aceitou com sucesso 200 OK, a gente destrói e limpa a fila de cache pesada local do celular!
-        queue.forEach(item => clearSyncQueueItem(item.id));
+      // 304 Not Modified = server says data unchanged, use local cache
+      if (res.status === 304) {
+        const cached = getProviders();
+        return { data: cached, total: cached.length, totalPages: 1, fromCache: true };
       }
-      
-      // 2. Com a casa organizada, eu peço pro Backend todos os Ativos atuais formatados (PULL)
-      const remoteAssets: Asset[] = await this.request('/assets');
 
-      // Eu sobrescrevo meu SQLite interno local com exatamente os dados de Single-source-of-truth puxados da Cloud
-      saveAssetsLocal(remoteAssets);
-      console.log('[SYNC] Finalizado: Cópia Gêmea Exata da Nuvem Salva Nativamente no Celular.');
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const json = await res.json();
+      const results: any[] = json.data || [];
 
-      return true;
-    } catch (error) {
-      console.error('[SYNC] O Backend NodeJS parece estar desligado ou fora da rede:', error);
-      // O App devolve false permitindo a tela de Profile de alertar, E MANTÉM OS DADOS SALVOS NA FILA para depois!
-      return false; 
+      // Cache only the first page of unfiltered results (likely "all / recent")
+      if (!q && !category && !city && page === 1 && results.length > 0) {
+        const existing = getProviders();
+        const merged = [...results, ...existing]
+          .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i)
+          .slice(0, PROVIDERS_CACHE_MAX);
+        saveProviders(merged);
+      }
+
+      return { data: results, total: json.total ?? results.length, totalPages: json.totalPages ?? 1, fromCache: false };
+    } catch {
+      // Offline fallback — return local cache filtered client-side
+      const cached = getProviders();
+      const filtered = cached.filter(p => {
+        const matchQ    = !q        || p.name.toLowerCase().includes(q.toLowerCase());
+        const matchCat  = !category || p.category === category;
+        const matchCity = !city     || (p.city || '').toLowerCase().includes(city.toLowerCase());
+        return matchQ && matchCat && matchCity;
+      });
+      return { data: filtered, total: filtered.length, totalPages: 1, fromCache: true };
     }
+  },
+};
+
+/**
+ * Sincroniza dados do app com o servidor (PostgreSQL como fonte da verdade).
+ *
+ * Estratégia:
+ * - Assets:    pull autenticado (dados do tenant do usuário)
+ * - Config:    pull PÚBLICO (metatags/tipos de ativo, sem auth)
+ * - Providers: NÃO sincronizado em massa — buscado sob demanda via ProviderService
+ * - SQLite local = cache offline de bens + config + últimos 50 prestadores vistos
+ */
+export class ApiService {
+
+  /** Sync completo: assets (auth) + config (público). Providers removidos do sync em massa. */
+  static async sync(ownerEmail?: string): Promise<boolean> {
+    console.log('[SYNC] Iniciando sincronização com BrSpark Cloud...');
+    let success = true;
+
+    // 1. Push and Pull modular data (costs, insurance, vault, media) via SyncService
+    try {
+      await fullSync(ownerEmail);
+    } catch (e) {
+      console.warn('[SYNC] Falha no fullSync modular:', e);
+      success = false;
+    }
+
+    // 2. Pull assets do tenant (requer auth)
+    try {
+      const res = await apiFetch('/api/sync/assets');
+      if (res.ok) {
+        const remoteAssets: Asset[] = await res.json();
+        saveAssetsLocal(remoteAssets, ownerEmail);
+        console.log(`[SYNC] ✅ ${remoteAssets.length} bens sincronizados.`);
+      }
+    } catch (e) {
+      console.warn('[SYNC] Assets: offline ou não autenticado.', e);
+      success = false;
+    }
+
+    // 3. Pull config/metatags (público — sem auth)
+    try {
+      const res = await fetch(`${API_BASE}/api/config`);
+      if (res.ok) {
+        const config = await res.json();
+        saveConfigLocal(config);
+        console.log('[SYNC] ✅ Config sincronizado.');
+      }
+    } catch (e) {
+      console.warn('[SYNC] Config: offline.', e);
+    }
+
+    // NOTE: Providers are NOT synced here. Use ProviderService.search() on-demand.
+
+    // fullSync already called at step 1
+
+    return success;
   }
 
-  static async getActivePortfolio() {
-    await this.sync();
-    return Promise.resolve([]);
+  static async getActivePortfolio(ownerEmail?: string) {
+    await this.sync(ownerEmail);
+    return [];
   }
 }
+

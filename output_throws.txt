@@ -1,0 +1,56 @@
+app/(tabs)/calendar.tsx:110       console.log('Error loading events:', e);
+app/(tabs)/costs.tsx:107     if (!perm.granted) return Alert.alert(t('common.error'), t('newAsset.cameraPermError'));
+app/(tabs)/stock.tsx:143       Alert.alert(t('common.exportError'), e.message);
+app/(tabs)/stock.tsx:179         console.log('OFF API Error', e); 
+app/(tabs)/stock.tsx:180         showToast(t('stock.productSearchError'), 'error');
+app/asset/[id].tsx:2550                                Alert.alert(t('common.error'), t('assetDetail.linkError'));
+app/asset/new.tsx:191             setTimeout(() => reject(new Error('timeout')), 10000)
+app/asset/new.tsx:203       if (!loc) throw new Error('Nenhuma localização obtida');
+app/asset/new.tsx:319               Alert.alert(t('common.error'), t('newAsset.cameraPermError'));
+app/asset/share.tsx:80       if (!res.ok) throw new Error('Failed to fetch shares');
+app/checklist/[id].tsx:237             throw new Error('Fallback Offline'); // Vai pro catch e tenta usar o db[realTemplateId]
+app/profile.tsx:239         throw new Error(`Storage API HTTP ${storageRes.status}: ${await storageRes.text()}`);
+app/profile.tsx:252         throw new Error(`Profile API HTTP ${userRes.status}: ${await userRes.text()}`);
+src/components/AIConsultantModule.tsx:67       Alert.alert(t('common.error'), e.message || t('ai.communicationError'));
+src/components/AIConsultantModule.tsx:120         <Text style={S.loadingText}>{t('ai.loadError')}</Text>
+src/hooks/useAuth.tsx:74     throw new Error('useAuth must be used within an AuthProvider');
+src/services/agendaService.ts:28       console.error('Error fetching local agenda events', e);
+src/services/agendaService.ts:34     if (!ownerEmail) throw new Error("Usuário não autenticado.");
+src/services/api.ts:39       if (!res.ok) throw new Error(`API error ${res.status}`);
+src/services/assetVault.ts:59     if (!ownerEmail) throw new Error('ownerEmail required for vaulted data');
+src/services/auth.ts:28 export class TwoFactorRequired extends Error {
+src/services/auth.ts:77       throw new Error(data.error || 'Erro ao fazer login.');
+src/services/auth.ts:99       throw new Error('Você deve aceitar os Termos de Uso e a Política de Privacidade.');
+src/services/auth.ts:116       throw new Error(data.error || 'Erro ao criar conta.');
+src/services/auth.ts:189       throw new Error(data.error || 'Erro ao alterar senha.');
+src/services/auth.ts:210     if (!res.ok) throw new Error(data.error || 'Código inválido.');
+src/services/auth.ts:220     if (!res.ok) throw new Error(data.error || 'Falha ao solicitar ativação.');
+src/services/auth.ts:231     if (!res.ok) throw new Error(data.error || 'Código inválido.');
+src/services/auth.ts:241     if (!res.ok) throw new Error(data.error || 'Falha ao desativar 2FA.');
+src/services/chat.ts:47     if (!res.ok) throw new Error(data.error || 'Erro ao enviar convite');
+src/services/chat.ts:61     if (!res.ok) throw new Error(data.error || 'Erro ao atualizar status');
+src/services/chat.ts:77     if (!res.ok) throw new Error(data.error || 'Erro ao criar sala');
+src/services/chat.ts:129     if (!res.ok) throw new Error(data.error || 'Falha ao enviar mensagem');
+src/services/costService.ts:24     if (!ownerEmail) throw new Error("Usuário não autenticado para salvar despesa.");
+src/services/costService.ts:60     if (!ownerEmail) throw new Error("Usuário não autenticado para salvar custo recorrente.");
+src/services/insuranceService.ts:44     if (!ownerEmail) throw new Error("Usuário não autenticado para salvar seguro.");
+src/services/llmService.ts:42       throw new Error('API key não configurada. Configure nas preferências do Consultor AI.');
+src/services/llmService.ts:75       if (response.status === 401) throw new Error('API key inválida. Verifique sua chave OpenAI.');
+src/services/llmService.ts:76       if (response.status === 429) throw new Error('Limite de requisições atingido. Tente novamente em alguns segundos.');
+src/services/llmService.ts:77       throw new Error(`Erro OpenAI (${response.status}): ${err}`);
+src/services/llmService.ts:109       if (response.status === 400) throw new Error('API key Gemini inválida ou formato incorreto.');
+src/services/llmService.ts:110       throw new Error(`Erro Gemini (${response.status}): ${err}`);
+src/services/ocrService.ts:46     throw new Error(`Imagem muito grande (${sizeKB}KB). Tente tirar uma foto com menos resolução.`);
+src/services/ocrService.ts:70     throw new Error('Falha de rede: ' + (netErr?.message || 'Verifique sua conexão com a internet.'));
+src/services/ocrService.ts:73   if (json.IsErroredOnProcessing) {
+src/services/ocrService.ts:74     const errMsg = json.ErrorMessage?.join('; ') || json.ErrorDetails || 'Erro desconhecido no servidor OCR';
+src/services/ocrService.ts:75     throw new Error(errMsg);
+src/services/ocrService.ts:79     throw new Error('O OCR não conseguiu extrair texto da imagem. Tente uma foto mais nítida.');
+src/services/ocrService.ts:85     throw new Error('Nenhum texto encontrado na imagem. Certifique-se de que o documento está legível.');
+src/services/stockService.ts:30     if (itemIdx === -1) throw new Error('Item não encontrado.');
+src/services/stockService.ts:89       if (items.length === 0) throw new Error('Não há itens para exportar.');
+src/services/stockService.ts:106         throw new Error('A função de compartilhamento não está disponível.');
+src/services/stockService.ts:112       console.error('Export Error:', e);
+src/services/storageService.ts:43     if (!res.ok) throw new Error('config fetch failed');
+src/services/storageService.ts:88       throw new Error(`Servidor RECUSOU o payload: ${res.status} - ${errText.slice(0,100)}`);
+src/services/storageService.ts:97     throw new Error(e.message || String(e));

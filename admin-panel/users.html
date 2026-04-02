@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Usuários</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Usuários</span>
+      <div class="topbar-actions">
+        <div class="search-wrap"><span class="search-icon"><ion-icon name="time-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></span><input type="text" placeholder="Buscar usuário…" id="search-input" /></div>
+        <select class="form-control" style="width:140px;padding:7px 10px;font-size:12px" id="filter-role">
+          <option value="">Todos os papeis</option>
+          <option value="ADMIN">Admin</option>
+          <option value="MANAGER">Gestor</option>
+          <option value="USER">Usuário</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModal('new-user-modal')">+ Novo Usuário</button>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total de Usuários</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Ativos</div></div>
+        <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-admins">—</div><div class="stat-label">Admins / Donos</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-inactive">—</div><div class="stat-label">Inativos</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Todos os Usuários</span>
+          <span class="badge badge-accent" id="count-badge">—</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nome</th><th>E-mail</th><th>Conta</th><th>Papel</th><th>Último Acesso</th><th>Status</th><th style="text-align:right">Ações</th></tr>
+            </thead>
+            <tbody id="users-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="pagination" style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border)"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New User Modal -->
+<div class="modal-overlay" id="new-user-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Novo Usuário</span><button class="modal-close" onclick="closeModal('new-user-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="new-name" placeholder="João Silva" /></div>
+        <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="new-email" type="email" placeholder="joao@exemplo.com" /></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Conta (Tenant)</label>
+          <select class="form-control" id="new-tenant"><option value="">Selecione...</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Papel</label>
+          <select class="form-control" id="new-role">
+            <option value="USER">Usuário</option><option value="MANAGER">Gestor</option><option value="ADMIN">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-user-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-user-btn">Criar Usuário</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-overlay" id="reset-pwd-modal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><span class="modal-title">Resetar Senha</span><button class="modal-close" onclick="closeModal('reset-pwd-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="reset-user-id" />
+      <div class="form-group"><label class="form-label">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('reset-pwd-modal')">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-reset-btn">Resetar Senha</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const roleMap = { ADMIN:'badge-red', MANAGER:'badge-amber', USER:'badge-gray' };
+  const roleLbl = { ADMIN:'<ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin', MANAGER:'<ion-icon name="construct-outline"></ion-icon> Gestor', USER:'<ion-icon name="person-outline" style="vertical-align:-2px"></ion-icon> Usuário' };
+  let currentPage = 1;
+
+  // Populate tenant dropdown
+  CONFIG.get('/tenants?limit=500').then(res => {
+    const sel = document.getElementById('new-tenant');
+    (res?.data || []).forEach(t => {
+      sel.innerHTML += `<option value="${t.id}">${t.name} (${t.email})</option>`;
+    });
+  });
+
+  async function loadUsers(page = 1) {
+    currentPage = page;
+    const q      = document.getElementById('search-input').value.trim();
+    const role   = document.getElementById('filter-role').value;
+    const params = new URLSearchParams({ page, limit: 50, ...(q && { q }), ...(role && { role }) });
+    const res    = await CONFIG.get(`/users?${params}`);
+    if (!res) return;
+
+    const { data = [], total = 0 } = res;
+    document.getElementById('count-badge').textContent = `${total} usuários`;
+    document.getElementById('stat-total').textContent   = total;
+    document.getElementById('stat-active').textContent  = data.filter(u => u.isActive).length;
+    document.getElementById('stat-admins').textContent  = data.filter(u => u.role === 'ADMIN').length;
+    document.getElementById('stat-inactive').textContent = data.filter(u => !u.isActive).length;
+
+    const fmt = d => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+
+    document.getElementById('users-tbody').innerHTML = data.length ? data.map(u => `
+      <tr>
+        <td class="bold">${u.name}</td>
+        <td style="color:var(--text3)">${u.email}</td>
+        <td><span class="badge badge-gray">${u.tenant?.name || '—'}</span></td>
+        <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleLbl[u.role] || u.role}</span></td>
+        <td style="color:var(--text3);font-size:11px">${fmt(u.lastLogin)}</td>
+        <td><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Inativo'}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" onclick="openReset('${u.id}')">Resetar senha</button>
+          <button class="btn ${u.isActive ? 'btn-danger' : 'btn-success'} btn-sm" onclick="toggleUser('${u.id}')">${u.isActive ? 'Desativar' : 'Ativar'}</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum usuário encontrado.</td></tr>';
+
+    // Pagination
+    const pages = Math.ceil(total / 50);
+    document.getElementById('pagination').innerHTML = pages > 1
+      ? `<span style="font-size:11px;color:var(--text3)">Página ${page} de ${pages}</span>
+         ${page > 1 ? `<button class="btn btn-ghost btn-sm" onclick="loadUsers(${page-1})">← Anterior</button>` : ''}
+         ${page < pages ? `<button class="btn btn-ghost btn-sm" onclick="loadUsers(${page+1})">Próxima →</button>` : ''}` : '';
+  }
+
+  window.toggleUser = async (id) => {
+    await CONFIG.patch(`/users/${id}/toggle-active`);
+    loadUsers(currentPage);
+  };
+
+  window.openReset = (id) => {
+    document.getElementById('reset-user-id').value = id;
+    document.getElementById('reset-password').value = '';
+    openModal('reset-pwd-modal');
+  };
+
+  document.getElementById('confirm-reset-btn').addEventListener('click', async () => {
+    const id  = document.getElementById('reset-user-id').value;
+    const pwd = document.getElementById('reset-password').value;
+    if (!pwd || pwd.length < 6) return alert('A senha deve ter ao menos 6 caracteres.');
+    const res = await CONFIG.patch(`/users/${id}/reset-password`, { newPassword: pwd });
+    if (res?.ok !== false) { alert('Senha resetada com sucesso.'); closeModal('reset-pwd-modal'); }
+    else alert('Erro ao resetar senha: ' + (res?.error || ''));
+  });
+
+  document.getElementById('save-user-btn').addEventListener('click', async () => {
+    const body = {
+      name:     document.getElementById('new-name').value.trim(),
+      email:    document.getElementById('new-email').value.trim(),
+      tenantId: document.getElementById('new-tenant').value,
+      role:     document.getElementById('new-role').value,
+      password: document.getElementById('new-password').value,
+    };
+    if (!body.name || !body.email || !body.password || !body.tenantId)
+      return alert('Preencha todos os campos obrigatórios.');
+    const res = await CONFIG.post('/users', body);
+    if (res?.id) {
+      closeModal('new-user-modal');
+      ['new-name','new-email','new-password'].forEach(id => { document.getElementById(id).value = ''; });
+      loadUsers();
+    } else alert('Erro: ' + (res?.error || 'Falha ao criar usuário.'));
+  });
+
+  let debounce;
+  document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadUsers(1), 300); });
+  document.getElementById('filter-role').addEventListener('change', () => loadUsers(1));
+
+  loadUsers();
+</script>
+</body>
+</html>

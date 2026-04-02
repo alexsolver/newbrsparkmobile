@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Dashboard</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Dashboard</span>
+      <div class="topbar-actions">
+        <span style="font-size:11px;color:var(--text3);" id="last-update">Carregando…</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Atualizar</button>
+        <span class="badge badge-red pulse" id="alert-badge" style="display:none"></span>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="warning-outline" style="font-size:16px;color:var(--red)"></ion-icon> Alertas Críticos</span>
+            <span class="badge badge-red" id="alerts-count"></span>
+          </div>
+          <div class="panel-body" id="alerts-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="flash-outline" style="font-size:16px;color:var(--accent)"></ion-icon> Atividade Recente</span>
+            <button class="btn btn-ghost btn-sm" onclick="window.location.href='audit.html'">Ver tudo →</button>
+          </div>
+          <div class="panel-body" id="activity-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="business-outline" style="font-size:16px;color:var(--text3)"></ion-icon> Tenants Recentes</span>
+          <button class="btn btn-ghost btn-sm" onclick="window.location.href='tenants.html'">Gerenciar →</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tenant</th><th>Plano</th><th>Usuários</th><th>Bens</th><th>Status</th><th>Criado em</th></tr></thead>
+            <tbody id="tenants-tbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const statDefs = [
+    { key: 'totalTenants', label: 'Tenants Ativos',    icon: 'business-outline', color: 'var(--accent)', fmt: 'num' },
+    { key: 'activeUsers',  label: 'Usuários',          icon: 'people-outline',       color: 'var(--green)',  fmt: 'num' },
+    { key: 'totalAssets',  label: 'Bens Cadastrados',  icon: 'cube-outline',     color: 'var(--blue)',   fmt: 'num' },
+    { key: 'stockItems',   label: 'Itens em Estoque',  icon: 'archive-outline',       color: 'var(--amber)',  fmt: 'num' },
+    { key: 'alerts',       label: 'Alertas Críticos',  icon: 'warning-outline', color: 'var(--red)',    fmt: 'num' },
+  ];
+
+  const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
+  const statusLbl = { TRIAL:'Trial', ACTIVE:'<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo', SUSPENDED:'Suspenso', CANCELLED:'Cancelado' };
+  const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
+
+  const catIcon = { AUTH:'lock-closed-outline', DATA:'stats-chart-outline', ADMIN:'shield-outline', SYSTEM:'settings-outline' };
+
+  window.loadDashboard = async function() {
+    const data = await CONFIG.get('/dashboard');
+    if (!data) return;
+
+    const { stats, recentTenants, recentActivity } = data;
+    document.getElementById('last-update').textContent = 'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
+
+    // Alerts badge
+    if ((stats.alerts || 0) > 0) {
+      const ab = document.getElementById('alert-badge');
+      ab.textContent = `${stats.alerts} alertas`;
+      ab.style.display = '';
+    }
+
+    // Stat cards
+    const grid = document.getElementById('stat-grid');
+    grid.innerHTML = '';
+    statDefs.forEach(s => {
+      const val = stats[s.key] ?? 0;
+      const card = document.createElement('div');
+      card.className = 'stat-card fade-in';
+      card.style.setProperty('--accent-color', s.color);
+      card.innerHTML = `
+        <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}-outline" style="font-size:20px"></ion-icon></div>
+        <div class="stat-value">${val.toLocaleString('pt-BR')}</div>
+        <div class="stat-label">${s.label}</div>`;
+      grid.appendChild(card);
+    
+    });
+
+    // Recent activity (audit logs from API)
+    const actList = document.getElementById('activity-list');
+    if (!recentActivity || !recentActivity.length) {
+      actList.innerHTML = '<div style="color:var(--text3);text-align:center;padding:16px;font-size:12px">Nenhuma atividade registrada.</div>';
+    } else {
+      actList.innerHTML = recentActivity.map(a => `
+        <div class="activity-item">
+          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${catIcon[a.category] || 'flash-outline'}-outline" style="font-size:16px;color:var(--accent)"></ion-icon></div>
+          <div class="activity-content">
+            <div class="activity-text"><strong>${a.admin?.email || a.user?.email || 'sistema'}</strong> — ${a.action} em <em>${a.resource}</em></div>
+            <div class="activity-time">${new Date(a.createdAt).toLocaleString('pt-BR')}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    // Alerts (stock critical count as proxy)
+    const alertList = document.getElementById('alerts-list');
+    document.getElementById('alerts-count').textContent = stats.criticalStock ?? 0;
+    if ((stats.criticalStock ?? 0) === 0) {
+      alertList.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">Nenhum alerta crítico.</div>';
+    } else {
+      alertList.innerHTML = `
+        <div class="alert-row">
+          <div class="alert-dot" style="background:var(--red)"></div>
+          <div class="alert-row-content">
+            <div class="alert-row-title">${stats.criticalStock} itens com estoque crítico</div>
+            <div class="alert-row-sub">Verifique o módulo de estoque dos tenants</div>
+          </div>
+          <div class="alert-row-time">agora</div>
+        </div>`;
+    }
+
+    // Tenants table
+    const tbody = document.getElementById('tenants-tbody');
+    if (!recentTenants || !recentTenants.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum tenant cadastrado ainda.</td></tr>';
+      return;
+    }
+    
+
+    tbody.innerHTML = recentTenants.map(t => {
+      const plan = t.subscription?.plan?.name || '—';
+      const users = t._count?.users ?? 0;
+      const assets = t._count?.assets ?? 0;
+      const created = new Date(t.createdAt).toLocaleDateString('pt-BR');
+      return `<tr>
+        <td class="bold">${t.name} <span style="color:var(--text3);font-weight:400;font-size:10px">${t.slug}</span></td>
+        <td><span class="badge ${planMap[plan] || 'badge-gray'}">${plan}</span></td>
+        <td>${users}</td>
+        <td>${assets.toLocaleString('pt-BR')}</td>
+        <td><span class="badge ${statusMap[t.status]}">${statusLbl[t.status]}</span></td>
+        <td style="color:var(--text3);font-size:11px">${created}</td>
+      </tr>`;
+    }).join('');
+  };
+
+  loadDashboard();
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +8,8 @@ import { colors } from '../../src/theme/colors';
 import { getLocalAssets } from '../../src/database';
 
 export default function ScannerScreen() {
-   const [permission, requestPermission] = useCameraPermissions();
+    const { t } = useTranslation();
+    const [permission, requestPermission] = useCameraPermissions();
    const [scanned, setScanned] = useState(false);
    const [isFocused, setIsFocused] = useState(false);
    const router = useRouter();
@@ -34,9 +36,9 @@ export default function ScannerScreen() {
       if (assetExists) {
           router.push(`/asset/${cleanData}` as any);
       } else {
-          Alert.alert('Etiqueta Invisível ou Fraude', 'O equipamento não foi encontrado na malha de dados corporativa e pode ser um objeto não homologado.', [
-             { text: 'Continuar Patrulha', onPress: () => setScanned(false) },
-             { text: 'Cancelar Visão', style: 'cancel', onPress: () => router.push('/') }
+          Alert.alert(t('scanner.error.title'), t('scanner.error.message'), [
+             { text: t('scanner.error.continue'), onPress: () => setScanned(false) },
+             { text: t('scanner.error.cancel'), style: 'cancel', onPress: () => router.push('/') }
           ]);
       }
    };
@@ -47,14 +49,14 @@ export default function ScannerScreen() {
             <View style={{alignItems: 'center', marginBottom: 24}}>
                <Ionicons name="camera" size={64} color={colors.primary} />
             </View>
-            <Text style={{color: colors.primary, textAlign: 'center', marginBottom: 24, fontSize: 18, fontWeight: '800'}}>Sincronização Física</Text>
-            <Text style={{color: '#94a3b8', textAlign: 'center', marginBottom: 32, fontSize: 14, lineHeight: 22}}>Para rastrear ativos no mundo real usando os selos emitidos, o BrSpark necessita invocar as lentes do seu hardware.</Text>
+            <Text style={{color: colors.primary, textAlign: 'center', marginBottom: 24, fontSize: 18, fontWeight: '800'}}>{t('scanner.title')}</Text>
+            <Text style={{color: '#94a3b8', textAlign: 'center', marginBottom: 32, fontSize: 14, lineHeight: 22}}>{t('scanner.description')}</Text>
             <TouchableOpacity onPress={requestPermission} style={{backgroundColor: '#2563EB', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center'}}>
-               <Text style={{color: '#ffffff', fontWeight: '700'}}>Ativar Lente Óptica</Text>
+               <Text style={{color: '#ffffff', fontWeight: '700'}}>{t('scanner.enableBtn')}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity onPress={() => router.push('/')} style={{paddingVertical: 18, marginTop: 12}}>
-               <Text style={{color: colors.primary, fontWeight: '700'}}>Retornar ao Painel</Text>
+               <Text style={{color: colors.primary, fontWeight: '700'}}>{t('scanner.backBtn')}</Text>
             </TouchableOpacity>
          </View>
       );
@@ -63,7 +65,7 @@ export default function ScannerScreen() {
    return (
       <View style={{flex: 1, backgroundColor: '#000'}}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between', padding: 24, paddingTop: 60, zIndex: 10}}>
-             <Text style={{color:'#fff', fontSize: 18, fontWeight: '800'}}>Aproxime da Etiqueta 👀</Text>
+             <Text style={{color:'#fff', fontSize: 18, fontWeight: '800'}}>{t('scanner.hint')}</Text>
              <TouchableOpacity onPress={() => router.push('/')}>
                 <Ionicons name="close-circle" size={32} color="#fff" />
              </TouchableOpacity>
@@ -86,7 +88,7 @@ export default function ScannerScreen() {
              </View>
              <View style={{flexDirection:'row', alignItems:'center', marginTop: 40}}>
                 <Ionicons name="scan" size={20} color={colors.primary} />
-                <Text style={{color: '#fff', fontWeight: '800', marginLeft: 8, fontSize: 15}}>Buscando sinal codificado...</Text>
+                <Text style={{color: '#fff', fontWeight: '800', marginLeft: 8, fontSize: 15}}>{t('scanner.searching')}</Text>
              </View>
           </View>
       </View>

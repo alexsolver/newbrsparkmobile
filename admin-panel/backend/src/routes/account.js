@@ -1,0 +1,185 @@
+'use strict';
+const router  = require('express').Router();
+const bcrypt  = require('bcryptjs');
+const jwt     = require('jsonwebtoken');
+const prisma  = require('../db');
+
+// ─── POST /api/register ─────────────────────────────────────────────────────
+// Público — cria conta de usuário individual (Tenant + User atomicamente)
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, phone, defaultLang = 'pt-BR' } = req.body;
+    if (!name || !email || !password)
+      return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
+    if (password.length < 6)
+      return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres.' });
+
+    // Verificar se já existe
+    const existing = await prisma.tenant.findUnique({ where: { email } });
+    if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+
+    const hash = await bcrypt.hash(password, 10);
+
+    // Gerar slug único a partir do email
+    const baseSlug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-');
+    let slug = baseSlug;
+    let suffix = 0;
+    while (await prisma.tenant.findUnique({ where: { slug } })) {
+      suffix++;
+      slug = `${baseSlug}-${suffix}`;
+    }
+
+    // Criar Tenant + User em transação
+    const result = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: { name, slug, email, ownerName: name, phone, defaultLang, status: 'TRIAL' }
+      });
+
+      const user = await tx.user.create({
+        data: { name, email, password: hash, tenantId: tenant.id, role: 'ADMIN' }
+      });
+
+      await tx.auditLog.create({
+        data: { tenantId: tenant.id, userId: user.id, action: 'USER_REGISTER', resource: email, category: 'AUTH' }
+      });
+
+      return { tenant, user };
+    });
+
+    const token = jwt.sign(
+      { id: result.user.id, tenantId: result.tenant.id, email, role: 'ADMIN' },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    res.status(201).json({
+      token,
+      user: { id: result.user.id, name, email, tenantId: result.tenant.id },
+    });
+  } catch (err) {
+    console.error('[register]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/login ─────────────────────────────────────────────────────────
+// Público — login do usuário do app (retorna JWT com tenantId)
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+
+    const user = await prisma.user.findFirst({
+      where: { email },
+      include: { tenant: true, technicianProfile: true },
+    });
+
+    if (!user || !user.tenant)
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    if (!user.isActive)
+      return res.status(403).json({ error: 'Conta suspensa. Entre em contato com o suporte.' });
+
+    if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED')
+      return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
+
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+    await prisma.auditLog.create({
+      data: { tenantId: user.tenantId, userId: user.id, action: 'USER_LOGIN', resource: email, category: 'AUTH' }
+    });
+
+    const token = jwt.sign(
+      { id: user.id, tenantId: user.tenantId, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+        tenantId: user.tenantId,
+        tenant: { id: user.tenant.id, name: user.tenant.name, status: user.tenant.status },
+        technicianProfile: user.technicianProfile,
+      },
+    });
+  } catch (err) {
+    console.error('[login]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/me ─────────────────────────────────────────────────────────────
+// Autenticado — retorna perfil do usuário logado (para o app)
+const authUser = require('../middleware/authUser');
+router.get('/me', authUser, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { 
+        tenant: { include: { subscription: { include: { plan: true } } } },
+        technicianProfile: true
+      },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const { password: _, ...safe } = user;
+    res.json(safe);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── PUT /api/me ─────────────────────────────────────────────────────────────
+// Autenticado — atualiza perfil do usuário logado
+router.put('/me', authUser, async (req, res) => {
+  try {
+    const { name, email, avatarUrl } = req.body;
+    
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { 
+        ...(name && { name }), 
+        ...(email && { email }), 
+        ...(avatarUrl !== undefined && { avatarUrl }) 
+      }
+    });
+
+    const { password: _, ...safe } = updated;
+    res.json(safe);
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+// ─── POST /api/me/technician ─────────────────────────────────────────────────
+// Autenticado — converte usuário atual em prestador (cria TechnicianProfile)
+router.post('/me/technician', authUser, async (req, res) => {
+  try {
+    const existing = await prisma.technicianProfile.findUnique({
+      where: { userId: req.user.id }
+    });
+    if (existing) {
+      return res.status(400).json({ error: 'Você já é um prestador.' });
+    }
+
+    const profile = await prisma.technicianProfile.create({
+      data: {
+        userId: req.user.id,
+        status: 'ACTIVE', // Para testes, ativamos direto. Na vida real seria PENDING.
+        score: 5.0
+      }
+    });
+
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;

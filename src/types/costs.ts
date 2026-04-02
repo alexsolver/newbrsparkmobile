@@ -3,6 +3,7 @@ export interface AssetBudget {
   assetId: string;
   monthlyLimit: number;
   category: string; // 'GERAL', 'MANUTENÇÃO', etc.
+  ownerEmail?: string;
 }
 
 export interface DirectExpense {
@@ -16,6 +17,8 @@ export interface DirectExpense {
   provider?: string;
   photoUri?: string;
   status: 'PAID' | 'PENDING';
+  paidAt?: string; // ISO date when the record was marked as realized
+  ownerEmail?: string;
 }
 
 export interface RecurringCost {
@@ -30,7 +33,11 @@ export interface RecurringCost {
   status: 'ACTIVE' | 'PAUSED';
   lastPaidAt?: string;
   alertDaysBefore?: number; // Ex: 0 (no dia), 1, 5, 10
+  totalInstallments?: number;
+  remainingInstallments?: number;
+  ownerEmail?: string;
 }
+
 
 
 

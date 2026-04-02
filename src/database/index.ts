@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { Asset } from '../types/asset';
+import { Asset, AssetLocation } from '../types/asset';
 
 const db = SQLite.openDatabaseSync('brspark.db');
 
@@ -14,22 +14,147 @@ export function initDatabase() {
       statusType TEXT,
       details TEXT,
       parent_id TEXT DEFAULT NULL,
-      deleted_at TEXT DEFAULT NULL
+      display_order INTEGER DEFAULT 0,
+      deleted_at TEXT DEFAULT NULL,
+      owner_email TEXT DEFAULT NULL,
+      sub_location TEXT DEFAULT NULL
     );
     
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action TEXT NOT NULL,
       payload TEXT NOT NULL,
+      owner_email TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Migration for existing sync_queue
+    PRAGMA table_info(sync_queue);
 
     CREATE TABLE IF NOT EXISTS assets_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       asset_id TEXT NOT NULL,
       action TEXT NOT NULL,
       details TEXT,
+      owner_email TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS providers (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      rating REAL,
+      reviews INTEGER,
+      photo TEXT,
+      tags TEXT,
+      verified INTEGER,
+      keywords TEXT,
+      phone TEXT,
+      city TEXT,
+      state TEXT DEFAULT 'SP'
+    );
+
+    CREATE TABLE IF NOT EXISTS service_categories (
+      id TEXT PRIMARY KEY NOT NULL,
+      label TEXT NOT NULL,
+      icon TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS system_configs (
+      id TEXT PRIMARY KEY NOT NULL,
+      category TEXT NOT NULL, -- e.g. 'expense_categories', 'revenue_categories'
+      label TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      avatarColor TEXT,
+      lastMessage TEXT,
+      lastSender TEXT,
+      lastMessageAt INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_types (
+      id TEXT PRIMARY KEY NOT NULL,
+      titleKey TEXT NOT NULL,
+      subtitleKey TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      color TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS global_contacts (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      color TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS stock_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      sku TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      currentStock REAL DEFAULT 0,
+      minStock REAL DEFAULT 0,
+      locationId TEXT,
+      subLocation TEXT,
+      costPrice REAL DEFAULT 0,
+      owner_email TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id TEXT PRIMARY KEY NOT NULL,
+      itemId TEXT NOT NULL,
+      type TEXT NOT NULL, -- 'IN', 'OUT', 'ADJUST', 'TRANSFER'
+      quantity REAL NOT NULL,
+      unitPrice REAL,
+      destinationAssetId TEXT,
+      subLocation TEXT,
+      timestamp TEXT NOT NULL,
+      notes TEXT,
+      owner_email TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS media_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      uri TEXT NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      tag TEXT,
+      latitude REAL,
+      longitude REAL,
+      address TEXT,
+      stamped_geo INTEGER DEFAULT 0,
+      stamped_datetime INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      owner_email TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_locations (
+      id TEXT PRIMARY KEY NOT NULL,
+      asset_id TEXT NOT NULL,
+      floor TEXT NOT NULL,
+      room TEXT NOT NULL,
+      icon TEXT DEFAULT 'location-outline',
+      is_stock INTEGER DEFAULT 0,
+      owner_email TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_notes (
+      id TEXT PRIMARY KEY NOT NULL,
+      assetId TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      createdBy TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      synced INTEGER DEFAULT 0,
+      owner_email TEXT DEFAULT NULL
     );
   `);
 
@@ -37,13 +162,66 @@ export function initDatabase() {
   try {
     db.execSync(`ALTER TABLE assets ADD COLUMN parent_id TEXT DEFAULT NULL;`);
   } catch (_) { /* coluna já existe */ }
+
+  // Adiciona coluna display_order
+  try {
+    db.execSync(`ALTER TABLE assets ADD COLUMN display_order INTEGER DEFAULT 0;`);
+  } catch (_) { /* já existe */ }
+
+  // Adiciona coluna owner_email (isolamento por usuário)
+  try {
+    db.execSync(`ALTER TABLE assets ADD COLUMN owner_email TEXT DEFAULT NULL;`);
+  } catch (_) { /* coluna já existe */ }
+
+  // Adiciona coluna sub_location (localização dentro do bem pai)
+  try {
+    db.execSync(`ALTER TABLE assets ADD COLUMN sub_location TEXT DEFAULT NULL;`);
+  } catch (_) { /* coluna já existe */ }
+
+  // Adiciona coluna sub_location_id em stock_items (referência ao asset_location)
+  try {
+    db.execSync(`ALTER TABLE stock_items ADD COLUMN asset_location_id TEXT DEFAULT NULL;`);
+  } catch (_) { /* coluna já existe */ }
+
+  // Adiciona coluna is_stock em asset_locations (indica que é ponto de estoque)
+  try {
+    db.execSync(`ALTER TABLE asset_locations ADD COLUMN is_stock INTEGER DEFAULT 0;`);
+  } catch (_) { /* já existe */ }
+
+  // Adiciona coluna remote_url em media_items (URL do arquivo no cloud storage)
+  try {
+    db.execSync(`ALTER TABLE media_items ADD COLUMN remote_url TEXT DEFAULT NULL;`);
+  } catch (_) { /* já existe */ }
+
+  // Migra tabela providers: adiciona phone, city, state se não existirem
+  try { db.execSync(`ALTER TABLE providers ADD COLUMN phone TEXT`); } catch (_) {}
+  try { db.execSync(`ALTER TABLE providers ADD COLUMN city TEXT`); } catch (_) {}
+  try { db.execSync(`ALTER TABLE providers ADD COLUMN state TEXT DEFAULT 'SP'`); } catch (_) {}
+
+  // Adiciona coluna owner_email em sync_queue caso não exista (migração)
+  try {
+    db.execSync(`ALTER TABLE sync_queue ADD COLUMN owner_email TEXT DEFAULT NULL;`);
+  } catch (_) { /* já existe */ }
+
+  // Migrações massivas para owner_email em outros módulos
+  const tablesToMigrate = ['stock_items', 'stock_movements', 'asset_locations', 'providers', 'assets_history'];
+  tablesToMigrate.forEach(table => {
+    try {
+      db.execSync(`ALTER TABLE ${table} ADD COLUMN owner_email TEXT DEFAULT NULL;`);
+    } catch (_) {}
+  });
 }
+
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseRow(row: any): Asset {
   let parsedDetails = {};
   if (row.details) {
     try { parsedDetails = JSON.parse(row.details); } catch (_) {}
+  }
+  let parsedSubLocation = null;
+  if (row.sub_location) {
+    try { parsedSubLocation = JSON.parse(row.sub_location); } catch (_) {}
   }
   return {
     id: row.id,
@@ -54,52 +232,209 @@ function parseRow(row: any): Asset {
     statusType: row.statusType,
     parentId: row.parent_id || null,
     childrenCount: row.childrenCount ?? 0,
+    displayOrder: row.display_order ?? 0,
+    deletedAt: row.deleted_at || null,
+    subLocation: parsedSubLocation,
     details: parsedDetails,
   };
+
+}
+
+/** Salva a sub-localização de um bem filho dentro do bem pai */
+export function saveSubLocation(assetId: string, subLocation: { floor: string; room: string; icon?: string; notes?: string } | null, ownerEmail?: string) {
+  if (ownerEmail) {
+    db.runSync(
+      'UPDATE assets SET sub_location = ? WHERE id = ? AND owner_email = ?',
+      [subLocation ? JSON.stringify(subLocation) : null, assetId, ownerEmail]
+    );
+  } else {
+    db.runSync(
+      'UPDATE assets SET sub_location = ? WHERE id = ?',
+      [subLocation ? JSON.stringify(subLocation) : null, assetId]
+    );
+  }
+}
+
+// ── Asset Locations (shared between Vínculos + Estoque) ──────────────────────
+
+/** Save or update a location for a given asset (upsert by asset_id+floor+room) */
+export function saveAssetLocation(loc: Omit<AssetLocation, 'createdAt'>, ownerEmail: string): AssetLocation {
+  const existing = db.getFirstSync<any>(
+    'SELECT id FROM asset_locations WHERE asset_id = ? AND floor = ? AND room = ? AND owner_email = ?',
+    [loc.assetId, loc.floor, loc.room, ownerEmail]
+  );
+  if (existing) {
+    db.runSync(
+      'UPDATE asset_locations SET icon = ?, is_stock = ? WHERE id = ? AND owner_email = ?',
+      [loc.icon, loc.isStock ? 1 : 0, existing.id, ownerEmail]
+    );
+    return { ...loc, id: existing.id };
+  }
+  const id = loc.id || Math.random().toString(36).substring(2, 10);
+  db.runSync(
+    'INSERT INTO asset_locations (id, asset_id, floor, room, icon, is_stock, owner_email) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, loc.assetId, loc.floor, loc.room, loc.icon, loc.isStock ? 1 : 0, ownerEmail]
+  );
+  return { ...loc, id };
+}
+
+// ── Asset Notes ───────────────────────────────────────────────────────────────
+import { AssetNote } from '../types/note';
+
+export function getAssetNotes(assetId: string, ownerEmail?: string): AssetNote[] {
+  let query = 'SELECT * FROM asset_notes WHERE assetId = ?';
+  const params: any[] = [assetId];
+  if (ownerEmail) {
+    query += ' AND owner_email = ?';
+    params.push(ownerEmail);
+  }
+  query += ' ORDER BY createdAt DESC';
+  
+  const rows = db.getAllSync<any>(query, params);
+  return rows.map(r => ({
+    id: r.id,
+    assetId: r.assetId,
+    title: r.title,
+    content: r.content,
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    synced: r.synced as 0 | 1
+  }));
+}
+
+export function saveAssetNote(note: AssetNote, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO asset_notes (id, assetId, title, content, createdBy, createdAt, updatedAt, synced, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      content = excluded.content,
+      updatedAt = excluded.updatedAt,
+      synced = excluded.synced,
+      owner_email = COALESCE(excluded.owner_email, asset_notes.owner_email)
+  `);
+  stmt.executeSync([
+    note.id, note.assetId, note.title, note.content, note.createdBy, 
+    note.createdAt, note.updatedAt, note.synced, ownerEmail || null
+  ]);
+
+  // Enfileira ação offline caso necessário
+  if (note.synced === 0) {
+    queueOfflineAction('CREATE_NOTE', note, ownerEmail);
+  }
+}
+
+export function deleteAssetNoteLocal(noteId: string, ownerEmail?: string) {
+  if (ownerEmail) {
+    db.runSync('DELETE FROM asset_notes WHERE id = ? AND owner_email = ?', [noteId, ownerEmail]);
+  } else {
+    db.runSync('DELETE FROM asset_notes WHERE id = ?', [noteId]);
+  }
+  // Enfileira exclusão offline
+  queueOfflineAction('DELETE_NOTE', { id: noteId }, ownerEmail);
+}
+
+/** Get all locations for a given asset, ordered by floor then room */
+export function getAssetLocations(assetId: string, ownerEmail?: string): AssetLocation[] {
+  let query = 'SELECT * FROM asset_locations WHERE asset_id = ?';
+  const params: any[] = [assetId];
+  if (ownerEmail) {
+    query += ' AND owner_email = ?';
+    params.push(ownerEmail);
+  }
+  query += ' ORDER BY floor, room';
+  const rows = db.getAllSync<any>(query, params);
+  return rows.map(r => ({
+    id: r.id,
+    assetId: r.asset_id,
+    floor: r.floor,
+    room: r.room,
+    icon: r.icon || 'location-outline',
+    isStock: r.is_stock === 1,
+    createdAt: r.created_at,
+  }));
+}
+
+/** Get only locations marked as stock points */
+export function getStockLocations(assetId: string): AssetLocation[] {
+  return getAssetLocations(assetId).filter(l => l.isStock);
+}
+
+/** Delete a location */
+export function deleteAssetLocation(locationId: string, ownerEmail?: string) {
+  if (ownerEmail) {
+    db.runSync('DELETE FROM asset_locations WHERE id = ? AND owner_email = ?', [locationId, ownerEmail]);
+  } else {
+    db.runSync('DELETE FROM asset_locations WHERE id = ?', [locationId]);
+  }
 }
 
 // ── Leitura ───────────────────────────────────────────────────────────────────
 /** Todos os ativos raiz (sem pai) com contagem de filhos */
-export function getRootAssets(): Asset[] {
-  const result = db.getAllSync(`
+export function getRootAssets(ownerEmail?: string): Asset[] {
+  let query = `
     SELECT a.*, 
       (SELECT COUNT(*) FROM assets c WHERE c.parent_id = a.id AND c.deleted_at IS NULL) as childrenCount
     FROM assets a
     WHERE a.deleted_at IS NULL AND (a.parent_id IS NULL OR a.parent_id = '')
-    ORDER BY a.title ASC
-  `);
+  `;
+  const params: any[] = [];
+  if (ownerEmail !== undefined) {
+    query += ` AND a.owner_email = ?`;
+    params.push(ownerEmail);
+  }
+  query += ` ORDER BY a.display_order ASC, a.title ASC`;
+  const result = db.getAllSync(query, params);
   return result.map(parseRow);
 }
 
 /** Filhos diretos de um ativo pai */
-export function getChildAssets(parentId: string): Asset[] {
-  const result = db.getAllSync(`
+export function getChildAssets(parentId: string, ownerEmail?: string): Asset[] {
+  let query = `
     SELECT a.*,
       (SELECT COUNT(*) FROM assets c WHERE c.parent_id = a.id AND c.deleted_at IS NULL) as childrenCount
     FROM assets a
     WHERE a.deleted_at IS NULL AND a.parent_id = ?
-    ORDER BY a.title ASC
-  `, [parentId]);
+  `;
+  const params: any[] = [parentId];
+  if (ownerEmail) {
+    query += ' AND a.owner_email = ?';
+    params.push(ownerEmail);
+  }
+  query += ' ORDER BY a.display_order ASC, a.title ASC';
+  const result = db.getAllSync(query, params);
   return result.map(parseRow);
 }
 
 /** Todos os ativos (para seletores de pai) */
-export function getLocalAssets(): Asset[] {
-  const result = db.getAllSync(`
+export function getLocalAssets(ownerEmail?: string): Asset[] {
+  let query = `
     SELECT a.*,
+      p.title as parentTitle,
       (SELECT COUNT(*) FROM assets c WHERE c.parent_id = a.id AND c.deleted_at IS NULL) as childrenCount
     FROM assets a
+    LEFT JOIN assets p ON a.parent_id = p.id
     WHERE a.deleted_at IS NULL
-    ORDER BY a.title ASC
-  `);
-  return result.map(parseRow);
+  `;
+  const params: any[] = [];
+  if (ownerEmail !== undefined) {
+    query += ` AND a.owner_email = ?`;
+    params.push(ownerEmail);
+  }
+  query += ` ORDER BY a.display_order ASC, a.title ASC`;
+  const result = db.getAllSync(query, params);
+  return (result as any[]).map(row => ({
+    ...parseRow(row),
+    parentTitle: row.parentTitle || null
+  }));
 }
 
 /** Breadcrumb: caminho do ativo até a raiz */
-export function getAssetAncestors(assetId: string): Asset[] {
+export function getAssetAncestors(assetId: string, ownerEmail?: string): Asset[] {
   const ancestors: Asset[] = [];
   let currentId: string | null = assetId;
-  const all = getLocalAssets();
+  const all = getLocalAssets(ownerEmail);
   const map = new Map(all.map(a => [a.id, a]));
 
   while (currentId) {
@@ -113,11 +448,22 @@ export function getAssetAncestors(assetId: string): Asset[] {
 }
 
 // ── Escrita ───────────────────────────────────────────────────────────────────
-export function saveAssetsLocal(assets: Asset[]) {
+export function saveAssetsLocal(assets: Asset[], ownerEmail?: string) {
   const stmt = db.prepareSync(`
-    INSERT OR REPLACE INTO assets 
-    (id, title, type, imageUrl, status, statusType, details, parent_id, deleted_at) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO assets 
+    (id, title, type, imageUrl, status, statusType, details, parent_id, display_order, deleted_at, owner_email) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      type = excluded.type,
+      imageUrl = excluded.imageUrl,
+      status = excluded.status,
+      statusType = excluded.statusType,
+      details = excluded.details,
+      parent_id = excluded.parent_id,
+      display_order = COALESCE(excluded.display_order, assets.display_order),
+      deleted_at = COALESCE(excluded.deleted_at, assets.deleted_at),
+      owner_email = COALESCE(excluded.owner_email, assets.owner_email)
   `);
 
   assets.forEach(asset => {
@@ -132,39 +478,103 @@ export function saveAssetsLocal(assets: Asset[]) {
       asset.statusType,
       detailsBlob,
       asset.parentId || null,
-      (asset as any).deletedAt || null,
+      asset.displayOrder || 0,
+      asset.deletedAt || null,
+      (asset as any).owner_email || ownerEmail || null,
     ]);
   });
 }
 
-export function updateAssetParent(assetId: string, parentId: string | null) {
+export function saveAssetsForUser(assets: Asset[], ownerEmail: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO assets 
+    (id, title, type, imageUrl, status, statusType, details, parent_id, display_order, deleted_at, owner_email) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      type = excluded.type,
+      imageUrl = excluded.imageUrl,
+      status = excluded.status,
+      statusType = excluded.statusType,
+      details = excluded.details,
+      parent_id = excluded.parent_id,
+      display_order = COALESCE(excluded.display_order, assets.display_order),
+      deleted_at = COALESCE(excluded.deleted_at, assets.deleted_at),
+      owner_email = excluded.owner_email
+  `);
+
+  assets.forEach(asset => {
+    let detailsBlob = '{}';
+    try { detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}'; } catch (_) {}
+    stmt.executeSync([
+      asset.id,
+      asset.title,
+      asset.type,
+      asset.imageUrl || null,
+      asset.status,
+      asset.statusType,
+      detailsBlob,
+      asset.parentId || null,
+      asset.displayOrder || 0,
+      asset.deletedAt || null,
+      (asset as any).owner_email || ownerEmail,
+    ]);
+  });
+}
+
+export function updateAssetParent(assetId: string, parentId: string | null, ownerEmail?: string) {
   db.runSync('UPDATE assets SET parent_id = ? WHERE id = ?', [parentId, assetId]);
+  
+  const asset = getLocalAssets(ownerEmail || '').find(a => a.id === assetId);
+  if (asset) {
+    queueOfflineAction('UPDATE_ASSET', asset, ownerEmail || '');
+  }
+}
+
+export function updateAssetOrder(updates: { id: string, displayOrder: number }[], ownerEmail?: string) {
+  const stmt = db.prepareSync('UPDATE assets SET display_order = ? WHERE id = ?');
+  db.withTransactionSync(() => {
+    updates.forEach(u => stmt.executeSync([u.displayOrder, u.id]));
+  });
 }
 
 // ── Histórico ─────────────────────────────────────────────────────────────────
-export function logAssetHistory(assetId: string, action: string, details: string = '') {
-  const stmt = db.prepareSync('INSERT INTO assets_history (asset_id, action, details) VALUES (?, ?, ?)');
-  stmt.executeSync([assetId, action, details]);
+export function logAssetHistory(assetId: string, action: string, details: string = '', ownerEmail?: string) {
+  const stmt = db.prepareSync('INSERT INTO assets_history (asset_id, action, details, owner_email) VALUES (?, ?, ?, ?)');
+  stmt.executeSync([assetId, action, details, ownerEmail || null]);
 }
 
-export function getAssetHistoryLocal(assetId: string) {
+export function getAssetHistoryLocal(assetId: string, ownerEmail?: string) {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM assets_history WHERE asset_id = ? AND owner_email = ? ORDER BY created_at DESC', [assetId, ownerEmail]);
+  }
   return db.getAllSync('SELECT * FROM assets_history WHERE asset_id = ? ORDER BY created_at DESC', [assetId]);
 }
 
 // ── Soft Delete ───────────────────────────────────────────────────────────────
-export function softDeleteAssetLocal(assetId: string) {
-  const stmt = db.prepareSync("UPDATE assets SET deleted_at = datetime('now') WHERE id = ?");
-  stmt.executeSync([assetId]);
-  logAssetHistory(assetId, 'EXCLUSÃO LÓGICA', 'Ativo removido via Soft Delete.');
+export function softDeleteAssetLocal(assetId: string, ownerEmail?: string) {
+  if (ownerEmail) {
+    db.runSync("UPDATE assets SET deleted_at = datetime('now') WHERE id = ? AND owner_email = ?", [assetId, ownerEmail]);
+  } else {
+    db.runSync("UPDATE assets SET deleted_at = datetime('now') WHERE id = ?", [assetId]);
+  }
+  logAssetHistory(assetId, 'EXCLUSÃO LÓGICA', 'Ativo removido via Soft Delete.', ownerEmail);
 }
 
 // ── Sync Queue ────────────────────────────────────────────────────────────────
-export function queueOfflineAction(action: string, payload: any) {
-  const stmt = db.prepareSync('INSERT INTO sync_queue (action, payload) VALUES (?, ?)');
-  stmt.executeSync([action, JSON.stringify(payload)]);
+export function queueOfflineAction(action: string, payload: any, ownerEmail?: string) {
+  const stmt = db.prepareSync('INSERT INTO sync_queue (action, payload, owner_email) VALUES (?, ?, ?)');
+  stmt.executeSync([action, JSON.stringify(payload), ownerEmail || null]);
 }
 
-export function getSyncQueue() {
+export function addToSyncQueue(module: string, action: string, payload: object, ownerEmail?: string): void {
+  queueOfflineAction(`${module}:${action}`, payload, ownerEmail);
+}
+
+export function getSyncQueue(ownerEmail?: string) {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM sync_queue WHERE owner_email = ? ORDER BY created_at ASC', [ownerEmail]);
+  }
   return db.getAllSync('SELECT * FROM sync_queue ORDER BY created_at ASC');
 }
 
@@ -172,3 +582,316 @@ export function clearSyncQueueItem(id: number) {
   const stmt = db.prepareSync('DELETE FROM sync_queue WHERE id = ?');
   stmt.executeSync([id]);
 }
+
+// ── Providers & Categories ────────────────────────────────────────────────────
+
+export function getProviders(): any[] {
+  const result = db.getAllSync('SELECT * FROM providers');
+  return result.map((r: any) => ({
+    ...r,
+    tags:     safeParseStringOrArray(r.tags),
+    keywords: safeParseStringOrArray(r.keywords),
+    verified: r.verified === 1
+  }));
+}
+
+/** Safely parses a field that may be a JSON array or a CSV string */
+function safeParseStringOrArray(val: string | null): string[] {
+  if (!val) return [];
+  try {
+    const parsed = JSON.parse(val);
+    return Array.isArray(parsed) ? parsed : [String(parsed)];
+  } catch {
+    // CSV string: "elétrica,hidráulica,gerador"
+    return val.split(',').map(s => s.trim()).filter(Boolean);
+  }
+}
+
+
+export function saveProviders(providers: any[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO providers (id, name, category, rating, reviews, photo, tags, verified, keywords, phone, city, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      category = excluded.category,
+      rating = excluded.rating,
+      reviews = excluded.reviews,
+      photo = excluded.photo,
+      tags = excluded.tags,
+      verified = excluded.verified,
+      keywords = excluded.keywords,
+      phone = excluded.phone,
+      city = excluded.city,
+      state = excluded.state
+  `);
+  providers.forEach(p => {
+    stmt.executeSync([
+      p.id, p.name, p.category, p.rating, p.reviews, p.photo,
+      Array.isArray(p.tags) ? p.tags.join(',') : (p.tags || ''),
+      p.verified ? 1 : 0,
+      p.keywords || '',
+      p.phone || null, p.city || null, p.state || 'SP',
+    ]);
+  });
+}
+
+/** saveProvidersLocal — substitui providers do backend (fonte da verdade: PostgreSQL) */
+export function saveProvidersLocal(providers: any[]) {
+  if (!providers?.length) return;
+  // Usa upsert para preservar dados locais que ainda não subiram
+  saveProviders(providers);
+}
+
+export function getServiceCategories(): any[] {
+  return db.getAllSync('SELECT * FROM service_categories');
+}
+
+export function saveServiceCategories(categories: any[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO service_categories (id, label, icon) VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET label = excluded.label, icon = excluded.icon
+  `);
+  categories.forEach(c => stmt.executeSync([c.id, c.label, c.icon]));
+}
+
+export function getSystemConfigs(category: string): any[] {
+  return db.getAllSync('SELECT * FROM system_configs WHERE category = ?', [category]);
+}
+
+export function saveSystemConfigs(category: string, items: { id: string, label: string }[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO system_configs (id, category, label) VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET label = excluded.label
+  `);
+  items.forEach(item => stmt.executeSync([item.id, category, item.label]));
+}
+
+// ── Chat & Asset Types ────────────────────────────────────────────────────────
+
+export function getChatRooms(): any[] {
+  return db.getAllSync('SELECT * FROM chat_rooms ORDER BY lastMessageAt DESC');
+}
+
+export function saveChatRooms(rooms: any[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO chat_rooms (id, name, description, avatarColor, lastMessage, lastSender, lastMessageAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      description = excluded.description,
+      avatarColor = excluded.avatarColor,
+      lastMessage = excluded.lastMessage,
+      lastSender = excluded.lastSender,
+      lastMessageAt = excluded.lastMessageAt
+  `);
+  rooms.forEach(r => stmt.executeSync([r.id, r.name, r.description || null, r.avatarColor, r.lastMessage || null, r.lastSender || null, r.lastMessageAt || null]));
+}
+
+export function getAssetTypes(): any[] {
+  return db.getAllSync('SELECT * FROM asset_types');
+}
+
+export function saveAssetTypes(types: any[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO asset_types (id, titleKey, subtitleKey, icon, color) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      titleKey = excluded.titleKey,
+      subtitleKey = excluded.subtitleKey,
+      icon = excluded.icon,
+      color = excluded.color
+  `);
+  types.forEach(t => stmt.executeSync([
+    t.id,
+    t.titleKey || t.id,
+    t.subtitleKey || t.titleKey || t.id,  // fallback: never null
+    t.icon,
+    t.color,
+  ]));
+}
+
+// ── Stock ─────────────────────────────────────────────────────────────────────
+
+export function getLocalStockItems(ownerEmail?: string): any[] {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM stock_items WHERE owner_email = ?', [ownerEmail]);
+  }
+  return db.getAllSync('SELECT * FROM stock_items');
+}
+
+export function saveStockItemLocal(item: any, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO stock_items (id, sku, name, category, unit, currentStock, minStock, locationId, subLocation, costPrice, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      sku = excluded.sku,
+      name = excluded.name,
+      category = excluded.category,
+      unit = excluded.unit,
+      currentStock = excluded.currentStock,
+      minStock = excluded.minStock,
+      locationId = excluded.locationId,
+      subLocation = excluded.subLocation,
+      costPrice = excluded.costPrice,
+      owner_email = COALESCE(excluded.owner_email, stock_items.owner_email)
+  `);
+  stmt.executeSync([
+    item.id, 
+    item.sku, 
+    item.name, 
+    item.category, 
+    item.unit, 
+    item.currentStock, 
+    item.minStock, 
+    item.locationId || null, 
+    item.subLocation || null, 
+    item.costPrice || 0, 
+    item.owner_email || ownerEmail || null
+  ]);
+}
+
+export function deleteStockItemLocal(itemId: string) {
+  db.runSync('DELETE FROM stock_movements WHERE itemId = ?', [itemId]);
+  db.runSync('DELETE FROM stock_items WHERE id = ?', [itemId]);
+}
+
+export function getLocalStockMovements(ownerEmail?: string): any[] {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM stock_movements WHERE owner_email = ? ORDER BY timestamp DESC', [ownerEmail]);
+  }
+  return db.getAllSync('SELECT * FROM stock_movements ORDER BY timestamp DESC');
+}
+
+export function saveStockMovementLocal(mov: any, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO stock_movements (id, itemId, type, quantity, unitPrice, destinationAssetId, subLocation, timestamp, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.executeSync([mov.id, mov.itemId, mov.type, mov.quantity, mov.unitPrice || null, mov.destinationAssetId || null, mov.subLocation || null, mov.timestamp, ownerEmail || null]);
+}
+
+export function getGlobalContacts(): any[] {
+  return db.getAllSync('SELECT * FROM global_contacts');
+}
+
+export function saveGlobalContacts(contacts: any[]) {
+  const stmt = db.prepareSync(`
+    INSERT INTO global_contacts (id, name, role, color) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      role = excluded.role,
+      color = excluded.color
+  `);
+  contacts.forEach(c => stmt.executeSync([c.id, c.name, c.role, c.color]));
+}
+
+export function clearLocalDatabase() {
+  db.execSync('DELETE FROM assets;');
+  db.execSync('DELETE FROM sync_queue;');
+  db.execSync('DELETE FROM assets_history;');
+  db.execSync('DELETE FROM stock_items;');
+  db.execSync('DELETE FROM stock_movements;');
+  db.execSync('DELETE FROM asset_locations;');
+  db.execSync('DELETE FROM providers;');
+  db.execSync('DELETE FROM media_items;');
+  db.execSync('DELETE FROM chat_rooms;');
+  db.execSync('DELETE FROM system_configs;');
+}
+
+/** Verifica quem é o "dono" predominante dos dados locais para evitar vazamentos */
+export function getDatabaseOwner(): string | null {
+  const row = db.getFirstSync<{ owner_email: string }>('SELECT owner_email FROM assets WHERE owner_email IS NOT NULL AND owner_email != "" LIMIT 1');
+  return row?.owner_email || null;
+}
+
+/** saveConfigLocal — salva assetTypes e categories do backend no SQLite */
+export function saveConfigLocal(config: { assetTypes?: any[]; categories?: any[] }) {
+  if (config.assetTypes?.length) saveAssetTypes(config.assetTypes);
+  if (config.categories?.length)  saveServiceCategories(config.categories);
+}
+
+// ── Media Items ───────────────────────────────────────────────────────────────
+
+export interface MediaItem {
+  id: string;
+  uri: string;
+  type: 'photo' | 'video';
+  description?: string;
+  tag?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  stampedGeo: boolean;
+  stampedDatetime: boolean;
+  createdAt: string;
+  ownerEmail?: string;
+  remoteUrl?: string;  // URL no BrSpark Cloud Storage após upload
+}
+
+export function saveMediaItem(item: MediaItem) {
+  db.runSync(
+    `INSERT INTO media_items
+      (id, uri, type, description, tag, latitude, longitude, address, stamped_geo, stamped_datetime, created_at, owner_email, remote_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       description = excluded.description,
+       tag = excluded.tag,
+       remote_url = COALESCE(excluded.remote_url, remote_url)`,
+    [
+      item.id, item.uri, item.type,
+      item.description || null,
+      item.tag || null,
+      item.latitude ?? null, item.longitude ?? null,
+      item.address || null,
+      item.stampedGeo ? 1 : 0,
+      item.stampedDatetime ? 1 : 0,
+      item.createdAt,
+      item.ownerEmail || null,
+      item.remoteUrl || null,
+    ]
+  );
+}
+
+/** Atualiza apenas o remote_url de um item após upload bem-sucedido */
+export function updateMediaRemoteUrl(id: string, remoteUrl: string) {
+  db.runSync('UPDATE media_items SET remote_url = ? WHERE id = ?', [remoteUrl, id]);
+}
+
+export function getMediaItems(ownerEmail?: string): MediaItem[] {
+  const rows = ownerEmail
+    ? db.getAllSync<any>('SELECT * FROM media_items WHERE owner_email = ? ORDER BY created_at DESC', [ownerEmail])
+    : db.getAllSync<any>('SELECT * FROM media_items ORDER BY created_at DESC');
+  return rows.map((r) => ({
+    id: r.id,
+    uri: r.uri,
+    type: r.type as 'photo' | 'video',
+    description: r.description || '',
+    tag: r.tag || '',
+    latitude: r.latitude,
+    longitude: r.longitude,
+    address: r.address || '',
+    stampedGeo: r.stamped_geo === 1,
+    stampedDatetime: r.stamped_datetime === 1,
+    createdAt: r.created_at,
+    ownerEmail: r.owner_email,
+    remoteUrl: r.remote_url || undefined,
+  }));
+}
+
+export function deleteMediaItem(id: string, ownerEmail?: string) {
+  db.runSync('DELETE FROM media_items WHERE id = ?', [id]);
+  
+  // Enfilera para deletar na nuvem
+  addToSyncQueue('media', 'DELETE', { id }, ownerEmail);
+}
+
+export function updateMediaItem(id: string, fields: { description?: string; tag?: string }, ownerEmail?: string) {
+  db.runSync(
+    'UPDATE media_items SET description = ?, tag = ? WHERE id = ?',
+    [fields.description ?? null, fields.tag ?? null, id]
+  );
+  
+  // Enfilera para sync na nuvem
+  addToSyncQueue('media', 'UPDATE', { id, ...fields }, ownerEmail);
+}
+

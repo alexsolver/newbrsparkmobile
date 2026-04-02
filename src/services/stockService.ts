@@ -1,34 +1,31 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StockItem, StockLocation, StockMovement } from '../types/stock';
 import { NotificationService } from './notifications';
-
-const KEYS = {
-  ITEMS: 'brspark_stock_items',
-  MOVEMENTS: 'brspark_stock_movements',
-  LOCATIONS: 'brspark_stock_locations'
-};
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { getLocalStockItems, saveStockItemLocal, getLocalStockMovements, saveStockMovementLocal, deleteStockItemLocal } from '../database';
+import { enqueueMutation } from './syncService';
 
 export const StockService = {
-  getItems: async (): Promise<StockItem[]> => {
-    const data = await AsyncStorage.getItem(KEYS.ITEMS);
-    return data ? JSON.parse(data) : [];
+  getItems: async (ownerEmail?: string): Promise<StockItem[]> => {
+    return getLocalStockItems(ownerEmail);
   },
 
-  saveItem: async (item: StockItem) => {
-    const items = await StockService.getItems();
-    const idx = items.findIndex(i => i.id === item.id);
-    if (idx > -1) items[idx] = item;
-    else items.push(item);
-    await AsyncStorage.setItem(KEYS.ITEMS, JSON.stringify(items));
+  saveItem: async (item: StockItem, ownerEmail?: string) => {
+    saveStockItemLocal(item, ownerEmail);
+    enqueueMutation('stock', 'stock:CREATE_ITEM', item, ownerEmail);
   },
 
-  getMovements: async (): Promise<StockMovement[]> => {
-    const data = await AsyncStorage.getItem(KEYS.MOVEMENTS);
-    return data ? JSON.parse(data) : [];
+  deleteItem: async (itemId: string, ownerEmail?: string) => {
+    deleteStockItemLocal(itemId);
+    enqueueMutation('stock', 'stock:DELETE_ITEM', { id: itemId }, ownerEmail);
   },
 
-  recordMovement: async (mov: Omit<StockMovement, 'id' | 'timestamp'>) => {
-    const items = await StockService.getItems();
+  getMovements: async (ownerEmail?: string): Promise<StockMovement[]> => {
+    return getLocalStockMovements(ownerEmail);
+  },
+
+  recordMovement: async (mov: Omit<StockMovement, 'id' | 'timestamp'>, ownerEmail?: string) => {
+    const items = getLocalStockItems(ownerEmail);
     const itemIdx = items.findIndex(i => i.id === mov.itemId);
     if (itemIdx === -1) throw new Error('Item não encontrado.');
 
@@ -39,39 +36,35 @@ export const StockService = {
       timestamp: new Date().toISOString(),
     };
 
-    // ATUALIZAR LOCALIZAÇÃO (EX: GAVETA/PRATELEIRA) SE INFORMADO
     if (mov.subLocation) { item.subLocation = mov.subLocation; }
 
     if (mov.type === 'IN') {
       item.currentStock += mov.quantity;
-      if (mov.unitPrice) item.costPrice = mov.unitPrice; // Atualiza custo médio/último pago ✅
+      if (mov.unitPrice) item.costPrice = mov.unitPrice;
     } else if (mov.type === 'OUT') {
       item.currentStock -= mov.quantity;
     } else if (mov.type === 'ADJUST') {
       item.currentStock = mov.quantity;
     } else if (mov.type === 'TRANSFER' && mov.destinationAssetId) {
-      // LOGICA DE TRANSFERENCIA:
-      // 1. Tirar do item de origem
       item.currentStock -= mov.quantity;
       
-      // 2. Procurar/Criar no destino (pelo SKU)
-      const destIndex = items.findIndex(i => i.sku === item.sku && i.locationId === mov.destinationAssetId);
+      const targetSub = mov.destinationSubLocation || '';
+      const destIndex = items.findIndex(i => i.sku === item.sku && i.locationId === mov.destinationAssetId && (i.subLocation || '') === targetSub);
       if (destIndex > -1) {
         items[destIndex].currentStock += mov.quantity;
+        saveStockItemLocal(items[destIndex], ownerEmail);
       } else {
-        // Criar ficha no destino se não existia
         const newItem: StockItem = {
           ...item,
           id: Math.random().toString(36).substring(7),
           locationId: mov.destinationAssetId,
+          subLocation: targetSub,
           currentStock: mov.quantity,
-          subLocation: '', // Inicia sem subloc no destino
         };
-        items.push(newItem);
+        saveStockItemLocal(newItem, ownerEmail);
       }
     }
 
-    // CHECK ESTOQUE CRÍTICO -> NOTIFICAR
     if (item.currentStock <= item.minStock) {
        NotificationService.addNotification({
          title: `ESTOQUE CRÍTICO: ${item.name}`,
@@ -81,17 +74,44 @@ export const StockService = {
        });
     }
 
-    // Salvar Tudo
-    await AsyncStorage.setItem(KEYS.ITEMS, JSON.stringify(items));
-
-    // Salvar Histórico
-    const history = await StockService.getMovements();
-    history.push(newMovement);
-    await AsyncStorage.setItem(KEYS.MOVEMENTS, JSON.stringify(history));
+    saveStockItemLocal(item, ownerEmail);
+    saveStockMovementLocal(newMovement, ownerEmail);
+    enqueueMutation('stock', 'stock:RECORD_MOVEMENT', newMovement, ownerEmail);
   },
 
   getLocations: async (): Promise<StockLocation[]> => {
-    const data = await AsyncStorage.getItem(KEYS.LOCATIONS);
-    return data ? JSON.parse(data) : [];
+     // Stock locations are usually Assets (venues)
+     return []; // Could be extended if specific stock-only locations exist
+  },
+
+  exportStockAsCSV: async (items: StockItem[], venues: any[]) => {
+    try {
+      if (items.length === 0) throw new Error('Não há itens para exportar.');
+      
+      let csv = 'Nome,SKU,Categoria,Saldo,Unidade,Local,Sub-local\n';
+      items.forEach(i => {
+        const asset = venues.find(v => v.id === i.locationId);
+        const name = i.name.replace(/"/g, '""');
+        const cat = i.category.replace(/"/g, '""');
+        const loc = (asset?.title || 'Geral').replace(/"/g, '""');
+        const sub = (i.subLocation || '').replace(/"/g, '""');
+        
+        csv += `"${name}","${i.sku}","${cat}",${i.currentStock},"${i.unit}","${loc}","${sub}"\n`;
+      });
+      
+      const fileUri = `${(FileSystem as any).cacheDirectory}inventario_brspark.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
+      
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('A função de compartilhamento não está disponível.');
+      }
+      
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Inventário' });
+
+    } catch (e: any) {
+      console.error('Export Error:', e);
+      throw e;
+    }
   }
 };
+

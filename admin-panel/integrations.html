@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Integrações</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .int-catalog { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
+    .int-card {
+      background:var(--surface1); border:1.5px solid var(--border); border-radius:var(--radius);
+      padding:20px; display:flex; flex-direction:column; gap:12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .int-card:hover { border-color:var(--accent); box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+    .int-card.connected { border-color:var(--green); background: var(--green-dim,#F0FDF4); }
+    .int-card-header { display:flex; align-items:center; gap:12px; }
+    .int-logo { width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+    .int-name { font-size:14px; font-weight:800; color:var(--text1); }
+    .int-cat  { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-top:1px; }
+    .int-desc { font-size:12px; color:var(--text3); line-height:1.5; }
+    .int-fields { display:flex; flex-direction:column; gap:8px; }
+    .int-fields input { font-size:12px; padding:8px 10px; }
+    .int-actions { display:flex; gap:8px; align-items:center; margin-top:4px; }
+    .int-status  { font-size:11px; font-weight:700; display:flex; align-items:center; gap:4px; }
+    .int-status.active { color:var(--green); }
+    .int-status.inactive { color:var(--text3); }
+    .section-title { font-size:13px; font-weight:900; color:var(--text2); margin:24px 0 12px; display:flex; align-items:center; gap:8px; }
+    .section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Integrações</span>
+      <div class="topbar-actions">
+        <span id="active-count" class="badge badge-green" style="font-size:12px">— ativas</span>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <!-- ── IA & LLM ──────────────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="bulb-outline" style="vertical-align:-2px"></ion-icon> Inteligência Artificial / LLM</div>
+      <div class="int-catalog" id="ai-catalog">
+
+        <!-- OpenAI -->
+        <div class="int-card" id="card-openai">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#000;color:#fff"><ion-icon name="hardware-chip-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">OpenAI</div><div class="int-cat">AI / LLM</div></div>
+            <span class="int-status inactive" id="status-openai" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">GPT-4o, assistentes, embeddings, visão computacional e geração de imagem.</div>
+          <div class="int-fields" id="fields-openai">
+            <input class="form-control" id="key-openai" type="password" placeholder="API Key — sk-…" />
+            <input class="form-control" id="model-openai" placeholder="Modelo padrão (ex: gpt-4o)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('openai','AI_LLM','OpenAI',['key-openai','model-openai'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-openai" style="display:none" onclick="testInt('openai')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-openai" style="display:none" onclick="deleteIntByName('OpenAI')">Remover</button>
+          </div>
+        </div>
+
+        <!-- Google AI (Gemini) -->
+        <div class="int-card" id="card-googleai">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#4285F4;color:#fff">G</div>
+            <div><div class="int-name">Google AI (Gemini)</div><div class="int-cat">AI / LLM</div></div>
+            <span class="int-status inactive" id="status-googleai" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Gemini Pro, Gemini Flash — multimodal, longa janela de contexto.</div>
+          <div class="int-fields" id="fields-googleai">
+            <input class="form-control" id="key-googleai" type="password" placeholder="API Key Google AI Studio" />
+            <input class="form-control" id="model-googleai" placeholder="Modelo (ex: gemini-1.5-flash)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('googleai','AI_LLM','Google AI (Gemini)',['key-googleai','model-googleai'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-googleai" style="display:none" onclick="testInt('googleai')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-googleai" style="display:none" onclick="deleteIntByName('Google AI (Gemini)')">Remover</button>
+          </div>
+        </div>
+
+        <!-- DeepSeek -->
+        <div class="int-card" id="card-deepseek">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#1A1A2E;color:#00D4FF"><ion-icon name="boat-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">DeepSeek</div><div class="int-cat">AI / LLM</div></div>
+            <span class="int-status inactive" id="status-deepseek" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">DeepSeek-V3, DeepSeek-R1 — alta performance e custo reduzido.</div>
+          <div class="int-fields" id="fields-deepseek">
+            <input class="form-control" id="key-deepseek" type="password" placeholder="API Key DeepSeek" />
+            <input class="form-control" id="url-deepseek" placeholder="Base URL (ex: https://api.deepseek.com/v1)" value="https://api.deepseek.com/v1" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('deepseek','AI_LLM','DeepSeek',['key-deepseek','url-deepseek'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-deepseek" style="display:none" onclick="testInt('deepseek')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-deepseek" style="display:none" onclick="deleteIntByName('DeepSeek')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── E-mail & Notificações ───────────────────────────── -->
+      <div class="section-title"><ion-icon name="mail-outline"></ion-icon> E-mail &amp; Notificações</div>
+      <div class="int-catalog" id="email-catalog">
+
+        <!-- Gmail -->
+        <div class="int-card" id="card-gmail">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#EA4335;color:#fff"><ion-icon name="mail-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Gmail</div><div class="int-cat">E-mail</div></div>
+            <span class="int-status inactive" id="status-gmail" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Envio de e-mails via conta Gmail com senha de app (OAuth ou SMTP).</div>
+          <div class="int-fields" id="fields-gmail">
+            <input class="form-control" id="user-gmail" placeholder="Endereço Gmail (ex: noreply@brspark.com)" />
+            <input class="form-control" id="key-gmail" type="password" placeholder="Senha de App Google (16 chars)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('gmail','EMAIL','Gmail',['user-gmail','key-gmail'],['baseUrl','apiKey'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-gmail" style="display:none" onclick="testInt('gmail')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-gmail" style="display:none" onclick="deleteIntByName('Gmail')">Remover</button>
+          </div>
+        </div>
+
+        <!-- Office 365 -->
+        <div class="int-card" id="card-office365">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0078D4;color:#fff"><ion-icon name="mail-unread-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Office 365</div><div class="int-cat">E-mail</div></div>
+            <span class="int-status inactive" id="status-office365" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Envio via Microsoft Exchange Online/SMTP autenticado com conta corporativa.</div>
+          <div class="int-fields" id="fields-office365">
+            <input class="form-control" id="user-office365" placeholder="E-mail corporativo (user@empresa.onmicrosoft.com)" />
+            <input class="form-control" id="key-office365" type="password" placeholder="Senha / App Password" />
+            <input class="form-control" id="tenant-office365" placeholder="Tenant ID (opcional)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('office365','EMAIL','Office 365',['user-office365','key-office365','tenant-office365'],['baseUrl','apiKey','description'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-office365" style="display:none" onclick="testInt('office365')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-office365" style="display:none" onclick="deleteIntByName('Office 365')">Remover</button>
+          </div>
+        </div>
+
+        <!-- SMTP Genérico -->
+        <div class="int-card" id="card-smtp">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#334155;color:#fff"><ion-icon name="cube-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">SMTP Genérico</div><div class="int-cat">E-mail</div></div>
+            <span class="int-status inactive" id="status-smtp" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Qualquer servidor SMTP: Resend, Zoho, SendGrid, Mailgun, etc.</div>
+          <div class="int-fields" id="fields-smtp">
+            <input class="form-control" id="host-smtp" placeholder="Host SMTP (ex: smtp.resend.com)" />
+            <input class="form-control" id="port-smtp" placeholder="Porta (ex: 587)" value="587" />
+            <input class="form-control" id="user-smtp" placeholder="Usuário SMTP" />
+            <input class="form-control" id="key-smtp" type="password" placeholder="Senha / API Key" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveSmtp()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-smtp" style="display:none" onclick="testInt('smtp')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-smtp" style="display:none" onclick="deleteIntByName('SMTP Genérico')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Catálogos & APIs ──────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="library-outline"></ion-icon> Catálogos &amp; APIs Externas</div>
+      <div class="int-catalog" id="catalog-catalog">
+        
+        <!-- Bluesoft Cosmos -->
+        <div class="int-card" id="card-cosmos">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0284C7;color:#fff"><ion-icon name="cart-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Bluesoft Cosmos</div><div class="int-cat">Catálogos / ERP</div></div>
+            <span class="int-status inactive" id="status-cosmos" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Consulta de produtos por código de barras (GTIN/EAN) para o estoque.</div>
+          <div class="int-fields" id="fields-cosmos">
+            <input class="form-control" id="key-cosmos" type="password" placeholder="X-Cosmos-Token" />
+            <input class="form-control" id="url-cosmos" placeholder="Base URL" value="https://api.cosmos.bluesoft.com.br" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('cosmos','ERP','Bluesoft Cosmos',['key-cosmos','url-cosmos'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-cosmos" style="display:none" onclick="testInt('cosmos')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-cosmos" style="display:none" onclick="deleteIntByName('Bluesoft Cosmos')">Remover</button>
+          </div>
+        </div>
+
+        <!-- UPCItemDB -->
+        <div class="int-card" id="card-upcitemdb">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0F172A;color:#10B981">US</div>
+            <div><div class="int-name">UPCItemDB</div><div class="int-cat">Catálogos / ERP</div></div>
+            <span class="int-status inactive" id="status-upcitemdb" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Consulta de produtos por código de barras (UPC/EAN) para região EUA.</div>
+          <div class="int-fields" id="fields-upcitemdb">
+            <input class="form-control" id="key-upcitemdb" type="password" placeholder="user_key (opcional para trial)" />
+            <input class="form-control" id="url-upcitemdb" placeholder="Base URL" value="https://api.upcitemdb.com/prod/trial" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('upcitemdb','ERP','UPCItemDB',['key-upcitemdb','url-upcitemdb'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-upcitemdb" style="display:none" onclick="testInt('upcitemdb')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-upcitemdb" style="display:none" onclick="deleteIntByName('UPCItemDB')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Storage & Cloud ──────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="cloud-outline"></ion-icon> Storage &amp; Cloud</div>
+      <div class="int-catalog" id="storage-catalog">
+
+        <!-- Dropbox -->
+        <div class="int-card" id="card-dropbox">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0061FF;color:#fff"><ion-icon name="cube-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Dropbox</div><div class="int-cat">Storage</div></div>
+            <span class="int-status inactive" id="status-dropbox" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Backup e armazenamento de documentos, mídias e relatórios no Dropbox.</div>
+          <div class="int-fields" id="fields-dropbox">
+            <input class="form-control" id="key-app-dropbox" placeholder="App Key (Client ID)" />
+            <input class="form-control" id="secret-dropbox" type="password" placeholder="App Secret (Client Secret)" />
+            <input class="form-control" id="refresh-dropbox" type="password" placeholder="Refresh Token" />
+            <input class="form-control" id="folder-dropbox" placeholder="Pasta raiz (ex: /BrSpark)" value="/BrSpark" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveDropbox()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-dropbox" style="display:none" onclick="testInt('dropbox')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-dropbox" style="display:none" onclick="deleteIntByName('Dropbox')">Remover</button>
+          </div>
+        </div>
+
+        <!-- Cloudflare R2 -->
+        <div class="int-card" id="card-cloudflare-r2">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#F48120;color:#fff"><ion-icon name="cloud-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Cloudflare R2</div><div class="int-cat">Storage</div></div>
+            <span class="int-status inactive" id="status-cloudflare-r2" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Object storage S3-compatível sem custo de egress. Ideal para mídias e backups.</div>
+          <div class="int-fields" id="fields-cloudflare-r2">
+            <input class="form-control" id="account-r2" placeholder="Account ID Cloudflare" />
+            <input class="form-control" id="keyid-r2" placeholder="Access Key ID" />
+            <input class="form-control" id="secret-r2" type="password" placeholder="Secret Access Key" />
+            <input class="form-control" id="bucket-r2" placeholder="Nome do Bucket" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveR2()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-cloudflare-r2" style="display:none" onclick="testInt('cloudflare-r2')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-cloudflare-r2" style="display:none" onclick="deleteIntByName('Cloudflare R2')">Remover</button>
+          </div>
+        </div>
+
+        <!-- Amazon S3 -->
+        <div class="int-card" id="card-amazon-s3">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#FF9900;color:#fff">🪣</div>
+            <div><div class="int-name">Amazon S3</div><div class="int-cat">Storage</div></div>
+            <span class="int-status inactive" id="status-amazon-s3" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Armazenamento escalável na AWS S3 para mídias, exports e backups de dados.</div>
+          <div class="int-fields" id="fields-amazon-s3">
+            <input class="form-control" id="keyid-s3" placeholder="Access Key ID (AWS)" />
+            <input class="form-control" id="secret-s3" type="password" placeholder="Secret Access Key (AWS)" />
+            <input class="form-control" id="bucket-s3" placeholder="Nome do Bucket" />
+            <input class="form-control" id="region-s3" placeholder="Região (ex: us-east-1)" value="us-east-1" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveS3()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-amazon-s3" style="display:none" onclick="testInt('amazon-s3')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-amazon-s3" style="display:none" onclick="deleteIntByName('Amazon S3')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  // Mapa: name → id do card e slug
+  const CARD_MAP = {
+    'OpenAI':              { slug:'openai' },
+    'Google AI (Gemini)':  { slug:'googleai' },
+    'DeepSeek':            { slug:'deepseek' },
+    'Gmail':               { slug:'gmail' },
+    'Office 365':          { slug:'office365' },
+    'SMTP Genérico':       { slug:'smtp' },
+    'Dropbox':             { slug:'dropbox' },
+    'Cloudflare R2':       { slug:'cloudflare-r2' },
+    'Amazon S3':           { slug:'amazon-s3' },
+    'Bluesoft Cosmos':     { slug:'cosmos' },
+    'UPCItemDB':           { slug:'upcitemdb' },
+  };
+
+  // type → typeLabel legível para exibição
+  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push' };
+
+  let activeInts = {};   // name → integration object
+
+  // ── Toast ─────────────────────────────────────────────────
+  function showToast(msg, ok = true) {
+    let t = document.getElementById('_toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = '_toast';
+      t.style.cssText = 'position:fixed;bottom:28px;right:28px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,0.15);transition:opacity 0.3s;max-width:380px;white-space:pre-wrap;';
+      document.body.appendChild(t);
+    }
+    t.style.background = ok ? '#10B981' : '#EF4444';
+    t.style.color = '#fff';
+    t.style.opacity = '1';
+    t.textContent = msg;
+    clearTimeout(t._to);
+    t._to = setTimeout(() => { t.style.opacity = '0'; }, 4000);
+  }
+
+  function setConnected(slug, connected, intObj) {
+    const card   = document.getElementById(`card-${slug}`);
+    const status = document.getElementById(`status-${slug}`);
+    const delBtn = document.getElementById(`del-${slug}`);
+    const testBtn = document.getElementById(`test-${slug}`);
+    const fields = document.getElementById(`fields-${slug}`);
+    if (!card) return;
+
+    if (connected) {
+      card.classList.add('connected');
+      status.className = 'int-status active';
+      status.innerHTML = intObj?.status === 'ERROR' ? '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Erro' : '● Conectado';
+      status.style.color = intObj?.status === 'ERROR' ? 'var(--red)' : '';
+      if (delBtn)  delBtn.style.display = '';
+      if (testBtn) testBtn.style.display = '';
+      if (fields)  fields.style.opacity = '0.5';
+    } else {
+      card.classList.remove('connected');
+      status.className = 'int-status inactive';
+      status.innerHTML = '○ Desconectado';
+      status.style.color = '';
+      if (delBtn)  delBtn.style.display = 'none';
+      if (testBtn) testBtn.style.display = 'none';
+      if (fields)  fields.style.opacity = '1';
+    }
+  }
+
+  // Testa a integração chamando o backend
+  window.testInt = async (slug) => {
+    const name = Object.keys(CARD_MAP).find(k => CARD_MAP[k].slug === slug);
+    const intObj = activeInts[name];
+    if (!intObj?.id) return showToast('Salve a integração antes de testar.', false);
+
+    const btn = document.getElementById(`test-${slug}`);
+    if (btn) { btn.disabled = true; btn.textContent = '⌛ Testando…'; }
+
+    try {
+      const res = await CONFIG.post(`/integrations/${intObj.id}/test`, {});
+      const ok = res?.ok ?? false;
+      showToast(res?.message || (ok ? 'Conectado com sucesso!' : 'Falha na conexão'), ok);
+
+      // Atualiza status visual baseado na resposta
+      if (res?.status) {
+        activeInts[name] = { ...intObj, status: res.status };
+        setConnected(slug, true, activeInts[name]);
+      }
+    } catch (e) {
+      showToast('Erro ao testar: ' + e.message, false);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '<ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar'; }
+    }
+  };
+
+  async function loadIntegrations() {
+    const data = await CONFIG.get('/integrations') || [];
+    activeInts = {};
+    data.forEach(i => { activeInts[i.name] = i; });
+
+    let count = 0;
+    Object.entries(CARD_MAP).forEach(([name, { slug }]) => {
+      const connected = !!activeInts[name];
+      if (connected) count++;
+      setConnected(slug, connected, activeInts[name]);
+    });
+    document.getElementById('active-count').textContent = `${count} ativas`;
+  }
+
+  // Salva integração genérica
+  window.saveInt = async (slug, type, name, fieldIds, bodyKeys) => {
+    const vals = fieldIds.map(id => document.getElementById(id)?.value.trim() || '');
+    const body = { type, name, status: 'ACTIVE' };
+    bodyKeys.forEach((k, i) => { if (vals[i]) body[k] = vals[i]; });
+
+    if (activeInts[name]) await CONFIG.del(`/integrations/${activeInts[name].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) { loadIntegrations(); }
+    else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+  };
+
+  // SMTP — salva com campos específicos no description
+  window.saveSmtp = async () => {
+    const host = document.getElementById('host-smtp').value.trim();
+    const port = document.getElementById('port-smtp').value.trim();
+    const user = document.getElementById('user-smtp').value.trim();
+    const key  = document.getElementById('key-smtp').value.trim();
+    if (!host) return alert('Host SMTP é obrigatório.');
+    const body = {
+      type: 'EMAIL', name: 'SMTP Genérico', status: 'ACTIVE',
+      baseUrl: `${host}:${port}`,
+      apiKey:  key,
+      description: `user:${user}`,
+    };
+    if (activeInts['SMTP Genérico']) await CONFIG.del(`/integrations/${activeInts['SMTP Genérico'].id}`);
+    await CONFIG.post('/integrations', body);
+    loadIntegrations();
+  };
+
+  // Dropbox — salva credenciais de OAuth2 Refresh
+  window.saveDropbox = async () => {
+    const appKey = document.getElementById('key-app-dropbox').value.trim();
+    const appSecret = document.getElementById('secret-dropbox').value.trim();
+    const refreshToken = document.getElementById('refresh-dropbox').value.trim();
+    const folder = document.getElementById('folder-dropbox').value.trim() || '/';
+    if (!appKey || !appSecret || !refreshToken) return alert('App Key, App Secret e Refresh Token são obrigatórios.');
+    
+    const body = {
+      type: 'STORAGE', name: 'Dropbox', status: 'ACTIVE',
+      baseUrl: folder,
+      apiKey: `${appKey}:${appSecret}`,
+      description: `refresh_token:${refreshToken}`,
+    };
+    if (activeInts['Dropbox']) await CONFIG.del(`/integrations/${activeInts['Dropbox'].id}`);
+    await CONFIG.post('/integrations', body);
+    loadIntegrations();
+  };
+
+  // Cloudflare R2 — salva account id no description
+  window.saveR2 = async () => {
+    const account = document.getElementById('account-r2').value.trim();
+    const keyid   = document.getElementById('keyid-r2').value.trim();
+    const secret  = document.getElementById('secret-r2').value.trim();
+    const bucket  = document.getElementById('bucket-r2').value.trim();
+    if (!keyid || !secret || !bucket) return alert('Access Key, Secret e Bucket são obrigatórios.');
+    const body = {
+      type: 'STORAGE', name: 'Cloudflare R2', status: 'ACTIVE',
+      baseUrl: `https://${account}.r2.cloudflarestorage.com/${bucket}`,
+      apiKey:  `${keyid}:${secret}`,
+      description: `account:${account} bucket:${bucket}`,
+    };
+    if (activeInts['Cloudflare R2']) await CONFIG.del(`/integrations/${activeInts['Cloudflare R2'].id}`);
+    await CONFIG.post('/integrations', body);
+    loadIntegrations();
+  };
+
+  // Amazon S3
+  window.saveS3 = async () => {
+    const keyid  = document.getElementById('keyid-s3').value.trim();
+    const secret = document.getElementById('secret-s3').value.trim();
+    const bucket = document.getElementById('bucket-s3').value.trim();
+    const region = document.getElementById('region-s3').value.trim();
+    if (!keyid || !secret || !bucket) return alert('Access Key, Secret e Bucket são obrigatórios.');
+    const body = {
+      type: 'STORAGE', name: 'Amazon S3', status: 'ACTIVE',
+      baseUrl: `https://${bucket}.s3.${region}.amazonaws.com`,
+      apiKey:  `${keyid}:${secret}`,
+      description: `region:${region} bucket:${bucket}`,
+    };
+    if (activeInts['Amazon S3']) await CONFIG.del(`/integrations/${activeInts['Amazon S3'].id}`);
+    await CONFIG.post('/integrations', body);
+    loadIntegrations();
+  };
+
+  window.deleteIntByName = async (name) => {
+    const intObj = activeInts[name];
+    if (!intObj) return;
+    if (!confirm(`Remover integração "${name}"?`)) return;
+    await CONFIG.del(`/integrations/${intObj.id}`);
+    loadIntegrations();
+  };
+
+  loadIntegrations();
+</script>
+</body>
+</html>

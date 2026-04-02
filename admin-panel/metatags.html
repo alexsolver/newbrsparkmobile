@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Metatags &amp; Categorias</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Metatags &amp; Categorias</span>
+      <div class="topbar-actions">
+        <select class="form-control" style="width:200px;padding:7px 10px;font-size:12px" id="filter-type">
+          <option value="">Todos os tipos</option>
+          <option value="ASSET_TYPE">Tipos de Bem</option>
+          <option value="STOCK_CATEGORY">Categorias de Estoque</option>
+          <option value="SERVICE_CATEGORY">Categorias de Serviço</option>
+          <option value="EXPENSE_CATEGORY">Categorias de Despesa</option>
+          <option value="REVENUE_CATEGORY">Categorias de Receita</option>
+          <option value="ASSET_STATUS">Status de Bens</option>
+          <option value="MEDIA_CATEGORY">Categorias de Mídia</option>
+          <option value="GLOBAL_TAG">Tags Globais</option>
+        </select>
+        <button class="btn btn-primary" onclick="openNewTag()">+ Nova Metatag</button>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:20px">
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="pricetags-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total</div></div>
+        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="home-outline"></ion-icon></div><div class="stat-value" id="stat-asset-types">—</div><div class="stat-label">Tipos de Bem</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cube-outline"></ion-icon></div><div class="stat-value" id="stat-stock">—</div><div class="stat-label">Cat. Estoque</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="construct-outline"></ion-icon></div><div class="stat-value" id="stat-service">—</div><div class="stat-label">Cat. Serviço</div></div>
+        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="trending-down-outline"></ion-icon></div><div class="stat-value" id="stat-expense">—</div><div class="stat-label">Cat. Despesa</div></div>
+        <div class="stat-card" style="--accent-color:#10B981"><div class="stat-icon" style="background:#ECFDF5;color:#10B981"><ion-icon name="trending-up-outline"></ion-icon></div><div class="stat-value" id="stat-revenue">—</div><div class="stat-label">Cat. Receita</div></div>
+        <div class="stat-card" style="--accent-color:#8B5CF6"><div class="stat-icon" style="background:#F5F3FF;color:#8B5CF6"><ion-icon name="images-outline"></ion-icon></div><div class="stat-value" id="stat-media">—</div><div class="stat-label">Cat. Mídia</div></div>
+        <div class="stat-card" style="--accent-color:var(--text3)"><div class="stat-icon" style="background:var(--surface2);color:var(--text3)"><ion-icon name="globe-outline"></ion-icon></div><div class="stat-value" id="stat-global">—</div><div class="stat-label">Tags Globais</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Metatags Cadastradas</span>
+          <span class="badge badge-accent" id="count-badge">—</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Ícone</th><th>Tipo</th><th>Chave</th><th>PT-BR</th><th>Cor</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody id="tags-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tag Modal -->
+<div class="modal-overlay" id="tag-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="tag-modal-title">Nova Metatag</span>
+      <button class="modal-close" onclick="closeModal('tag-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="tag-id" />
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Tipo *</label>
+          <select class="form-control" id="tag-type">
+            <option value="ASSET_TYPE">Tipo de Bem</option>
+            <option value="STOCK_CATEGORY">Categoria de Estoque</option>
+            <option value="SERVICE_CATEGORY">Categoria de Serviço</option>
+            <option value="EXPENSE_CATEGORY">Categoria de Despesa <ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></option>
+            <option value="REVENUE_CATEGORY">Categoria de Receita <ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></option>
+            <option value="ASSET_STATUS">Status de Bem</option>
+            <option value="MEDIA_CATEGORY">Categoria de Mídia <ion-icon name="camera-outline" style="vertical-align:-2px"></ion-icon></option>
+            <option value="GLOBAL_TAG">Tag Global</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Chave única *</label><input class="form-control" id="tag-key" placeholder="imovel_residencial" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Nome PT-BR *</label><input class="form-control" id="tag-ptbr" placeholder="Imóvel Residencial" /></div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Ícone (Nome Ionicons)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="icon-preview" style="width:42px;height:42px;border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--surface2);color:var(--accent)">
+              <ion-icon name="help-outline"></ion-icon>
+            </div>
+            <input class="form-control" id="tag-icon" placeholder="flash-outline" style="flex:1" />
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label">Cor</label><input class="form-control" id="tag-color" type="color" value="#F97316" style="height:42px;padding:4px" /></div>
+      </div>
+      
+      <div class="form-group">
+        <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label">Buscar Ícone</label>
+        <input class="form-control" id="icon-search" placeholder="Ex: car, house, tools..." />
+      </div>
+      <label class="form-label">Sugestões de Ícones</label>
+        <div id="common-icons" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(40px, 1fr));gap:4px;max-height:300px;overflow-y:auto;padding:8px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <!-- Dynamic grid -->
+        </div>
+      </div>
+
+      <div class="form-group"><label class="form-label">Ordem de exibição</label><input class="form-control" id="tag-sort" type="number" value="0" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tag-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-tag-btn">Salvar Metatag</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  const typeLabel = {
+    ASSET_TYPE:       '<ion-icon name="home-outline"></ion-icon> Tipo de Bem',
+    STOCK_CATEGORY:   '<ion-icon name="cube-outline"></ion-icon> Cat. Estoque',
+    SERVICE_CATEGORY: '<ion-icon name="construct-outline"></ion-icon> Cat. Serviço',
+    EXPENSE_CATEGORY: '<ion-icon name="trending-down-outline"></ion-icon> Cat. Despesa',
+    REVENUE_CATEGORY: '<ion-icon name="trending-up-outline"></ion-icon> Cat. Receita',
+    ASSET_STATUS:     '<ion-icon name="bulb-outline"></ion-icon> Status',
+    MEDIA_CATEGORY:   '<ion-icon name="images-outline"></ion-icon> Cat. Mídia',
+    GLOBAL_TAG:       '<ion-icon name="globe-outline"></ion-icon> Tag Global'
+  };
+  const typeBadge = {
+    ASSET_TYPE: 'badge-blue', STOCK_CATEGORY: 'badge-green',
+    SERVICE_CATEGORY: 'badge-amber', EXPENSE_CATEGORY: 'badge-danger',
+    REVENUE_CATEGORY: 'badge-success', ASSET_STATUS: 'badge-accent',
+    MEDIA_CATEGORY: 'badge-purple', GLOBAL_TAG: 'badge-gray'
+  };
+
+  async function loadTags() {
+    const type = document.getElementById('filter-type').value;
+    const tags  = await CONFIG.get(`/metatags${type ? `?type=${type}` : ''}`) || [];
+
+    document.getElementById('stat-total').textContent        = tags.length;
+    document.getElementById('stat-asset-types').textContent  = tags.filter(t => t.type === 'ASSET_TYPE').length;
+    document.getElementById('stat-stock').textContent        = tags.filter(t => t.type === 'STOCK_CATEGORY').length;
+    document.getElementById('stat-service').textContent      = tags.filter(t => t.type === 'SERVICE_CATEGORY').length;
+    document.getElementById('stat-expense').textContent      = tags.filter(t => t.type === 'EXPENSE_CATEGORY').length;
+    document.getElementById('stat-revenue').textContent      = tags.filter(t => t.type === 'REVENUE_CATEGORY').length;
+    document.getElementById('stat-media').textContent        = tags.filter(t => t.type === 'MEDIA_CATEGORY').length;
+    document.getElementById('stat-global').textContent       = tags.filter(t => t.type === 'GLOBAL_TAG').length;
+    document.getElementById('count-badge').textContent       = `${tags.length} metatags`;
+
+    document.getElementById('tags-tbody').innerHTML = tags.length
+      ? tags.map(t => {
+          const iconHtml = t.icon ? `<ion-icon name="${t.icon}" style="color:${t.color || 'var(--accent)'}"></ion-icon>` : '—';
+          return `<tr>
+          <td style="font-size:22px;text-align:center">${iconHtml}</td>
+          <td><span class="badge ${typeBadge[t.type] || 'badge-gray'}">${typeLabel[t.type] || t.type}</span></td>
+          <td style="font-family:monospace;font-size:11px;color:var(--text3)">${t.key}</td>
+          <td class="bold">${t.ptBr}</td>
+          <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${t.color || '#ccc'};border:1px solid var(--border)"></span></td>
+          <td><span class="badge ${t.isActive ? 'badge-green' : 'badge-gray'}">${t.isActive ? '<ion-icon name="ellipse-outline" style="font-size:14px;vertical-align:middle;margin-right:4px"></ion-icon> Ativo' : '○ Inativo'}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="editTag(${JSON.stringify(t).replace(/"/g,'&quot;')})">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteTag('${t.id}')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+          </td>
+        </tr>`;
+      }).join('')
+      : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma metatag encontrada.</td></tr>';
+  }
+
+  const commonIcons = [
+    "add-outline",
+    "add-circle-outline",
+    "airplane-outline",
+    "alarm-outline",
+    "albums-outline",
+    "alert-outline",
+    "alert-circle-outline",
+    "american-football-outline",
+    "analytics-outline",
+    "aperture-outline",
+    "apps-outline",
+    "archive-outline",
+    "arrow-back-outline",
+    "arrow-down-outline",
+    "arrow-forward-outline",
+    "arrow-up-outline",
+    "at-outline",
+    "attach-outline",
+    "backspace-outline",
+    "bandage-outline",
+    "bar-chart-outline",
+    "barbell-outline",
+    "barcode-outline",
+    "baseball-outline",
+    "basket-outline",
+    "basketball-outline",
+    "battery-charging-outline",
+    "battery-dead-outline",
+    "battery-full-outline",
+    "beaker-outline",
+    "bed-outline",
+    "beer-outline",
+    "bicycle-outline",
+    "bluetooth-outline",
+    "boat-outline",
+    "body-outline",
+    "bonfire-outline",
+    "book-outline",
+    "bookmark-outline",
+    "bookmarks-outline",
+    "briefcase-outline",
+    "browsers-outline",
+    "brush-outline",
+    "bug-outline",
+    "build-outline",
+    "bulb-outline",
+    "bus-outline",
+    "business-outline",
+    "cafe-outline",
+    "calculator-outline",
+    "calendar-outline",
+    "call-outline",
+    "camera-outline",
+    "car-outline",
+    "car-sport-outline",
+    "card-outline",
+    "caret-back-outline",
+    "caret-down-outline",
+    "caret-forward-outline",
+    "caret-up-outline",
+    "cart-outline",
+    "cash-outline",
+    "cellular-outline",
+    "chatbox-outline",
+    "chatbox-ellipses-outline",
+    "chatbubble-outline",
+    "chatbubble-ellipses-outline",
+    "chatbubbles-outline",
+    "checkbox-outline",
+    "checkmark-outline",
+    "checkmark-circle-outline",
+    "checkmark-done-outline",
+    "checkmark-done-circle-outline",
+    "chevron-back-outline",
+    "chevron-down-outline",
+    "chevron-forward-outline",
+    "chevron-up-outline",
+    "clipboard-outline",
+    "close-outline",
+    "close-circle-outline",
+    "cloud-outline",
+    "cloud-circle-outline",
+    "cloud-done-outline",
+    "cloud-download-outline",
+    "cloud-offline-outline",
+    "cloud-upload-outline",
+    "cloudy-outline",
+    "cloudy-night-outline",
+    "code-outline",
+    "code-download-outline",
+    "code-working-outline",
+    "cog-outline",
+    "color-fill-outline",
+    "color-filter-outline",
+    "color-palette-outline",
+    "color-wand-outline",
+    "compass-outline",
+    "construct-outline",
+    "contract-outline",
+    "contrast-outline",
+    "copy-outline",
+    "create-outline",
+    "crop-outline",
+    "cube-outline",
+    "cut-outline",
+    "desktop-outline",
+    "disc-outline",
+    "document-outline",
+    "document-attach-outline",
+    "document-lock-outline",
+    "document-text-outline",
+    "documents-outline",
+    "download-outline",
+    "duplicate-outline",
+    "ear-outline",
+    "earth-outline",
+    "easel-outline",
+    "egg-outline",
+    "ellipse-outline",
+    "ellipsis-horizontal-outline",
+    "ellipsis-vertical-outline",
+    "enter-outline",
+    "exit-outline",
+    "expand-outline",
+    "extension-puzzle-outline",
+    "eye-outline",
+    "eye-off-outline",
+    "eyedropper-outline",
+    "fast-food-outline",
+    "female-outline",
+    "file-tray-outline",
+    "file-tray-full-outline",
+    "file-tray-stacked-outline",
+    "film-outline",
+    "filter-outline",
+    "filter-circle-outline",
+    "finger-print-outline",
+    "fish-outline",
+    "fitness-outline",
+    "flag-outline",
+    "flame-outline",
+    "flash-outline",
+    "flash-off-outline",
+    "flashlight-outline",
+    "flask-outline",
+    "flower-outline",
+    "folder-outline",
+    "folder-open-outline",
+    "football-outline",
+    "footsteps-outline",
+    "funnel-outline",
+    "game-controller-outline",
+    "gift-outline",
+    "git-branch-outline",
+    "git-commit-outline",
+    "git-compare-outline",
+    "git-merge-outline",
+    "git-network-outline",
+    "git-pull-request-outline",
+    "glasses-outline",
+    "globe-outline",
+    "golf-outline",
+    "grid-outline",
+    "hammer-outline",
+    "hand-left-outline",
+    "hand-right-outline",
+    "happy-outline",
+    "hardware-chip-outline",
+    "headset-outline",
+    "heart-outline",
+    "heart-circle-outline",
+    "heart-dislike-outline",
+    "heart-half-outline",
+    "help-outline",
+    "help-buoy-outline",
+    "help-circle-outline",
+    "home-outline",
+    "hourglass-outline",
+    "ice-cream-outline",
+    "id-card-outline",
+    "image-outline",
+    "images-outline",
+    "infinite-outline",
+    "information-outline",
+    "information-circle-outline",
+    "invert-mode-outline",
+    "journal-outline",
+    "key-outline",
+    "keypad-outline",
+    "language-outline",
+    "laptop-outline",
+    "layers-outline",
+    "leaf-outline",
+    "library-outline",
+    "list-outline",
+    "list-circle-outline",
+    "locate-outline",
+    "location-outline",
+    "lock-closed-outline",
+    "lock-open-outline",
+    "log-in-outline",
+    "log-out-outline",
+    "magnet-outline",
+    "mail-outline",
+    "mail-open-outline",
+    "mail-unread-outline",
+    "male-outline",
+    "man-outline",
+    "map-outline",
+    "medal-outline",
+    "medical-outline",
+    "medkit-outline",
+    "megaphone-outline",
+    "menu-outline",
+    "mic-outline",
+    "mic-circle-outline",
+    "mic-off-outline",
+    "moon-outline",
+    "musical-note-outline",
+    "musical-notes-outline",
+    "navigate-outline",
+    "newspaper-outline",
+    "notifications-outline",
+    "notifications-circle-outline",
+    "notifications-off-outline",
+    "nutrition-outline",
+    "open-outline",
+    "options-outline",
+    "paper-plane-outline",
+    "partly-sunny-outline",
+    "pause-outline",
+    "pause-circle-outline",
+    "paw-outline",
+    "pencil-outline",
+    "people-outline",
+    "person-outline",
+    "person-add-outline",
+    "person-circle-outline",
+    "person-remove-outline",
+    "phone-landscape-outline",
+    "phone-portrait-outline",
+    "pie-chart-outline",
+    "pin-outline",
+    "pint-outline",
+    "pizza-outline",
+    "planet-outline",
+    "play-outline",
+    "play-back-outline",
+    "play-circle-outline",
+    "play-forward-outline",
+    "play-skip-back-outline",
+    "play-skip-forward-outline",
+    "podium-outline",
+    "power-outline",
+    "pricetag-outline",
+    "pricetags-outline",
+    "print-outline",
+    "prism-outline",
+    "pulse-outline",
+    "push-outline",
+    "qr-code-outline",
+    "radio-outline",
+    "radio-button-off-outline",
+    "radio-button-on-outline",
+    "rainy-outline",
+    "reader-outline",
+    "receipt-outline",
+    "recording-outline",
+    "refresh-outline",
+    "refresh-circle-outline",
+    "reload-outline",
+    "reload-circle-outline",
+    "remove-outline",
+    "remove-circle-outline",
+    "reorder-four-outline",
+    "reorder-three-outline",
+    "reorder-two-outline",
+    "repeat-outline",
+    "resize-outline",
+    "restaurant-outline",
+    "ribbon-outline",
+    "rocket-outline",
+    "rose-outline",
+    "scan-outline",
+    "school-outline",
+    "search-outline",
+    "search-circle-outline",
+    "send-outline",
+    "server-outline",
+    "settings-outline",
+    "shapes-outline",
+    "share-outline",
+    "share-social-outline",
+    "shield-outline",
+    "shield-checkmark-outline",
+    "shirt-outline",
+    "shuffle-outline",
+    "skull-outline",
+    "snow-outline",
+    "sparkles-outline",
+    "speaker-high-outline",
+    "speaker-low-outline",
+    "speaker-none-outline",
+    "speedometer-outline",
+    "square-outline",
+    "star-outline",
+    "star-half-outline",
+    "stats-chart-outline",
+    "stop-outline",
+    "stop-circle-outline",
+    "stopwatch-outline",
+    "storefront-outline",
+    "sunny-outline",
+    "swap-horizontal-outline",
+    "swap-vertical-outline",
+    "sync-outline",
+    "sync-circle-outline",
+    "tablet-landscape-outline",
+    "tablet-portrait-outline",
+    "telescope-outline",
+    "tennisball-outline",
+    "terminal-outline",
+    "text-outline",
+    "thermometer-outline",
+    "thumbs-down-outline",
+    "thumbs-up-outline",
+    "thunderstorm-outline",
+    "ticket-outline",
+    "time-outline",
+    "timer-outline",
+    "today-outline",
+    "toggle-outline",
+    "trail-sign-outline",
+    "train-outline",
+    "transgender-outline",
+    "trash-outline",
+    "trash-bin-outline",
+    "trending-down-outline",
+    "trending-up-outline",
+    "triangle-outline",
+    "trophy-outline",
+    "tv-outline",
+    "umbrella-outline",
+    "videocam-outline",
+    "videocam-off-outline",
+    "volume-high-outline",
+    "volume-low-outline",
+    "volume-mute-outline",
+    "volume-off-outline",
+    "walk-outline",
+    "wallet-outline",
+    "warning-outline",
+    "watch-outline",
+    "water-outline",
+    "wifi-outline",
+    "wine-outline",
+    "woman-outline",
+    "logo-alipay",
+    "logo-amazon",
+    "logo-android",
+    "logo-apple",
+    "logo-apple-appstore",
+    "logo-behance",
+    "logo-bitbucket",
+    "logo-bitcoin",
+    "logo-buffer",
+    "logo-capacitor",
+    "logo-chrome",
+    "logo-closed-captioning",
+    "logo-codepen",
+    "logo-css3",
+    "logo-designernews",
+    "logo-deviantart",
+    "logo-discord",
+    "logo-docker",
+    "logo-dribbble",
+    "logo-dropbox",
+    "logo-edge",
+    "logo-electron",
+    "logo-euro",
+    "logo-facebook",
+    "logo-figma",
+    "logo-firebase",
+    "logo-firefox",
+    "logo-flickr",
+    "logo-foursquare",
+    "logo-github",
+    "logo-gitlab",
+    "logo-google",
+    "logo-google-playstore",
+    "logo-hackernews",
+    "logo-html5",
+    "logo-instagram",
+    "logo-ionic",
+    "logo-ionitron",
+    "logo-javascript",
+    "logo-laravel",
+    "logo-linkedin",
+    "logo-markdown",
+    "logo-mastodon",
+    "logo-medium",
+    "logo-microsoft",
+    "logo-no-smoking",
+    "logo-nodejs",
+    "logo-npm",
+    "logo-octocat",
+    "logo-paypal",
+    "logo-pinterest",
+    "logo-playstation",
+    "logo-pwa",
+    "logo-python",
+    "logo-react",
+    "logo-reddit",
+    "logo-rss",
+    "logo-sass",
+    "logo-skype",
+    "logo-slack",
+    "logo-snapchat",
+    "logo-soundcloud",
+    "logo-stackoverflow",
+    "logo-steam",
+    "logo-stencil",
+    "logo-tableau",
+    "logo-tiktok",
+    "logo-tumblr",
+    "logo-tux",
+    "logo-twitch",
+    "logo-twitter",
+    "logo-usd",
+    "logo-venmo",
+    "logo-vercel",
+    "logo-vimeo",
+    "logo-vk",
+    "logo-vue",
+    "logo-web-component",
+    "logo-wechat",
+    "logo-whatsapp",
+    "logo-windows",
+    "logo-wordpress",
+    "logo-xbox",
+    "logo-xing",
+    "logo-yahoo",
+    "logo-yen",
+    "logo-youtube"
+];
+
+  function renderCommonIcons(filter = '') {
+    const grid = document.getElementById('common-icons');
+    const filtered = commonIcons.filter(icon => icon.toLowerCase().includes(filter.toLowerCase()));
+    
+    grid.innerHTML = filtered.map(icon => `
+      <div class="icon-pick" data-name="${icon}" style="cursor:pointer;padding:8px;text-align:center;border-radius:4px;transition:background 0.2s" title="${icon}">
+        <ion-icon name="${icon}" style="font-size:24px;pointer-events:none"></ion-icon>
+      </div>`).join('') || '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text3)">Nenhum ícone encontrado.</div>';
+    
+    grid.querySelectorAll('.icon-pick').forEach(el => {
+      el.onclick = () => {
+        const iconName = el.dataset.name;
+        document.getElementById('tag-icon').value = iconName;
+        updateIconPreview(iconName);
+      };
+      el.onmouseenter = () => el.style.background = 'var(--surface3)';
+      el.onmouseleave = () => el.style.background = 'transparent';
+    });
+  }
+
+  function updateIconPreview(name) {
+    const icon = document.getElementById('tag-icon').value.trim() || 'help-outline';
+    const color = document.getElementById('tag-color').value;
+    const preview = document.getElementById('icon-preview');
+    preview.innerHTML = `<ion-icon name="${icon}"></ion-icon>`;
+    if (preview.firstChild) preview.firstChild.style.color = color;
+    preview.style.color = color;
+  }
+
+  document.getElementById('tag-icon').oninput = (e) => updateIconPreview(e.target.value);
+  document.getElementById('tag-color').oninput = (e) => updateIconPreview(document.getElementById('tag-icon').value);
+  document.getElementById('icon-search').oninput = (e) => renderCommonIcons(e.target.value);
+
+  renderCommonIcons();
+
+  window.openNewTag = () => {
+    document.getElementById('tag-id').value = '';
+    document.getElementById('tag-modal-title').textContent = 'Nova Metatag';
+    ['tag-key','tag-ptbr','tag-icon'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const enus = document.getElementById('tag-enus'); if (enus) enus.value = '';
+    const eses = document.getElementById('tag-eses'); if (eses) eses.value = '';
+    document.getElementById('tag-color').value = '#F97316';
+    document.getElementById('tag-sort').value  = '0';
+    document.getElementById('tag-type').value  = 'ASSET_TYPE';
+    updateIconPreview('help-outline');
+    openModal('tag-modal');
+  };
+
+  window.editTag = (t) => {
+    document.getElementById('tag-id').value    = t.id;
+    document.getElementById('tag-modal-title').textContent = 'Editar: ' + t.ptBr;
+    document.getElementById('tag-type').value  = t.type;
+    document.getElementById('tag-key').value   = t.key;
+    document.getElementById('tag-ptbr').value  = t.ptBr;
+    const enus = document.getElementById('tag-enus'); if (enus) enus.value = t.enUs || '';
+    const eses = document.getElementById('tag-eses'); if (eses) eses.value = t.esEs || '';
+    document.getElementById('tag-icon').value  = t.icon || '';
+    document.getElementById('tag-color').value = t.color || '#F97316';
+    document.getElementById('tag-sort').value  = t.sortOrder || 0;
+    updateIconPreview(t.icon);
+    openModal('tag-modal');
+  };
+
+  window.deleteTag = async (id) => {
+    if (!confirm('Excluir esta metatag?')) return;
+    await CONFIG.del(`/metatags/${id}`);
+    loadTags();
+  };
+
+  document.getElementById('save-tag-btn').addEventListener('click', async () => {
+    const id   = document.getElementById('tag-id').value;
+    const body = {
+      type:      document.getElementById('tag-type').value,
+      key:       document.getElementById('tag-key').value.trim().replace(/\s+/g,'_').toLowerCase(),
+      ptBr:      document.getElementById('tag-ptbr').value.trim(),
+      enUs:      document.getElementById('tag-enus').value.trim(),
+      esEs:      document.getElementById('tag-eses').value.trim(),
+      icon:      document.getElementById('tag-icon').value.trim(),
+      color:     document.getElementById('tag-color').value,
+      sortOrder: parseInt(document.getElementById('tag-sort').value) || 0,
+    };
+    if (!body.key || !body.ptBr) return alert('Chave e Nome PT-BR são obrigatórios.');
+    const res = id ? await CONFIG.put(`/metatags/${id}`, body) : await CONFIG.post('/metatags', body);
+    if (res?.id) { closeModal('tag-modal'); loadTags(); }
+    else alert('Erro: ' + (res?.error || 'Chave duplicada ou falha ao salvar.'));
+  });
+
+  document.getElementById('filter-type').addEventListener('change', loadTags);
+  loadTags();
+
+  // ─── Seeds de Categorias de Mídia (criados na primeira inicialização) ──────
+  async function seedMediaCategories() {
+    const existing = await CONFIG.get('/metatags?type=MEDIA_CATEGORY') || [];
+    if (existing.length > 0) return; // já existem, não duplicar
+
+    const defaults = [
+      { key: 'foto',          ptBr: 'Foto',               icon: 'camera-outline',     color: '#3B82F6' },
+      { key: 'video',         ptBr: 'Vídeo',              icon: 'videocam-outline',    color: '#8B5CF6' },
+      { key: 'documento',     ptBr: 'Documento',          icon: 'document-text-outline', color: '#F59E0B' },
+      { key: 'planta_baixa',  ptBr: 'Planta Baixa',       icon: 'map-outline',         color: '#10B981' },
+      { key: 'nota_fiscal',   ptBr: 'Nota Fiscal',        icon: 'receipt-outline',     color: '#EF4444' },
+      { key: 'contrato',      ptBr: 'Contrato',           icon: 'reader-outline',      color: '#6366F1' },
+      { key: 'laudo',         ptBr: 'Laudo / Relatório',  icon: 'clipboard-outline',   color: '#F97316' },
+      { key: 'manutencao',    ptBr: 'Manutenção',         icon: 'construct-outline',   color: '#64748B' },
+      { key: 'seguro',        ptBr: 'Seguro',             icon: 'shield-outline',      color: '#0EA5E9' },
+      { key: 'outro',         ptBr: 'Outro',              icon: 'ellipsis-horizontal-outline', color: '#9CA3AF' },
+    ];
+
+    for (const d of defaults) {
+      await CONFIG.post('/metatags', { type: 'MEDIA_CATEGORY', sortOrder: defaults.indexOf(d), ...d });
+    }
+    loadTags();
+  }
+
+  seedMediaCategories();
+</script>
+</body>
+</html>

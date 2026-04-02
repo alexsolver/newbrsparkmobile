@@ -3,8 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react
 import { colors } from '../../src/theme/colors';
 import { Header } from '../../src/components/Header';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { formatDate } from '../../src/i18n/formatters';
 
 export default function DocumentsScreen() {
+  const { t } = useTranslation();
   const [docs, setDocs] = useState<{id: string, name: string, date: string}[]>([]);
 
   const pickDocument = async () => {
@@ -13,10 +16,10 @@ export default function DocumentsScreen() {
       const newDoc = {
         id: Math.random().toString(),
         name: `comprovante_${Math.floor(Math.random() * 1000)}.pdf`,
-        date: new Date().toLocaleDateString('pt-BR')
+        date: formatDate(new Date())
       };
       setDocs(prev => [newDoc, ...prev]);
-      Alert.alert('Sucesso', 'Documento importado e salvo offline pronto para sincronização!');
+      Alert.alert(t('common.success'), t('documents.importSuccess'));
     } catch (err) {
       console.log(err);
     }
@@ -24,13 +27,12 @@ export default function DocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      <Header />
       <View style={styles.content}>
         <View style={styles.headerRow}>
-          <Text style={styles.pageTitle}>Documentos</Text>
+          <Text style={styles.pageTitle}>{t('documents.pageTitle')}</Text>
           <TouchableOpacity style={styles.uploadBtn} onPress={pickDocument}>
             <Ionicons name="cloud-upload" size={20} color="#fff" />
-            <Text style={styles.uploadBtnText}>Upload</Text>
+            <Text style={styles.uploadBtnText}>{t('documents.uploadBtn')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -42,7 +44,7 @@ export default function DocumentsScreen() {
               <Ionicons name="document-text" size={32} color={colors.primary} style={{marginRight: 16}} />
               <View style={{flex: 1}}>
                 <Text style={styles.docName}>{item.name}</Text>
-                <Text style={styles.docDate}>Salvo em: {item.date}</Text>
+                <Text style={styles.docDate}>{t('documents.savedAt')}: {item.date}</Text>
               </View>
               <TouchableOpacity>
                 <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
@@ -65,12 +67,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: 16, flex: 1 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  pageTitle: { fontSize: 24, fontWeight: '700', color: colors.primary },
-  uploadBtn: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
-  uploadBtnText: { color: '#fff', fontWeight: '600', marginLeft: 8 },
+  pageTitle: { fontSize: 20, fontWeight: '900', color: colors.primary, letterSpacing: -0.4 },
+  uploadBtn: { backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  uploadBtnText: { color: '#fff', fontWeight: '900', marginLeft: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
   docCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardWhite, padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
-  docName: { fontSize: 16, fontWeight: '600', color: colors.primary },
-  docDate: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
+  docName: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
+  docDate: { fontSize: 10, color: colors.textSecondary, marginTop: 4, fontWeight: '700', textTransform: 'uppercase' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyText: { color: colors.textSecondary, marginTop: 12 }
+  emptyText: { color: colors.textSecondary, marginTop: 12, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }
 });

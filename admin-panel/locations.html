@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Multi-Location (Países &amp; Idiomas)</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .country-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+    .country-card {
+      background:var(--surface); border:1px solid var(--border); border-radius:12px;
+      padding:20px; display:flex; flex-direction:column; gap:12px;
+      transition:box-shadow .2s;
+    }
+    .country-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.06); }
+    .country-header { display:flex; align-items:center; gap:12px; }
+    .country-flag { font-size:32px; line-height:1; flex-shrink:0; }
+    .country-name { font-size:14px; font-weight:800; color:var(--text); }
+    .country-code { font-size:11px; color:var(--text3); font-family:monospace; margin-top:2px; }
+    .country-langs { display:flex; flex-wrap:wrap; gap:6px; }
+    .lang-chip {
+      display:flex; align-items:center; gap:5px;
+      background:var(--surface2); border:1px solid var(--border);
+      border-radius:20px; padding:3px 10px;
+      font-size:11px; font-weight:700; color:var(--text2);
+    }
+    .lang-chip.primary { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+    .lang-chip .dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
+    .country-stats { display:flex; gap:16px; padding-top:8px; border-top:1px solid var(--border); }
+    .country-stat { display:flex; flex-direction:column; }
+    .country-stat-val { font-size:16px; font-weight:900; color:var(--text); }
+    .country-stat-label { font-size:10px; color:var(--text3); font-weight:600; text-transform:uppercase; margin-top:1px; }
+    .country-actions { display:flex; gap:8px; justify-content:flex-end; }
+    
+    .toggle-switch { position:relative; display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
+    .toggle-switch input { opacity:0; width:0; height:0; position:absolute; }
+    .toggle-track {
+      width:36px; height:20px; background:var(--border); border-radius:10px;
+      transition:background .2s; position:relative; flex-shrink:0;
+    }
+    .toggle-track::after {
+      content:''; position:absolute; top:2px; left:2px;
+      width:16px; height:16px; border-radius:50%; background:#fff;
+      transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle-switch input:checked + .toggle-track { background:var(--green); }
+    .toggle-switch input:checked + .toggle-track::after { transform:translateX(16px); }
+    .toggle-label { font-size:11px; font-weight:700; color:var(--text2); }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title"><ion-icon name="earth-outline" style="vertical-align:-2px"></ion-icon> Multi-Location — Países &amp; Idiomas</span>
+      <div class="topbar-actions">
+        <div class="search-wrap"><span class="search-icon"><ion-icon name="time-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></span><input type="text" placeholder="Buscar país…" id="search-input" /></div>
+        <button class="btn btn-primary" onclick="openModal('new-country-modal')">+ Adicionar País</button>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Stats -->
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        <div class="stat-card" style="--accent-color:var(--accent)">
+          <div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="earth-outline" style="vertical-align:-2px"></ion-icon></div>
+          <div class="stat-value" id="stat-countries">—</div>
+          <div class="stat-label">Países ativos</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--blue)">
+          <div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon></div>
+          <div class="stat-value" id="stat-langs">—</div>
+          <div class="stat-label">Idiomas suportados</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--green)">
+          <div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
+          <div class="stat-value" id="stat-users">—</div>
+          <div class="stat-label">Usuários nesses países</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--amber)">
+          <div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
+          <div class="stat-value" id="stat-assets">—</div>
+          <div class="stat-label">Bens cadastrados</div>
+        </div>
+      </div>
+
+      <!-- Countries grid -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Regiões Habilitadas</span>
+          <span class="badge badge-accent" id="count-badge">—</span>
+        </div>
+        <div class="panel-body">
+          <div class="country-grid" id="country-grid">
+            <div style="color:var(--text3);text-align:center;padding:40px;grid-column:1/-1">Carregando…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Language coverage table -->
+      <div class="panel" style="margin-top:20px">
+        <div class="panel-header">
+          <span class="panel-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> Cobertura de Idiomas na Plataforma</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Idioma</th><th>Código</th><th>Países</th><th>Usuários</th><th>Tradução App</th><th>Tradução Admin</th><th>Status</th>
+            </tr></thead>
+            <tbody id="lang-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Add Country Modal -->
+<div class="modal-overlay" id="new-country-modal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title">Adicionar País / Região</span>
+      <button class="modal-close" onclick="closeModal('new-country-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">País *</label>
+          <input class="form-control" id="new-country-name" placeholder="Ex: Brasil" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Código ISO *</label>
+          <input class="form-control" id="new-country-code" placeholder="BR" maxlength="2" style="text-transform:uppercase" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Emoji da Bandeira</label>
+          <input class="form-control" id="new-country-flag" placeholder="🇧🇷" maxlength="4" style="font-size:20px;text-align:center" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fuso Horário</label>
+          <input class="form-control" id="new-country-tz" placeholder="America/Sao_Paulo" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Idioma Primário *</label>
+        <select class="form-control" id="new-country-lang">
+          <option value="pt-BR">🇧🇷 Português (Brasil)</option>
+          <option value="en-US">🇺🇸 English (US)</option>
+          <option value="es-ES">🇪🇸 Español</option>
+          <option value="fr-FR">🇫🇷 Français</option>
+          <option value="de-DE">🇩🇪 Deutsch</option>
+          <option value="it-IT">🇮🇹 Italiano</option>
+          <option value="ja-JP">🇯🇵 日本語</option>
+          <option value="zh-CN">🇨🇳 中文 (简体)</option>
+          <option value="ar-SA">🇸🇦 العربية</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Moeda</label>
+        <input class="form-control" id="new-country-currency" placeholder="BRL" maxlength="3" style="text-transform:uppercase" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Regulação de Privacidade</label>
+        <select class="form-control" id="new-country-regulation">
+          <option value="LGPD">LGPD (Brasil)</option>
+          <option value="GDPR">GDPR (Europa)</option>
+          <option value="CCPA">CCPA (Califórnia)</option>
+          <option value="PDPA">PDPA (Tailândia/Singapura)</option>
+          <option value="OTHER">Outra</option>
+          <option value="NONE">Sem regulação específica</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-country-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-country-btn">Adicionar País</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  // Platform languages — derived from DB locales
+  const PLATFORM_LANGS_BASE = [
+    { code:'pt-BR', name:'Português (Brasil)', flag:'🇧🇷' },
+    { code:'en-US', name:'English (US)',        flag:'🇺🇸' },
+    { code:'es-ES', name:'Español',             flag:'🇪🇸' },
+  ];
+
+  // Map: countryCode → locale metadata enrichment
+  const COUNTRY_META = {
+    BR: { regulation:'LGPD',  timezone:'America/Sao_Paulo',          currency:'BRL', flag:'🇧🇷' },
+    US: { regulation:'CCPA',  timezone:'America/New_York',            currency:'USD', flag:'🇺🇸' },
+    ES: { regulation:'GDPR',  timezone:'Europe/Madrid',               currency:'EUR', flag:'🇪🇸' },
+    AR: { regulation:'LGPD',  timezone:'America/Argentina/Buenos_Aires', currency:'ARS', flag:'🇦🇷' },
+  };
+
+  // Países disponíveis (configuração global do admin)
+  // Carregamos dos tenants existentes para ver onde há usuários
+  async function loadData() {
+    // Load regions from DB (LocaleProfile table)
+    const [tenantsRes, localesRaw] = await Promise.all([
+      CONFIG.get('/tenants?limit=500').catch(() => ({ data: [] })),
+      CONFIG.get('/i18n/entries?source=locales').catch(() => []),
+    ]);
+
+    const tenants = tenantsRes.data || [];
+    const locales = Array.isArray(localesRaw) ? localesRaw : [];
+
+    // Agrupa por idioma padrão dos tenants
+    const langMap = {};
+    tenants.forEach(t => {
+      const lang = t.defaultLang || 'pt-BR';
+      langMap[lang] = langMap[lang] || { users: 0, assets: 0 };
+      langMap[lang].users  += t._count?.users  || 0;
+      langMap[lang].assets += t._count?.assets || 0;
+    });
+
+    const activeLocales = locales.filter(l => l.isActive);
+    const totalUsers    = Object.values(langMap).reduce((s, v) => s + v.users, 0);
+    const totalAssets   = Object.values(langMap).reduce((s, v) => s + v.assets, 0);
+
+    document.getElementById('stat-countries').textContent = activeLocales.length || locales.length || '—';
+    document.getElementById('stat-langs').textContent     = PLATFORM_LANGS_BASE.length;
+    document.getElementById('stat-users').textContent     = totalUsers.toLocaleString('pt-BR');
+    document.getElementById('stat-assets').textContent    = totalAssets.toLocaleString('pt-BR');
+
+    // Build country cards from DB locales
+    const countryData = locales.map(l => {
+      const meta   = COUNTRY_META[l.countryCode] || {};
+      const lang   = l.language || 'pt-BR';
+      const users  = tenants.filter(t => t.defaultLang === lang).reduce((s, t) => s + (t._count?.users || 0), 0);
+      const assets = tenants.filter(t => t.defaultLang === lang).reduce((s, t) => s + (t._count?.assets || 0), 0);
+      return {
+        code:        l.countryCode,
+        name:        l.name,
+        flag:        meta.flag || '<ion-icon name="globe-outline" style="vertical-align:-2px"></ion-icon>',
+        primaryLang: lang,
+        currency:    l.currency || meta.currency || '—',
+        timezone:    l.timezone || meta.timezone || '—',
+        regulation:  meta.regulation || 'OTHER',
+        enabled:     l.isActive,
+        id:          l.id,
+        users, assets,
+      };
+    });
+
+    document.getElementById('count-badge').textContent = `${countryData.length} regiões`;
+
+    const q = document.getElementById('search-input').value.toLowerCase();
+    const filtered = q
+      ? countryData.filter(c => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q))
+      : countryData;
+
+    const grid = document.getElementById('country-grid');
+    grid.innerHTML = filtered.length
+      ? filtered.map(renderCountryCard).join('')
+      : '<div style="color:var(--text3);text-align:center;padding:40px;grid-column:1/-1">Nenhuma região encontrada.</div>';
+
+    // Language coverage: derive from active locales
+    const tbody = document.getElementById('lang-table-body');
+    tbody.innerHTML = PLATFORM_LANGS_BASE.map(l => {
+      const usage = langMap[l.code] || { users: 0, assets: 0 };
+      const inUse = locales.some(loc => loc.language === l.code && loc.isActive);
+      return `<tr>
+        <td><strong>${l.flag} ${l.name}</strong></td>
+        <td class="mono" style="font-size:11px">${l.code}</td>
+        <td>${inUse ? '<span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Habilitado</span>' : '<span class="badge badge-gray">— Inativo</span>'}</td>
+        <td>${usage.users.toLocaleString('pt-BR')}</td>
+        <td><span class="badge badge-green">100%</span></td>
+        <td><span class="badge badge-green">100%</span></td>
+        <td><span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Completo</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderCountryCard(c) {
+    const langName = {
+      'pt-BR':'Português', 'en-US':'English', 'es-ES':'Español',
+      'fr-FR':'Français', 'de-DE':'Deutsch', 'it-IT':'Italiano'
+    }[c.primaryLang] || c.primaryLang;
+
+    const regBadge = {
+      LGPD:'badge-green', GDPR:'badge-blue', CCPA:'badge-amber', PDPA:'badge-accent', OTHER:'badge-gray', NONE:'badge-gray'
+    }[c.regulation] || 'badge-gray';
+
+    return `<div class="country-card">
+      <div class="country-header">
+        <div class="country-flag">${c.flag}</div>
+        <div>
+          <div class="country-name">${c.name}</div>
+          <div class="country-code">${c.code} · ${c.timezone}</div>
+        </div>
+        <label class="toggle-switch" title="${c.enabled ? 'Habilitado' : 'Desabilitado'}" style="margin-left:auto">
+          <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleRegion('${c.code}', this.checked)" />
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="country-langs">
+        <span class="lang-chip primary"><span class="dot"></span>${langName}</span>
+        <span class="badge ${regBadge}">${c.regulation}</span>
+        <span class="lang-chip">${c.currency}</span>
+      </div>
+      <div class="country-stats">
+        <div class="country-stat">
+          <span class="country-stat-val">${c.users.toLocaleString('pt-BR')}</span>
+          <span class="country-stat-label">Usuários</span>
+        </div>
+        <div class="country-stat">
+          <span class="country-stat-val">${c.assets.toLocaleString('pt-BR')}</span>
+          <span class="country-stat-label">Bens</span>
+        </div>
+        <div class="country-stat">
+          <span class="country-stat-val">${c.enabled ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon>' : '——'}</span>
+          <span class="country-stat-label">Status</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  window.toggleRegion = async (code, enabled) => {
+    try {
+      // Find locale ID then PATCH isActive
+      const locales = await CONFIG.get('/i18n/entries?source=locales').catch(() => []);
+      const locale  = Array.isArray(locales) ? locales.find(l => l.countryCode === code) : null;
+      if (locale?.id) {
+        await CONFIG.post('/i18n/update', { source: 'locales', entries: [{ id: locale.id, isActive: enabled }] });
+      }
+      loadData(); // Refresh
+    } catch (e) {
+      console.error('toggleRegion error:', e);
+    }
+  };
+
+  // Save new country
+  document.getElementById('save-country-btn').addEventListener('click', () => {
+    const name = document.getElementById('new-country-name').value.trim();
+    const code = document.getElementById('new-country-code').value.trim().toUpperCase();
+    if (!name || !code) return alert('Nome e código do país são obrigatórios.');
+    // Futuramente: salvar no banco via API
+    alert(`País "${name}" (${code}) será adicionado. Implemente a rota /api/regions para persistência.`);
+    closeModal('new-country-modal');
+  });
+
+  document.getElementById('search-input').addEventListener('input', loadData);
+  loadData();
+</script>
+</body>
+</html>

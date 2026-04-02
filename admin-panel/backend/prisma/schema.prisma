@@ -1,0 +1,846 @@
+// BrSpark Admin — Prisma Schema (PostgreSQL)
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+// ADMINS (painel interno)
+// ─────────────────────────────────────────────────────────
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // bcrypt hash
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  auditLogs AuditLog[]
+}
+
+// ─────────────────────────────────────────────────────────
+// PLANOS
+// ─────────────────────────────────────────────────────────
+model Plan {
+  id            String   @id @default(cuid())
+  name          String   @unique  // Basic | Pro | Enterprise
+  priceMonthly  Decimal  @db.Decimal(10,2)
+  priceYearly   Decimal  @db.Decimal(10,2)
+  maxAssets     Int      // -1 = unlimited
+  maxUsers      Int      // -1 = unlimited
+  storageGb     Int
+  features      Json     // { stock: true, vault: true, ai: false, ... }
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  subscriptions Subscription[]
+}
+
+// ─────────────────────────────────────────────────────────
+// TENANTS
+// ─────────────────────────────────────────────────────────
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String                        // nome completo do usuário
+  slug         String   @unique              // gerado do email
+  email        String   @unique              // email do dono da conta (= login)
+  ownerName    String                        // nome de exibição
+  phone        String?
+  taxId        String?                       // CPF
+  avatarUrl    String?
+  defaultLang  String   @default("pt-BR")
+  localeId     String?
+  locale       LocaleProfile? @relation(fields: [localeId], references: [id])
+  status       TenantStatus @default(TRIAL)
+  sectorCode   String?                       // telecom | utilities | saude | predial | outro
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscription         Subscription?
+  users                User[]
+  assets               Asset[]
+  locations            Location[]
+  auditLogs            AuditLog[]
+  featureFlags         FeatureFlag[]
+  translationOverrides TranslationOverride[]
+  collectionPolicies   CollectionPolicy[]
+  complianceDocs       ComplianceDoc[]       @relation("TenantComplianceDocs")
+}
+
+// ─────────────────────────────────────────────────────────
+// SOBREPOSIÇÃO DE TRADUÇÃO (TENANT OVERRIDES)
+// ─────────────────────────────────────────────────────────
+model TranslationOverride {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  key       String   // i18n key como "common.save" ou "metatag.AssetStatus"
+  language  String   // pt-BR, en-US, es-ES
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key, language])
+}
+
+// ─────────────────────────────────────────────────────────
+// CONFIGURAÇÕES GLOBAIS / LOCALIZAÇÃO
+// ─────────────────────────────────────────────────────────
+model LocaleProfile {
+  id              String   @id @default(cuid())
+  countryCode     String   @unique // BR, US, ES, AR, CL...
+  name            String   // Brasil, United States, España
+  language        String   @default("pt-BR")
+  currency        String   @default("BRL")
+  currencySymbol  String   @default("R$")
+  dateFormat      String   @default("DD/MM/YYYY")
+  numberFormat    String   @default("PT_STYLE") // PT_STYLE (1.000,00) or US_STYLE (1,000.00)
+  timezone        String   @default("UTC")
+  taxIdLabel      String   @default("Tax ID") // CPF, SSN, NIF, RUT
+  postalCodeLabel String   @default("Postal Code") // CEP, ZIP, CP
+  measureSystem   String   @default("METRIC") // METRIC, IMPERIAL
+  isActive        Boolean  @default(true)
+  tenants         Tenant[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────────────────
+// ASSINATURAS
+// ─────────────────────────────────────────────────────────
+model Subscription {
+  id            String   @id @default(cuid())
+  tenantId      String   @unique
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  planId        String
+  plan          Plan     @relation(fields: [planId], references: [id])
+  billingCycle  BillingCycle @default(MONTHLY)
+  status        SubStatus    @default(ACTIVE)
+  currentStart  DateTime
+  currentEnd    DateTime
+  cancelledAt   DateTime?
+  trialEndsAt   DateTime?
+  externalId    String?  // Stripe subscription ID
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  invoices      Invoice[]
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
+// ─────────────────────────────────────────────────────────
+// FATURAS
+// ─────────────────────────────────────────────────────────
+model Invoice {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  amount         Decimal  @db.Decimal(10,2)
+  status         InvoiceStatus @default(PENDING)
+  dueDate        DateTime
+  paidAt         DateTime?
+  externalId     String?  // Stripe invoice ID
+  createdAt      DateTime @default(now())
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  VOID
+}
+
+// ─────────────────────────────────────────────────────────
+// USUÁRIOS
+// ─────────────────────────────────────────────────────────
+model User {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  email      String
+  name       String
+  password   String   // bcrypt hash
+  avatarUrl  String?
+  role       UserRole @default(USER)
+  isActive   Boolean  @default(true)
+  lastLogin  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  auditLogs  AuditLog[]
+  pushTokens PushToken[]
+  technicianProfile TechnicianProfile?
+
+  @@unique([email, tenantId])
+}
+
+model TechnicianProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING") // PENDING, ACTIVE, INACTIVE, SUSPENDED
+  score     Float    @default(5.0)
+  cft       String?  // Conselho Federal dos Técnicos
+  specialty String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+}
+
+// ─────────────────────────────────────────────────────────
+// BENS / ATIVOS
+// ─────────────────────────────────────────────────────────
+model Asset {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  parentId    String?  // hierarchical tree
+  title       String
+  type        AssetType
+  status      String   @default("Operacional")
+  description String?
+  imageUrl    String?
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  metadata    Json?    // custom fields (details, photos, etc.)
+  deletedAt   DateTime? // soft delete para sync mobile
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  children    Asset[]  @relation("AssetHierarchy")
+  parent      Asset?   @relation("AssetHierarchy", fields: [parentId], references: [id])
+  stockItems  StockItem[]
+}
+
+enum AssetType {
+  REAL_ESTATE
+  TERRESTRIAL
+  AQUATIC
+  SPECIAL
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────
+// MULTI-LOCATION
+// ─────────────────────────────────────────────────────────
+model Location {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  name       String
+  type       LocationType @default(BUILDING)
+  address    String?
+  floor      String?
+  room       String?
+  icon       String?
+  latitude   Float?
+  longitude  Float?
+  parentId   String?
+  parent     Location? @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children   Location[] @relation("LocationHierarchy")
+  assets     Asset[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum LocationType {
+  BUILDING
+  FLOOR
+  ROOM
+  AREA
+  WAREHOUSE
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────
+// ESTOQUE
+// ─────────────────────────────────────────────────────────
+model StockItem {
+  id           String   @id @default(cuid())
+  assetId      String
+  asset        Asset    @relation(fields: [assetId], references: [id])
+  name         String
+  sku          String
+  currentStock Int      @default(0)
+  minStock     Int      @default(1)
+  unit         String   @default("un")
+  subLocation  String?
+  unitPrice    Decimal? @db.Decimal(10,2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  movements    StockMovement[]
+
+  @@unique([assetId, sku])
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  itemId      String
+  item        StockItem @relation(fields: [itemId], references: [id])
+  type        MovementType
+  quantity    Int
+  reason      String?
+  fromAssetId String?
+  toAssetId   String?
+  createdAt   DateTime @default(now())
+}
+
+enum MovementType {
+  IN
+  OUT
+  TRANSFER
+}
+
+// ─────────────────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  adminId    String?
+  admin      Admin?   @relation(fields: [adminId], references: [id])
+  action     String   // e.g. TENANT_CREATE, ASSET_UPDATE, LOGIN
+  resource   String   // what was affected
+  category   AuditCategory
+  metadata   Json?    // extra context
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+enum AuditCategory {
+  AUTH
+  DATA
+  ADMIN
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────────────────
+// FEATURE FLAGS
+// ─────────────────────────────────────────────────────────
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   // e.g. "stock", "vault", "ai"
+  label       String
+  description String
+  icon        String?
+  enabled     Boolean  @default(true)
+  tenantId    String?  // null = global default
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  updatedAt   DateTime @updatedAt
+
+  @@unique([key, tenantId])
+}
+
+// ─────────────────────────────────────────────────────────
+// METATAGS
+// ─────────────────────────────────────────────────────────
+model Metatag {
+  id         String      @id @default(cuid())
+  type       MetatagType
+  key        String      @unique
+  ptBr       String
+  enUs       String
+  esEs       String
+  icon       String?
+  color      String?
+  isActive   Boolean     @default(true)
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+enum MetatagType {
+  ASSET_TYPE
+  STOCK_CATEGORY
+  SERVICE_CATEGORY
+  EXPENSE_CATEGORY
+  REVENUE_CATEGORY
+  ASSET_STATUS
+  MEDIA_CATEGORY
+  GLOBAL_TAG
+}
+
+// ─────────────────────────────────────────────────────────
+// INTEGRAÇÕES
+// ─────────────────────────────────────────────────────────
+model Integration {
+  id           String   @id @default(cuid())
+  name         String
+  type         IntType
+  description  String?
+  icon         String?
+  apiKey       String?  // encrypted in production
+  baseUrl      String?
+  webhookUrl   String?
+  status       String   @default("ACTIVE")  // ACTIVE | ERROR | DISCONNECTED
+  lastTestedAt DateTime?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum IntType {
+  AI_LLM
+  EMAIL
+  PUSH
+  STORAGE
+  WEBHOOK
+  ERP
+  PAYMENT
+  MAPS
+}
+
+// ─────────────────────────────────────────────────────────
+// COMPLIANCE / LGPD
+// ─────────────────────────────────────────────────────────
+model ComplianceDoc {
+  id          String   @id @default(cuid())
+  type        DocType
+  version     String   // e.g. "1.2"
+  title       String
+  content     String   @db.Text
+  isActive    Boolean  @default(false)  // only one active per type
+  publishedAt DateTime?
+  createdBy   String?  // admin email
+  tenantId    String?  // null = global default
+  tenant      Tenant?  @relation("TenantComplianceDocs", fields: [tenantId], references: [id])
+  sectorCode  String?  // telecom | utilities | saude | predial | outro
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  acceptances ComplianceAcceptance[]
+  consentRecords ConsentRecord[]
+}
+
+enum DocType {
+  TERMS_OF_USE
+  PRIVACY_POLICY
+  LGPD_DPA
+  COOKIE_POLICY
+}
+
+model ComplianceAcceptance {
+  id        String   @id @default(cuid())
+  docId     String
+  doc       ComplianceDoc @relation(fields: [docId], references: [id])
+  userId    String?
+  tenantId  String?
+  ipAddress String?
+  acceptedAt DateTime @default(now())
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  device    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────
+// SHARING & COLLABORATION
+// ─────────────────────────────────────────────────────────
+model AssetShare {
+  id              String   @id @default(cuid())
+  assetId         String   // O Bem compartilhado
+  ownerEmail      String   // Quem convidou
+  sharedWithEmail String   // O convidado
+  permission      String   // "READ" | "WRITE"
+  modules         Json     // Ex: ["costs", "docs", "maint"] ou ["all"]
+  status          String   @default("PENDING") // PENDING, ACCEPTED
+  expiresAt       DateTime? // Validade do compartilhamento
+  invitedAt       DateTime @default(now())
+
+  @@unique([assetId, sharedWithEmail])
+}
+
+// ─────────────────────────────────────────────────────────
+// NOTIFICAÇÕES
+// ─────────────────────────────────────────────────────────
+model NotificationTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique  // e.g. "welcome", "stock_low"
+  label     String
+  channel   Channel
+  subject   String?  // for email
+  body      String   @db.Text
+  variables Json?    // list of available {{vars}}
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  logs      NotificationLog[]
+}
+
+model NotificationLog {
+  id         String   @id @default(cuid())
+  templateId String
+  template   NotificationTemplate @relation(fields: [templateId], references: [id])
+  recipient  String
+  channel    Channel
+  status     NotifStatus @default(SENT)
+  sentAt     DateTime @default(now())
+  metadata   Json?
+}
+
+enum Channel {
+  EMAIL
+  PUSH
+  WHATSAPP
+  SMS
+}
+
+enum NotifStatus {
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+}
+
+// ─────────────────────────────────────────────────────────
+// PRESTADORES DE SERVIÇO (catálogo global)
+// ─────────────────────────────────────────────────────────
+model ServiceProvider {
+  id        String   @id @default(cuid())
+  name      String
+  category  String   // ex: "Elétrica", "Hidráulica", "Limpeza"
+  rating    Float    @default(0)
+  reviews   Int      @default(0)
+  photo     String?  // URL da foto/avatar
+  tags      Json?    // ["rápido", "confiável"]
+  keywords  String?  // busca full-text
+  phone     String?
+  email     String?
+  city      String?
+  state     String   @default("SP")
+  verified  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+// ─────────────────────────────────────────────────────────
+// DADOS DE MÓDULOS DO APP MOBILE (sync offline-first)
+// Armazena JSON de cada módulo por ownerEmail, sem schema fixo.
+// ─────────────────────────────────────────────────────────
+model UserModuleData {
+  id         String   @id @default(cuid())
+  ownerEmail String
+  module     String   // costs_expenses | costs_recurring | costs_budgets | insurance_policies | vault | media | maintenances | asset_docs | stock_items | stock_movements
+  data       Json     // array de registros
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([ownerEmail, module])
+  @@index([ownerEmail])
+}
+
+// ─────────────────────────────────────────────────────────
+// CHAT E MENSAGERIA CORPORATIVA
+// ─────────────────────────────────────────────────────────
+model ChatContact {
+  id          String   @id @default(cuid())
+  requesterId String   // Email do solicitante
+  addresseeId String   // Email do destinatário
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requesterId, addresseeId])
+}
+
+model ChatRoom {
+  id          String   @id @default(cuid())
+  name        String?
+  description String?
+  avatarColor String?  @default("#2563EB")
+  isGroup     Boolean  @default(false)
+  creatorId   String?  // Email do dono/admin do grupo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     ChatRoomMember[]
+  messages    ChatMessage[]
+}
+
+model ChatRoomMember {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String   // Email
+  role      String   @default("MEMBER") // ADMIN, MEMBER
+  joinedAt  DateTime @default(now())
+  lastReadAt DateTime @default(now())
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  roomId     String
+  senderId   String   // Email
+  senderName String
+  type       String   @default("text") // text, audio, video, image
+  content    String?  @db.Text
+  mediaUrl   String?
+  createdAt  DateTime @default(now())
+  
+  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────
+// CHECKLISTS FSM E WORKFORCE MANAGEMENT
+// ─────────────────────────────────────────────────────────
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String?  
+  title       String
+  description String?
+  settings    Json     // Ex: { requireGlobalGeofence: true, globalGeofenceRadius: 200 }
+  schemaData  Json     // O Array das perguntas do Drag&Drop
+  metadata    Json?    // Ex: { icon: "cart", iconLibrary: "Ionicons", iconColor: "#000" }
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  executions  ChecklistExecution[]
+}
+
+model ChecklistExecution {
+  id          String   @id @default(cuid())
+  templateId  String?
+  template    ChecklistTemplate? @relation(fields: [templateId], references: [id])
+  ownerEmail  String   // Email do Técnico/Coordenador
+  assetId     String?  // Equipamento em Manutenção
+  status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SYNCED
+  responses   Json?    // Respostas nativas das perguntas (null enquanto PENDING)
+  metadata    Json?    // Metadata do smartphone
+  
+  // Localização do Local de Serviço (Geofencing)
+  locationAddress  String?  // Endereço legível pelo gestor
+  locationLat      Float?   // Latitude do ponto de destino (para radius)
+  locationLng      Float?   // Longitude do ponto de destino (para radius)
+  locationRadius   Int?     // Raio de aceitação em metros
+  locationZoneType String?  // 'radius' | 'polygon' | 'route'
+  locationPolygon  Json?    // [[lat,lng],...] — polígono de área ou pontos do trajeto
+
+  // Auditoria (Provas WFM)
+  gpsLocation Json?    // {lat, lng, radius} coletado ao concluir
+  startedAt   DateTime?
+  completedAt DateTime?
+  syncedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([ownerEmail])
+  @@index([status])
+  @@index([ownerEmail, status])
+}
+
+// ─────────────────────────────────────────────────────────
+// COLETA DE DADOS — DATA COLLECTION FOUNDATION
+// ─────────────────────────────────────────────────────────
+
+// Política de coleta: global (tenantId null) ou override por tenant
+model CollectionPolicy {
+  id          String   @id @default(cuid())
+  tenantId    String?  // null = política global padrão
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  sectorCode  String?  // telecom | utilities | saude | predial | outro
+  label       String   @default("Padrão")
+
+  // ── Localização ──────────────────────────────────────
+  locationEnabled               Boolean @default(true)
+  locationBackgroundEnabled     Boolean @default(true)
+  locationIntervalIdleMin       Int     @default(30)
+  locationIntervalTransitMin    Int     @default(2)
+  locationIntervalOnSiteMin     Int     @default(5)
+  locationDistanceFilterMeters  Int     @default(200)
+
+  // ── Retenção ─────────────────────────────────────────
+  retentionGpsRawDays     Int @default(15)
+  retentionEventsYears    Int @default(5)
+  retentionAuditDays      Int @default(180)
+  retentionMetricsDays    Int @default(730)
+
+  // ── Integridade / Antifraude ──────────────────────────
+  mockGpsAction          String @default("WARN")   // BLOCK | WARN | LOG
+  rootJailbreakAction    String @default("WARN")   // BLOCK | WARN | LOG
+  clockDriftMaxSeconds   Int    @default(300)
+
+  // ── Consentimento ────────────────────────────────────
+  requireExplicitConsent Boolean @default(true)
+  consentGranular        Boolean @default(true)
+  legalBasis             String  @default("LGPD")  // LGPD | GDPR | CCPA | OTHER
+
+  // ── Comportamento de checkin ──────────────────────────
+  requireCheckinPhoto  Boolean @default(false)
+  allowOfflineCheckin  Boolean @default(true)
+  minOnSiteMinutes     Int     @default(0)
+
+  // ── Comportamento fora da política ───────────────────
+  outOfPolicyAction  String @default("PROCEED_FLAG") // PROCEED_FLAG | BLOCK | WARN
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  consentRecords ConsentRecord[]
+
+  @@unique([tenantId, sectorCode])
+  @@index([tenantId])
+}
+
+// Registro granular de eventos de telemetria (event store)
+model TelemetryEvent {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  ownerEmail    String
+  deviceId      String?  // pseudonimizado: hash do device
+  executionId   String?  // FK ChecklistExecution (sem constraint — suporta offline)
+
+  // ── Tipo do evento ────────────────────────────────────
+  eventType     TelemetryEventType
+
+  // ── Localização ──────────────────────────────────────
+  lat           Float?
+  lng           Float?
+  accuracy      Float?
+  altitude      Float?
+  speed         Float?
+  heading       Float?
+  locationSource String? // GPS | NETWORK | HYBRID
+
+  // ── Dispositivo ───────────────────────────────────────
+  batteryLevel    Float?  // 0.0 a 1.0
+  batteryCharging Boolean?
+  networkType     String? // WIFI | 4G | 5G | OFFLINE
+  appVersion      String?
+  osVersion       String?
+  deviceModel     String?
+
+  // ── Integridade ───────────────────────────────────────
+  isMockLocation  Boolean @default(false)
+  isRooted        Boolean @default(false)
+  clockDriftMs    Int?    // diferença entre relógio do app e servidor
+
+  // ── Timestamps ────────────────────────────────────────
+  serverTimestamp DateTime @default(now())
+  deviceTimestamp DateTime?
+
+  // ── Dados extras por tipo de evento ──────────────────
+  payload Json?
+
+  // ── Retenção ─────────────────────────────────────────
+  retentionTier String   @default("OPERATIONAL") // RAW_SHORT | OPERATIONAL | LEGAL | PERMANENT
+  expiresAt     DateTime?
+
+  @@index([tenantId, eventType, serverTimestamp])
+  @@index([ownerEmail, serverTimestamp])
+  @@index([executionId])
+  @@index([expiresAt])
+}
+
+enum TelemetryEventType {
+  SESSION_OPEN
+  SESSION_CLOSE
+  OS_ACCEPT
+  OS_START
+  CHECKIN
+  CHECKOUT
+  TRANSIT_START
+  TRANSIT_END
+  HEARTBEAT
+  GEOFENCE_ENTER
+  GEOFENCE_EXIT
+  PAUSE
+  RESUME
+  FRAUD_FLAG
+  INTEGRITY_CHECK
+  POLICY_VIOLATION
+}
+
+// Métricas calculadas por execução de OS
+model ExecutionMetric {
+  id           String   @id @default(cuid())
+  tenantId     String?
+  executionId  String   @unique  // FK ChecklistExecution
+  ownerEmail   String
+
+  // ── Tempos (minutos) ──────────────────────────────────
+  transitDurationMin    Int?
+  siteArrivalDelayMin   Int?  // positivo = atrasado, negativo = adiantado
+  onSiteDurationMin     Int?
+  idleTimeMin           Int?
+
+  // ── Deslocamento ─────────────────────────────────────
+  distanceKm              Float?
+  geofenceBreaches        Int     @default(0)
+  routeDeviationMaxMeters Int?
+
+  // ── Scores (0-100) ────────────────────────────────────
+  scoreExecution    Int?
+  scoreReliability  Int?
+  scoreRisk         Int?
+
+  // ── Fraude ────────────────────────────────────────────
+  fraudFlags Json?  // array de { type, severity, detail }
+
+  calculatedAt DateTime @default(now())
+  source       String   @default("BATCH") // REALTIME | BATCH
+
+  @@index([tenantId, ownerEmail])
+  @@index([executionId])
+}
+
+// Registro granular de consentimento por técnico
+model ConsentRecord {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  ownerEmail String
+  policyId   String?
+  policy     CollectionPolicy? @relation(fields: [policyId], references: [id])
+  docId      String?
+  doc        ComplianceDoc? @relation(fields: [docId], references: [id])
+
+  consentType String  // LOCATION_BACKGROUND | LOCATION_FOREGROUND |
+                      // DEVICE_TELEMETRY | DATA_RETENTION | FULL
+  accepted    Boolean
+  ipAddress   String?
+  deviceId    String?
+  appVersion  String?
+
+  acceptedAt DateTime @default(now())
+  revokedAt  DateTime?
+
+  @@unique([ownerEmail, policyId, consentType])
+  @@index([ownerEmail])
+  @@index([tenantId])
+}

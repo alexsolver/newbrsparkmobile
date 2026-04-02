@@ -1,71 +1,107 @@
+import { AuthService } from './auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { DirectExpense, AssetBudget, CostSummary, RecurringCost } from '../types/costs';
 import { StockService } from './stockService';
+import { formatCurrency, formatDate } from '../i18n/formatters';
+import { enqueueMutation } from './syncService';
 
-const KEYS = {
-  EXPENSES: 'brspark_costs_expenses',
-  BUDGETS: 'brspark_costs_budgets',
-  RECURRING: 'brspark_costs_recurring'
-};
+const GET_KEYS = (email: string) => ({
+  EXPENSES: AuthService.getUserKey('costs_expenses', email),
+  BUDGETS: AuthService.getUserKey('costs_budgets', email),
+  RECURRING: AuthService.getUserKey('costs_recurring', email)
+});
 
 export const CostService = {
-  getExpenses: async (): Promise<DirectExpense[]> => {
-    const data = await AsyncStorage.getItem(KEYS.EXPENSES);
+  getExpenses: async (ownerEmail?: string): Promise<DirectExpense[]> => {
+    if (!ownerEmail) return [];
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.EXPENSES);
     return data ? JSON.parse(data) : [];
   },
 
-  saveExpense: async (expense: DirectExpense) => {
-    const all = await CostService.getExpenses();
-    const idx = all.findIndex(e => e.id === expense.id);
-    if (idx > -1) all[idx] = expense;
-    else all.push(expense);
-    await AsyncStorage.setItem(KEYS.EXPENSES, JSON.stringify(all));
+  saveExpense: async (expense: DirectExpense, ownerEmail: string) => {
+    if (!ownerEmail) throw new Error("Usuário não autenticado para salvar despesa.");
+    const keys = GET_KEYS(ownerEmail);
+    const all = await AsyncStorage.getItem(keys.EXPENSES).then(d => d ? JSON.parse(d) : []);
+    const toSave = { ...expense, ownerEmail };
+    const idx = all.findIndex((e: DirectExpense) => e.id === toSave.id);
+    if (idx > -1) all[idx] = toSave; else all.push(toSave);
+    await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all));
+    enqueueMutation('costs', idx > -1 ? 'UPDATE_EXPENSE' : 'CREATE_EXPENSE', toSave, ownerEmail);
   },
 
-  getRecurringCosts: async (): Promise<RecurringCost[]> => {
-    const data = await AsyncStorage.getItem(KEYS.RECURRING);
+  deleteExpense: async (id: string, ownerEmail: string) => {
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.EXPENSES);
+    const all: DirectExpense[] = data ? JSON.parse(data) : [];
+    await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all.filter(e => e.id !== id)));
+    enqueueMutation('costs', 'DELETE_EXPENSE', { id }, ownerEmail);
+  },
+
+  markAsRealized: async (id: string, ownerEmail: string): Promise<void> => {
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.EXPENSES);
+    const all: DirectExpense[] = data ? JSON.parse(data) : [];
+    const idx = all.findIndex(e => e.id === id);
+    if (idx === -1) return;
+    all[idx] = { ...all[idx], status: 'PAID', paidAt: new Date().toISOString().split('T')[0] };
+    await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all));
+  },
+
+  getRecurringCosts: async (ownerEmail?: string): Promise<RecurringCost[]> => {
+    if (!ownerEmail) return [];
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.RECURRING);
     return data ? JSON.parse(data) : [];
   },
 
-  saveRecurringCost: async (cost: RecurringCost) => {
-    const all = await CostService.getRecurringCosts();
-    const idx = all.findIndex(c => c.id === cost.id);
-    if (idx > -1) all[idx] = cost;
-    else all.push(cost);
-    await AsyncStorage.setItem(KEYS.RECURRING, JSON.stringify(all));
-    
-    // Agendar Notificação
-    if (cost.alertDaysBefore !== undefined) {
-      await CostService.scheduleRecurringNotification(cost);
+  saveRecurringCost: async (cost: RecurringCost, ownerEmail: string) => {
+    if (!ownerEmail) throw new Error("Usuário não autenticado para salvar custo recorrente.");
+    const keys = GET_KEYS(ownerEmail);
+    const all = await AsyncStorage.getItem(keys.RECURRING).then(d => d ? JSON.parse(d) : []);
+    const toSave = { ...cost, ownerEmail };
+    const idx = all.findIndex((c: RecurringCost) => c.id === toSave.id);
+    if (idx > -1) all[idx] = toSave; else all.push(toSave);
+    await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(all));
+    enqueueMutation('costs', idx > -1 ? 'UPDATE_RECURRING' : 'CREATE_RECURRING', toSave, ownerEmail);
+    if (toSave.alertDaysBefore !== undefined) {
+      await CostService.scheduleRecurringNotification(toSave);
     }
   },
 
-  deleteRecurringCost: async (id: string) => {
-    const all = await CostService.getRecurringCosts();
+  deleteRecurringCost: async (id: string, ownerEmail: string) => {
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.RECURRING);
+    const all: RecurringCost[] = data ? JSON.parse(data) : [];
     const filtered = all.filter(c => c.id !== id);
-    await AsyncStorage.setItem(KEYS.RECURRING, JSON.stringify(filtered));
-    await Notifications.cancelScheduledNotificationAsync(id);
+    await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(filtered));
+    enqueueMutation('costs', 'DELETE_RECURRING', { id }, ownerEmail);
+    try { await Notifications.cancelScheduledNotificationAsync(id); } catch (_) {}
   },
 
-  getBudgets: async (): Promise<AssetBudget[]> => {
-    const data = await AsyncStorage.getItem(KEYS.BUDGETS);
+  getBudgets: async (ownerEmail?: string): Promise<AssetBudget[]> => {
+    if (!ownerEmail) return [];
+    const keys = GET_KEYS(ownerEmail);
+    const data = await AsyncStorage.getItem(keys.BUDGETS);
     return data ? JSON.parse(data) : [];
   },
 
-  saveBudget: async (budget: AssetBudget) => {
-    const all = await CostService.getBudgets();
-    const idx = all.findIndex(b => b.assetId === budget.assetId && b.category === budget.category);
-    if (idx > -1) all[idx] = budget;
-    else all.push(budget);
-    await AsyncStorage.setItem(KEYS.BUDGETS, JSON.stringify(all));
+  saveBudget: async (budget: AssetBudget, ownerEmail: string) => {
+    const keys = GET_KEYS(ownerEmail);
+    const all = await AsyncStorage.getItem(keys.BUDGETS).then(d => d ? JSON.parse(d) : []);
+    const toSave = { ...budget, ownerEmail };
+    const idx = all.findIndex((b: AssetBudget) => b.assetId === toSave.assetId && b.category === toSave.category);
+    if (idx > -1) all[idx] = toSave; else all.push(toSave);
+    await AsyncStorage.setItem(keys.BUDGETS, JSON.stringify(all));
+    enqueueMutation('costs', idx > -1 ? 'UPDATE_BUDGET' : 'CREATE_BUDGET', toSave, ownerEmail);
   },
 
-  getAssetCostSummary: async (assetId: string, month: string): Promise<CostSummary> => {
-    const allExpenses = await CostService.getExpenses();
-    const allMovements = await StockService.getMovements();
-    const allItems = await StockService.getItems();
-    const allBudgets = await CostService.getBudgets();
+  getAssetCostSummary: async (assetId: string, month: string, ownerEmail?: string): Promise<CostSummary> => {
+    const allExpenses = await CostService.getExpenses(ownerEmail);
+    const allMovements = await StockService.getMovements(ownerEmail);
+    const allItems = await StockService.getItems(ownerEmail);
+    const allBudgets = await CostService.getBudgets(ownerEmail);
 
     // 1. Despesas Diretas vs Receitas (OpEx / Income)
     const directRecords = allExpenses.filter(e => e.assetId === assetId && e.date.startsWith(month));
@@ -106,8 +142,22 @@ export const CostService = {
     };
   },
 
-  markRecurringAsPaid: async (id: string): Promise<void> => {
-    const allRecurring = await CostService.getRecurringCosts();
+  /** Aggregates cost summary across multiple asset IDs (parent + children) */
+  getConsolidatedSummary: async (assetIds: string[], month: string, ownerEmail?: string): Promise<CostSummary> => {
+    const summaries = await Promise.all(assetIds.map(id => CostService.getAssetCostSummary(id, month, ownerEmail)));
+    return {
+      assetId: assetIds[0],
+      period: month,
+      totalStockValue:      summaries.reduce((a, s) => a + s.totalStockValue, 0),
+      totalConsumptionValue: summaries.reduce((a, s) => a + s.totalConsumptionValue, 0),
+      totalExpenses:         summaries.reduce((a, s) => a + s.totalExpenses, 0),
+      totalRevenues:         summaries.reduce((a, s) => a + s.totalRevenues, 0),
+      totalBudget:           summaries.reduce((a, s) => a + s.totalBudget, 0),
+    };
+  },
+
+  markRecurringAsPaid: async (id: string, ownerEmail: string): Promise<void> => {
+    const allRecurring = await CostService.getRecurringCosts(ownerEmail);
     const idx = allRecurring.findIndex(r => r.id === id);
     if (idx === -1) return;
 
@@ -115,7 +165,7 @@ export const CostService = {
     
     // 1. Criar a despesa direta correspondente
     const newExpense: DirectExpense = {
-      id: Math.random().toString(36).substring(7),
+      id: `rc-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`,
       assetId: recurring.assetId,
       description: `PAGTO: ${recurring.description}`,
       amount: recurring.amount,
@@ -124,7 +174,7 @@ export const CostService = {
       status: 'PAID',
       type: recurring.type || 'EXPENSE'
     };
-    await CostService.saveExpense(newExpense);
+    await CostService.saveExpense(newExpense, ownerEmail);
 
     // 2. Calcular a próxima data de vencimento
     const currentDate = new Date(recurring.nextDueDate);
@@ -141,17 +191,80 @@ export const CostService = {
     recurring.nextDueDate = currentDate.toISOString().split('T')[0];
     recurring.lastPaidAt = new Date().toISOString().split('T')[0];
     
+    // 3. Gerenciar Parcelas (Series)
+    if (recurring.remainingInstallments !== undefined) {
+      recurring.remainingInstallments -= 1;
+      if (recurring.remainingInstallments <= 0) {
+        recurring.status = 'PAUSED'; // Finaliza a série
+      }
+    }
+
+    const keys = GET_KEYS(ownerEmail);
     allRecurring[idx] = recurring;
-    await AsyncStorage.setItem(KEYS.RECURRING, JSON.stringify(allRecurring));
+    await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(allRecurring));
 
     // Atualizar Notificação
     if (recurring.alertDaysBefore !== undefined) {
-      await CostService.scheduleRecurringNotification(recurring);
+      try { await CostService.scheduleRecurringNotification(recurring); } catch (_) {}
+    }
+  },
+
+  /** Anticipate a recurring cost: create a PENDING direct record and advance date */
+  anticipateRecurring: async (id: string, ownerEmail: string): Promise<void> => {
+    const allRecurring = await CostService.getRecurringCosts(ownerEmail);
+    const idx = allRecurring.findIndex(r => r.id === id);
+    if (idx === -1) return;
+
+    const recurring = allRecurring[idx];
+    
+    // 1. Criar a despesa direta como PENDENTE
+    const newRecord: DirectExpense = {
+      id: `rc-ant-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`,
+      assetId: recurring.assetId,
+      description: `ANTECIPAÇÃO: ${recurring.description}`,
+      amount: recurring.amount,
+      date: recurring.nextDueDate,
+      category: 'CONTAS',
+      status: 'PENDING',
+      type: recurring.type || 'EXPENSE'
+    };
+    await CostService.saveExpense(newRecord, ownerEmail);
+
+    // 2. Calcular a próxima data de vencimento
+    const currentDate = new Date(recurring.nextDueDate);
+    if (isNaN(currentDate.getTime())) return;
+
+    if (recurring.frequency === 'MONTHLY') {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    } else if (recurring.frequency === 'WEEKLY') {
+      currentDate.setDate(currentDate.getDate() + 7);
+    } else if (recurring.frequency === 'YEARLY') {
+      currentDate.setFullYear(currentDate.getFullYear() + 1);
+    }
+    
+    recurring.nextDueDate = currentDate.toISOString().split('T')[0];
+    
+    // Atualizar Série
+    if (recurring.remainingInstallments !== undefined) {
+      recurring.remainingInstallments -= 1;
+      if (recurring.remainingInstallments <= 0) {
+        recurring.status = 'PAUSED';
+      }
+    }
+
+    const keys = GET_KEYS(ownerEmail);
+    allRecurring[idx] = recurring;
+    await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(allRecurring));
+
+    // Atualizar Notificação
+    if (recurring.alertDaysBefore !== undefined) {
+      try { await CostService.scheduleRecurringNotification(recurring); } catch (_) {}
     }
   },
 
   scheduleRecurringNotification: async (cost: RecurringCost) => {
-    await Notifications.cancelScheduledNotificationAsync(cost.id);
+    if (!cost.id) return;
+    try { await Notifications.cancelScheduledNotificationAsync(cost.id); } catch (_) {}
     if (cost.status !== 'ACTIVE' || !cost.nextDueDate || cost.alertDaysBefore === undefined) return;
 
     const dueDate = new Date(cost.nextDueDate);
@@ -164,7 +277,7 @@ export const CostService = {
         identifier: cost.id,
         content: {
           title: `💰 Conta Próxima: ${cost.description}`,
-          body: `Vencimento em ${cost.nextDueDate}. Valor: R$ ${cost.amount.toFixed(2)}.`,
+          body: `Vencimento em ${formatDate(cost.nextDueDate)}. Valor: ${formatCurrency(cost.amount)}.`,
           data: { costId: cost.id, assetId: cost.assetId },
         },
         trigger: { date: alertDate } as any,
@@ -172,5 +285,3 @@ export const CostService = {
     }
   }
 };
-
-

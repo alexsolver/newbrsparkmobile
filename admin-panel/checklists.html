@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Checklists Builder</title>
+  
+  <!-- WebFonts para o Icon Picker! -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css" />
+  <!-- Universal React Native Vector Icons Map -->
+  <link rel="stylesheet" href="css/vector-icons.css" />
+  
+  <link rel="stylesheet" href="css/main.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <!-- jsPDF for Quick Frontend PDF Gen -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    .toolbox-item {
+      padding: 12px 16px;
+      background: #fdfdfd;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: grab;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text2);
+      transition: all 0.2s;
+    }
+    .toolbox-item:hover { border-color: var(--accent); color: var(--accent); }
+    .canvas-item {
+      padding: 16px;
+      background: white;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      cursor: grab;
+      position: relative;
+    }
+    .canvas-item.active {
+      border-color: var(--accent);
+    }
+    .canvas-item-delete {
+      position: absolute; right: 12px; top: 12px; color: var(--red); cursor: pointer; font-size: 20px;
+    }
+    .prop-group { margin-bottom: 16px; }
+    .prop-label { display: block; font-size: 11px; font-weight: 700; color: var(--text3); margin-bottom: 6px; text-transform: uppercase; }
+    .prop-input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+    .canvas-empty { text-align: center; color: var(--text3); font-size: 14px; padding: 40px; border: 2px dashed #cbd5e1; border-radius: 12px; }
+    
+    /* Strict SPA Lock for Builder Scroll */
+    .admin-layout, .main-content {
+      height: 100vh !important;
+      overflow: hidden !important;
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title" style="display:flex; align-items:center; gap:12px;">
+        <span style="font-weight:700">Checklists Builder</span>
+        <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Abrir Formulário</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> Criar Novo</button>
+      </div>
+      <div class="topbar-actions">
+        <!-- Import / Export -->
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.importJSON()" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
+        <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
+
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.sendTestForm()" style="color:var(--text); background:#f1f5f9;"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar Teste</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> Preview no App</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.configureGlobalSettings()"><ion-icon name="settings-outline" style="vertical-align:-2px"></ion-icon> Cerca Global</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Schema</button>
+      </div>
+    </div>
+    
+    <div style="background:var(--card); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; gap:20px; flex-shrink: 0">
+       <div style="flex:1">
+          <label class="prop-label">Título do Checklist</label>
+          <input id="tpl-title" type="text" class="prop-input" placeholder="Ex: Vistoria Cautelar" style="font-weight:700; font-size:16px;" value="NOVO CHECKLIST">
+       </div>
+       <div style="flex:2">
+          <label class="prop-label">Descrição Pública</label>
+          <input id="tpl-desc" type="text" class="prop-input" placeholder="O que seus parceiros farão com este doc?">
+       </div>
+       <div style="flex:1; display:flex; align-items:flex-end;">
+          <input type="hidden" id="tpl-icon" value="">
+          <button class="btn btn-outline" style="width: 100%;" onclick="window.openIconPicker(val => { document.getElementById('tpl-icon').value = val; document.getElementById('tpl-icon-preview').innerHTML = val ? '<ion-icon name=&quot;' + val + '&quot; style=&quot;font-size:18px;margin-right:6px;vertical-align:-3px;&quot;></ion-icon> ' + val : 'Escolher Ícone da Tarefa'; })" id="tpl-icon-preview">Escolher Ícone da Tarefa</button>
+       </div>
+    </div>
+
+    <div class="page-body" style="display:flex; gap:20px; flex:1; min-height:0; padding: 20px; overflow: hidden;">
+      <!-- Toolbox Column -->
+      <div class="panel" style="width: 250px; flex-shrink: 0; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
+        <div class="panel-header"><span class="panel-title">Campos Dinâmicos</span></div>
+        <div class="panel-body" id="toolbox" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:4px; margin-bottom:8px;">BÁSICOS E CONTATOS</div>
+           <div class="toolbox-item" data-type="text"><ion-icon name="text-outline" style="margin-right:6px; font-size:16px"></ion-icon>Resposta em Texto</div>
+           <div class="toolbox-item" data-type="number"><ion-icon name="keypad-outline" style="margin-right:6px; font-size:16px"></ion-icon>Input Numérico</div>
+           <div class="toolbox-item" data-type="email"><ion-icon name="mail-outline" style="margin-right:6px; font-size:16px"></ion-icon>E-mail</div>
+           <div class="toolbox-item" data-type="phone"><ion-icon name="call-outline" style="margin-right:6px; font-size:16px"></ion-icon>Telefone / Celular</div>
+           <div class="toolbox-item" data-type="date"><ion-icon name="calendar-outline" style="margin-right:6px; font-size:16px"></ion-icon>Data / Hora</div>
+           <div class="toolbox-item" data-type="checkbox"><ion-icon name="checkbox-outline" style="margin-right:6px; font-size:16px"></ion-icon>Caixa de Seleção</div>
+           <div class="toolbox-item" data-type="yes_no"><ion-icon name="toggle-outline" style="margin-right:6px; font-size:16px"></ion-icon>Sim / Não (Toggle)</div>
+           
+           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">PREMIUM & INTELIGÊNCIA</div>
+           <div class="toolbox-item" data-type="section_break" style="border-left: 3px solid #8b5cf6;"><ion-icon name="albums-outline" style="margin-right:6px; font-size:16px; color:#8b5cf6;"></ion-icon>Separador de Etapa / Página</div>
+           <div class="toolbox-item" data-type="dropdown" style="border-left: 3px solid #6366f1;"><ion-icon name="list-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Lista (Dropdown)</div>
+           <div class="toolbox-item" data-type="multiselect" style="border-left: 3px solid #6366f1;"><ion-icon name="list-circle-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Múltipla Escolha</div>
+           <div class="toolbox-item" data-type="rating" style="border-left: 3px solid #6366f1;"><ion-icon name="star-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Avaliação (Estrelas)</div>
+           <div class="toolbox-item" data-type="calculated" style="border-left: 3px solid #8b5cf6;"><ion-icon name="calculator-outline" style="margin-right:6px; font-size:16px; color:#8b5cf6;"></ion-icon>Campo Calculado (Math)</div>
+           <div class="toolbox-item" data-type="hidden" style="border-left: 3px solid #94a3b8;"><ion-icon name="eye-off-outline" style="margin-right:6px; font-size:16px; color:#94a3b8;"></ion-icon>Campo Oculto</div>
+           
+           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">OPERAÇÃO & JORNADA (WFM)</div>
+           <div class="toolbox-item" data-type="transit_start" style="border-left: 3px solid #3b82f6;"><ion-icon name="rocket-outline" style="margin-right:6px; font-size:16px; color:#3b82f6;"></ion-icon>Iniciar Deslocamento</div>
+           <div class="toolbox-item" data-type="transit_end" style="border-left: 3px solid #3b82f6;"><ion-icon name="flag-outline" style="margin-right:6px; font-size:16px; color:#3b82f6;"></ion-icon>Finalizar Deslocamento</div>
+           <div class="toolbox-item" data-type="geofence_check" style="border-left: 3px solid #10b981;"><ion-icon name="location-outline" style="margin-right:6px; font-size:16px; color:#10b981;"></ion-icon>Validar Cerca (Geofence)</div>
+           
+           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">AUDITORIA E PROVAS</div>
+           <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Enviar PDF/Doc</div>
+           <div class="toolbox-item" data-type="photo"><ion-icon name="camera-outline" style="margin-right:6px; font-size:16px;"></ion-icon>Foto (Galeria Livre)</div>
+           <div class="toolbox-item" data-type="photo_stamped" style="border-left: 3px solid #f59e0b;"><ion-icon name="scan-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Foto Carimbada (Ao Vivo)</div>
+           <div class="toolbox-item" data-type="barcode_scan" style="border-left: 3px solid #f59e0b;"><ion-icon name="barcode-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Escanear Etiqueta / Bem</div>
+           <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
+        </div>
+      </div>
+      
+      <!-- Canvas Column -->
+      <div class="panel" style="flex: 1; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
+        <div class="panel-header">
+           <span class="panel-title">Canvas do Checklist</span>
+        </div>
+        <div class="panel-body" style="flex:1; background:#f8fafc; padding:20px; border-radius:8px; overflow-y:auto;">
+           <div id="canvas" style="min-height: 200px;">
+              <div class="canvas-empty">Arraste os bloquinhos do menu esquerdo aqui para construir seu Checklist.</div>
+           </div>
+        </div>
+      </div>
+      
+      <!-- Properties Panel -->
+      <div class="panel" id="properties-panel" style="width: 300px; flex-shrink: 0; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
+         <div class="panel-header"><span class="panel-title">Propriedades do Campo</span></div>
+         <div class="panel-body" id="properties-body" style="flex:1; overflow-y:auto;">
+            <div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">
+              Clique em um bloco no Canvas para configurar suas lógicas.
+            </div>
+         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Mobile Preview Modal -->
+<div id="mobile-preview-overlay" onclick="if(event.target === this) window.toggleMobilePreview()" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+  <div style="width: 380px; height: 800px; background: white; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 12px solid #1e293b; position:relative; overflow:hidden; display:flex; flex-direction:column;">
+     <!-- Notch -->
+     <div style="position:absolute; top:0; left:50%; transform:translateX(-50%); width: 120px; height: 25px; background: #1e293b; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; z-index:10"></div>
+     
+     <!-- Simulator Header -->
+     <div style="background: var(--primary); color: white; padding: 40px 20px 20px; text-align:center; font-weight:700; font-size:16px;">
+        <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">Aplicativo BrSpark</div>
+        <div style="position:absolute; top: 38px; left: 20px; font-size:24px; cursor:pointer;" onclick="window.toggleMobilePreview()">&times;</div>
+     </div>
+     
+     <!-- Simulator Content Area -->
+     <div id="mobile-preview-content" style="flex:1; background:#f1f5f9; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
+        <!-- Filled by JS -->
+     </div>
+     
+     <!-- Simulator Footer (Bottom Nav Bar Mock) -->
+     <div style="height: 60px; background: white; border-top: 1px solid #e2e8f0; display:flex; justify-content:space-around; align-items:center; color:#94a3b8; padding-bottom:10px;">
+        <div style="font-size:24px;"><ion-icon name="home"></ion-icon></div>
+        <div style="font-size:24px; color:var(--primary)"><ion-icon name="list"></ion-icon></div>
+        <div style="font-size:24px;"><ion-icon name="person"></ion-icon></div>
+     </div>
+  </div>
+</div>
+<!-- Modal Create New Checklist -->
+<div id="new-checklist-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+  <div style="width: 400px; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Novo Formulário</h3>
+    <label style="display:block; font-size:13px; font-weight:600; color:#64748b; margin-bottom:8px; margin-top:20px;">Dê um nome / título para o documento:</label>
+    <input type="text" id="new-form-name-input" placeholder="Ex: Roteiro de Ar Condicionado" style="width:90%; padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; margin-bottom:20px;" />
+    
+    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('new-checklist-modal').style.display='none'">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="window.confirmCreateNewChecklist()">Criar Painel Limpo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirm Test Sending -->
+<div id="test-dispatch-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+  <div style="width: 420px; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar Formulário para Técnico</h3>
+    <label style="display:block; font-size:13px; font-weight:600; color:#64748b; margin-bottom:8px; margin-top:20px;">E-mail do Técnico Destino *</label>
+    <div style="font-size:11px; color:#94a3b8; margin-bottom:12px">O técnico receberá uma OS no app com este formulário vinculado.</div>
+    <input 
+      type="email" 
+      id="test-dispatch-email" 
+      placeholder="tecnico@empresa.com"
+      autocomplete="off"
+      style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; margin-bottom:8px; box-sizing:border-box;"
+      onfocus="this.select()"
+    />
+    <div style="font-size:10px; color:#94a3b8; margin-bottom:20px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> O email deve ser exatamente igual ao cadastrado no app móvel.</div>
+    
+    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('test-dispatch-modal').style.display='none'; document.getElementById('test-dispatch-email').value='';">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="window.confirmTestDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS ao Técnico</button>
+    </div>
+  </div>
+</div>
+
+<script src="./js/icons-db.js"></script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  initPage();
+</script>
+
+<!-- Forms List Modal -->
+<div id="forms-list-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+    <div style="background:#f8fafc; width:800px; height:80vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+        <div style="padding:24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+               <h3 style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
+               <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Selecione um checklist para edita-lo.</p>
+            </div>
+            <span style="font-size:24px; cursor:pointer; color:#94a3b8;" onclick="document.getElementById('forms-list-modal').style.display='none'">&times;</span>
+        </div>
+        <div style="padding:16px 24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:8px;">
+            <ion-icon name="search-outline" style="font-size:20px; color:#94a3b8;"></ion-icon>
+            <input type="text" id="form-search" placeholder="Buscar por nome do formulário..." class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none;" >
+        </div>
+        <div id="forms-grid" style="flex:1; padding:24px; overflow-y:auto; display:grid; grid-template-columns: repeat(2, 1fr); gap:16px; align-content:start;">
+            <!-- Forms injected by JS -->
+        </div>
+    </div>
+</div>
+
+<!-- Icon Picker Modal -->
+<div id="icon-picker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center;">
+    <div style="background:white; width:600px; height:80vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:16px; background:var(--primary); color:white; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; font-size:16px;">Selecione um Ícone</h3>
+            <span style="font-size:24px; cursor:pointer;" onclick="document.getElementById('icon-picker-modal').style.display='none'">&times;</span>
+        </div>
+        <div style="padding:16px; border-bottom:1px solid #e2e8f0; display:flex; gap:12px; align-items:flex-end;">
+            <div style="flex:1;">
+               <label class="prop-label">Pesquisar Ícone</label>
+               <input type="text" id="icon-search" placeholder="Buscar em inglês (ex: star, car...)" class="prop-input" onkeyup="window.filterIcons(this.value)" >
+            </div>
+            <div style="width:180px;">
+               <label class="prop-label">Biblioteca</label>
+               <select id="icon-lib-select" class="prop-input" onchange="window.switchIconLibrary()">
+                   <!-- Loaded by JS -->
+               </select>
+            </div>
+            <div style="width:60px; text-align:center;">
+               <label class="prop-label">Cor</label>
+               <input type="color" id="icon-color" value="#0F172A" style="width:100%; height:34px; border:none; padding:0; background:transparent; cursor:pointer;" onchange="window.updateIconGridColors()">
+            </div>
+        </div>
+        <div id="icon-grid" style="flex:1; padding:16px; overflow-y:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap:12px; align-content:start;">
+            <!-- Icons injected by JS -->
+        </div>
+        <div style="padding:16px; border-top:1px solid #e2e8f0; text-align:right;">
+             <button class="btn btn-outline" style="color:#ef4444; border-color:#fca5a5; margin-right:12px;" onclick="window.confirmIconSelection('')">Remover Ícone (Deixar Vazio)</button>
+             <button class="btn btn-ghost" onclick="document.getElementById('icon-picker-modal').style.display='none'">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Automations & Rules Modal -->
+<!-- Field Logic Modal -->
+<div id="logic-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:99998; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+    <div style="background:var(--bg); width:750px; max-height:85vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+        
+        <!-- Modal Header -->
+        <div style="padding:20px; background:linear-gradient(to right, #4f46e5, #c084fc); color:white; display:flex; justify-content:space-between; align-items:center; flex-shrink: 0;">
+            <div>
+               <h3 style="margin:0; font-size:20px; display:flex; align-items:center; gap:8px;"><ion-icon name="beaker-outline" style="vertical-align:-2px"></ion-icon> Regras e Lógica do Campo</h3>
+               <div id="logic-modal-subtitle" style="font-size:12px; opacity:0.9; margin-top:4px;">Configurando gatilhos para o campo: ...</div>
+            </div>
+            <span style="font-size:32px; cursor:pointer;" onclick="document.getElementById('logic-modal').style.display='none'">&times;</span>
+        </div>
+        
+        <!-- Rules Body -->
+        <div style="flex:1; background:#f8fafc; padding:24px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
+           <div style="display:flex; justify-content:space-between; align-items:center;">
+               <h4 style="margin:0; color:#334155;">Se este campo for modificado...</h4>
+               <button class="btn btn-primary btn-sm" onclick="window.addLogicRule()">+ Adicionar Regra (SE)</button>
+           </div>
+           
+           <div id="logic-rules-container" style="display:flex; flex-direction:column; gap:16px;">
+               <!-- Rules injected via JS -->
+           </div>
+
+           <div id="logic-empty-state" style="text-align:center; padding:40px; color:#94a3b8; display:none;">
+               <ion-icon name="git-network-outline" style="font-size:48px; opacity:0.5;"></ion-icon>
+               <p style="margin-top:12px; font-weight:600;">Este campo não possui regras ativas.</p>
+           </div>
+        </div>
+        
+        <div style="padding:20px; background:white; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:12px;">
+             <button class="btn btn-ghost" onclick="document.getElementById('logic-modal').style.display='none'">Cancelar</button>
+             <button class="btn btn-primary" onclick="window.saveFieldLogic()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Regras do Campo</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Confirm Modal -->
+<div id="custom-confirm-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:999999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+    <div style="background:white; width:400px; padding:24px; border-radius:16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); text-align:center;">
+        <div style="width:56px; height:56px; border-radius:28px; background:#fee2e2; color:#ef4444; display:flex; justify-content:center; align-items:center; font-size:32px; margin:0 auto 16px;">
+            <ion-icon name="warning-outline"></ion-icon>
+        </div>
+        <h3 style="margin:0 0 8px; font-size:18px; color:#0f172a; font-weight:800;">Excluir Formulário?</h3>
+        <p style="margin:0 0 24px; font-size:14px; color:#64748b; line-height:1.5;">Tem certeza que deseja excluir este formulário permanentemente? Esta ação não pode ser desfeita.</p>
+        <div style="display:flex; justify-content:center; gap:12px;">
+            <button id="custom-confirm-cancel" class="btn btn-outline" style="flex:1;">Cancelar</button>
+            <button id="custom-confirm-yes" class="btn" style="flex:1; background:#ef4444; color:white; border:none;">Sim, Excluir</button>
+        </div>
+    </div>
+</div>
+
+<script>
+  // Cache-buster: always load latest builder
+  const s = document.createElement('script');
+  s.src = 'js/checklists-builder.js?v=' + Date.now();
+  document.head.appendChild(s);
+</script>
+</body>
+</html>

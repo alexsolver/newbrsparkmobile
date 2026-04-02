@@ -1,44 +1,243 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments, useLocalSearchParams, Href } from 'expo-router';
+import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
+import { getLocalAssets } from '../database';
+import { Asset } from '../types/asset';
+import { useAuth } from '../hooks/useAuth';
 
-export function Header() {
+interface HeaderProps {
+  showAssetTools?: boolean;
+  title?: string;
+  leftIcon?: string;
+  onLeftPress?: () => void;
+}
+
+export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }: HeaderProps) {
   const router = useRouter();
+  const segments = useSegments() as string[];
+  const params = useLocalSearchParams();
+  const { colors: C } = useTheme();
+  const { mode, setMode, guardRef } = useAppContext();
+  const { user, userRole } = useAuth();
+
+  const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
+  const isProfile = segments[0] === 'profile';
+  const isTabs = segments[0] === '(tabs)';
+
+  // O Header global (injetado no _layout.tsx) não recebe `title`.
+  // Devemos escondê-lo completamente se não estivermos nas abas principais, no perfil ou no detalhe do ativo.
+  if (!title && !isTabs && !isProfile && !isAssetDetail) {
+    return null;
+  }
+
+  const asset = isAssetDetail && params.id ? getLocalAssets().find(a => a.id === params.id) : null;
+
+  const toggleMode = () => {
+    const newMode = mode === 'SERVICES' ? 'ASSETS' : 'SERVICES';
+    setMode(newMode);
+    // If not in main screen, redirect to it to show the correct content
+    if (segments[0] !== '(tabs)') {
+      router.push('/(tabs)');
+    }
+  };
+
+  const renderBadge = (isLarge = false) => (
+    <View style={{
+      flexDirection: 'row',
+      backgroundColor: '#F1F5F9',
+      borderRadius: 18,
+      padding: 3,
+      width: 140, // Back to 2 options width
+    }}>
+      {userRole === 'CLIENT' && (
+        <TouchableOpacity 
+          onPress={() => {
+            setMode('SERVICES');
+            if (segments[0] !== '(tabs)') router.push('/(tabs)');
+          }}
+          activeOpacity={0.8}
+          style={{
+            flex: 1,
+            paddingVertical: 4,
+            borderRadius: 16,
+            alignItems: 'center',
+            backgroundColor: mode === 'SERVICES' ? '#fff' : 'transparent',
+            shadowColor: mode === 'SERVICES' ? '#000' : 'transparent',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: mode === 'SERVICES' ? 0.05 : 0,
+            shadowRadius: 2,
+            elevation: mode === 'SERVICES' ? 1 : 0,
+          }}
+        >
+          <Text style={{ fontSize: 9, fontWeight: mode === 'SERVICES' ? '900' : '700', color: mode === 'SERVICES' ? '#10B981' : '#94A3B8', letterSpacing: 0.2 }}>SERVIÇOS</Text>
+        </TouchableOpacity>
+      )}
+      
+      {/* Bens is always visible */}
+      <TouchableOpacity 
+        onPress={() => {
+          setMode('ASSETS');
+          if (segments[0] !== '(tabs)') router.push('/(tabs)');
+        }}
+        activeOpacity={0.8}
+        style={{
+          flex: 1,
+          paddingVertical: 4,
+          borderRadius: 16,
+          alignItems: 'center',
+          backgroundColor: mode === 'ASSETS' ? '#fff' : 'transparent',
+          shadowColor: mode === 'ASSETS' ? '#000' : 'transparent',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: mode === 'ASSETS' ? 0.05 : 0,
+          shadowRadius: 2,
+          elevation: mode === 'ASSETS' ? 1 : 0,
+        }}
+      >
+        <Text style={{ fontSize: 9, fontWeight: mode === 'ASSETS' ? '900' : '700', color: mode === 'ASSETS' ? '#3B82F6' : '#94A3B8', letterSpacing: 0.2 }}>BENS</Text>
+      </TouchableOpacity>
+
+      {userRole === 'TECHNICIAN' && (
+        <TouchableOpacity 
+          onPress={() => {
+            setMode('PROVIDER');
+            if (segments[0] !== '(tabs)') router.push('/(tabs)');
+          }}
+          activeOpacity={0.8}
+          style={{
+            flex: 1,
+            paddingVertical: 4,
+            borderRadius: 16,
+            alignItems: 'center',
+            backgroundColor: mode === 'PROVIDER' ? '#fff' : 'transparent',
+            shadowColor: mode === 'PROVIDER' ? '#000' : 'transparent',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: mode === 'PROVIDER' ? 0.05 : 0,
+            shadowRadius: 2,
+            elevation: mode === 'PROVIDER' ? 1 : 0,
+          }}
+        >
+          <Text style={{ fontSize: 9, fontWeight: mode === 'PROVIDER' ? '900' : '700', color: mode === 'PROVIDER' ? '#D97706' : '#94A3B8', letterSpacing: 0.2 }}>PRESTADOR</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  if (title || isAssetDetail || isProfile) {
+    return (
+      <SafeAreaView edges={['top']} style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+        <View style={{ height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
+          {/* Left: Back + Title */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={onLeftPress || (() => checkGuardBeforeBack(guardRef, () => router.back()))} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name={(leftIcon as any) || "arrow-back"} size={20} color="#191C1D" />
+            </TouchableOpacity>
+
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }} 
+              resizeMode="contain" 
+            />
+
+            {title ? (
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#191C1D', letterSpacing: -0.5 }}>
+                {title}
+              </Text>
+            ) : isAssetDetail && asset ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Image
+                  source={{ uri: asset.imageUrl || 'https://via.placeholder.com/150' }}
+                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#E2E8F0' }}
+                />
+                <Text style={{ fontSize: 13, fontWeight: '900', color: '#191C1D', maxWidth: 160 }} numberOfLines={1}>
+                  {asset.title}
+                </Text>
+              </View>
+            ) : isProfile ? (
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#191C1D', letterSpacing: -0.5 }}>
+                Configurações
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Right: only show QR + Profile when NOT on profile page */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {!isProfile ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }}
+                  onPress={() => router.push('/scanner')}
+                >
+                  <Ionicons name="qr-code-outline" size={20} color={C.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}
+                  onPress={() => router.push('/profile')}
+                >
+                  {user?.avatarUrl ? (
+                    <Image source={{ uri: user.avatarUrl }} style={{ width: 40, height: 40 }} />
+                  ) : (
+                    <Ionicons name="person-outline" size={20} color={C.textSecondary} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ width: 40 }} />
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <View style={styles.container}>
-        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-          <View style={styles.profileAvatar}>
-            <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={{textAlign: 'center', marginTop: 5}}/>
-          </View>
-        </TouchableOpacity>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: C.cardWhite }]}>
+      <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
+        {/* Left: Logo */}
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Image 
+            source={require('../../assets/logo.png')} 
+            style={{ width: 100, height: 32 }} 
+            resizeMode="contain" 
+          />
+        </View>
         
-        {/* Logo Image Placeholder */}
-        <Image 
-          source={require('../../assets/logo.png')} 
-          style={styles.logo} 
-          resizeMode="contain" 
-        />
+        {/* Middle: Centered Badge */}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', pointerEvents: 'box-none' }}>
+          {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
+        </View>
         
-        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/scanner' as any)}>
-          <Ionicons name="qr-code-outline" size={22} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/assets')}>
-          <Ionicons name="search" size={24} color={colors.primary} />
-        </TouchableOpacity>
+        {/* Right: Profile */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity 
+            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }} 
+            onPress={() => router.push('/scanner')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="qr-code-outline" size={22} color={C.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }} 
+            onPress={() => router.push('/profile')}
+            activeOpacity={0.7}
+          >
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={{ width: 44, height: 44 }} />
+            ) : (
+               <Ionicons name="person-outline" size={22} color={C.textSecondary} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: colors.cardWhite,
-  },
+  safeArea: {},
   container: {
     height: 56,
     flexDirection: 'row',
@@ -46,21 +245,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   profileButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#EAECF0',
   },
   profileAvatar: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logo: {
-    width: 180,
-    height: 48,
+    width: 140,
+    height: 40,
   },
   searchButton: {
     padding: 4,

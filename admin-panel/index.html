@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Login</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .pw-wrap { position: relative; }
+    .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text3); cursor: pointer; font-size: 16px; transition: color var(--transition); }
+    .pw-toggle:hover { color: var(--text); }
+  </style>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-bg-glow"></div>
+    <div class="login-bg-glow2"></div>
+
+    <div class="login-card fade-in">
+      <div class="login-logo">
+        <img src="img/logo.png" alt="BrSpark Logo">
+        <div class="login-logo-text">
+          <p>Admin Console</p>
+        </div>
+      </div>
+
+      <h2 class="login-title">Acesso Restrito</h2>
+      <p class="login-subtitle">Área exclusiva para administradores da plataforma.</p>
+
+      <div class="login-error" id="login-error">
+        <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> &nbsp;Credenciais inválidas. Tente novamente.
+      </div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label" for="email">E-mail</label>
+          <input class="form-control" type="email" id="email" placeholder="admin@brspark.com" autocomplete="email" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Senha</label>
+          <div class="pw-wrap">
+            <input class="form-control" type="password" id="password" placeholder="••••••••" autocomplete="current-password" required style="padding-right:42px" />
+            <button type="button" class="pw-toggle" id="pw-toggle" title="Mostrar senha"><ion-icon name="eye-outline" style="vertical-align:-2px"></ion-icon></button>
+          </div>
+        </div>
+        <button type="submit" class="login-btn" id="login-btn">Entrar no Console</button>
+      </form>
+
+      <div class="login-hint">
+        Credenciais de acesso: <code>admin@brspark.com</code> / <code>admin123</code>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { CONFIG } from './js/config.js';
+
+    // If already logged in, go to dashboard
+    if (sessionStorage.getItem('brspark_admin_token')) window.location.href = 'dashboard.html';
+
+    const form     = document.getElementById('login-form');
+    const errorEl  = document.getElementById('login-error');
+    const pwToggle = document.getElementById('pw-toggle');
+    const pwInput  = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+
+    pwToggle.addEventListener('click', () => {
+      const isPass = pwInput.type === 'password';
+      pwInput.type = isPass ? 'text' : 'password';
+      pwToggle.innerHTML = isPass ? '<ion-icon name="eye-off-outline" style="vertical-align:-2px"></ion-icon>' : '<ion-icon name="eye-outline" style="vertical-align:-2px"></ion-icon>';
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.remove('show');
+      loginBtn.innerHTML = 'Verificando…';
+      loginBtn.disabled = true;
+
+      try {
+        const res = await fetch(`${CONFIG.API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          sessionStorage.setItem('brspark_admin_token', data.token);
+          sessionStorage.setItem('brspark_admin_email', data.admin.email);
+          loginBtn.innerHTML = '<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> Acesso autorizado…';
+          setTimeout(() => window.location.href = 'dashboard.html', 400);
+        } else {
+          throw new Error(data.error || 'Credenciais inválidas.');
+        }
+      } catch (err) {
+        errorEl.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ${err.message}`;
+        errorEl.classList.add('show');
+        loginBtn.innerHTML = 'Entrar no Console';
+        loginBtn.disabled = false;
+        document.getElementById('password').value = '';
+        document.getElementById('password').focus();
+      }
+    });
+  </script>
+</body>
+</html>

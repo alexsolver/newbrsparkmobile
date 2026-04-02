@@ -29,6 +29,7 @@ export interface StockMovement {
   reason?: string;
   assetId?: string; // Ativo de origem/contexto
   destinationAssetId?: string; // APENAS PARA TRANSFERÊNCIA ✅
+  destinationSubLocation?: string; // Para enviar a uma sala específica
   subLocation?: string;
   unitPrice?: number; // Preço pago na transação (IN ou ADJUST) ✅
 }

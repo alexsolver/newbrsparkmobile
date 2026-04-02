@@ -1,9 +1,11 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { AuthService } from './auth';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Assuming AsyncStorage is imported from somewhere
 
 export interface AssetDocument {
   id: string;
   assetId: string;
+  parentId?: string; // NOVO: Para criar estrutura hierárquica (Nulo = Raiz)
   title: string;
   category?: string; // Ex: Financeiro, Técnico, Vistoria
   version: number;   // v1, v2, v3...
@@ -11,7 +13,7 @@ export interface AssetDocument {
   expirationDate?: string; // ISO string 
   alertDaysBefore?: number; // 0, 1, 5, 10, 30
   uri: string;
-  type: 'pdf' | 'image' | 'file';
+  type: 'pdf' | 'image' | 'file' | 'folder';
   createdAt: string;
   history?: { 
     uri: string; 
@@ -21,30 +23,32 @@ export interface AssetDocument {
   }[];
 }
 
-const STORAGE_KEY = 'brspark_asset_docs';
+const KEY = (email: string) => AuthService.getUserKey('asset_docs', email);
 
 export const AssetDocService = {
-  getDocuments: async (assetId: string): Promise<AssetDocument[]> => {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
+  getDocuments: async (assetId: string, ownerEmail?: string): Promise<AssetDocument[]> => {
+    if (!ownerEmail) return [];
+    const data = await AsyncStorage.getItem(KEY(ownerEmail));
     if (!data) return [];
     const all: AssetDocument[] = JSON.parse(data);
     return all.filter(d => d.assetId === assetId);
   },
 
-  getAllDocuments: async (): Promise<AssetDocument[]> => {
-     const data = await AsyncStorage.getItem(STORAGE_KEY);
+  getAllDocuments: async (ownerEmail?: string): Promise<AssetDocument[]> => {
+     if (!ownerEmail) return [];
+     const data = await AsyncStorage.getItem(KEY(ownerEmail));
      return data ? JSON.parse(data) : [];
   },
 
-  saveDocument: async (doc: AssetDocument) => {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
+  saveDocument: async (doc: AssetDocument, ownerEmail: string) => {
+    const data = await AsyncStorage.getItem(KEY(ownerEmail));
     const all: AssetDocument[] = data ? JSON.parse(data) : [];
     const idx = all.findIndex(d => d.id === doc.id);
     
     if (idx >= 0) all[idx] = doc;
     else all.push(doc);
     
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    await AsyncStorage.setItem(KEY(ownerEmail), JSON.stringify(all));
 
     // Agendar notificação se houver vencimento e alerta
     if (doc.expirationDate && doc.alertDaysBefore !== undefined) {
@@ -52,11 +56,11 @@ export const AssetDocService = {
     }
   },
 
-  deleteDocument: async (id: string) => {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
+  deleteDocument: async (id: string, ownerEmail: string) => {
+    const data = await AsyncStorage.getItem(KEY(ownerEmail));
     const all: AssetDocument[] = data ? JSON.parse(data) : [];
     const filtered = all.filter(d => d.id !== id);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    await AsyncStorage.setItem(KEY(ownerEmail), JSON.stringify(filtered));
     await Notifications.cancelScheduledNotificationAsync(id);
   },
 

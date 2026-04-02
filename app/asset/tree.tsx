@@ -6,12 +6,15 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { getLocalAssets } from '../../src/database';
 import { Asset } from '../../src/types/asset';
 import { colors } from '../../src/theme/colors';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../src/hooks/useAuth';
 
 const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
-  REAL_ESTATE: { icon: 'business',     color: '#3B82F6' },
-  VEHICLE:     { icon: 'car',          color: '#F59E0B' },
-  COLLECTION:  { icon: 'diamond',      color: '#8B5CF6' },
-  OTHER:       { icon: 'cube',         color: '#10B981' },
+  REAL_ESTATE: { icon: 'business-outline',  color: '#FF8C00' },
+  TERRESTRIAL: { icon: 'car-outline',       color: '#904D00' },
+  AQUATIC:     { icon: 'boat-outline',      color: '#006B5C' },
+  SPECIAL:     { icon: 'star-outline',      color: '#70797C' },
+  OTHER:       { icon: 'cube-outline',      color: '#565E61' },
 };
 
 interface TreeNode extends Asset {
@@ -26,8 +29,9 @@ function buildTree(assets: Asset[]): TreeNode[] {
 
   const roots: TreeNode[] = [];
   map.forEach(node => {
-    if (node.parentId && map.has(node.parentId)) {
-      map.get(node.parentId)!.children.push(node);
+    const pId = node.parentId && node.parentId.trim() ? node.parentId : null;
+    if (pId && map.has(pId)) {
+      map.get(pId)!.children.push(node);
     } else {
       roots.push(node);
     }
@@ -57,16 +61,18 @@ function flattenTree(nodes: TreeNode[], collapsed: Set<string>): TreeNode[] {
 
 export default function AssetTreeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { t } = useTranslation();
   const [tree,      setTree]      = useState<TreeNode[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [flat,      setFlat]      = useState<TreeNode[]>([]);
 
   useFocusEffect(useCallback(() => {
-    const assets = getLocalAssets();
+    const assets = getLocalAssets(user?.email || '');
     const built = buildTree(assets);
     setTree(built);
     setFlat(flattenTree(built, collapsed));
-  }, []));
+  }, [user]));
 
   const toggle = (id: string) => {
     setCollapsed(prev => {
@@ -90,7 +96,7 @@ export default function AssetTreeScreen() {
         onPress={() => router.push(`/asset/${item.id}` as any)}
         onLongPress={() => hasChildren && toggle(item.id)}
       >
-        {/* Linha vertical de hierarquia */}
+        {/* Linha vertical de vínculos */}
         {item.depth > 0 && (
           <View style={[styles.hierarchyLine, { left: -12 }]} />
         )}
@@ -119,8 +125,11 @@ export default function AssetTreeScreen() {
         <View style={styles.nodeInfo}>
           <Text style={styles.nodeTitle} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.nodeSub}>
-            {item.type === 'REAL_ESTATE' ? 'Imóvel' : item.type === 'VEHICLE' ? 'Veículo' : item.type === 'COLLECTION' ? 'Patrimônio' : 'Máq./Equip.'}
-            {hasChildren ? ` · ${item.children.length} sub-ativo${item.children.length > 1 ? 's' : ''}` : ''}
+            {item.type === 'TERRESTRIAL' ? t('newAsset.terrestrial') :
+             item.type === 'REAL_ESTATE' ? t('newAsset.realEstate') :
+             item.type === 'AQUATIC' ? t('newAsset.aquatic') :
+             item.type === 'SPECIAL' ? t('newAsset.special') : item.type}
+            {hasChildren ? ` · ${item.children.length} ${item.children.length > 1 ? t('assetDetail.assetTree.subAssets') : t('assetDetail.assetTree.subAsset')}` : ''}
           </Text>
         </View>
 
@@ -133,33 +142,33 @@ export default function AssetTreeScreen() {
   const totalAssets = getLocalAssets().length;
 
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+    <View style={styles.container}>
+      {/* Sub Header (Hierarquia Context) */}
+      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' }}>
+           <Ionicons name="arrow-back" size={20} color="#191C1D" />
         </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.headerTitle}>Hierarquia de Ativos</Text>
-          <Text style={styles.headerSub}>{totalAssets} ativos no portfólio</Text>
+        <View style={{ flex: 1, marginLeft: 16 }}>
+           <Text style={{ fontSize: 16, fontWeight: '900', color: '#191C1D' }}>{t('assetDetail.assetTree.title')}</Text>
+           <Text style={{ fontSize: 11, color: '#70797C', fontWeight: '800', textTransform: 'uppercase' }}>{flat.length} items no portfólio</Text>
         </View>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => router.push('/asset/new' as any)}
         >
-          <Ionicons name="add" size={22} color="#fff" />
+          <Ionicons name="add" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
       {/* Legenda */}
       <View style={styles.legend}>
-        <Text style={styles.legendText}>Toque para ver detalhes · Segure para expandir/colapsar</Text>
+        <Text style={styles.legendText}>{t('assetDetail.assetTree.legend')}</Text>
       </View>
 
       {flat.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="git-branch-outline" size={56} color={colors.border} />
-          <Text style={styles.emptyText}>Nenhum ativo cadastrado{'\n'}Toque em + para adicionar</Text>
+          <Text style={styles.emptyText}>{t('assetDetail.assetTree.empty')}</Text>
         </View>
       ) : (
         <FlatList
@@ -170,7 +179,7 @@ export default function AssetTreeScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -185,7 +194,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: colors.primary },
   headerSub:   { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
   addBtn: {
-    backgroundColor: colors.primary, width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.accent, width: 36, height: 36, borderRadius: 18,
+
     justifyContent: 'center', alignItems: 'center',
   },
 

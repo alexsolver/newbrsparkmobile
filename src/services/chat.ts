@@ -1,15 +1,26 @@
-import { NotificationService } from './notifications';
+import { apiFetch, API_BASE } from './auth';
 
-const BASE_URL = 'http://192.168.0.13:3000'; // ajuste conforme o IP do servidor
+export interface ChatContact {
+  id: string;
+  requesterId: string;
+  addresseeId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  user?: { email: string; name: string; avatarUrl?: string };
+}
 
 export interface ChatRoom {
   id: string;
   name: string;
-  description?: string;
+  isGroup: boolean;
+  creatorId?: string;
   avatarColor: string;
+  avatarUrl?: string;
   lastMessage?: string;
   lastSender?: string;
   lastMessageAt?: number;
+  memberCount: number;
+  unreadCount?: number;
+  members: any[];
 }
 
 export interface ChatMessage {
@@ -17,48 +28,148 @@ export interface ChatMessage {
   roomId: string;
   senderId: string;
   senderName: string;
+  senderAvatarUrl?: string;
   type: 'text' | 'audio' | 'video' | 'image';
   content?: string;
   mediaUrl?: string;
   timestamp: number;
 }
 
-// ID do usuário local (sem auth real, usa um ID fixo por dispositivo)
-export const MY_USER_ID   = 'user_local';
-export const MY_USER_NAME = 'Eu';
-
 export const ChatService = {
+
+  // ---- CONTATOS ----
+
+  async requestContact(email: string): Promise<any> {
+    const res = await apiFetch('/api/chat/contacts/request', {
+      method: 'POST', body: JSON.stringify({ contactEmail: email })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao enviar convite');
+    return data;
+  },
+
+  async getPendingContacts(): Promise<ChatContact[]> {
+    const res = await apiFetch('/api/chat/contacts/pending');
+    return res.json();
+  },
+
+  async updateContactStatus(id: string, status: 'ACCEPTED' | 'REJECTED'): Promise<any> {
+    const res = await apiFetch(`/api/chat/contacts/${id}/status`, {
+      method: 'PUT', body: JSON.stringify({ status })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao atualizar status');
+    return data;
+  },
+
+  async getAvailableContacts(): Promise<any[]> {
+    const res = await apiFetch('/api/chat/contacts');
+    return res.json();
+  },
+
+  // ---- SALAS ----
+
+  async createRoom(params: { isGroup: boolean; name?: string; userIds: string[] }): Promise<ChatRoom> {
+    const res = await apiFetch('/api/chat/rooms', {
+      method: 'POST', body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao criar sala');
+    return data;
+  },
+
+  async updateGroupMembers(roomId: string, userIds: string[]): Promise<any> {
+    const res = await apiFetch(`/api/chat/rooms/${roomId}/members`, {
+      method: 'PUT', body: JSON.stringify({ userIds })
+    });
+    return res.json();
+  },
+
   async getRooms(): Promise<ChatRoom[]> {
     try {
-      const res = await fetch(`${BASE_URL}/api/chat/rooms`);
+      const res = await apiFetch('/api/chat/rooms');
+      if (!res.ok) return [];
       return await res.json();
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   },
+
+  async markAsRead(roomId: string): Promise<void> {
+    await apiFetch(`/api/chat/rooms/${roomId}/read`, { method: 'PUT' });
+  },
+
+  async getRoomInfo(roomId: string): Promise<ChatRoom | null> {
+    const rooms = await this.getRooms();
+    return rooms.find(r => r.id === roomId) || null;
+  },
+
+  // ---- MENSAGENS ----
 
   async getMessages(roomId: string, since: number = 0): Promise<ChatMessage[]> {
     try {
-      const res = await fetch(`${BASE_URL}/api/chat/rooms/${roomId}/messages?since=${since}`);
+      const res = await apiFetch(`/api/chat/rooms/${roomId}/messages?since=${since}`);
+      if (!res.ok) return [];
       return await res.json();
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   },
 
   async sendMessage(roomId: string, payload: {
     type: 'text' | 'audio' | 'video' | 'image';
     content?: string;
     mediaUrl?: string;
-  }): Promise<ChatMessage | null> {
+  }): Promise<ChatMessage> {
+    const res = await apiFetch(`/api/chat/rooms/${roomId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Falha ao enviar mensagem');
+    return data;
+  },
+
+  /**
+   * Faz upload de mídia local para o servidor e retorna a URL pública.
+   * Usa a mesma rota de storage do app (POST /api/storage/upload).
+   * Se o upload falhar, retorna null e o app pode tratar com fallback.
+   */
+  async uploadChatMedia(localUri: string, mimeType: string): Promise<string | null> {
     try {
-      const res = await fetch(`${BASE_URL}/api/chat/rooms/${roomId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          senderId:   MY_USER_ID,
-          senderName: MY_USER_NAME,
-          ...payload,
-        }),
+      // Lê o arquivo como base64
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            // FileReader result: "data:image/jpeg;base64,AAAA..."
+            const base64 = (reader.result as string).split(',')[1];
+            const ext = mimeType.split('/')[1] || 'jpg';
+            const remotePath = `chat/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+            const uploadRes = await apiFetch('/api/storage/upload', {
+              method: 'POST',
+              body: JSON.stringify({ fileBase64: base64, mimeType, name: remotePath, path: remotePath }),
+            });
+
+            if (!uploadRes.ok) { resolve(null); return; }
+            const { url } = await uploadRes.json();
+            resolve(url || null);
+          } catch (e) {
+            console.warn('[ChatUpload] Erro ao processar base64:', e);
+            resolve(null);
+          }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
       });
-      const data = await res.json();
-      return { id: data.id, roomId, senderId: MY_USER_ID, senderName: MY_USER_NAME, timestamp: data.timestamp, ...payload } as ChatMessage;
-    } catch { return null; }
+    } catch (e) {
+      console.warn('[ChatUpload] Erro de upload:', e);
+      return null;
+    }
   },
 };
+

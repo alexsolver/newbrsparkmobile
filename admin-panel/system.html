@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Sistema</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Configurações do Sistema</span>
+    </div>
+    <div class="page-body">
+      <div class="grid-2">
+
+        <!-- Feature Flags -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Feature Flags Globais</span><span class="badge badge-accent" id="flags-count">—</span></div>
+          <div class="panel-body" id="flags-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
+        </div>
+
+        <!-- System Info -->
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="information-circle-outline" style="vertical-align:-2px"></ion-icon> Informações do Sistema</span></div>
+          <div class="panel-body">
+            <div class="flag-item" style="border-bottom:1px solid var(--border)">
+              <span class="flag-icon"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon></span>
+              <div class="flag-info"><div class="flag-name">Versão do App</div><div class="flag-desc">BrSpark Mobile v2.4.1</div></div>
+            </div>
+            <div class="flag-item" style="border-bottom:1px solid var(--border)">
+              <span class="flag-icon"><ion-icon name="server-outline" style="vertical-align:-2px"></ion-icon></span>
+              <div class="flag-info"><div class="flag-name">Banco de Dados</div><div class="flag-desc" id="db-info">PostgreSQL (verificando…)</div></div>
+            </div>
+            <div class="flag-item" style="border-bottom:1px solid var(--border)">
+              <span class="flag-icon"><ion-icon name="globe-outline"></ion-icon></span>
+              <div class="flag-info"><div class="flag-name">API Backend</div><div class="flag-desc"><span class="badge badge-green pulse" id="api-status"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Verificando</span></div></div>
+            </div>
+            <div class="flag-item">
+              <span class="flag-icon"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></span>
+              <div class="flag-info"><div class="flag-name">Servidor</div><div class="flag-desc" id="server-time">—</div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Global Config -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title"><ion-icon name="settings-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Configurações Globais</span><button class="btn btn-primary btn-sm" id="save-config-btn">Salvar</button></div>
+        <div class="panel-body">
+          <div class="grid-3">
+            <div class="form-group">
+              <label class="form-label">Idioma Padrão</label>
+              <select class="form-control" id="cfg-lang"><option value="pt-BR">Português (pt-BR)</option><option value="en-US">English (en-US)</option><option value="es-ES">Español (es-ES)</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Retenção de Logs (dias)</label>
+              <input class="form-control" type="number" id="cfg-retention" value="365" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Período de Trial (dias)</label>
+              <input class="form-control" type="number" id="cfg-trial" value="14" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG }   from './js/config.js';
+  initPage();
+
+  // Check API health
+  fetch(`${CONFIG.API_BASE.replace('/api','')}/health`)
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('api-status').innerHTML = '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Online';
+      document.getElementById('api-status').className = 'badge badge-green';
+      document.getElementById('server-time').textContent = new Date(data.ts).toLocaleString('pt-BR');
+      document.getElementById('db-info').textContent = 'PostgreSQL — conectado';
+    })
+    .catch(() => {
+      document.getElementById('api-status').textContent = '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Offline';
+      document.getElementById('api-status').className = 'badge badge-red';
+    });
+
+  // Load flags
+  async function loadFlags() {
+    const flags = await CONFIG.get('/flags');
+    if (!flags) return;
+    document.getElementById('flags-count').textContent = `${flags.length} flags`;
+    document.getElementById('flags-list').innerHTML = flags.map(f => {
+      const iconHtml = f.icon ? `<ion-icon name="${f.icon}"></ion-icon>` : '<ion-icon name="construct-outline"></ion-icon>';
+      return `<div class="flag-item">
+        <span class="flag-icon">${iconHtml}</span>
+        <div class="flag-info"><div class="flag-name">${f.label}</div><div class="flag-desc">${f.description}</div></div>
+        <label class="toggle">
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlag('${f.key}', this.checked)" />
+          <span class="toggle-track"></span>
+        </label>
+      </div>`;
+    }).join('');
+  }
+
+  loadFlags();
+
+  window.toggleFlag = async (key, enabled) => {
+    await CONFIG.patch(`/flags/${key}`, { enabled });
+  };
+
+  document.getElementById('save-config-btn').addEventListener('click', () => {
+    alert('Configurações salvas (persistência em desenvolvimento).');
+  });
+</script>
+</body>
+</html>

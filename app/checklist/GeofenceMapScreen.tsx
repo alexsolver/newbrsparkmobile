@@ -1,0 +1,383 @@
+/**
+ * GeofenceMapScreen — Opção B
+ * Full-screen map confirmation shown BEFORE the technician starts the checklist.
+ * Shows zone/route + live position. Can block start if outside + failMode='block'.
+ */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator, Alert, Linking, Platform, Image,
+  StyleSheet, Text, TouchableOpacity, View
+} from 'react-native';
+import MapView, { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
+import * as Location from 'expo-location';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { useAuth } from '../../src/hooks/useAuth';
+
+interface TaskLocation {
+  id?: string;
+  title?: string;
+  locationZoneType?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
+  locationRadius?: number | null;
+  locationAddress?: string | null;
+  locationPolygon?: number[][] | string | null;
+}
+
+interface Props {
+  task: TaskLocation;
+  failMode?: 'block' | 'warn';
+  onProceed: () => void;
+  onCancel: () => void;
+}
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371000, toRad = (d: number) => d * Math.PI / 180;
+  const a = Math.sin(toRad(lat2-lat1)/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(toRad(lng2-lng1)/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function pointInPolygon(lat: number, lng: number, poly: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length-1; i < poly.length; j = i++) {
+    if ((poly[i][0] > lat) !== (poly[j][0] > lat) &&
+        lng < ((poly[j][1]-poly[i][1])*(lat-poly[i][0])/(poly[j][0]-poly[i][0])+poly[i][1]))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function nearestRoutePoint(lat: number, lng: number, route: number[][]): number {
+  let min = Infinity;
+  for (let i = 0; i < route.length-1; i++) {
+    const [aL, aG] = route[i], [bL, bG] = route[i+1];
+    const dx = bG-aG, dy = bL-aL, len2 = dx*dx+dy*dy;
+    let t = len2 > 0 ? ((lng-aG)*dx+(lat-aL)*dy)/len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const d = haversine(lat, lng, aL+t*dy, aG+t*dx);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, onCancel }: Props) {
+  const { user } = useAuth();
+  const mapRef = useRef<MapView>(null);
+  const [myPos, setMyPos]     = useState<{ lat: number; lng: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus]   = useState<'inside' | 'outside' | 'unknown'>('unknown');
+  const [statusMsg, setStatusMsg] = useState('Obtendo localização...');
+  const [distance, setDistance]   = useState<number | null>(null);
+
+  const zoneType = task.locationZoneType;
+  const polygon: number[][] = (() => {
+    const raw = task.locationPolygon;
+    if (!raw) return [];
+    try { 
+      let parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; 
+      if (Array.isArray(parsed)) {
+          return parsed.map((pt: any) => {
+              if (Array.isArray(pt)) return [parseFloat(pt[0]), parseFloat(pt[1])];
+              return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
+          });
+      }
+      return [];
+    } catch { return []; }
+  })();
+
+  const evaluate = useCallback((lat: number, lng: number) => {
+    if (!zoneType || zoneType === 'none') {
+      setStatus('inside'); setStatusMsg('Sem restrição geográfica nesta OS.'); return;
+    }
+    if (zoneType === 'radius') {
+      const dest = { lat: task.locationLat!, lng: task.locationLng! };
+      const radius = task.locationRadius || 200;
+      const dist = Math.round(haversine(lat, lng, dest.lat, dest.lng));
+      setDistance(dist);
+      if (dist <= radius) {
+        setStatus('inside'); setStatusMsg(`DENTRO: Você está na área (${dist}m do centro)`);
+      } else {
+        setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m da área (raio: ${radius}m)`);
+      }
+    } else if (zoneType === 'polygon') {
+      const inside = pointInPolygon(lat, lng, polygon);
+      setStatus(inside ? 'inside' : 'outside');
+      setStatusMsg(inside ? 'DENTRO: Você está na área de serviço' : 'FORA: Você está do polígono de serviço');
+    } else if (zoneType === 'route') {
+      const dist = Math.round(nearestRoutePoint(lat, lng, polygon));
+      setDistance(dist);
+      const threshold = task.locationRadius || 100; // distância de desvio configurável
+      if (dist <= threshold) {
+        setStatus('inside'); setStatusMsg(`DENTRO: Você está no trajeto correto (${dist}m da rota)`);
+      } else {
+        setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m do trajeto (limite: ${threshold}m)`);
+      }
+    } else if (zoneType === 'segment') {
+      if (polygon.length >= 2) {
+        const distA = Math.round(haversine(lat, lng, polygon[0][0], polygon[0][1]));
+        const distB = Math.round(haversine(lat, lng, polygon[1][0], polygon[1][1]));
+        const dist = Math.min(distA, distB);
+        setDistance(dist);
+        const radius = task.locationRadius || 150;
+        if (dist <= radius) {
+          setStatus('inside'); setStatusMsg(`DENTRO: Você está na extremidade ${distA < distB ? 'A' : 'B'} (${dist}m)`);
+        } else {
+          setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m da extremidade mais próxima (limite: ${radius}m)`);
+        }
+      }
+    }
+  }, [task, polygon]);
+
+  useEffect(() => {
+    (async () => {
+      const { status: perm } = await Location.requestForegroundPermissionsAsync();
+      if (perm !== 'granted') { setLoading(false); setStatus('unknown'); setStatusMsg('GPS negado.'); return; }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const { latitude: lat, longitude: lng } = loc.coords;
+      setMyPos({ lat, lng });
+      evaluate(lat, lng);
+      setLoading(false);
+
+      // Fit map to show both user and zone
+      setTimeout(() => {
+        if (!mapRef.current) return;
+        const points = polygon.length > 0
+          ? [...polygon.map(c => ({ latitude: c[0], longitude: c[1] })), { latitude: lat, longitude: lng }]
+          : [{ latitude: lat, longitude: lng }];
+        if (task.locationLat && task.locationLng)
+          points.push({ latitude: task.locationLat, longitude: task.locationLng });
+        mapRef.current.fitToCoordinates(points, { edgePadding: { top: 80, right: 40, bottom: 200, left: 40 }, animated: true });
+      }, 500);
+    })();
+  }, []);
+
+  const openInMaps = () => {
+    // Caso seja Trecho, mostrar alerta para escolher Ponto A ou Ponto B
+    if (zoneType === 'segment' && polygon.length >= 2) {
+      Alert.alert(
+        'Navegar para OS',
+        'Para qual extremidade do trecho deseja navegar?',
+        [
+          { text: 'Ponto A', onPress: () => openDestInMaps(polygon[0][0], polygon[0][1]) },
+          { text: 'Ponto B', onPress: () => openDestInMaps(polygon[1][0], polygon[1][1]) },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    // Para rotas, navegamos para o ponto INICIAL (polygon[0]). Para outros, para o centro.
+    const targetLat = (zoneType === 'route' && polygon.length > 0) ? polygon[0][0] : task.locationLat;
+    const targetLng = (zoneType === 'route' && polygon.length > 0) ? polygon[0][1] : task.locationLng;
+    openDestInMaps(targetLat, targetLng);
+  };
+
+  const openDestInMaps = (targetLat?: number | null, targetLng?: number | null) => {
+    if (!targetLat || !targetLng) return;
+    
+    const options: any[] = [
+      { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${targetLat},${targetLng}&navigate=yes`) },
+      { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}`) }
+    ];
+    
+    if (Platform.OS === 'ios') {
+      options.push({ text: 'Apple Maps', onPress: () => Linking.openURL(`maps://?daddr=${targetLat},${targetLng}`) });
+      options.push({ text: 'Cancelar', style: 'cancel' });
+      Alert.alert('Navegar para OS', 'Escolha seu aplicativo favorito:', options);
+    } else {
+      Linking.openURL(`geo:0,0?q=${targetLat},${targetLng}(Local da OS)`);
+    }
+  };
+
+  const handleProceed = () => {
+    if (status === 'outside' && failMode === 'block') {
+      Alert.alert('Acesso Bloqueado', 'Você precisa estar na área de serviço para iniciar esta OS.\n\n' + statusMsg);
+      return;
+    }
+    if (status === 'outside' && failMode === 'warn') {
+      Alert.alert('Atenção', statusMsg + '\n\nVocê pode continuar, mas o desvio será registrado como evidência.', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Iniciar mesmo assim', onPress: onProceed },
+      ]);
+      return;
+    }
+    onProceed();
+  };
+
+  const statusColor = status === 'inside' ? '#16a34a' : status === 'outside' ? '#dc2626' : '#6b7280';
+
+  // Map region defaults
+  const initialRegion = {
+    latitude:  task.locationLat  || myPos?.lat  || -23.55,
+    longitude: task.locationLng  || myPos?.lng  || -46.63,
+    latitudeDelta: 0.01, longitudeDelta: 0.01,
+  };
+
+  return (
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={initialRegion}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+      >
+        {myPos && user?.avatarUrl && (
+          <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={999}>
+            <View style={styles.userMarkerOutline}>
+              <View style={styles.userMarkerInner}>
+                <Image source={{ uri: user.avatarUrl }} style={styles.userMarkerImage} />
+              </View>
+            </View>
+          </Marker>
+        )}
+        {/* Radius zone */}
+        {zoneType === 'radius' && task.locationLat && task.locationLng && (
+          <>
+            <Circle
+              center={{ latitude: task.locationLat, longitude: task.locationLng }}
+              radius={task.locationRadius || 200}
+              fillColor="rgba(59,130,246,0.12)"
+              strokeColor="#3b82f6"
+              strokeWidth={2}
+            />
+            <Marker
+              coordinate={{ latitude: task.locationLat, longitude: task.locationLng }}
+              title={task.title || 'Local da OS'}
+              pinColor="#3b82f6"
+            />
+          </>
+        )}
+
+        {/* Polygon zone */}
+        {zoneType === 'polygon' && polygon.length >= 3 && (
+          <Polygon
+            coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
+            fillColor="rgba(59,130,246,0.12)"
+            strokeColor="#3b82f6"
+            strokeWidth={2}
+          />
+        )}
+
+        {/* Route */}
+        {zoneType === 'route' && polygon.length >= 2 && (
+          <>
+            <Polyline
+              coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
+              strokeColor="#f97316"
+              strokeWidth={4}
+              lineDashPattern={[8, 4]}
+            />
+            {/* Start and end markers */}
+            <Marker coordinate={{ latitude: polygon[0][0], longitude: polygon[0][1] }} title="Início" pinColor="#16a34a" />
+            <Marker coordinate={{ latitude: polygon[polygon.length-1][0], longitude: polygon[polygon.length-1][1] }} title="Fim (Destino)">
+               <View style={{ width: 32, height: 32, backgroundColor: '#dc2626', borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
+                 <FontAwesome5 name="flag-checkered" size={14} color="#fff" />
+               </View>
+            </Marker>
+          </>
+        )}
+
+        {/* Segment zone */}
+        {zoneType === 'segment' && polygon.length >= 2 && (
+          <>
+            <Polyline
+              coordinates={[{ latitude: polygon[0][0], longitude: polygon[0][1] }, { latitude: polygon[1][0], longitude: polygon[1][1] }]}
+              strokeColor="#9ca3af"
+              strokeWidth={2}
+              lineDashPattern={[5, 10]}
+            />
+            {/* Ponto A */}
+            <Circle
+              center={{ latitude: polygon[0][0], longitude: polygon[0][1] }}
+              radius={task.locationRadius || 150}
+              fillColor="rgba(37,99,235,0.12)"
+              strokeColor="#2563eb"
+              strokeWidth={2}
+            />
+            <Marker coordinate={{ latitude: polygon[0][0], longitude: polygon[0][1] }} title="Ponto A" pinColor="#2563eb" />
+            
+            {/* Ponto B */}
+            <Circle
+              center={{ latitude: polygon[1][0], longitude: polygon[1][1] }}
+              radius={task.locationRadius || 150}
+              fillColor="rgba(217,70,239,0.12)"
+              strokeColor="#d946ef"
+              strokeWidth={2}
+            />
+            <Marker coordinate={{ latitude: polygon[1][0], longitude: polygon[1][1] }} title="Ponto B" pinColor="#d946ef" />
+          </>
+        )}
+      </MapView>
+
+      {/* Status overlay */}
+      <View style={[styles.statusCard, { borderColor: statusColor + '40' }]}>
+        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.statusTitle, { color: statusColor }]}>
+            {loading ? 'Localizando...' : statusMsg}
+          </Text>
+          {task.locationAddress && (
+            <Text style={styles.address} numberOfLines={1}>📍 {task.locationAddress}</Text>
+          )}
+        </View>
+        {loading && <ActivityIndicator size="small" color={statusColor} />}
+      </View>
+
+      {/* Action buttons */}
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.btnCancel} onPress={onCancel}>
+          <Text style={styles.btnCancelText}>← Voltar</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.btnStart, { backgroundColor: status === 'outside' && failMode === 'block' ? '#9ca3af' : '#f97316' }]}
+          onPress={handleProceed}
+        >
+          <Text style={styles.btnStartText}>
+            {status === 'outside' && failMode === 'block' ? 'BLOQUEADO' : 'INICIAR OS'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  map: { flex: 1 },
+  statusCard: {
+    position: 'absolute', top: 50, left: 16, right: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12, borderWidth: 1,
+    padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+  },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  statusTitle: { fontSize: 13, fontWeight: '700' },
+  address: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  actions: {
+    position: 'absolute', bottom: 40, left: 16, right: 16,
+    flexDirection: 'row', gap: 10,
+  },
+  btnCancel: {
+    backgroundColor: '#fff', borderRadius: 10, padding: 14,
+    borderWidth: 1, borderColor: '#e5e7eb',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnCancelText: { fontSize: 13, color: '#374151', fontWeight: '600' },
+  btnMaps: {
+    backgroundColor: '#fff', borderRadius: 10, padding: 14,
+    borderWidth: 1, borderColor: '#e5e7eb',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnMapsText: { fontSize: 13, color: '#3b82f6', fontWeight: '600' },
+  btnStart: {
+    flex: 1, borderRadius: 10, padding: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnStartText: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  userMarkerOutline: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  userMarkerInner: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fff', overflow: 'hidden' },
+  userMarkerImage: { width: '100%', height: '100%', resizeMode: 'cover' }
+});

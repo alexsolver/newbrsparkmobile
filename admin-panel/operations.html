@@ -1,0 +1,2417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Central de Operações</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    /* ── Kanban Layout ───────────────────────────────────────── */
+    .kanban-board {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 1200px) { .kanban-board { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 768px)  { .kanban-board { grid-template-columns: 1fr; } }
+
+    .kanban-col {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 200px;
+      max-height: calc(100vh - 220px);
+    }
+    .kanban-col-header {
+      padding: 14px 16px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .kanban-col-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .kanban-count {
+      margin-left: auto;
+      background: rgba(0,0,0,0.08);
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+    }
+
+    /* ── Task Cards ──────────────────────────────────────────── */
+    .task-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .task-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--card-accent, var(--accent));
+    }
+    .task-card:hover {
+      border-color: var(--border2);
+      box-shadow: 0 4px 16px rgba(15,23,42,0.08);
+      transform: translateY(-1px);
+    }
+    .task-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .task-card-email {
+      font-size: 10px;
+      color: var(--text3);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .task-card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .task-card-time {
+      font-size: 9px;
+      color: var(--text3);
+      font-weight: 600;
+    }
+    .task-card-id {
+      font-size: 9px;
+      color: var(--text3);
+      font-family: monospace;
+    }
+
+    /* ── Column Colors ───────────────────────────────────────── */
+    .col-pending   { --col-hdr-bg: #FEF3C7; --col-hdr-color: #92400E; --card-accent: var(--amber); }
+    .col-progress  { --col-hdr-bg: #DBEAFE; --col-hdr-color: #1E40AF; --card-accent: var(--blue); }
+    .col-completed { --col-hdr-bg: #D1FAE5; --col-hdr-color: #065F46; --card-accent: var(--green); }
+    .col-error     { --col-hdr-bg: #FEE2E2; --col-hdr-color: #991B1B; --card-accent: var(--red); }
+
+    .kanban-col.col-pending   .kanban-col-header { background: var(--col-hdr-bg); color: var(--col-hdr-color); }
+    .kanban-col.col-progress  .kanban-col-header { background: var(--col-hdr-bg); color: var(--col-hdr-color); }
+    .kanban-col.col-completed .kanban-col-header { background: var(--col-hdr-bg); color: var(--col-hdr-color); }
+    .kanban-col.col-error     .kanban-col-header { background: var(--col-hdr-bg); color: var(--col-hdr-color); }
+
+    .task-card.col-pending   { --card-accent: var(--amber); }
+    .task-card.col-progress  { --card-accent: var(--blue); }
+    .task-card.col-completed { --card-accent: var(--green); }
+    .task-card.col-error     { --card-accent: var(--red); }
+
+    /* ── Filter Bar ──────────────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 0;
+      flex-wrap: wrap;
+    }
+    .filter-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+      min-width: 220px;
+      transition: border-color var(--transition);
+    }
+    .filter-input:focus { border-color: var(--accent); }
+    .filter-input::placeholder { color: var(--text3); }
+
+    /* ── Detail Modal ────────────────────────────────────────── */
+    .detail-field { margin-bottom: 14px; }
+    .detail-label { font-size: 9px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+    .detail-value { font-size: 12px; color: var(--text); font-weight: 500; background: var(--surface2); border-radius: 6px; padding: 8px 10px; word-break: break-all; }
+    .detail-value.mono { font-family: monospace; font-size: 11px; }
+    .detail-value.empty { color: var(--text3); font-style: italic; }
+
+    /* ── Column Controls ─────────────────────────────────────── */
+    .kanban-col-controls {
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .kanban-col-controls input {
+      flex: 1;
+      font-size: 10px;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      outline: none;
+      background: #f8fafc;
+    }
+    .kanban-col-controls input:focus { border-color: var(--accent); }
+    .kanban-col-controls button {
+      font-size: 10px;
+      padding: 5px 6px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text2);
+      transition: background 0.2s;
+    }
+    .kanban-col-controls button:hover { background: #e2e8f0; }
+
+    /* ── Pulse dot ───────────────────────────────────────────── */
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.5s infinite;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* ── Empty column ────────────────────────────────────────── */
+    .kanban-empty {
+      text-align: center;
+      padding: 28px 16px;
+      color: var(--text3);
+      font-size: 11px;
+    }
+    .kanban-empty-icon { font-size: 28px; margin-bottom: 8px; }
+
+    /* ── Sync Flash ──────────────────────────────────────────── */
+    @keyframes flash { 0%,100%{background:var(--surface)} 50%{background:var(--accent-dim)} }
+    .card-flash { animation: flash 0.6s ease; }
+    /* ── Report View ─────────────────────────────────────────── */
+    .report-section { margin-bottom: 24px; }
+    .report-section-title {
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--text3); margin-bottom: 12px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .report-field { margin-bottom: 14px; }
+    .report-field-label {
+      font-size: 9px; font-weight: 800; color: var(--text3);
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;
+    }
+    .report-field-value {
+      font-size: 12px; color: var(--text); font-weight: 500;
+      background: var(--surface2); border-radius: 6px; padding: 8px 10px;
+      word-break: break-all;
+    }
+    .report-field-value.mono { font-family: monospace; font-size: 11px; }
+    .report-field-value.empty { color: var(--text3); font-style: italic; }
+    .report-response-item {
+      background: var(--surface2); border-radius: 8px; padding: 12px 14px;
+      margin-bottom: 8px; border-left: 3px solid var(--accent);
+    }
+    .report-response-q {
+      font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+    }
+    .report-response-a {
+      font-size: 12px; color: var(--text2); background: var(--surface);
+      border-radius: 4px; padding: 6px 10px; margin-top: 4px;
+    }
+    .report-response-a.empty { color: var(--text3); font-style: italic; }
+    .report-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .report-tab {
+      padding: 8px 16px; font-size: 11px; font-weight: 700; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      color: var(--text3); transition: all 0.15s; background: none; border-top: none;
+      border-left: none; border-right: none;
+    }
+    .report-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .report-tab:hover:not(.active) { color: var(--text); }
+
+    /* ── Print styles ────────────────────────────────────────── */
+    @media print {
+      body, html { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body > * { display: none !important; }
+      #print-report { display: block !important; position: static !important; width: auto !important; left: 0 !important; top: 0 !important; }
+      @page { size: A4; margin: 0.8cm; }
+    }
+    #print-report {
+      display: block;
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      width: 800px !important;
+      font-family: 'Inter', sans-serif;
+      color: #0f172a;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pdf-topbar {
+       display: flex; justify-content: space-between; font-size: 10px; color: #1e293b;
+       padding-bottom: 5px; font-weight: 600;
+    }
+    .pdf-header-banner {
+       background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 30%, #e2e8f0 100%);
+       height: 70px; border-radius: 8px; position: relative;
+       margin-top: 5px; margin-bottom: 30px;
+    }
+    .pdf-summary-plate {
+       position: absolute; left: 50%; transform: translateX(-50%); top: 15px;
+       background: rgba(255,255,255,0.95); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+       border-radius: 20px; padding: 8px 30px; text-align: center;
+       border: 1px solid #cbd5e1;
+    }
+    .pdf-summary-plate h2 { margin: 0; font-size: 16px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+    .pdf-summary-plate span { font-size: 9px; color: #0f172a; font-weight: 500; }
+    
+    .pdf-tech-info {
+       position: absolute; right: 20px; top: 15px; display: flex; align-items: center; gap: 10px;
+    }
+    .pdf-tech-avatar {
+       width: 40px; height: 40px; border-radius: 50%; background: #94a3b8;
+       display: flex; align-items: center; justify-content: center; color: white;
+       font-weight: bold; overflow: hidden; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .pdf-tech-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .pdf-tech-texts { display: flex; flex-direction: column; text-align: right; }
+    .pdf-tech-name { font-size: 12px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px; }
+    .pdf-tech-mail { font-size: 10px; color: #334155; }
+
+    .pdf-box {
+       border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
+       padding: 15px; margin-bottom: 25px; position: relative;
+    }
+    .pdf-box-title {
+       text-align: center; font-size: 14px; font-weight: 900; color: #0f172a; margin-bottom: 25px;
+       letter-spacing: -0.3px;
+    }
+    .pdf-timeline {
+       display: flex; justify-content: space-between; align-items: flex-start;
+       position: relative; padding: 0 40px;
+    }
+    .pdf-timeline::before {
+       content: ''; position: absolute; top: 15px; left: 70px; right: 70px;
+       height: 3px; background: linear-gradient(90deg, #3b82f6 0%, #22c55e 100%);
+       z-index: 0;
+    }
+    .pdf-timeline-node {
+       display: flex; flex-direction: column; align-items: center; z-index: 1; width: 100px; text-align: center; background:#f8fafc;
+    }
+    .pdf-timeline-icon {
+       width: 32px; height: 32px; border-radius: 50%;
+       display: flex; align-items: center; justify-content: center;
+       color: white; font-size: 14px; margin-bottom: 8px; border: 3px solid #f8fafc;
+    }
+    .bg-blue { background: #3b82f6; }
+    .bg-green { background: #22c55e; }
+    .bg-orange { background: #EA580C; }
+    .pdf-timeline-label { font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
+    .pdf-timeline-date { font-size: 9px; color: #475569; }
+
+    .pdf-total-time {
+       position: absolute; left: 50%; transform: translateX(-50%); bottom: -45px;
+       width: 80px; height: 80px; background: white !important; border: 5px solid #22c55e;
+       border-radius: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+    }
+    .pdf-total-time span { font-size: 8px; font-weight: 800; color: #0f172a; }
+    .pdf-total-time strong { font-size: 12px; font-weight: 900; color: #0f172a; }
+
+    .pdf-section-title {
+       font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 50px; margin-bottom: 20px;
+       display: flex; align-items: center; gap: 8px;
+    }
+    .pdf-section-title ion-icon { color: #64748b; }
+
+    .pdf-form-grid {
+       display: flex; flex-direction: column; gap: 20px;
+       position: relative; padding-left: 45px; margin-top: 10px;
+    }
+    .pdf-form-line {
+       position: absolute; left: 13.5px; top: 5px; height: 100%; width: 2px; background: #e2e8f0;
+    }
+    .pdf-form-item {
+       position: relative;
+       background: #f8fafc;
+       border: 1px solid #e2e8f0;
+       border-radius: 10px;
+       padding: 14px 18px;
+       break-inside: avoid;
+       page-break-inside: avoid;
+    }
+    .pdf-form-num {
+       position: absolute; left: -44px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
+       background: #F97316; color: white; display: flex; align-items: center; justify-content: center;
+       font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid white;
+       box-shadow: 0 2px 6px rgba(249,115,22,0.3);
+    }
+    .pdf-q { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; }
+    .pdf-a { font-size: 14px; font-weight: 600; color: #0f172a; }
+    
+    .pdf-pill { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    
+    .pdf-photo-grid {
+       display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    .pdf-photo-card {
+       border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; position: relative;
+       break-inside: avoid;
+       page-break-inside: avoid;
+    }
+    .pdf-photo-title {
+       font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 10px; background: white;
+    }
+    .pdf-photo-img {
+       width: 100%; height: 180px; background: #e2e8f0; object-fit: cover; display: block;
+    }
+    .pdf-photo-stamp {
+       position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white;
+       padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight:600;
+    }
+    .pdf-photo-watermark {
+       position: absolute; bottom: 8px; left: 8px; width: 45px; height: 45px; opacity: 0.8;
+       border-radius: 50%; border: 2px solid rgba(255,255,255,0.8);
+       background: rgba(0,0,0,0.4); color: white; display:flex; align-items:center; justify-content:center;
+       font-size: 7px; font-weight:bold; text-align:center; box-sizing:border-box; line-height:1;
+    }
+
+    .pdf-footer {
+       text-align: center; border-top: 1px solid #cbd5e1; margin-top: 60px; padding-top: 15px;
+       font-size: 11px; font-weight: 600; color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title" style="display:flex;align-items:center;gap:10px;">
+        <ion-icon name="git-branch-outline" style="font-size:20px;color:var(--accent)"></ion-icon>
+        Central de Operações
+        <span class="live-dot" title="Auto-refresh ativo"></span>
+      </div>
+      <div class="topbar-actions">
+        <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
+          <option value="">Todos os técnicos</option>
+        </select>
+        <input class="filter-input" type="text" id="filter-search" placeholder="<ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon>  Buscar OS, ID, título..." oninput="applyFilters()" style="min-width:240px" />
+        <button class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ Atualizar</button>
+        <button class="btn btn-primary btn-sm" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
+      </div>
+    </div>
+
+    <div class="page-body" style="overflow-y:auto; max-height:calc(100vh - 60px); padding:20px 24px 48px;">
+
+      <!-- Stat Summary Row -->
+      <div class="stat-grid" id="ops-stats" style="margin-bottom:20px;"></div>
+
+      <!-- Kanban Board -->
+      <div class="kanban-board" id="kanban-board">
+        <div class="kanban-col col-pending">
+          <div class="kanban-col-header">
+            <ion-icon name="time-outline" style="font-size:15px"></ion-icon>
+            Não Iniciadas
+            <span class="kanban-count" id="cnt-pending">—</span>
+          </div>
+          <div class="kanban-col-controls">
+            <input type="text" placeholder="Filtrar pendentes..." onkeyup="updateColFilter('pending', this.value)" />
+            <button onclick="toggleColSort('pending')" id="sort-btn-pending" title="Alterar ordenação">⬇ Novas</button>
+          </div>
+          <div class="kanban-col-body" id="col-pending"></div>
+        </div>
+        <div class="kanban-col col-progress">
+          <div class="kanban-col-header">
+            <ion-icon name="construct-outline" style="font-size:15px"></ion-icon>
+            Em Campo
+            <span class="kanban-count" id="cnt-progress">—</span>
+          </div>
+          <div class="kanban-col-controls">
+            <input type="text" placeholder="Filtrar em campo..." onkeyup="updateColFilter('progress', this.value)" />
+            <button onclick="toggleColSort('progress')" id="sort-btn-progress" title="Alterar ordenação">⬇ Novas</button>
+          </div>
+          <div class="kanban-col-body" id="col-progress"></div>
+        </div>
+        <div class="kanban-col col-completed">
+          <div class="kanban-col-header">
+            <ion-icon name="checkmark-circle-outline" style="font-size:15px"></ion-icon>
+            Concluídas
+            <span class="kanban-count" id="cnt-completed">—</span>
+          </div>
+          <div class="kanban-col-controls">
+            <input type="text" placeholder="Filtrar concluídas..." onkeyup="updateColFilter('completed', this.value)" />
+            <button onclick="toggleColSort('completed')" id="sort-btn-completed" title="Alterar ordenação">⬇ Novas</button>
+          </div>
+          <div class="kanban-col-body" id="col-completed"></div>
+        </div>
+        <div class="kanban-col col-error">
+          <div class="kanban-col-header">
+            <ion-icon name="warning-outline" style="font-size:15px"></ion-icon>
+            Erro / Bloqueadas
+            <span class="kanban-count" id="cnt-error">—</span>
+          </div>
+          <div class="kanban-col-controls">
+            <input type="text" placeholder="Filtrar erros..." onkeyup="updateColFilter('error', this.value)" />
+            <button onclick="toggleColSort('error')" id="sort-btn-error" title="Alterar ordenação">⬇ Novas</button>
+          </div>
+          <div class="kanban-col-body" id="col-error"></div>
+        </div>
+        <div class="kanban-col col-cancelled">
+          <div class="kanban-col-header">
+            <ion-icon name="close-circle-outline" style="font-size:15px"></ion-icon>
+            Canceladas
+            <span class="kanban-count" id="cnt-cancelled">—</span>
+          </div>
+          <div class="kanban-col-controls">
+            <input type="text" placeholder="Filtrar canceladas..." onkeyup="updateColFilter('cancelled', this.value)" />
+            <button onclick="toggleColSort('cancelled')" id="sort-btn-cancelled" title="Alterar ordenação">⬇ Novas</button>
+          </div>
+          <div class="kanban-col-body" id="col-cancelled"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail Modal ──────────────────────────────────────────── -->
+<div class="modal-overlay" id="detail-modal" style="display:none;opacity:1;pointer-events:all;">
+  <div class="modal modal-lg" style="max-width:720px;width:95vw;">
+    <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title" id="detail-modal-title">Detalhes da OS</span>
+      <span id="detail-modal-badge" style="margin-left:4px"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" id="detail-pdf-btn" onclick="printReport()" title="Exportar PDF / Imprimir"
+          style="display:none;gap:5px;">
+          <ion-icon name="print-outline" style="vertical-align:-2px"></ion-icon> PDF
+        </button>
+        <button class="modal-close" onclick="closeDetailModal()"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      </div>
+    </div>
+    <!-- Tabs -->
+    <div class="report-tabs" id="detail-tabs">
+      <button class="report-tab active" id="tab-info" onclick="switchTab('info')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Informações</button>
+      <button class="report-tab" id="tab-report" onclick="switchTab('report')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
+      <button class="report-tab" id="tab-raw" onclick="switchTab('raw')"><ion-icon name="build-outline" style="vertical-align:-2px"></ion-icon> Debug (JSON)</button>
+    </div>
+    <div class="modal-body" id="detail-modal-body" style="max-height:65vh;overflow-y:auto;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="detail-cancel-btn" onclick="cancelTask()" style="display:none"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeDetailModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Print Report (hidden, only for print) ──────────────────── -->
+<div id="print-report"></div>
+
+
+<!-- ── Quick Dispatch Modal ──────────────────────────────────── -->
+<div class="modal-overlay" id="dispatch-modal" style="display:none;opacity:1;pointer-events:all;">
+  <div class="modal" style="max-width:680px; width:95%;">
+    <div class="modal-header">
+      <span class="modal-title"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar Nova OS</span>
+      <button class="modal-close" onclick="closeDispatchModal()"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:82vh; overflow-y:auto;">
+
+      <!-- BLOCO 1: DESIGNAÇÃO -->
+      <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Designação</div>
+      <div class="form-group">
+        <label class="form-label">E-mail do Técnico *</label>
+        <input class="form-control" id="d-email" type="email" placeholder="tecnico@empresa.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Formulário / Template *</label>
+        <select class="form-control" id="d-template">
+          <option value="">Selecionar formulário...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Título da OS</label>
+        <input class="form-control" id="d-title" placeholder="Ex: Vistoria Técnica — Apt 302" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição</label>
+        <textarea class="form-control" id="d-desc" placeholder="Instruções adicionais para o técnico..." rows="2"></textarea>
+      </div>
+
+      <!-- BLOCO 2: LOCALIZAÇÃO -->
+      <div style="border-top:1px solid var(--border); margin:18px 0 14px;"></div>
+      <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de Serviço (Cerca Eletrônica)</div>
+
+      <!-- Tab de Modo de Zona -->
+      <div style="display:flex; gap:4px; margin-bottom:12px; background:var(--surface2); border-radius:10px; padding:4px;">
+        <button id="geo-tab-radius"  onclick="window.switchGeoTab('radius')"  style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:var(--primary); color:#fff; transition:all .2s;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto</button>
+        <button id="geo-tab-segment" onclick="window.switchGeoTab('segment')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;">A↔B Trecho</button>
+        <button id="geo-tab-route"   onclick="window.switchGeoTab('route')"   style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota</button>
+        <button id="geo-tab-polygon" onclick="window.switchGeoTab('polygon')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono</button>
+        <button id="geo-tab-none"    onclick="window.switchGeoTab('none')"    style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Livre</button>
+      </div>
+
+      <!-- TAB: Ponto + Raio -->
+      <div id="geo-panel-radius">
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 12px; font-size:11px; color:#1e40af; margin-bottom:10px;">
+          <ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> <strong>Ponto:</strong> O técnico deve estar dentro do raio definido ao redor do endereço.
+          <br/>Validação: <code>distância ≤ raio</code>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Endereço (busca por nome)</label>
+          <div style="display:flex; gap:6px;">
+            <input class="form-control" id="d-address" placeholder="Ex: Rua das Flores, 123, São Paulo" style="flex:1;" />
+            <button class="btn btn-outline btn-sm" onclick="window.geocodeAddress()" style="white-space:nowrap;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="form-group">
+            <label class="form-label">Latitude</label>
+            <input class="form-control" id="d-lat" type="number" step="0.000001" placeholder="-23.5505" oninput="window.updateMapFromInputs()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Longitude</label>
+            <input class="form-control" id="d-lng" type="number" step="0.000001" placeholder="-46.6333" oninput="window.updateMapFromInputs()" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Raio de Aceitação (metros)</label>
+          <input class="form-control" id="d-radius" type="number" min="10" max="50000" value="200" oninput="window.updateMapFromInputs()" />
+          <div style="font-size:10px; color:var(--text3); margin-top:4px;">Técnico precisa estar dentro deste raio do ponto para ser validado.</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:11px; font-weight:700; color:var(--text2);">Mapa de Prévia</span>
+          <button class="btn btn-ghost btn-sm" onclick="window.useMyLocation()" style="font-size:10px;"><ion-icon name="radio-outline" style="vertical-align:-2px"></ion-icon> Usar Minha Localização</button>
+        </div>
+        <div id="dispatch-map" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
+      </div>
+
+      <!-- TAB: Rota (KML LineString) -->
+      <div id="geo-panel-route" style="display:none;">
+        <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:8px 12px; font-size:11px; color:#9a3412; margin-bottom:10px;">
+          <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> <strong>Rota:</strong> O técnico deve seguir o trajeto definido. Alerta caso se afaste mais que a tolerância.
+          <br/>Validação: <code>distância perpendicular da linha ≤ tolerância</code>
+        </div>
+        <!-- KML Upload -->
+        <div style="background:var(--surface2); border:1px dashed var(--border); border-radius:8px; padding:12px; margin-bottom:12px;">
+          <div style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:8px;"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Importar KML de Rota (Google Earth / Maps)</div>
+          <label for="d-kml-route-file" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <div style="flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--text3);" id="d-kml-route-label">Nenhum arquivo selecionado...</div>
+            <div style="background:#f97316; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
+          </label>
+          <input type="file" id="d-kml-route-file" accept=".kml,.kmz" style="display:none;" onchange="window.onKmlRouteFileChange(event)" />
+          <div id="d-kml-route-status" style="font-size:10px; color:var(--text3); margin-top:6px;">Suporta arquivos .kml com <strong>LineString</strong> (trajeto) exportados do Google Earth ou Maps.</div>
+        </div>
+        <!-- Tolerance -->
+        <div class="form-group">
+          <label class="form-label">Tolerância de Desvio (metros)</label>
+          <input class="form-control" id="d-route-tolerance" type="number" min="10" max="5000" value="100" />
+          <div style="font-size:10px; color:var(--text3); margin-top:4px;">Distância máxima permitida do trajeto. Padrão: 100m.</div>
+        </div>
+        <!-- Hidden storage for route coords -->
+        <textarea id="d-route" style="display:none;"></textarea>
+        <div id="dispatch-map-route" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; margin-top:8px;"></div>
+      </div>
+
+      <!-- TAB: Trecho (Segmento A-B) -->
+      <div id="geo-panel-segment" style="display:none;">
+        <div style="background:#fefce8; border:1px solid #fef08a; border-radius:8px; padding:8px 12px; font-size:11px; color:#854d0e; margin-bottom:10px;">
+          <ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> <strong>Trecho (A↔B):</strong> O técnico deve estar perto do <strong>Ponto A</strong> OU do <strong>Ponto B</strong>.
+          <br/>Preencha os endereços/coordenadas abaixo ou clique no mapa para os 2 pontos.
+        </div>
+        
+        <!-- Ponto A inputs -->
+        <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; border-left:4px solid #2563eb;">
+           <span style="font-size:11px; font-weight:700; color:#2563eb;">Ponto A</span>
+           <div class="form-group" style="margin-top:6px; margin-bottom:6px;">
+             <label class="form-label" style="font-size:10px;">Endereço (busca por nome)</label>
+             <div style="display:flex; gap:6px;">
+               <input class="form-control" id="d-segment-address-a" placeholder="Ex: Rua A" style="flex:1; font-size:11px;" />
+               <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('A')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+             </div>
+           </div>
+           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+             <div class="form-group" style="margin-bottom:0;">
+               <label class="form-label" style="font-size:10px;">Latitude</label>
+               <input class="form-control" id="d-segment-lat-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+             </div>
+             <div class="form-group" style="margin-bottom:0;">
+               <label class="form-label" style="font-size:10px;">Longitude</label>
+               <input class="form-control" id="d-segment-lng-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+             </div>
+           </div>
+        </div>
+
+        <!-- Ponto B inputs -->
+        <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; border-left:4px solid #d946ef;">
+           <span style="font-size:11px; font-weight:700; color:#d946ef;">Ponto B</span>
+           <div class="form-group" style="margin-top:6px; margin-bottom:6px;">
+             <label class="form-label" style="font-size:10px;">Endereço (busca por nome)</label>
+             <div style="display:flex; gap:6px;">
+               <input class="form-control" id="d-segment-address-b" placeholder="Ex: Rua B" style="flex:1; font-size:11px;" />
+               <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('B')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+             </div>
+           </div>
+           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+             <div class="form-group" style="margin-bottom:0;">
+               <label class="form-label" style="font-size:10px;">Latitude</label>
+               <input class="form-control" id="d-segment-lat-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+             </div>
+             <div class="form-group" style="margin-bottom:0;">
+               <label class="form-label" style="font-size:10px;">Longitude</label>
+               <input class="form-control" id="d-segment-lng-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+             </div>
+           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tolerância (metros) em cada ponta</label>
+          <input class="form-control" id="d-segment-radius" type="number" min="10" max="5000" value="150" />
+          <div style="font-size:10px; color:var(--text3); margin-top:4px;">Distância permitida ao redor de A ou de B.</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:11px; font-weight:700; color:var(--text2);">Mapa (Clique 2 vezes)</span>
+          <button class="btn btn-ghost btn-sm" onclick="window.clearSegmentMap()" style="font-size:10px; color:#dc2626;"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Limpar Trecho</button>
+        </div>
+        <div id="dispatch-map-segment" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
+      </div>
+
+      <!-- TAB: Polígono (KML Polygon) -->
+      <div id="geo-panel-polygon" style="display:none;">
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:8px 12px; font-size:11px; color:#14532d; margin-bottom:10px;">
+          <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polígono:</strong> O técnico deve estar <strong>dentro</strong> da área delimitada.
+          <br/>Validação: <code>dentro <ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> / fora <ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon></code> — sem tolerância de borda.
+        </div>
+        <!-- KML Upload -->
+        <div style="background:var(--surface2); border:1px dashed var(--border); border-radius:8px; padding:12px; margin-bottom:12px;">
+          <div style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:8px;"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Importar KML de Área (Google Earth / Maps)</div>
+          <label for="d-kml-file" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <div style="flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--text3);" id="d-kml-label">Nenhum arquivo selecionado...</div>
+            <div style="background:#3b82f6; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
+          </label>
+          <input type="file" id="d-kml-file" accept=".kml,.kmz" style="display:none;" onchange="window.onKmlFileChange(event)" />
+          <div id="d-kml-status" style="font-size:10px; color:var(--text3); margin-top:6px;">Suporta arquivos .kml com <strong>Polygon</strong> exportados do Google Earth, Google Maps ou QGIS.</div>
+        </div>
+        <!-- JSON Manual -->
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px;">Ou cole manualmente (JSON)</label>
+          <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]'></textarea>
+        </div>
+        <div id="dispatch-map-polygon" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
+        <button class="btn btn-outline btn-sm" onclick="window.renderPolygonPreview()" style="margin-top:8px; width:100%; font-size:11px;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Visualizar Polígono no Mapa</button>
+      </div>
+
+      <!-- TAB: Sem Validação -->
+      <div id="geo-panel-none" style="display:none;">
+        <div style="background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:12px; font-size:12px; color:#92400e;">
+          <ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico poderá executar a OS de qualquer local.
+          Campos do tipo "Validar Cerca" apenas registrarão a posição GPS como evidência.
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeDispatchModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initPage } from './js/sidebar.js';
+import { CONFIG }   from './js/config.js';
+initPage();
+
+// ── State ─────────────────────────────────────────────────────
+let allTasks = [];
+let currentDetailId = null;
+let refreshInterval = null;
+
+// ── Helpers ───────────────────────────────────────────────────
+function timeAgo(dateStr) {
+  if (!dateStr) return '—';
+  const secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (secs < 60)   return `${secs}s atrás`;
+  if (secs < 3600) return `${Math.floor(secs/60)}min atrás`;
+  if (secs < 86400) return `${Math.floor(secs/3600)}h atrás`;
+  return `${Math.floor(secs/86400)}d atrás`;
+}
+
+function shortId(id) {
+  return id ? id.slice(0,8).toUpperCase() : '—';
+}
+
+function statusColClass(status) {
+  const map = { PENDING: 'col-pending', IN_PROGRESS: 'col-progress', COMPLETED: 'col-completed', SYNCED: 'col-completed' };
+  if (!status) return 'col-error';
+  return map[status.toUpperCase()] || 'col-error';
+}
+
+// ── Load Board ────────────────────────────────────────────────
+window.loadBoard = async function() {
+  try {
+    const data = await CONFIG.get(`/operations/tasks?_t=${Date.now()}`);
+    if (!data) return;
+    allTasks = data;
+    populateEmailFilter(data);
+    applyFilters();
+    renderStats(data);
+  } catch(e) {
+    console.error('[OPS] Falha ao carregar board:', e);
+  }
+};
+
+function renderStats(tasks) {
+  const pending   = tasks.filter(t => ['PENDING','RECEIVED','ACCEPTED'].includes(t.status)).length;
+  const progress  = tasks.filter(t => t.status === 'IN_PROGRESS').length;
+  const completed = tasks.filter(t => ['COMPLETED','SYNCED'].includes(t.status)).length;
+  const cancelled = tasks.filter(t => t.status === 'CANCELLED').length;
+  const errors    = tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED'].includes(t.status)).length;
+  const total     = tasks.length;
+
+  const defs = [
+    { label: 'Total de OS',   value: total,     color: 'var(--accent)',  icon: 'git-branch-outline' },
+    { label: 'Pendentes',     value: pending,   color: 'var(--amber)',   icon: 'hourglass-outline' },
+    { label: 'Em Campo',      value: progress,  color: 'var(--blue)',    icon: 'construct-outline' },
+    { label: 'Concluídas',    value: completed, color: 'var(--green)',   icon: 'checkmark-circle-outline' },
+    { label: 'Canceladas',    value: cancelled, color: 'var(--text3)',   icon: 'close-circle-outline' },
+    { label: 'Erros',         value: errors,    color: 'var(--red)',     icon: 'warning-outline' },
+  ];
+
+  document.getElementById('ops-stats').innerHTML = defs.map(d => `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:${d.color}18;color:${d.color}">
+        <ion-icon name="${d.icon}" style="font-size:18px"></ion-icon>
+      </div>
+      <div class="stat-value" style="color:${d.color}">${d.value}</div>
+      <div class="stat-label">${d.label}</div>
+    </div>`).join('');
+}
+
+function populateEmailFilter(tasks) {
+  const emails = [...new Set(tasks.map(t => t.ownerEmail).filter(Boolean))].sort();
+  const sel = document.getElementById('filter-email');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todos os técnicos</option>' +
+    emails.map(e => `<option value="${e}" ${current===e?'selected':''}>${e}</option>`).join('');
+}
+
+window.applyFilters = function() {
+  const emailFilter  = document.getElementById('filter-email').value.toLowerCase();
+  const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+
+  const filtered = allTasks.filter(t => {
+    const matchEmail  = !emailFilter  || (t.ownerEmail || '').toLowerCase() === emailFilter;
+    const matchSearch = !searchFilter || 
+      (t.id   || '').toLowerCase().includes(searchFilter) ||
+      (t.title|| '').toLowerCase().includes(searchFilter) ||
+      (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
+      (t.refId||'').toLowerCase().includes(searchFilter);
+    return matchEmail && matchSearch;
+  });
+
+  renderKanban(filtered);
+};
+
+// ── Column Sorting and Filtering State ────────────────────────
+const colState = {
+   pending:   { text: '', sort: 'desc' },
+   progress:  { text: '', sort: 'desc' },
+   completed: { text: '', sort: 'desc' },
+   cancelled: { text: '', sort: 'desc' },
+   error:     { text: '', sort: 'desc' }
+};
+
+window.updateColFilter = function(colId, text) {
+   colState[colId].text = text.toLowerCase();
+   applyFilters(); // Re-triggers renderKanban with the global filters
+};
+
+window.updateColSort = function(colId, sortDir) {
+   colState[colId].sort = sortDir;
+   const btn = document.getElementById('sort-btn-' + colId);
+   if (btn) btn.textContent = sortDir === 'desc' ? '⬇ Novas' : '⬆ Antigas';
+   applyFilters();
+};
+
+window.toggleColSort = function(colId) {
+   updateColSort(colId, colState[colId].sort === 'desc' ? 'asc' : 'desc');
+};
+
+// ── Render Kanban ─────────────────────────────────────────────
+function renderKanban(tasks) {
+  const processCol = (arr, colId) => {
+     let res = arr;
+     const st = colState[colId];
+     if (st.text) {
+        res = res.filter(t => 
+           (t.id || '').toLowerCase().includes(st.text) || 
+           (t.title || '').toLowerCase().includes(st.text) || 
+           (t.ownerEmail || '').toLowerCase().includes(st.text) ||
+           (t.refId || '').toLowerCase().includes(st.text)
+        );
+     }
+     res = res.sort((a,b) => {
+         // Escolhe a data mais relevante dependendo de quão avançada está a OS
+         const getRelevantDate = (t) => {
+             if (colId === 'completed') return t.completedAt || t.syncedAt || t.updatedAt || t.createdAt;
+             if (colId === 'progress')  return t.startedAt || t.updatedAt || t.createdAt;
+             // Pending ou fallback geral: data de criação modificação mais recente disponível ali
+             return t.updatedAt || t.createdAt;
+         };
+         
+         const dA = new Date(getRelevantDate(a) || 0).getTime();
+         const dB = new Date(getRelevantDate(b) || 0).getTime();
+         return st.sort === 'desc' ? dB - dA : dA - dB;
+     });
+     return res;
+  };
+
+  const cols = {
+    pending:   processCol(tasks.filter(t => t.status === 'PENDING'), 'pending'),
+    progress:  processCol(tasks.filter(t => ['RECEIVED','ACCEPTED','IN_PROGRESS'].includes(t.status)), 'progress'),
+    completed: processCol(tasks.filter(t => ['COMPLETED','SYNCED'].includes(t.status)), 'completed'),
+    cancelled: processCol(tasks.filter(t => t.status === 'CANCELLED'), 'cancelled'),
+    error:     processCol(tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED'].includes(t.status)), 'error'),
+  };
+
+  document.getElementById('cnt-pending').textContent   = cols.pending.length;
+  document.getElementById('cnt-progress').textContent  = cols.progress.length;
+  document.getElementById('cnt-completed').textContent = cols.completed.length;
+  document.getElementById('cnt-cancelled').textContent = cols.cancelled.length;
+  document.getElementById('cnt-error').textContent     = cols.error.length;
+
+  const render = (arr, colClass) => arr.length === 0
+    ? `<div class="kanban-empty">
+        <div class="kanban-empty-icon"><ion-icon name="mail-open-outline" style="vertical-align:-2px"></ion-icon></div>
+        Nenhuma OS aqui
+      </div>`
+    : arr.map(t => buildCard(t, colClass)).join('');
+
+  document.getElementById('col-pending').innerHTML   = render(cols.pending,   'col-pending');
+  document.getElementById('col-progress').innerHTML  = render(cols.progress,  'col-progress');
+  document.getElementById('col-completed').innerHTML = render(cols.completed, 'col-completed');
+  document.getElementById('col-cancelled').innerHTML = render(cols.cancelled, 'col-cancelled');
+  document.getElementById('col-error').innerHTML     = render(cols.error,     'col-error');
+}
+
+function buildCard(task, colClass) {
+  const title  = task.title || task.metadata?.title || `OS #${shortId(task.id)}`;
+  const refId  = task.refId || task.metadata?.refId || '—';
+  
+  let subBadge = '';
+  if (task.status === 'PENDING') {
+     subBadge = '<span class="badge" style="background:#fef9c3;color:#a16207;font-size:9px;margin-bottom:6px">⏳ Aguardando Envio</span>';
+  } else if (task.status === 'RECEIVED') {
+     subBadge = '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:9px;margin-bottom:6px"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Aparelho Recebeu</span>';
+  } else if (task.status === 'ACCEPTED') {
+     subBadge = '<span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px;margin-bottom:6px"><ion-icon name="thumbs-up-outline" style="vertical-align:-2px"></ion-icon> Técnico Aceitou</span>';
+  } else if (task.status === 'IN_PROGRESS') {
+     subBadge = '<span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px;margin-bottom:6px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Executando</span>';
+  }
+
+  const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+
+  return `
+    <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
+      ${subBadge}
+      <div class="task-card-title" title="${title}">${title}</div>
+      <div class="task-card-email" style="margin-bottom:8px">
+        <ion-icon name="person-outline" style="font-size:11px"></ion-icon>
+        ${task.ownerEmail || '—'}
+      </div>
+      
+      <div style="font-size:9px;color:var(--text2);margin-bottom:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px;white-space:nowrap;overflow:hidden;">
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Criada:</strong><br>${fd(task.createdAt)}</div>
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Disponível:</strong><br>${fd(task.metadata?.receivedAt)}</div>
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Aceita:</strong><br>${fd(task.metadata?.acceptedAt)}</div>
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Início:</strong><br>${fd(task.startedAt)}</div>
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Fim:</strong><br>${fd(task.completedAt)}</div>
+        <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Sincronizada:</strong><br>${fd(task.syncedAt)}</div>
+      </div>
+
+      <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">
+        <span class="task-card-id">#${shortId(task.id)}</span>
+        ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
+      </div>
+    </div>`;
+}
+
+// ── Detail Modal ──────────────────────────────────────────────
+let _currentTask = null;
+let _currentTab = 'info';
+
+function switchTab(tab) {
+  _currentTab = tab;
+  ['info','report','raw'].forEach(t => {
+    document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
+  });
+  if (_currentTask) renderModalBody(_currentTask);
+}
+
+function renderModalBody(t) {
+  const body = document.getElementById('detail-modal-body');
+
+  if (window._reportTransitMap) {
+      window._reportTransitMap.remove();
+      window._reportTransitMap = null;
+  }
+
+  if (_currentTab === 'info') {
+      body.innerHTML = buildInfoTab(t);
+  } else if (_currentTab === 'report') {
+      body.innerHTML = buildReportTab(t);
+      
+      setTimeout(() => {
+          const mapEl = document.getElementById('report-transit-map');
+          if (mapEl && t && t.responses) {
+              const resps = t.responses;
+              let startPos = null;
+              let endPos = null;
+              
+              Object.values(resps).forEach(val => {
+                  if (!val) return;
+                  const vStr = typeof val === 'string' ? val : JSON.stringify(val);
+                  if (vStr.includes('"action":"SAIDA"')) {
+                      try { const j = typeof val === 'object' ? val : JSON.parse(val); startPos = j; }catch(e){}
+                  } else if (vStr.includes('"action":"CHEGADA"')) {
+                      try { const j = typeof val === 'object' ? val : JSON.parse(val); endPos = j; }catch(e){}
+                  }
+              });
+
+              let pathData = [];
+              if (endPos && endPos.traversedPath) pathData = endPos.traversedPath;
+
+              const fallbackEnd = pathData.length > 0 ? pathData[pathData.length - 1] : null;
+              const fallbackStart = pathData.length > 0 ? pathData[0] : null;
+
+              // Precedência correta: Se a linha existe, o marcador DEVE ficar na ponta da linha!
+              const endLat = fallbackEnd ? fallbackEnd[0] : (endPos?.coordinates?.lat ?? endPos?.lat);
+              const endLng = fallbackEnd ? fallbackEnd[1] : (endPos?.coordinates?.lng ?? endPos?.lng);
+              
+              const startLat = fallbackStart ? fallbackStart[0] : (startPos?.coordinates?.lat ?? startPos?.lat);
+              const startLng = fallbackStart ? fallbackStart[1] : (startPos?.coordinates?.lng ?? startPos?.lng);
+
+              if (endLat !== undefined) {
+                  try {
+                      if (window._reportTransitMap) { window._reportTransitMap.remove(); }
+                  } catch(e){}
+                  window._reportTransitMap = null;
+                  
+                  try {
+                      const map = L.map('report-transit-map').setView([endLat, endLng], 15);
+                      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                      
+                      const startIcon = L.divIcon({ html: '<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
+                      const endIcon = L.divIcon({ html: '<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
+                      
+                      const polyline = L.polyline(pathData, { color: '#EA580C', weight: 5 }).addTo(map); 
+                      
+                      if (startLat !== undefined) {
+                          L.marker([startLat, startLng], {icon: startIcon}).addTo(map).bindPopup('<b>Saída (Início do Deslocamento)</b>');
+                      }
+                      L.marker([endLat, endLng], {icon: endIcon}).addTo(map).bindPopup('<b>Chegada (Fim do Deslocamento)</b>').openPopup();
+                      
+                      window._reportTransitMap = map;
+                      if (pathData.length > 1) {
+                          setTimeout(() => map.fitBounds(polyline.getBounds(), { padding: [20,20] }), 250);
+                      }
+                  } catch(err) {
+                      if (mapEl) mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
+                  }
+              } else {
+                  if (mapEl) {
+                      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: endLat is undefined.<br/>endPos = ${JSON.stringify(endPos)}</div>`;
+                  }
+              }
+          } else {
+              if (mapEl) mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: Element not found or responses missing.</div>`;
+          }
+      }, 150);
+  } else {
+      body.innerHTML = buildRawTab(t);
+  }
+}
+
+function buildInfoTab(t) {
+  const statusBadgeMap = {
+    PENDING: 'badge-amber', IN_PROGRESS: 'badge-blue',
+    COMPLETED: 'badge-green', SYNCED: 'badge-green',
+  };
+  const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'DESCONHECIDO'}</span>`;
+  const desc = t.description || t.metadata?.description || '';
+  const gps  = t.gpsLocation;
+
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="report-field">
+        <div class="report-field-label">ID da Execução</div>
+        <div class="report-field-value mono">${t.id}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Status</div>
+        <div class="report-field-value" style="background:transparent;padding:0">${statusBadge}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Técnico Designado</div>
+        <div class="report-field-value">${t.ownerEmail || '—'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Formulário (refId)</div>
+        <div class="report-field-value mono">${t.refId || t.metadata?.refId || '—'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Criado em</div>
+        <div class="report-field-value">${t.createdAt ? new Date(t.createdAt).toLocaleString('pt-BR') : '—'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Concluído em</div>
+        <div class="report-field-value">${t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : '<span style="color:var(--text3)">Ainda em aberto</span>'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Iniciado em (App)</div>
+        <div class="report-field-value">${t.startedAt ? new Date(t.startedAt).toLocaleString('pt-BR') : '<span style="color:var(--text3)">Não iniciado</span>'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Sincronizado em</div>
+        <div class="report-field-value ${t.syncedAt ? '' : 'empty'}">${t.syncedAt ? new Date(t.syncedAt).toLocaleString('pt-BR') : 'Pendente de sync'}</div>
+      </div>
+    </div>
+    ${desc ? `<div class="report-field"><div class="report-field-label">Descrição</div><div class="report-field-value">${desc}</div></div>` : ''}
+    ${gps ? `<div class="report-field">
+      <div class="report-field-label"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Localização GPS</div>
+      <div class="report-field-value mono">${typeof gps === 'object' ? JSON.stringify(gps) : gps}</div>
+    </div>` : ''}`;
+}
+
+function buildReportTab(t) {
+  const responses = t.responses || {};
+  const template  = t.template;
+  const fields    = template?.fields;
+  const hasResp   = Object.keys(responses).length > 0;
+
+  // Extrair GPS markers para montar o Mapa no Painel
+  let startGPS = null;
+  let endGPS = null;
+  Object.values(responses).forEach(val => {
+     if (!val) return;
+     const vStr = typeof val === 'string' ? val : JSON.stringify(val);
+     if (vStr.includes('"action":"SAIDA"')) {
+         try { const j=JSON.parse(vStr); startGPS = j.coordinates || j; }catch(e){}
+     }
+     if (vStr.includes('"action":"CHEGADA"')) {
+         try { const j=JSON.parse(vStr); endGPS = j; }catch(e){}
+     }
+  });
+
+  if (!hasResp) {
+    return `<div style="text-align:center;padding:40px 20px;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:8px"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon></div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">Sem respostas registradas</div>
+      <div style="font-size:11px">Esta OS ainda não foi preenchida pelo técnico.</div>
+    </div>`;
+  }
+
+  // Render a single field value, handling special types
+  const renderFieldValue = (val, fieldType) => {
+    if (val === undefined || val === null || val === '') return '<em style="color:var(--text3)">(não respondido)</em>';
+    if (Array.isArray(val)) return val.join(', ');
+    if (typeof val === 'boolean') return val ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Sim' : '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Não';
+    const str = String(val);
+    // Signature: SIG_V1|path1|path2|...
+    if (str.startsWith('SIG_V1|')) {
+      const paths = str.replace('SIG_V1|', '').split('|').filter(Boolean);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      paths.forEach(p => { [...p.matchAll(/(-?[\d\.]+)/g)].forEach((m, i) => { const v = parseFloat(m[0]); if(i%2===0){ minX=Math.min(minX,v); maxX=Math.max(maxX,v); } else { minY=Math.min(minY,v); maxY=Math.max(maxY,v); } }); });
+      let vB = "0 0 350 400";
+      if (minX !== Infinity && maxX > minX) { const pad=20; vB = `${minX-pad} ${minY-pad} ${maxX-minX+pad*2} ${maxY-minY+pad*2}`; }
+      const pathsHtml = paths.map(d => `<path d="${d}" stroke="#0f172a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+      return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:inline-block;">
+        <svg viewBox="${vB}" width="280" height="180" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#fff;border-radius:4px">${pathsHtml}</svg>
+        <div style="font-size:9px;color:#94a3b8;margin-top:4px;text-align:center"><ion-icon name="pencil-outline" style="vertical-align:-2px"></ion-icon> Assinatura Digital</div>
+      </div>`;
+    }
+    // Transit location payload (GPS)
+    if (str.includes('"action":"SAIDA"') || str.includes('"action":"CHEGADA"') || str.includes('"action":"VALIDACAO_CERCA"')) {
+      try {
+        const tObj = JSON.parse(str);
+        const isStart = tObj.action === 'SAIDA';
+        const d = new Date(tObj.timestamp);
+        const timeStr = !isNaN(d) ? d.toLocaleTimeString('pt-BR') : '--:--';
+        let html = `<div style="padding:10px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; margin-top: 4px;">`;
+        html += `<div style="font-weight:900; color:#0f172a; font-size:12px; margin-bottom:4px;">${isStart ? '<ion-icon name="ellipse" style="color:var(--green);vertical-align:-2px;font-size:10px"></ion-icon> Início' : '<ion-icon name="ellipse" style="color:var(--red);vertical-align:-2px;font-size:10px"></ion-icon> Fim'}: ${timeStr}</div>`;
+        if (tObj.address) html += `<div style="font-size:11px; color:#475569; margin-bottom:4px; line-height:1.4"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> ${tObj.address}</div>`;
+        if (tObj.coordinates) html += `<div style="font-size:10px;"><a href="https://maps.google.com/?q=${tObj.coordinates.lat},${tObj.coordinates.lng}" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600"><ion-icon name="link-outline" style="vertical-align:-2px"></ion-icon> Abrir no Mapa Múndi</a></div>`;
+        html += `</div>`;
+        return html;
+      } catch(e) {}
+    }
+    // Image/file URL
+    if (str.startsWith('http') || str.startsWith('file://')) {
+      return `<a href="${str}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>`;
+    }
+    return str;
+  };
+
+  // Se temos as definições do template, renderiza com labels
+  let items = '';
+  if (Array.isArray(fields) && fields.length > 0) {
+    fields.forEach(field => {
+      let val = responses[field.id];
+      
+      // Graciously recover mismatched IDs for GPS fields (if template changed but mobile cached an old ID)
+      if ((val === undefined || val === null || val === '') && (field.type === 'transit_start' || field.type === 'transit_end')) {
+         const targetAction = field.type === 'transit_start' ? '"action":"SAIDA"' : '"action":"CHEGADA"';
+         const orphanedMatchKey = Object.keys(responses).find(k => String(responses[k]).includes(targetAction));
+         if (orphanedMatchKey) {
+             val = responses[orphanedMatchKey];
+             // Remover para não renderizar de novo lá embaixo nos orfãos
+             delete responses[orphanedMatchKey];
+         }
+      }
+      
+      const hasVal = val !== undefined && val !== null && val !== '';
+      const displayHtml = renderFieldValue(val, field.type);
+      items += `<div class="report-response-item">
+        <div class="report-response-q">${field.label || field.id}</div>
+        <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
+      </div>`;
+    });
+    
+    // Add orphaned fields (things filled in the app but missing in the current template schema)
+    const templateFieldIds = fields.map(f => f.id);
+    Object.entries(responses).forEach(([key, val]) => {
+      if (!templateFieldIds.includes(key)) {
+         const displayHtml = renderFieldValue(val, null);
+         if (displayHtml.includes('não respondido')) return;
+         let qLabel = key;
+         if (String(val).includes('"action":"SAIDA"')) qLabel = 'Registro de GPS Coletado (Saída)';
+         if (String(val).includes('"action":"CHEGADA"')) qLabel = 'Registro de GPS Coletado (Chegada)';
+         
+         items += `<div class="report-response-item">
+           <div class="report-response-q" style="color:var(--text3)">${qLabel} <span style="font-size:9px;font-weight:400;opacity:0.6">(Orfão)</span></div>
+           <div class="report-response-a">${displayHtml}</div>
+         </div>`;
+      }
+    });
+  } else {
+    // Sem template: renderiza as chaves do response diretamente
+    Object.entries(responses).forEach(([key, val]) => {
+      const displayHtml = renderFieldValue(val, null);
+      items += `<div class="report-response-item">
+        <div class="report-response-q">${key}</div>
+        <div class="report-response-a">${displayHtml}</div>
+      </div>`;
+    });
+  }
+
+  const title = t.title || t.metadata?.title || `OS #${t.id.slice(0,8).toUpperCase()}`;
+  
+  const fDate = (d) => d ? new Date(d).toLocaleString('pt-BR') : '<span style="color:#94a3b8;font-style:italic">Não reg.</span>';
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:14px;font-weight:800;color:var(--text)">${title}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${t.ownerEmail}</div>
+      </div>
+    </div>
+    
+    <div class="report-section" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div class="report-section-title" style="margin-bottom:8px;border-bottom:none">⏱ Linha do Tempo da Operação</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Criação:</strong> ${fDate(t.createdAt)}</div>
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Envio ao App (Despacho):</strong> ${fDate(t.createdAt)}</div>
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Disponível no App:</strong> ${fDate(t.metadata?.receivedAt)}</div>
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Aceite:</strong> ${fDate(t.metadata?.acceptedAt)}</div>
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Início:</strong> ${fDate(t.startedAt)}</div>
+         <div style="font-size:10px;"><strong style="color:var(--text2)">Conclusão:</strong> ${fDate(t.completedAt)}</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Sincronização / Envio Nuvem:</strong> ${fDate(t.syncedAt)}</div>
+      </div>
+    </div>
+    
+    <div class="report-section">
+      <div class="report-section-title"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Respostas do Formulário — ${Object.keys(responses).length} campo(s)</div>
+      ${items}
+    </div>
+    ${endGPS ? `
+    <div class="report-section">
+      <div class="report-section-title"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Mapa Interativo de Deslocamento</div>
+      <div id="report-transit-map" style="width:100%; height:250px; border-radius:8px; border:1px solid #cbd5e1; margin-top:8px; z-index:1;"></div>
+    </div>` : ''}
+    ${t.gpsLocation ? `<div class="report-section">
+      <div class="report-section-title"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Localização GPS (OS)</div>
+      <div class="report-field-value mono">${typeof t.gpsLocation === 'object' ? JSON.stringify(t.gpsLocation) : t.gpsLocation}</div>
+    </div>` : ''}`;
+}
+
+function buildRawTab(t) {
+  return `
+    <div class="report-field">
+      <div class="report-field-label">Respostas (JSON)</div>
+      <pre class="report-field-value mono" style="max-height:200px;overflow-y:auto;white-space:pre-wrap">${JSON.stringify(t.responses || {}, null, 2)}</pre>
+    </div>
+    <div class="report-field">
+      <div class="report-field-label">Metadata</div>
+      <pre class="report-field-value mono" style="max-height:120px;overflow-y:auto;white-space:pre-wrap">${JSON.stringify(t.metadata || {}, null, 2)}</pre>
+    </div>
+    <div class="report-field">
+      <div class="report-field-label">GPS</div>
+      <pre class="report-field-value mono">${JSON.stringify(t.gpsLocation || null, null, 2)}</pre>
+    </div>`;
+}
+
+window.openDetail = function(id) {
+  const t = allTasks.find(x => x.id === id);
+  if (!t) return;
+  currentDetailId = id;
+  _currentTask = t;
+  _currentTab = t.status === 'COMPLETED' || t.status === 'SYNCED' ? 'report' : 'info';
+
+  const title = t.title || t.metadata?.title || `OS #${t.id.slice(0,8).toUpperCase()}`;
+  const statusBadgeMap = { PENDING: 'badge-amber', IN_PROGRESS: 'badge-blue', COMPLETED: 'badge-green', SYNCED: 'badge-green' };
+  const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'?'}</span>`;
+
+  document.getElementById('detail-modal-title').textContent = title;
+  document.getElementById('detail-modal-badge').innerHTML = statusBadge;
+  const canCancel = !['COMPLETED','SYNCED','CANCELLED'].includes(t.status);
+  const cancelBtn = document.getElementById('detail-cancel-btn');
+  cancelBtn.style.display = canCancel ? '' : 'none';
+  // Reseta estado customizado caso tenha sido alterado pela confirmação
+  cancelBtn.onclick = () => window.cancelTask();
+  cancelBtn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
+  cancelBtn.disabled = false;
+
+  const hasReport = (t.status === 'COMPLETED' || t.status === 'SYNCED');
+  document.getElementById('detail-pdf-btn').style.display = hasReport ? '' : 'none';
+
+  // Activate correct tab
+  ['info','report','raw'].forEach(tab => {
+    document.getElementById(`tab-${tab}`)?.classList.toggle('active', tab === _currentTab);
+  });
+
+  renderModalBody(t);
+  document.getElementById('detail-modal').style.display = 'flex';
+};
+
+window.switchTab = switchTab;
+
+window.printReport = async function() {
+  if (!_currentTask) return;
+
+  // Always fetch fresh data so responses (GPS) are never stale from initial load
+  let t = _currentTask;
+  try {
+    const fresh = await fetch(`http://localhost:3001/api/operations/tasks?id=${t.id}`);
+    if (fresh.ok) {
+      const all = await fresh.json();
+      const found = all.find(x => x.id === t.id) || all[0];
+      if (found) {
+        t = found;
+        _currentTask = found; // update cached ref too
+      }
+    }
+  } catch(e) { console.warn('[PDF] Could not refresh task data, using cached.', e); }
+
+  const shortId = t.id.slice(0, 10).toLowerCase();
+  const responses = t.responses || {};
+  const fields = t.template?.fields || [];
+  
+  const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+  
+  // Total Time logic
+  let durationStr = "—";
+  let durationMs = 0;
+  if (t.startedAt && t.completedAt) {
+     durationMs = new Date(t.completedAt) - new Date(t.startedAt);
+     const h = Math.floor(durationMs / 3600000);
+     const m = Math.floor((durationMs % 3600000) / 60000);
+     const s = Math.floor((durationMs % 60000) / 1000);
+     durationStr = `${h}h ${m}m ${s}s`;
+  }
+
+  let responseHtml = '';
+  let photoHtml = '';
+  let qNum = 1;
+
+  // Transit logic extractors
+  let startGPS = null;
+  let endGPS = null;
+
+  const allResponseVals = Object.values(responses);
+  console.log('[PDF DEBUG] responses keys:', Object.keys(responses));
+  console.log('[PDF DEBUG] response values:', allResponseVals);
+
+  allResponseVals.forEach(val => {
+     if (!val) return;
+     const vStr = typeof val === 'string' ? val : JSON.stringify(val);
+     if (vStr.includes('"action":"SAIDA"')) {
+         try {
+             const j = typeof val === 'object' ? val : JSON.parse(val);
+             const lat = j.coordinates?.lat ?? j.lat;
+             const lng = j.coordinates?.lng ?? j.lng;
+             if (lat !== undefined) startGPS = { lat, lng, addr: j.address || '', time: j.timestamp };
+         } catch(e) {}
+     } else if (vStr.includes('"action":"CHEGADA"')) {
+         try {
+             const j = typeof val === 'object' ? val : JSON.parse(val);
+             const lat = j.coordinates?.lat ?? j.lat;
+             const lng = j.coordinates?.lng ?? j.lng;
+             if (lat !== undefined) {
+                 endGPS = { lat, lng, addr: j.address || '', time: j.timestamp, traversedPath: j.traversedPath };
+             }
+         } catch(e) {}
+     }
+  });
+
+  const order = Array.isArray(fields) && fields.length > 0 ? fields.map(f => f.id) : Object.keys(responses);
+  
+  order.forEach(id => {
+      const fieldDef = fields.find(f => f.id === id);
+      const label = fieldDef ? (fieldDef.label || fieldDef.id) : id;
+      let val = responses[id];
+      
+      const rawVal = String(val);
+
+      if (fieldDef && (fieldDef.type === 'transit_start' || fieldDef.type === 'transit_end')) return;
+
+      let displayVal = val;
+      
+      if (fieldDef && fieldDef.type === 'section_break') {
+          const startIso = responses[`__section_start_${fieldDef.id}`];
+          const endIso = responses[`__section_end_${fieldDef.id}`];
+          const formatTime = (iso) => iso ? new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : '--:--';
+          let durationStr = '';
+          if (startIso && endIso) {
+              const diffSecs = Math.floor((new Date(endIso).getTime() - new Date(startIso).getTime()) / 1000);
+              const m = Math.floor(diffSecs / 60); const s = diffSecs % 60;
+              durationStr = `${m}m ${s}s`;
+          }
+          
+          responseHtml += `
+            <div style="background: linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%); border-left: 4px solid #8b5cf6; padding: 12px 16px; margin: 25px 0 10px -20px; border-radius: 0 8px 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; z-index: 5;">
+               <div style="font-size:13px; font-weight:900; color:#0f172a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center;">
+                  <ion-icon name="albums" style="color:#8b5cf6; margin-right:8px; font-size:16px;"></ion-icon>${label}
+               </div>
+               <div style="font-size:10px; color:#64748b; font-weight:600; display:flex; gap:12px; align-items:center;">
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${formatTime(startIso)}</span>
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${formatTime(endIso)}</span>
+                  ${durationStr ? `<span style="color:#8b5cf6; font-weight:800;"><ion-icon name="time-outline"></ion-icon> Duração: ${durationStr}</span>` : ''}
+               </div>
+            </div>
+          `;
+          return;
+      }
+
+      if (val === undefined || val === null || val === '') {
+          displayVal = '<span style="color:#94a3b8;font-style:italic">Não preenchido</span>';
+      } else {
+          const isPhoto = rawVal.startsWith('http') || rawVal.startsWith('file://') || rawVal.startsWith('data:image');
+          const isSig = rawVal.startsWith('SIG_V1|');
+          
+          let isMap = false;
+          let mapLat, mapLng;
+          let mapAddr = '';
+          if (typeof val === 'object' && val !== null) {
+              if (val.lat !== undefined && val.lng !== undefined) { isMap = true; mapLat = val.lat; mapLng = val.lng; mapAddr = val.address || ''; }
+              else if (val.coordinates && val.coordinates.lat !== undefined) { isMap = true; mapLat = val.coordinates.lat; mapLng = val.coordinates.lng; mapAddr = val.address || ''; }
+          } else if (typeof val === 'string' && val.startsWith('{')) {
+              try {
+                 let jVal = JSON.parse(val);
+                 if (jVal.coordinates && jVal.coordinates.lat !== undefined) { isMap = true; mapLat = jVal.coordinates.lat; mapLng = jVal.coordinates.lng; mapAddr = jVal.address || ''; val = jVal; }
+              }catch(e){}
+          }
+    
+          if (isPhoto) {
+              const timestamp = t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : fd(t.createdAt);
+              if (rawVal.startsWith('file://')) {
+                  displayVal = `
+                    <div style="margin-top: 8px; max-width: 350px; background:#f8fafc; padding:20px; text-align:center; border:2px dashed #cbd5e1; border-radius:8px;">
+                       <ion-icon name="cloud-offline-outline" style="font-size:32px; color:#94a3b8; margin-bottom:8px;"></ion-icon>
+                       <div style="font-size:12px; color:#475569; font-weight:800;">MÍDIA PENDENTE</div>
+                       <div style="font-size:10px; color:#94a3b8; margin-top:4px;">Aguardando o aplicativo recuperar o sinal de internet para realizar o upload da Foto.</div>
+                    </div>`;
+              } else {
+                  displayVal = `
+                    <div class="pdf-photo-card" style="margin-top: 8px; max-width: 350px;">
+                       <img src="${val}" class="pdf-photo-img" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
+                       <div class="pdf-photo-stamp">${timestamp}</div>
+                       ${val.includes('live') || fieldDef?.type === 'photo_stamped' ? '<div class="pdf-photo-watermark">CARIMBADA<br>LIVE</div>' : ''}
+                    </div>`;
+              }
+          } else if (typeof val === 'boolean') {
+              displayVal = val ? '<span class="pdf-pill">Sim</span>' : '<span class="pdf-pill" style="background:#ef4444">Não</span>';
+          } else if (Array.isArray(val)) {
+              displayVal = val.map(v => `<span class="pdf-pill">${v}</span>`).join(' ');
+          } else if (isSig) {
+              let paths = String(val).replace('SIG_V1|', '').split('|').filter(Boolean);
+              let metaHtml = '';
+              if (paths.length > 0 && paths[0].startsWith('meta:')) {
+                  try {
+                      const meta = JSON.parse(paths[0].replace('meta:', ''));
+                      metaHtml = `
+                        <div style="font-size: 10px; color: #64748b; margin-top: 8px; line-height: 1.4; max-width: 350px;">
+                           <div style="font-weight: 700; color: #334155; margin-bottom: 2px;">Metadados da Assinatura:</div>
+                           <div style="display:flex; gap:4px; margin-bottom:2px;"><ion-icon name="location" style="margin-top:2px;"></ion-icon> ${meta.address || (meta.lat + ', ' + meta.lng)}</div>
+                           <div style="display:flex; gap:4px; margin-bottom:2px;"><ion-icon name="globe" style="margin-top:2px;"></ion-icon> Endereço IP: ${meta.ip || 'Desconhecido'}</div>
+                        </div>`;
+                  } catch(e) {}
+                  paths.shift(); // Remove o meta string dos paths
+              }
+              const pathsHtml = paths.map(d => `<path d="${d}" stroke="#0f172a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              paths.forEach(p => { [...p.matchAll(/(-?[\d\.]+)/g)].forEach((m, i) => { const v = parseFloat(m[0]); if(i%2===0){ minX=Math.min(minX,v); maxX=Math.max(maxX,v); } else { minY=Math.min(minY,v); maxY=Math.max(maxY,v); } }); });
+              let vB = "0 0 350 400";
+              if (minX !== Infinity && maxX > minX) { const pad=20; vB = `${minX-pad} ${minY-pad} ${maxX-minX+pad*2} ${maxY-minY+pad*2}`; }
+              
+              displayVal = `
+                <svg viewBox="${vB}" width="120" height="70" xmlns="http://www.w3.org/2000/svg" style="border:1px solid #cbd5e1;background:white;border-radius:4px;margin-top:4px">${pathsHtml}</svg>
+                ${metaHtml}
+              `;
+          } else if (isMap) {
+              const vStr = typeof val === 'string' ? val : JSON.stringify(val);
+              const isStartGPS = vStr.includes('"action":"SAIDA"');
+              const isEndGPS = vStr.includes('"action":"CHEGADA"');
+              
+              if (isStartGPS || isEndGPS) return;
+    
+              const formattedAction = val.action ? `Ponto marcado: ${val.action}` : 'Coordenada Geográfica';
+              displayVal = `
+                <div style="border: 1px solid #cbd5e1; border-radius: 8px; background:#f8fafc; padding:10px 12px; margin-top:4px; display:flex; align-items:center; gap:12px;">
+                   <div style="width: 36px; height: 36px; background: #e0f2fe; border-radius: 50%; display:flex; justify-content:center; align-items:center;">
+                       <ion-icon name="location" style="font-size:18px; color:#3b82f6"></ion-icon>
+                   </div>
+                   <div style="flex:1;">
+                       <div style="font-size:11px; font-weight:900; color:#0f172a; margin-bottom: 2px;">${formattedAction}</div>
+                       ${mapAddr ? `<div style="font-size:10px; color:#475569; margin-bottom: 4px;">${mapAddr}</div>` : ''}
+                       <div style="font-size:9px; color:#94a3b8; font-family:monospace;">Lat/Lng: ${mapLat.toFixed(5)}, ${mapLng.toFixed(5)}</div>
+                   </div>
+                   ${val.timestamp ? `<div style="font-size:11px; font-weight:800; color:#10b981; align-self:flex-start; background:#dcfce7; padding:2px 6px; border-radius:4px;">${new Date(val.timestamp).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
+                </div>
+              `;
+          } else if (fieldDef && (fieldDef.type === 'dropdown' || fieldDef.type === 'radio')) {
+              displayVal = `<span class="pdf-pill">${val}</span>`;
+          } else if (typeof val === 'object' && val !== null) {
+              displayVal = `<pre style="font-family:monospace;font-size:10px;white-space:pre-wrap">${JSON.stringify(val)}</pre>`;
+          }
+      }
+      
+      let timeHtml = '';
+      if (responses[`__time_${id}`]) {
+          const tIso = responses[`__time_${id}`];
+          const humanTime = new Date(tIso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+          timeHtml = `<span style="font-size:9px; color:#94a3b8; margin-left:8px; font-weight:600; text-transform:none;"><ion-icon name="time-outline" style="vertical-align:-2px; margin-right:2px;"></ion-icon>${humanTime}</span>`;
+      }
+      
+      responseHtml += `
+        <div class="pdf-form-item" style="position:relative;">
+           <div class="pdf-form-num">${qNum++}</div>
+           <div class="pdf-q" style="display:flex; justify-content:space-between; align-items:center;">
+             <span>${label}</span>
+             ${timeHtml}
+           </div>
+           <div class="pdf-a">${displayVal}</div>
+        </div>`;
+  });
+
+  // Transit Header Block UI Construction
+  // Always build transit section — show empty cards when GPS not captured
+  const makeTransitCard = (gpsObj, title, colorHex, iconName) => {
+     if (!gpsObj) return `
+        <div style="flex:1; border:1px dashed #cbd5e1; border-radius:8px; padding:15px; display:flex; gap:12px; align-items:center; background:#fafafa;">
+           <div style="width:40px;height:40px;background:#f1f5f9;border-radius:50%;display:flex;justify-content:center;align-items:center;flex-shrink:0;">
+              <ion-icon name="${iconName}" style="font-size:20px;color:#cbd5e1"></ion-icon>
+           </div>
+           <div>
+              <div style="font-size:11px;font-weight:900;color:#94a3b8;margin-bottom:4px;">${title}</div>
+              <div style="font-size:10px;color:#cbd5e1;font-style:italic;">Não registrado</div>
+           </div>
+        </div>`;
+     return `
+        <div style="flex:1; border: 1px solid #e2e8f0; border-radius: 8px; background:#f8fafc; padding:15px; display:flex; gap:12px; box-shadow: 0 1px 2px rgba(0,0,0,0.02)">
+           <div style="width: 40px; height: 40px; background: ${colorHex}15; border: 1px solid ${colorHex}30; border-radius: 50%; display:flex; justify-content:center; align-items:center; flex-shrink:0">
+               <ion-icon name="${iconName}" style="font-size:20px; color:${colorHex}"></ion-icon>
+           </div>
+           <div style="flex:1;">
+               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                   <span style="font-size:11px; font-weight:900; color:#0f172a;">${title}</span>
+                   <span style="font-size:11px; font-weight:800; color:${colorHex}; background:${colorHex}15; padding:2px 6px; border-radius:4px;">${new Date(gpsObj.time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
+               </div>
+               ${gpsObj.addr ? `<div style="font-size:11px; color:#475569; margin-bottom: 6px; line-height:1.4;">${gpsObj.addr}</div>` : ''}
+               <a href="https://maps.google.com/?q=${gpsObj.lat},${gpsObj.lng}" target="_blank" style="font-size:10px; color:#3b82f6; text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:3px;">
+                  <ion-icon name="navigate" style="font-size:12px"></ion-icon> Ver no Mapa
+               </a>
+           </div>
+        </div>
+     `;
+  };
+
+  let speedBadgeHtml = '';
+  if (startGPS && endGPS) {
+      const R = 6371;
+      const dLat = (endGPS.lat - startGPS.lat) * Math.PI / 180;
+      const dLon = (endGPS.lng - startGPS.lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(startGPS.lat*Math.PI/180)*Math.cos(endGPS.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      let transitSeconds = Math.floor((new Date(endGPS.time) - new Date(startGPS.time))/1000);
+      if (transitSeconds <= 0) transitSeconds = 1;
+      const speedKmh = distanceKm / (transitSeconds / 3600);
+      const tmH = Math.floor(transitSeconds / 3600);
+      const tmM = Math.floor((transitSeconds % 3600) / 60);
+      speedBadgeHtml = `
+        <div style="background:#FFF7ED; border:1px solid #FFEDD5; border-radius:8px; padding:12px; margin-top:15px; display:flex; justify-content:space-around; align-items:center;">
+           <div style="text-align:center;">
+              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">TEMPO EM DESLOCAMENTO</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${tmH>0?tmH+'h ':''}${tmM}m ${transitSeconds%60}s</div>
+           </div>
+           <div style="width:1px;height:24px;background:#FED7AA;"></div>
+           <div style="text-align:center;">
+              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">VELOCIDADE MÉDIA ESTIMADA</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${speedKmh.toFixed(1)} <span style="font-size:10px">km/h</span></div>
+           </div>
+           <div style="width:1px;height:24px;background:#FED7AA;"></div>
+           <div style="text-align:center;">
+              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">DISTÂNCIA (LINHA RETA)</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${distanceKm.toFixed(2)} <span style="font-size:10px">km</span></div>
+           </div>
+        </div>`;
+  } else {
+      speedBadgeHtml = `
+        <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:12px; margin-top:15px; display:flex; justify-content:space-around; align-items:center;">
+           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">TEMPO EM DESLOCAMENTO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="width:1px;height:24px;background:#e2e8f0;"></div>
+           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VELOCIDADE MÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="width:1px;height:24px;background:#e2e8f0;"></div>
+           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">DISTÂNCIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+        </div>`;
+  }
+
+  const transitHtml = `
+    <div class="pdf-section-title" style="margin-top:25px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+       <ion-icon name="car-sport-outline" style="font-size:20px; color:#EA580C"></ion-icon>
+       RESUMO DE DESLOCAMENTO
+    </div>
+    <div style="display:flex; gap:15px; margin-top:12px;">
+       ${makeTransitCard(startGPS, "INÍCIO DO DESLOCAMENTO", "#3b82f6", "play")}
+       ${makeTransitCard(endGPS, "FIM DO DESLOCAMENTO", "#ef4444", "stop")}
+    </div>
+    ${speedBadgeHtml}
+    ${endGPS ? `
+    <div id="pdf-transit-map" style="width: 100%; height: 210px; border-radius: 8px; margin-top: 10px; border: 1px solid #cbd5e1; z-index: 1;"></div>
+    ` : ''}
+  `;
+
+  // Use server avatar only if it's an http/https URL (local file:// URLs can't be loaded in the browser)
+  const rawAvatar = t.ownerAvatar || '';
+  let avatarUrl = '';
+  if (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://') || rawAvatar.startsWith('data:image')) {
+      avatarUrl = rawAvatar;
+  } else if (rawAvatar.startsWith('/')) {
+      avatarUrl = `http://localhost:3001${rawAvatar}`;
+  } else {
+      avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
+  }
+
+  document.getElementById('print-report').innerHTML = `
+    <div class="pdf-topbar" style="border-bottom:none">
+       <div style="display:flex; align-items:center; gap:8px;">
+           <img src="img/logo.png" style="height:24px; width:auto; border-radius:4px;">
+           <span style="font-size:12px; color:#94a3b8; margin-left:8px; padding-left:8px; border-left:1px solid #e2e8f0">${fd(new Date())}</span>
+       </div>
+       <div style="font-size:11px; font-weight:600; color:#64748b; background:#f1f5f9; padding:4px 8px; border-radius:4px">
+          Relatório de atividade de campo
+       </div>
+    </div>
+    
+    <div class="pdf-header-banner" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); position:relative; overflow:hidden">
+       <!-- Elementos Graficos -->
+       <div style="position:absolute; top:-20px; right:-20px; width:150px; height:150px; background:#ffffff10; border-radius:50%"></div>
+       <div class="pdf-summary-plate">
+          <h2>RELATÓRIO DA ATIVIDADE</h2>
+          <span>${t.id}</span>
+       </div>
+       <div class="pdf-tech-info">
+          <div class="pdf-tech-texts">
+             <div class="pdf-tech-name" style="color:#f8fafc">${t.ownerEmail?.split('@')[0].toUpperCase() || 'TÉCNICO'}</div>
+             <div class="pdf-tech-mail" style="color:#93c5fd">${t.ownerEmail || '—'}</div>
+          </div>
+          <div class="pdf-tech-avatar" style="border:2px solid #fff">
+             <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=&quot;font-size:14px; font-weight:900;&quot;>${(t.ownerEmail||'T')[0].toUpperCase()}</span>'">
+          </div>
+       </div>
+    </div>
+    
+    <!-- Cabeçalho Técnico (NOVO Bloco) -->
+    <div style="margin-top:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px; box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+            <ion-icon name="business" style="font-size:18px; color:#64748b"></ion-icon>
+            <h3 style="font-size:12px; font-weight:800; color:#334155; margin:0">DADOS TÉCNICOS DA ATIVIDADE</h3>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; border-top:1px solid #f1f5f9; padding-top:10px">
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ONDE (LOCAL / ATIVO)</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.title || '—'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ENDEREÇO DA UNIDADE</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.description || 'Não preenchido'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">QUANDO (PREVISTO)</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${fd(t.createdAt)}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">QUANDO (EXECUTADO)</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.startedAt ? fd(t.startedAt) + ' – ' + (t.completedAt ? fd(t.completedAt) : 'Em andamento') : 'Não iniciado'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ID DA TAREFA</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px; font-family:monospace">${t.id}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ID PARA INTEGRAÇÃO</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px; font-family:monospace">${t.refId || t.metadata?.refId || '—'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">SITUAÇÃO</div>
+               <div style="font-size:11px; font-weight:700; margin-top:2px">
+                  <span style="background:${{ PENDING:'#fef9c3', RECEIVED:'#e0f2fe', ACCEPTED:'#dbeafe', IN_PROGRESS:'#fef3c7', COMPLETED:'#dcfce7', SYNCED:'#dcfce7', CANCELLED:'#fee2e2' }[t.status]||'#f1f5f9'}; color:${{ PENDING:'#a16207', RECEIVED:'#0369a1', ACCEPTED:'#1e40af', IN_PROGRESS:'#b45309', COMPLETED:'#15803d', SYNCED:'#15803d', CANCELLED:'#dc2626' }[t.status]||'#475569'}; padding:2px 8px; border-radius:4px; font-size:10px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Executando', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada' }[t.status]||t.status||'—'}</span>
+               </div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">FORMULÁRIO EXECUTADO</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.template?.title || t.metadata?.refId || 'N/A'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ORIGEM</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.devicePlatform || 'Cadastrada via Painel'}</div>
+            </div>
+            <div>
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">PRIORIDADE</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.priority || 'Normal'}</div>
+            </div>
+            <div style="grid-column: 1 / -1">
+               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">OBSERVAÇÃO</div>
+               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.notes || t.metadata?.observation || 'Não preenchido'}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pdf-box" style="margin-top: 10px; margin-bottom: 20px;">
+       <div class="pdf-box-title">LINHA DO TEMPO OPERACIONAL</div>
+       <div class="pdf-timeline">
+          <div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon bg-blue"><ion-icon name="create-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Criação</div>
+             <div class="pdf-timeline-date">${fd(t.createdAt)}</div>
+          </div>
+          <div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon bg-blue"><ion-icon name="sync-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Sincronização</div>
+             <div class="pdf-timeline-date">${fd(t.metadata?.receivedAt || t.syncedAt)}</div>
+          </div>
+          <div class="pdf-timeline-node" style="opacity:${startGPS ? '1' : '0.35'}">
+             <div class="pdf-timeline-icon bg-orange"><ion-icon name="car-sport-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Deslocamento</div>
+             <div class="pdf-timeline-date">${startGPS ? new Date(startGPS.time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—'}</div>
+          </div>
+          <div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon bg-green"><ion-icon name="flag-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Início</div>
+             <div class="pdf-timeline-date">${fd(t.startedAt)}</div>
+          </div>
+          <div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon bg-green"><ion-icon name="checkmark-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Conclusão</div>
+             <div class="pdf-timeline-date">${fd(t.completedAt)}</div>
+          </div>
+       </div>
+       <div class="pdf-total-time">
+          <span>DURAÇÃO (OS)</span>
+          <strong>${durationStr}</strong>
+       </div>
+    </div>
+    
+    ${transitHtml}
+    
+    <div class="pdf-section-title" style="${transitHtml ? 'margin-top:35px;' : ''} border-bottom:1px solid #e2e8f0; padding-bottom:8px; page-break-before: always;">
+       <ion-icon name="document-text-outline" style="font-size:20px; color:#3b82f6"></ion-icon>
+       RESPOSTAS DO FORMULÁRIO
+    </div>
+    
+    <div style="padding-left:15px; margin-top:12px">
+      <div class="pdf-form-grid">
+         <div class="pdf-form-line"></div>
+         ${responseHtml || '<div class="pdf-form-item"><div class="pdf-q" style="color:#94a3b8">Sem respostas cadastradas</div></div>'}
+      </div>
+    </div>
+    
+    ${photoHtml ? `
+      <div class="pdf-section-title" style="margin-top:35px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+         <ion-icon name="camera-outline" style="font-size:20px; color:#10b981"></ion-icon>
+         EVIDÊNCIAS FOTOGRÁFICAS
+      </div>
+      <div class="pdf-photo-grid" style="margin-top:12px">${photoHtml}</div>
+    ` : ''}
+
+    <div class="pdf-footer" style="margin-top:50px; border-top:1px solid #e2e8f0; padding-top:15px; display:flex; justify-content:space-between; color:#64748b; font-size:10px;">
+       <div>Gerado pela <strong>BrSpark Admin Central de Operações</strong></div>
+       <div>www.brspark.com</div>
+    </div>
+  `;
+  
+  if (endGPS) {
+      setTimeout(() => {
+          const mapEl = document.getElementById('pdf-transit-map');
+          if (mapEl) {
+              if (window._pdfTransitMap) { window._pdfTransitMap.remove(); window._pdfTransitMap = null; }
+              const map = L.map('pdf-transit-map', { zoomControl: false, attributionControl: false, fadeAnimation: false, zoomAnimation: false }).setView([endGPS.lat, endGPS.lng], 15);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+              
+              const startIcon = L.divIcon({ html: '<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
+              const endIcon = L.divIcon({ html: '<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
+              
+              const latlngs = (endGPS.traversedPath || []).map(c => [c[0], c[1]]);
+              const polyline = L.polyline(latlngs, { color: '#EA580C', weight: 5 }).addTo(map);
+              
+              const fallbackStart = latlngs.length > 0 ? latlngs[0] : null;
+              const finalStartLat = fallbackStart ? fallbackStart[0] : startGPS?.lat;
+              const finalStartLng = fallbackStart ? fallbackStart[1] : startGPS?.lng;
+              
+              const fallbackEnd = latlngs.length > 0 ? latlngs[latlngs.length - 1] : null;
+              const finalEndLat = fallbackEnd ? fallbackEnd[0] : endGPS?.lat;
+              const finalEndLng = fallbackEnd ? fallbackEnd[1] : endGPS?.lng;
+              
+              if (finalStartLat !== undefined && finalStartLat !== null) {
+                  L.marker([finalStartLat, finalStartLng], { icon: startIcon }).addTo(map);
+              }
+              if (finalEndLat !== undefined && finalEndLat !== null) {
+                  L.marker([finalEndLat, finalEndLng], { icon: endIcon }).addTo(map);
+              }
+              
+              window._pdfTransitMap = map;
+              if (latlngs.length > 1) {
+                  map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false });
+                  map.invalidateSize(false);
+              }
+          }
+          setTimeout(() => window.print(), 800); // give tiles a moment to load
+      }, 100);
+  } else {
+      setTimeout(() => window.print(), 100);
+  }
+};
+
+window.closeDetailModal = () => {
+  document.getElementById('detail-modal').style.display = 'none';
+  currentDetailId = null;
+  _currentTask = null;
+};
+
+window.cancelTask = async function(bypassConfirm = false) {
+  if (!currentDetailId) return;
+  
+  if (!bypassConfirm) {
+     const btn = document.getElementById('detail-cancel-btn');
+     btn.textContent = '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Tem Certeza? (Clique de novo)';
+     btn.onclick = () => cancelTask(true);
+     return;
+  }
+
+  try {
+    document.getElementById('detail-cancel-btn').disabled = true;
+    document.getElementById('detail-cancel-btn').textContent = '⏳ Cancelando...';
+    
+    const res = await CONFIG.del(`/operations/tasks/${currentDetailId}?_t=${Date.now()}`);
+    if (res && res.error) { 
+      throw new Error(res.error); 
+    }
+    
+    alert('OS Cancelada com sucesso!');
+    window.closeDetailModal();
+    await window.loadBoard();
+  } catch(e) {
+    console.error('[OPS] cancelTask error:', e);
+    alert('Erro ao cancelar OS: ' + (e.message || 'Falha de rede'));
+  } finally {
+    const btn = document.getElementById('detail-cancel-btn');
+    if(btn) {
+       btn.disabled = false;
+       btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
+    }
+  }
+};
+
+// ── Dispatch Modal ────────────────────────────────────────────
+window.openDispatchModal = async function() {
+  const templates = await CONFIG.get('/checklists/templates');
+  const sel = document.getElementById('d-template');
+  sel.innerHTML = '<option value="">Selecionar formulário...</option>';
+  if (templates && Array.isArray(templates)) {
+    templates.filter(t => t.isActive).forEach(t => {
+      sel.innerHTML += `<option value="${t.id}">${t.title}</option>`;
+    });
+  }
+  document.getElementById('d-email').value = '';
+  document.getElementById('d-title').value = '';
+  document.getElementById('d-desc').value  = '';
+  document.getElementById('d-address').value = '';
+  document.getElementById('d-lat').value = '';
+  document.getElementById('d-lng').value = '';
+  document.getElementById('d-radius').value = '200';
+  document.getElementById('d-polygon').value = '';
+  if (window.clearSegmentMap) window.clearSegmentMap();
+  if (document.getElementById('d-route')) document.getElementById('d-route').value = '';
+  if (document.getElementById('d-kml-route-file')) document.getElementById('d-kml-route-file').value = '';
+  if (document.getElementById('d-kml-file')) document.getElementById('d-kml-file').value = '';
+  if (document.getElementById('d-kml-route-label')) document.getElementById('d-kml-route-label').textContent = 'Nenhum arquivo selecionado...';
+  if (document.getElementById('d-kml-route-status')) document.getElementById('d-kml-route-status').innerHTML = 'Suporta arquivos .kml com <strong>LineString</strong>.';
+  window._kmlZoneType = null;
+  window._geoMode = 'radius';
+  switchGeoTab('radius');
+  document.getElementById('dispatch-modal').style.display = 'flex';
+  // Init map after display
+  setTimeout(() => window.initDispatchMap(), 200);
+};
+
+// ── Geo Tab Switcher ────────────────────────────────────────────
+window._geoMode = 'radius';
+window.switchGeoTab = function(mode) {
+  window._geoMode = mode;
+  const TAB_COLORS = {
+    radius:  { bg: 'var(--primary)', color: '#fff' },
+    route:   { bg: '#f97316',        color: '#fff' },
+    segment: { bg: '#eab308',        color: '#fff' },
+    polygon: { bg: '#3b82f6',        color: '#fff' },
+    none:    { bg: '#64748b',        color: '#fff' },
+  };
+  ['radius', 'route', 'segment', 'polygon', 'none'].forEach(m => {
+    const panel = document.getElementById(`geo-panel-${m}`);
+    if (panel) panel.style.display = m === mode ? 'block' : 'none';
+    const btn = document.getElementById(`geo-tab-${m}`);
+    if (btn) {
+      const active = m === mode;
+      btn.style.background = active ? TAB_COLORS[m].bg : 'transparent';
+      btn.style.color = active ? TAB_COLORS[m].color : 'var(--text2)';
+      btn.style.boxShadow = active ? '0 2px 6px rgba(0,0,0,0.15)' : 'none';
+    }
+  });
+  if (mode === 'radius') setTimeout(() => {
+    if (!window._dispatchMap) window.initDispatchMap();
+    else window._dispatchMap.invalidateSize();
+  }, 100);
+  if (mode === 'polygon') setTimeout(() => {
+    if (!window._dispatchMapPoly) window.initPolygonMap();
+    else window._dispatchMapPoly.invalidateSize();
+  }, 100);
+  if (mode === 'segment') setTimeout(() => {
+    if (!window._dispatchMapSegment) window.initSegmentMap();
+    else window._dispatchMapSegment.invalidateSize();
+  }, 100);
+  if (mode === 'route') setTimeout(() => {
+    if (!window._dispatchMapRoute) window.initRouteMap();
+    else window._dispatchMapRoute.invalidateSize();
+  }, 100);
+};
+
+window._segmentPoints = [];
+window._segmentMarkers = [];
+window._dispatchMapSegment = null;
+window._segmentLine = null;
+
+window.initSegmentMap = function() {
+  const el = document.getElementById('dispatch-map-segment');
+  if (!el || !window.L) return;
+  if (window._dispatchMapSegment) { window._dispatchMapSegment.invalidateSize(); return; }
+  window._dispatchMapSegment = L.map('dispatch-map-segment').setView([-15.788, -47.879], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(window._dispatchMapSegment);
+  
+  window._dispatchMapSegment.on('click', function(e) {
+    if (window._segmentPoints.length >= 2) return; // Only 2 points allowed!
+    const lat = parseFloat(e.latlng.lat.toFixed(6));
+    const lng = parseFloat(e.latlng.lng.toFixed(6));
+    window._segmentPoints.push([lat, lng]);
+    
+    // Fill the inputs dynamically based on click
+    if (window._segmentPoints.length === 1) {
+      document.getElementById('d-segment-lat-a').value = lat;
+      document.getElementById('d-segment-lng-a').value = lng;
+    } else if (window._segmentPoints.length === 2) {
+      document.getElementById('d-segment-lat-b').value = lat;
+      document.getElementById('d-segment-lng-b').value = lng;
+    }
+    
+    window._renderSegmentMapOverlay();
+  });
+};
+
+window._renderSegmentMapOverlay = function() {
+  if (!window._dispatchMapSegment) return;
+  window._segmentMarkers.forEach(m => window._dispatchMapSegment.removeLayer(m));
+  window._segmentMarkers = [];
+  if (window._segmentLine) window._dispatchMapSegment.removeLayer(window._segmentLine);
+  window._segmentLine = null;
+
+  window._segmentPoints.forEach((pt, idx) => {
+    const isA = idx === 0;
+    const color = isA ? '#2563eb' : '#d946ef';
+    const title = isA ? 'Ponto A' : 'Ponto B';
+    const mk = L.marker([pt[0], pt[1]], { title }).addTo(window._dispatchMapSegment).bindPopup(title);
+    
+    const icon = mk._icon;
+    if (icon) icon.style.filter = isA ? 'hue-rotate(0deg)' : 'hue-rotate(280deg)'; 
+    window._segmentMarkers.push(mk);
+  });
+  
+  if (window._segmentPoints.length === 2) {
+     window._segmentLine = L.polyline(window._segmentPoints, { color: '#9ca3af', weight: 2, dashArray: '5,5' }).addTo(window._dispatchMapSegment);
+     window._dispatchMapSegment.fitBounds(window._segmentLine.getBounds(), { padding: [20, 20] });
+  } else if (window._segmentPoints.length === 1) {
+     window._dispatchMapSegment.setView([window._segmentPoints[0][0], window._segmentPoints[0][1]], 14);
+  }
+};
+
+window.geocodeSegmentAddress = async function(pontoStr) {
+  // pontoStr is 'A' or 'B'
+  const addr = document.getElementById(`d-segment-address-${pontoStr.toLowerCase()}`).value;
+  if (!addr) return alert('Digite um endereço válido.');
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}`);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat).toFixed(6);
+      const lng = parseFloat(data[0].lon).toFixed(6);
+      document.getElementById(`d-segment-lat-${pontoStr.toLowerCase()}`).value = lat;
+      document.getElementById(`d-segment-lng-${pontoStr.toLowerCase()}`).value = lng;
+      window.updateSegmentMapFromInputs();
+    } else {
+      alert('Endereço não encontrado.');
+    }
+  } catch(e) { console.error(e); alert('Erro ao buscar o endereço.'); }
+};
+
+window.updateSegmentMapFromInputs = function() {
+  const latA = parseFloat(document.getElementById('d-segment-lat-a').value);
+  const lngA = parseFloat(document.getElementById('d-segment-lng-a').value);
+  const latB = parseFloat(document.getElementById('d-segment-lat-b').value);
+  const lngB = parseFloat(document.getElementById('d-segment-lng-b').value);
+  
+  window._segmentPoints = [];
+  if (!isNaN(latA) && !isNaN(lngA)) window._segmentPoints.push([latA, lngA]);
+  if (!isNaN(latB) && !isNaN(lngB)) window._segmentPoints.push([latB, lngB]);
+  
+  window._renderSegmentMapOverlay();
+};
+
+window.clearSegmentMap = function() {
+  window._segmentPoints = [];
+  window._segmentMarkers.forEach(m => {
+    if (window._dispatchMapSegment) window._dispatchMapSegment.removeLayer(m);
+  });
+  window._segmentMarkers = [];
+  if (window._segmentLine && window._dispatchMapSegment) window._dispatchMapSegment.removeLayer(window._segmentLine);
+  window._segmentLine = null;
+  
+  if(document.getElementById('d-segment-address-a')) document.getElementById('d-segment-address-a').value = '';
+  if(document.getElementById('d-segment-lat-a')) document.getElementById('d-segment-lat-a').value = '';
+  if(document.getElementById('d-segment-lng-a')) document.getElementById('d-segment-lng-a').value = '';
+  if(document.getElementById('d-segment-address-b')) document.getElementById('d-segment-address-b').value = '';
+  if(document.getElementById('d-segment-lat-b')) document.getElementById('d-segment-lat-b').value = '';
+  if(document.getElementById('d-segment-lng-b')) document.getElementById('d-segment-lng-b').value = '';
+};
+
+// ── Leaflet Map (Rota) ─────────────────────────────────────────
+window._dispatchMapRoute = null;
+window._routePolyline = null;
+
+window.initRouteMap = function() {
+  const el = document.getElementById('dispatch-map-route');
+  if (!el || !window.L) return;
+  if (window._dispatchMapRoute) { window._dispatchMapRoute.invalidateSize(); return; }
+  window._dispatchMapRoute = L.map('dispatch-map-route').setView([-15.788, -47.879], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap', maxZoom: 19
+  }).addTo(window._dispatchMapRoute);
+};
+
+window.renderRoutePreview = function() {
+  const raw = document.getElementById('d-route')?.value?.trim();
+  if (!raw || !window._dispatchMapRoute) return;
+  try {
+    const coords = JSON.parse(raw);
+    if (window._routePolyline) window._dispatchMapRoute.removeLayer(window._routePolyline);
+    const latlngs = coords.map(c => [c[0], c[1]]);
+    window._routePolyline = L.polyline(latlngs, { color: '#f97316', weight: 4, dashArray: '8,4' })
+      .addTo(window._dispatchMapRoute);
+    // Start + end markers
+    L.marker(latlngs[0], { title: 'Início' }).addTo(window._dispatchMapRoute);
+    L.marker(latlngs[latlngs.length - 1], { title: 'Fim' }).addTo(window._dispatchMapRoute);
+    window._dispatchMapRoute.fitBounds(window._routePolyline.getBounds(), { padding: [20, 20] });
+  } catch(e) { console.error('renderRoutePreview:', e); }
+};
+
+// ── KML Upload Handler (Rota) ───────────────────────────────────
+window.onKmlRouteFileChange = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('d-kml-route-label').textContent = file.name;
+  document.getElementById('d-kml-route-status').innerHTML = '⏳ Lendo arquivo...';
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const parsed = window.parseKML(ev.target.result);
+      if (!parsed || parsed.coords.length < 2) {
+        document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
+        return;
+      }
+      if (parsed.type !== 'route') {
+        document.getElementById('d-kml-route-status').innerHTML =
+          '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Este KML contém um Polígono, não uma Rota (LineString). Use a aba <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono.';
+        return;
+      }
+      document.getElementById('d-route').value = JSON.stringify(parsed.coords);
+      window._kmlZoneType = 'route';
+      document.getElementById('d-kml-route-status').innerHTML =
+        '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota importada — <strong>' + parsed.coords.length + ' pontos</strong>.';
+      if (!window._dispatchMapRoute) window.initRouteMap();
+      setTimeout(function() { window.renderRoutePreview(); }, 300);
+    } catch(err) {
+      document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' + err.message;
+    }
+  };
+  reader.onerror = function() {
+    document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
+  };
+  reader.readAsText(file);
+};
+
+
+// ── Leaflet Map (Ponto + Raio) ──────────────────────────────────
+window._dispatchMap = null;
+window._dispatchMarker = null;
+window._dispatchCircle = null;
+
+window.initDispatchMap = function() {
+  const el = document.getElementById('dispatch-map');
+  if (!el || !window.L) return;
+  if (window._dispatchMap) { window._dispatchMap.invalidateSize(); return; }
+  window._dispatchMap = L.map('dispatch-map').setView([-15.788, -47.879], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 19
+  }).addTo(window._dispatchMap);
+  window._dispatchMap.on('click', function(e) {
+    const lat = e.latlng.lat.toFixed(6);
+    const lng = e.latlng.lng.toFixed(6);
+    document.getElementById('d-lat').value = lat;
+    document.getElementById('d-lng').value = lng;
+    window.placeMapMarker(parseFloat(lat), parseFloat(lng));
+  });
+};
+
+window.placeMapMarker = function(lat, lng) {
+  const map = window._dispatchMap;
+  if (!map) return;
+  const radius = parseInt(document.getElementById('d-radius').value) || 200;
+  if (window._dispatchMarker) map.removeLayer(window._dispatchMarker);
+  if (window._dispatchCircle) map.removeLayer(window._dispatchCircle);
+  window._dispatchMarker = L.marker([lat, lng]).addTo(map)
+    .bindPopup(`<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto de serviço<br>Raio: ${radius}m`).openPopup();
+  window._dispatchCircle = L.circle([lat, lng], { radius, color: '#10b981', fillOpacity: 0.12, weight: 2 }).addTo(map);
+  map.setView([lat, lng], 15);
+};
+
+window.updateMapFromInputs = function() {
+  const lat = parseFloat(document.getElementById('d-lat').value);
+  const lng = parseFloat(document.getElementById('d-lng').value);
+  if (!isNaN(lat) && !isNaN(lng)) window.placeMapMarker(lat, lng);
+};
+
+window.geocodeAddress = async function() {
+  const addr = document.getElementById('d-address').value.trim();
+  if (!addr) return;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat).toFixed(6);
+      const lng = parseFloat(data[0].lon).toFixed(6);
+      document.getElementById('d-lat').value = lat;
+      document.getElementById('d-lng').value = lng;
+      window.placeMapMarker(parseFloat(lat), parseFloat(lng));
+    } else {
+      alert('Endereço não encontrado. Tente ser mais específico ou insira as coordenadas manualmente.');
+    }
+  } catch(e) {
+    alert('Erro ao buscar endereço. Verifique sua conexão.');
+  }
+};
+
+window.useMyLocation = function() {
+  if (!navigator.geolocation) { alert('Geolocalização não suportada.'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    document.getElementById('d-lat').value = lat;
+    document.getElementById('d-lng').value = lng;
+    window.placeMapMarker(parseFloat(lat), parseFloat(lng));
+  }, () => alert('Permissão de localização negada.'));
+};
+
+// ── Leaflet Map (Polígono) ─────────────────────────────────────
+window._dispatchMapPoly = null;
+window._polyLayer = null;
+
+window.initPolygonMap = function() {
+  const el = document.getElementById('dispatch-map-polygon');
+  if (!el || !window.L) return;
+  if (window._dispatchMapPoly) { window._dispatchMapPoly.invalidateSize(); return; }
+  window._dispatchMapPoly = L.map('dispatch-map-polygon').setView([-15.788, -47.879], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 19
+  }).addTo(window._dispatchMapPoly);
+};
+
+// ── KML Upload Handler ──────────────────────────────────────────
+window.onKmlFileChange = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('d-kml-label').textContent = file.name;
+  document.getElementById('d-kml-status').innerHTML = '⏳ Lendo arquivo...';
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const parsed = window.parseKML(ev.target.result);
+      if (!parsed || parsed.coords.length < 2) {
+        document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
+        return;
+      }
+      document.getElementById('d-polygon').value = JSON.stringify(parsed.coords);
+      // Store zone type to be sent on dispatch
+      window._kmlZoneType = parsed.type; // 'polygon' or 'route'
+      const typeLabel = parsed.type === 'route' ? '<ion-icon name="ellipse" style="color:var(--amber);vertical-align:-2px;font-size:10px"></ion-icon> Rota' : '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono';
+      document.getElementById('d-kml-status').innerHTML =
+        '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ' + typeLabel + ' importado — <strong>' + parsed.coords.length + ' pontos</strong>.';
+      if (!window._dispatchMapPoly) window.initPolygonMap();
+      setTimeout(function() { window.renderPolygonPreview(); }, 300);
+    } catch(err) {
+      document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' + err.message;
+    }
+  };
+  reader.onerror = function() {
+    document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
+  };
+  reader.readAsText(file);
+};
+
+// Returns { type: 'polygon'|'route', coords: [[lat,lng],...] }
+window.parseKML = function(kmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(kmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('XML inválido no arquivo KML.');
+
+  function extractCoords(node) {
+    var pts = [];
+    node.textContent.trim().split(/\s+/).forEach(function(token) {
+      var parts = token.split(',');
+      if (parts.length >= 2) {
+        var lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+        if (!isNaN(lat) && !isNaN(lng)) pts.push([+lat.toFixed(6), +lng.toFixed(6)]);
+      }
+    });
+    return pts;
+  }
+
+  // 1) Try LineString first (route)
+  var lineNodes = doc.querySelectorAll('LineString coordinates');
+  if (lineNodes.length > 0) {
+    var routeCoords = [];
+    lineNodes.forEach(function(n) { routeCoords = routeCoords.concat(extractCoords(n)); });
+    if (routeCoords.length >= 2) return { type: 'route', coords: routeCoords };
+  }
+
+  // 2) Try Polygon
+  var polySelectors = ['outerBoundaryIs coordinates', 'LinearRing coordinates', 'Polygon coordinates', 'coordinates'];
+  for (var i = 0; i < polySelectors.length; i++) {
+    var nodes = doc.querySelectorAll(polySelectors[i]);
+    if (!nodes.length) continue;
+    var coords = extractCoords(nodes[0]);
+    if (coords.length >= 3) {
+      // Remove KML closing duplicate
+      var f = coords[0], l = coords[coords.length - 1];
+      if (f[0] === l[0] && f[1] === l[1]) coords.pop();
+      return { type: 'polygon', coords: coords };
+    }
+  }
+  return { type: 'polygon', coords: [] };
+};
+
+
+window.renderPolygonPreview = function() {
+  const raw = document.getElementById('d-polygon').value.trim();
+  if (!raw) { alert('Insira os pontos do polígono primeiro.'); return; }
+  let coords;
+  try {
+    coords = JSON.parse(raw);
+    if (!Array.isArray(coords) || coords.length < 2) throw new Error('Mínimo 2 pontos necessários.');
+  } catch(e) {
+    alert('Formato inválido: ' + e.message);
+    return;
+  }
+  const map = window._dispatchMapPoly;
+  if (!map) return;
+  if (window._polyLayer) map.removeLayer(window._polyLayer);
+  const latlngs = coords.map(function(c) { return [c[0], c[1]]; });
+  const isRoute = (window._kmlZoneType === 'route') || (coords.length === 2);
+  if (isRoute) {
+    window._polyLayer = L.polyline(latlngs, { color: '#f97316', weight: 4, dashArray: '8,4' }).addTo(map);
+  } else {
+    window._polyLayer = L.polygon(latlngs, { color: '#3b82f6', fillOpacity: 0.15, weight: 2 }).addTo(map);
+  }
+  map.fitBounds(window._polyLayer.getBounds());
+};
+
+// ── confirmDispatch (Updated) ───────────────────────────────────
+window.closeDispatchModal = () => {
+  document.getElementById('dispatch-modal').style.display = 'none';
+};
+
+window.confirmDispatch = async function() {
+  const email    = document.getElementById('d-email').value.trim();
+  const refId    = document.getElementById('d-template').value;
+  const title    = document.getElementById('d-title').value.trim();
+  const desc     = document.getElementById('d-desc').value.trim();
+
+  if (!email) { alert('Informe o e-mail do técnico.'); return; }
+  
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    alert('Erro: Formato de e-mail inválido. Verifique se você digitou corretamente com o "@" em vez de "#" ou espaços.');
+    return;
+  }
+
+  if (!refId) { alert('Selecione um formulário.'); return; }
+
+  // ── Build location payload baseado na aba ativa ─────────────────
+  const geoMode = window._geoMode || 'none';
+  let locationPayload = {};
+
+  if (geoMode === 'radius') {
+    // <ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> PONTO
+    const lat = parseFloat(document.getElementById('d-lat').value);
+    const lng = parseFloat(document.getElementById('d-lng').value);
+    const radius = parseInt(document.getElementById('d-radius').value) || 200;
+    const address = document.getElementById('d-address').value.trim();
+    if (!isNaN(lat) && !isNaN(lng)) {
+      locationPayload = {
+        locationLat: lat, locationLng: lng, locationRadius: radius,
+        locationAddress: address || null, locationZoneType: 'radius'
+      };
+    }
+  } else if (geoMode === 'route') {
+    // <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> ROTA
+    const rawRoute = document.getElementById('d-route')?.value?.trim() || document.getElementById('d-polygon')?.value?.trim();
+    if (rawRoute && rawRoute.length > 5) {
+      try {
+        const coords = JSON.parse(rawRoute);
+        if (Array.isArray(coords) && coords.length >= 2) {
+          const tolEl = document.getElementById('d-route-tolerance');
+          const tolerance = tolEl ? (parseInt(tolEl.value) || 100) : 100;
+          const centLat = coords.reduce((s,c) => s + c[0], 0) / coords.length;
+          const centLng = coords.reduce((s,c) => s + c[1], 0) / coords.length;
+          locationPayload = {
+            locationPolygon: coords, locationZoneType: 'route', locationRadius: tolerance,
+            locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
+          };
+        }
+      } catch(e) { console.error('Erro na rota:', e); }
+    }
+  } else if (geoMode === 'segment') {
+    // <ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> TRECHO
+    if (window._segmentPoints && window._segmentPoints.length === 2) {
+      const tolEl = document.getElementById('d-segment-radius');
+      const tolerance = tolEl ? (parseInt(tolEl.value) || 150) : 150;
+      const coords = window._segmentPoints;
+      // The center could just be the middle of the segment
+      const centLat = (coords[0][0] + coords[1][0]) / 2;
+      const centLng = (coords[0][1] + coords[1][1]) / 2;
+      locationPayload = {
+        locationPolygon: coords, locationZoneType: 'segment', locationRadius: tolerance,
+        locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
+      };
+    }
+  } else if (geoMode === 'polygon') {
+    // <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> POLÍGONO
+    const rawPoly = document.getElementById('d-polygon')?.value?.trim();
+    if (rawPoly && rawPoly.length > 5) {
+      try {
+        const coords = JSON.parse(rawPoly);
+        if (Array.isArray(coords) && coords.length >= 3) {
+          const centLat = coords.reduce((s,c) => s + c[0], 0) / coords.length;
+          const centLng = coords.reduce((s,c) => s + c[1], 0) / coords.length;
+          locationPayload = {
+            locationPolygon: coords, locationZoneType: 'polygon',
+            locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
+          };
+        }
+      } catch(e) { console.error('Erro no polígono:', e); }
+    }
+  }
+
+  try {
+    const res = await CONFIG.post('/checklists/dispatch', {
+      ownerEmail: email, refId, title: title || 'Nova OS Designada', description: desc,
+      metadata: { icon: 'build-outline' },
+      ...locationPayload
+    });
+    if (res.success) {
+      closeDispatchModal();
+      loadBoard();
+      let modeDesc = 'Nenhuma';
+      if (locationPayload.locationZoneType === 'radius') modeDesc = `Ponto (${locationPayload.locationRadius}m)`;
+      if (locationPayload.locationZoneType === 'route') modeDesc = `Rota (${locationPayload.locationRadius}m desvio tolerado)`;
+      if (locationPayload.locationZoneType === 'segment') modeDesc = `Trecho A↔B (${locationPayload.locationRadius}m em cada ponto)`;
+      if (locationPayload.locationZoneType === 'polygon') modeDesc = `Polígono`;
+      const hasGeo = locationPayload.locationLat ? `\n📍 Validação: ${modeDesc}` : '';
+      alert(`✅ OS enviada com sucesso!\nID: ${res.task?.id}${hasGeo}`);
+    } else {
+      alert('Erro: ' + (res.error || 'desconhecido'));
+    }
+  } catch(e) { alert('Erro de rede ao despachar OS.'); }
+};
+
+// ── Auto-refresh (30s) ─────────────────────────────────────────
+loadBoard();
+refreshInterval = setInterval(loadBoard, 30000);
+window.addEventListener('beforeunload', () => clearInterval(refreshInterval));
+</script>
+</body>
+</html>

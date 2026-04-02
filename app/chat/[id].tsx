@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Image
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
-import { ChatService, ChatMessage, MY_USER_ID, MY_USER_NAME } from '../../src/services/chat';
+
+import { ChatService, ChatMessage, ChatRoom } from '../../src/services/chat';
 import { colors } from '../../src/theme/colors';
-import { NotificationService } from '../../src/services/notifications';
+import { useAuth } from '../../src/hooks/useAuth';
 
 function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -19,19 +19,38 @@ function formatTime(ts: number) {
 type MediaAttach = { type: 'audio' | 'video' | 'image'; uri: string } | null;
 
 export default function ChatRoomScreen() {
-  const { id: roomId, name, color } = useLocalSearchParams<{ id: string; name: string; color: string }>();
+  const { id: roomId, name, color, avatarUrl } = useLocalSearchParams<{ id: string; name: string; color: string; avatarUrl?: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const flatRef = useRef<FlatList>(null);
 
-  const [messages,    setMessages]    = useState<ChatMessage[]>([]);
-  const [text,        setText]        = useState('');
-  const [sending,     setSending]     = useState(false);
-  const [recording,   setRecording]   = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [attach,      setAttach]      = useState<MediaAttach>(null);
-  const [showAttach,  setShowAttach]  = useState(false);
+  const [roomInfo, setRoomInfo] = useState<ChatRoom | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  
+  const [attach, setAttach] = useState<MediaAttach>(null);
+  const [showAttach, setShowAttach] = useState(false);
+  
   const lastTs = useRef(0);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<any>(null);
+
+  // Modal Settings
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [savingMembers, setSavingMembers] = useState(false);
+
+  const loadRoomInfo = useCallback(async () => {
+    const info = await ChatService.getRoomInfo(roomId!);
+    setRoomInfo(info);
+    if (info) {
+      setSelectedContacts(info.members.map(m => m.userId || m.email));
+    }
+    const c = await ChatService.getAvailableContacts();
+    setContacts(c || []);
+  }, [roomId]);
 
   const loadMessages = useCallback(async (since = 0) => {
     const msgs = await ChatService.getMessages(roomId!, since);
@@ -39,136 +58,149 @@ export default function ChatRoomScreen() {
       setMessages(prev => {
         const ids = new Set(prev.map(m => m.id));
         const fresh = msgs.filter(m => !ids.has(m.id));
-        if (fresh.length > 0) {
-          // Notifica mensagens de outros
-          fresh.filter(m => m.senderId !== MY_USER_ID).forEach(m => {
-            NotificationService.addNotification({
-              title: `${name}: ${m.senderName}`,
-              body: m.type === 'text' ? (m.content || '') : `📎 ${m.type}`,
-              category: 'info',
-            });
-          });
-          return [...prev, ...fresh];
-        }
-        return prev;
+        return [...prev, ...fresh];
       });
       lastTs.current = msgs[msgs.length - 1].timestamp;
     }
-  }, [roomId, name]);
+  }, [roomId]);
 
-  // Carga inicial
   useEffect(() => {
+    loadRoomInfo();
     ChatService.getMessages(roomId!, 0).then(msgs => {
       setMessages(msgs);
       if (msgs.length > 0) lastTs.current = msgs[msgs.length - 1].timestamp;
+      ChatService.markAsRead(roomId!).catch(() => {});
     });
-  }, [roomId]);
+  }, [roomId, loadRoomInfo]);
 
-  // Polling a cada 3s para novas mensagens
   useEffect(() => {
     pollRef.current = setInterval(() => {
       if (lastTs.current > 0) loadMessages(lastTs.current);
+      else loadMessages(0);
     }, 3000);
     return () => clearInterval(pollRef.current);
   }, [loadMessages]);
 
-  // Auto-scroll
+  // Track whether initial messages have been loaded to control scroll animation
+  const initialScrollDone = useRef(false);
+
+  const scrollToBottom = (animated = true) => {
+    flatRef.current?.scrollToEnd({ animated });
+  };
+
   useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    if (messages.length > 0 && initialScrollDone.current) {
+      // New messages arrived via polling — scroll animated
+      scrollToBottom(true);
     }
   }, [messages.length]);
 
-  // ── Envio ────────────────────────────────────────────────────────────────────
+  const [uploading, setUploading] = useState(false);
+
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed && !attach) return;
     setSending(true);
 
-    const payload = attach
-      ? { type: attach.type, content: trimmed || undefined, mediaUrl: attach.uri }
-      : { type: 'text' as const, content: trimmed };
+    try {
+      let resolvedMediaUrl: string | undefined = undefined;
 
-    const msg = await ChatService.sendMessage(roomId!, payload as any);
-    if (msg) {
+      // Upload media to server first so the URL is public (accessible by recipient)
+      if (attach) {
+        setUploading(true);
+        const mimeMap: Record<string, string> = { image: 'image/jpeg', video: 'video/mp4', audio: 'audio/m4a' };
+        const mimeType = mimeMap[attach.type] || 'application/octet-stream';
+        const uploaded = await ChatService.uploadChatMedia(attach.uri, mimeType);
+        setUploading(false);
+
+        if (uploaded) {
+          resolvedMediaUrl = uploaded;
+        } else {
+          // Fallback: use local URI (sender sees it, but recipient won't — warn)
+          console.warn('[Chat] Upload falhou, usando URI local como fallback');
+          resolvedMediaUrl = attach.uri;
+        }
+      }
+
+      const payload = attach
+        ? { type: attach.type, content: trimmed || undefined, mediaUrl: resolvedMediaUrl }
+        : { type: 'text' as const, content: trimmed };
+
+      const msg = await ChatService.sendMessage(roomId!, payload as any);
       setMessages(prev => [...prev, msg]);
       lastTs.current = msg.timestamp;
+    } catch (e: any) {
+      Alert.alert('Erro', e.message || 'Falha ao enviar mensagem');
     }
+
     setText('');
     setAttach(null);
     setShowAttach(false);
     setSending(false);
+    setUploading(false);
   };
 
-  // ── Gravação de Áudio ─────────────────────────────────────────────────────────
-  const startRecording = async () => {
-    try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) { Alert.alert('Permissão negada', 'Conceda acesso ao microfone.'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(rec);
-      setIsRecording(true);
-    } catch (e) { Alert.alert('Erro', 'Não foi possível iniciar gravação.'); }
-  };
 
-  const stopRecording = async () => {
-    if (!recording) return;
-    setIsRecording(false);
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecording(null);
-    if (uri) {
-      setAttach({ type: 'audio', uri });
-      setShowAttach(false);
-    }
-  };
-
-  // ── Seleção de Vídeo/Imagem ───────────────────────────────────────────────────
   const pickVideo = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert('Permissão negada'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
-      quality: 0.7,
-      videoMaxDuration: 60,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setAttach({ type: 'video', uri: result.assets[0].uri });
-      setShowAttach(false);
-    }
+    if (!granted) return Alert.alert('Permissão negada');
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.7, videoMaxDuration: 60 });
+    if (!result.canceled && result.assets[0]) { setAttach({ type: 'video', uri: result.assets[0].uri }); setShowAttach(false); }
   };
 
   const pickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert('Permissão negada'); return; }
+    if (!granted) return Alert.alert('Permissão negada');
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      setAttach({ type: 'image', uri: result.assets[0].uri });
-      setShowAttach(false);
-    }
+    if (!result.canceled && result.assets[0]) { setAttach({ type: 'image', uri: result.assets[0].uri }); setShowAttach(false); }
   };
 
   const takeCamera = async () => {
-    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-    if (!granted) { Alert.alert('Permissão negada'); return; }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      const isVideo = result.assets[0].type === 'video';
-      setAttach({ type: isVideo ? 'video' : 'image', uri: result.assets[0].uri });
-      setShowAttach(false);
+    try {
+      const permRes = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permRes.granted) {
+        Alert.alert('Permissão Negada', 'Conceda acesso à câmera nas configurações.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const isVideo = result.assets[0].type === 'video';
+        setAttach({ type: isVideo ? 'video' : 'image', uri: result.assets[0].uri });
+        setShowAttach(false);
+      }
+    } catch (e: any) {
+      console.warn('[Camera]', e);
+      Alert.alert(
+        'Câmera Indisponível',
+        'A câmera não está disponível no simulador iOS. Teste em um dispositivo físico.',
+      );
     }
   };
 
-  // ── Render da Mensagem ────────────────────────────────────────────────────────
+  const handleSaveMembers = async () => {
+    setSavingMembers(true);
+    try {
+      await ChatService.updateGroupMembers(roomId!, selectedContacts);
+      await loadRoomInfo();
+      Alert.alert('Sucesso', 'Membros do grupo atualizados');
+      setSettingsVisible(false);
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Falha ao atualizar grupo');
+    }
+    setSavingMembers(false);
+  };
+
   const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isMe = item.senderId === MY_USER_ID;
+    const isMe = item.senderId === user?.email;
 
     const bubble = () => {
       if (item.type === 'audio') return (
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
           <Ionicons name="mic" size={18} color={isMe ? '#fff' : colors.primary} />
-          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Áudio gravado</Text>
+          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Mensagem de áudio</Text>
         </View>
       );
       if (item.type === 'video') return (
@@ -177,15 +209,34 @@ export default function ChatRoomScreen() {
           <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Vídeo enviado</Text>
         </View>
       );
-      if (item.type === 'image') return (
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          <Ionicons name="image" size={18} color={isMe ? '#fff' : colors.primary} />
-          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Imagem enviada</Text>
-        </View>
-      );
+      // Image: render actual thumbnail
+      if (item.type === 'image') {
+        const imageUri = item.mediaUrl || (item as any).content;
+        if (imageUri) {
+          return (
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { padding: 4 }]}>
+              {!isMe && <Text style={[styles.senderName, { marginBottom: 4, marginLeft: 4 }]}>{item.senderName || item.senderId}</Text>}
+              <Image
+                source={{ uri: imageUri }}
+                style={{ width: 220, height: 160, borderRadius: 14 }}
+                resizeMode="cover"
+              />
+              {item.content ? (
+                <Text style={[styles.bubbleText, isMe && { color: '#fff' }, { marginTop: 6, marginHorizontal: 4 }]}>{item.content}</Text>
+              ) : null}
+            </View>
+          );
+        }
+        return (
+          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="image" size={18} color={isMe ? '#fff' : colors.primary} />
+            <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Imagem enviada</Text>
+          </View>
+        );
+      }
       return (
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-          {!isMe && <Text style={styles.senderName}>{item.senderName}</Text>}
+          {!isMe && <Text style={styles.senderName}>{item.senderName || item.senderId}</Text>}
           <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>{item.content}</Text>
         </View>
       );
@@ -195,7 +246,11 @@ export default function ChatRoomScreen() {
       <View style={[styles.messageRow, isMe && { justifyContent: 'flex-end' }]}>
         {!isMe && (
           <View style={[styles.msgAvatar, { backgroundColor: color || '#2563EB' }]}>
-            <Text style={styles.msgAvatarText}>{item.senderName[0]}</Text>
+            {item.senderAvatarUrl ? (
+               <Image source={{ uri: item.senderAvatarUrl }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+            ) : (
+               <Text style={styles.msgAvatarText}>{(item.senderName || item.senderId || '?')[0].toUpperCase()}</Text>
+            )}
           </View>
         )}
         <View style={{ maxWidth: '75%' }}>
@@ -206,171 +261,290 @@ export default function ChatRoomScreen() {
     );
   };
 
+  const isCreator = roomInfo?.creatorId === user?.email;
+
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: colors.cardWhite }]}>
+      <Stack.Screen options={{ headerShown: false }} />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
+
         <View style={[styles.headerAvatar, { backgroundColor: color || '#2563EB' }]}>
-          <Text style={styles.headerAvatarText}>{(name || 'C')[0].toUpperCase()}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerName}>{name}</Text>
-          <Text style={styles.headerSub}>Canal corporativo</Text>
-        </View>
-      </View>
-
-      {/* Mensagens */}
-      <FlatList
-        ref={flatRef}
-        data={messages}
-        keyExtractor={m => m.id}
-        contentContainerStyle={styles.messageList}
-        renderItem={renderMessage}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="chatbubble-ellipses-outline" size={52} color={colors.border} />
-            <Text style={styles.emptyText}>Sem mensagens ainda{'\n'}Seja o primeiro a escrever!</Text>
-          </View>
-        }
-      />
-
-      {/* Pré-visualização de anexo */}
-      {attach && (
-        <View style={styles.attachPreview}>
-          <Ionicons name={attach.type === 'audio' ? 'mic' : attach.type === 'video' ? 'videocam' : 'image'} size={20} color={colors.primary} />
-          <Text style={styles.attachPreviewText}>{attach.type === 'audio' ? 'Áudio gravado' : attach.type === 'video' ? 'Vídeo selecionado' : 'Imagem selecionada'}</Text>
-          <TouchableOpacity onPress={() => setAttach(null)}>
-            <Ionicons name="close-circle" size={20} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Painel de anexos */}
-      {showAttach && (
-        <View style={styles.attachPanel}>
-          <TouchableOpacity style={styles.attachBtn} onPress={isRecording ? stopRecording : startRecording}>
-            <View style={[styles.attachIcon, { backgroundColor: isRecording ? '#EF4444' : '#6366F1' }]}>
-              <Ionicons name={isRecording ? 'stop' : 'mic'} size={24} color="#fff" />
-            </View>
-            <Text style={styles.attachLabel}>{isRecording ? 'Parar Gravação' : 'Gravar Áudio'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.attachBtn} onPress={pickVideo}>
-            <View style={[styles.attachIcon, { backgroundColor: '#F59E0B' }]}>
-              <Ionicons name="videocam" size={24} color="#fff" />
-            </View>
-            <Text style={styles.attachLabel}>Vídeo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.attachBtn} onPress={pickImage}>
-            <View style={[styles.attachIcon, { backgroundColor: '#10B981' }]}>
-              <Ionicons name="image" size={24} color="#fff" />
-            </View>
-            <Text style={styles.attachLabel}>Galeria</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.attachBtn} onPress={takeCamera}>
-            <View style={[styles.attachIcon, { backgroundColor: '#3B82F6' }]}>
-              <Ionicons name="camera" size={24} color="#fff" />
-            </View>
-            <Text style={styles.attachLabel}>Câmera</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Input Bar */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.inputBar}>
-          <TouchableOpacity style={[styles.iconBtn, showAttach && { backgroundColor: colors.primary + '20' }]} onPress={() => setShowAttach(v => !v)}>
-            <Ionicons name={showAttach ? 'close' : 'add-circle-outline'} size={26} color={colors.primary} />
-          </TouchableOpacity>
-
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            placeholder="Escreva uma mensagem..."
-            placeholderTextColor={colors.textLight}
-            multiline
-          />
-
-          {isRecording ? (
-            <TouchableOpacity style={styles.sendBtn} onPress={stopRecording}>
-              <Ionicons name="stop" size={20} color="#fff" />
-            </TouchableOpacity>
-          ) : (text.trim() || attach) ? (
-            <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending}>
-              {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" />}
-            </TouchableOpacity>
+          {avatarUrl ? (
+             <Image source={{ uri: avatarUrl }} style={{ width: 42, height: 42, borderRadius: 21 }} />
           ) : (
-            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: '#6366F1' }]} onPressIn={startRecording} onPressOut={stopRecording}>
-              <Ionicons name="mic" size={20} color="#fff" />
-            </TouchableOpacity>
+             <Text style={styles.headerAvatarText}>{(name || 'C')[0]?.toUpperCase() || 'C'}</Text>
           )}
         </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.headerSub}>{roomInfo ? (roomInfo.isGroup ? `${roomInfo.memberCount} membros` : 'Chat Privado') : 'Carregando...'}</Text>
+        </View>
+        {roomInfo?.isGroup && (
+          <TouchableOpacity onPress={() => setSettingsVisible(true)} style={styles.settingsBtn}>
+            <Ionicons name="settings-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: '#F8FAFC' }}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 60}
+      >
+        <FlatList
+          ref={flatRef}
+          data={messages}
+          keyExtractor={m => m.id}
+          contentContainerStyle={styles.messageList}
+          renderItem={renderMessage}
+          keyboardShouldPersistTaps="handled"
+          // Scroll to bottom when content is measured (handles initial load reliably)
+          onContentSizeChange={() => {
+            if (!initialScrollDone.current) {
+              // First render: instant scroll to bottom (no animation flash)
+              scrollToBottom(false);
+              initialScrollDone.current = true;
+            }
+          }}
+          onLayout={() => {
+            if (!initialScrollDone.current) {
+              scrollToBottom(false);
+            }
+          }}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="chatbubble-ellipses-outline" size={52} color={colors.border} />
+              <Text style={styles.emptyText}>Sem mensagens ainda{'\n'}Seja o primeiro a escrever!</Text>
+            </View>
+          }
+        />
+
+        {attach && (
+          <View style={styles.attachPreview}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {uploading ? (
+                <>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ marginLeft: 8, fontWeight: '700', color: colors.primary }}>Enviando mídia...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name={attach.type === 'image' ? 'image' : attach.type === 'video' ? 'videocam' : 'mic'} size={24} color={colors.primary} />
+                  {attach.type === 'image' ? (
+                    <Image source={{ uri: attach.uri }} style={{ width: 44, height: 44, borderRadius: 8, marginLeft: 8 }} />
+                  ) : (
+                    <Text style={{ marginLeft: 8, fontWeight: '600', color: colors.slate }}>Arquivo anexado</Text>
+                  )}
+                </>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => setAttach(null)} disabled={uploading}>
+              <Ionicons name="close-circle" size={24} color={uploading ? colors.border : colors.textLight} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <TouchableOpacity onPress={() => setShowAttach(!showAttach)} style={styles.iconBtn} disabled={uploading}>
+            <Ionicons name="add" size={28} color={uploading ? colors.border : colors.textSecondary} />
+          </TouchableOpacity>
+
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Digite algo..."
+            value={text}
+            onChangeText={setText}
+            multiline
+            maxLength={500}
+           returnKeyType="done"/>
+          
+          <TouchableOpacity onPress={handleSend} style={[styles.sendBtn, (sending || uploading || (!text.trim() && !attach)) && { opacity: 0.4 }]} disabled={sending || uploading || (!text.trim() && !attach)}>
+            {sending || uploading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
+          </TouchableOpacity>
+        </View>
+
+        {showAttach && (
+          <View style={styles.attachMenu}>
+            <TouchableOpacity style={styles.attachMenuItem} onPress={takeCamera}>
+              <View style={[styles.attachIconBg, { backgroundColor: '#DBEAFE' }]}><Ionicons name="camera" size={22} color="#2563EB" /></View>
+              <Text style={styles.attachMenuText}>Câmera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachMenuItem} onPress={pickImage}>
+              <View style={[styles.attachIconBg, { backgroundColor: '#FCE7F3' }]}><Ionicons name="image" size={22} color="#DB2777" /></View>
+              <Text style={styles.attachMenuText}>Foto</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachMenuItem} onPress={pickVideo}>
+              <View style={[styles.attachIconBg, { backgroundColor: '#FEF3C7' }]}><Ionicons name="videocam" size={22} color="#D97706" /></View>
+              <Text style={styles.attachMenuText}>Vídeo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
+
+      {/* MODAL GROUP SETTINGS */}
+      <Modal visible={settingsVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Configurações do Grupo</Text>
+              <TouchableOpacity onPress={() => setSettingsVisible(false)}>
+                 <Ionicons name="close" size={26} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.sectionTitle}>Membros ({roomInfo?.memberCount})</Text>
+              
+              {!isCreator && (
+                <View style={styles.infoBox}>
+                  <Ionicons name="information-circle" size={20} color={colors.primary} />
+                  <Text style={styles.infoText}>Apenas o administrador do grupo ({roomInfo?.creatorId}) pode adicionar ou remover participantes.</Text>
+                </View>
+              )}
+
+              {/* Se for criador, pode mudar checkboxes */}
+              {isCreator ? (
+                <View>
+                  {contacts.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 10 }}>Nenhum contato disponível.</Text>
+                  ) : (
+                    contacts.map(c => {
+                      const isSelected = selectedContacts.includes(c.email);
+                      return (
+                        <TouchableOpacity 
+                          key={c.email} 
+                          style={styles.contactItem} 
+                          onPress={() => {
+                            if (isSelected) setSelectedContacts(prev => prev.filter(email => email !== c.email));
+                            else setSelectedContacts(prev => [...prev, c.email]);
+                          }}
+                        >
+                          <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.contactName}>{c.name}</Text>
+                            <Text style={styles.contactEmail}>{c.email}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })
+                  )}
+                  <TouchableOpacity style={[styles.primaryBtn, savingMembers && { opacity: 0.5 }]} disabled={savingMembers} onPress={handleSaveMembers}>
+                    {savingMembers ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Salvar Alterações</Text>}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* Se não for criador, apenas visualiza */
+                <View>
+                  {roomInfo?.members.map(m => (
+                    <View key={m.userId || m.email} style={styles.contactItem}>
+                      <View style={[styles.avatarFixed, { backgroundColor: '#9CA3AF' }]}>
+                        {m.avatarUrl ? (
+                          <Image source={{ uri: m.avatarUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                        ) : (
+                          <Text style={{ color: '#fff', fontWeight: '800' }}>
+                            {((m.name || m.userId || '?')[0] || '?').toUpperCase()}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.contactName}>{m.name || m.userId}</Text>
+                        <Text style={styles.contactEmail}>{m.role}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 14,
+    backgroundColor: colors.cardWhite,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  headerAvatarText: { color: '#fff', fontWeight: '900', fontSize: 14 },
-  headerName: { fontSize: 16, fontWeight: '800', color: colors.primary },
-  headerSub:  { fontSize: 11, color: colors.textSecondary },
-
-  messageList: { padding: 16, paddingBottom: 8 },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 12 },
+  backBtn: { padding: 8, marginRight: 8 },
+  settingsBtn: { padding: 8 },
+  headerAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  headerAvatarText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  headerName: { fontSize: 17, fontWeight: '800', color: colors.slate },
+  headerSub: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  
+  messageList: { padding: 16, paddingBottom: 32 },
+  empty: { alignItems: 'center', marginTop: 100 },
+  emptyText: { fontSize: 15, color: colors.textLight, textAlign: 'center', marginTop: 12, lineHeight: 22 },
+  
+  messageRow: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-end' },
   msgAvatar: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  msgAvatarText: { color: '#fff', fontSize: 11, fontWeight: '900' },
-
-  bubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 2 },
-  bubbleThem: { backgroundColor: colors.cardWhite, borderTopLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
-  bubbleMe:   { backgroundColor: colors.primary, borderTopRightRadius: 4 },
-  senderName: { fontSize: 11, fontWeight: '800', color: colors.primary, marginBottom: 4 },
-  bubbleText: { fontSize: 15, color: colors.primary, lineHeight: 20 },
-  msgTime: { fontSize: 10, color: colors.textLight, paddingHorizontal: 4, marginTop: 2 },
-
-  empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', fontWeight: '600', lineHeight: 22 },
-
-  attachPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 16, marginBottom: 8, padding: 10,
-    backgroundColor: colors.primary + '10', borderRadius: 10,
-    borderWidth: 1, borderColor: colors.primary + '30',
+  msgAvatarText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  
+  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 20 },
+  bubbleThem: { backgroundColor: colors.cardWhite, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
+  bubbleMe: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
+  bubbleText: { fontSize: 15, color: colors.slate, lineHeight: 22 },
+  senderName: { fontSize: 11, color: colors.primary, fontWeight: '800', marginBottom: 4 },
+  msgTime: { fontSize: 10, color: colors.textLight, marginTop: 4, fontWeight: '600' },
+  
+  inputArea: {
+    flexDirection: 'row', alignItems: 'flex-end',
+    backgroundColor: colors.cardWhite, padding: 12, paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    borderTopWidth: 1, borderTopColor: colors.border
   },
-  attachPreviewText: { flex: 1, fontSize: 13, color: colors.primary, fontWeight: '700' },
-
-  attachPanel: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: colors.cardWhite, paddingVertical: 16, paddingHorizontal: 8,
-    borderTopWidth: 1, borderTopColor: colors.border,
-  },
-  attachBtn: { alignItems: 'center', gap: 6 },
-  attachIcon: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  attachLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
-
-  inputBar: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: colors.cardWhite, borderTopWidth: 1, borderTopColor: colors.border,
-  },
-  iconBtn: { padding: 4, borderRadius: 8 },
   input: {
-    flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: '#F1F5F9',
-    borderRadius: 20, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
-    fontSize: 15, color: colors.primary, fontWeight: '500',
+    flex: 1, backgroundColor: '#F1F5F9', minHeight: 44, maxHeight: 100,
+    borderRadius: 22, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12,
+    fontSize: 15, color: colors.slate, marginHorizontal: 8
   },
-  sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center',
+  iconBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 22 },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  
+  attachPreview: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#EEF2FF', margin: 12, padding: 12, borderRadius: 12,
+    borderWidth: 1, borderColor: '#C7D2FE'
   },
+  attachMenu: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    backgroundColor: colors.cardWhite, paddingVertical: 20,
+    borderTopWidth: 1, borderTopColor: colors.border
+  },
+  attachMenuItem: { alignItems: 'center', gap: 8 },
+  attachIconBg: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  attachMenuText: { fontSize: 12, color: colors.slate, fontWeight: '600' },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: colors.cardWhite, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: colors.slate, letterSpacing: -0.5 },
+  sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', marginBottom: 16 },
+  
+  infoBox: { flexDirection: 'row', backgroundColor: '#EEF2FF', padding: 12, borderRadius: 8, marginBottom: 16 },
+  infoText: { flex: 1, fontSize: 12, color: colors.primary, marginLeft: 8, lineHeight: 18 },
+
+  contactItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.background },
+  contactName: { fontSize: 15, fontWeight: '800', color: colors.slate },
+  contactEmail: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, marginRight: 14, justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  
+  avatarFixed: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+
+  primaryBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 24 },
+  primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '900' }
 });
