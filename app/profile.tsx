@@ -386,8 +386,9 @@ export default function ProfileScreen() {
         {/* ─── Profile Mode Selector ─── */}
         {user.technicianProfile ? (
           <>
-            <View style={styles.sectionHeaderWrap}>
-              <Text style={styles.sectionHeaderLabel}>🛠️ Modo de Uso</Text>
+            <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+              <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
+              <Text style={styles.sectionHeaderLabel}>MODO DE USO</Text>
             </View>
             <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
               <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
@@ -425,8 +426,9 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>🗣️ {t('profile.selectLanguage') || 'Idioma'}</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="language" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>{(t('profile.selectLanguage') || 'Idioma').toUpperCase()}</Text>
         </View>
         <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
           <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
@@ -476,8 +478,9 @@ export default function ProfileScreen() {
         </View>
 
         {/* ─── País / Região (conformidade, moeda, fuso) ─── */}
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>🌍 País / Região</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="globe" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>PAÍS / REGIÃO</Text>
         </View>
         <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
           <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
@@ -530,8 +533,9 @@ export default function ProfileScreen() {
         </View>
 
         {/* ─── Main Settings List ─── */}
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>{t('profile.globalInterface')}</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="color-palette" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>{(t('profile.globalInterface') || 'Interface Global').toUpperCase()}</Text>
         </View>
         <View style={styles.listCard}>
           <View style={styles.listItem}>
@@ -554,8 +558,9 @@ export default function ProfileScreen() {
         </View>
 
         {/* ─── Segurança ─── */}
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>Segurança</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="shield-checkmark" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>SEGURANÇA</Text>
         </View>
         <View style={styles.listCard}>
           <TouchableOpacity style={styles.listItem} onPress={() => setShowPwdModal(true)}>
@@ -629,8 +634,9 @@ export default function ProfileScreen() {
         )}
 
         {/* ─── Cloud & Data ─── */}
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>{t('profile.backendMonitor')}</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="cloud" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>{(t('profile.backendMonitor') || 'Monitor do Backend').toUpperCase()}</Text>
         </View>
         <View style={styles.listCard}>
           <TouchableOpacity style={styles.listItem} onPress={handleSync} disabled={syncing}>
@@ -685,8 +691,9 @@ export default function ProfileScreen() {
         </View>
 
         {/* ─── Danger Zone ─── */}
-        <View style={styles.sectionHeaderWrap}>
-          <Text style={styles.sectionHeaderLabel}>Conta</Text>
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="warning" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>CONTA</Text>
         </View>
         <View style={styles.listCard}>
           <TouchableOpacity 
@@ -791,7 +798,7 @@ const styles = StyleSheet.create({
 
   // ─── Sections ───
   sectionHeaderWrap: { marginTop: 20, marginBottom: 10, paddingLeft: 4 },
-  sectionHeaderLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 0.8, color: '#64748B', textTransform: 'uppercase' },
+  sectionHeaderLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 0.8, color: '#64748B' },
 
   // ─── Integrated List Card ───
   listCard: { backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 16, overflow: 'hidden' },

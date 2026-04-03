@@ -281,6 +281,29 @@
 
       </div>
 
+      <!-- ── Mapas & Roteamento ──────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="map-outline"></ion-icon> Mapas &amp; Roteamento</div>
+      <div class="int-catalog" id="maps-catalog">
+
+        <!-- OSRM -->
+        <div class="int-card" id="card-osrm">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#5B21B6;color:#fff"><ion-icon name="navigate-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">OSRM</div><div class="int-cat">Mapas / Routing</div></div>
+            <span class="int-status inactive" id="status-osrm" style="margin-left:auto">○ Público</span>
+          </div>
+          <div class="int-desc">Substitui a API pública do OSRM pelo seu servidor próprio para calcular ETAs precisos em tempo real sem rate limits.</div>
+          <div class="int-fields" id="fields-osrm">
+            <input class="form-control" id="url-osrm" placeholder="Base URL (ex: http://osrm.empresa.com.br)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveInt('osrm','MAPS','OSRM',['url-osrm'],['baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-danger btn-sm" id="del-osrm" style="display:none" onclick="deleteIntByName('OSRM')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
 </div>
@@ -310,6 +333,7 @@
     'Amazon S3':           { slug:'amazon-s3' },
     'Bluesoft Cosmos':     { slug:'cosmos' },
     'UPCItemDB':           { slug:'upcitemdb' },
+    'OSRM':                { slug:'osrm' },
   };
 
   // type → typeLabel legível para exibição

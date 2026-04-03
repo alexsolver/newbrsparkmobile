@@ -651,6 +651,7 @@ model ChecklistExecution {
   locationRadius   Int?     // Raio de aceitação em metros
   locationZoneType String?  // 'radius' | 'polygon' | 'route'
   locationPolygon  Json?    // [[lat,lng],...] — polígono de área ou pontos do trajeto
+  etaMinutes       Int?     // Tempo estimado de chegada atualizado via telemetria
 
   // Auditoria (Provas WFM)
   gpsLocation Json?    // {lat, lng, radius} coletado ao concluir
@@ -795,7 +796,8 @@ model ExecutionMetric {
   ownerEmail   String
 
   // ── Tempos (minutos) ──────────────────────────────────
-  transitDurationMin    Int?
+  etaMinutes          Int?
+  transitDurationMin  Int?
   siteArrivalDelayMin   Int?  // positivo = atrasado, negativo = adiantado
   onSiteDurationMin     Int?
   idleTimeMin           Int?

@@ -398,7 +398,7 @@
     "cameraPermDenied": "Permiso de cámara denegado.",
     "permDenied": "Permiso Denegado",
     "permDeniedMsg": "Para recibir alertas, permita notificaciones en Configuración del dispositivo.",
-    "alertsEnabled": "🔔 Alertas Activadas",
+    "alertsEnabled": "Alertas Activadas",
     "alertsEnabledMsg": "Recibirá notificaciones PUSH para eventos críticos.",
     "exportData": "Exportar Mis Datos",
     "exportDataConfirm": "Sus datos se exportarán en formato JSON conforme a la ley de protección de datos. ¿Continuar?",

@@ -930,10 +930,16 @@ function buildCard(task, colClass) {
      subBadge = '<span class="badge" style="background:#fef9c3;color:#a16207;font-size:9px;margin-bottom:6px">⏳ Aguardando Envio</span>';
   } else if (task.status === 'RECEIVED') {
      subBadge = '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:9px;margin-bottom:6px"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Aparelho Recebeu</span>';
-  } else if (task.status === 'ACCEPTED') {
-     subBadge = '<span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px;margin-bottom:6px"><ion-icon name="thumbs-up-outline" style="vertical-align:-2px"></ion-icon> Técnico Aceitou</span>';
-  } else if (task.status === 'IN_PROGRESS') {
-     subBadge = '<span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px;margin-bottom:6px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Executando</span>';
+  } else if (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') {
+     let etaBadge = '';
+     if (task.etaMinutes !== null && task.etaMinutes !== undefined) {
+        etaBadge = `<span class="badge" style="background:#dcfce7;color:#166534;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="time-outline" style="vertical-align:-1px"></ion-icon> ETA: ${task.etaMinutes} min</span>`;
+     }
+     if (task.status === 'ACCEPTED') {
+         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px"><ion-icon name="car-outline" style="vertical-align:-2px"></ion-icon> Em Deslocamento</span>${etaBadge}</div>`;
+     } else {
+         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Executando</span>${etaBadge}</div>`;
+     }
   }
 
   const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -1011,12 +1017,12 @@ function renderModalBody(t) {
               const fallbackEnd = pathData.length > 0 ? pathData[pathData.length - 1] : null;
               const fallbackStart = pathData.length > 0 ? pathData[0] : null;
 
-              // Precedência correta: Se a linha existe, o marcador DEVE ficar na ponta da linha!
-              const endLat = fallbackEnd ? fallbackEnd[0] : (endPos?.coordinates?.lat ?? endPos?.lat);
-              const endLng = fallbackEnd ? fallbackEnd[1] : (endPos?.coordinates?.lng ?? endPos?.lng);
+              // Precedência correta: O evento disparado pelo operador ao clicar em INICIAR/FINALIZAR é sempre absoluto. A trilha é secundária.
+              const endLat = (endPos?.coordinates?.lat ?? endPos?.lat) ?? (fallbackEnd ? fallbackEnd[0] : undefined);
+              const endLng = (endPos?.coordinates?.lng ?? endPos?.lng) ?? (fallbackEnd ? fallbackEnd[1] : undefined);
               
-              const startLat = fallbackStart ? fallbackStart[0] : (startPos?.coordinates?.lat ?? startPos?.lat);
-              const startLng = fallbackStart ? fallbackStart[1] : (startPos?.coordinates?.lng ?? startPos?.lng);
+              const startLat = (startPos?.coordinates?.lat ?? startPos?.lat) ?? (fallbackStart ? fallbackStart[0] : undefined);
+              const startLng = (startPos?.coordinates?.lng ?? startPos?.lng) ?? (fallbackStart ? fallbackStart[1] : undefined);
 
               if (endLat !== undefined) {
                   try {
@@ -1144,19 +1150,38 @@ function buildReportTab(t) {
     if (Array.isArray(val)) return val.join(', ');
     if (typeof val === 'boolean') return val ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Sim' : '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Não';
     const str = String(val);
-    // Signature: SIG_V1|path1|path2|...
+    // Signature: SIG_V1|meta:{...}|path1|path2|...
     if (str.startsWith('SIG_V1|')) {
-      const paths = str.replace('SIG_V1|', '').split('|').filter(Boolean);
+      const allParts = str.replace('SIG_V1|', '').split('|').filter(Boolean);
+      // meta: segment has GPS/IP — must NOT be treated as an SVG path
+      const metaPart = allParts.find(p => p.startsWith('meta:'));
+      const paths = allParts.filter(p => !p.startsWith('meta:') && p.trim().length > 2);
+
+      let metaHtml = '';
+      if (metaPart) {
+        try {
+          const m = JSON.parse(metaPart.slice(5)); // remove 'meta:'
+          const info = [];
+          if (m.address && m.address !== 'Localização Desconhecida') info.push(`<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> ${m.address}`);
+          if (m.ip && m.ip !== 'Desconhecido') info.push(`IP: ${m.ip}`);
+          if (info.length) metaHtml = `<div style="font-size:9px;color:#64748b;margin-top:5px;line-height:1.5">${info.join(' · ')}</div>`;
+        } catch(e) {}
+      }
+
+      if (paths.length === 0) return `<em style="color:var(--text3)">(assinatura vazia)</em>`;
+
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      paths.forEach(p => { [...p.matchAll(/(-?[\d\.]+)/g)].forEach((m, i) => { const v = parseFloat(m[0]); if(i%2===0){ minX=Math.min(minX,v); maxX=Math.max(maxX,v); } else { minY=Math.min(minY,v); maxY=Math.max(maxY,v); } }); });
+      paths.forEach(p => { [...p.matchAll(/(-?[\d\.]+)/g)].forEach((m2, i) => { const v = parseFloat(m2[0]); if(i%2===0){ minX=Math.min(minX,v); maxX=Math.max(maxX,v); } else { minY=Math.min(minY,v); maxY=Math.max(maxY,v); } }); });
       let vB = "0 0 350 400";
       if (minX !== Infinity && maxX > minX) { const pad=20; vB = `${minX-pad} ${minY-pad} ${maxX-minX+pad*2} ${maxY-minY+pad*2}`; }
       const pathsHtml = paths.map(d => `<path d="${d}" stroke="#0f172a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
-      return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:inline-block;">
-        <svg viewBox="${vB}" width="280" height="180" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#fff;border-radius:4px">${pathsHtml}</svg>
-        <div style="font-size:9px;color:#94a3b8;margin-top:4px;text-align:center"><ion-icon name="pencil-outline" style="vertical-align:-2px"></ion-icon> Assinatura Digital</div>
+      return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:inline-block;max-width:100%">
+        <svg viewBox="${vB}" width="300" height="160" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#fff;border-radius:6px;border:1px solid #f1f5f9">${pathsHtml}</svg>
+        <div style="font-size:9px;color:#94a3b8;margin-top:5px;text-align:center"><ion-icon name="pencil-outline" style="vertical-align:-2px"></ion-icon> Assinatura Digital · ${paths.length} traço(s)</div>
+        ${metaHtml}
       </div>`;
     }
+
     // Transit location payload (GPS)
     if (str.includes('"action":"SAIDA"') || str.includes('"action":"CHEGADA"') || str.includes('"action":"VALIDACAO_CERCA"')) {
       try {
@@ -1801,12 +1826,12 @@ window.printReport = async function() {
               const polyline = L.polyline(latlngs, { color: '#EA580C', weight: 5 }).addTo(map);
               
               const fallbackStart = latlngs.length > 0 ? latlngs[0] : null;
-              const finalStartLat = fallbackStart ? fallbackStart[0] : startGPS?.lat;
-              const finalStartLng = fallbackStart ? fallbackStart[1] : startGPS?.lng;
+              const finalStartLat = startGPS?.lat ?? (fallbackStart ? fallbackStart[0] : undefined);
+              const finalStartLng = startGPS?.lng ?? (fallbackStart ? fallbackStart[1] : undefined);
               
               const fallbackEnd = latlngs.length > 0 ? latlngs[latlngs.length - 1] : null;
-              const finalEndLat = fallbackEnd ? fallbackEnd[0] : endGPS?.lat;
-              const finalEndLng = fallbackEnd ? fallbackEnd[1] : endGPS?.lng;
+              const finalEndLat = endGPS?.lat ?? (fallbackEnd ? fallbackEnd[0] : undefined);
+              const finalEndLng = endGPS?.lng ?? (fallbackEnd ? fallbackEnd[1] : undefined);
               
               if (finalStartLat !== undefined && finalStartLat !== null) {
                   L.marker([finalStartLat, finalStartLng], { icon: startIcon }).addTo(map);

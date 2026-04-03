@@ -371,10 +371,8 @@ export default function DashboardScreen() {
     const interval = setInterval(async () => {
       if (!active || !user) return;
       try {
-        const outboxStr = await AsyncStorage.getItem('@brspark_outbox');
-        if (outboxStr && outboxStr !== '[]') {
-           await pushSyncQueue(user.email);
-        }
+        // ALWAYS push sync queue so that pushTelemetryBatch() runs!
+        await pushSyncQueue(user.email);
         await pullTasks(user.email);
         if (active) loadData(false);
       } catch(e) {
@@ -1300,9 +1298,17 @@ export default function DashboardScreen() {
                       {/* Right Content */}
                       <View style={{ flex: 1, paddingVertical: 14, paddingRight: 14 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <Text style={{ fontSize: 10, fontWeight: '800', color: order.color, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                            OS {order.id.split('_').pop()?.substring(0, 12) || order.id.substring(0, 12)}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: order.color, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                              OS {order.id.split('_').pop()?.substring(0, 12) || order.id.substring(0, 12)}
+                            </Text>
+                            {(order as any).etaMinutes !== undefined && (order as any).etaMinutes !== null && (
+                               <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center' }}>
+                                  <Ionicons name="location" size={10} color="#166534" style={{ marginRight: 2 }} />
+                                  <Text style={{ fontSize: 9, color: '#166534', fontWeight: '900' }}>ETA: {(order as any).etaMinutes} min</Text>
+                               </View>
+                            )}
+                          </View>
                           {order.status === 'COMPLETED' && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                {order.isCachedLocally && !order.isPendingSync && (

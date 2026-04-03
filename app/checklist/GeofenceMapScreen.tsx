@@ -318,7 +318,10 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
             {loading ? 'Localizando...' : statusMsg}
           </Text>
           {task.locationAddress && (
-            <Text style={styles.address} numberOfLines={1}>📍 {task.locationAddress}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+              <Ionicons name="location" size={12} color="#6b7280" />
+              <Text style={[styles.address, { marginTop: 0, marginLeft: 3 }]} numberOfLines={1}>{task.locationAddress}</Text>
+            </View>
           )}
         </View>
         {loading && <ActivityIndicator size="small" color={statusColor} />}

@@ -60,6 +60,7 @@ router.get('/tasks', async (req, res) => {
         startedAt:   ex.startedAt,
         completedAt: ex.completedAt,
         syncedAt:    ex.syncedAt,
+        etaMinutes:  ex.etaMinutes,
         // Template fields with labels — used by panel report view
         template: ex.template ? {
           id:     ex.template.id,

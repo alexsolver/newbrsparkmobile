@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Monitoramento de Telemetria</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    /* ── Layout Principal ───────────────────────────────────────── */
+    .telemetry-layout {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 20px;
+      height: calc(100vh - 150px);
+    }
+    @media (max-width: 1024px) {
+      .telemetry-layout { grid-template-columns: 1fr; height: auto; }
+    }
+
+    /* ── Painel de Filtros e Lista ───────────────────────────── */
+    .telemetry-sidebar {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .filters-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .filter-group label { font-size: 10px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+    .filter-group input, .filter-group select {
+      padding: 8px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+    }
+    .filter-group input:focus, .filter-group select:focus { border-color: var(--accent); }
+    
+    .event-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+    .event-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .event-item:hover { background: var(--surface); }
+    .event-item.selected { background: var(--blue-dim, #eff6ff); border-left: 3px solid var(--blue, #3b82f6); }
+    .event-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .event-type { font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+    .event-time { font-size: 11px; color: var(--text3); font-weight: 600; }
+    .event-meta { font-size: 11px; color: var(--text2); display: flex; gap: 10px; align-items: center; margin-top: 4px;}
+    
+    /* Cores de Eventos */
+    .evt-HEARTBEAT { background: #f1f5f9; color: #475569; }
+    .evt-TRANSIT_START { background: #dbeafe; color: #1d4ed8; }
+    .evt-TRANSIT_END { background: #fee2e2; color: #b91c1c; }
+    .evt-CHECKIN { background: #dcfce7; color: #15803d; }
+    .evt-FRAUD_FLAG { background: #fef9c3; color: #a16207; border: 1px solid #fde047; }
+    .evt-GEOFENCE_ENTER { background: #f3e8ff; color: #7e22ce; }
+
+    /* ── Painel Principal (Mapa e Detalhes) ──────────────────── */
+    .telemetry-main {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .map-container {
+      flex: 1;
+      background: #e2e8f0;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      min-height: 400px;
+      position: relative;
+    }
+    #telemetry-map { width: 100%; height: 100%; }
+
+    .details-panel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .detail-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .detail-label { font-size: 10px; font-weight: 800; color: var(--text3); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-val { font-size: 14px; font-weight: 700; color: var(--text); }
+    .detail-val.alert { color: var(--red, #ef4444); }
+
+    /* Utilities */
+    .battery-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: 700;
+    }
+    .bat-high { background: #dcfce7; color: #15803d; }
+    .bat-med { background: #fef9c3; color: #a16207; }
+    .bat-low { background: #fee2e2; color: #b91c1c; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">
+        <ion-icon name="pulse-outline" style="vertical-align:-3px;margin-right:6px;color:var(--blue)"></ion-icon>
+        Rastreamento de Telemetria
+      </span>
+    </div>
+
+    <div class="page-body">
+      <div class="telemetry-layout">
+        
+        <!-- SIDEBAR DE LISTA -->
+        <div class="telemetry-sidebar">
+          <div class="filters-header">
+            <div class="filter-group">
+              <label>E-mail do Técnico</label>
+              <input type="email" id="filter-email" placeholder="ex: técnico@empresa.com" />
+            </div>
+            <div style="display:flex; gap:10px;">
+              <div class="filter-group" style="flex:1">
+                <label>Data Inicial</label>
+                <input type="date" id="filter-date-from" />
+              </div>
+              <div class="filter-group" style="flex:1">
+                <label>Data Final</label>
+                <input type="date" id="filter-date-to" />
+              </div>
+            </div>
+            
+            <div class="filter-group" style="margin-bottom: 0;">
+              <label>Limitar</label>
+              <select id="filter-limit">
+                <option value="50">50 eventos</option>
+                <option value="200" selected>200 eventos</option>
+                <option value="500">500 eventos</option>
+                <option value="1000">1000 eventos</option>
+              </select>
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:12px">
+              <button class="btn btn-primary" style="flex:1" onclick="loadTelemetry()">
+                <ion-icon name="search-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Buscar
+              </button>
+              <button class="btn" id="btn-live" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="toggleLive()">
+                <ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Ao Vivo
+              </button>
+              <button class="btn" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="exportTelemetry()">
+                <ion-icon name="download-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Exportar
+              </button>
+            </div>
+          </div>
+          
+          <ul class="event-list" id="events-list">
+            <li style="padding:20px; text-align:center; color:var(--text3); font-size:12px;">Preencha o e-mail e busque para carregar os eventos.</li>
+          </ul>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="telemetry-main">
+          <div class="details-panel" id="details-panel">
+            <div class="detail-box"><div class="detail-label">Dispositivo</div><div class="detail-val" id="det-os">—</div></div>
+            <div class="detail-box"><div class="detail-label">Bateria / Carga</div><div class="detail-val" id="det-bat">—</div></div>
+            <div class="detail-box"><div class="detail-label">Rede</div><div class="detail-val" id="det-net">—</div></div>
+            <div class="detail-box"><div class="detail-label">Precisão GPS</div><div class="detail-val" id="det-acc">—</div></div>
+          </div>
+
+          <div class="map-container">
+            <div id="telemetry-map"></div>
+            <div style="position:absolute; top:10px; right:10px; z-index:400; background:rgba(255,255,255,0.9); padding:8px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.15); font-size:11px; font-weight:700;">
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;margin-right:4px;"></span> Precisão &lt; 20m</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span> Precisão 20m - 100m</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:4px;"></span> Precisão &gt; 100m (Mock/Wi-Fi)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initPage } from './js/sidebar.js';
+import { CONFIG }   from './js/config.js';
+
+initPage();
+
+// Init date input to today
+document.getElementById('filter-date-from').valueAsDate = new Date();
+document.getElementById('filter-date-to').valueAsDate = new Date();
+
+let map = null;
+let polyline = null;
+let markers = [];
+let allEvents = [];
+let liveIntervalId = null;
+
+function initMap() {
+  if (map) return;
+  map = L.map('telemetry-map').setView([-23.5505, -46.6333], 10);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+}
+
+function getBatteryHtml(level, charging) {
+  if (level === null || level === undefined) return '—';
+  const pct = Math.round(level * 100);
+  let cls = 'bat-high';
+  let icon = 'battery-full-outline';
+  if (pct < 20) { cls = 'bat-low'; icon = 'battery-dead-outline'; }
+  else if (pct < 50) { cls = 'bat-med'; icon = 'battery-half-outline'; }
+  
+  const chgIcon = charging ? '<ion-icon name="flash" style="color:#eab308;margin-left:2px"></ion-icon>' : '';
+  return `<span class="battery-pill ${cls}"><ion-icon name="${icon}"></ion-icon> ${pct}% ${chgIcon}</span>`;
+}
+
+function getAccuracyColor(acc) {
+  if (!acc) return '#94a3b8';
+  if (acc < 20) return '#3b82f6';
+  if (acc <= 100) return '#f59e0b';
+  return '#ef4444';
+}
+
+window.loadTelemetry = async (isSilent = false) => {
+  const email = document.getElementById('filter-email').value.trim();
+  const dateFrom = document.getElementById('filter-date-from').value;
+  const dateTo = document.getElementById('filter-date-to').value;
+  const limit = document.getElementById('filter-limit').value;
+
+  if (!email) {
+    if (!isSilent) alert('Por favor, informe o e-mail do técnico.');
+    return;
+  }
+
+  const listEl = document.getElementById('events-list');
+  if (!isSilent) {
+    listEl.innerHTML = '<li style="padding:20px;text-align:center;">Buscando rastros da nave-mãe... 🛸</li>';
+  }
+
+  try {
+    let url = `/telemetry?ownerEmail=${encodeURIComponent(email)}&limit=${limit}`;
+    if (dateFrom) {
+      const from = new Date(dateFrom + 'T00:00:00');
+      url += `&from=${from.toISOString()}`;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59');
+      url += `&to=${to.toISOString()}`;
+    }
+
+    const events = await CONFIG.get(url);
+    if (!Array.isArray(events) || events.length === 0) {
+      if (!isSilent) listEl.innerHTML = '<li style="padding:20px;text-align:center;color:var(--text3)">Nenhum evento registrado nesta data.</li>';
+      if (polyline) polyline.remove();
+      markers.forEach(m => m.remove());
+      return;
+    }
+
+    // Se é refresh silencioso e o banco não trouxe novidade (mesmo último evento lido e mesmo tamanho de cache), nao piscar a UI.
+    if (isSilent && allEvents.length > 0 && events.length === allEvents.length && events[0]?.id === allEvents[0]?.id) {
+      return;
+    }
+
+    allEvents = events;
+    renderList(events);
+    drawMap(events);
+  } catch (err) {
+    if (!isSilent) listEl.innerHTML = `<li style="padding:20px;text-align:center;color:red">Erro: ${err.message}</li>`;
+  }
+};
+
+function renderList(events) {
+  const listEl = document.getElementById('events-list');
+  listEl.innerHTML = events.map((ev, i) => {
+    const time = new Date(ev.serverTimestamp).toLocaleTimeString('pt-BR');
+    const typeCls = `evt-${ev.eventType}` || 'evt-HEARTBEAT';
+    const bat = getBatteryHtml(ev.batteryLevel, ev.batteryCharging);
+    const mockIcon = ev.isMockLocation ? '<ion-icon name="warning" style="color:#ef4444" title="Mock GPS Detectado"></ion-icon>' : '';
+    
+    return `
+      <li class="event-item" id="ev-idx-${i}" onclick="selectEvent(${i})">
+        <div class="event-header">
+          <span class="event-type ${typeCls}">${ev.eventType}</span>
+          <span class="event-time">${time} ${mockIcon}</span>
+        </div>
+        <div class="event-meta">
+          ${bat}
+          <span>${ev.networkType || 'APP'}</span>
+          <span>Acc: ${ev.accuracy ? Math.round(ev.accuracy)+'m' : '—'}</span>
+        </div>
+      </li>
+    `;
+  }).join('');
+}
+
+window.selectEvent = (idx) => {
+  document.querySelectorAll('.event-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById(`ev-idx-${idx}`)?.classList.add('selected');
+  
+  const ev = allEvents[idx];
+  if (!ev) return;
+
+  // Atualizar painel de detalhes superior
+  const osStr = [ev.deviceModel, ev.osVersion, ev.appVersion ? `v${ev.appVersion}` : ''].filter(Boolean).join(' • ');
+  document.getElementById('det-os').innerHTML = osStr || '—';
+  
+  const chgStr = ev.batteryCharging ? ' (Carregando)' : '';
+  const batLvl = ev.batteryLevel !== null ? `${Math.round(ev.batteryLevel * 100)}%` : '—';
+  document.getElementById('det-bat').innerHTML = `${batLvl}${chgStr}`;
+  
+  document.getElementById('det-net').innerHTML = ev.networkType || 'Desconhecida';
+  
+  let accHtml = ev.accuracy ? `${Math.round(ev.accuracy)} metros` : '—';
+  if (ev.isMockLocation) accHtml = `<span class="detail-val alert"><ion-icon name="warning" style="vertical-align:-2px"></ion-icon> Mock GPS</span>`;
+  document.getElementById('det-acc').innerHTML = accHtml;
+
+  // Dar zoom no marcador
+  if (ev.lat && ev.lng) {
+    map.setView([ev.lat, ev.lng], 16);
+    // Abrir popup simulando clique se o marker existir
+    const m = markers.find(m => m.options.eventId === ev.id);
+    if (m) m.openPopup();
+  }
+};
+
+function drawMap(events) {
+  initMap();
+  if (polyline) polyline.remove();
+  markers.forEach(m => m.remove());
+  markers = [];
+
+  // Filtrar apenas eventos com coordenadas válidas para traçagem de rota
+  const geoEvents = [...events].reverse().filter(e => e.lat !== null && e.lng !== null);
+  
+  if (geoEvents.length === 0) return;
+
+  const latlngs = geoEvents.map(e => [e.lat, e.lng]);
+  polyline = L.polyline(latlngs, { color: '#64748b', weight: 3, opacity: 0.6, dashArray: '5, 5' }).addTo(map);
+
+  geoEvents.forEach((ev, idx) => {
+    const color = getAccuracyColor(ev.accuracy);
+    const borderColor = ev.isMockLocation ? '#ef4444' : '#ffffff';
+    
+    const circleIcon = L.divIcon({
+      html: `<div style="width:14px;height:14px;background-color:${color};border:2px solid ${borderColor};border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
+      className: '',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7]
+    });
+
+    const m = L.marker([ev.lat, ev.lng], { icon: circleIcon, eventId: ev.id }).addTo(map);
+    const time = new Date(ev.serverTimestamp).toLocaleTimeString('pt-BR');
+    
+    m.bindPopup(`
+      <div style="font-size:12px;font-family:Inter,sans-serif">
+        <div style="font-weight:800;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px">${time}</div>
+        <div style="font-size:11px"><b>Evento:</b> ${ev.eventType}</div>
+        <div style="font-size:11px"><b>Precisão:</b> ${ev.accuracy ? Math.round(ev.accuracy)+'m' : '—'}</div>
+        <div style="font-size:11px"><b>Autenticidade:</b> ${ev.isMockLocation ? '<span style="color:red">MOCK</span>' : 'Válido'}</div>
+      </div>
+    `);
+    
+    m.on('click', () => {
+      // Find original index
+      const originalIdx = events.findIndex(e => e.id === ev.id);
+      if (originalIdx >= 0) {
+        selectEvent(originalIdx);
+        document.getElementById(`ev-idx-${originalIdx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+
+    markers.push(m);
+  });
+
+  map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+}
+
+window.exportTelemetry = () => {
+  if (allEvents.length === 0) {
+    alert("Nenhum dado para exportar. Faça uma busca primeiro.");
+    return;
+  }
+  
+  const headers = ['Data Hora (UTC)', 'Evento', 'Precisao (m)', 'Mock GPS', 'Bateria (%)', 'Carregando', 'Rede', 'Dispositivo', 'OS', 'Latitude', 'Longitude'];
+  const rows = allEvents.map(ev => [
+    new Date(ev.serverTimestamp).toISOString(),
+    ev.eventType,
+    ev.accuracy ?? '',
+    ev.isMockLocation ? 'Sim' : 'Nao',
+    ev.batteryLevel !== null ? Math.round(ev.batteryLevel * 100) : '',
+    ev.batteryCharging ? 'Sim' : 'Nao',
+    ev.networkType || '',
+    ev.deviceModel || '',
+    ev.osVersion || '',
+    ev.lat ?? '',
+    ev.lng ?? ''
+  ]);
+  
+  const csvContent = [headers.join(',')].concat(
+    rows.map(row => row.map(cell => `"${cell}"`).join(','))
+  ).join('\\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const safeEmail = document.getElementById('filter-email').value.trim().replace(/[^a-zA-Z0-9]/g, '_');
+  link.setAttribute("download", `telemetria_${safeEmail}_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+window.toggleLive = () => {
+  const btn = document.getElementById('btn-live');
+  if (liveIntervalId) {
+    clearInterval(liveIntervalId);
+    liveIntervalId = null;
+    btn.innerHTML = `<ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Ao Vivo`;
+    btn.style.color = "var(--text)";
+    btn.style.borderColor = "var(--border)";
+  } else {
+    const email = document.getElementById('filter-email').value.trim();
+    if (!email) {
+      alert("Informe o e-mail primeiro para iniciar o rastreio em tempo real.");
+      return;
+    }
+    
+    // Força filtro pro dia atual pra não ficar em um cache de ontem
+    document.getElementById('filter-date-from').valueAsDate = new Date();
+    document.getElementById('filter-date-to').valueAsDate = new Date();
+    
+    loadTelemetry(true);
+    liveIntervalId = setInterval(() => { loadTelemetry(true); }, 5000);
+    
+    btn.innerHTML = `<ion-icon name="radio-button-on" style="vertical-align:-2px; margin-right:4px; color: #ef4444;"></ion-icon> <span style="color:#ef4444; font-weight:700">Ao Vivo</span>`;
+    btn.style.borderColor = "#ef4444";
+  }
+};
+
+setTimeout(initMap, 200);
+
+</script>
+</body>
+</html>

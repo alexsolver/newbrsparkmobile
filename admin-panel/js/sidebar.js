@@ -17,6 +17,7 @@ export const NAV_ITEMS = [
   { page: 'notifications.html', icon: 'notifications-outline', label: 'Notificações',          section: null },
   { page: 'compliance.html',      icon: 'shield-checkmark-outline', label: 'LGPD & Compliance',   section: null },
   { page: 'data-collection.html', icon: 'pulse-outline',            label: 'Coleta de Dados',      section: null },
+  { page: 'telemetry.html',       icon: 'navigate-circle-outline',  label: 'Telemetria',            section: null },
   { page: 'api-docs.html',      icon: 'document-text-outline',   label: 'API Docs',              section: null },
   { page: 'audit.html',         icon: 'time-outline',       label: 'Auditoria',             section: 'Sistema' },
   { page: 'system.html',        icon: 'settings-outline',   label: 'Configurações',         section: null },

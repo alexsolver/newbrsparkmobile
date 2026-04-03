@@ -8,18 +8,151 @@ import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingServi
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
 import { Alert, Linking, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Props {
   route: number[][];      // [[lat,lng], ...]
   visible: boolean;       // set true when transit_start is pressed
   zoneType?: string | null;
   targetLoc?: { lat?: number | null; lng?: number | null };
+  etaMinutes?: number | null;
   onEndTransit?: () => void;
 }
 
+// ─── ETA Badge — Premium floating map overlay ────────────────────────────────
+function EtaBadge({ etaMinutes, pct }: { etaMinutes: number; pct: number }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.8, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1,   duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  // Smart time formatting
+  const hours = Math.floor(etaMinutes / 60);
+  const mins  = etaMinutes % 60;
+  const timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
+
+  return (
+    <View style={etaStyles.wrapper} pointerEvents="none">
+      <LinearGradient
+        colors={['#f97316', '#ea580c']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={etaStyles.gradient}
+      >
+        {/* Top Row: live dot + label */}
+        <View style={etaStyles.topRow}>
+          <View style={etaStyles.dotWrapper}>
+            <Animated.View style={[etaStyles.pulseDot, { transform: [{ scale: pulse }] }]} />
+            <View style={etaStyles.dot} />
+          </View>
+          <Text style={etaStyles.label}>EM ROTA</Text>
+          <Ionicons name="navigate" size={10} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />
+        </View>
+
+        {/* Main time display */}
+        <Text style={etaStyles.time}>{timeStr}</Text>
+
+        {/* Sub label */}
+        <Text style={etaStyles.sub}>tempo estimado de chegada</Text>
+
+        {/* Progress bar if we have route data */}
+        {pct > 0 && (
+          <View style={etaStyles.progressTrack}>
+            <View style={[etaStyles.progressFill, { width: `${Math.max(pct, 5)}%` as any }]} />
+          </View>
+        )}
+      </LinearGradient>
+    </View>
+  );
+}
+
+const etaStyles = StyleSheet.create({
+  wrapper: {
+    position: 'absolute',
+    bottom: 185,
+    left: 16,
+    zIndex: 20,
+    borderRadius: 18,
+    shadowColor: '#f97316',
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
+  },
+  gradient: {
+    paddingHorizontal: 16,
+    paddingTop: 11,
+    paddingBottom: 12,
+    borderRadius: 18,
+    minWidth: 140,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  dotWrapper: {
+    width: 12, height: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  dot: {
+    width: 6, height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+    position: 'absolute',
+  },
+  pulseDot: {
+    width: 10, height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    position: 'absolute',
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  time: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5,
+    lineHeight: 30,
+  },
+  sub: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  progressTrack: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 2,
+  },
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 const { width, height } = Dimensions.get('window');
 
-export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, onEndTransit }: Props) {
+export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit }: Props) {
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
@@ -172,6 +305,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
               <Text style={styles.headerTitle}>
                  {isComplete ? 'Deslocamento Concluído' : isPaused ? 'Navegação Pausada' :(!hasRoute ? 'Deslocamento em Andamento' : (isDeviation ? `Desvio de ${update?.distanceFromRoute}m` : `Em Rota · ${pct}%`))}
               </Text>
+              {/* ETA moved to floating map badge below */}
               {hasRoute && !isComplete && !isPaused && (
                  <View style={styles.miniBar}>
                    <View style={[styles.miniBarFill, { width: `${pct}%` as any, backgroundColor: statusColor }]} />
@@ -274,6 +408,11 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             )}
         </View>
 
+        {/* ──── Premium ETA Badge ──── */}
+        {etaMinutes != null && !isComplete && !isPaused && (
+          <EtaBadge etaMinutes={etaMinutes} pct={pct} />
+        )}
+
         {/* Deviation Banner Overlay */}
         {isDeviation && !isPaused && (
           <View style={styles.deviationBanner}>
@@ -310,7 +449,7 @@ const styles = StyleSheet.create({
 
   deviationBanner: { position: 'absolute', top: 120, left: 16, right: 16, backgroundColor: '#dc2626', borderRadius: 8, flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, alignItems: 'center', shadowColor: '#dc2626', shadowOpacity: 0.4, shadowRadius: 6, elevation: 5 },
   deviationText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  
+
   userMarkerContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderWidth: 3, borderColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, elevation: 5, overflow: 'hidden' },
   userMarkerImage: { width: '100%', height: '100%', resizeMode: 'cover' }
 });

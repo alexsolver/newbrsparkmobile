@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Text } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Image, Text, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
 import { getLocalAssets } from '../database';
 import { Asset } from '../types/asset';
 import { useAuth } from '../hooks/useAuth';
+import { useConnectivity } from '../hooks/useConnectivity';
 
 interface HeaderProps {
   showAssetTools?: boolean;
@@ -23,6 +24,26 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const { colors: C } = useTheme();
   const { mode, setMode, guardRef } = useAppContext();
   const { user, userRole } = useAuth();
+  const { isOnline } = useConnectivity();
+
+  // Pulse animation for the online dot
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (isOnline) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulse, { toValue: 1.6, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulse.setValue(1);
+    }
+  }, [isOnline]);
+
+  // Dot color: grey while first check, green online, red offline
+  const dotColor = isOnline === null ? '#94A3B8' : isOnline ? '#22C55E' : '#EF4444';
+  const dotLabel = isOnline === null ? 'Verificando...' : isOnline ? 'Online' : 'Offline';
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
@@ -163,10 +184,18 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
             ) : null}
           </View>
 
-          {/* Right: only show QR + Profile when NOT on profile page */}
+          {/* Right: QR + connectivity dot + Profile */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {!isProfile ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {/* Connectivity dot */}
+                <View style={{ alignItems: 'center', justifyContent: 'center', width: 20 }}>
+                  <Animated.View style={[
+                    styles.dotRing,
+                    { borderColor: dotColor, transform: [{ scale: pulse }] }
+                  ]} />
+                  <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                </View>
                 <TouchableOpacity
                   style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }}
                   onPress={() => router.push('/scanner')}
@@ -210,8 +239,16 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
         </View>
         
-        {/* Right: Profile */}
+        {/* Right: connectivity dot + QR + Profile */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* Connectivity dot */}
+          <View style={{ alignItems: 'center', justifyContent: 'center', width: 20 }}>
+            <Animated.View style={[
+              styles.dotRing,
+              { borderColor: dotColor, transform: [{ scale: pulse }] }
+            ]} />
+            <View style={[styles.dot, { backgroundColor: dotColor }]} />
+          </View>
           <TouchableOpacity 
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }} 
             onPress={() => router.push('/scanner')}
@@ -263,5 +300,19 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     padding: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    position: 'absolute',
+  },
+  dotRing: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    opacity: 0.4,
+    position: 'absolute',
   },
 });

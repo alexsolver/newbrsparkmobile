@@ -408,7 +408,7 @@
     "cameraPermDenied": "Camera permission denied.",
     "permDenied": "Permission Denied",
     "permDeniedMsg": "To receive alerts, allow notifications in device Settings.",
-    "alertsEnabled": "🔔 Alerts Enabled",
+    "alertsEnabled": "Alerts Enabled",
     "alertsEnabledMsg": "You will receive PUSH notifications for critical events.",
     "exportData": "Export My Data",
     "exportDataConfirm": "Your data will be exported as JSON per GDPR/LGPD. Continue?",

@@ -316,6 +316,7 @@ router.get('/tasks', anyValidJwt, async (req, res) => {
             locationAddress:  ex.locationAddress  || null,
             locationZoneType: ex.locationZoneType || null,
             locationPolygon:  ex.locationPolygon  || null,
+            etaMinutes:       ex.etaMinutes       || null,
         };
     });
 

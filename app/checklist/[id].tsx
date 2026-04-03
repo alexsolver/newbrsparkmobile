@@ -386,6 +386,51 @@ export default function ChecklistEngine() {
       }
   }, [taskId, isReadOnly]);
 
+  // Poller to update ETA in real-time — fetches directly from server so it works
+  // even while the user is inside this screen (the home screen pullTasks doesn't run here)
+  useEffect(() => {
+    if (!taskId || isReadOnly) return;
+    
+    const fetchEta = async () => {
+      try {
+        // First try local cache (fast)
+        const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+        const cloudTasks = JSON.parse(cloudTasksStr);
+        const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(taskId));
+        if (cachedTask?.etaMinutes != null) {
+          setCurrentTask((prev: any) => {
+            if (!prev || prev.etaMinutes === cachedTask.etaMinutes) return prev;
+            return { ...prev, etaMinutes: cachedTask.etaMinutes };
+          });
+        }
+
+        // Then fetch fresh ETA directly from server (resolves even if cache is stale)
+        const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.etaMinutes != null) {
+            // Update local cache
+            const updatedTasks = cloudTasks.map((t: any) =>
+              String(t.id) === String(taskId) ? { ...t, etaMinutes: data.etaMinutes } : t
+            );
+            await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(updatedTasks));
+            // Update state
+            setCurrentTask((prev: any) => {
+              if (!prev) return prev;
+              return { ...prev, etaMinutes: data.etaMinutes };
+            });
+          }
+        }
+      } catch(e) {
+        // Offline: silent
+      }
+    };
+
+    fetchEta(); // Run immediately on mount
+    const interval = setInterval(fetchEta, 15000); // Then every 15s
+    return () => clearInterval(interval);
+  }, [taskId, isReadOnly]);
+
 
   useEffect(() => {
     loadTemplate();
@@ -1009,6 +1054,7 @@ export default function ChecklistEngine() {
                   visible={isVisible}
                   zoneType={currentTask?.locationZoneType}
                   targetLoc={{ lat: currentTask?.locationLat, lng: currentTask?.locationLng }}
+                  etaMinutes={currentTask?.etaMinutes}
                   onEndTransit={endField ? () => {
                       const hasValue = !!responses[endField.id];
                       if (!hasValue) {

@@ -408,7 +408,7 @@
     "cameraPermDenied": "Permissão de câmera negada.",
     "permDenied": "Permissão Negada",
     "permDeniedMsg": "Para receber alertas, permita notificações nas Configurações do dispositivo.",
-    "alertsEnabled": "🔔 Alertas Ativados",
+    "alertsEnabled": "Alertas Ativados",
     "alertsEnabledMsg": "Você receberá notificações PUSH para eventos críticos.",
     "exportData": "Exportar Meus Dados",
     "exportDataConfirm": "Seus dados serão exportados em formato JSON conforme Art. 18 da LGPD. Deseja continuar?",

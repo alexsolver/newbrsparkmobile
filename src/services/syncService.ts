@@ -305,13 +305,11 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
     } else {
         const err = await res.text();
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);
-        if(res.status !== 304 && res.status !== 401) {
-            alert(`Erro na API (${res.status}): Falha ao baixar tarefas.`);
-        }
+        // Offline-first: never block the user with an alert
     }
   } catch(e) { 
-      console.warn('[pullTasks] ❌ Exceção de rede:', e); 
-      alert(`Servidor Inalcançável: Verifique sua conexão com a internet ou se o servidor principal está online.`);
+      console.warn('[pullTasks] ❌ Servidor inalcançável (modo offline):', e);
+      // Offline-first: silent fail — data already exists locally
   }
 }
 
@@ -341,10 +339,12 @@ export async function pushTelemetryBatch(): Promise<void> {
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
       try {
+        const user = await AuthService.getUser().catch(() => null);
+        const ownerEmail = user?.email || 'unknown';
         const res = await apiFetch('/api/telemetry/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ events: batch }),
+          body: JSON.stringify({ events: batch, ownerEmail }),
         });
         if (res.ok || res.status === 400) {
           // 400 significa batch inválido mas enviado — remove mesmo assim para não travar
