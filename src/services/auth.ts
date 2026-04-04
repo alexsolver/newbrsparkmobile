@@ -5,8 +5,10 @@ import { clearLocalDatabase } from '../database';
 // Altere MAC_IP para o IP da sua máquina na rede Wi-Fi local quando testar no celular.
 // Em simulador use 'localhost'. Em Expo Go no device, use seu IP da rede (ex: 192.168.1.10).
 const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessário
+/** Porta da API unificada (admin-panel/backend + PostgreSQL). Backend SQLite legado: 3002. */
+const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
 export const API_BASE = __DEV__
-  ? `http://${MAC_IP}:3001`              // desenvolvimento local
+  ? `http://${MAC_IP}:${DEV_API_PORT}`
   : 'https://api.brspark.com';           // produção (ajuste quando deployar)
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────

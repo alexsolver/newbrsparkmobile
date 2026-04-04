@@ -1,9 +1,20 @@
 /**
  * config.js — Frontend API configuration
- * All pages import this to get the API base URL.
+ * Quando o painel é aberto via servidor admin (ex.: http://localhost:3001/),
+ * usa a mesma origem — assim todas as chamadas batem no backend Prisma + PostgreSQL.
+ * Fallback: http://localhost:3001/api (dev com arquivo aberto direto ou outra porta).
  */
+export function resolveApiBase() {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol !== 'file:') {
+    return `${window.location.origin}/api`;
+  }
+  return 'http://localhost:3001/api';
+}
+
 export const CONFIG = {
-  API_BASE: 'http://localhost:3001/api',
+  get API_BASE() {
+    return resolveApiBase();
+  },
 
   /** Returns stored JWT token */
   getToken: () => sessionStorage.getItem('brspark_admin_token') || '',

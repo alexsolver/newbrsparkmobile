@@ -52,7 +52,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // ── Health ─────────────────────────────────────────────────
-app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date() }));
+app.get('/health', (_req, res) => {
+  res.json({
+    ok: true,
+    status: 'ok',
+    ts: new Date().toISOString(),
+    database: 'postgresql',
+    adminPanel: 'Abra http://localhost:' + (process.env.PORT || 3001) + '/index.html',
+  });
+});
 
 // ── Public routes ──────────────────────────────────────────
 app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login
@@ -282,7 +290,6 @@ app.use('/api/metatags',      adminAuth, metatagRoutes);
 app.use('/api/integrations',  adminAuth, integrationRoutes);
 app.use('/api/compliance',         adminAuth, complianceRoutes);
 app.use('/api/notifications',      adminAuth, notificationRoutes);
-app.use('/api/i18n',               adminAuth, i18nRoutes);
 app.use('/api/cockpit',            adminAuth, cockpitRoutes);
 app.use('/api/collection-policy',  adminAuth, collectionPolicyRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app

@@ -3,6 +3,13 @@
  * Lógica do Criador de Checklists Drag & Drop com Vanilla JS e SortableJS
  */
 
+function brsparkApiBase() {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol !== 'file:') {
+    return window.location.origin + '/api';
+  }
+  return 'http://localhost:3001/api';
+}
+
 // 1. Initialize State
 let fields = [];
 let selectedFieldId = null;
@@ -646,7 +653,7 @@ window.saveChecklist = async function() {
                 settings: globalFormSettings,
                 schemaData: fields
             };
-            const res = await fetch('http://localhost:3001/api/checklists/templates', {
+            const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -795,7 +802,7 @@ window.duplicateChecklist = async function(id) {
             schemaData: newForm.schema
         };
         const token = sessionStorage.getItem('brspark_admin_token') || '';
-        await fetch('http://localhost:3001/api/checklists/templates', {
+        await fetch(`${brsparkApiBase()}/checklists/templates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(payload)
@@ -826,7 +833,7 @@ window.deleteChecklist = function(id) {
         
         try {
             const token = sessionStorage.getItem('brspark_admin_token') || '';
-            await fetch('http://localhost:3001/api/checklists/templates/' + id, {
+            await fetch(`${brsparkApiBase()}/checklists/templates/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -853,7 +860,7 @@ window.selectFormFromModal = function(id) {
 
 window.loadSavedFormsList = async function() {
     try {
-        const res = await fetch('http://localhost:3001/api/checklists/templates');
+        const res = await fetch(`${brsparkApiBase()}/checklists/templates`);
         if(res.ok) {
             const apiForms = await res.json();
             const db = {}; // Reconstrói sempre a verdade da nuvem
@@ -1121,7 +1128,7 @@ window.confirmTestDispatch = async function() {
             ownerEmail: email
         };
 
-        const res = await fetch('http://localhost:3001/api/checklists/dispatch', {
+        const res = await fetch(`${brsparkApiBase()}/checklists/dispatch`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)

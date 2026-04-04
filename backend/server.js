@@ -857,8 +857,9 @@ app.get('/api/checklists/templates/:id', async (req, res) => {
   }
 });
 
-// ─── Storage Upload ───────────────────────────────────────────────────────────// Servir arquivos de interface (Admin Panel Web)
-app.use('/admin', express.static(path.join(__dirname, '../admin-panel')));
+// Painel admin + dados completos: use admin-panel/backend (PostgreSQL) na porta 3001.
+
+// ─── Storage Upload ───────────────────────────────────────────────────────────
 
 // Setup multer para upload de arquivos
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
@@ -1008,12 +1009,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', modules: ['assets', 'costs', 'insurance', 'vault', 'media', 'chat'] });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3002;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n================================`);
-  console.log(`🔥 BrSpark Cloud API v2.0 Online`);
+  console.log(`🔥 BrSpark Cloud API v2.0 (SQLite legado — app mobile)`);
   console.log(`📡 Porta: ${PORT}`);
   console.log(`💾 DB: ${dbPath}`);
   console.log(`📁 Uploads: ${UPLOAD_DIR}`);
+  console.log(`ℹ️  Painel admin + PostgreSQL: cd admin-panel/backend && npm run dev`);
+  console.log(`   (normalmente http://localhost:3001 — não use esta porta para o admin)`);
   console.log(`================================\n`);
 });

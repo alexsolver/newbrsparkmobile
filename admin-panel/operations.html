@@ -1375,7 +1375,7 @@ window.printReport = async function() {
   // Always fetch fresh data so responses (GPS) are never stale from initial load
   let t = _currentTask;
   try {
-    const fresh = await fetch(`http://localhost:3001/api/operations/tasks?id=${t.id}`);
+    const fresh = await fetch(`${CONFIG.API_BASE}/operations/tasks?id=${t.id}`, { headers: CONFIG.headers() });
     if (fresh.ok) {
       const all = await fresh.json();
       const found = all.find(x => x.id === t.id) || all[0];
@@ -1803,7 +1803,7 @@ window.printReport = async function() {
   if (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://') || rawAvatar.startsWith('data:image')) {
       avatarUrl = rawAvatar;
   } else if (rawAvatar.startsWith('/')) {
-      avatarUrl = `http://localhost:3001${rawAvatar}`;
+      avatarUrl = `${window.location.origin}${rawAvatar}`;
   } else {
       avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
   }
