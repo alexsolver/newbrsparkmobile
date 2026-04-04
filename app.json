@@ -18,16 +18,10 @@
         "CFBundleLocalizations": [
           "pt",
           "en",
-          "es",
-          "pt",
-          "en",
           "es"
         ],
         "CFBundleDevelopmentRegion": "pt",
         "UIBackgroundModes": [
-          "location",
-          "fetch",
-          "remote-notification",
           "location",
           "fetch",
           "remote-notification"

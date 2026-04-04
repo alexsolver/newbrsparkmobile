@@ -12,18 +12,23 @@ const GET_KEYS = (email: string) => ({
   RECURRING: AuthService.getUserKey('costs_recurring', email)
 });
 
+const safeParse = (data: string | null, fallback: any = []) => {
+  if (!data) return fallback;
+  try { return JSON.parse(data); } catch { return fallback; }
+};
+
 export const CostService = {
   getExpenses: async (ownerEmail?: string): Promise<DirectExpense[]> => {
     if (!ownerEmail) return [];
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.EXPENSES);
-    return data ? JSON.parse(data) : [];
+    return safeParse(data);
   },
 
   saveExpense: async (expense: DirectExpense, ownerEmail: string) => {
     if (!ownerEmail) throw new Error("Usuário não autenticado para salvar despesa.");
     const keys = GET_KEYS(ownerEmail);
-    const all = await AsyncStorage.getItem(keys.EXPENSES).then(d => d ? JSON.parse(d) : []);
+    const all = await AsyncStorage.getItem(keys.EXPENSES).then(d => safeParse(d));
     const toSave = { ...expense, ownerEmail };
     const idx = all.findIndex((e: DirectExpense) => e.id === toSave.id);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);
@@ -34,7 +39,7 @@ export const CostService = {
   deleteExpense: async (id: string, ownerEmail: string) => {
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.EXPENSES);
-    const all: DirectExpense[] = data ? JSON.parse(data) : [];
+    const all: DirectExpense[] = safeParse(data);
     await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all.filter(e => e.id !== id)));
     enqueueMutation('costs', 'DELETE_EXPENSE', { id }, ownerEmail);
   },
@@ -42,7 +47,7 @@ export const CostService = {
   markAsRealized: async (id: string, ownerEmail: string): Promise<void> => {
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.EXPENSES);
-    const all: DirectExpense[] = data ? JSON.parse(data) : [];
+    const all: DirectExpense[] = safeParse(data);
     const idx = all.findIndex(e => e.id === id);
     if (idx === -1) return;
     all[idx] = { ...all[idx], status: 'PAID', paidAt: new Date().toISOString().split('T')[0] };
@@ -53,13 +58,13 @@ export const CostService = {
     if (!ownerEmail) return [];
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.RECURRING);
-    return data ? JSON.parse(data) : [];
+    return safeParse(data);
   },
 
   saveRecurringCost: async (cost: RecurringCost, ownerEmail: string) => {
     if (!ownerEmail) throw new Error("Usuário não autenticado para salvar custo recorrente.");
     const keys = GET_KEYS(ownerEmail);
-    const all = await AsyncStorage.getItem(keys.RECURRING).then(d => d ? JSON.parse(d) : []);
+    const all = await AsyncStorage.getItem(keys.RECURRING).then(d => safeParse(d));
     const toSave = { ...cost, ownerEmail };
     const idx = all.findIndex((c: RecurringCost) => c.id === toSave.id);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);
@@ -73,7 +78,7 @@ export const CostService = {
   deleteRecurringCost: async (id: string, ownerEmail: string) => {
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.RECURRING);
-    const all: RecurringCost[] = data ? JSON.parse(data) : [];
+    const all: RecurringCost[] = safeParse(data);
     const filtered = all.filter(c => c.id !== id);
     await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(filtered));
     enqueueMutation('costs', 'DELETE_RECURRING', { id }, ownerEmail);
@@ -84,12 +89,12 @@ export const CostService = {
     if (!ownerEmail) return [];
     const keys = GET_KEYS(ownerEmail);
     const data = await AsyncStorage.getItem(keys.BUDGETS);
-    return data ? JSON.parse(data) : [];
+    return safeParse(data);
   },
 
   saveBudget: async (budget: AssetBudget, ownerEmail: string) => {
     const keys = GET_KEYS(ownerEmail);
-    const all = await AsyncStorage.getItem(keys.BUDGETS).then(d => d ? JSON.parse(d) : []);
+    const all = await AsyncStorage.getItem(keys.BUDGETS).then(d => safeParse(d));
     const toSave = { ...budget, ownerEmail };
     const idx = all.findIndex((b: AssetBudget) => b.assetId === toSave.assetId && b.category === toSave.category);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);

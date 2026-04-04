@@ -60,6 +60,7 @@ export default function ProfileScreen() {
   const [oldPwd,         setOldPwd]           = useState('');
   const [newPwd,         setNewPwd]           = useState('');
   const [changingPwd,    setChangingPwd]      = useState(false);
+  const [showAvatarModal,setShowAvatarModal]  = useState(false);
 
   // ─── 2FA State ──────────────────────────────────────────────────────────────
   const [twoFaEnabled,   setTwoFaEnabled]     = useState(false);
@@ -280,36 +281,7 @@ export default function ProfileScreen() {
   };
 
   const pickAvatar = () => {
-    Alert.alert(t('profile.avatarTitle'), t('profile.avatarMsg'), [
-      {
-        text: t('profile.takePhoto'),
-        onPress: async () => {
-          try {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (perm.granted) {
-              const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
-              if (!result.canceled) await uploadAvatar(result.assets[0]);
-            } else {
-              Alert.alert(t('common.error'), t('profile.cameraPermDenied'));
-            }
-          } catch (e: any) {
-            Alert.alert(t('common.error') || 'Error', 'Câmera não disponível no simulador ou ocorreu um erro: ' + e.message);
-          }
-        },
-      },
-      {
-        text: t('profile.cameraRoll'),
-        onPress: async () => {
-          try {
-            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
-            if (!result.canceled) await uploadAvatar(result.assets[0]);
-          } catch (e: any) {
-            Alert.alert(t('common.error') || 'Error', 'Erro ao abrir a galeria: ' + e.message);
-          }
-        },
-      },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
+    setShowAvatarModal(true);
   };
 
   // ── Guest Mode ──────────────────────────────────────────────
@@ -766,6 +738,67 @@ export default function ProfileScreen() {
                 <Text style={styles.saveSubmitBtnText}>
                   {changingPwd ? "Atualizando..." : "Atualizar Senha"}
                 </Text>
+              </TouchableOpacity>
+           </View>
+        </View>
+      )}
+
+      {/* ─── Avatar Modal ─── */}
+      {showAvatarModal && (
+        <View style={styles.modalOverlay}>
+           <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                 <Text style={styles.modalTitle}>{t('profile.avatarTitle')}</Text>
+                 <TouchableOpacity onPress={() => setShowAvatarModal(false)}>
+                    <Ionicons name="close" size={24} color="#64748B" />
+                 </TouchableOpacity>
+              </View>
+              
+              <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
+                {t('profile.avatarMsg')}
+              </Text>
+              
+              <TouchableOpacity 
+                style={[styles.listItem, { backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 12, paddingVertical: 16 }]} 
+                onPress={async () => {
+                  setShowAvatarModal(false);
+                  try {
+                    const perm = await ImagePicker.requestCameraPermissionsAsync();
+                    if (perm.granted) {
+                      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
+                      if (!result.canceled) await uploadAvatar(result.assets[0]);
+                    } else {
+                      Alert.alert(t('common.error'), t('profile.cameraPermDenied') || 'Permissão de câmera negada.');
+                    }
+                  } catch (e: any) {
+                    Alert.alert(t('common.error') || 'Error', 'Câmera indisponível: ' + e.message);
+                  }
+                }}
+              >
+                <View style={[styles.listIconBox, { backgroundColor: '#EFF6FF' }]}>
+                  <Ionicons name="camera" size={18} color="#3B82F6" />
+                </View>
+                <Text style={[styles.listItemText, { fontWeight: '700' }]}>{t('profile.takePhoto')}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.listItem, { backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 16, paddingVertical: 16 }]} 
+                onPress={async () => {
+                  setShowAvatarModal(false);
+                  try {
+                    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
+                    if (!result.canceled) await uploadAvatar(result.assets[0]);
+                  } catch (e: any) {
+                    Alert.alert(t('common.error') || 'Error', 'Erro ao abrir a galeria: ' + e.message);
+                  }
+                }}
+              >
+                <View style={[styles.listIconBox, { backgroundColor: '#F5F3FF' }]}>
+                  <Ionicons name="images" size={18} color="#8B5CF6" />
+                </View>
+                <Text style={[styles.listItemText, { fontWeight: '700' }]}>{t('profile.cameraRoll')}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
               </TouchableOpacity>
            </View>
         </View>

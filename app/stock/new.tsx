@@ -9,6 +9,7 @@ import { Header } from '../../src/components/Header';
 import { StockService } from '../../src/services/stockService';
 import { BarcodeService } from '../../src/services/barcodeService';
 import { useAuth } from '../../src/hooks/useAuth';
+import { getLocalAssets } from '../../src/database';
 
 export default function NewStockScreen() {
   const router = useRouter();
@@ -21,6 +22,10 @@ export default function NewStockScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+
+  const assets = React.useMemo(() => {
+    return user?.email ? getLocalAssets(user.email).filter(a => !a.deletedAt) : [];
+  }, [user?.email]);
 
   const handleStartScan = async () => {
     if (!permission?.granted) {
@@ -87,7 +92,25 @@ export default function NewStockScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Header title="Adicionar ao Estoque" leftIcon="arrow-back" onLeftPress={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      {assets.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
+          <Ionicons name="cube-outline" size={64} color="#CBD5E1" />
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginTop: 24, textAlign: 'center' }}>
+            Nenhum Bem cadastrado
+          </Text>
+          <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
+            Para organizar seu estoque, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+          </Text>
+          <TouchableOpacity 
+            style={{ backgroundColor: '#1E293B', paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
+            onPress={() => router.back()}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll}>
 
         {isScanning ? (
           <View style={styles.cameraContainer}>
@@ -156,6 +179,7 @@ export default function NewStockScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+      )}
     </KeyboardAvoidingView>
   );
 }

@@ -20,35 +20,46 @@ import { uploadFile } from './storageService';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
+let isSyncing = false;
+
 export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
-  // 0. Enviar eventos de telemetria primeiro (dados de coleta)
-  await pushTelemetryBatch();
-
-  // 1. Prioridade: Enviar checklists concluídos offline
-  await pushChecklistOutbox();
-
-  // 2. Fila genérica
-  const queue = getSyncQueue(ownerEmail);
-  if (queue.length === 0) return;
-
+  if (isSyncing) {
+    console.log('[SYNC] Sincronização já em andamento, ignorando...');
+    return;
+  }
+  isSyncing = true;
   try {
-    const res = await apiFetch('/api/sync/push', {
-      method: 'POST',
-      body: JSON.stringify({ queue }),
-      headers: ownerEmail ? { 'x-owner-email': ownerEmail } : {},
-    });
-    if (res.ok) {
-      const data = await res.json();
-      console.log(`[SYNC] Push de ${data.processed}/${queue.length} itens genéricos concluído.`);
-      const processedIds = data.processedIds || [];
-      for (const item of queue) {
-         if (processedIds.includes((item as any).id || (item as any).payload?.id)) {
-           clearSyncQueueItem((item as any).id);
-         }
+    // 0. Enviar eventos de telemetria primeiro (dados de coleta)
+    await pushTelemetryBatch();
+
+    // 1. Prioridade: Enviar checklists concluídos offline
+    await pushChecklistOutbox();
+
+    // 2. Fila genérica
+    const queue = getSyncQueue(ownerEmail);
+    if (queue.length === 0) return;
+
+    try {
+      const res = await apiFetch('/api/sync/push', {
+        method: 'POST',
+        body: JSON.stringify({ queue }),
+        headers: ownerEmail ? { 'x-owner-email': ownerEmail } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[SYNC] Push de ${data.processed}/${queue.length} itens genéricos concluído.`);
+        const processedIds = data.processedIds || [];
+        for (const item of queue) {
+           if (processedIds.includes((item as any).id || (item as any).payload?.id)) {
+             clearSyncQueueItem((item as any).id);
+           }
+        }
       }
+    } catch (e) {
+      console.warn('[SYNC] Falha de conexão durante o push genérico.', e);
     }
-  } catch (e) {
-    console.warn('[SYNC] Falha de conexão durante o push.', e);
+  } finally {
+    isSyncing = false;
   }
 }
 
@@ -58,8 +69,17 @@ async function pushChecklistOutbox() {
   try {
      const raw = await AsyncStorage.getItem('@brspark_outbox');
      if (!raw) return;
-     const outbox = JSON.parse(raw);
-     if (!Array.isArray(outbox) || outbox.length === 0) return;
+     let outbox: any[] = [];
+     try {
+       outbox = JSON.parse(raw);
+       if (!Array.isArray(outbox)) outbox = [];
+     } catch (parseErr) {
+       console.warn('[SYNC] Outbox corrompida, limpando para desbloquear fila...', parseErr);
+       await AsyncStorage.removeItem('@brspark_outbox');
+       return;
+     }
+
+     if (outbox.length === 0) return;
 
      const syncedIds: any[] = [];
      for (const payload of outbox) {
@@ -127,8 +147,15 @@ async function pushModule(endpoint: string, storageKey: string): Promise<void> {
   try {
     const raw = await AsyncStorage.getItem(storageKey);
     if (!raw) return;
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data) || data.length === 0) return;
+    let data: any[] = [];
+    try {
+      data = JSON.parse(raw);
+      if (!Array.isArray(data)) data = [];
+    } catch {
+      console.warn(`[SYNC] Dados corrompidos em ${storageKey}, ignorando push.`);
+      return;
+    }
+    if (data.length === 0) return;
     await apiFetch(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -152,7 +179,16 @@ async function pullModule<T>(
     if (remote.length === 0 && !merge) return;
 
     const localRaw = await AsyncStorage.getItem(storageKey);
-    const local: T[] = localRaw ? JSON.parse(localRaw) : [];
+    let local: T[] = [];
+    if (localRaw) {
+      try {
+        local = JSON.parse(localRaw);
+        if (!Array.isArray(local)) local = [];
+      } catch {
+        console.warn(`[SYNC] Dados locais corrompidos em ${storageKey}. Substituindo pelo remoto.`);
+        local = [];
+      }
+    }
 
     if (merge) {
       await AsyncStorage.setItem(storageKey, JSON.stringify(merge(remote, local)));
@@ -195,7 +231,11 @@ export async function pullVault(ownerEmail: string): Promise<void> {
       vaultKeys.map(async k => {
         const raw = await AsyncStorage.getItem(k);
         const assetId = k.split('vault:').pop() || k;
-        return { assetId, entries: raw ? JSON.parse(raw) : [] };
+        let entries = [];
+        if (raw) {
+          try { entries = JSON.parse(raw); } catch {}
+        }
+        return { assetId, entries };
       })
     );
     if (entries.length > 0) {

@@ -4,8 +4,12 @@ const prisma = require('../db');
 
 // GET /api/plans
 router.get('/', async (_req, res) => {
-  const plans = await prisma.plan.findMany({ orderBy: { priceMonthly: 'asc' }, include: { _count: { select: { subscriptions: true } } } });
-  res.json(plans);
+  try {
+    const plans = await prisma.plan.findMany({ orderBy: { priceMonthly: 'asc' }, include: { _count: { select: { subscriptions: true } } } });
+    res.json(plans);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/plans

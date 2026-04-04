@@ -19,10 +19,10 @@ import { ApiService } from '../../src/services/api';
 const REGION_KEY = '@brspark_region';
 
 const COUNTRIES = [
-  { code: 'BR', flag: '🇧🇷', label: 'Brasil',  lang: 'pt-BR' as const },
-  { code: 'US', flag: '🇺🇸', label: 'USA',     lang: 'en-US' as const },
-  { code: 'ES', flag: '🇪🇸', label: 'España',  lang: 'es-ES' as const },
-  { code: 'AR', flag: '🇦🇷', label: 'Argentina', lang: 'es-ES' as const },
+  { code: 'BR', label: 'Brasil',    lang: 'pt-BR' as const },
+  { code: 'US', label: 'USA',       lang: 'en-US' as const },
+  { code: 'ES', label: 'España',    lang: 'es-ES' as const },
+  { code: 'AR', label: 'Argentina', lang: 'es-ES' as const },
 ];
 
 type Mode = 'LOGIN' | 'REGISTER';
@@ -140,7 +140,6 @@ export default function LoginScreen() {
       } else {
         await register({ name, email, password, consent });
       }
-      await ApiService.sync(email);
       // RouteGuard will handle onboarding redirect if needed
     } catch (e: any) {
       if (e instanceof TwoFactorRequired) {
@@ -309,16 +308,7 @@ export default function LoginScreen() {
             />
 
 
-            {/* Demo quick-fill */}
-            {mode === 'LOGIN' && (
-              <TouchableOpacity
-                style={S.demoBtn}
-                onPress={() => { setEmail('joao@teste.com'); setPassword('teste123'); }}
-              >
-                <Ionicons name="flash-outline" size={14} color={colors.accent} />
-                <Text style={S.demoBtnT}>{t('auth.demoAccount')}  ·  joao@teste.com / teste123</Text>
-              </TouchableOpacity>
-            )}
+
 
             {/* Country selector — shown in REGISTER mode */}
             {mode === 'REGISTER' && (
@@ -337,7 +327,9 @@ export default function LoginScreen() {
                           await setLanguage(c.lang);
                         }}
                       >
-                        <Text style={S.countryFlag}>{c.flag}</Text>
+                        <View style={[S.countryBadge, active && S.countryBadgeActive]}>
+                          <Ionicons name="earth" size={16} color={active ? '#fff' : colors.slate} />
+                        </View>
                         <Text style={[S.countryCode, active && S.countryCodeActive]}>{c.code}</Text>
                       </TouchableOpacity>
                     );
@@ -526,8 +518,9 @@ const S = StyleSheet.create({
     backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0',
   },
   countryPillActive: { backgroundColor: '#191C1D', borderColor: '#191C1D' },
-  countryFlag: { fontSize: 22 },
-  countryCode: { fontSize: 10, fontWeight: '900', color: '#64748B', marginTop: 2 },
+  countryBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  countryBadgeActive: { backgroundColor: '#334155' },
+  countryCode: { fontSize: 11, fontWeight: '900', color: '#64748B' },
   countryCodeActive: { color: '#fff' },
 });
 

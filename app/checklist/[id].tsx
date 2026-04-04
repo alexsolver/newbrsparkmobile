@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PanResponder } from 'react-native';
@@ -36,8 +38,21 @@ export default function ChecklistEngine() {
   const [currentTask, setCurrentTask]       = useState<any>(null);
   const [geoMapChecked, setGeoMapChecked]   = useState(false);
   const [geofenceFailMode, setGeofenceFailMode] = useState<'block'|'warn'>('warn');
+  
+  // Scanner Modal & Virtual Camera State
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerFieldId, setScannerFieldId] = useState<string | null>(null);
+  
+  // -- Novo Estado de Webhook API --
+  const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
+
+  const [isCapturing, setIsCapturing] = useState(false);
+  const cameraRef = React.useRef<any>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
+  // Tracking share link state
+  const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
 
 
   const [sigModalVisible, setSigModalVisible] = useState(false);
@@ -119,6 +134,55 @@ export default function ChecklistEngine() {
       }
   };
 
+  const ensureOnlineValidation = async (field: any, action: () => void | Promise<void>) => {
+      if (field.requireOnlineValidation) {
+          try {
+              const netState = await Network.getNetworkStateAsync();
+              if (!netState.isConnected) {
+                  Alert.alert(
+                      "Validação Online Obrigatória",
+                      "Esta etapa da OS possui regras de segurança e não pode ser preenchida offline.\n\nPor favor, conecte-se à internet para continuar.",
+                      [{ text: "OK" }]
+                  );
+                  return;
+              }
+          } catch (e) {
+              Alert.alert("Erro de Conexão", "Não foi possível verificar a conectividade.");
+              return;
+          }
+      }
+      await action();
+  };
+
+  const processFacialImage = async (fieldId: string, imgBase64: string, imgUri: string) => {
+      const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
+      if (fieldData?.requireOnlineValidation) {
+          try {
+              const rawResp = await apiFetch('/api/vision/verify-face', {
+                  method: 'POST',
+                  body: JSON.stringify({ 
+                     imageBase64: imgBase64,
+                     provider: fieldData.visionProvider || 'AUTO'
+                  })
+              });
+              const apiResp = await rawResp.json();
+              if (apiResp.error) {
+                  Alert.alert("Erro de Reconhecimento", apiResp.error);
+                  return false;
+              }
+              if (!apiResp.match) {
+                  Alert.alert("Rosto não reconhecido", "A biometria facial falhou em comparar o rosto. Você não possui autorização para este formulário.");
+                  return false;
+              }
+          } catch (err: any) {
+              Alert.alert("Falha no Motor de IA", "Não foi possível conectar ao servidor para validação biométrica.");
+              return false;
+          }
+      }
+      handleInput(fieldId, imgUri + "?live=true");
+      return true;
+  };
+
   const handleMediaPicker = async (fieldId: string, type: string) => {
       if (type === 'file_upload') {
           try {
@@ -129,14 +193,43 @@ export default function ChecklistEngine() {
           } catch(e) {}
       } else {
           try {
-             if (type === 'photo_stamped') {
+             if (type === 'photo_stamped' || type === 'facial_recognition') {
+                 
+                 // Intercept custom camera mode for facial recognition
+                 if (type === 'facial_recognition') {
+                     const fieldData = template?.schemaData?.find((f: any) => f.id === fieldId);
+                     console.log("[DEBUG] fieldId:", fieldId, "fieldData.cameraMode:", fieldData?.cameraMode);
+                     
+                     if (fieldData?.cameraMode === 'scanner') {
+                         console.log("[DEBUG] Trying scanner mode...");
+                         if (!cameraPermission?.granted) {
+                             console.log("[DEBUG] Requesting camera permission...");
+                             try {
+                                 const p = await requestCameraPermission();
+                                 if (!p.granted) return Alert.alert("Atenção", "Permissão negada para câmera virtual.");
+                             } catch (permErr: any) {
+                                 console.log("[DEBUG] Permission error:", permErr);
+                             }
+                         }
+                         setScannerFieldId(fieldId);
+                         setShowScanner(true);
+                         return; // Modal will handle the capture
+                     }
+                 }
+
                  try {
                      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                     if (status !== 'granted') return Alert.alert("Atenção", "Permissão negada para câmera.");
+                     if (status !== 'granted') return Alert.alert("Atenção", "Permissão negada para câmera nativa.");
                      
-                     const res = await ImagePicker.launchCameraAsync({ quality: 0.5 });
+                     const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
                      if (!res.canceled && res.assets && res.assets.length > 0) {
-                         handleInput(fieldId, res.assets[0].uri + "?live=true");
+                         const imgAsset = res.assets[0];
+                         if (type === 'facial_recognition') {
+                             const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri);
+                             if (!ok) return;
+                         } else {
+                             handleInput(fieldId, imgAsset.uri + "?live=true");
+                         }
                      }
                  } catch (err: any) {
                      Alert.alert("Câmera Indisponível", err.message || "Erro ao tentar abrir a câmera.");
@@ -204,6 +297,26 @@ export default function ChecklistEngine() {
   };
 
   // --- Location handler (Transit + Geofence) ---
+  // --- Tracking Link ──────────────────────────────────────────────
+  const generateTrackingLink = async () => {
+    if (!taskId) return;
+    try {
+      const res = await apiFetch(`/api/tracking/start/${taskId}`, { method: 'POST' });
+      if (res?.url) {
+        setTrackingUrl(res.url);
+      }
+    } catch(e) {
+      console.warn('[tracking] could not generate link', e);
+    }
+  };
+
+  const endTrackingLink = async () => {
+    if (!taskId) return;
+    try { await apiFetch(`/api/tracking/end/${taskId}`, { method: 'POST' }); }
+    catch(e) { console.warn('[tracking] could not end link', e); }
+  };
+  // ───────────────────────────────────────────────────
+
   const handleTransit = async (fieldId: string, label: string, traversedPath?: number[][]) => {
     const isGeofenceCheck = label === 'VALIDACAO_CERCA';
     try {
@@ -332,6 +445,11 @@ export default function ChecklistEngine() {
       
       handleInput(fieldId, JSON.stringify(payload));
       
+      // Auto-encerrar o public link se for evento de CHEGADA
+      if (label === 'CHEGADA') {
+          endTrackingLink();
+      }
+      
       if (status !== 'granted' || lat === 0) {
           Alert.alert("Atenção", `${label} registrado às ${new Date().toLocaleTimeString('pt-BR')}, mas sem rastreio de GPS.\nMotivo: ${address}`);
       } else {
@@ -343,6 +461,8 @@ export default function ChecklistEngine() {
       setSubmitting(false);
     }
   };
+
+
 
     // Sincronização passiva do Kanban (Ping)
   const notifyKanbanStatus = async (status: 'ACCEPTED' | 'IN_PROGRESS') => {
@@ -407,6 +527,8 @@ export default function ChecklistEngine() {
         // Then fetch fresh ETA directly from server (resolves even if cache is stale)
         const res = await apiFetch(`/api/checklists/executions/${taskId}`);
         if (res.ok) {
+          const { trackingUrl: tUrl } = await res.json();
+          setTrackingUrl(tUrl);
           const data = await res.json();
           if (data.etaMinutes != null) {
             // Update local cache
@@ -520,7 +642,7 @@ export default function ChecklistEngine() {
       let tmpl = null;
       
       try {
-         const res = await apiFetch(`/api/checklists/templates/${realTemplateId}`);
+         const res = await apiFetch(`/api/checklists/templates/${realTemplateId}?_t=${Date.now()}`);
          if (res.ok) {
             tmpl = await res.json();
             db[realTemplateId] = tmpl;
@@ -567,12 +689,12 @@ export default function ChecklistEngine() {
             const geoField = tmpl.schemaData?.find((f: any) => f.type === 'geofence_check');
             const fm = geoField?.geofenceFailMode || 'warn';
             setGeofenceFailMode(fm as 'block' | 'warn');
-            if (thisTask.locationZoneType && thisTask.locationZoneType !== 'none') {
+            if (thisTask.locationZoneType === 'route' || thisTask.locationZoneType === 'segment') {
               shouldShowMap = true;
               setShowGeoMap(true);
-              console.log('[GeoMap] ✅ Mostrando mapa para zona:', thisTask.locationZoneType);
+              console.log('[GeoMap] ✅ Mostrando mapa para zona (ROTA/SEGMENTO):', thisTask.locationZoneType);
             } else {
-              console.log('[GeoMap] ⏭ Sem zona definida — pulando mapa. locationZoneType=', thisTask?.locationZoneType);
+              console.log('[GeoMap] ⏭ Tarefa não é rota. Pulando mapa de aceite. locationZoneType=', thisTask?.locationZoneType);
             }
           } else {
             console.log('[GeoMap] ⚠️ Task não encontrada no cache. Total no cache:', cloudTasks.length);
@@ -818,6 +940,52 @@ export default function ChecklistEngine() {
          });
      }
      return [...globalRules, ...fieldRules];
+  };
+
+  const handleApiValidation = async (fieldId: string) => {
+      const rules = getAllRules();
+      // Encontra regras engatilhadas por este campo que são do tipo API_VALIDATION e cuja condição é verdadeira
+      const triggeredRules = rules.filter((r: any) => 
+          r.condFieldId === fieldId && 
+          evaluateCondition(r.condFieldId, r.condOperator, r.condValue, responses) &&
+          r.actions && 
+          r.actions.some((a:any) => a.type === 'API_VALIDATION')
+      );
+
+      if (triggeredRules.length === 0) return;
+
+      for (const rule of triggeredRules) {
+          const apiActions = rule.actions.filter((a:any) => a.type === 'API_VALIDATION');
+          for (const action of apiActions) {
+              setValidatingFieldId(fieldId);
+              try {
+                  const netState = await Network.getNetworkStateAsync();
+                  // Se marcado para ignorar offline e o app estiver offline, passa direto
+                  if (action.apiAllowOffline && !netState.isConnected) {
+                     continue;
+                  }
+                  
+                  const apiRes = await fetch(action.apiUrl, {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({ checklist_id: template?.id, task_id: taskId, responses }) // Payload completo com contexto
+                  });
+                  const text = await apiRes.text();
+                  
+                  // Sucesso se o regex ou a string bater na resposta do servidor
+                  const expected = action.apiExpectedReturn || '';
+                  if (expected && !text.includes(expected) && !new RegExp(expected).test(text)) {
+                      throw new Error(action.apiErrorMsg || 'Consulta bloqueada. Verifique os dados e a conexão com a API Externa.');
+                  }
+              } catch (err: any) {
+                  Alert.alert('Bloqueio no Sistema Externo', err.message);
+                  // Limpa o valor para impedir o técnico de avançar com o dado inválido
+                  handleInput(fieldId, '');
+              } finally {
+                  setValidatingFieldId(null);
+              }
+          }
+      }
   };
 
   useEffect(() => {
@@ -1121,6 +1289,13 @@ export default function ChecklistEngine() {
                       {field.icon ? '' : `${field._globalIdx}. `}{field.label}{isFieldRequired(field) ? <Text style={{color: '#EF4444'}}> *</Text> : null}
                   </Text>
                   {field.description ? <Text style={{fontSize: 12, color: '#64748b', marginBottom: 12}}>{field.description}</Text> : null}
+                  
+                  {validatingFieldId === field.id && (
+                      <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 6, marginBottom: 12}}>
+                          <ActivityIndicator size="small" color="#0284c7" style={{marginRight: 8}} />
+                          <Text style={{color: '#0284c7', fontSize: 12, fontWeight: '700'}}>Consultando sistema remoto...</Text>
+                      </View>
+                  )}
               
               {(field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'date') && (
                 <TextInput
@@ -1128,7 +1303,9 @@ export default function ChecklistEngine() {
                   placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
                   keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
                   value={responses[field.id] || ''}
+                  editable={validatingFieldId !== field.id}
                   onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                  onEndEditing={() => handleApiValidation(field.id)}
                 />
               )}
               {field.type === 'number' && (
@@ -1137,7 +1314,9 @@ export default function ChecklistEngine() {
                   placeholder="0"
                   keyboardType="numeric"
                   value={responses[field.id] || ''}
+                  editable={validatingFieldId !== field.id}
                   onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                  onEndEditing={() => handleApiValidation(field.id)}
                 />
               )}
               {field.type === 'dropdown' && (
@@ -1223,17 +1402,53 @@ export default function ChecklistEngine() {
                    ><Text style={[styles.radioText, responses[field.id] === 'Não' && {color: '#FFF'}]}>Não</Text></TouchableOpacity>
                 </View>
               )}
-              {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'file_upload') && (
+              {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition' || field.type === 'file_upload') && (
                 <View>
-                  <TouchableOpacity style={styles.cameraBox} onPress={() => handleMediaPicker(field.id, field.type)}>
-                    <Ionicons name={field.type === 'file_upload' ? "document-attach" : "camera"} size={32} color={field.type === 'photo_stamped' ? "#d97706" : "#64748b"} />
-                    <Text style={[styles.cameraText, field.type === 'photo_stamped' && {color: "#d97706"}]}>
-                      {field.type === 'photo_stamped' ? 'FOTOGRAFAR (GPS OBRIGATÓRIO)' : field.type === 'file_upload' ? 'Anexar Arquivo...' : 'Adicionar Foto...'}
-                    </Text>
-                  </TouchableOpacity>
-                  {responses[field.id] && (
+                  {field.type === 'facial_recognition' ? (
+                     <TouchableOpacity 
+                         onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type))}
+                         activeOpacity={0.8}
+                         style={{
+                             borderRadius: 16, overflow: 'hidden', marginVertical: 4,
+                             shadowColor: "#e11d48", shadowOffset: { width: 0, height: 6 },
+                             shadowOpacity: 0.25, shadowRadius: 10, elevation: 6,
+                             backgroundColor: '#fff',
+                             borderWidth: 1, borderColor: '#fda4af'
+                         }}
+                     >
+                        <LinearGradient
+                            colors={['#fff1f2', '#ffe4e6']}
+                            start={{x:0, y:0}} end={{x:1, y:1}}
+                            style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: '#f43f5e', alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#9f1239', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset:{width:0, height:4} }}>
+                                <Ionicons name="scan" size={40} color="#fff" />
+                                <View style={{ position: 'absolute' }}>
+                                    <Ionicons name="person" size={20} color="#fff" style={{ marginTop: 2 }} />
+                                </View>
+                            </View>
+                            <Text style={{ fontSize: 16, fontWeight: '900', color: '#881337', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                Validar Biometria
+                            </Text>
+                            <Text style={{ fontSize: 13, color: '#be123c', fontWeight: '500', marginTop: 4, textAlign: 'center' }}>
+                                Toque para escanear a face do operador e autenticar esta operação.
+                            </Text>
+                        </LinearGradient>
+                     </TouchableOpacity>
+                  ) : (
+                     <TouchableOpacity 
+                        style={[styles.cameraBox]} 
+                        onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type))}
+                     >
+                       <Ionicons name={field.type === 'file_upload' ? "document-attach" : "camera"} size={32} color={field.type === 'photo_stamped' ? "#d97706" : "#64748b"} />
+                       <Text style={[styles.cameraText, field.type === 'photo_stamped' && {color: "#d97706"}]}>
+                         {field.type === 'photo_stamped' ? 'FOTOGRAFAR (GPS OBRIGATÓRIO)' : field.type === 'file_upload' ? 'Anexar Arquivo...' : 'Adicionar Foto...'}
+                       </Text>
+                     </TouchableOpacity>
+                  )}
+                   {responses[field.id] && (
                     <View style={{marginTop:10, padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
-                       {(field.type === 'photo' || field.type === 'photo_stamped') && (
+                       {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') && (
                           <View style={{ width: '100%', height: 200, borderRadius: 6, overflow: 'hidden', marginBottom: 10, backgroundColor: '#cbd5e1' }}>
                              <Image source={{ uri: responses[field.id].split('?')[0] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                           </View>
@@ -1250,9 +1465,9 @@ export default function ChecklistEngine() {
                 </View>
               )}
               {field.type === 'barcode_scan' && (
-                <TouchableOpacity style={[styles.cameraBox, {borderColor: '#0284c7', backgroundColor: '#f0f9ff'}]} onPress={() => {
+                <TouchableOpacity style={[styles.cameraBox, {borderColor: '#0284c7', backgroundColor: '#f0f9ff'}]} onPress={() => ensureOnlineValidation(field, () => {
                   Alert.alert("Scanner", "Iniciando Expo Barcode Scanner...");
-                }}>
+                })}>
                   <Ionicons name="barcode" size={32} color="#0284c7" />
                   <Text style={[styles.cameraText, {color: '#0284c7'}]}>LER CÓDIGO DO EQUIPAMENTO</Text>
                 </TouchableOpacity>
@@ -1297,6 +1512,8 @@ export default function ChecklistEngine() {
                             if (currentTask?.locationZoneType === 'route' || currentTask?.locationZoneType === 'segment') {
                               setShowLiveMap(true);
                             }
+                            // ━ Gerar link de rastreamento para o cliente ━
+                            generateTrackingLink();
                           } else {
                             // transit_end — chegou ao local
                             dataCollectionService.setState('ARRIVED', {
@@ -1316,7 +1533,7 @@ export default function ChecklistEngine() {
                  );
               })()}
               {field.type === 'geofence_check' && (
-                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#e2e8f0', borderColor:'#cbd5e1', borderWidth:1, flexDirection:'row', gap:8}]} onPress={async () => {
+                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#e2e8f0', borderColor:'#cbd5e1', borderWidth:1, flexDirection:'row', gap:8}]} onPress={() => ensureOnlineValidation(field, async () => {
                    await handleTransit(field.id, 'VALIDACAO_CERCA');
                    // GPS chega na cerca eletrônica — modo IN_SERVICE
                    const resultStr = responses[field.id];
@@ -1331,14 +1548,14 @@ export default function ChecklistEngine() {
                        lng: currentTask?.locationLng ? parseFloat(currentTask.locationLng) : undefined,
                      }).catch(() => {});
                    }
-                }}>
+                })}>
                    <Ionicons name="location" size={20} color={colors.primary} />
                    <Text style={{color: colors.primary, fontWeight: '700', fontSize:14}}>VALIDAR LOCALIZAÇÃO (GPS)</Text>
                 </TouchableOpacity>
               )}
               {field.type === 'signature' && (
                  <TouchableOpacity 
-                   onPress={() => {
+                   onPress={() => ensureOnlineValidation(field, () => {
                        setCurrentSigField(field.id);
                        
                        // Try to retrieve previous strokes if they exist
@@ -1353,7 +1570,7 @@ export default function ChecklistEngine() {
                        currentStrokeRef.current = '';
                        setCurrentStrokeState('');
                        setSigModalVisible(true);
-                   }}
+                   })}
                    style={{ 
                      height: responses[field.id] ? 160 : 120, 
                      borderWidth: 2, 
@@ -1455,6 +1672,97 @@ export default function ChecklistEngine() {
           </View>
         </View>
       )}
+
+      {/* Modals removed: Tracking modal was removed (handled by backoffice) */}
+
+      <Modal visible={showScanner} animationType="slide" transparent={false}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <CameraView style={StyleSheet.absoluteFillObject} facing="front" ref={cameraRef}>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    
+                    {/* The massive border trick to create a dark overlay with a transparent hole 
+                        In React Native, dimensions INCLUDE borders (border-box). 
+                        So inner width = 280 -> outer = 2280
+                        inner height = 380 -> outer = 2380
+                        inner radius = 140 -> outer = 1140
+                    */}
+                    <View style={{
+                        position: 'absolute',
+                        width: 2280, height: 2380,
+                        borderRadius: 1140,
+                        borderWidth: 1000,
+                        borderColor: 'rgba(0,0,0,0.85)',
+                    }} pointerEvents="none" />
+
+                    <Text style={{ position: 'absolute', top: 80, color: '#FFF', fontSize: 18, fontWeight: '800', textAlign: 'center', width: '80%', zIndex: 10 }}>
+                        Posicione seu rosto dentro da marcação
+                    </Text>
+
+                    {/* The actual red geometric border */}
+                    <View style={{
+                        width: 280, height: 380,
+                        backgroundColor: isCapturing ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
+                        borderRadius: 140,
+                        borderWidth: 4,
+                        borderColor: isCapturing ? '#f59e0b' : '#e11d48',
+                        overflow: 'hidden',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1
+                    }}>
+                        {isCapturing && (
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 20 }}>
+                                <Text style={{ color: '#f59e0b', fontWeight: 'bold' }}>Analisando Face...</Text>
+                            </View>
+                        )}
+                    </View>
+                    <View style={{ position: 'absolute', bottom: 40, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
+                        <View style={{ position: 'absolute', left: 20 }}>
+                            <TouchableOpacity style={{ padding: 16 }} onPress={() => setShowScanner(false)} disabled={isCapturing}>
+                                <Text style={{ color: isCapturing ? '#94a3b8' : '#FFF', fontSize: 16, fontWeight: '700' }}>CANCELAR</Text>
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <TouchableOpacity 
+                            style={{ 
+                                width: 72, height: 72, borderRadius: 36, 
+                                backgroundColor: isCapturing ? '#f59e0b' : '#e11d48', 
+                                justifyContent: 'center', alignItems: 'center', 
+                                borderWidth: 4, borderColor: '#FFF',
+                                shadowColor: isCapturing ? '#f59e0b' : '#e11d48',
+                                shadowOpacity: 0.8, shadowRadius: 15, shadowOffset: { width: 0, height: 0 }
+                            }}
+                            onPress={async () => {
+                                if (isCapturing) return;
+                                setIsCapturing(true);
+                                
+                                // Adicionamos um atraso visual sintético de 2 segundos.
+                                // Assim você pode ver a animação acontecer perfeitamente mesmo no seu simulador!
+                                await new Promise(r => setTimeout(r, 2000));
+
+                                try {
+                                    const snap = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
+                                    if (snap?.base64 && scannerFieldId) {
+                                        const ok = await processFacialImage(scannerFieldId, snap.base64, snap.uri);
+                                        if (ok) {
+                                            setShowScanner(false);
+                                        }
+                                    }
+                                } catch (e) {
+                                    Alert.alert("Aviso de Hardware", "No simulador a tela de captura falhará. Mas no celular funcionará normal! :)");
+                                } finally {
+                                    setIsCapturing(false);
+                                }
+                            }}
+                        >
+                            {isCapturing ? <ActivityIndicator color="#FFF" size="large" /> : <Ionicons name="camera" size={32} color="#FFF" />}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </CameraView>
+        </View>
+      </Modal>
+
     </View>
   );
 }

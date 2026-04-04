@@ -5,12 +5,16 @@ const { testIntegration } = require('../lib/integrationTester');
 
 // GET /api/integrations
 router.get('/', async (_req, res) => {
-  const integrations = await prisma.integration.findMany({ orderBy: { type: 'asc' } });
-  // Mask API keys
-  res.json(integrations.map(i => ({
-    ...i,
-    apiKey: i.apiKey ? `${i.apiKey.slice(0, 6)}••••••••••••${i.apiKey.slice(-4)}` : null
-  })));
+  try {
+    const integrations = await prisma.integration.findMany({ orderBy: { type: 'asc' } });
+    // Mask API keys
+    res.json(integrations.map(i => ({
+      ...i,
+      apiKey: i.apiKey ? `${i.apiKey.slice(0, 6)}••••••••••••${i.apiKey.slice(-4)}` : null
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/integrations/:id/test

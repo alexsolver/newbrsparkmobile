@@ -188,30 +188,26 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {!isProfile ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {/* Connectivity dot */}
-                <View style={{ alignItems: 'center', justifyContent: 'center', width: 20 }}>
-                  <Animated.View style={[
-                    styles.dotRing,
-                    { borderColor: dotColor, transform: [{ scale: pulse }] }
-                  ]} />
-                  <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                <View style={{ 
+                  width: 48, height: 48, borderRadius: 24, 
+                  borderWidth: 3, borderColor: dotColor, 
+                  justifyContent: 'center', alignItems: 'center' 
+                }}>
+                  <TouchableOpacity
+                    style={{ 
+                      width: 38, height: 38, borderRadius: 19, 
+                      backgroundColor: '#fff', overflow: 'hidden',
+                      justifyContent: 'center', alignItems: 'center'
+                    }}
+                    onPress={() => router.push('/profile')}
+                  >
+                    {user?.avatarUrl ? (
+                      <Image source={{ uri: user.avatarUrl }} style={{ width: 38, height: 38 }} />
+                    ) : (
+                      <Ionicons name="person-outline" size={20} color={C.textSecondary} />
+                    )}
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }}
-                  onPress={() => router.push('/scanner')}
-                >
-                  <Ionicons name="qr-code-outline" size={20} color={C.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}
-                  onPress={() => router.push('/profile')}
-                >
-                  {user?.avatarUrl ? (
-                    <Image source={{ uri: user.avatarUrl }} style={{ width: 40, height: 40 }} />
-                  ) : (
-                    <Ionicons name="person-outline" size={20} color={C.textSecondary} />
-                  )}
-                </TouchableOpacity>
               </View>
             ) : (
               <View style={{ width: 40 }} />
@@ -239,34 +235,29 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
         </View>
         
-        {/* Right: connectivity dot + QR + Profile */}
+        {/* Right: QR + Profile (with Aura) */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {/* Connectivity dot */}
-          <View style={{ alignItems: 'center', justifyContent: 'center', width: 20 }}>
-            <Animated.View style={[
-              styles.dotRing,
-              { borderColor: dotColor, transform: [{ scale: pulse }] }
-            ]} />
-            <View style={[styles.dot, { backgroundColor: dotColor }]} />
+          <View style={{ 
+            width: 50, height: 50, borderRadius: 25, 
+            borderWidth: 3, borderColor: dotColor, 
+            justifyContent: 'center', alignItems: 'center' 
+          }}>
+            <TouchableOpacity 
+              style={{ 
+                width: 40, height: 40, borderRadius: 20, 
+                backgroundColor: '#fff', overflow: 'hidden',
+                justifyContent: 'center', alignItems: 'center'
+              }} 
+              onPress={() => router.push('/profile')}
+              activeOpacity={0.7}
+            >
+              {user?.avatarUrl ? (
+                <Image source={{ uri: user.avatarUrl }} style={{ width: 40, height: 40 }} />
+              ) : (
+                 <Ionicons name="person-outline" size={22} color={C.textSecondary} />
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity 
-            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }} 
-            onPress={() => router.push('/scanner')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="qr-code-outline" size={22} color={C.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', borderColor: '#F1F5F9', borderWidth: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }} 
-            onPress={() => router.push('/profile')}
-            activeOpacity={0.7}
-          >
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={{ width: 44, height: 44 }} />
-            ) : (
-               <Ionicons name="person-outline" size={22} color={C.textSecondary} />
-            )}
-          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -302,17 +293,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    position: 'absolute',
+    display: 'none',
   },
   dotRing: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    opacity: 0.4,
-    position: 'absolute',
+    display: 'none',
   },
 });

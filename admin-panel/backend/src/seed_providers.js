@@ -60,27 +60,12 @@ const keywordsByCategory = {
 };
 
 const names = [
-  'Carlos Andrade', 'Roberto Ferreira', 'José Oliveira', 'Marcos Santos', 'Paulo Rodrigues',
-  'Fernando Lima', 'Antônio Araújo', 'Ricardo Alves', 'Eduardo Costa', 'Renato Barbosa',
-  'Gustavo Carvalho', 'Leonardo Sousa', 'Alexandre Martins', 'Bruno Pereira', 'Daniel Ribeiro',
-  'Lucas Azevedo', 'Rodrigo Monteiro', 'Felipe Correia', 'Thiago Nascimento', 'Mateus Medeiros',
-  'Aline Silveira', 'Fernanda Gomes', 'Juliana Castro', 'Camila Moreira', 'Patricia Nunes',
-  'Sandra Rocha', 'Luciana Pinto', 'Claudia Mendes', 'Beatriz Ramos', 'Gabriela Cardoso',
   'Eletro Rápido SP', 'Hidro Fix Encanamentos', 'Spick & Span Limpeza', 'ReformaMax SP', 'Verde Jardins',
   'SecureHome SP', 'ClimaTech SP', 'TechSupport Brasil', 'Dedetizadora Alpha SP', 'Mudança Fácil SP',
   'Gastech Instalações', 'Pintor Pro SP', 'Elétrica 24h Santos', 'AquaPro Hidráulica', 'CleanSpace SP',
-  'Miguel Torres', 'Henrique Campos', 'Gabriel Vieira', 'Vinicius Santana', 'Diego Teixeira',
-  'Andréia Lopes', 'Mariana Freitas', 'Rafaela Macedo', 'Tatiane Borges', 'Priscila Cunha',
   'MultiServ Elétrica', 'HidroMestre', 'LimpaMax', 'ConstruFácil', 'JardimVerde',
   'GuardaSeuLar', 'FrioCerto', 'NetFix TI', 'PragaZero', 'CarregaFácil',
-  'Anderson Melo', 'Peterson Cruz', 'Júnior Pacheco', 'Sandro Nogueira', 'Gilson Farias',
-  'Vera Paixão', 'Sônia Moura', 'Cilene Barros', 'Denise Cavalcanti', 'Elaine Brito',
   'Eletro Norte SP', 'CanoMestre', 'BrilhoTotal', 'AlvenariaMax', 'EcoJardim',
-  'VisionSeg', 'ClimateMax', 'DataFix', 'BioControl', 'MudaFácil',
-  'GasSeguro', 'ColorMax Pinturas', 'Amper Elétrica', 'FluxoHidro', 'WhiteClean',
-  'StructMax Reformas', 'GreenLand Jardins', 'SafeGroup', 'ArcticAir', 'SpeedTech',
-  'NoPragas', 'TransporteMax', 'GásMais', 'PincelMestre', 'ElétricaVIP',
-  'HidroRápido', 'CleanPro', 'ObraMestre', 'JardimCerto', 'SegurMax',
 ];
 
 function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -100,7 +85,7 @@ async function main() {
   console.log('🗑️  Prestadores anteriores removidos');
 
   const providers = [];
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 30; i++) {
     const catIdx = i % categories.length;
     const cat = categories[catIdx];
     const tagOptions = tagsByCategory[cat];
@@ -130,11 +115,10 @@ async function main() {
   for (const prov of providers) {
     await p.serviceProvider.create({ data: prov });
     created++;
-    if (created % 20 === 0) console.log(`   ${created}/100 criados...`);
   }
 
   const total = await p.serviceProvider.count();
-  console.log(`\n✅ ${total} prestadores criados com sucesso!`);
+  console.log(`\n✅ ${total} empresas prestadoras criadas com sucesso!`);
   console.log('   Fotos: randomuser.me (fotos realistas de perfil)');
   console.log('   Categorias: 12 categorias cobertas');
   console.log('   Cidades: 15 cidades brasileiras');

@@ -33,16 +33,20 @@ router.get('/', async (req, res) => {
 
 // GET /api/tenants/:id
 router.get('/:id', async (req, res) => {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: req.params.id },
-    include: { 
-      locale: true,
-      subscription: { include: { plan: true, invoices: { orderBy: { createdAt: 'desc' }, take: 5 } } }, 
-      _count: { select: { users: true, assets: true } } 
-    }
-  });
-  if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
-  res.json(tenant);
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      include: { 
+        locale: true,
+        subscription: { include: { plan: true, invoices: { orderBy: { createdAt: 'desc' }, take: 5 } } }, 
+        _count: { select: { users: true, assets: true } } 
+      }
+    });
+    if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+    res.json(tenant);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/tenants

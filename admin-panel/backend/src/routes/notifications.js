@@ -4,8 +4,12 @@ const prisma = require('../db');
 
 // GET /api/notifications/templates
 router.get('/templates', async (_req, res) => {
-  const templates = await prisma.notificationTemplate.findMany({ orderBy: { key: 'asc' } });
-  res.json(templates);
+  try {
+    const templates = await prisma.notificationTemplate.findMany({ orderBy: { key: 'asc' } });
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/notifications/templates

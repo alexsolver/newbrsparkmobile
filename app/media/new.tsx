@@ -53,8 +53,11 @@ export default function NewMediaScreen() {
       const mediaItem = {
         id: `local_media_${Date.now()}`,
         url: mediaUri, // Em prod, isso deveria ir para S3 e retornar a URL. Aqui guardamos o URI local.
+        uri: mediaUri,
         type: 'image' as const,
         createdAt: new Date().toISOString(),
+        stampedGeo: false,
+        stampedDatetime: false
       };
       saveMediaItem(mediaItem);
 
@@ -96,6 +99,24 @@ export default function NewMediaScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Header title="Vincular Mídia" leftIcon="arrow-back" onLeftPress={() => setMediaUri(null)} />
       
+      {assets.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
+          <Ionicons name="cube-outline" size={64} color="#CBD5E1" />
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginTop: 24, textAlign: 'center' }}>
+            Nenhum Bem cadastrado
+          </Text>
+          <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
+            Para organizar suas mídias e fotos, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+          </Text>
+          <TouchableOpacity 
+            style={{ backgroundColor: '#1E293B', paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
+            onPress={() => router.back()}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll}>
         <Image source={{ uri: mediaUri }} style={styles.preview} />
 
@@ -132,6 +153,7 @@ export default function NewMediaScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

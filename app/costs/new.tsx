@@ -7,6 +7,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import { useTranslation } from 'react-i18next';
 import { enqueueMutation } from '../../src/services/syncService';
+import { CostService } from '../../src/services/costService';
 import { getRootAssets, getLocalAssets } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ValueInput } from '../../src/components/ValueInput';
@@ -30,7 +31,7 @@ export default function NewCostScreen() {
   const [newRecord, setNewRecord] = useState<{ category: string, amount: number, date: string, status: 'PAID'|'PENDING', description: string, type: 'REVENUE'|'EXPENSE' }>({ category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PENDING', description: '', type: 'EXPENSE' });
 
   // States for Recurring
-  const [newRec, setNewRec] = useState<{ frequency: 'WEEKLY'|'MONTHLY'|'YEARLY', status: 'ACTIVE'|'PAUSED', type: 'REVENUE'|'EXPENSE', amount: number, description: string, nextDueDate: string, alertDaysBefore?: number, totalInstallments?: number, remainingInstallments?: number }>({ frequency: 'MONTHLY', status: 'ACTIVE', type: 'EXPENSE', amount: 0, description: '', nextDueDate: new Date().toISOString().split('T')[0], alertDaysBefore: 1 });
+  const [newRec, setNewRec] = useState<{ category: string, frequency: 'WEEKLY'|'MONTHLY'|'YEARLY', status: 'ACTIVE'|'PAUSED', type: 'REVENUE'|'EXPENSE', amount: number, description: string, nextDueDate: string, alertDaysBefore?: number, totalInstallments?: number, remainingInstallments?: number }>({ category: 'OUTROS', frequency: 'MONTHLY', status: 'ACTIVE', type: 'EXPENSE', amount: 0, description: '', nextDueDate: new Date().toISOString().split('T')[0], alertDaysBefore: 1 });
 
   // States for Budget
   const [budgetLimit, setBudgetLimit] = useState('');
@@ -56,8 +57,10 @@ export default function NewCostScreen() {
           Alert.alert('Atenção', 'Preencha a descrição e um valor maior que zero.');
           return;
         }
-        await enqueueMutation('financial', 'cost:CREATE', {
-          ...newRecord, assetId: selectedAsset
+        await CostService.saveExpense({
+          id: `exp_${Date.now()}`,
+          assetId: selectedAsset,
+          ...newRecord
         }, user.email);
       } 
       else if (transactionType === 'recurring') {
@@ -65,8 +68,10 @@ export default function NewCostScreen() {
           Alert.alert('Atenção', 'Preencha a descrição e um valor maior que zero.');
           return;
         }
-        await enqueueMutation('financial', 'recurring:CREATE', {
-          ...newRec, assetId: selectedAsset
+        await CostService.saveRecurringCost({
+          id: `rec_${Date.now()}`,
+          assetId: selectedAsset,
+          ...newRec
         }, user.email);
       }
       else if (transactionType === 'budget') {
@@ -75,8 +80,11 @@ export default function NewCostScreen() {
            Alert.alert('Atenção', 'Defina um limite válido maior que zero.');
            return;
         }
-        await enqueueMutation('financial', 'budget:SET', {
-          assetId: selectedAsset, monthlyLimit: val, category: 'GERAL'
+        await CostService.saveBudget({
+          id: `bud_${Date.now()}`,
+          assetId: selectedAsset, 
+          monthlyLimit: val, 
+          category: 'GERAL'
         }, user.email);
       }
 
@@ -113,8 +121,8 @@ export default function NewCostScreen() {
   };
 
   const currentThemeColor = transactionType === 'budget' ? '#F59E0B' : 
-    (step > 2 && newRecord.type === 'REVENUE' && transactionType !== 'budget' && newRec.type === 'REVENUE') ? '#10B981' : 
-    (step > 2 && newRecord.type === 'EXPENSE' && transactionType !== 'budget' && newRec.type === 'EXPENSE') ? '#EF4444' : C.primary;
+    (step > 2 && newRecord.type === 'REVENUE' && newRec.type === 'REVENUE') ? '#10B981' : 
+    (step > 2 && newRecord.type === 'EXPENSE' && newRec.type === 'EXPENSE') ? '#EF4444' : C.primary;
 
   return (
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: C.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -133,7 +141,26 @@ export default function NewCostScreen() {
         {/* ======================= STEP 1: TRANSACTION TYPE ======================= */}
         {step === 1 && (
           <View style={{ paddingTop: 20 }}>
-            <Text style={styles.sectionTitle}>Que tipo de lançamento você deseja criar?</Text>
+            {assets.length === 0 ? (
+               <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 }}>
+                 <Ionicons name="cube-outline" size={64} color="#CBD5E1" />
+                 <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginTop: 24, textAlign: 'center' }}>
+                   Nenhum Bem cadastrado
+                 </Text>
+                 <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
+                   Para organizar suas finanças, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+                 </Text>
+                 <TouchableOpacity 
+                   style={{ backgroundColor: '#1E293B', paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
+                   onPress={() => router.back()}
+                   activeOpacity={0.8}
+                 >
+                   <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+                 </TouchableOpacity>
+               </View>
+            ) : (
+              <>
+                <Text style={styles.sectionTitle}>Que tipo de lançamento você deseja criar?</Text>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => { setTransactionType('single'); setStep(2); }}>
               <View style={[styles.menuIcon, { backgroundColor: '#ECFDF5' }]}><Ionicons name="receipt-outline" size={24} color="#10B981" /></View>
@@ -161,6 +188,8 @@ export default function NewCostScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
             </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 

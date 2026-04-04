@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image,
   RefreshControl, Dimensions, NativeSyntheticEvent, NativeScrollEvent, Alert, Modal,
-  KeyboardAvoidingView, Platform} from 'react-native';
+  KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { colors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
@@ -24,7 +24,8 @@ import { useAppContext } from '../../src/context/AppContext';
 import { API_BASE, apiFetch } from '../../src/services/auth';
 import { useManualSync } from '../../src/hooks/useManualSync';
 import { pushSyncQueue, pullTasks } from '../../src/services/syncService';
-import MapView, { Marker, Callout, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Callout, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import * as Location from 'expo-location';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -104,7 +105,9 @@ export default function DashboardScreen() {
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  const [providerSortMode, setProviderSortMode] = useState<'NEWEST' | 'OLDEST'>('NEWEST');
+  const [providerSortMode, setProviderSortMode] = useState<'NEWEST' | 'OLDEST' | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>('NEWEST');
+  const [osrmDurations, setOsrmDurations] = useState<Record<string, number>>({});
+  const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
   const [providerSearch, setProviderSearch] = useState('');
   const [isProviderMenuExpanded, setIsProviderMenuExpanded] = useState(true);
   const [activeCardDropdown, setActiveCardDropdown] = useState<string | null>(null);
@@ -115,6 +118,71 @@ export default function DashboardScreen() {
   // Task Card Details Modal
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
+  const [showRouteMap, setShowRouteMap] = useState<boolean>(false);
+
+  const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
+    const pendentes = providerTasks.filter(t => {
+        let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
+        if (s === 'RECEIVED') s = 'PENDING';
+        return s === providerTab;
+    }).filter(t => t.locationLat && t.locationLng);
+
+    if (pendentes.length === 0) {
+        Alert.alert("Aviso", "Não há nenhuma atividade pendente com coordenadas de destino cadastradas para criar percurso.");
+        return;
+    }
+
+    setIsOptimizingRoute(true);
+    try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') throw new Error("Permissão de GPS negada.");
+
+        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        
+        const coordPairs = [`${location.coords.longitude},${location.coords.latitude}`];
+        pendentes.forEach(p => coordPairs.push(`${p.locationLng},${p.locationLat}`));
+
+        const url = `https://router.project-osrm.org/table/v1/driving/${coordPairs.join(';')}?sources=0`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.code !== 'Ok' || !data.durations) {
+            throw new Error("O servidor OSRM falhou ou devolveu retorno vazio.");
+        }
+
+        const durList = data.durations[0]; 
+        const newDurs: Record<string, number> = {};
+        pendentes.forEach((p, index) => {
+            const val = durList[index + 1];
+            newDurs[p.id] = (val !== null && val !== undefined) ? val : 999999;
+        });
+
+        setOsrmDurations(newDurs);
+        setProviderSortMode(mode);
+    } catch (err: any) {
+        Alert.alert("Erro de Roteamento", err.message);
+    } finally {
+        setIsOptimizingRoute(false);
+    }
+  };
+
+  const onSortRoutePress = (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
+      if (providerSortMode === mode) return;
+      
+      const pendentesIds = providerTasks.filter(t => {
+          let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
+          if (s === 'RECEIVED') s = 'PENDING';
+          return s === providerTab;
+      }).filter(t => t.locationLat && t.locationLng).map(t => String(t.id));
+
+      const needsRecalc = pendentesIds.some(id => osrmDurations[id] === undefined) || Object.keys(osrmDurations).length === 0;
+
+      if (needsRecalc) {
+          handleOptimizeRoute(mode);
+      } else {
+          setProviderSortMode(mode);
+      }
+  };
 
   const moveAsset = (index: number, direction: 'UP' | 'DOWN', currentList: Asset[], isGlobal: boolean) => {
     if (direction === 'UP' && index === 0) return;
@@ -281,7 +349,7 @@ export default function DashboardScreen() {
                isCachedLocally: cachedExecutionKeys.has(`@brspark_execution_${t.id}`),
                service: t.title || 'Serviço Gên.',
                createdAt: t.startDate || new Date().toISOString(),
-               dueDate: t.endDate || new Date(new Date().getTime() + 86400000).toISOString(),
+               dueDate: t.metadata?.dueDate || t.endDate || new Date(new Date().getTime() + 86400000).toISOString(),
                description: t.description || 'Nenhuma descrição detalhada foi fornecida para esta Ordem de Serviço.',
                color: isCompleted ? '#10B981' : 
                       (inprogressTasks.includes(String(t.id)) || acceptedTasks.includes(String(t.id))) ? '#F59E0B' : 
@@ -1157,7 +1225,12 @@ export default function DashboardScreen() {
               return (
                 <TouchableOpacity
                   key={tab.id}
-                  onPress={() => setProviderTab(tab.id as any)}
+                  onPress={() => {
+                    setProviderTab(tab.id as any);
+                    if (tab.id !== 'PENDING' && (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE')) {
+                      setProviderSortMode('NEWEST');
+                    }
+                  }}
                   activeOpacity={0.8}
                   style={{
                     flex: 1, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
@@ -1192,22 +1265,47 @@ export default function DashboardScreen() {
                  </TouchableOpacity>
                )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingHorizontal: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, paddingBottom: 8, marginTop: 12 }}>
                <TouchableOpacity 
                   onPress={() => setProviderSortMode('NEWEST')}
                   style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'NEWEST' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
                >
                   <Ionicons name={providerSortMode === 'NEWEST' ? "time" : "time-outline"} size={16} color={providerSortMode === 'NEWEST' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'NEWEST' ? '900' : '700', color: providerSortMode === 'NEWEST' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Mais Novas</Text>
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'NEWEST' ? '900' : '700', color: providerSortMode === 'NEWEST' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Recentes</Text>
                </TouchableOpacity>
                <TouchableOpacity 
                   onPress={() => setProviderSortMode('OLDEST')}
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: providerSortMode === 'OLDEST' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OLDEST' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
                >
                   <Ionicons name={providerSortMode === 'OLDEST' ? "calendar" : "calendar-outline"} size={16} color={providerSortMode === 'OLDEST' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OLDEST' ? '900' : '700', color: providerSortMode === 'OLDEST' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Mais Antigas</Text>
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OLDEST' ? '900' : '700', color: providerSortMode === 'OLDEST' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Antigas</Text>
                </TouchableOpacity>
-            </View>
+               <TouchableOpacity 
+                  onPress={() => onSortRoutePress('OSRM_ROUTE')}
+                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OSRM_ROUTE' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
+               >
+                  {isOptimizingRoute && providerSortMode === 'OSRM_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name="rocket" size={16} color={providerSortMode === 'OSRM_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_ROUTE' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Rota</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => onSortRoutePress('OSRM_SLA_ROUTE')}
+                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
+               >
+                  {isOptimizingRoute && providerSortMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_SLA_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Rota + Vencimento</Text>
+               </TouchableOpacity>
+               {(providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') && providerTab === 'PENDING' && (
+                 <TouchableOpacity 
+                   onPress={() => setShowRouteMap(true)}
+                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginLeft: 8 }}
+                 >
+                   <Ionicons name="map" size={16} color="#38BDF8" style={{ marginRight: 6 }} />
+                   <Text style={{ fontSize: 11, fontWeight: '900', color: '#38BDF8', textTransform: 'uppercase' }}>Ver no Mapa</Text>
+                 </TouchableOpacity>
+               )}
+            </ScrollView>
           </View>
 
           {/* Provider Content Placeholder / List */}
@@ -1226,10 +1324,6 @@ export default function DashboardScreen() {
             <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 22 }}>
               A lista de serviços aparecerá aqui logo que houver despachos do painel central.
             </Text>
-            
-            <TouchableOpacity onPress={() => loadData(true)} style={{ marginTop: 32, backgroundColor: '#D97706', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, shadowColor: '#D97706', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 }}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Atualizar Fila</Text>
-            </TouchableOpacity>
           </View>
           ) : (
             <View style={{ padding: 16 }}>
@@ -1241,27 +1335,54 @@ export default function DashboardScreen() {
                 })
                 .filter(t => providerSearch === '' || t.id.toLowerCase().includes(providerSearch.toLowerCase()) || (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())))
                 .sort((a,b) => {
+                   if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
+                       const d1 = osrmDurations[a.id] ?? 999999;
+                       const d2 = osrmDurations[b.id] ?? 999999;
+                       
+                       if (providerSortMode === 'OSRM_SLA_ROUTE') {
+                           const getScore = (item: any, durationSecs: number) => {
+                               const durationMins = durationSecs / 60;
+                               if (!item.dueDate) return durationMins;
+                               
+                               const msToDue = new Date(item.dueDate).getTime() - Date.now();
+                               const minsToDue = msToDue / 60000;
+                               
+                               let urgencyDiscount = 0;
+                               if (minsToDue < 0) {
+                                   urgencyDiscount = 999999; // Atrasado: prioridade absoluta
+                               } else if (minsToDue < 120) {
+                                   urgencyDiscount = (120 - minsToDue) * 5; // < 2h: alta redução de custo
+                               } else if (minsToDue < 1440) {
+                                   urgencyDiscount = (1440 - minsToDue) * 0.1; // < 1d: leve desconto
+                               }
+                               return durationMins - urgencyDiscount;
+                           };
+                           return getScore(a, d1) - getScore(b, d2);
+                       }
+                       return d1 - d2;
+                   }
                    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                    if (isNaN(tA) || isNaN(tB)) return 0;
                    return providerSortMode === 'NEWEST' ? tB - tA : tA - tB;
                 })
-                .map(order => (
-                <View
-                  key={order.id}
-                  style={{
-                    borderRadius: 16, marginBottom: 12, overflow: 'hidden',
-                    shadowColor: order.color, shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
-                  }}
-                >
-                  {/* Gradient background wash from status color */}
-                  <LinearGradient
-                    colors={[`${order.color}22`, `${order.color}08`, '#FFFFFF']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ borderRadius: 16, borderWidth: 1, borderColor: `${order.color}30` }}
+                .map((order, index, arr) => (
+                <View key={order.id} style={{ flexDirection: 'row', alignItems: 'stretch', marginBottom: 12 }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      borderRadius: 16, overflow: 'hidden',
+                      shadowColor: order.color, shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
+                    }}
                   >
+                    {/* Gradient background wash from status color */}
+                    <LinearGradient
+                      colors={[`${order.color}22`, `${order.color}08`, '#FFFFFF']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ borderRadius: 16, borderWidth: 1, borderColor: `${order.color}30` }}
+                    >
                     <TouchableOpacity
                       activeOpacity={0.85}
                       onPress={() => {
@@ -1357,6 +1478,23 @@ export default function DashboardScreen() {
                       </View>
                     </TouchableOpacity>
                   </LinearGradient>
+                </View>
+
+                {/* Right Side: Timeline Ribbon */}
+                {(providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') && (
+                    <View style={{ width: 44, marginLeft: 8, alignItems: 'center' }}>
+                       {/* Upper Line segment */}
+                       <View style={{ flex: 1, width: 2, backgroundColor: index === 0 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706'), opacity: 0.3 }} />
+                       
+                       {/* Node */}
+                       <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF2F2' : '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706' }}>
+                          <Text style={{ color: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706', fontWeight: '900', fontSize: 13 }}>{index + 1}</Text>
+                       </View>
+                       
+                       {/* Lower Line segment */}
+                       <View style={{ flex: 1, width: 2, backgroundColor: index === arr.length - 1 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706'), opacity: 0.3 }} />
+                    </View>
+                )}
                 </View>
               ))}
             </View>
@@ -1642,6 +1780,71 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Rota Map Modal Modal */}
+      <Modal visible={showRouteMap} transparent animationType="slide" onRequestClose={() => setShowRouteMap(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+           <View style={{ height: 110, backgroundColor: '#1E293B', paddingTop: 50, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
+              <View>
+                 <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Rota do Dia</Text>
+                 <Text style={{ color: '#94A3B8', fontSize: 13, marginTop: 2 }}>Ordem OSRM para execução</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowRouteMap(false)} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}>
+                 <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+           </View>
+
+           <MapView
+             provider={PROVIDER_DEFAULT}
+             style={{ flex: 1 }}
+             initialRegion={{
+               latitude: providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.asset?.latitude)?.asset?.latitude || -23.5505,
+               longitude: providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.asset?.longitude)?.asset?.longitude || -46.6333,
+               latitudeDelta: 0.1,
+               longitudeDelta: 0.1
+             }}
+             showsUserLocation
+           >
+             {providerTasks.filter(t => {
+               let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
+               if (s === 'RECEIVED') s = 'PENDING';
+               return s === 'PENDING' && t.asset?.latitude && t.asset?.longitude;
+             }).map((task, index) => {
+                const coords = { latitude: task.asset.latitude, longitude: task.asset.longitude };
+                return (
+                   <Marker key={`rm-${task.id}`} coordinate={coords} zIndex={100 - index}>
+                     <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 }}>
+                       <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{index + 1}</Text>
+                     </View>
+                     <Callout>
+                       <View style={{ width: 230, padding: 8 }}>
+                         <Text style={{ fontSize: 14, fontWeight: '900', color: '#1E293B', marginBottom: 4 }} numberOfLines={2}>{task.title}</Text>
+                         <Text style={{ fontSize: 12, color: '#64748B' }}>{task.asset?.title || 'Local'}</Text>
+                         {providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE' ? (
+                           <Text style={{ fontSize: 12, fontWeight: '900', color: '#10B981', marginTop: 6, textTransform: 'uppercase' }}>
+                             ETA: {osrmDurations[String(task.id)] ? Math.ceil(osrmDurations[String(task.id)] / 60) + ' min' : (index === 0 ? 'Atual' : '--')}
+                           </Text>
+                         ) : null}
+                       </View>
+                     </Callout>
+                   </Marker>
+                );
+             })}
+             
+             <Polyline 
+               coordinates={providerTasks.filter(t => {
+                 let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
+                 if (s === 'RECEIVED') s = 'PENDING';
+                 return s === 'PENDING' && t.asset?.latitude && t.asset?.longitude;
+               }).map(t => ({ latitude: t.asset.latitude, longitude: t.asset.longitude }))} 
+               strokeColor="#3B82F6" 
+               strokeWidth={5} 
+               lineDashPattern={[15, 10]}
+             />
+           </MapView>
+        </View>
+      </Modal>
+
     </View>
   );
 }

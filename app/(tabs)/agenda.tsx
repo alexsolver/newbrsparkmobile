@@ -193,11 +193,37 @@ export default function AgendaScreen() {
   };
 
   const renderGantt = () => {
-    const TODAY = new Date();
-    TODAY.setHours(0,0,0,0);
+    const { daysArray, activeRows, TODAY, MathZoomWidth } = useMemo(() => {
+      const TODAY = new Date();
+      TODAY.setHours(0,0,0,0);
+      
+      const DAYS_TO_SHOW = 365;
+      
+      const daysArr = Array.from({length: DAYS_TO_SHOW}).map((_, i) => {
+        const d = new Date(TODAY);
+        d.setDate(d.getDate() + i);
+        return d;
+      });
+
+      const rws = assets.map(a => ({ id: a.id, title: a.title, events: [] as AgendaEvent[] }));
+      const others = { id: 'other', title: 'Geral', events: [] as AgendaEvent[] };
+
+      events.forEach(ev => {
+        const eEnd = new Date(ev.endDate);
+        eEnd.setHours(23,59,59,999);
+        if (eEnd.getTime() < TODAY.getTime()) return; 
+        
+        const r = rws.find(x => x.id === ev.assetId);
+        if (r) r.events.push(ev);
+        else others.events.push(ev);
+      });
+
+      const active = rws;
+      if (others.events.length > 0) active.push(others);
+
+      return { daysArray: daysArr, activeRows: active, TODAY, MathZoomWidth: DAYS_TO_SHOW };
+    }, [assets, events]);
     
-    // O zoom altera APENAS a largura visual. Manteve-se o "infinito" com 365 dias para navegação
-    const DAYS_TO_SHOW = 365;
     let COL_WIDTH = 48;
     
     if (zoomLevel === 1) {
@@ -212,28 +238,7 @@ export default function AgendaScreen() {
 
     const ROW_HEIGHT = 65;
     const LEFT_COL_WIDTH = 90;
-
-    const daysArray = Array.from({length: DAYS_TO_SHOW}).map((_, i) => {
-      const d = new Date(TODAY);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-
-    const rows = assets.map(a => ({ id: a.id, title: a.title, events: [] as AgendaEvent[] }));
-    const othersRow = { id: 'other', title: 'Geral', events: [] as AgendaEvent[] };
-
-    events.forEach(ev => {
-      const eEnd = new Date(ev.endDate);
-      eEnd.setHours(23,59,59,999);
-      if (eEnd.getTime() < TODAY.getTime()) return; 
-      
-      const r = rows.find(x => x.id === ev.assetId);
-      if (r) r.events.push(ev);
-      else othersRow.events.push(ev);
-    });
-
-    const activeRows = rows; // Mostra todos os bens para ver os buracos de ociosidade
-    if (othersRow.events.length > 0) activeRows.push(othersRow);
+    const DAYS_TO_SHOW = MathZoomWidth;
 
     return (
       <View style={{ flex: 1, backgroundColor: '#fff' }}>

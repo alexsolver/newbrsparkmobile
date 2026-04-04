@@ -146,7 +146,19 @@ class DataCollectionService {
 
     const eventType = eventMap[next];
     if (eventType) {
-      await this.recordEvent(eventType, { previousState: prev, lat: opts.lat, lng: opts.lng });
+      let lat = opts.lat;
+      let lng = opts.lng;
+      
+      // se n passou loc no opts e for evento importante (ex: TRANSIT_START), força coleta no ato
+      if (!lat && !lng && (eventType === 'TRANSIT_START' || eventType === 'GEOFENCE_ENTER' || eventType === 'OS_START' || eventType === 'CHECKIN')) {
+         const burst = await this.burstCapture();
+         if (burst) {
+            lat = burst.lat;
+            lng = burst.lng;
+         }
+      }
+      
+      await this.recordEvent(eventType, { previousState: prev, lat, lng });
     }
 
     // Start new location strategy for this state
@@ -331,8 +343,17 @@ class DataCollectionService {
 
   private async enqueueEvent(event: Record<string, any>): Promise<void> {
     try {
-      const raw    = await AsyncStorage.getItem(TELEMETRY_KEY) || '[]';
-      const outbox: any[] = JSON.parse(raw);
+      const raw    = await AsyncStorage.getItem(TELEMETRY_KEY);
+      let outbox: any[] = [];
+      if (raw) {
+        try {
+          outbox = JSON.parse(raw);
+          if (!Array.isArray(outbox)) outbox = [];
+        } catch {
+          console.warn('[DataCollection] Outbox corrompida, reiniciando fila livre.');
+        }
+      }
+      
       outbox.push(event);
       // Hard limit to prevent excessive storage usage
       const trimmed = outbox.slice(-2000);

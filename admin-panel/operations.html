@@ -156,10 +156,10 @@
 
     /* ── Detail Modal ────────────────────────────────────────── */
     .detail-field { margin-bottom: 14px; }
-    .detail-label { font-size: 9px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
-    .detail-value { font-size: 12px; color: var(--text); font-weight: 500; background: var(--surface2); border-radius: 6px; padding: 8px 10px; word-break: break-all; }
-    .detail-value.mono { font-family: monospace; font-size: 11px; }
-    .detail-value.empty { color: var(--text3); font-style: italic; }
+    .detail-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
+    .detail-value { font-size: 13px; color: var(--text); font-weight: 700; background: var(--surface2); border-radius: 6px; padding: 10px 12px; word-break: break-all; }
+    .detail-value.mono { font-family: monospace; font-size: 11px; font-weight: 600; }
+    .detail-value.empty { color: var(--text3); font-style: italic; font-weight: 500; }
 
     /* ── Column Controls ─────────────────────────────────────── */
     .kanban-col-controls {
@@ -216,33 +216,33 @@
     /* ── Report View ─────────────────────────────────────────── */
     .report-section { margin-bottom: 24px; }
     .report-section-title {
-      font-size: 10px; font-weight: 800; text-transform: uppercase;
-      letter-spacing: 0.8px; color: var(--text3); margin-bottom: 12px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text2); margin-bottom: 12px;
       padding-bottom: 6px; border-bottom: 1px solid var(--border);
       display: flex; align-items: center; gap: 6px;
     }
     .report-field { margin-bottom: 14px; }
     .report-field-label {
-      font-size: 9px; font-weight: 800; color: var(--text3);
-      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;
+      font-size: 10px; font-weight: 600; color: var(--text3);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block;
     }
     .report-field-value {
-      font-size: 12px; color: var(--text); font-weight: 500;
-      background: var(--surface2); border-radius: 6px; padding: 8px 10px;
+      font-size: 13px; color: var(--text); font-weight: 700;
+      background: var(--surface2); border-radius: 6px; padding: 10px 12px;
       word-break: break-all;
     }
-    .report-field-value.mono { font-family: monospace; font-size: 11px; }
-    .report-field-value.empty { color: var(--text3); font-style: italic; }
+    .report-field-value.mono { font-family: monospace; font-size: 11px; font-weight: 600; }
+    .report-field-value.empty { color: var(--text3); font-style: italic; font-weight: 500; }
     .report-response-item {
       background: var(--surface2); border-radius: 8px; padding: 12px 14px;
       margin-bottom: 8px; border-left: 3px solid var(--accent);
     }
     .report-response-q {
-      font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+      font-size: 11px; font-weight: 600; color: var(--text3); margin-bottom: 6px; display: block;
     }
     .report-response-a {
-      font-size: 12px; color: var(--text2); background: var(--surface);
-      border-radius: 4px; padding: 6px 10px; margin-top: 4px;
+      font-size: 14px; font-weight: 700; color: var(--text); background: var(--surface);
+      border-radius: 6px; padding: 8px 12px; margin-top: 4px;
     }
     .report-response-a.empty { color: var(--text3); font-style: italic; }
     .report-tabs {
@@ -310,18 +310,18 @@
 
     .pdf-box {
        border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
-       padding: 15px; margin-bottom: 25px; position: relative;
+       padding: 10px 15px; margin-bottom: 12px; position: relative;
     }
     .pdf-box-title {
-       text-align: center; font-size: 14px; font-weight: 900; color: #0f172a; margin-bottom: 25px;
+       text-align: center; font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 12px;
        letter-spacing: -0.3px;
     }
     .pdf-timeline {
        display: flex; justify-content: space-between; align-items: flex-start;
-       position: relative; padding: 0 40px;
+       position: relative; padding: 0 40px; margin-bottom: 8px;
     }
     .pdf-timeline::before {
-       content: ''; position: absolute; top: 15px; left: 70px; right: 70px;
+       content: ''; position: absolute; top: 12px; left: 70px; right: 70px;
        height: 3px; background: linear-gradient(90deg, #3b82f6 0%, #22c55e 100%);
        z-index: 0;
     }
@@ -329,9 +329,9 @@
        display: flex; flex-direction: column; align-items: center; z-index: 1; width: 100px; text-align: center; background:#f8fafc;
     }
     .pdf-timeline-icon {
-       width: 32px; height: 32px; border-radius: 50%;
+       width: 26px; height: 26px; border-radius: 50%;
        display: flex; align-items: center; justify-content: center;
-       color: white; font-size: 14px; margin-bottom: 8px; border: 3px solid #f8fafc;
+       color: white; font-size: 12px; margin-bottom: 4px; border: 3px solid #f8fafc;
     }
     .bg-blue { background: #3b82f6; }
     .bg-green { background: #22c55e; }
@@ -340,12 +340,12 @@
     .pdf-timeline-date { font-size: 9px; color: #475569; }
 
     .pdf-total-time {
-       position: absolute; left: 50%; transform: translateX(-50%); bottom: -45px;
-       width: 80px; height: 80px; background: white !important; border: 5px solid #22c55e;
+       position: absolute; left: 50%; transform: translateX(-50%); bottom: -25px;
+       width: 60px; height: 60px; background: white !important; border: 4px solid #22c55e;
        border-radius: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
     }
-    .pdf-total-time span { font-size: 8px; font-weight: 800; color: #0f172a; }
-    .pdf-total-time strong { font-size: 12px; font-weight: 900; color: #0f172a; }
+    .pdf-total-time span { font-size: 7px; font-weight: 800; color: #0f172a; text-align: center; line-height: 1; margin-bottom: 2px;}
+    .pdf-total-time strong { font-size: 10px; font-weight: 900; color: #0f172a; }
 
     .pdf-section-title {
        font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 50px; margin-bottom: 20px;
@@ -547,21 +547,21 @@
       <!-- BLOCO 1: DESIGNAÇÃO -->
       <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Designação</div>
       <div class="form-group">
-        <label class="form-label">E-mail do Técnico *</label>
+        <label class="form-label" for="d-email">E-mail do Técnico *</label>
         <input class="form-control" id="d-email" type="email" placeholder="tecnico@empresa.com" />
       </div>
       <div class="form-group">
-        <label class="form-label">Formulário / Template *</label>
+        <label class="form-label" for="d-template">Formulário / Template *</label>
         <select class="form-control" id="d-template">
           <option value="">Selecionar formulário...</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Título da OS</label>
+        <label class="form-label" for="d-title">Título da OS</label>
         <input class="form-control" id="d-title" placeholder="Ex: Vistoria Técnica — Apt 302" />
       </div>
       <div class="form-group">
-        <label class="form-label">Descrição</label>
+        <label class="form-label" for="d-desc">Descrição</label>
         <textarea class="form-control" id="d-desc" placeholder="Instruções adicionais para o técnico..." rows="2"></textarea>
       </div>
 
@@ -571,8 +571,8 @@
 
       <!-- Tab de Modo de Zona -->
       <div style="display:flex; gap:4px; margin-bottom:12px; background:var(--surface2); border-radius:10px; padding:4px;">
-        <button id="geo-tab-radius"  onclick="window.switchGeoTab('radius')"  style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:var(--primary); color:#fff; transition:all .2s;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto</button>
-        <button id="geo-tab-segment" onclick="window.switchGeoTab('segment')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;">A↔B Trecho</button>
+        <button id="geo-tab-radius"  onclick="window.switchGeoTab('radius')"  style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:#0f172a; color:#fff; transition:all .2s;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto</button>
+        <button id="geo-tab-segment" onclick="window.switchGeoTab('segment')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> Trecho</button>
         <button id="geo-tab-route"   onclick="window.switchGeoTab('route')"   style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota</button>
         <button id="geo-tab-polygon" onclick="window.switchGeoTab('polygon')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono</button>
         <button id="geo-tab-none"    onclick="window.switchGeoTab('none')"    style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Livre</button>
@@ -585,7 +585,7 @@
           <br/>Validação: <code>distância ≤ raio</code>
         </div>
         <div class="form-group">
-          <label class="form-label">Endereço (busca por nome)</label>
+          <label class="form-label" for="d-address">Endereço (busca por nome)</label>
           <div style="display:flex; gap:6px;">
             <input class="form-control" id="d-address" placeholder="Ex: Rua das Flores, 123, São Paulo" style="flex:1;" />
             <button class="btn btn-outline btn-sm" onclick="window.geocodeAddress()" style="white-space:nowrap;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
@@ -593,16 +593,16 @@
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div class="form-group">
-            <label class="form-label">Latitude</label>
+            <label class="form-label" for="d-lat">Latitude</label>
             <input class="form-control" id="d-lat" type="number" step="0.000001" placeholder="-23.5505" oninput="window.updateMapFromInputs()" />
           </div>
           <div class="form-group">
-            <label class="form-label">Longitude</label>
+            <label class="form-label" for="d-lng">Longitude</label>
             <input class="form-control" id="d-lng" type="number" step="0.000001" placeholder="-46.6333" oninput="window.updateMapFromInputs()" />
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Raio de Aceitação (metros)</label>
+          <label class="form-label" for="d-radius">Raio de Aceitação (metros)</label>
           <input class="form-control" id="d-radius" type="number" min="10" max="50000" value="200" oninput="window.updateMapFromInputs()" />
           <div style="font-size:10px; color:var(--text3); margin-top:4px;">Técnico precisa estar dentro deste raio do ponto para ser validado.</div>
         </div>
@@ -631,7 +631,7 @@
         </div>
         <!-- Tolerance -->
         <div class="form-group">
-          <label class="form-label">Tolerância de Desvio (metros)</label>
+          <label class="form-label" for="d-route-tolerance">Tolerância de Desvio (metros)</label>
           <input class="form-control" id="d-route-tolerance" type="number" min="10" max="5000" value="100" />
           <div style="font-size:10px; color:var(--text3); margin-top:4px;">Distância máxima permitida do trajeto. Padrão: 100m.</div>
         </div>
@@ -651,7 +651,7 @@
         <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; border-left:4px solid #2563eb;">
            <span style="font-size:11px; font-weight:700; color:#2563eb;">Ponto A</span>
            <div class="form-group" style="margin-top:6px; margin-bottom:6px;">
-             <label class="form-label" style="font-size:10px;">Endereço (busca por nome)</label>
+             <label class="form-label" style="font-size:10px;" for="d-segment-address-a">Endereço (busca por nome)</label>
              <div style="display:flex; gap:6px;">
                <input class="form-control" id="d-segment-address-a" placeholder="Ex: Rua A" style="flex:1; font-size:11px;" />
                <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('A')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
@@ -659,11 +659,11 @@
            </div>
            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
              <div class="form-group" style="margin-bottom:0;">
-               <label class="form-label" style="font-size:10px;">Latitude</label>
+               <label class="form-label" style="font-size:10px;" for="d-segment-lat-a">Latitude</label>
                <input class="form-control" id="d-segment-lat-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
              </div>
              <div class="form-group" style="margin-bottom:0;">
-               <label class="form-label" style="font-size:10px;">Longitude</label>
+               <label class="form-label" style="font-size:10px;" for="d-segment-lng-a">Longitude</label>
                <input class="form-control" id="d-segment-lng-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
              </div>
            </div>
@@ -673,7 +673,7 @@
         <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; border-left:4px solid #d946ef;">
            <span style="font-size:11px; font-weight:700; color:#d946ef;">Ponto B</span>
            <div class="form-group" style="margin-top:6px; margin-bottom:6px;">
-             <label class="form-label" style="font-size:10px;">Endereço (busca por nome)</label>
+             <label class="form-label" style="font-size:10px;" for="d-segment-address-b">Endereço (busca por nome)</label>
              <div style="display:flex; gap:6px;">
                <input class="form-control" id="d-segment-address-b" placeholder="Ex: Rua B" style="flex:1; font-size:11px;" />
                <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('B')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
@@ -681,17 +681,17 @@
            </div>
            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
              <div class="form-group" style="margin-bottom:0;">
-               <label class="form-label" style="font-size:10px;">Latitude</label>
+               <label class="form-label" style="font-size:10px;" for="d-segment-lat-b">Latitude</label>
                <input class="form-control" id="d-segment-lat-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
              </div>
              <div class="form-group" style="margin-bottom:0;">
-               <label class="form-label" style="font-size:10px;">Longitude</label>
+               <label class="form-label" style="font-size:10px;" for="d-segment-lng-b">Longitude</label>
                <input class="form-control" id="d-segment-lng-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
              </div>
            </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Tolerância (metros) em cada ponta</label>
+          <label class="form-label" for="d-segment-radius">Tolerância (metros) em cada ponta</label>
           <input class="form-control" id="d-segment-radius" type="number" min="10" max="5000" value="150" />
           <div style="font-size:10px; color:var(--text3); margin-top:4px;">Distância permitida ao redor de A ou de B.</div>
         </div>
@@ -720,7 +720,7 @@
         </div>
         <!-- JSON Manual -->
         <div class="form-group">
-          <label class="form-label" style="font-size:11px;">Ou cole manualmente (JSON)</label>
+          <label class="form-label" style="font-size:11px;" for="d-polygon">Ou cole manualmente (JSON)</label>
           <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]'></textarea>
         </div>
         <div id="dispatch-map-polygon" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
@@ -962,9 +962,21 @@ function buildCard(task, colClass) {
         <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Sincronizada:</strong><br>${fd(task.syncedAt)}</div>
       </div>
 
-      <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">
-        <span class="task-card-id">#${shortId(task.id)}</span>
-        ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
+      <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+          <span class="task-card-id">#${shortId(task.id)}</span>
+          ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
+        </div>
+        ${task.metadata?.trackingToken ? `
+        <div style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center" onclick="event.stopPropagation()">
+          <ion-icon name="location-outline" style="color:#EA580C; font-size:12px"></ion-icon>
+          <a href="/track.html?t=${task.metadata.trackingToken}" target="_blank" style="color:#EA580C; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+            Acompanhar
+          </a>
+          <button style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0" onclick="navigator.clipboard.writeText(window.location.origin+'/track.html?t=${task.metadata.trackingToken}'); alert('Link copiado!'); event.stopPropagation();">
+            📋 Copiar
+          </button>
+        </div>` : ''}
       </div>
     </div>`;
 }
@@ -1597,49 +1609,139 @@ window.printReport = async function() {
      `;
   };
 
+  // ── Haversine helper (reusable inside printReport) ──────────────────────────
+  const haversineKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
   let speedBadgeHtml = '';
   if (startGPS && endGPS) {
-      const R = 6371;
-      const dLat = (endGPS.lat - startGPS.lat) * Math.PI / 180;
-      const dLon = (endGPS.lng - startGPS.lng) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(startGPS.lat*Math.PI/180)*Math.cos(endGPS.lat*Math.PI/180)*Math.sin(dLon/2)**2;
-      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      // Distance technician actually traveled (start → stop point)
+      const traveledKm = haversineKm(startGPS.lat, startGPS.lng, endGPS.lat, endGPS.lng);
+
       let transitSeconds = Math.floor((new Date(endGPS.time) - new Date(startGPS.time))/1000);
       if (transitSeconds <= 0) transitSeconds = 1;
-      const speedKmh = distanceKm / (transitSeconds / 3600);
+      const speedKmh  = traveledKm / (transitSeconds / 3600);
       const tmH = Math.floor(transitSeconds / 3600);
       const tmM = Math.floor((transitSeconds % 3600) / 60);
+      const tmS = transitSeconds % 60;
+      const realStr = `${tmH > 0 ? tmH + 'h ' : ''}${tmM}m ${tmS}s`;
+
+      // ── Did the technician actually reach the destination? ────────────────
+      const destLat = parseFloat(t.locationLat);
+      const destLng = parseFloat(t.locationLng);
+      const hasDestCoords = !isNaN(destLat) && !isNaN(destLng);
+
+      let reachedDestination = true;  // assume reached if no destination set
+      let distToDestKm = 0;
+      let incompleteWarningHtml = '';
+
+      if (hasDestCoords) {
+        distToDestKm = haversineKm(endGPS.lat, endGPS.lng, destLat, destLng);
+        // Consider "reached" if stopped within 500m of destination
+        reachedDestination = distToDestKm <= 0.5;
+
+        if (!reachedDestination) {
+          incompleteWarningHtml = `
+            <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;margin-top:12px;display:flex;align-items:center;gap:10px;">
+              <ion-icon name="warning-outline" style="font-size:20px;color:#DC2626;flex-shrink:0"></ion-icon>
+              <div>
+                <div style="font-size:11px;font-weight:900;color:#DC2626;">DESLOCAMENTO INCOMPLETO</div>
+                <div style="font-size:10px;color:#7F1D1D;margin-top:2px;line-height:1.4;">
+                  O técnico encerrou o deslocamento <strong>${distToDestKm.toFixed(2)} km</strong> antes de chegar ao destino.<br>
+                  A comparação com o ETA previsto não se aplica.
+                </div>
+              </div>
+            </div>`;
+        }
+      }
+
+      // ── ETA Previsto column ────────────────────────────────────────────────
+      let etaPrevistoHtml = '—';
+      let etaDeltaHtml = '';
+      if (t.etaMinutes != null) {
+        const eH = Math.floor(t.etaMinutes / 60);
+        const eM = t.etaMinutes % 60;
+        etaPrevistoHtml = `${eH > 0 ? eH + 'h ' : ''}${eM}m`;
+
+        // Only show delta if technician actually reached the destination
+        if (reachedDestination) {
+          const etaRealMin = Math.round(transitSeconds / 60);
+          const delta = etaRealMin - t.etaMinutes;
+          const absDelta = Math.abs(delta);
+          const dH = Math.floor(absDelta / 60), dM = absDelta % 60;
+          const deltaStr = `${dH > 0 ? dH + 'h ' : ''}${dM}m`;
+          if (delta > 5) {
+            etaDeltaHtml = `<div style="font-size:8px;color:#dc2626;font-weight:700;margin-top:2px">+${deltaStr} acima do previsto</div>`;
+          } else if (delta < -5) {
+            etaDeltaHtml = `<div style="font-size:8px;color:#16a34a;font-weight:700;margin-top:2px">${deltaStr} abaixo do previsto ✓</div>`;
+          } else {
+            etaDeltaHtml = `<div style="font-size:8px;color:#2563eb;font-weight:700;margin-top:2px">Dentro do previsto ≈</div>`;
+          }
+        } else {
+          // Incomplete — show remaining distance instead of misleading delta
+          etaDeltaHtml = `<div style="font-size:8px;color:#dc2626;font-weight:700;margin-top:2px">⚠ não concluído</div>`;
+        }
+      }
+
+      // ── Distance column label changes based on completion ─────────────────
+      const distLabel  = reachedDestination ? 'DISTÂNCIA (LINHA RETA)' : 'DISTÂNCIA PERCORRIDA';
+      const distColor  = reachedDestination ? '#9A3412' : '#B45309';
+      const remainHtml = (!reachedDestination && hasDestCoords)
+        ? `<div style="font-size:8px;color:#DC2626;font-weight:700;margin-top:2px">${distToDestKm.toFixed(2)} km p/ destino</div>`
+        : '';
+
+      // ── Speeds uses different bg when incomplete ──────────────────────────
+      const bgColor     = reachedDestination ? '#FFF7ED' : '#FFFBEB';
+      const borderColor = reachedDestination ? '#FFEDD5' : '#FDE68A';
+
       speedBadgeHtml = `
-        <div style="background:#FFF7ED; border:1px solid #FFEDD5; border-radius:8px; padding:12px; margin-top:15px; display:flex; justify-content:space-around; align-items:center;">
-           <div style="text-align:center;">
-              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">TEMPO EM DESLOCAMENTO</div>
-              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${tmH>0?tmH+'h ':''}${tmM}m ${transitSeconds%60}s</div>
+        <div style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:8px; padding:8px; margin-top:8px; display:flex; justify-content:space-around; align-items:flex-start; flex-wrap:wrap; gap:4px;">
+           <div style="text-align:center;min-width:60px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">ETA PREVISTO (OSRM)</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${etaPrevistoHtml}</div>
+              <div style="font-size:8px;color:#C2410C;margin-top:1px;font-style:italic">antes da viagem</div>
            </div>
-           <div style="width:1px;height:24px;background:#FED7AA;"></div>
-           <div style="text-align:center;">
-              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">VELOCIDADE MÉDIA ESTIMADA</div>
+           <div style="width:1px;height:40px;background:#FED7AA;"></div>
+           <div style="text-align:center;min-width:80px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">TEMPO EM TRÂNSITO</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${realStr}</div>
+              ${etaDeltaHtml}
+           </div>
+           <div style="width:1px;height:40px;background:#FED7AA;"></div>
+           <div style="text-align:center;min-width:80px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">VELOCIDADE MÉDIA</div>
               <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${speedKmh.toFixed(1)} <span style="font-size:10px">km/h</span></div>
            </div>
-           <div style="width:1px;height:24px;background:#FED7AA;"></div>
-           <div style="text-align:center;">
-              <div style="font-size:9px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">DISTÂNCIA (LINHA RETA)</div>
-              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${distanceKm.toFixed(2)} <span style="font-size:10px">km</span></div>
+           <div style="width:1px;height:40px;background:#FED7AA;"></div>
+           <div style="text-align:center;min-width:80px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">${distLabel}</div>
+              <div style="font-size:14px;font-weight:900;color:${distColor};margin-top:2px;">${traveledKm.toFixed(2)} <span style="font-size:10px">km</span></div>
+              ${remainHtml}
            </div>
-        </div>`;
+        </div>
+        ${incompleteWarningHtml}`;
   } else {
       speedBadgeHtml = `
-        <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:12px; margin-top:15px; display:flex; justify-content:space-around; align-items:center;">
-           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">TEMPO EM DESLOCAMENTO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+        <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:6px; margin-top:8px; display:flex; justify-content:space-around; align-items:center; flex-wrap:wrap; gap:4px;">
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">ETA PREVISTO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${t.etaMinutes != null ? (Math.floor(t.etaMinutes/60)>0?Math.floor(t.etaMinutes/60)+'h ':'')+(t.etaMinutes%60)+'m' : '—'}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VELOCIDADE MÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">TEMPO EM TRÂNSITO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">DISTÂNCIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VELOCIDADE MÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="width:1px;height:24px;background:#e2e8f0;"></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">DISTÂNCIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
         </div>`;
   }
 
+
   const transitHtml = `
-    <div class="pdf-section-title" style="margin-top:25px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
-       <ion-icon name="car-sport-outline" style="font-size:20px; color:#EA580C"></ion-icon>
+    <div class="pdf-section-title" style="margin-top:12px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+       <ion-icon name="car-sport-outline" style="font-size:16px; color:#EA580C"></ion-icon>
        RESUMO DE DESLOCAMENTO
     </div>
     <div style="display:flex; gap:15px; margin-top:12px;">
@@ -1648,7 +1750,7 @@ window.printReport = async function() {
     </div>
     ${speedBadgeHtml}
     ${endGPS ? `
-    <div id="pdf-transit-map" style="width: 100%; height: 210px; border-radius: 8px; margin-top: 10px; border: 1px solid #cbd5e1; z-index: 1;"></div>
+    <div id="pdf-transit-map" style="width: 100%; height: 140px; border-radius: 8px; margin-top: 8px; border: 1px solid #cbd5e1; z-index: 1; box-sizing: border-box;"></div>
     ` : ''}
   `;
 
@@ -1692,63 +1794,60 @@ window.printReport = async function() {
        </div>
     </div>
     
-    <!-- Cabeçalho Técnico (NOVO Bloco) -->
-    <div style="margin-top:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px; box-shadow:0 1px 3px rgba(0,0,0,0.05)">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
-            <ion-icon name="business" style="font-size:18px; color:#64748b"></ion-icon>
-            <h3 style="font-size:12px; font-weight:800; color:#334155; margin:0">DADOS TÉCNICOS DA ATIVIDADE</h3>
+    <!-- Cabeçalho Técnico — 3 colunas: Identidade | Previsto | Realizado -->
+    <div style="margin-top:10px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+
+      <!-- Header banner with status pill -->
+      <div style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
+        <ion-icon name="document-text-outline" style="font-size:16px; color:#94a3b8"></ion-icon>
+        <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
+        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada' }[t.status]||t.status||'—'}</span>
+      </div>
+
+      <!-- 3-column cards -->
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0">
+
+        <!-- COL 1: Identidade -->
+        <div style="padding:10px; border-right:1px solid #f1f5f9">
+          <div style="font-size:8px; font-weight:900; color:#64748b; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #f1f5f9; display:flex; align-items:center; gap:4px">
+            <ion-icon name="information-circle-outline" style="font-size:12px"></ion-icon> Identificação
+          </div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.title||'—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.description||'Não preenchido'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID da Tarefa</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
+          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
+          ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #f1f5f9"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; border-top:1px solid #f1f5f9; padding-top:10px">
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ONDE (LOCAL / ATIVO)</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.title || '—'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ENDEREÇO DA UNIDADE</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.description || 'Não preenchido'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">QUANDO (PREVISTO)</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${fd(t.createdAt)}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">QUANDO (EXECUTADO)</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.startedAt ? fd(t.startedAt) + ' – ' + (t.completedAt ? fd(t.completedAt) : 'Em andamento') : 'Não iniciado'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ID DA TAREFA</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px; font-family:monospace">${t.id}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ID PARA INTEGRAÇÃO</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px; font-family:monospace">${t.refId || t.metadata?.refId || '—'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">SITUAÇÃO</div>
-               <div style="font-size:11px; font-weight:700; margin-top:2px">
-                  <span style="background:${{ PENDING:'#fef9c3', RECEIVED:'#e0f2fe', ACCEPTED:'#dbeafe', IN_PROGRESS:'#fef3c7', COMPLETED:'#dcfce7', SYNCED:'#dcfce7', CANCELLED:'#fee2e2' }[t.status]||'#f1f5f9'}; color:${{ PENDING:'#a16207', RECEIVED:'#0369a1', ACCEPTED:'#1e40af', IN_PROGRESS:'#b45309', COMPLETED:'#15803d', SYNCED:'#15803d', CANCELLED:'#dc2626' }[t.status]||'#475569'}; padding:2px 8px; border-radius:4px; font-size:10px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Executando', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada' }[t.status]||t.status||'—'}</span>
-               </div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">FORMULÁRIO EXECUTADO</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.template?.title || t.metadata?.refId || 'N/A'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">ORIGEM</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.devicePlatform || 'Cadastrada via Painel'}</div>
-            </div>
-            <div>
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">PRIORIDADE</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.priority || 'Normal'}</div>
-            </div>
-            <div style="grid-column: 1 / -1">
-               <div style="font-size:9px; color:#94a3b8; font-weight:bold; letter-spacing:0.5px">OBSERVAÇÃO</div>
-               <div style="font-size:11px; color:#0f172a; font-weight:600; margin-top:2px">${t.metadata?.notes || t.metadata?.observation || 'Não preenchido'}</div>
-            </div>
+
+        <!-- COL 2: Previsto -> Despacho -->
+        <div style="padding:10px; border-right:1px solid #f1f5f9; background:#f8faff">
+          <div style="font-size:8px; font-weight:900; color:#2563eb; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #dbeafe; display:flex; align-items:center; gap:4px">
+            <ion-icon name="calendar-outline" style="font-size:12px; color:#2563eb"></ion-icon> Despacho
+          </div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Data/Hora (Criação)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.createdAt)}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Sincronização ao Aparelho</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.metadata?.receivedAt||t.syncedAt)||'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Aceite pelo Técnico</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.metadata?.acceptedAt)||'—'}</div></div>
+          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Zona de Atuação</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${{'point':'Ponto (Raio)','route':'Rota (Polilinha)','segment':'Trecho (A→B)','polygon':'Polígono'}[t.locationZoneType]||t.locationZoneType||'—'}</div></div>
         </div>
+
+        <!-- COL 3: Realizado -> Execução -->
+        <div style="padding:10px; background:#f0fdf4">
+          <div style="font-size:8px; font-weight:900; color:#16a34a; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #bbf7d0; display:flex; align-items:center; gap:4px">
+            <ion-icon name="checkmark-done-outline" style="font-size:12px; color:#16a34a"></ion-icon> Execução
+          </div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Início da Execução</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.startedAt)||'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Saída (Início Deslocamento)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${startGPS?new Date(startGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Chegada (Fim Deslocamento)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${endGPS?new Date(endGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
+          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Conclusão da OS</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.completedAt)||'—'}</div></div>
+        </div>
+
+      </div>
     </div>
 
-    <div class="pdf-box" style="margin-top: 10px; margin-bottom: 20px;">
+    <div class="pdf-box" style="margin-top: 8px; margin-bottom: 8px;">
        <div class="pdf-box-title">LINHA DO TEMPO OPERACIONAL</div>
        <div class="pdf-timeline">
           <div class="pdf-timeline-node">
@@ -1930,7 +2029,7 @@ window._geoMode = 'radius';
 window.switchGeoTab = function(mode) {
   window._geoMode = mode;
   const TAB_COLORS = {
-    radius:  { bg: 'var(--primary)', color: '#fff' },
+    radius:  { bg: '#0f172a',        color: '#fff' },
     route:   { bg: '#f97316',        color: '#fff' },
     segment: { bg: '#eab308',        color: '#fff' },
     polygon: { bg: '#3b82f6',        color: '#fff' },

@@ -19,8 +19,8 @@ interface Props {
   onEndTransit?: () => void;
 }
 
-// ─── ETA Badge — Premium floating map overlay ────────────────────────────────
-function EtaBadge({ etaMinutes, pct }: { etaMinutes: number; pct: number }) {
+// ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
+function EtaBadge({ etaMinutes, pct }: { etaMinutes: number | null | undefined; pct: number }) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -33,9 +33,12 @@ function EtaBadge({ etaMinutes, pct }: { etaMinutes: number; pct: number }) {
   }, []);
 
   // Smart time formatting
-  const hours = Math.floor(etaMinutes / 60);
-  const mins  = etaMinutes % 60;
-  const timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
+  let timeStr = 'Calculando...';
+  if (etaMinutes != null) {
+    const hours = Math.floor(etaMinutes / 60);
+    const mins  = etaMinutes % 60;
+    timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
+  }
 
   return (
     <View style={etaStyles.wrapper} pointerEvents="none">
@@ -158,6 +161,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
+  const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
   const { user } = useAuth();
   
   // Track pause state natively inside component (or from routeTracker)
@@ -205,6 +209,26 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       routeTracker.off('traversed_update', traversedHandler);
     };
   }, [visible, route]);
+
+  // Fetch dynamic OSRM route for point-to-point tasks (e.g. radius tasks)
+  useEffect(() => {
+    if (visible && zoneType !== 'route' && zoneType !== 'segment' && myPos && targetLoc?.lat && targetLoc?.lng && !dynamicRoute) {
+      const fetchOsrm = async () => {
+        try {
+          const url = `https://router.project-osrm.org/route/v1/driving/${myPos.lng},${myPos.lat};${targetLoc.lng},${targetLoc.lat}?overview=full&geometries=geojson`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]); // OSRM gives lng,lat
+            setDynamicRoute(coords);
+          }
+        } catch (e) {
+          console.warn('[LiveRouteMap] OSRM fetch failed', e);
+        }
+      };
+      fetchOsrm();
+    }
+  }, [visible, zoneType, myPos, targetLoc, dynamicRoute]);
 
   if (!visible) return null;
 
@@ -364,6 +388,18 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </>
           )}
           
+          {/* Render point-to-point dynamic route line and target marker */}
+          {dynamicRoute && dynamicRoute.length >= 2 && (
+             <>
+               <Polyline coordinates={dynamicRoute.map(c => ({ latitude: c[0], longitude: c[1] }))} strokeColor="#3b82f6" strokeWidth={5} lineDashPattern={[8, 8]} />
+               <Marker coordinate={{ latitude: dynamicRoute[dynamicRoute.length - 1][0], longitude: dynamicRoute[dynamicRoute.length - 1][1] }} title="Destino">
+                 <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
+                   <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
+                 </View>
+               </Marker>
+             </>
+          )}
+          
           {myPos && (
             <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={100}>
               <View style={styles.userMarkerContainer}>
@@ -408,9 +444,9 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             )}
         </View>
 
-        {/* ──── Premium ETA Badge ──── */}
-        {etaMinutes != null && !isComplete && !isPaused && (
-          <EtaBadge etaMinutes={etaMinutes} pct={pct} />
+        {/* ──── Premium ETA Badge — always visible during transit ──── */}
+        {!isComplete && !isPaused && (
+          <EtaBadge etaMinutes={etaMinutes ?? null} pct={pct} />
         )}
 
         {/* Deviation Banner Overlay */}

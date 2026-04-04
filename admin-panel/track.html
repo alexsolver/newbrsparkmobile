@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#EA580C" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Acompanhe seu Técnico · BrSpark</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Ionicons -->
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --brand:    #EA580C;
+      --green:    #16A34A;
+      --surface:  #FFFFFF;
+      --bg:       #F8FAFC;
+      --text:     #0F172A;
+      --text2:    #475569;
+      --text3:    #94A3B8;
+      --border:   #E2E8F0;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+
+    #map { position: fixed; inset: 0; z-index: 0; }
+
+    /* Top Floating Action Buttons (Back & Help) */
+    #top-nav {
+      position: fixed;
+      top: env(safe-area-inset-top); left: 0; right: 0;
+      padding: 16px;
+      display: flex; justify-content: space-between;
+      z-index: 20;
+      pointer-events: none; /* Let clicks pass through empty space */
+    }
+    #top-nav > * { pointer-events: auto; }
+    
+    .nav-btn {
+      height: 48px; background: #fff;
+      border: none; border-radius: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: #dc2626; cursor: pointer;
+    }
+    #btn-back { width: 48px; font-size: 20px; color: var(--text); }
+    #btn-help { padding: 0 20px; font-size: 14px; }
+
+    /* Top Main Card */
+    #top-card {
+      position: fixed;
+      top: calc(env(safe-area-inset-top) + 70px);
+      left: 16px; right: 16px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+      z-index: 20;
+    }
+
+    #status-title {
+      font-size: 18px; font-weight: 700; color: var(--text);
+    }
+
+    .progress-bars {
+      display: flex; gap: 6px; margin: 16px 0;
+    }
+    .bar-seg {
+      flex: 1; height: 3px; background: var(--border); border-radius: 2px;
+    }
+    .bar-fill {
+      height: 100%; background: var(--green); border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    #eta-row {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #eta-text {
+      font-size: 14px; font-weight: 600; color: var(--text);
+    }
+    #eta-value { font-weight: 800; }
+
+    #info-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+    }
+    #info-label { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
+    #info-badge {
+      background: #f1f5f9; padding: 6px 12px; border-radius: 8px;
+      font-size: 12px; font-weight: 800; color: var(--text);
+      max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Bottom Sheet */
+    #bottom-sheet {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #fff; z-index: 20;
+      border-radius: 24px 24px 0 0;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.06);
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    .drag-handle {
+      width: 36px; height: 4px; background: var(--border);
+      border-radius: 2px; margin: 12px auto;
+    }
+
+    /* Tech Row */
+    #tech-row {
+      display: flex; align-items: center; padding: 0 20px 16px; gap: 16px;
+    }
+    #tech-avatar-wrap { position: relative; }
+    #tech-avatar {
+      width: 52px; height: 52px; border-radius: 50%;
+      object-fit: cover; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s ease;
+    }
+    #tech-avatar.aura-green { animation: aura-green-pulse 2s infinite; }
+    #tech-avatar.aura-red { animation: aura-red-pulse 2s infinite; }
+    
+    @keyframes aura-green-pulse {
+      0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(22,163,74, 0.6); }
+      70% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 10px rgba(22,163,74, 0); }
+      100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(22,163,74, 0); }
+    }
+    @keyframes aura-red-pulse {
+      0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(239,68,68, 0.6); }
+      70% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 10px rgba(239,68,68, 0); }
+      100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(239,68,68, 0); }
+    }
+    #tech-info { flex: 1; }
+    #tech-name { font-size: 16px; font-weight: 800; color: var(--text); }
+    #tech-role { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+    /* Action Buttons */
+    #action-row { padding: 0 20px 20px; display:flex; flex-direction:column; gap:8px;}
+    .btn-chat {
+      width: 100%; border: none; border-radius: 16px; padding: 18px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; background: #f8fafc; transition: background 0.2s;
+    }
+    .btn-chat:active { background: #f1f5f9; }
+    .btn-chat-left { display: flex; align-items: center; gap: 12px; }
+    .btn-chat-icon { font-size: 22px; color: var(--text3); }
+    .btn-chat-text { font-size: 15px; font-weight: 500; color: var(--text2); }
+    .btn-chat-right { font-size: 15px; font-weight: 700; color: #dc2626; } /* iFood red text here */
+    
+    #btn-share .btn-chat-right { color: var(--brand); }
+
+    /* Arrived loading/overlay */
+    #arrived-overlay {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(22,163,74,0.95);
+      display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px;
+    }
+    #arrived-overlay.show { display: flex; }
+    #arrived-crown { font-size: 72px; animation: pop-in 0.6s cubic-bezier(0.34,1.56,0.64,1); }
+    #arrived-title { font-size: 28px; font-weight: 900; color: #fff; }
+    #arrived-sub   { font-size: 14px; color: rgba(255,255,255,0.8); }
+    #arrived-close {
+      margin-top: 20px; background: rgba(255,255,255,0.2); color: #fff;
+      border: none; border-radius: 14px; padding: 14px 32px; font-size: 14px;
+      font-weight: 700; cursor: pointer;
+    }
+    @keyframes pop-in { 0% {transform: scale(0); opacity: 0;} 100% {transform: scale(1); opacity: 1;} }
+
+    /* Utility overlay & loaders */
+
+    #expired-screen {
+      position: fixed; inset: 0; z-index: 100;
+      background: var(--bg); display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 32px; text-align: center;
+    }
+    #expired-screen.show { display: flex; }
+    #expired-icon { font-size: 64px; }
+    #expired-title { font-size: 22px; font-weight: 900; color: var(--text); }
+    #expired-sub   { font-size: 14px; color: var(--text2); line-height: 1.5; }
+
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 200;
+      background: var(--bg); display: flex;
+      flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .loader {
+      width: 44px; height: 44px; border: 4px solid var(--border);
+      border-top-color: var(--brand); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-text { font-size: 13px; color: var(--text2); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-screen">
+  <div class="loader"></div>
+  <div id="loading-text">Conectando ao Técnico...</div>
+</div>
+
+<!-- Expired -->
+<div id="expired-screen">
+  <div id="expired-icon">⏰</div>
+  <div id="expired-title">Link Expirado</div>
+  <div id="expired-sub">Este rastreamento encerrou.<br>O link fica ativo por 15 minutos após a chegada.</div>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Top Nav Buttons -->
+<div id="top-nav" style="justify-content: flex-end;">
+  <button id="btn-help" class="nav-btn" onclick="alert('Chat indisponível nesta etapa.')">Chat</button>
+</div>
+
+<!-- Main Top Card -->
+<div id="top-card">
+  <div id="status-title">Aguardando início...</div>
+  
+  <div class="progress-bars">
+    <div class="bar-seg" id="pbar-1"><div class="bar-fill" style="width:100%"></div></div>
+    <div class="bar-seg" id="pbar-2"><div class="bar-fill" id="fill-2" style="width:0%"></div></div>
+    <div class="bar-seg" id="pbar-3"><div class="bar-fill" id="fill-3" style="width:0%"></div></div>
+  </div>
+
+  <div id="eta-row">
+    <div id="eta-text">Previsão de chegada: <span id="eta-value">--</span></div>
+    <ion-icon name="chevron-down-outline" style="color:var(--text3)"></ion-icon>
+  </div>
+
+  <div id="info-row">
+    <div id="info-label">Serviço em andamento <ion-icon name="information-circle-outline"></ion-icon></div>
+    <div id="info-badge" id="service-title-container"><span id="service-title">--</span></div>
+  </div>
+</div>
+
+<!-- Bottom Sheet -->
+<div id="bottom-sheet">
+  <div class="drag-handle"></div>
+
+  <div id="tech-row">
+    <div id="tech-avatar-wrap">
+       <img id="tech-avatar" src="" />
+    </div>
+    <div id="tech-info">
+      <div id="tech-name">Técnico</div>
+      <div id="tech-role">Profissional Parceiro BrSpark</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a id="btn-mini-call" href="#" style="display:none; background:#dcfce7; width:44px; height:44px; border-radius:22px; align-items:center; justify-content:center; text-decoration:none;">
+        <ion-icon name="call-outline" style="font-size:20px; color:var(--green);"></ion-icon>
+      </a>
+      <button id="btn-mini-share" onclick="shareLink()" style="background:var(--bg); border:none; width:44px; height:44px; border-radius:22px; display:flex; align-items:center; justify-content:center; cursor:pointer; -webkit-tap-highlight-color:transparent;">
+        <ion-icon name="share-social-outline" style="font-size:20px; color:var(--text2);"></ion-icon>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Arrived overlay -->
+<div id="arrived-overlay">
+  <div id="arrived-crown">✅</div>
+  <div id="arrived-title">Técnico Chegou!</div>
+  <div id="arrived-sub">Sua atividade está em andamento.</div>
+
+
+
+  <button id="arrived-close" onclick="dismissArrived()">Ver no Mapa</button>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // ── Configuration ─────────────────────────────────────────
+  const BASE = window.location.origin;
+  const token = new URLSearchParams(location.search).get('t');
+  const POLL_MS = 8000; // 8 seconds
+
+  // ── State ─────────────────────────────────────────────────
+  let map, techMarker, destMarker, routeLine;
+  let lastData = null;
+  let arrivedShown = false;
+  let pollTimer = null;
+
+  // ─── Init ──────────────────────────────────────────────────
+  if (!token) {
+    showExpired('Link inválido. Solicite um novo link ao técnico.');
+  } else {
+    initMap();
+    poll();
+  }
+
+  function initMap() {
+    map = L.map('map', { zoomControl: false, attributionControl: false })
+      .setView([-23.5505, -46.6333], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Zoom control top-right
+    L.control.zoom({ position: 'topright' }).addTo(map);
+  }
+
+  // ─── Polling ───────────────────────────────────────────────
+  async function poll() {
+    try {
+      const res = await fetch(`${BASE}/api/tracking/${token}`);
+
+      if (res.status === 404) {
+        showExpired('Link inválido ou não encontrado.');
+        return;
+      }
+      if (res.status === 410) {
+        showExpiredGrace();
+        return;
+      }
+
+      const data = await res.json();
+      hideLoading();
+      render(data);
+      lastData = data;
+    } catch (e) {
+      console.warn('[tracking] poll error', e);
+      // Offline: keep last data, don't crash
+    }
+    pollTimer = setTimeout(poll, POLL_MS);
+  }
+
+  // ─── Render ────────────────────────────────────────────────
+  
+  async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        // OSRM returns GeoJSON coordinates in [lng, lat] format
+        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+        return {
+          coords: coords,
+          etaMinutes: Math.ceil((route.duration || 0) / 60)
+        };
+      }
+    } catch (e) {
+      console.warn('[tracking] fallback OSRM fetch failed', e);
+    }
+    return null;
+  }
+  async function render(d) {
+    updateTech(d);
+    
+    // Asynchronously try to fetch OSRM route if we have coordinates
+    if (d.currentLat && d.currentLng && d.destLat && d.destLng) {
+      const osrmData = await fetchOsrmRoute(d.currentLat, d.currentLng, d.destLat, d.destLng);
+      if (osrmData && osrmData.etaMinutes !== null && d.etaMinutes == null) {
+         d.etaMinutes = osrmData.etaMinutes; // Update ETA dynamically
+      }
+      if (osrmData && osrmData.coords) {
+         d.routePolyline = osrmData.coords; // Draw precise dynamic path
+      }
+    }
+
+    updateEta(d);
+    updateMap(d);
+    updateStatus(d);
+    updateActions(d);
+    if (d.isEnded && !arrivedShown) showArrived();
+  }
+
+  function updateTech(d) {
+    document.getElementById('tech-name').textContent = d.techName || 'Técnico';
+    document.getElementById('service-title').textContent = d.serviceTitle || '';
+    const av = document.getElementById('tech-avatar');
+    
+    const isOffline = d.gpsAgeSeconds != null && d.gpsAgeSeconds > 120;
+    av.classList.remove('aura-green', 'aura-red');
+    if (d.gpsAgeSeconds != null && !d.isEnded) {
+      if (isOffline) {
+        av.classList.add('aura-red');
+        av.style.borderColor = '#EF4444'; 
+      } else {
+        av.classList.add('aura-green');
+        av.style.borderColor = '#16A34A'; 
+      }
+    } else {
+      av.style.borderColor = '#E2E8F0';
+    }
+
+    
+    let avatarUrl = d.techAvatar;
+    if (avatarUrl) {
+      if (avatarUrl.startsWith('/')) {
+         avatarUrl = BASE + avatarUrl;
+      } else if (avatarUrl.includes('localhost')) {
+         try {
+           const urlObj = new URL(avatarUrl);
+           avatarUrl = BASE + urlObj.pathname + urlObj.search;
+         } catch(e) {}
+      }
+    }
+    
+    if (avatarUrl) {
+      av.src = avatarUrl;
+      av.onerror = () => {
+        av.src = avatarFallback(d.techName);
+      };
+    } else {
+      av.src = avatarFallback(d.techName);
+    }
+    
+    // Also store it back globally so makeTechIcon accesses the resolved URL
+    d.techAvatar = avatarUrl;
+  }
+
+  function updateEta(d) {
+    if (d.isEnded) {
+       document.getElementById('eta-value').textContent = 'Chegou';
+       return;
+    }
+    if (d.etaMinutes != null) {
+      const h = Math.floor(d.etaMinutes / 60);
+      const m = d.etaMinutes % 60;
+      document.getElementById('eta-value').textContent = h > 0 ? `${h}h ${m}m` : `${m} minutos`;
+    } else {
+      document.getElementById('eta-value').textContent = 'calculando...';
+    }
+  }
+
+  function updateMap(d) {
+    const hasTech = d.currentLat != null && d.currentLng != null;
+    const hasDest = d.destLat != null && d.destLng != null;
+
+    // Technician marker (avatar circle)
+    if (hasTech) {
+      const ll = [d.currentLat, d.currentLng];
+      if (!techMarker) {
+        const icon = makeTechIcon(d.techAvatar, d.techName);
+        techMarker = L.marker(ll, { icon, zIndexOffset: 100 }).addTo(map);
+        map.setView(ll, 15);
+      } else {
+        techMarker.setLatLng(ll);
+      }
+    }
+
+    // Destination marker
+    if (hasDest && !destMarker) {
+      const destIcon = L.divIcon({
+        html: `<div style="width:32px;height:32px;background:#EF4444;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.2)"></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 28],
+        className: '',
+      });
+      destMarker = L.marker([d.destLat, d.destLng], { icon: destIcon })
+        .addTo(map)
+        .bindPopup(`<b>Destino</b><br>${d.destAddress || ''}`);
+    }
+
+    // Route polyline
+    if (d.routePolyline && d.routePolyline.length >= 2) {
+      const coords = d.routePolyline.map(c => Array.isArray(c) ? [c[0], c[1]] : [c.lat, c.lng]);
+      if (routeLine) {
+         routeLine.setLatLngs(coords);
+      } else {
+         routeLine = L.polyline(coords, {
+           color: '#EA580C',
+           weight: 5,
+           opacity: 0.8,
+           dashArray: '8 8',
+         }).addTo(map);
+      }
+    }
+
+    // Fit bounds to show both tech + destination
+    if (hasTech && hasDest) {
+      const bounds = L.latLngBounds([[d.currentLat, d.currentLng], [d.destLat, d.destLng]]);
+      // Add the route line to the bounds to ensure the entire path is visible
+      if (routeLine) {
+         bounds.extend(routeLine.getBounds());
+      }
+      if (techMarker && !techMarker._hasFitted) {
+        map.fitBounds(bounds.pad(0.3), { animate: true });
+        techMarker._hasFitted = true;
+      }
+    }
+  }
+
+  function updateStatus(d) {
+    const title = document.getElementById('status-title');
+    const fill2 = document.getElementById('fill-2');
+    const fill3 = document.getElementById('fill-3');
+
+    const techFirstName = (d.techName || 'O técnico').split(' ')[0];
+
+    if (d.isEnded) {
+      title.textContent = `${techFirstName} chegou ao local`;
+      fill2.style.width = '100%';
+      fill3.style.width = '100%';
+    } else {
+      title.textContent = `${techFirstName} está indo até você`;
+      fill2.style.width = '60%'; // Arbitrary completion for 'on route' 
+      fill3.style.width = '0%';
+    }
+  }
+
+  function updateActions(d) {
+    // Phone Call button
+    const callBtn = document.getElementById('btn-mini-call');
+    if (d.techPhone) {
+       callBtn.style.display = 'flex';
+       callBtn.href = `tel:${d.techPhone}`;
+    }
+  }
+
+  // ─── OSRM Client integration ────────────────────────────────
+  async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
+     try {
+       const qs = `${startLng},${startLat};${endLng},${endLat}`;
+       const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${qs}?overview=full&geometries=geojson`);
+       const json = await res.json();
+       if (json.routes && json.routes.length > 0) {
+         const route = json.routes[0];
+         const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+         const etaMinutes = Math.ceil(route.duration / 60);
+         return { coords, etaMinutes };
+       }
+     } catch(e) {}
+     return null;
+  }
+
+  // ─── Arrived State ─────────────────────────────────────────
+  function showArrived() {
+    arrivedShown = true;
+    clearTimeout(pollTimer);
+    const ov = document.getElementById('arrived-overlay');
+    ov.classList.add('show');
+  }
+
+  function dismissArrived() {
+    document.getElementById('arrived-overlay').classList.remove('show');
+  }
+
+  // ─── Expired States ────────────────────────────────────────
+  function showExpired(msg) {
+    clearTimeout(pollTimer);
+    hideLoading();
+    document.getElementById('expired-sub').textContent = msg || 'Este link de rastreamento expirou.';
+    document.getElementById('expired-screen').classList.add('show');
+  }
+
+  function showExpiredGrace() {
+    showExpired('Este rastreamento encerrou.\nO link fica ativo por 15 minutos após a chegada do técnico.');
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────
+  function hideLoading() {
+    const el = document.getElementById('loading-screen');
+    if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; setTimeout(() => el.remove(), 400); }
+  }
+
+  function avatarFallback(name) {
+    const n = encodeURIComponent((name || 'T').split(' ').slice(0,2).join('+'));
+    return `https://ui-avatars.com/api/?name=${n}&background=EA580C&color=fff&size=100&bold=true`;
+  }
+
+  function makeTechIcon(avatarUrl, name) {
+    const imgSrc = avatarUrl || avatarFallback(name);
+    return L.divIcon({
+      html: `
+        <div style="
+          width:44px;height:44px;border-radius:50%;
+          border:3px solid #EA580C;
+          box-shadow:0 2px 12px rgba(234,88,12,0.45);
+          overflow:hidden;background:#FFF7ED;
+          position:relative;
+        ">
+          <img src="${imgSrc}" 
+               onerror="this.src='${avatarFallback(name)}'"
+               style="width:100%;height:100%;object-fit:cover" />
+          <div style="
+            position:absolute;bottom:-1px;right:-1px;
+            width:14px;height:14px;background:#16A34A;
+            border:2px solid white;border-radius:50%;
+          "></div>
+        </div>`,
+      iconSize:   [44, 44],
+      iconAnchor: [22, 22],
+      className:  '',
+    });
+  }
+
+  async function shareLink() {
+    const url = location.href;
+    if (navigator.share && window.isSecureContext) {
+      try {
+        await navigator.share({
+          title: '🚗 Acompanhe o técnico',
+          text: `O técnico está a caminho! Acompanhe ao vivo:`,
+          url,
+        });
+      } catch(e) {}
+    } else {
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = url;
+          ta.style.position = "fixed";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        alert('Link copiado! ✓');
+      } catch(e) {
+        alert('Link: ' + url);
+      }
+    }
+  }
+</script>
+</body>
+</html>

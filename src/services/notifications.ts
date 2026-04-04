@@ -229,6 +229,14 @@ export const NotificationService = {
     try {
       const tokenData = await Notifications.getExpoPushTokenAsync();
       console.log('[BrSpark] Expo Push Token:', tokenData.data);
+      try {
+         await apiFetch('/api/sync/push_token', {
+            method: 'POST',
+            body: JSON.stringify({ token: tokenData.data, device: Platform.OS })
+         });
+      } catch (err) {
+         console.log('[BrSpark] Falha ao sincronizar token push no backend', err);
+      }
       return tokenData.data;
     } catch (e) {
       console.log('[BrSpark] Erro ao obter push token:', e);

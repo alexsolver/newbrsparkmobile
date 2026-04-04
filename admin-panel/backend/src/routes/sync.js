@@ -21,6 +21,29 @@ function anyValidJwt(req, res, next) {
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
 
+// ─── POST /api/sync/push_token ────────────────────────────────────────────────
+// App móvel envia o token do expo para receber pushes.
+router.post('/push_token', async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { token, device } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token é obrigatório.' });
+
+    const existing = await prisma.pushToken.findUnique({ where: { token } });
+    if (existing) {
+      if (existing.userId !== userId) {
+         await prisma.pushToken.update({ where: { token }, data: { userId, device } });
+      }
+    } else {
+      await prisma.pushToken.create({ data: { userId, token, device } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("POST /api/sync/push_token error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/sync/assets ─────────────────────────────────────────────────────
 // Retorna todos os bens do tenant do usuário logado (para o app sincronizar)
 router.get('/assets', async (req, res) => {

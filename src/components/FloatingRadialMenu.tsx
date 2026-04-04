@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const ADMIN_MENU_ITEMS = [
+  { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
   { id: 'asset', label: 'Bem', icon: 'business-outline', color: '#006B5C', route: '/asset/new' },
   { id: 'expense', label: 'Financeiro', icon: 'wallet-outline', color: '#EF4444', route: '/costs/new' },
   { id: 'stock', label: 'Estoque', icon: 'cube-outline', color: '#F59E0B', route: '/stock/new' },
@@ -18,6 +19,7 @@ const ADMIN_MENU_ITEMS = [
 ];
 
 const PROVIDER_MENU_ITEMS = [
+  { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
   { id: 'new_os', label: 'Nova OS', icon: 'construct', color: '#3B82F6', route: '/' },
   { id: 'contracts', label: 'Contratos', icon: 'document-text', color: '#EF4444', route: '/' },
   { id: 'wallet', label: 'Caixa', icon: 'wallet', color: '#10B981', route: '/' },

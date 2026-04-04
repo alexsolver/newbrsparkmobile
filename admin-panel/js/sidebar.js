@@ -7,7 +7,7 @@ export const NAV_ITEMS = [
   { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
   { page: 'users.html',         icon: 'people-outline',     label: 'Usuários',              section: null },
   { page: 'subscriptions.html', icon: 'card-outline',       label: 'Assinaturas',          section: null },
-  { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Checklists Builder',   section: 'Operações' },
+  { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
   { page: 'cockpit.html',       icon: 'pulse-outline',      label: 'Sync Cockpit',         section: null },
   { page: 'locations.html',     icon: 'location-outline',   label: 'Multi-Location',        section: 'Multi-Location' },

@@ -4,7 +4,7 @@ import { clearLocalDatabase } from '../database';
 // ─── Config ──────────────────────────────────────────────────────────────────
 // Altere MAC_IP para o IP da sua máquina na rede Wi-Fi local quando testar no celular.
 // Em simulador use 'localhost'. Em Expo Go no device, use seu IP da rede (ex: 192.168.1.10).
-const MAC_IP = 'localhost';          // ← altere para seu IP se necessário
+const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessário
 export const API_BASE = __DEV__
   ? `http://${MAC_IP}:3001`              // desenvolvimento local
   : 'https://api.brspark.com';           // produção (ajuste quando deployar)
@@ -138,7 +138,12 @@ export class AuthService {
       'brspark_costs_expenses',
       'brspark_costs_budgets',
       'brspark_costs_recurring',
-      'brspark_last_manual_sync'
+      'brspark_last_manual_sync',
+      '@brspark_cloud_tasks',
+      '@brspark_outbox',
+      '@brspark_telemetry_outbox',
+      '@brspark_active_role',
+      '@brspark_read_notifications'
     ];
     await AsyncStorage.multiRemove(keys);
     clearLocalDatabase();

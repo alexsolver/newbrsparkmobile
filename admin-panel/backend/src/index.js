@@ -34,6 +34,7 @@ const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
 const telemetryRoutes        = require('./routes/telemetry');
 const metricsRoutes          = require('./routes/metrics');
+const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
 
 const path = require('path');
 
@@ -64,6 +65,7 @@ app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
+app.use('/api/vision',     require('./routes/vision'));     // app: biometria e IA yüz tanıma
 
 // Public: effective collection policy for mobile app (no auth)
 app.get('/api/collection-policy/effective', collectionPolicyRoutes.effectiveHandler);
@@ -285,6 +287,7 @@ app.use('/api/cockpit',            adminAuth, cockpitRoutes);
 app.use('/api/collection-policy',  adminAuth, collectionPolicyRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app
 app.use('/api/metrics',            adminAuth, metricsRoutes);
+app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
 
 // ── 404 ───────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));

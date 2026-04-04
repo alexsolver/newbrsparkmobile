@@ -815,7 +815,7 @@ export function saveConfigLocal(config: { assetTypes?: any[]; categories?: any[]
 export interface MediaItem {
   id: string;
   uri: string;
-  type: 'photo' | 'video';
+  type: 'photo' | 'video' | 'file' | 'image' | 'audio';
   description?: string;
   tag?: string;
   latitude?: number;

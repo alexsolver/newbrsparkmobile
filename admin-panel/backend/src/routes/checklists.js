@@ -267,8 +267,36 @@ router.post('/dispatch', async (req, res) => {
             }
         });
         
-        console.log(`[DISPATCH] ✅ OS enviada para ${payload.ownerEmail} (ID: ${execution.id}, Form: ${payload.refId})`);
         console.log(`[DISPATCH] 📍 locationZoneType=${execution.locationZoneType} | polygon.length=${Array.isArray(execution.locationPolygon) ? execution.locationPolygon.length : 'null'} | lat=${execution.locationLat}`);
+        
+        // ─── Disparar Push Notification se o técnico tiver token registrado ───
+        try {
+            const user = await prisma.user.findUnique({ where: { email: payload.ownerEmail.toLowerCase() } });
+            if (user) {
+                const pushTokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+                for (const pt of pushTokens) {
+                    await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Accept-encoding': 'gzip, deflate',
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            to: pt.token,
+                            sound: 'default',
+                            title: '📢 Nova OS Designada',
+                            body: templateTitle || 'Você recebeu uma nova atividade',
+                            data: { taskId: execution.id }
+                        })
+                    });
+                }
+                if (pushTokens.length > 0) console.log(`[DISPATCH] 🔔 Push enviado para ${pushTokens.length} dispositivo(s).`);
+            }
+        } catch (pushErr) {
+            console.error('[DISPATCH] ⚠️ Falha ao tentar enviar Push Expo:', pushErr.message);
+        }
+        
         res.json({ success: true, task: { id: execution.id, refId: payload.refId } });
     } catch (err) {
         console.error("POST /api/checklists/dispatch error:", err);

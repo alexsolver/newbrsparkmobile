@@ -34,8 +34,9 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inTabs       = segments[0] === '(tabs)';
     const inProfile    = segments[0] === 'profile';
     const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
+    const isRoot       = !segments || !segments.length || !segments[0];
 
-    if (!user && !inAuthGroup && !inTabs && !inProfile) {
+    if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile) {
       router.replace('/auth/login' as any);
       return;
     }
@@ -46,7 +47,12 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
         if (!done) {
           router.replace('/auth/onboarding' as any);
         } else {
-          router.replace('/(tabs)' as any);
+          const isTech = user.technicianProfile || user.role === 'TECHNICIAN';
+          if (isTech) {
+            router.replace('/(tabs)/agenda' as any);
+          } else {
+            router.replace('/(tabs)' as any);
+          }
         }
       });
     }

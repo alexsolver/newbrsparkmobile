@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Checklists Builder</title>
+  <title>BrSpark Admin — Forms Builder</title>
   
   <!-- WebFonts para o Icon Picker! -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
@@ -60,7 +60,7 @@
   <div class="main-content">
     <div class="topbar">
       <div class="topbar-title" style="display:flex; align-items:center; gap:12px;">
-        <span style="font-weight:700">Checklists Builder</span>
+        <span style="font-weight:700">Forms Builder</span>
         <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Abrir Formulário</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> Criar Novo</button>
       </div>
@@ -123,6 +123,7 @@
            <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Enviar PDF/Doc</div>
            <div class="toolbox-item" data-type="photo"><ion-icon name="camera-outline" style="margin-right:6px; font-size:16px;"></ion-icon>Foto (Galeria Livre)</div>
            <div class="toolbox-item" data-type="photo_stamped" style="border-left: 3px solid #f59e0b;"><ion-icon name="scan-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Foto Carimbada (Ao Vivo)</div>
+            <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
            <div class="toolbox-item" data-type="barcode_scan" style="border-left: 3px solid #f59e0b;"><ion-icon name="barcode-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Escanear Etiqueta / Bem</div>
            <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
         </div>

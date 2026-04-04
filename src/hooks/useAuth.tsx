@@ -30,16 +30,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         if (localUser) {
           AuthService.validateSession()
-            .then(fresh => { if (fresh) setUser(fresh); })
+            .then(fresh => {
+              if (fresh) setUser(fresh);
+              else setUser(null); // Token expirado e limpo do ASyncStorage
+            })
             .catch(() => {});
         }
-        return AsyncStorage.getItem('@brspark_active_role');
+        return AsyncStorage.getItem('@brspark_active_role').then(role => ({ localUser, role }));
       })
-      .then(savedRole => {
-        if (savedRole === 'TECHNICIAN' || savedRole === 'CLIENT') {
-          _setUserRole(savedRole);
-        }
-        setLoading(false);
+      .then(({ localUser, role: savedRole }) => {
+         if (localUser && (savedRole === 'TECHNICIAN' || savedRole === 'CLIENT')) {
+            _setUserRole(savedRole);
+         } else {
+            _setUserRole('CLIENT');
+         }
+         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
@@ -70,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await AuthService.logout();
     setUser(null);
+    _setUserRole('CLIENT');
   };
 
   const deleteAccount = async () => {

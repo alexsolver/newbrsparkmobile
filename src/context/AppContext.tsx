@@ -30,9 +30,20 @@ const AppContext = createContext<AppCtx>({
   guardRef: { current: { isDirty: false, onSave: null, labels: DEFAULT_LABELS } },
 });
 
+import { useAuth } from '../hooks/useAuth';
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { userRole } = useAuth();
   const [mode, setMode] = useState<AppMode>('SERVICES');
   const guardRef = useRef<GuardRef>({ isDirty: false, onSave: null, labels: DEFAULT_LABELS });
+
+  React.useEffect(() => {
+    if (userRole === 'TECHNICIAN') {
+      setMode('PROVIDER');
+    } else {
+      setMode('SERVICES');
+    }
+  }, [userRole]);
 
   return (
     <AppContext.Provider value={{ mode, setMode, guardRef }}>

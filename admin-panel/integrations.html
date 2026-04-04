@@ -304,6 +304,51 @@
 
       </div>
 
+      <!-- ── Biometria & Visão ──────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="scan-outline"></ion-icon> Biometria &amp; Reconhecimento Facial</div>
+      <div class="int-catalog" id="vision-catalog">
+
+        <!-- AWS Rekognition -->
+        <div class="int-card" id="card-aws-rekog">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#232F3E;color:#FF9900"><ion-icon name="scan-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">AWS Rekognition</div><div class="int-cat">Visão & Biometria</div></div>
+            <span class="int-status inactive" id="status-aws-rekog" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Autenticação biométrica e reconhecimento facial de alta precisão via nuvem AWS.</div>
+          <div class="int-fields" id="fields-aws-rekog">
+            <input class="form-control" id="region-aws-rekog" placeholder="Region (ex: us-east-1)" value="us-east-1" />
+            <input class="form-control" id="key-aws-rekog" placeholder="Access Key ID" />
+            <input class="form-control" id="secret-aws-rekog" type="password" placeholder="Secret Access Key" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveVisionInt('AWS Rekognition', 'aws-rekog')"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-aws-rekog" style="display:none" onclick="testInt('aws-rekog')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-aws-rekog" style="display:none" onclick="deleteIntByName('AWS Rekognition')">Remover</button>
+          </div>
+        </div>
+
+        <!-- CompreFace -->
+        <div class="int-card" id="card-compreface">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#2563EB;color:#fff"><ion-icon name="cube-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Exadel CompreFace</div><div class="int-cat">Visão & Biometria</div></div>
+            <span class="int-status inactive" id="status-compreface" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Motor Open-Source de reconhecimento facial gratuito para validação em backend.</div>
+          <div class="int-fields" id="fields-compreface">
+            <input class="form-control" id="url-compreface" placeholder="API Base URL (ex: http://localhost:8000)" />
+            <input class="form-control" id="key-compreface" type="password" placeholder="Recognition API Key" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveVisionInt('Exadel CompreFace', 'compreface')"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-compreface" style="display:none" onclick="testInt('compreface')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-compreface" style="display:none" onclick="deleteIntByName('Exadel CompreFace')">Remover</button>
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
 </div>
@@ -334,6 +379,8 @@
     'Bluesoft Cosmos':     { slug:'cosmos' },
     'UPCItemDB':           { slug:'upcitemdb' },
     'OSRM':                { slug:'osrm' },
+    'AWS Rekognition':     { slug:'aws-rekog' },
+    'Exadel CompreFace':   { slug:'compreface' },
   };
 
   // type → typeLabel legível para exibição
@@ -516,6 +563,30 @@
     if (!confirm(`Remover integração "${name}"?`)) return;
     await CONFIG.del(`/integrations/${intObj.id}`);
     loadIntegrations();
+  };
+
+  window.saveVisionInt = async (name, slug) => {
+    const body = { type: 'AI_LLM', name, status: 'ACTIVE' }; // Reusing AI_LLM to avoid schema resets
+    if (slug === 'aws-rekog') {
+      const region = document.getElementById('region-aws-rekog').value.trim();
+      const keyId = document.getElementById('key-aws-rekog').value.trim();
+      const secret = document.getElementById('secret-aws-rekog').value.trim();
+      if (!region || !keyId || !secret) return alert('Region, Key e Secret são obrigatórios.');
+      body.baseUrl = region;
+      body.apiKey = `${keyId}|${secret}`;
+      body.metadata = { category: 'COMPUTER_VISION', engine: 'aws_rekognition' };
+    } else {
+      const url = document.getElementById('url-compreface').value.trim();
+      const key = document.getElementById('key-compreface').value.trim();
+      if (!url || !key) return alert('URL e API Key são obrigatórias.');
+      body.baseUrl = url;
+      body.apiKey = key;
+      body.metadata = { category: 'COMPUTER_VISION', engine: 'compreface' };
+    }
+    if (activeInts[name]) await CONFIG.del(`/integrations/${activeInts[name].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) { loadIntegrations(); showToast('Integração de Biometria salva!'); }
+    else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
   };
 
   loadIntegrations();

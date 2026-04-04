@@ -36,11 +36,16 @@ router.post('/login', async (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
-  const admin = await prisma.admin.findUnique({
-    where: { id: req.admin.id },
-    select: { id: true, email: true, name: true, createdAt: true }
-  });
-  res.json(admin);
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { id: req.admin.id },
+      select: { id: true, email: true, name: true, createdAt: true }
+    });
+    res.json(admin);
+  } catch (err) {
+    console.error('[auth/me]', err);
+    res.status(500).json({ error: 'Erro interno do servidor.' });
+  }
 });
 
 module.exports = router;
