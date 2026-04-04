@@ -106,7 +106,7 @@ router.get('/executions/:taskId', async (req, res) => {
 router.patch('/executions/:taskId/status', async (req, res) => {
     try {
         const { taskId } = req.params;
-        const { status, timestamp } = req.body;
+        const { status, timestamp, responses } = req.body;
         
         const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
@@ -129,6 +129,10 @@ router.patch('/executions/:taskId/status', async (req, res) => {
            updateData.metadata = { ...(typeof existing.metadata === 'object' && existing.metadata ? existing.metadata : {}), acceptedAt: ts };
         } else if (status === 'IN_PROGRESS') {
            if (!existing.startedAt) updateData.startedAt = ts;
+        }
+
+        if (responses) {
+            updateData.responses = responses;
         }
 
         const execution = await prisma.checklistExecution.update({

@@ -897,8 +897,8 @@ function renderKanban(tasks) {
     pending:   processCol(tasks.filter(t => t.status === 'PENDING'), 'pending'),
     progress:  processCol(tasks.filter(t => ['RECEIVED','ACCEPTED','IN_PROGRESS'].includes(t.status)), 'progress'),
     completed: processCol(tasks.filter(t => ['COMPLETED','SYNCED'].includes(t.status)), 'completed'),
-    cancelled: processCol(tasks.filter(t => t.status === 'CANCELLED'), 'cancelled'),
-    error:     processCol(tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED'].includes(t.status)), 'error'),
+    cancelled: processCol(tasks.filter(t => ['CANCELLED', 'REJECTED'].includes(t.status)), 'cancelled'),
+    error:     processCol(tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED','REJECTED'].includes(t.status)), 'error'),
   };
 
   document.getElementById('cnt-pending').textContent   = cols.pending.length;
@@ -932,14 +932,23 @@ function buildCard(task, colClass) {
      subBadge = '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:9px;margin-bottom:6px"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Aparelho Recebeu</span>';
   } else if (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') {
      let etaBadge = '';
-     if (task.etaMinutes !== null && task.etaMinutes !== undefined) {
+     if (task.metadata?.trackingEndedAt) {
+        etaBadge = `<span class="badge" style="background:#f0fdf4;color:#15803d;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="checkmark-done-outline" style="vertical-align:-1px"></ion-icon> Desloc. Encerrado</span>`;
+     } else if (task.metadata?.trackingPaused) {
+        etaBadge = `<span class="badge" style="background:#fee2e2;color:#dc2626;font-size:9px;margin-left:4px;border:1px solid #fecaca;"><ion-icon name="pause-circle-outline" style="vertical-align:-1px"></ion-icon> Pausado</span>`;
+     } else if (task.etaMinutes !== null && task.etaMinutes !== undefined) {
         etaBadge = `<span class="badge" style="background:#dcfce7;color:#166534;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="time-outline" style="vertical-align:-1px"></ion-icon> ETA: ${task.etaMinutes} min</span>`;
      }
+
      if (task.status === 'ACCEPTED') {
-         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px"><ion-icon name="car-outline" style="vertical-align:-2px"></ion-icon> Em Deslocamento</span>${etaBadge}</div>`;
+         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px"><ion-icon name="car-outline" style="vertical-align:-2px"></ion-icon> Aceito pelo Técnico</span>${etaBadge}</div>`;
      } else {
-         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Executando</span>${etaBadge}</div>`;
+         const hasStartedTransit = !!task.metadata?.trackingStartedAt;
+         const badgeLabel = hasStartedTransit && !task.metadata?.trackingEndedAt ? 'Em Deslocamento' : 'Executando Form';
+         subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> ${badgeLabel}</span>${etaBadge}</div>`;
      }
+  } else if (task.status === 'REJECTED') {
+     subBadge = '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:9px;margin-bottom:6px"><ion-icon name="close-circle-outline" style="vertical-align:-2px"></ion-icon> Técnico Rejeitou</span>';
   }
 
   const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -1290,6 +1299,7 @@ function buildReportTab(t) {
          <div style="font-size:10px;"><strong style="color:var(--text2)">Início:</strong> ${fDate(t.startedAt)}</div>
          <div style="font-size:10px;"><strong style="color:var(--text2)">Conclusão:</strong> ${fDate(t.completedAt)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Sincronização / Envio Nuvem:</strong> ${fDate(t.syncedAt)}</div>
+         ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
       </div>
     </div>
     
@@ -1332,12 +1342,12 @@ window.openDetail = function(id) {
   _currentTab = t.status === 'COMPLETED' || t.status === 'SYNCED' ? 'report' : 'info';
 
   const title = t.title || t.metadata?.title || `OS #${t.id.slice(0,8).toUpperCase()}`;
-  const statusBadgeMap = { PENDING: 'badge-amber', IN_PROGRESS: 'badge-blue', COMPLETED: 'badge-green', SYNCED: 'badge-green' };
+  const statusBadgeMap = { PENDING: 'badge-amber', RECEIVED: 'badge-blue', ACCEPTED: 'badge-blue', IN_PROGRESS: 'badge-blue', COMPLETED: 'badge-green', SYNCED: 'badge-green', CANCELLED: 'badge-red', REJECTED: 'badge-red' };
   const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'?'}</span>`;
 
   document.getElementById('detail-modal-title').textContent = title;
   document.getElementById('detail-modal-badge').innerHTML = statusBadge;
-  const canCancel = !['COMPLETED','SYNCED','CANCELLED'].includes(t.status);
+  const canCancel = !['COMPLETED','SYNCED','CANCELLED', 'REJECTED'].includes(t.status);
   const cancelBtn = document.getElementById('detail-cancel-btn');
   cancelBtn.style.display = canCancel ? '' : 'none';
   // Reseta estado customizado caso tenha sido alterado pela confirmação
@@ -1495,12 +1505,45 @@ window.printReport = async function() {
                        <div style="font-size:10px; color:#94a3b8; margin-top:4px;">Aguardando o aplicativo recuperar o sinal de internet para realizar o upload da Foto.</div>
                     </div>`;
               } else {
-                  displayVal = `
-                    <div class="pdf-photo-card" style="margin-top: 8px; max-width: 350px;">
-                       <img src="${val}" class="pdf-photo-img" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
-                       <div class="pdf-photo-stamp">${timestamp}</div>
-                       ${val.includes('live') || fieldDef?.type === 'photo_stamped' ? '<div class="pdf-photo-watermark">CARIMBADA<br>LIVE</div>' : ''}
-                    </div>`;
+              let gpsComplement = '';
+              if (val.includes('live') || fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition') {
+                  let locationStr = '';
+                  
+                  // Extract from URL query params
+                  let photoLat, photoLng, photoAddr;
+                  try {
+                      const urlParts = val.split('?');
+                      if (urlParts.length > 1) {
+                          const params = new URLSearchParams(urlParts[1]);
+                          if (params.has('lat') && params.has('lng')) {
+                              photoLat = parseFloat(params.get('lat'));
+                              photoLng = parseFloat(params.get('lng'));
+                          }
+                          if (params.has('addr')) photoAddr = params.get('addr');
+                      }
+                  } catch(e) {}
+
+                  if (photoLat && photoLng) {
+                      locationStr = `<br/><span style="margin-top:3px; display:inline-block">📍 ${photoAddr || 'Desconhecido'}</span> <br/><span style="color:#FFF8F0">🧭 Lat: ${photoLat.toFixed(5)}, Lng: ${photoLng.toFixed(5)}</span>`;
+                  } else if (endGPS && endGPS.lat) {
+                      locationStr = `<br/><span style="margin-top:3px; display:inline-block">📍 ${endGPS.addr || 'Local Coletado'}</span> <br/><span style="color:#FFF8F0">🧭 Lat: ${parseFloat(endGPS.lat).toFixed(5)}, Lng: ${parseFloat(endGPS.lng).toFixed(5)}</span>`;
+                  } else if (startGPS && startGPS.lat) {
+                      locationStr = `<br/><span style="margin-top:3px; display:inline-block">📍 ${startGPS.addr || 'Local Coletado'}</span> <br/><span style="color:#FFF8F0">🧭 Lat: ${parseFloat(startGPS.lat).toFixed(5)}, Lng: ${parseFloat(startGPS.lng).toFixed(5)}</span>`;
+                  } else if (t.locationLat) {
+                      locationStr = `<br/><span style="margin-top:3px; display:inline-block">📍 ${t.locationAddress || 'Destino O.S.'}</span> <br/><span style="color:#FFF8F0">🧭 Lat: ${parseFloat(t.locationLat).toFixed(5)}, Lng: ${parseFloat(t.locationLng).toFixed(5)}</span>`;
+                  }
+                  gpsComplement = locationStr;
+              }
+
+              displayVal = `
+                <div class="pdf-photo-card" style="margin-top: 8px; max-width: 350px; background: #EA580C; border-radius: 8px; border: 1px solid #c2410c; overflow: hidden; display: flex; flex-direction: column;">
+                   <img src="${val.split('?')[0]}" class="pdf-photo-img" style="border-radius: 0; width: 100%; height: auto; min-height: 180px; object-fit: cover; display: block;" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
+                   ${gpsComplement || val.includes('live') || fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition' ? `
+                   <div style="background: #EA580C; color: #fff; padding: 10px 12px; font-size: 8px; font-weight: 700; line-height: 1.4; box-sizing: border-box; font-family: monospace;">
+                      🕒 ${timestamp}
+                      ${gpsComplement}
+                   </div>` : ''}
+                </div>`;
               }
           } else if (typeof val === 'boolean') {
               displayVal = val ? '<span class="pdf-pill">Sim</span>' : '<span class="pdf-pill" style="background:#ef4444">Não</span>';
@@ -1801,7 +1844,7 @@ window.printReport = async function() {
       <div style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
         <ion-icon name="document-text-outline" style="font-size:16px; color:#94a3b8"></ion-icon>
         <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
-        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada' }[t.status]||t.status||'—'}</span>
+        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
       </div>
 
       <!-- 3-column cards -->

@@ -33,14 +33,16 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 // ── Mini card ─────────────────────────────────────────────────────────────────
-const MediaCard = React.memo(({ item, t, onDelete, onPress }: {
+const MediaCard = React.memo(({ item, t, onDelete, onPress, operatorName }: {
   item: MediaItem; t: any;
   onDelete: (id: string) => void;
   onPress: (item: MediaItem) => void;
+  operatorName?: string;
 }) => {
   const tagColor = TAG_COLORS[item.tag || ''] ?? TAG_COLORS.OTHER;
   const stampLines: string[] = [];
   if (item.stampedDatetime) stampLines.push(new Date(item.createdAt).toLocaleString('pt-BR'));
+  if (operatorName) stampLines.push(operatorName);
   if (item.stampedGeo && item.address) stampLines.push(`\u{1F4CD} ${item.address}`);
   if (item.stampedGeo && item.latitude) stampLines.push(`${item.latitude.toFixed(4)}, ${item.longitude?.toFixed(4)}`);
 
@@ -80,7 +82,7 @@ const MediaCard = React.memo(({ item, t, onDelete, onPress }: {
             onPress={(e) => { e.stopPropagation?.(); onDelete(item.id); }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="close-circle" size={18} color="#fff" />
+            <Ionicons name="trash" size={15} color="#fff" />
           </TouchableOpacity>
         </View>
         <View style={S.cardMeta}>
@@ -260,8 +262,8 @@ export function MediaModule({ assetId }: { assetId: string }) {
   }, [viewItem, editDesc, editTag, assetId, load]);
 
   const renderItem = useCallback(({ item }: { item: MediaItem }) => (
-    <MediaCard item={item} t={t} onDelete={handleDelete} onPress={setViewItem} />
-  ), [t, handleDelete]);
+    <MediaCard item={item} t={t} onDelete={handleDelete} onPress={setViewItem} operatorName={user?.name} />
+  ), [t, handleDelete, user?.name]);
 
   const keyExtractor = useCallback((m: MediaItem) => m.id, []);
 
@@ -271,6 +273,7 @@ export function MediaModule({ assetId }: { assetId: string }) {
     return (
       <View style={S.viewerStamp} pointerEvents="none">
         {item.stampedDatetime && <Text style={S.viewerStampTxt}>🕐 {new Date(item.createdAt).toLocaleString('pt-BR')}</Text>}
+        {user?.name && <Text style={S.viewerStampTxt}>{user.name}</Text>}
         {item.stampedGeo && item.address && <Text style={S.viewerStampTxt}>📍 {item.address}</Text>}
         {item.stampedGeo && item.latitude && <Text style={[S.viewerStampTxt, { opacity: 0.8 }]}>{item.latitude.toFixed(6)}, {item.longitude?.toFixed(6)}</Text>}
       </View>
@@ -538,8 +541,8 @@ const S = StyleSheet.create({
   thumbWrap: { position: 'relative' },
   thumb: { width: '100%', height: CARD * 0.78 },
   videoBox: { justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceLow },
-  stampOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 5, paddingVertical: 4, gap: 1 },
-  stampTxt: { color: '#fff', fontSize: 7.5, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  stampOverlay: { position: 'absolute', bottom: 0, left: 0, backgroundColor: 'rgba(255,165,0,0.6)', paddingHorizontal: 5, paddingVertical: 4, gap: 1, alignItems: 'flex-start' },
+  stampTxt: { color: '#fff', fontSize: 7.5, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'left' },
   playOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
   tagBadge: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   tagBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: '800' },
@@ -559,8 +562,8 @@ const S = StyleSheet.create({
   vBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   viewerContent: { flex: 1, justifyContent: 'center' },
   viewerImg: { width: '100%', flex: 1 },
-  viewerStamp: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
-  viewerStampTxt: { color: '#fff', fontSize: 12, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  viewerStamp: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255,165,0,0.65)', paddingHorizontal: 14, paddingVertical: 10, gap: 4, alignItems: 'flex-start' },
+  viewerStampTxt: { color: '#fff', fontSize: 12, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'left' },
   viewerInfo: { paddingHorizontal: 20, paddingTop: 12, backgroundColor: 'rgba(0,0,0,0.85)', paddingBottom: 16 },
   viewerDesc: { color: '#E5E7EB', fontSize: 14, lineHeight: 20 },
   viewerTagBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },

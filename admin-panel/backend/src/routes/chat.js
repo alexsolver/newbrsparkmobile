@@ -46,15 +46,26 @@ router.post('/contacts/request', async (req, res) => {
       }
     });
 
-    // Create a Notification so the Bell icon shows it!
-    await prisma.notification.create({
-      data: {
-        userId: userExists.id,
-        title: 'Novo Pedido de Contato',
-        body: `${req.user.name || email} enviou uma solicitação de chat corporativo.`,
-        category: 'alert'
+    // Disparar Push Notification se o destinatário tiver token
+    try {
+      if (userExists) {
+        const pushTokens = await prisma.pushToken.findMany({ where: { userId: userExists.id } });
+        for (const pt of pushTokens) {
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: pt.token,
+              sound: 'default',
+              title: '💬 Novo Pedido de Contato',
+              body: `${req.user.name || email} quer se conectar com você.`
+            })
+          });
+        }
       }
-    });
+    } catch (pushErr) {
+      console.error('[CHAT] Falha ao enviar Push Expo:', pushErr.message);
+    }
 
     res.json({ success: true, contact });
   } catch (err) {

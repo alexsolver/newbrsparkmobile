@@ -1,5 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import { colors } from '../src/theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
 import { ApiService } from '../src/services/api';
@@ -48,17 +50,19 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
           router.replace('/auth/onboarding' as any);
         } else {
           const isTech = user.technicianProfile || user.role === 'TECHNICIAN';
-          if (isTech) {
-            router.replace('/(tabs)/agenda' as any);
-          } else {
-            router.replace('/(tabs)' as any);
-          }
+          router.replace('/(tabs)' as any);
         }
       });
     }
   }, [user, loading, segments]);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
 
   return <>{children}</>;
 }

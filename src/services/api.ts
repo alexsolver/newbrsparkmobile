@@ -3,7 +3,7 @@ import { getSyncQueue, clearSyncQueueItem, saveAssetsLocal, saveConfigLocal, sav
 import { apiFetch, API_BASE } from './auth';
 import { fullSync } from './syncService';
 
-export { API_BASE };
+export { API_BASE, apiFetch };
 
 const PROVIDERS_CACHE_MAX = 50;
 

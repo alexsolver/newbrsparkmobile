@@ -84,6 +84,40 @@ router.post('/end/:taskId', async (req, res) => {
   }
 });
 
+// ─── POST /api/tracking/pause/:taskId ──────────────────────────────────────────
+router.post('/pause/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
+    if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    const meta = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    await prisma.checklistExecution.update({
+      where: { id: taskId },
+      data: { metadata: { ...meta, trackingPaused: true } }
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/tracking/resume/:taskId ──────────────────────────────────────────
+router.post('/resume/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
+    if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    const meta = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    await prisma.checklistExecution.update({
+      where: { id: taskId },
+      data: { metadata: { ...meta, trackingPaused: false } }
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/tracking/:token ─────────────────────────────────────────────────
 // FULLY PUBLIC — no auth required.
 // Returns real-time technician position, ETA, name, avatar, service info.
@@ -204,6 +238,7 @@ router.get('/:token', async (req, res) => {
 
       // Status
       isEnded,
+      isPaused:  !!meta.trackingPaused,
       endedAt:   meta.trackingEndedAt    || null,
       startedAt: meta.trackingStartedAt  || null,
       expiresAt: meta.trackingExpiredAt  || null,

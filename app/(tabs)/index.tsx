@@ -119,6 +119,10 @@ export default function DashboardScreen() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState<boolean>(false);
+  const [routeMapCenterObj, setRouteMapCenterObj] = useState<{lat: number, lng: number} | null>(null);
+  const [osrmRouteCoords, setOsrmRouteCoords] = useState<{latitude: number, longitude: number}[]>([]);
+  const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
     const pendentes = providerTasks.filter(t => {
@@ -156,6 +160,46 @@ export default function DashboardScreen() {
             const val = durList[index + 1];
             newDurs[p.id] = (val !== null && val !== undefined) ? val : 999999;
         });
+
+        const sortedPendentes = [...pendentes].sort((a,b) => {
+           const d1 = newDurs[a.id] ?? 999999;
+           const d2 = newDurs[b.id] ?? 999999;
+           if (mode === 'OSRM_SLA_ROUTE') {
+               const getScore = (item: any, durationSecs: number) => {
+                   const durationMins = durationSecs / 60;
+                   if (!item.dueDate) return durationMins;
+                   const msToDue = new Date(item.dueDate).getTime() - Date.now();
+                   const minsToDue = msToDue / 60000;
+                   let urgencyDiscount = 0;
+                   if (minsToDue < 0) urgencyDiscount = 999999;
+                   else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
+                   else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
+                   return durationMins - urgencyDiscount;
+               };
+               return getScore(a, d1) - getScore(b, d2);
+           }
+           return d1 - d2;
+        });
+
+        const routePairs = [`${location.coords.longitude},${location.coords.latitude}`];
+        sortedPendentes.forEach(p => routePairs.push(`${p.locationLng},${p.locationLat}`));
+        try {
+            const routeUrl = `https://router.project-osrm.org/route/v1/driving/${routePairs.join(';')}?overview=full&geometries=geojson`;
+            const routeRes = await fetch(routeUrl);
+            const routeData = await routeRes.json();
+            if (routeData.code === 'Ok' && routeData.routes && routeData.routes[0]) {
+                const coordsArray = routeData.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
+                    latitude: coord[1],
+                    longitude: coord[0]
+                }));
+                setOsrmRouteCoords(coordsArray);
+            } else {
+                setOsrmRouteCoords([]);
+            }
+        } catch (e) {
+            console.warn("Could not fetch route geometry: ", e);
+            setOsrmRouteCoords([]);
+        }
 
         setOsrmDurations(newDurs);
         setProviderSortMode(mode);
@@ -292,6 +336,11 @@ export default function DashboardScreen() {
          try { acceptedTasks = JSON.parse(accStr); } catch(e) {}
          if (!Array.isArray(acceptedTasks)) acceptedTasks = [];
          
+         const rejStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+         let rejectedTasks: string[] = [];
+         try { rejectedTasks = JSON.parse(rejStr); } catch(e) {}
+         if (!Array.isArray(rejectedTasks)) rejectedTasks = [];
+         
          const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
          let outboxTasks = [];
          try { outboxTasks = JSON.parse(outboxStr); } catch(e){}
@@ -323,6 +372,7 @@ export default function DashboardScreen() {
          
          const pt_filtered = combinedEvents.filter((e: any) => {
              if (e.source !== 'CHECKLIST' && e.category !== 'TASK') return false;
+             if (rejectedTasks.includes(String(e.id))) return false;
              return true; 
          }).filter((e: any) => {
              const isPurged = executedTasksRaw.find((raw:any) => (typeof raw === 'string' ? raw : raw.id) === String(e.id)) 
@@ -1296,15 +1346,7 @@ export default function DashboardScreen() {
                   {isOptimizingRoute && providerSortMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
                   <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_SLA_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Rota + Vencimento</Text>
                </TouchableOpacity>
-               {(providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') && providerTab === 'PENDING' && (
-                 <TouchableOpacity 
-                   onPress={() => setShowRouteMap(true)}
-                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginLeft: 8 }}
-                 >
-                   <Ionicons name="map" size={16} color="#38BDF8" style={{ marginRight: 6 }} />
-                   <Text style={{ fontSize: 11, fontWeight: '900', color: '#38BDF8', textTransform: 'uppercase' }}>Ver no Mapa</Text>
-                 </TouchableOpacity>
-               )}
+               
             </ScrollView>
           </View>
 
@@ -1487,9 +1529,16 @@ export default function DashboardScreen() {
                        <View style={{ flex: 1, width: 2, backgroundColor: index === 0 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706'), opacity: 0.3 }} />
                        
                        {/* Node */}
-                       <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF2F2' : '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706' }}>
+                       <TouchableOpacity 
+                         onPress={() => {
+                            const coords = order.locationLat && order.locationLng ? { latitude: Number(order.locationLat), longitude: Number(order.locationLng) } : null;
+                            if (coords) setRouteMapCenterObj({ lat: coords.latitude, lng: coords.longitude });
+                            else setRouteMapCenterObj(null);
+                            setShowRouteMap(true);
+                         }}
+                         style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF2F2' : '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706' }}>
                           <Text style={{ color: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706', fontWeight: '900', fontSize: 13 }}>{index + 1}</Text>
-                       </View>
+                       </TouchableOpacity>
                        
                        {/* Lower Line segment */}
                        <View style={{ flex: 1, width: 2, backgroundColor: index === arr.length - 1 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706'), opacity: 0.3 }} />
@@ -1598,6 +1647,7 @@ export default function DashboardScreen() {
         animationType="slide"
         onRequestClose={() => setTaskModalVisible(false)}
       >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setTaskModalVisible(false)} />
           <View style={[styles.sortSheet, { backgroundColor: C.cardWhite, paddingHorizontal: 24, paddingBottom: 48, maxHeight: Dimensions.get('window').height * 0.85 }]}>
@@ -1647,74 +1697,112 @@ export default function DashboardScreen() {
                   </View>
 
                   {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') && !selectedTask.isAccepted && (
-                  <View style={{ flexDirection: 'row', gap: 12 }}>
-                     <TouchableOpacity 
-                        onPress={() => {
-                           setTaskModalVisible(false);
-                           Alert.alert('Rejeitada', 'Esta atividade foi movida para o fim da fila.');
-                        }}
-                        style={{ flex: 1, backgroundColor: '#FEF2F2', paddingVertical: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#FDE8E8' }}>
-                         <Text style={{ color: '#EF4444', fontWeight: '800', fontSize: 15 }}>Rejeitar</Text>
-                     </TouchableOpacity>
-
-                     <TouchableOpacity 
-                        onPress={async () => {
-                           if (!selectedTask.refId) {
-                               Alert.alert("Erro", "Formulário ausente na OS.");
-                               return;
-                           }
-                           
-                           // Move para "Aceita" salvando localmente
-                           const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
-                           let acceptedLocal: string[] = [];
-                           try { acceptedLocal = JSON.parse(accStr); } catch(e) {}
-                           if (!Array.isArray(acceptedLocal)) acceptedLocal = [];
-                           
-                           if (!acceptedLocal.includes(String(selectedTask.id))) {
-                               acceptedLocal.push(String(selectedTask.id));
-                               await AsyncStorage.setItem('@brspark_accepted_tasks', JSON.stringify(acceptedLocal));
-                           }
-                           
-                           // Atualiza a view (mantém a OS no Pending, mas seta estado para aceito)
-                           setSelectedTask((prev: any) => ({ ...prev, isAccepted: true }));
-                           loadData(false);
-                           
-                           Alert.alert(
-                               "OS Aceita!", 
-                               "Excelente! Deseja iniciar a execução da atividade agora mesmo?",
-                               [
-                                   {
-                                      text: "Agora Não",
-                                      style: "cancel",
-                                      onPress: () => {
-                                          setTaskModalVisible(false);
-                                      }
-                                   },
-                                   {
-                                      text: "Sim, Iniciar Agora",
-                                      style: "default",
-                                      onPress: async () => {
-                                          // Mesma lógica de Iniciar
-                                          const _ip = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-                                          let _ipArr: string[] = [];
-                                          try { _ipArr = JSON.parse(_ip); } catch(e) {}
-                                          if (!Array.isArray(_ipArr)) _ipArr = [];
-                                          if (!_ipArr.includes(String(selectedTask.id))) {
-                                             _ipArr.push(String(selectedTask.id));
-                                             await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(_ipArr));
-                                          }
-                                          setInprogressIds(prev => { const s = new Set(prev); s.add(String(selectedTask.id)); return s; });
-                                          setTaskModalVisible(false);
-                                          router.push({ pathname: '/checklist/[id]', params: { id: selectedTask.refId, taskId: selectedTask.id } } as any);
-                                      }
-                                   }
-                               ]
-                           );
-                        }}
-                        style={{ flex: 2, backgroundColor: '#059669', paddingVertical: 16, borderRadius: 14, alignItems: 'center', shadowColor: '#059669', shadowOffset: {width:0,height:4}, shadowOpacity:0.3, shadowRadius:8, elevation: 4 }}>
-                         <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Aceitar Ordem</Text>
-                     </TouchableOpacity>
-                  </View>
+                  <>
+                     {rejectingTaskId === selectedTask.id ? (
+                        <View style={{ backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#FCA5A5' }}>
+                           <Text style={{ fontSize: 13, fontWeight: '800', color: '#B91C1C', marginBottom: 8, textTransform: 'uppercase' }}>Motivo da Rejeição</Text>
+                           <TextInput 
+                              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#FECACA', minHeight: 80, textAlignVertical: 'top', color: '#1E293B' }}
+                              placeholder="Especifique o motivo detalhadamente..."
+                              multiline
+                              value={rejectReason}
+                              onChangeText={setRejectReason}
+                           />
+                           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                              <TouchableOpacity 
+                                 onPress={() => { setRejectingTaskId(null); setRejectReason(""); }}
+                                 style={{ flex: 1, backgroundColor: '#fff', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#FECACA' }}
+                              >
+                                 <Text style={{ color: '#7F1D1D', fontWeight: '800' }}>Voltar</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity 
+                                 onPress={async () => {
+                                    if (rejectReason.trim().length < 10) return Alert.alert("Atenção", "Por favor, explique o motivo da rejeição de forma mais detalhada.");
+                                    try {
+                                        await apiFetch(`/api/operations/tasks/${selectedTask.id}/reject`, {
+                                            method: 'POST',
+                                            body: JSON.stringify({ reason: rejectReason })
+                                        });
+                                        const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+                                        let rejArr: string[] = [];
+                                        try { rejArr = JSON.parse(rStr); } catch(e) {}
+                                        if (!Array.isArray(rejArr)) rejArr = [];
+                                        if (!rejArr.includes(String(selectedTask.id))) {
+                                            rejArr.push(String(selectedTask.id));
+                                            await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
+                                        }
+                                        setRejectingTaskId(null);
+                                        setRejectReason("");
+                                        setTaskModalVisible(false);
+                                        loadData(false);
+                                        Alert.alert("Recusada", "A atividade foi rejeitada e retirada da sua fila.");
+                                    } catch (e: any) {
+                                        Alert.alert("Erro", "Falha ao rejeitar a atividade: " + e.message);
+                                    }
+                                 }}
+                                 style={{ flex: 1, backgroundColor: '#DC2626', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                              >
+                                 <Text style={{ color: '#fff', fontWeight: '800' }}>Confirmar</Text>
+                              </TouchableOpacity>
+                           </View>
+                        </View>
+                     ) : (
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                           <TouchableOpacity 
+                              onPress={() => { setRejectingTaskId(selectedTask.id); setRejectReason(""); }}
+                              style={{ flex: 1, backgroundColor: '#FEF2F2', paddingVertical: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#FDE8E8' }}
+                           >
+                               <Text style={{ color: '#EF4444', fontWeight: '800', fontSize: 15 }}>Rejeitar</Text>
+                           </TouchableOpacity>
+                           <TouchableOpacity 
+                              onPress={async () => {
+                                 if (!selectedTask.refId) {
+                                     Alert.alert("Erro", "Formulário ausente na OS.");
+                                     return;
+                                 }
+                                 
+                                 const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+                                 let acceptedLocal: string[] = [];
+                                 try { acceptedLocal = JSON.parse(accStr); } catch(e) {}
+                                 if (!Array.isArray(acceptedLocal)) acceptedLocal = [];
+                                 
+                                 if (!acceptedLocal.includes(String(selectedTask.id))) {
+                                     acceptedLocal.push(String(selectedTask.id));
+                                     await AsyncStorage.setItem('@brspark_accepted_tasks', JSON.stringify(acceptedLocal));
+                                 }
+                                 
+                                 setSelectedTask((prev: any) => ({ ...prev, isAccepted: true }));
+                                 loadData(false);
+                                 
+                                 Alert.alert(
+                                     "OS Aceita!", 
+                                     "Excelente! Deseja iniciar a execução da atividade agora mesmo?",
+                                     [
+                                         { text: "Agora Não", style: "cancel", onPress: () => { setTaskModalVisible(false); } },
+                                         { text: "Sim, Iniciar Agora", style: "default", onPress: async () => {
+                                               const _ip = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+                                               let _ipArr: string[] = [];
+                                               try { _ipArr = JSON.parse(_ip); } catch(e) {}
+                                               if (!Array.isArray(_ipArr)) _ipArr = [];
+                                               if (!_ipArr.includes(String(selectedTask.id))) {
+                                                  _ipArr.push(String(selectedTask.id));
+                                                  await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(_ipArr));
+                                               }
+                                               setInprogressIds(prev => { const s = new Set(prev); s.add(String(selectedTask.id)); return s; });
+                                               setTaskModalVisible(false);
+                                               router.push({ pathname: '/checklist/[id]', params: { id: selectedTask.refId, taskId: selectedTask.id } } as any);
+                                           }
+                                         }
+                                     ]
+                                 );
+                              }}
+                              style={{ flex: 2, backgroundColor: '#059669', paddingVertical: 16, borderRadius: 14, alignItems: 'center', shadowColor: '#059669', shadowOffset: {width:0,height:4}, shadowOpacity:0.3, shadowRadius:8, elevation: 4 }}
+                           >
+                               <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Aceitar Ordem</Text>
+                           </TouchableOpacity>
+                        </View>
+                     )}
+                  </>
                   )}
 
                   {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') && selectedTask.isAccepted && (
@@ -1779,6 +1867,7 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Rota Map Modal Modal */}
@@ -1794,23 +1883,32 @@ export default function DashboardScreen() {
               </TouchableOpacity>
            </View>
 
-           <MapView
-             provider={PROVIDER_DEFAULT}
-             style={{ flex: 1 }}
-             initialRegion={{
-               latitude: providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.asset?.latitude)?.asset?.latitude || -23.5505,
-               longitude: providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.asset?.longitude)?.asset?.longitude || -46.6333,
-               latitudeDelta: 0.1,
-               longitudeDelta: 0.1
-             }}
+            {showRouteMap && (
+             <MapView
+               key={`map-${showRouteMap ? 'on' : 'off'}-${routeMapCenterObj?.lat || 'default'}`}
+               provider={PROVIDER_DEFAULT}
+               style={{ flex: 1 }}
+               initialRegion={{
+                 latitude: routeMapCenterObj?.lat || (providerTasks.find(t => {
+                     if (t.status !== 'PENDING' && t.status !== 'RECEIVED') return false;
+                     return !!(t.locationLat && t.locationLng);
+                 }) ? Number(providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.locationLat && t.locationLng)?.locationLat) || -23.5505 : -23.5505),
+                 longitude: routeMapCenterObj?.lng || (providerTasks.find(t => {
+                     if (t.status !== 'PENDING' && t.status !== 'RECEIVED') return false;
+                     return !!(t.locationLat && t.locationLng);
+                 }) ? Number(providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.locationLat && t.locationLng)?.locationLng) || -46.6333 : -46.6333),
+                 latitudeDelta: routeMapCenterObj ? 0.02 : 0.1,
+                 longitudeDelta: routeMapCenterObj ? 0.02 : 0.1
+               }}
              showsUserLocation
            >
              {providerTasks.filter(t => {
                let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
                if (s === 'RECEIVED') s = 'PENDING';
-               return s === 'PENDING' && t.asset?.latitude && t.asset?.longitude;
+               if (s !== 'PENDING') return false;
+               return !!(t.locationLat && t.locationLng);
              }).map((task, index) => {
-                const coords = { latitude: task.asset.latitude, longitude: task.asset.longitude };
+                const coords = { latitude: Number(task.locationLat), longitude: Number(task.locationLng) };
                 return (
                    <Marker key={`rm-${task.id}`} coordinate={coords} zIndex={100 - index}>
                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 }}>
@@ -1831,17 +1929,26 @@ export default function DashboardScreen() {
                 );
              })}
              
-             <Polyline 
-               coordinates={providerTasks.filter(t => {
-                 let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-                 if (s === 'RECEIVED') s = 'PENDING';
-                 return s === 'PENDING' && t.asset?.latitude && t.asset?.longitude;
-               }).map(t => ({ latitude: t.asset.latitude, longitude: t.asset.longitude }))} 
-               strokeColor="#3B82F6" 
-               strokeWidth={5} 
-               lineDashPattern={[15, 10]}
-             />
+             {osrmRouteCoords.length > 0 ? (
+               <Polyline 
+                 coordinates={osrmRouteCoords} 
+                 strokeColor="#3B82F6" 
+                 strokeWidth={5} 
+               />
+             ) : (
+               <Polyline 
+                 coordinates={providerTasks.filter(t => {
+                   let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
+                   if (s === 'RECEIVED') s = 'PENDING';
+                   return s === 'PENDING' && !!(t.locationLat && t.locationLng);
+                 }).map(t => ({ latitude: Number(t.locationLat), longitude: Number(t.locationLng) }))} 
+                 strokeColor="#3B82F6" 
+                 strokeWidth={2} 
+                 lineDashPattern={[15, 10]}
+               />
+             )}
            </MapView>
+            )}
         </View>
       </Modal>
 

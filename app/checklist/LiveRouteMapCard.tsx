@@ -9,6 +9,7 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
 import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { apiFetch } from '../../src/services/api';
 
 interface Props {
   route: number[][];      // [[lat,lng], ...]
@@ -17,6 +18,7 @@ interface Props {
   targetLoc?: { lat?: number | null; lng?: number | null };
   etaMinutes?: number | null;
   onEndTransit?: () => void;
+  taskId?: string | null;
 }
 
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
@@ -155,7 +157,7 @@ const etaStyles = StyleSheet.create({
 
 const { width, height } = Dimensions.get('window');
 
-export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit }: Props) {
+export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit, taskId }: Props) {
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
@@ -247,8 +249,10 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const handlePauseResume = () => {
     if (isPaused) {
       routeTracker.resume();
+      if (taskId) apiFetch(`/api/tracking/resume/${taskId}`, { method: 'POST' }).catch(()=>{});
     } else {
       routeTracker.pause();
+      if (taskId) apiFetch(`/api/tracking/pause/${taskId}`, { method: 'POST' }).catch(()=>{});
     }
   };
 
@@ -357,7 +361,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             <Polyline
               coordinates={route.map(c => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#ea580c"
-              strokeWidth={5}
+              strokeWidth={2}
               lineDashPattern={[12, 8]}
             />
           )}
@@ -391,7 +395,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           {/* Render point-to-point dynamic route line and target marker */}
           {dynamicRoute && dynamicRoute.length >= 2 && (
              <>
-               <Polyline coordinates={dynamicRoute.map(c => ({ latitude: c[0], longitude: c[1] }))} strokeColor="#3b82f6" strokeWidth={5} lineDashPattern={[8, 8]} />
+               <Polyline coordinates={dynamicRoute.map(c => ({ latitude: c[0], longitude: c[1] }))} strokeColor="#3b82f6" strokeWidth={2} lineDashPattern={[8, 8]} />
                <Marker coordinate={{ latitude: dynamicRoute[dynamicRoute.length - 1][0], longitude: dynamicRoute[dynamicRoute.length - 1][1] }} title="Destino">
                  <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
                    <FontAwesome5 name="flag-checkered" size={12} color="#fff" />

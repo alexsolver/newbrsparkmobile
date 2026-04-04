@@ -110,4 +110,38 @@ router.delete('/tasks/:id', async (req, res) => {
   }
 });
 
+// ─── POST /api/operations/tasks/:id/reject ─────────────────────────
+// Rejects an OS
+router.post('/tasks/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const ex = await prisma.checklistExecution.findUnique({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
+
+    let meta = typeof ex.metadata === 'object' && ex.metadata ? ex.metadata : {};
+    meta = { ...meta, rejectionReason: reason, rejectedAt: new Date().toISOString() };
+
+    await prisma.checklistExecution.update({ 
+       where: { id },
+       data: { status: 'REJECTED', metadata: meta }
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        action:   'OS_REJECTED',
+        resource: 'ChecklistExecution',
+        category: 'DATA',
+        metadata: { executionId: id, ownerEmail: ex.ownerEmail, reason },
+      }
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[operations/tasks/reject POST]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

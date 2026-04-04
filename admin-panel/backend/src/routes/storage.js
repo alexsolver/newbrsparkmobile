@@ -397,4 +397,121 @@ router.get('/config', async (_req, res) => {
   }
 });
 
+// ── SYNC WORKER: Stranded Local Files -> Cloud ─────────────
+let isSyncing = false;
+async function syncStrandedFiles() {
+  if (isSyncing) return;
+  isSyncing = true;
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const integration = await getStorageIntegration();
+    if (!integration) { isSyncing = false; return; }
+    
+    let dbxToken = null;
+    if (integration.provider === 'dropbox') {
+      const [appKey, ...secretParts] = (integration.apiKey || '').split(':');
+      const appSecret = secretParts.join(':');
+      const refreshToken = (integration.description?.match(/refresh_token:(\S+)/) || [])[1];
+      if (appKey && appSecret && refreshToken) {
+         dbxToken = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken.trim());
+      } else { isSyncing = false; return; }
+    }
+
+    const localDir = path.join(__dirname, '../../public/uploads/storage');
+    if (!fs.existsSync(localDir)) { isSyncing = false; return; }
+
+    function getFiles(dir, filesList = []) {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          getFiles(fullPath, filesList);
+        } else {
+          filesList.push(fullPath);
+        }
+      }
+      return filesList;
+    }
+
+    const allFiles = getFiles(localDir);
+    
+    for (const fullPath of allFiles) {
+      if (!fullPath.includes('.')) continue; // ignore hidden or weird files
+      const remotePath = fullPath.replace(localDir + '/', '');
+      const buffer = fs.readFileSync(fullPath);
+      let newUrl = null;
+
+      try {
+        if (integration.provider === 'r2') {
+          const res = await uploadToR2(buffer, integration, remotePath, 'application/octet-stream');
+          newUrl = res.url;
+        } else if (integration.provider === 's3') {
+          const res = await uploadToS3(buffer, integration, remotePath, 'application/octet-stream');
+          newUrl = res.url;
+        } else if (integration.provider === 'dropbox') {
+          const rootFolder = integration.baseUrl || '/BrSpark';
+          const dropboxPath = `${rootFolder}/${remotePath}`.replace(/\\/g, '/').replace(/\/\//g, '/');
+          await uploadToDropbox(buffer, dbxToken, dropboxPath);
+          newUrl = await getDropboxDirectLink(dbxToken, dropboxPath);
+        }
+        
+        if (newUrl) {
+          // Update DB ChecklistExecutions
+          const executions = await prisma.checklistExecution.findMany({
+             where: { responses: { not: null } }
+          });
+          for (const ex of executions) {
+             const respStr = JSON.stringify(ex.responses || {});
+             // Local path in URL looks like /uploads/storage/media/xyz.jpg
+             if (respStr.includes('uploads/storage/' + remotePath)) {
+                // regex to replace http(s)://.../uploads/storage/PATH -> newUrl
+                const safeRemotePath = remotePath.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const newRespStr = respStr.replace(new RegExp(`http[^"]*?uploads\\/storage\\/${safeRemotePath}`, 'g'), newUrl);
+                await prisma.checklistExecution.update({
+                   where: { id: ex.id },
+                   data: { responses: JSON.parse(newRespStr) }
+                });
+                console.log(`[SYNC-WORKER] Re-writed URL in DB OS: ${ex.id}`);
+             }
+          }
+          // Delete local file to prevent double-sync
+          fs.unlinkSync(fullPath);
+          console.log(`[SYNC-WORKER] File sent to cloud & deleted locally: ${remotePath}`);
+        }
+      } catch (uploadErr) {
+        console.warn(`[SYNC-WORKER] Failed to upload ${remotePath}: ${uploadErr.message}`);
+      }
+    }
+    
+    // Auto cleanup empty dirs (max depth 3 is enough to clean structure)
+    function cleanEmptyFoldersRecursively(folder) {
+        if (!fs.existsSync(folder)) return;
+        if (!fs.statSync(folder).isDirectory()) return;
+        let files = fs.readdirSync(folder);
+        if (files.length > 0) {
+            files.forEach(file => cleanEmptyFoldersRecursively(path.join(folder, file)));
+            files = fs.readdirSync(folder); // Check again after recursive
+        }
+        if (files.length === 0 && folder !== localDir) fs.rmdirSync(folder);
+    }
+    cleanEmptyFoldersRecursively(localDir);
+    
+  } catch (err) {
+    console.error('[SYNC-WORKER] Critical error:', err.message);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// Start watching every 10 minutes
+setInterval(syncStrandedFiles, 10 * 60 * 1000);
+
+// Manual endpoint
+router.post('/sync-local', async (req, res) => {
+  if (isSyncing) return res.json({ status: 'already_running' });
+  syncStrandedFiles(); // Do not await
+  res.json({ status: 'started' });
+});
+
 module.exports = router;

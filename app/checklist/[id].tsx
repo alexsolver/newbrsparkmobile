@@ -104,7 +104,9 @@ export default function ChecklistEngine() {
           
           let meta = { lat: 0, lng: 0, address: "Localização Desconhecida", ip: "Desconhecido" };
           try {
-             const ipReq = await fetch('https://api64.ipify.org/?format=json');
+             // Forçando api.ipify.org para retornar o IP clássico (IPv4 - ex: 177.34.20.1)
+             // Sem o "64" ele não trará o IP de nova geração (IPv6 - com letras e dois pontos)
+             const ipReq = await fetch('https://api.ipify.org/?format=json');
              const ipJson = await ipReq.json();
              if (ipJson.ip) meta.ip = ipJson.ip;
           } catch(e) {}
@@ -179,7 +181,7 @@ export default function ChecklistEngine() {
               return false;
           }
       }
-      handleInput(fieldId, imgUri + "?live=true");
+      handleInput(fieldId, imgUri);
       return true;
   };
 
@@ -224,11 +226,29 @@ export default function ChecklistEngine() {
                      const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
                      if (!res.canceled && res.assets && res.assets.length > 0) {
                          const imgAsset = res.assets[0];
+
+                         let gpsQuery = "?live=true";
+                         try {
+                             const loc = await Location.getLastKnownPositionAsync({}) || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                             if (loc && loc.coords) {
+                                 const { latitude, longitude } = loc.coords;
+                                 gpsQuery += `&lat=${latitude}&lng=${longitude}`;
+                                 try {
+                                     const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
+                                     if (rev && rev.length > 0) {
+                                        const r = rev[0];
+                                        const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
+                                        gpsQuery += `&addr=${encodeURIComponent(addr)}`;
+                                     }
+                                 } catch(e) {}
+                             }
+                         } catch(e) {}
+
                          if (type === 'facial_recognition') {
-                             const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri);
+                             const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri + gpsQuery);
                              if (!ok) return;
                          } else {
-                             handleInput(fieldId, imgAsset.uri + "?live=true");
+                             handleInput(fieldId, imgAsset.uri + gpsQuery);
                          }
                      }
                  } catch (err: any) {
@@ -505,6 +525,22 @@ export default function ChecklistEngine() {
          });
       }
   }, [taskId, isReadOnly]);
+
+  // Sincronização em tempo real das respostas (Debounced)
+  useEffect(() => {
+     if (isReadOnly || !taskId || Object.keys(responses).length === 0) return;
+     
+     const timeoutId = setTimeout(() => {
+         apiFetch(`/api/checklists/executions/${taskId}/status`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ responses })
+         }).catch(() => {});
+     }, 2000); // 2 second debounce
+     
+     return () => clearTimeout(timeoutId);
+  }, [responses, taskId, isReadOnly]);
+
 
   // Poller to update ETA in real-time — fetches directly from server so it works
   // even while the user is inside this screen (the home screen pullTasks doesn't run here)
@@ -1223,6 +1259,7 @@ export default function ChecklistEngine() {
                   zoneType={currentTask?.locationZoneType}
                   targetLoc={{ lat: currentTask?.locationLat, lng: currentTask?.locationLng }}
                   etaMinutes={currentTask?.etaMinutes}
+                  taskId={typeof taskId === 'string' ? taskId : undefined}
                   onEndTransit={endField ? () => {
                       const hasValue = !!responses[endField.id];
                       if (!hasValue) {

@@ -382,7 +382,18 @@
     updateMap(d);
     updateStatus(d);
     updateActions(d);
-    if (d.isEnded && !arrivedShown) showArrived();
+
+    let actualArrived = false;
+    if (d.isEnded) {
+       if (d.currentLat && d.destLat && map) {
+           try {
+             const dist = map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
+             if (dist <= 300) actualArrived = true;
+           } catch(e) {}
+       }
+    }
+
+    if (d.isEnded && actualArrived && !arrivedShown) showArrived();
   }
 
   function updateTech(d) {
@@ -431,16 +442,39 @@
   }
 
   function updateEta(d) {
+    const etaVal = document.getElementById('eta-value');
     if (d.isEnded) {
-       document.getElementById('eta-value').textContent = 'Chegou';
+       let actualArrived = false;
+       if (d.currentLat && d.destLat && map) {
+           try {
+             const dist = map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
+             if (dist <= 300) actualArrived = true;
+           } catch(e) {}
+       }
+       etaVal.textContent = actualArrived ? 'Chegou' : 'Encerrado';
        return;
     }
+
+    if (d.isPaused) {
+       etaVal.textContent = 'Pausado pelo técnico';
+       etaVal.style.color = '#DC2626';
+       return;
+    } else {
+       etaVal.style.color = 'var(--text)'; // Reset color
+    }
+    
+    // Check if GPS is stale
+    if (d.gpsAgeSeconds != null && d.gpsAgeSeconds > 300) { 
+        etaVal.textContent = 'Aguardando sinal GPS...';
+        return;
+    }
+
     if (d.etaMinutes != null) {
       const h = Math.floor(d.etaMinutes / 60);
       const m = d.etaMinutes % 60;
-      document.getElementById('eta-value').textContent = h > 0 ? `${h}h ${m}m` : `${m} minutos`;
+      etaVal.textContent = h > 0 ? `${h}h ${m}m` : `${m} minutos`;
     } else {
-      document.getElementById('eta-value').textContent = 'calculando...';
+      etaVal.textContent = 'calculando...';
     }
   }
 
@@ -509,13 +543,34 @@
 
     const techFirstName = (d.techName || 'O técnico').split(' ')[0];
 
+    // Determine if REALLY arrived
+    let actualArrived = false;
     if (d.isEnded) {
-      title.textContent = `${techFirstName} chegou ao local`;
-      fill2.style.width = '100%';
-      fill3.style.width = '100%';
+       if (d.currentLat && d.destLat && map) {
+           try {
+             const dist = map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
+             if (dist <= 300) actualArrived = true;
+           } catch(e) {}
+       }
+    }
+
+    if (d.isEnded) {
+      if (actualArrived) {
+         title.textContent = `${techFirstName} chegou ao local`;
+         fill2.style.width = '100%';
+         fill3.style.width = '100%';
+      } else {
+         title.textContent = `Deslocamento Encerrado`;
+         fill2.style.width = '100%';
+         fill3.style.width = '0%';
+      }
+    } else if (d.isPaused) {
+      title.textContent = `${techFirstName} pausou o deslocamento`;
+      fill2.style.width = '60%'; 
+      fill3.style.width = '0%';
     } else {
-      title.textContent = `${techFirstName} está indo até você`;
-      fill2.style.width = '60%'; // Arbitrary completion for 'on route' 
+      title.textContent = `${techFirstName} está a caminho`;
+      fill2.style.width = '60%'; 
       fill3.style.width = '0%';
     }
   }

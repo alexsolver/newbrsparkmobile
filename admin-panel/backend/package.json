@@ -11,6 +11,9 @@
     "db:backup": "bash scripts/backup.sh manual",
     "db:seed": "node src/seed.js",
     "db:studio": "npx prisma studio",
+    "dropbox:check": "node scripts/check_dropbox.js",
+    "dropbox:exchange": "node scripts/exchange_dbx.js",
+    "dropbox:test-token": "node scripts/test_dbx.js",
     "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'"
   },
   "dependencies": {

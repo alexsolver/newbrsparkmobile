@@ -10,7 +10,7 @@ async function runEtaCron() {
     // Find all active tasks with a destination
     const activeTasks = await prisma.checklistExecution.findMany({
       where: { status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
-      select: { id: true, ownerEmail: true, locationLat: true, locationLng: true, locationZoneType: true, locationPolygon: true }
+      select: { id: true, ownerEmail: true, locationLat: true, locationLng: true, locationZoneType: true, locationPolygon: true, metadata: true }
     });
 
     if (activeTasks.length === 0) return;
@@ -21,6 +21,10 @@ async function runEtaCron() {
     const osrmBase = mapsInt?.baseUrl || 'http://router.project-osrm.org';
 
     for (const task of activeTasks) {
+      const meta = typeof task.metadata === 'object' && task.metadata ? task.metadata : {};
+      // Skip if tracking is explicitly paused or has ended successfully
+      if (meta.trackingPaused || meta.trackingEndedAt) continue;
+
       // Resolve destination coordinates
       let destLat = task.locationLat;
       let destLng = task.locationLng;
@@ -212,7 +216,7 @@ router.post('/batch', async (req, res) => {
           const ev = latestEvents[execId];
           const task = await prisma.checklistExecution.findUnique({
             where: { id: execId },
-            select: { status: true, locationLat: true, locationLng: true, locationZoneType: true, locationPolygon: true }
+            select: { status: true, locationLat: true, locationLng: true, locationZoneType: true, locationPolygon: true, metadata: true }
           });
 
           // Calcula ETA se estiver ACCEPTED ou IN_PROGRESS e tiver um lugar para ir
@@ -228,7 +232,9 @@ router.post('/batch', async (req, res) => {
              } catch(e){}
           }
 
-          if (task && (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && destLat && destLng) {
+          const meta = typeof task?.metadata === 'object' && task?.metadata ? task.metadata : {};
+
+          if (task && (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && destLat && destLng && !meta.trackingPaused && !meta.trackingEndedAt) {
             const osrmUrl = `${osrmBaseUrl}/route/v1/driving/${ev.lng},${ev.lat};${destLng},${destLat}?overview=false`;
             
             try {

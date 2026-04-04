@@ -265,7 +265,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
             <Polyline
               coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#f97316"
-              strokeWidth={4}
+              strokeWidth={2}
               lineDashPattern={[8, 4]}
             />
             {/* Start and end markers */}

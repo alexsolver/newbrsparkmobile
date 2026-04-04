@@ -162,8 +162,13 @@ export default function ProfileScreen() {
       const token = await getToken();
       const res = await fetch(`${API_BASE}/api/me/technician`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Não foi possível ativar o modo prestador.');
-      Alert.alert('Sucesso', 'Você agora é um Prestador! Reinicie o app (ou faça login novamente) para atualizar sua sessão.');
-      // Na vida real a gente já buscaria o user de novo aqui.
+      
+      setUserRole('TECHNICIAN');
+      if (user) {
+         user.technicianProfile = { id: `tech_${Date.now()}`, status: 'ACTIVE', score: 100 };
+      }
+      
+      router.push('/auth/onboarding' as any);
     } catch(e: any) {
       Alert.alert('Erro', e.message);
     } finally {
