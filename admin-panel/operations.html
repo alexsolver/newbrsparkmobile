@@ -1131,6 +1131,28 @@ function buildInfoTab(t) {
         <div class="report-field-value">${t.startedAt ? new Date(t.startedAt).toLocaleString('pt-BR') : '<span style="color:var(--text3)">Não iniciado</span>'}</div>
       </div>
       <div class="report-field">
+        <div class="report-field-label">Tempo total no formulário</div>
+        <div class="report-field-value">${(() => {
+          const r = t.responses || {};
+          const m = t.metadata || {};
+          const sec = Number(m.formFillDurationSeconds ?? m.durationSeconds ?? r.__form_fill_duration_sec);
+          if (!Number.isFinite(sec) || sec < 0) return '<span style="color:var(--text3)">—</span>';
+          const h = Math.floor(sec / 3600), mi = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+          return h > 0 ? `${h}h ${mi}m ${s}s` : `${mi}m ${s}s`;
+        })()}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Tempo com app em foco</div>
+        <div class="report-field-value">${(() => {
+          const r = t.responses || {};
+          const m = t.metadata || {};
+          const sec = Number(m.formActiveSeconds ?? r.__form_active_seconds_final);
+          if (!Number.isFinite(sec) || sec < 0) return '<span style="color:var(--text3)">—</span>';
+          const h = Math.floor(sec / 3600), mi = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+          return h > 0 ? `${h}h ${mi}m ${s}s` : `${mi}m ${s}s`;
+        })()}</div>
+      </div>
+      <div class="report-field">
         <div class="report-field-label">Sincronizado em</div>
         <div class="report-field-value ${t.syncedAt ? '' : 'empty'}">${t.syncedAt ? new Date(t.syncedAt).toLocaleString('pt-BR') : 'Pendente de sync'}</div>
       </div>
@@ -1173,7 +1195,22 @@ function buildReportTab(t) {
   // Render a single field value, handling special types
   const renderFieldValue = (val, fieldType) => {
     if (val === undefined || val === null || val === '') return '<em style="color:var(--text3)">(não respondido)</em>';
-    if (Array.isArray(val)) return val.join(', ');
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '<em style="color:var(--text3)">(não respondido)</em>';
+      return val.map((item, i) => {
+        const s = String(item);
+        const isUrl = s.startsWith('http') || s.startsWith('file://');
+        if ((fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') && isUrl) {
+          const clean = s.split('?')[0];
+          const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+          return `<div style="margin-top:8px"><img src="${clean.replace(/"/g,'%22')}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div></div>`;
+        }
+        if (isUrl) {
+          return `<div style="margin-bottom:4px"><a href="${s}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Anexo ${i+1}</a></div>`;
+        }
+        return `<span style="display:inline-block;margin:2px 4px 2px 0;padding:4px 8px;background:#f1f5f9;border-radius:6px;font-size:12px">${s.replace(/</g,'&lt;')}</span>`;
+      }).join('');
+    }
     if (typeof val === 'boolean') return val ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Sim' : '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Não';
     const str = String(val);
     // Signature: SIG_V1|meta:{...}|path1|path2|...
@@ -1247,12 +1284,27 @@ function buildReportTab(t) {
          }
       }
       
-      const hasVal = val !== undefined && val !== null && val !== '';
+      const hasVal = (() => {
+        if (val === undefined || val === null || val === '') return false;
+        if (Array.isArray(val)) return val.some(x => x !== undefined && x !== null && String(x).trim() !== '');
+        return true;
+      })();
       const displayHtml = renderFieldValue(val, field.type);
       items += `<div class="report-response-item">
         <div class="report-response-q">${field.label || field.id}</div>
         <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
       </div>`;
+      if (field.allowTechnicianComment) {
+        const ck = '__comment_' + field.id;
+        const cv = responses[ck];
+        if (cv !== undefined && cv !== null && String(cv).trim() !== '') {
+          const safe = String(cv).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          items += `<div class="report-response-item" style="margin-top:-4px">
+            <div class="report-response-q" style="font-size:10px;color:#92400e;font-weight:700">Comentário do técnico · ${field.label || field.id}</div>
+            <div class="report-response-a" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#422006;line-height:1.45">${safe}</div>
+          </div>`;
+        }
+      }
     });
     
     // Add orphaned fields (things filled in the app but missing in the current template schema)
@@ -1286,6 +1338,16 @@ function buildReportTab(t) {
   
   const fDate = (d) => d ? new Date(d).toLocaleString('pt-BR') : '<span style="color:#94a3b8;font-style:italic">Não reg.</span>';
 
+  const fillSecRep = Number(t.metadata?.formFillDurationSeconds ?? t.metadata?.durationSeconds ?? responses.__form_fill_duration_sec);
+  const activeSecRep = Number(t.metadata?.formActiveSeconds ?? responses.__form_active_seconds_final);
+  const fmtHmsRep = (sec) => {
+    if (sec == null || !Number.isFinite(sec) || sec < 0) return '—';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+  };
+
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
@@ -1304,6 +1366,8 @@ function buildReportTab(t) {
          <div style="font-size:10px;"><strong style="color:var(--text2)">Início:</strong> ${fDate(t.startedAt)}</div>
          <div style="font-size:10px;"><strong style="color:var(--text2)">Conclusão:</strong> ${fDate(t.completedAt)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Sincronização / Envio Nuvem:</strong> ${fDate(t.syncedAt)}</div>
+         <div style="font-size:10px;grid-column:1/-1;padding-top:6px;margin-top:4px;border-top:1px dashed var(--border)"><strong style="color:var(--text2)">Tempo total no formulário:</strong> ${fmtHmsRep(fillSecRep)}</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo com app em foco:</strong> ${fmtHmsRep(activeSecRep)}</div>
          ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
       </div>
     </div>
@@ -1408,6 +1472,18 @@ window.printReport = async function() {
      durationStr = `${h}h ${m}m ${s}s`;
   }
 
+  const fillSecPdf = Number(t.metadata?.formFillDurationSeconds ?? t.metadata?.durationSeconds ?? responses.__form_fill_duration_sec);
+  const activeSecPdf = Number(t.metadata?.formActiveSeconds ?? responses.__form_active_seconds_final);
+  const fmtDurPdf = (sec) => {
+    if (sec == null || !Number.isFinite(sec) || sec < 0) return '—';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+  };
+  const formFillStrPdf = fmtDurPdf(fillSecPdf);
+  const formActiveStrPdf = fmtDurPdf(activeSecPdf);
+
   let responseHtml = '';
   let photoHtml = '';
   let qNum = 1;
@@ -1466,15 +1542,17 @@ window.printReport = async function() {
               durationStr = `${m}m ${s}s`;
           }
           
+          const fmtIsoShort = (iso) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
           responseHtml += `
             <div style="background: linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%); border-left: 4px solid #8b5cf6; padding: 12px 16px; margin: 25px 0 10px -20px; border-radius: 0 8px 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; z-index: 5;">
                <div style="font-size:13px; font-weight:900; color:#0f172a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center;">
                   <ion-icon name="albums" style="color:#8b5cf6; margin-right:8px; font-size:16px;"></ion-icon>${label}
                </div>
-               <div style="font-size:10px; color:#64748b; font-weight:600; display:flex; gap:12px; align-items:center;">
-                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${formatTime(startIso)}</span>
-                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${formatTime(endIso)}</span>
-                  ${durationStr ? `<span style="color:#8b5cf6; font-weight:800;"><ion-icon name="time-outline"></ion-icon> Duração: ${durationStr}</span>` : ''}
+               <div style="font-size:9px;color:#94a3b8;margin-bottom:6px;font-weight:600">Contador de etapa (início/fim automáticos no app)</div>
+               <div style="font-size:10px; color:#64748b; font-weight:600; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${formatTime(startIso)} <span style="opacity:0.85">(${fmtIsoShort(startIso)})</span></span>
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${formatTime(endIso)} <span style="opacity:0.85">(${fmtIsoShort(endIso)})</span></span>
+                  ${durationStr ? `<span style="color:#8b5cf6; font-weight:800;"><ion-icon name="time-outline"></ion-icon> Duração: ${durationStr}</span>` : (startIso && !endIso ? `<span style="color:#94a3b8;font-weight:700">Em curso ou não concluída no envio</span>` : '')}
                </div>
             </div>
           `;
@@ -1613,6 +1691,12 @@ window.printReport = async function() {
           const humanTime = new Date(tIso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
           timeHtml = `<span style="font-size:9px; color:#94a3b8; margin-left:8px; font-weight:600; text-transform:none;"><ion-icon name="time-outline" style="vertical-align:-2px; margin-right:2px;"></ion-icon>${humanTime}</span>`;
       }
+
+      const techCommentKey = '__comment_' + id;
+      const techCommentRaw = fieldDef && fieldDef.allowTechnicianComment && responses[techCommentKey] ? String(responses[techCommentKey]).trim() : '';
+      const techCommentPdf = techCommentRaw
+        ? `<div class="pdf-a" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:10px;color:#713f12;line-height:1.45"><strong>Comentário do técnico:</strong> ${techCommentRaw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
+        : '';
       
       responseHtml += `
         <div class="pdf-form-item" style="position:relative;">
@@ -1622,6 +1706,7 @@ window.printReport = async function() {
              ${timeHtml}
            </div>
            <div class="pdf-a">${displayVal}</div>
+           ${techCommentPdf}
         </div>`;
   });
 
@@ -1925,8 +2010,16 @@ window.printReport = async function() {
           </div>
        </div>
        <div class="pdf-total-time">
-          <span>DURAÇÃO (OS)</span>
+          <span>DURAÇÃO (OS — início→fim)</span>
           <strong>${durationStr}</strong>
+       </div>
+       <div class="pdf-total-time" style="margin-top:6px">
+          <span>TEMPO NO FORMULÁRIO (total)</span>
+          <strong>${formFillStrPdf}</strong>
+       </div>
+       <div class="pdf-total-time" style="margin-top:6px">
+          <span>TEMPO COM APP EM FOCO</span>
+          <strong>${formActiveStrPdf}</strong>
        </div>
     </div>
     

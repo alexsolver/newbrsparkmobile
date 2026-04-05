@@ -4,11 +4,292 @@
  */
 
 function brsparkApiBase() {
+  if (typeof window !== 'undefined' && window.__BRSPARK_API_BASE__) {
+    return window.__BRSPARK_API_BASE__;
+  }
+  try {
+    const ls = localStorage.getItem('brspark_admin_api_origin');
+    if (ls) return String(ls).replace(/\/$/, '') + '/api';
+  } catch (e) { /* ignore */ }
   if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol !== 'file:') {
     return window.location.origin + '/api';
   }
-  return 'http://localhost:3001/api';
+  return 'http://127.0.0.1:3001/api';
 }
+
+/** Origem do servidor Node (sem /api) — imagens /uploads/… */
+function brsparkServerOrigin() {
+  return brsparkApiBase().replace(/\/api\/?$/, '');
+}
+
+function absoluteUploadUrl(path) {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+  return brsparkServerOrigin() + (path.startsWith('/') ? path : '/' + path);
+}
+
+/** URL da imagem no preview do builder: origem da página se a porta for a da API (corrige localhost vs 127.0.0.1). */
+function helpImageDisplayUrl(pathOrUrl) {
+  if (!pathOrUrl) return pathOrUrl;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const path = pathOrUrl.startsWith('/') ? pathOrUrl : '/' + pathOrUrl;
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol.startsWith('http')) {
+    try {
+      const apiO = new URL(brsparkServerOrigin());
+      const pageO = new URL(window.location.origin);
+      const normPort = (u) => u.port || (u.protocol === 'https:' ? '443' : '80');
+      if (normPort(apiO) === normPort(pageO)) {
+        return window.location.origin + path;
+      }
+    } catch (e) { /* fall through */ }
+  }
+  return absoluteUploadUrl(pathOrUrl);
+}
+
+function escapeHtmlAttr(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function adminJsonHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  try {
+    const t = sessionStorage.getItem('brspark_admin_token');
+    if (t) h['Authorization'] = 'Bearer ' + t;
+  } catch (e) { /* ignore */ }
+  return h;
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result || '');
+      const i = s.indexOf(',');
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error('Leitura do arquivo falhou'));
+    r.readAsDataURL(file);
+  });
+}
+
+window.fieldHelpQuill = null;
+/** ID do campo cujo texto está actualmente no Quill (evita perder edições ao re-renderizar o painel). */
+window.quillBoundFieldId = null;
+
+function flushQuillToBoundField() {
+  const quill = window.fieldHelpQuill;
+  const bid = window.quillBoundFieldId;
+  if (!quill || !bid) return;
+  const f = fields.find((x) => x.id === bid);
+  if (f) {
+    f.helpHtml = quill.root.innerHTML;
+    f.description = quill.getText().trim();
+  }
+}
+
+/** Instruções com texto OU só imagem (Quill). */
+function fieldHasRichHelp(f) {
+  if (!f || !f.helpHtml || !String(f.helpHtml).trim()) return false;
+  const html = String(f.helpHtml);
+  const textOnly = html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+  if (textOnly.length > 0) return true;
+  return /<img\b/i.test(html);
+}
+
+/**
+ * A API por vezes devolve schemaData sem helpHtml; o Quill também pode falhar ao converter HTML com <img>.
+ * Preserva helpHtml/description ricos do lado local (prevSnapshot) quando o campo vindo da API veio “limpo”.
+ */
+function mergeSchemaKeepRichHelp(prevSnapshot, apiSchema) {
+  if (!Array.isArray(apiSchema) || apiSchema.length === 0) {
+    return Array.isArray(prevSnapshot) ? prevSnapshot : [];
+  }
+  if (!Array.isArray(prevSnapshot)) prevSnapshot = [];
+  const localById = new Map(prevSnapshot.map((x) => [x.id, x]));
+  return apiSchema.map((apiField) => {
+    if (fieldHasRichHelp(apiField)) return apiField;
+    const loc = localById.get(apiField.id);
+    if (loc && fieldHasRichHelp(loc)) {
+      return {
+        ...apiField,
+        helpHtml: loc.helpHtml,
+        description:
+          apiField.description && String(apiField.description).trim()
+            ? apiField.description
+            : loc.description || '',
+      };
+    }
+    return apiField;
+  });
+}
+
+window.destroyFieldHelpEditor = function () {
+  window.fieldHelpQuill = null;
+  window.quillBoundFieldId = null;
+  const el = document.getElementById('field-help-editor');
+  if (el) el.innerHTML = '';
+};
+
+function fieldHelpImageHandler() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.setAttribute('aria-hidden', 'true');
+  input.style.cssText = 'position:fixed;left:-2000px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(input);
+  const cleanup = () => {
+    try {
+      if (input.parentNode) input.parentNode.removeChild(input);
+    } catch (e) { /* ignore */ }
+  };
+  input.addEventListener(
+    'change',
+    async () => {
+    const file = input.files && input.files[0];
+    cleanup();
+    if (!file) return;
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const res = await fetch(`${brsparkApiBase()}/checklists/help-image`, {
+        method: 'POST',
+        headers: adminJsonHeaders(),
+        body: JSON.stringify({ fileBase64, mimeType: file.type || 'image/jpeg' }),
+      });
+      const rawText = await res.text();
+      let data = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (_) {
+        data = { error: rawText.slice(0, 200) || 'Resposta inválida do servidor' };
+      }
+      if (!res.ok) {
+        const hint =
+          res.status === 401
+            ? ' Faça login no painel (ex.: index.html na mesma máquina) e abra o Form Builder pela URL do servidor Node (ex.: http://localhost:3001/checklists.html), não pelo Live Server.'
+            : '';
+        alert((data.error || 'Upload recusado.') + hint);
+        return;
+      }
+      const url = data.url;
+      if (!url) {
+        alert('Servidor não devolveu a URL da imagem.');
+        return;
+      }
+      const quill = window.fieldHelpQuill;
+      if (!quill) {
+        alert('Editor não está pronto. Clique de novo no campo e tente inserir a imagem.');
+        return;
+      }
+      const imgSrc = helpImageDisplayUrl(url);
+      quill.focus();
+      const sel = quill.getSelection(true);
+      const len = quill.getLength();
+      let index = sel && typeof sel.index === 'number' ? sel.index : Math.max(0, len - 1);
+      index = Math.max(0, Math.min(index, Math.max(0, len - 1)));
+
+      // insertEmbed com imagem (BlockEmbed) no Quill 1.3 falha em vários índices; HTML é fiável
+      const snippet = `<p><img src="${escapeHtmlAttr(imgSrc)}" alt="" /></p>`;
+      try {
+        quill.clipboard.dangerouslyPasteHTML(index, snippet, 'user');
+      } catch (e1) {
+        try {
+          const Delta = Quill.import('delta');
+          quill.updateContents(new Delta().retain(index).insert({ image: imgSrc }).insert('\n'), 'user');
+        } catch (e2) {
+          console.error('[help-image] paste', e1, e2);
+          alert('Não foi possível inserir a imagem no editor. Atualize a página e tente de novo.');
+          return;
+        }
+      }
+
+      const after = Math.min(quill.getLength(), index + 2);
+      quill.setSelection(after, 0, 'silent');
+    } catch (err) {
+      console.error(err);
+      alert('Falha ao enviar imagem: ' + (err.message || err));
+    }
+    },
+    { once: true }
+  );
+  input.addEventListener(
+    'cancel',
+    () => {
+      cleanup();
+    },
+    { once: true }
+  );
+  try {
+    input.click();
+  } catch (e) {
+    cleanup();
+    console.error('[help-image] file picker', e);
+    alert('Não foi possível abrir o seletor de ficheiros. Tente outro browser ou permissões de ficheiros.');
+  }
+}
+
+window.initFieldHelpEditor = function (field) {
+  flushQuillToBoundField();
+  window.destroyFieldHelpEditor();
+  if (typeof Quill === 'undefined') {
+    console.warn('[builder] Quill não disponível (CDN).');
+    return;
+  }
+  const host = document.getElementById('field-help-editor');
+  if (!host) return;
+  const quill = new Quill('#field-help-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: [
+          ['bold', 'italic', 'underline'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['link', 'image'],
+        ],
+        handlers: { image: fieldHelpImageHandler },
+      },
+    },
+    placeholder: 'Texto e imagens que o técnico consulta no app (botão «Instruções»).',
+  });
+  window.fieldHelpQuill = quill;
+  window.quillBoundFieldId = field.id;
+  quill.on('text-change', function () {
+    const bid = window.quillBoundFieldId;
+    if (!bid) return;
+    const f = fields.find((x) => x.id === bid);
+    if (!f) return;
+    f.helpHtml = quill.root.innerHTML;
+    f.description = quill.getText().trim();
+    if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
+  });
+  const initial = (field.helpHtml && String(field.helpHtml).trim())
+    ? field.helpHtml
+    : (field.description ? `<p>${String(field.description).replace(/</g, '&lt;')}</p>` : '');
+  if (initial) {
+    try {
+      // Mesmo caminho que o upload de imagem; clipboard.convert() costuma falhar ou esvaziar com <img>
+      quill.clipboard.dangerouslyPasteHTML(0, initial, 'silent');
+    } catch (e1) {
+      try {
+        quill.setContents(quill.clipboard.convert({ html: initial }), 'silent');
+      } catch (e2) {
+        console.warn('[builder] helpHtml load', e1, e2);
+        quill.setText(field.description || '', 'silent');
+      }
+    }
+  }
+};
 
 // 1. Initialize State
 let fields = [];
@@ -17,6 +298,12 @@ let currentFormId = null;
 let currentFormTitle = 'Novo Checklist';
 let currentFormDesc = '';
 let currentFormIcon = '';
+/** Pasta do modelo em edição (null = raiz) — persistida na API como folderId */
+let currentFormFolderId = null;
+/** Pasta aberta no modal “Meus Formulários” */
+let builderBrowseFolderId = null;
+/** Lista plana de pastas (GET /template-folders) */
+let builderFolders = [];
 
 let iconPickerCallback = null;
 let currentIconLib = 'Ionicons';
@@ -158,6 +445,9 @@ new Sortable(elCanvas, {
             type: type,
             label: `${rawText}`,
             required: false,
+            multiple: false,
+            minItems: '',
+            maxItems: '',
             requireOnlineValidation: false,
             dependsOnId: '',
             dependsOnOperator: '==',
@@ -167,8 +457,10 @@ new Sortable(elCanvas, {
             calcFormula: type === 'calculated' ? '' : null,
             textMask: (type === 'text' || type === 'number' || type === 'phone') ? '' : null,
             description: '',
+            helpHtml: '',
             defaultValue: '',
-            icon: ''
+            icon: '',
+            allowTechnicianComment: false
         };
         
         // Injetar na exata posição na array onde o mouse soltou
@@ -210,6 +502,8 @@ function renderCanvas() {
                </div>` 
             : '';
         const condTag = (f.rules && f.rules.length > 0) ? `<div style="display:flex; align-items:center; background:var(--accent-dim); color:var(--accent); font-size:10px; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:800;"><ion-icon name="git-network-outline" style="margin-right:2px; font-size:12px;"></ion-icon> ${f.rules.length} Gatilhos</div>` : '';
+        const multiCanvasTypes = ['text', 'number', 'email', 'phone', 'date', 'photo', 'photo_stamped', 'file_upload'];
+        const multiTag = (f.multiple && multiCanvasTypes.includes(f.type)) ? `<div style="display:flex; align-items:center; background:#f3e8ff; color:#6b21a8; font-size:10px; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:800;" title="Várias respostas">M×</div>` : '';
 
         if (f.type === 'section_break') {
             div.style.background = '#e2e8f0';
@@ -237,7 +531,7 @@ function renderCanvas() {
                     <div style="flex:1;">
                         <div style="font-size:14.5px; color:var(--text1); display:flex; align-items:center;">
                             <input type="text" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1;" value="${f.label}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}')" onblur="this.style.borderBottomColor='transparent'; window.renderCanvas();" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" />
-                            ${reqTag} ${condTag}
+                            ${reqTag} ${multiTag} ${condTag}
                         </div>
                         <div style="font-size:11px; color:var(--text3); margin-top:4px; letter-spacing:0.5px">ID: ${f.id} | TYPE: ${f.type.toUpperCase()}</div>
                     </div>
@@ -321,6 +615,7 @@ window.triggerIconPickerForField = function(evt, id) {
 
 // Ações na Janela / Global Scope
 window.deleteField = function(id) {
+    flushQuillToBoundField();
     fields = fields.filter(f => f.id !== id);
     if(selectedFieldId === id) selectedFieldId = null;
     renderCanvas();
@@ -330,6 +625,7 @@ window.deleteField = function(id) {
 window.cloneField = function(id) {
     const fIndex = fields.findIndex(f => f.id === id);
     if(fIndex === -1) return;
+    flushQuillToBoundField();
     const f = fields[fIndex];
     const newId = 'field_' + Math.floor(Math.random() * 99999);
     const clone = JSON.parse(JSON.stringify(f)); // Deep copy simple
@@ -342,22 +638,33 @@ window.cloneField = function(id) {
     renderProperties();
 };
 
-function updateField(key, val) {
+function updateField(key, val, opts) {
     if(!selectedFieldId) return;
     const f = fields.find(x => x.id === selectedFieldId);
     if(f) {
         f[key] = val;
-        renderCanvas();
+        if (!opts || !opts.skipCanvas) renderCanvas();
     }
 }
 
 function renderProperties() {
     if(!selectedFieldId) {
+        flushQuillToBoundField();
+        if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
         elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em um bloco no Canvas para configurar suas lógicas.</div>';
         return;
     }
 
+    // Gravar instruções Quill no campo ANTES de apagar o DOM do editor (senão perde-se helpHtml ao trocar de campo / re-renderizar)
+    flushQuillToBoundField();
+    if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
+
     const f = fields.find(x => x.id === selectedFieldId);
+    if (!f) {
+        selectedFieldId = null;
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em um bloco no Canvas para configurar suas lógicas.</div>';
+        return;
+    }
     
     // Bloquear circular dependency
     let depOptions = '<option value="">(Nenhuma Condição - Sempre visível)</option>';
@@ -454,6 +761,12 @@ function renderProperties() {
                 <option value="scanner" ${f.cameraMode === 'scanner' ? 'selected' : ''}>📱 Scanner Seguro (Máscara Redonda In-App)</option>
             </select>
         </div>`;
+    } else if (f.type === 'file_upload') {
+        extraProps = `
+        <div class="prop-group" style="background:#fffbeb; border:1px solid #fcd34d; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px"><ion-icon name="document-attach-outline"></ion-icon> Anexar Arquivo (app)</div>
+            <div style="font-size:10px; color:#92400e; line-height:1.35;">Máximo <b>50 MB</b> por ficheiro. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e ficheiros correntes (PDF, Office, imagens, ZIP, etc.) são aceites.</div>
+        </div>`;
     } else if (f.type === 'dropdown' || f.type === 'multiselect') {
         extraProps = `
         <div class="prop-group" style="background:#eef2ff; border:1px solid #6366f1; padding:12px; border-radius:8px; margin-top:16px;">
@@ -479,8 +792,13 @@ function renderProperties() {
             <input class="prop-input" type="text" value="${f.id}" disabled style="background:#f1f5f9; cursor:not-allowed;" title="Copie isso para usar em Fórmulas"/>
         </div>
         <div class="prop-group">
-            <label class="prop-label">Ajuda / Descrição do Campo (Opcional)</label>
-            <textarea class="prop-input" style="height:45px; font-size:12px;" placeholder="Ex: Fotografe o painel e o chassi..." onkeyup="window.handleFieldUpdate('description', this.value)">${f.description || ''}</textarea>
+            <label class="prop-label">Instruções ao técnico (rich text, opcional)</label>
+            <div id="field-help-editor-host" style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              <div id="field-help-editor"></div>
+            </div>
+            <div style="font-size:10px;color:#64748b;margin-top:6px;line-height:1.35;">
+              No app: botão <b>Instruções</b> abre o texto e imagens sem empurrar o formulário. Imagens: use o ícone da imagem na barra (envia para o servidor e insere o link). Só texto/imagem também conta como instrução.
+            </div>
         </div>
         
         ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'geofence_check' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
@@ -495,6 +813,36 @@ function renderProperties() {
             <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">Resposta Obrigatória?</label>
         </div>
 
+        ${['text', 'number', 'email', 'phone', 'date', 'photo', 'photo_stamped', 'file_upload'].includes(f.type) ? `
+        <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
+                <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Várias respostas (lista)</label>
+            </div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução (várias fotos, ficheiros ou linhas de texto/número). Compatível com checklists antigos (valor único continua a ser uma string).</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:110px;">
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. itens (vazio = padrão)</label>
+                    <input class="prop-input" type="number" min="0" placeholder="ex.: 2" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                </div>
+                <div style="flex:1; min-width:110px;">
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">Máx. itens (vazio = ilimitado)</label>
+                    <input class="prop-input" type="number" min="1" placeholder="ex.: 5" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                </div>
+            </div>
+        </div>
+        ` : ''}
+
+        ${f.type !== 'section_break' && f.type !== 'hidden' ? `
+        <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:4px; background:#f0f9ff; border:1px solid #bae6fd; padding:12px; border-radius:8px;">
+            <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} onchange="window.handleFieldUpdate('allowTechnicianComment', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
+                <label for="prop-allow-comment" style="font-size:13px; font-weight:700; color:#0369a1; cursor:pointer;">Comentário do técnico (opcional no app)</label>
+                <div style="font-size:10px; color:#0c4a6e; margin-top:4px; line-height:1.35;">Mostra uma caixa de texto livre abaixo da resposta no app. Complementa as instruções ao técnico (não as substitui).</div>
+            </div>
+        </div>
+        ` : ''}
+
         ${['geofence_check', 'photo', 'photo_stamped', 'facial_recognition', 'signature', 'barcode_scan'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
@@ -506,18 +854,11 @@ function renderProperties() {
         ` : ''}
         
         ${extraProps}
-        
-        <div style="margin-top:24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:center; padding:20px;">
-            <ion-icon name="color-wand-outline" style="font-size:32px; color:#c084fc; margin-bottom:12px;"></ion-icon>
-            <div style="font-size:14px; font-weight:800; color:#1e293b;">Central de Automações</div>
-            <div style="font-size:12px; color:#64748b; margin-top:4px; margin-bottom:16px;">
-                Para ocultar/exibir este passo, mudar seu valor ou torná-lo obrigatório dinamicamente, crie uma Regra Inteligente.
-            </div>
-            <button class="btn btn-outline" style="width:100%; border-color:#c084fc; color:#a855f7;" onclick="window.openLogicModal(event, '${f.id}')">
-                ⚡ Abrir Central de Regras
-            </button>
-        </div>
     `;
+
+    setTimeout(function () {
+        if (typeof window.initFieldHelpEditor === 'function') window.initFieldHelpEditor(f);
+    }, 0);
 }
 
 // Expose pra UI HTML
@@ -590,6 +931,7 @@ window.importJSON = function() {
             try {
                 const parsed = JSON.parse(evt.target.result);
                 if(parsed.schema) {
+                    flushQuillToBoundField();
                     fields = parsed.schema;
                     globalFormSettings = parsed.settings || { requireGlobalGeofence: false, globalGeofenceRadius: 200, rules: [] };
                     if(!globalFormSettings.rules) globalFormSettings.rules = [];
@@ -614,6 +956,8 @@ window.saveChecklist = async function() {
     btn.innerHTML = '⏳ Salvando...';
     btn.disabled = true;
 
+    flushQuillToBoundField();
+
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
     currentFormIcon = document.getElementById('tpl-icon').value;
@@ -625,6 +969,9 @@ window.saveChecklist = async function() {
             }
             currentFormId = 'chk_' + Date.now().toString(36);
         }
+
+        // Snapshot serializável (evita referências partilhadas e garante helpHtml no JSON)
+        const schemaSnapshot = JSON.parse(JSON.stringify(fields));
         
         // 1. BACKUP OFFLINE-FIRST SEMPRE FUNCIONA (GARANTIDO)
         const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
@@ -634,16 +981,18 @@ window.saveChecklist = async function() {
             description: currentFormDesc,
             settings: globalFormSettings,
             metadata: { icon: currentFormIcon },
-            schema: fields,
+            schema: schemaSnapshot,
+            folderId: currentFormFolderId ?? null,
             updatedAt: new Date().toISOString()
         };
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
         
-        // UI Feedback imediato da criação (Offline Success)
-        btn.innerHTML = '✅ Salvo Localmente!';
-        if(window.loadSavedFormsList) window.loadSavedFormsList();
+        btn.innerHTML = '✅ Salvo localmente';
+        // NÃO chamar loadSavedFormsList aqui: ele faz GET e substitui o localStorage pela nuvem
+        // ANTES do POST terminar → apagava instruções/helpHtml recém gravados.
+        if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(db);
         
-        // 2. Tentar Enviar payload para nuvem (Node.js/Prisma) silenciosamente
+        // 2. Enviar para API; só depois sincronizar lista com GET (dados já persistidos)
         try {
             const payload = {
                 id: currentFormId,
@@ -651,19 +1000,68 @@ window.saveChecklist = async function() {
                 description: currentFormDesc,
                 metadata: { icon: currentFormIcon },
                 settings: globalFormSettings,
-                schemaData: fields
+                schemaData: schemaSnapshot,
+                folderId: currentFormFolderId ?? null
             };
+            const token = sessionStorage.getItem('brspark_admin_token') || '';
             const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: 'Bearer ' + token } : {}),
+                },
                 body: JSON.stringify(payload)
             });
-            if(res.ok) btn.innerHTML = '✅ Na Nuvem e App!';
-        } catch(apiError) {
-            console.warn("Salvamento em Nuvem Falhou. Modificações só estão salvas no seu Browser.", apiError);
+            const raw = await res.text();
+            if (res.ok) {
+                btn.innerHTML = '✅ Na nuvem e no app';
+                try {
+                    const saved = JSON.parse(raw);
+                    if (saved && saved.id) {
+                        const dbLocal = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+                        const apiSch = Array.isArray(saved.schemaData) ? saved.schemaData : [];
+                        const mergedSch = mergeSchemaKeepRichHelp(schemaSnapshot, apiSch);
+                        dbLocal[saved.id] = {
+                            id: saved.id,
+                            title: saved.title,
+                            description: saved.description || '',
+                            settings: saved.settings || {},
+                            metadata: saved.metadata || {},
+                            schema: mergedSch.length ? mergedSch : schemaSnapshot,
+                            folderId: saved.folderId ?? currentFormFolderId ?? null,
+                            updatedAt: saved.updatedAt || new Date().toISOString(),
+                        };
+                        localStorage.setItem('brspark_checklists_db', JSON.stringify(dbLocal));
+                        if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(dbLocal);
+                    }
+                } catch (mergeErr) {
+                    console.warn('[saveChecklist] merge resposta API', mergeErr);
+                }
+                if (window.loadSavedFormsList) await window.loadSavedFormsList();
+            } else {
+                let msg = raw;
+                try {
+                    const j = JSON.parse(raw);
+                    msg = j.error || raw;
+                } catch (_) {}
+                console.warn('[saveChecklist] API recusou:', res.status, msg);
+                alert(
+                    'Guardado só neste navegador. A API não gravou (' +
+                    res.status +
+                    '): ' +
+                    (msg || 'erro desconhecido') +
+                    '\n\nConfirme que o backend está no ar e a URL da API está certa.'
+                );
+            }
+        } catch (apiError) {
+            console.warn('Salvamento na API falhou (rede). Rascunho está no navegador.', apiError);
+            alert(
+                'Não foi possível contactar a API. O formulário ficou guardado só neste navegador.\n\n' +
+                (apiError && apiError.message ? apiError.message : '')
+            );
         }
         
-        setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2000);
+        setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2200);
         
     } catch (err) {
         console.error("Falha fatal ao salvar form:", err);
@@ -757,23 +1155,287 @@ window.previewPDF = function() {
     doc.save("roteiro_rascunho_brspark.pdf");
 };
 
-// --- MULTI-FORM HYBRID STORAGE MANAGEMENT --- //
-window.openFormsModal = function() {
+// --- MULTI-FORM HYBRID STORAGE MANAGEMENT + PASTAS (Finder no admin) --- //
+
+window._formsDbCache = {};
+
+async function refreshTemplateFolders() {
+    try {
+        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders`);
+        if (res.ok) {
+            builderFolders = await res.json();
+            try {
+                localStorage.setItem('brspark_checklist_folders', JSON.stringify(builderFolders));
+            } catch (e) { /* ignore */ }
+        }
+    } catch (e) {
+        console.warn('[folders] API indisponível, a usar cache local', e);
+        try {
+            const raw = localStorage.getItem('brspark_checklist_folders');
+            if (raw) builderFolders = JSON.parse(raw);
+        } catch (e2) { /* ignore */ }
+    }
+}
+
+function folderPathChain(folderId) {
+    const byId = new Map(builderFolders.map((f) => [f.id, f]));
+    const chain = [];
+    let cur = folderId;
+    const guard = new Set();
+    while (cur && !guard.has(cur)) {
+        guard.add(cur);
+        const f = byId.get(cur);
+        if (!f) break;
+        chain.unshift(f);
+        cur = f.parentId;
+    }
+    return chain;
+}
+
+function renderFolderTreeSidebar() {
+    const container = document.getElementById('forms-folder-tree');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const mkBtn = (label, isActive, onClick) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText =
+            'width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;border-radius:8px;border:1px solid #e2e8f0;background:' +
+            (isActive ? '#e0f2fe' : '#fff') +
+            ';cursor:pointer;font-size:13px;color:#0f172a;';
+        b.onmouseover = () => {
+            if (!isActive) b.style.background = '#f8fafc';
+        };
+        b.onmouseout = () => {
+            b.style.background = isActive ? '#e0f2fe' : '#fff';
+        };
+        b.onclick = onClick;
+        return b;
+    };
+
+    container.appendChild(
+        mkBtn('📂 Início (raiz)', builderBrowseFolderId === null, () => {
+            builderBrowseFolderId = null;
+            window.renderFormsGridFromLocal(window._formsDbCache || {});
+        })
+    );
+
+    const childrenOf = (parentKey) =>
+        builderFolders
+            .filter((f) => (f.parentId || null) === parentKey)
+            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name).localeCompare(String(b.name)));
+
+    const walk = (parentKey, depth) => {
+        for (const f of childrenOf(parentKey)) {
+            const indent = '\u00A0\u00A0'.repeat(depth);
+            container.appendChild(
+                mkBtn(`${indent}📁 ${f.name}`, builderBrowseFolderId === f.id, () => {
+                    builderBrowseFolderId = f.id;
+                    window.renderFormsGridFromLocal(window._formsDbCache || {});
+                })
+            );
+            walk(f.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+}
+
+function renderFolderBreadcrumb() {
+    const el = document.getElementById('forms-folder-breadcrumb');
+    if (!el) return;
+    const parts = [];
+    parts.push(
+        `<a href="#" style="color:#2563eb;text-decoration:none;font-weight:600;" onclick="event.preventDefault();window.enterBrowseFolder(null);return false;">Início</a>`
+    );
+    const chain = folderPathChain(builderBrowseFolderId);
+    chain.forEach((f, i) => {
+        parts.push('<span style="color:#94a3b8"> / </span>');
+        const isLast = i === chain.length - 1;
+        if (isLast) {
+            parts.push(`<span style="font-weight:600;color:#0f172a;">${escapeHtml(f.name)}</span>`);
+        } else {
+            parts.push(
+                `<a href="#" style="color:#2563eb;text-decoration:none;" onclick="event.preventDefault();window.enterBrowseFolder('${escapeHtmlAttr(f.id)}');return false;">${escapeHtml(f.name)}</a>`
+            );
+        }
+    });
+    el.innerHTML = parts.join('');
+}
+
+window.enterBrowseFolder = function (id) {
+    builderBrowseFolderId = id || null;
+    window.renderFormsGridFromLocal(window._formsDbCache || {});
+};
+
+window.promptCreateTemplateFolder = async function () {
+    const name = prompt('Nome da nova pasta:');
+    if (!name || !String(name).trim()) return;
+    try {
+        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders`, {
+            method: 'POST',
+            headers: adminJsonHeaders(),
+            body: JSON.stringify({ name: String(name).trim(), parentId: builderBrowseFolderId }),
+        });
+        const raw = await res.text();
+        if (!res.ok) {
+            let msg = raw;
+            try {
+                msg = JSON.parse(raw).error || raw;
+            } catch (_) {}
+            alert('Não foi possível criar a pasta: ' + msg);
+            return;
+        }
+        await refreshTemplateFolders();
+        window.renderFormsGridFromLocal(window._formsDbCache || {});
+    } catch (e) {
+        alert('Erro de rede ao criar pasta.');
+        console.warn(e);
+    }
+};
+
+window.promptRenameTemplateFolder = async function (folderId) {
+    const f = builderFolders.find((x) => x.id === folderId);
+    if (!f) return;
+    const name = prompt('Novo nome da pasta:', f.name);
+    if (!name || !String(name).trim()) return;
+    try {
+        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
+            method: 'PATCH',
+            headers: adminJsonHeaders(),
+            body: JSON.stringify({ name: String(name).trim() }),
+        });
+        const raw = await res.text();
+        if (!res.ok) {
+            let msg = raw;
+            try {
+                msg = JSON.parse(raw).error || raw;
+            } catch (_) {}
+            alert('Não foi possível renomear: ' + msg);
+            return;
+        }
+        await refreshTemplateFolders();
+        window.renderFormsGridFromLocal(window._formsDbCache || {});
+    } catch (e) {
+        alert('Erro de rede ao renomear.');
+        console.warn(e);
+    }
+};
+
+window.promptDeleteTemplateFolder = async function (folderId) {
+    const f = builderFolders.find((x) => x.id === folderId);
+    if (!f) return;
+    if (!confirm(`Eliminar a pasta "${f.name}" e todas as subpastas? Os formulários ficam na raiz (sem pasta).`)) return;
+    try {
+        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
+            method: 'DELETE',
+            headers: adminJsonHeaders(),
+        });
+        if (!res.ok) {
+            const raw = await res.text();
+            alert('Não foi possível eliminar: ' + raw);
+            return;
+        }
+        if (builderBrowseFolderId === folderId) {
+            builderBrowseFolderId = f.parentId || null;
+        }
+        await refreshTemplateFolders();
+        await window.loadSavedFormsList();
+    } catch (e) {
+        alert('Erro de rede ao eliminar pasta.');
+        console.warn(e);
+    }
+};
+
+window.createNewChecklistInBrowseFolder = function () {
+    document.getElementById('forms-list-modal').style.display = 'none';
+    window.__newFormFolderId = builderBrowseFolderId;
+    window.createNewChecklist(true);
+};
+
+function buildMoveFolderOptionsHtml(currentFolderId) {
+    const byId = new Map(builderFolders.map((x) => [x.id, x]));
+    const depthOf = (id) => {
+        let d = 0;
+        let cur = id;
+        const g = new Set();
+        while (cur && !g.has(cur)) {
+            g.add(cur);
+            d++;
+            const row = byId.get(cur);
+            if (!row) break;
+            cur = row.parentId;
+            if (d > 64) break;
+        }
+        return d;
+    };
+    const sorted = [...builderFolders].sort(
+        (a, b) => depthOf(a.id) - depthOf(b.id) || String(a.name).localeCompare(String(b.name))
+    );
+    let html = `<option value="" ${!currentFolderId ? 'selected' : ''}>Raiz</option>`;
+    for (const fo of sorted) {
+        const depth = depthOf(fo.id) - 1;
+        const pad = '\u2014 '.repeat(Math.max(0, depth));
+        const sel = currentFolderId === fo.id ? ' selected' : '';
+        html += `<option value="${escapeHtmlAttr(fo.id)}"${sel}>${escapeHtml(pad + fo.name)}</option>`;
+    }
+    return html;
+}
+
+window.onMoveFormFolderChange = async function (formId, selectEl) {
+    const v = selectEl.value;
+    const folderId = v === '' ? null : v;
+    try {
+        const res = await fetch(
+            `${brsparkApiBase()}/checklists/templates/${encodeURIComponent(formId)}/folder`,
+            {
+                method: 'PATCH',
+                headers: adminJsonHeaders(),
+                body: JSON.stringify({ folderId }),
+            }
+        );
+        const raw = await res.text();
+        if (!res.ok) {
+            let msg = raw;
+            try {
+                msg = JSON.parse(raw).error || raw;
+            } catch (_) {}
+            alert('Não foi possível mover: ' + msg);
+            selectEl.value = folderId === null ? '' : folderId;
+            return;
+        }
+        const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        if (db[formId]) {
+            db[formId].folderId = folderId;
+            localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+        }
+        window._formsDbCache = db;
+        window.renderFormsGridFromLocal(db);
+    } catch (e) {
+        alert('Erro de rede ao mover formulário.');
+        console.warn(e);
+    }
+};
+
+window.openFormsModal = function () {
+    builderBrowseFolderId = null;
     window.loadSavedFormsList();
     document.getElementById('forms-list-modal').style.display = 'flex';
 };
 
-window.filterFormsList = function() {
-   const q = document.getElementById('form-search').value.toLowerCase();
-   const cards = document.querySelectorAll('.form-card-item');
-   cards.forEach(card => {
-       const title = card.getAttribute('data-title').toLowerCase();
-       if (title.includes(q)) {
-           card.style.display = 'flex';
-       } else {
-           card.style.display = 'none';
-       }
-   });
+window.filterFormsList = function () {
+    const inp = document.getElementById('form-search');
+    const q = (inp && inp.value ? inp.value : '').toLowerCase();
+    const cards = document.querySelectorAll('#forms-grid .form-card-item, #forms-grid .folder-browser-item');
+    cards.forEach((card) => {
+        const title = (card.getAttribute('data-title') || '').toLowerCase();
+        if (title.includes(q)) {
+            card.style.display = 'flex';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 };
 
 window.duplicateChecklist = async function(id) {
@@ -786,6 +1448,7 @@ window.duplicateChecklist = async function(id) {
     newForm.id = 'chk_' + Date.now().toString(36) + Math.random().toString(36).substring(2,5);
     newForm.title = newForm.title + ' (Cópia)';
     newForm.updatedAt = new Date().toISOString();
+    if (newForm.folderId === undefined) newForm.folderId = form.folderId ?? null;
     
     // Save to local DB first
     db[newForm.id] = newForm;
@@ -799,7 +1462,8 @@ window.duplicateChecklist = async function(id) {
             description: newForm.description,
             metadata: newForm.metadata,
             settings: newForm.settings,
-            schemaData: newForm.schema
+            schemaData: newForm.schema,
+            folderId: newForm.folderId ?? null
         };
         const token = sessionStorage.getItem('brspark_admin_token') || '';
         await fetch(`${brsparkApiBase()}/checklists/templates`, {
@@ -858,76 +1522,149 @@ window.selectFormFromModal = function(id) {
     window.loadChecklist(id);
 };
 
-window.loadSavedFormsList = async function() {
+window.loadSavedFormsList = async function () {
+    let prev = {};
+    try {
+        prev = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+    } catch (e) {
+        prev = {};
+    }
+    await refreshTemplateFolders();
     try {
         const res = await fetch(`${brsparkApiBase()}/checklists/templates`);
-        if(res.ok) {
+        if (res.ok) {
             const apiForms = await res.json();
-            const db = {}; // Reconstrói sempre a verdade da nuvem
-            apiForms.forEach(form => {
-               db[form.id] = {
-                   id: form.id,
-                   title: form.title,
-                   settings: form.settings,
-                   schema: form.schemaData,
-                   metadata: form.metadata,
-                   updatedAt: form.updatedAt
-               };
+            const db = { ...prev };
+            apiForms.forEach((form) => {
+                const prevEntry = prev[form.id];
+                let schema = form.schemaData;
+                if (prevEntry && Array.isArray(prevEntry.schema) && Array.isArray(schema)) {
+                    schema = mergeSchemaKeepRichHelp(prevEntry.schema, schema);
+                }
+                db[form.id] = {
+                    id: form.id,
+                    title: form.title,
+                    description: form.description || '',
+                    settings: form.settings,
+                    schema,
+                    metadata: form.metadata,
+                    folderId: form.folderId ?? null,
+                    updatedAt: form.updatedAt,
+                };
             });
             localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
         }
-    } catch(e) {
-        console.warn("Sem conexão com API Node.js. Carregando formulários locais do Cache...", e);
+    } catch (e) {
+        console.warn('Sem conexão com API Node.js. Carregando formulários locais do Cache...', e);
     }
-    
+
     const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
     window.renderFormsGridFromLocal(db);
 };
 
-window.renderFormsGridFromLocal = function(db) {
+window.renderFormsGridFromLocal = function (db) {
     const grid = document.getElementById('forms-grid');
     if (!grid) return;
-    
-    grid.innerHTML = '';
-    const sortedForms = Object.values(db).sort((a,b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
-    sortedForms.forEach(form => {
-        const count = (form.schema || []).length;
-        const iconHtml = form.metadata?.icon ? `<ion-icon name="${form.metadata.icon}"></ion-icon>` : '📋';
-        // Wrapper: card + delete button as SIBLINGS to avoid event bubbling
+    window._formsDbCache = db || {};
+    renderFolderTreeSidebar();
+    renderFolderBreadcrumb();
+
+    const browseKey = builderBrowseFolderId || null;
+    const subfolders = builderFolders
+        .filter((f) => (f.parentId || null) === browseKey)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name).localeCompare(String(b.name)));
+
+    const sortedForms = Object.values(db)
+        .filter((form) => (form.folderId || null) === browseKey)
+        .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+    grid.innerHTML = '';
+
+    subfolders.forEach((folder) => {
+        const fid = escapeHtmlAttr(folder.id);
+        const fname = escapeHtml(folder.name);
         grid.innerHTML += `
-            <div class="form-card-item" data-title="${form.title}" style="display:flex; align-items:stretch; gap:0; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; transition:border-color 0.2s;"
-                 onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#e2e8f0'">
-               <!-- Clickable card (open form) -->
-               <div onclick="window.selectFormFromModal('${form.id}')"
+            <div class="folder-browser-item" data-title="${escapeHtmlAttr(folder.name)}" style="display:flex; align-items:stretch; gap:0; border-radius:12px; overflow:hidden; border:1px solid #c4b5fd; background:linear-gradient(135deg,#faf5ff 0%,#fff 100%); transition:border-color 0.2s;"
+                 onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#c4b5fd'">
+               <div onclick="window.enterBrowseFolder('${fid}')"
                     style="flex:1; padding:16px; cursor:pointer; display:flex; align-items:center; gap:16px; border:none; background:transparent;">
-                  <div style="width:48px; height:48px; border-radius:12px; background:#f1f5f9; display:flex; justify-content:center; align-items:center; font-size:24px; color:#64748b; flex-shrink:0">
-                     ${iconHtml}
-                  </div>
+                  <div style="width:48px; height:48px; border-radius:12px; background:#ede9fe; display:flex; justify-content:center; align-items:center; font-size:26px; flex-shrink:0">📁</div>
                   <div style="flex:1;">
-                     <h4 style="margin:0; font-size:15px; color:#1e293b;">${form.title}</h4>
-                     <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;">${count} campos</p>
+                     <h4 style="margin:0; font-size:15px; color:#4c1d95;">${fname}</h4>
+                     <p style="margin:4px 0 0 0; font-size:12px; color:#7c3aed; font-weight:600;">Pasta</p>
                   </div>
                </div>
-               <!-- Duplicate button: SIBLING -->
                <button type="button"
-                  onclick="event.stopPropagation(); window.duplicateChecklist('${form.id}')"
-                  style="background:#f0fdf4; border:none; border-left:1px solid #dcfce3; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#22c55e; font-size:20px; flex-shrink:0; transition:background 0.15s;"
-                  onmouseover="this.style.background='#dcfce3'" onmouseout="this.style.background='#f0fdf4'"
-                  title="Duplicar formulário">
-                  <ion-icon name="copy-outline"></ion-icon>
+                  onclick="event.stopPropagation(); window.promptRenameTemplateFolder('${fid}')"
+                  style="background:#f5f3ff; border:none; border-left:1px solid #ddd6fe; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6d28d9; font-size:18px; flex-shrink:0;"
+                  title="Renomear pasta">
+                  <ion-icon name="create-outline"></ion-icon>
                </button>
-               <!-- Delete button: SIBLING, not child — no bubbling possible -->
                <button type="button"
-                  onclick="event.stopPropagation(); window.deleteChecklist('${form.id}')"
-                  style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0; transition:background 0.15s;"
-                  onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff0f0'"
-                  title="Excluir formulário">
+                  onclick="event.stopPropagation(); window.promptDeleteTemplateFolder('${fid}')"
+                  style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0;"
+                  title="Eliminar pasta">
                   <ion-icon name="trash-outline"></ion-icon>
                </button>
             </div>
         `;
     });
+
+    sortedForms.forEach((form) => {
+        const count = (form.schema || []).length;
+        const iconHtml = form.metadata?.icon ? `<ion-icon name="${escapeHtmlAttr(form.metadata.icon)}"></ion-icon>` : '📋';
+        const fid = escapeHtmlAttr(form.id);
+        const ftitle = escapeHtml(form.title);
+        const moveSelectId = 'move-folder-' + form.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const moveOpts = buildMoveFolderOptionsHtml(form.folderId || null);
+        grid.innerHTML += `
+            <div class="form-card-item" data-title="${escapeHtmlAttr(form.title)}" style="display:flex; flex-direction:column; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; transition:border-color 0.2s;"
+                 onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#e2e8f0'">
+               <div style="display:flex; align-items:stretch; flex:1;">
+                 <div onclick="window.selectFormFromModal('${fid}')"
+                      style="flex:1; padding:16px; cursor:pointer; display:flex; align-items:center; gap:16px; border:none; background:transparent;">
+                    <div style="width:48px; height:48px; border-radius:12px; background:#f1f5f9; display:flex; justify-content:center; align-items:center; font-size:24px; color:#64748b; flex-shrink:0">
+                       ${iconHtml}
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                       <h4 style="margin:0; font-size:15px; color:#1e293b;">${ftitle}</h4>
+                       <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;">${count} campos</p>
+                    </div>
+                 </div>
+                 <button type="button"
+                    onclick="event.stopPropagation(); window.duplicateChecklist('${fid}')"
+                    style="background:#f0fdf4; border:none; border-left:1px solid #dcfce3; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#22c55e; font-size:20px; flex-shrink:0; transition:background 0.15s;"
+                    onmouseover="this.style.background='#dcfce3'" onmouseout="this.style.background='#f0fdf4'"
+                    title="Duplicar formulário">
+                    <ion-icon name="copy-outline"></ion-icon>
+                 </button>
+                 <button type="button"
+                    onclick="event.stopPropagation(); window.deleteChecklist('${fid}')"
+                    style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0; transition:background 0.15s;"
+                    onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff0f0'"
+                    title="Excluir formulário">
+                    <ion-icon name="trash-outline"></ion-icon>
+                 </button>
+               </div>
+               <div style="padding:8px 12px 12px 12px; border-top:1px solid #f1f5f9; display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b;">
+                 <span style="white-space:nowrap;">Mover para</span>
+                 <select id="${moveSelectId}" class="prop-input" style="flex:1; font-size:12px; padding:6px 8px; margin:0;"
+                    onclick="event.stopPropagation();"
+                    onchange="window.onMoveFormFolderChange('${fid}', this)">
+                   ${moveOpts}
+                 </select>
+               </div>
+            </div>
+        `;
+    });
+
+    if (subfolders.length === 0 && sortedForms.length === 0) {
+        grid.innerHTML =
+            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">Nenhuma pasta nem formulário neste nível. Use «Nova pasta» ou «Novo formulário aqui».</p>';
+    }
+
+    if (window.filterFormsList) window.filterFormsList();
 };
 
 window.loadChecklist = function(id) {
@@ -935,6 +1672,7 @@ window.loadChecklist = function(id) {
         window.createNewChecklist();
         return;
     }
+    flushQuillToBoundField();
     const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
     const form = db[id];
     if(form) {
@@ -942,6 +1680,7 @@ window.loadChecklist = function(id) {
         currentFormTitle = form.title;
         currentFormDesc = form.description || '';
         currentFormIcon = form.metadata?.icon || '';
+        currentFormFolderId = form.folderId ?? null;
         globalFormSettings = form.settings || { requireGlobalGeofence: false, globalGeofenceRadius: 200 };
         
         // Fix: Restore inputs correctly
@@ -949,26 +1688,37 @@ window.loadChecklist = function(id) {
         document.getElementById('tpl-desc').value = currentFormDesc;
         document.getElementById('tpl-icon').value = currentFormIcon;
         document.getElementById('tpl-icon-preview').innerHTML = currentFormIcon ? `<ion-icon name="${currentFormIcon}" style="font-size:18px;margin-right:6px;vertical-align:-3px;"></ion-icon> ${currentFormIcon}` : 'Escolher Ícone da Tarefa';
-        fields = form.schema || [];
+        fields = JSON.parse(JSON.stringify(form.schema || []));
         selectedFieldId = null;
         renderCanvas();
         renderProperties();
     }
 };
 
-window.createNewChecklist = function() {
+window.createNewChecklist = function (fromBrowseFolder) {
+    if (!fromBrowseFolder) {
+        window.__newFormFolderId = undefined;
+    }
     const modal = document.getElementById('new-checklist-modal');
-    if(modal) {
+    if (modal) {
         modal.style.display = 'flex';
         document.getElementById('new-form-name-input').value = 'Novo Checklist';
         setTimeout(() => document.getElementById('new-form-name-input').focus(), 100);
     }
 };
 
-window.confirmCreateNewChecklist = function() {
+window.confirmCreateNewChecklist = function () {
     const title = document.getElementById('new-form-name-input').value.trim() || 'Novo Checklist';
     document.getElementById('new-checklist-modal').style.display = 'none';
-    
+
+    if (window.__newFormFolderId !== undefined) {
+        currentFormFolderId = window.__newFormFolderId;
+        window.__newFormFolderId = undefined;
+    } else {
+        currentFormFolderId = null;
+    }
+
+    flushQuillToBoundField();
     currentFormId = null;
     currentFormTitle = title;
     fields = [];
@@ -1040,6 +1790,14 @@ function renderMobilePreview() {
         
         let labelTag = `<label style="font-size:14.5px; font-weight:700; color:#1e293b; line-height:1.2;">${idx + 1}. ${f.label}${f.required ? '<span style="color:#ef4444; margin-left:4px; font-size:16px;">*</span>' : ''}</label>`;
         let condBadge = isCond ? `<div style="font-size:10px; background:#f3e8ff; color:#7e22ce; font-weight:700; padding:4px 8px; border-radius:6px; align-self:flex-start;"><ion-icon name="color-wand-outline"></ion-icon> Ativado por ${relatedRules.length} Regra(s)</div>` : '';
+        const helpPlain = (f.description || '').replace(/<[^>]+>/g, '').trim();
+        const helpHtmlStr = f.helpHtml || '';
+        const helpRich = helpHtmlStr.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+        const helpHasImg = /<img\b[^>]*\bsrc\s*=\s*["'][^"']+["']/i.test(helpHtmlStr);
+        const hasHelp = helpRich.length > 0 || helpPlain.length > 0 || helpHasImg;
+        const helpMock = hasHelp
+          ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin-bottom:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:11px;font-weight:700;color:#1e40af;"><ion-icon name="document-text-outline" style="font-size:14px;"></ion-icon> Instruções</div>`
+          : '';
         
         let inputMock = '';
         if(f.type === 'text') inputMock = `<input type="text" placeholder="Sua resposta..." disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
@@ -1066,7 +1824,7 @@ function renderMobilePreview() {
         if(f.type === 'transit_end') inputMock = `<button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button>`;
         if(f.type === 'geofence_check') inputMock = `<button disabled style="background:#0f172a; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="location" style="font-size:20px"></ion-icon> VALIDAR GEOLOCALIZAÇÃO<br>Raio: ${f.geofenceRadius}m</button>`;
         
-        html += `<div style="${wrapperStyle}">${condBadge}${labelTag}${inputMock}</div>`;
+        html += `<div style="${wrapperStyle}">${condBadge}${labelTag}${helpMock}${inputMock}</div>`;
     });
     
     html += `<button disabled style="background:var(--primary); color:white; font-weight:800; border:none; padding:18px; border-radius:12px; font-size:16px; margin-top:10px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">✅ SALVAR CHECKLIST EM OFFLINE-FIRST</button>`;
@@ -1149,6 +1907,135 @@ window.confirmTestDispatch = async function() {
 // 🚀 AUTOMATIONS & RULES ENGINE (IF/THEN)
 // ==========================================
 
+/** Monitor virtual: tempo total do formulário (app grava __form_started_at / metadata). */
+const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
+
+function escapeHtmlLogic(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Rótulo no select de alvo / monitor — destaca separadores de etapa (section_break). */
+function logicFieldSelectLabel(fld) {
+    if (!fld) return '';
+    if (fld.type === 'section_break') {
+        return `[Seção/Etapa] ${fld.label || '(sem nome)'} — ${fld.id}`;
+    }
+    return `${fld.label || fld.id} (${fld.id})`;
+}
+
+function logicConditionNeedsSeconds(operator) {
+    return (
+        operator === 'section_elapsed_sec_gte' ||
+        operator === 'section_elapsed_sec_lte' ||
+        operator === 'form_elapsed_sec_gte' ||
+        operator === 'form_elapsed_sec_lte'
+    );
+}
+
+/** Ajusta operador/valor quando o monitor deixa de ser campo “normal”. */
+function normalizeRuleOperatorForMonitor(rule) {
+    const mid = rule.condFieldId || currentLogicFieldId;
+    const fld = fields.find((f) => f.id === mid);
+    const isFormClock = mid === FORM_CLOCK_COND_ID;
+    const isSection = fld && fld.type === 'section_break';
+
+    let valid = ['==', '!=', 'contains', 'not_empty', 'is_empty'];
+    if (isFormClock) valid = ['form_elapsed_sec_gte', 'form_elapsed_sec_lte'];
+    else if (isSection) {
+        valid = [
+            'section_has_started',
+            'section_not_started',
+            'section_has_ended',
+            'section_not_ended',
+            'section_in_progress',
+            'section_elapsed_sec_gte',
+            'section_elapsed_sec_lte',
+        ];
+    }
+
+    if (!valid.includes(rule.operator)) {
+        rule.operator = valid[0];
+        rule.value = logicConditionNeedsSeconds(rule.operator) ? '60' : '';
+    }
+}
+
+function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
+    const fld = fields.find((f) => f.id === monitorFieldId);
+    const isFormClock = monitorFieldId === FORM_CLOCK_COND_ID;
+    const isSection = fld && fld.type === 'section_break';
+    const op = rule.operator || '==';
+
+    let opSelect = '';
+    if (isFormClock) {
+        opSelect = `
+            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
+                <option value="form_elapsed_sec_gte" ${op === 'form_elapsed_sec_gte' ? 'selected' : ''}>Tempo total no formulário ≥ (segundos)</option>
+                <option value="form_elapsed_sec_lte" ${op === 'form_elapsed_sec_lte' ? 'selected' : ''}>Tempo total no formulário ≤ (segundos)</option>
+            </select>`;
+    } else if (isSection) {
+        opSelect = `
+            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
+                <option value="section_has_started" ${op === 'section_has_started' ? 'selected' : ''}>Técnico já entrou nesta etapa</option>
+                <option value="section_not_started" ${op === 'section_not_started' ? 'selected' : ''}>Ainda não entrou nesta etapa</option>
+                <option value="section_has_ended" ${op === 'section_has_ended' ? 'selected' : ''}>Etapa já foi concluída (avançou ou enviou)</option>
+                <option value="section_not_ended" ${op === 'section_not_ended' ? 'selected' : ''}>Etapa ainda não foi concluída</option>
+                <option value="section_in_progress" ${op === 'section_in_progress' ? 'selected' : ''}>Em curso (entrou e não concluiu)</option>
+                <option value="section_elapsed_sec_gte" ${op === 'section_elapsed_sec_gte' ? 'selected' : ''}>Tempo gasto na etapa ≥ (segundos)</option>
+                <option value="section_elapsed_sec_lte" ${op === 'section_elapsed_sec_lte' ? 'selected' : ''}>Tempo gasto na etapa ≤ (segundos)</option>
+            </select>`;
+    } else {
+        opSelect = `
+            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
+                <option value="==" ${op === '==' ? 'selected' : ''}>Igual a (==)</option>
+                <option value="!=" ${op === '!=' ? 'selected' : ''}>Diferente de (!=)</option>
+                <option value="contains" ${op === 'contains' ? 'selected' : ''}>Contém texto</option>
+                <option value="not_empty" ${op === 'not_empty' ? 'selected' : ''}>Estiver Preenchido (Qualquer valor)</option>
+                <option value="is_empty" ${op === 'is_empty' ? 'selected' : ''}>Estiver Vazio</option>
+            </select>`;
+    }
+
+    let valInput = '';
+    if (logicConditionNeedsSeconds(op)) {
+        valInput = `
+            <input type="number" min="0" step="1" class="prop-input" placeholder="Segundos (ex: 120)" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+    } else if (!isFormClock && !isSection && op !== 'is_empty' && op !== 'not_empty') {
+        valInput = `
+            <input type="text" class="prop-input" placeholder="Valor esperado" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+    }
+
+    return { opSelect, valInput };
+}
+
+/** Opções do alvo da ação ENTÃO: em SHOW/HIDE inclui seções; ações sobre valor não listam section_break. */
+function buildLogicActionTargetOptions(actType, selectedTargetId) {
+    const allowSection = actType === 'SHOW' || actType === 'HIDE';
+    let list = fields.filter((fld) => {
+        if (fld.type === 'section_break') return allowSection;
+        if (!allowSection && fld.type === 'hidden') return false;
+        return true;
+    });
+    if (allowSection) {
+        list = [...list].sort((a, b) => {
+            const sa = a.type === 'section_break' ? 0 : 1;
+            const sb = b.type === 'section_break' ? 0 : 1;
+            if (sa !== sb) return sa - sb;
+            return logicFieldSelectLabel(a).localeCompare(logicFieldSelectLabel(b), 'pt');
+        });
+    }
+    const body = list
+        .map(
+            (fld) =>
+                `<option value="${escapeHtmlLogic(fld.id)}" ${selectedTargetId === fld.id ? 'selected' : ''}>${escapeHtmlLogic(logicFieldSelectLabel(fld))}</option>`
+        )
+        .join('');
+    return '<option value="">[Selec. Alvo]</option>' + body;
+}
+
 // --- NEW CONTEXTUAL LOGIC BUILDER ---
 let currentLogicFieldId = null;
 
@@ -1159,7 +2046,7 @@ window.openLogicModal = function(evt, fieldId) {
     const field = fields.find(f => f.id === fieldId);
     if(!field) return;
     
-    document.getElementById('logic-modal-subtitle').innerHTML = `Gatilhos baseados no campo: <strong>${field.label} (${field.id})</strong>`;
+    document.getElementById('logic-modal-subtitle').innerHTML = `Regras neste bloco: <strong>${escapeHtmlLogic(field.label)} (${escapeHtmlLogic(field.id)})</strong>. Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>.`;
     
     // Initialize rules array if it doesn't exist
     if(!field.rules) field.rules = [];
@@ -1171,6 +2058,8 @@ window.openLogicModal = function(evt, fieldId) {
 function renderLogicRules() {
     const field = fields.find(f => f.id === currentLogicFieldId);
     if(!field) return;
+
+    (field.rules || []).forEach((r) => normalizeRuleOperatorForMonitor(r));
 
     const container = document.getElementById('logic-rules-container');
     const emptyState = document.getElementById('logic-empty-state');
@@ -1191,25 +2080,31 @@ function renderLogicRules() {
         div.style.borderRadius = '8px';
         div.style.padding = '16px';
         div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-        
-        let opSelect = `
-            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
-                <option value="==" ${rule.operator==='=='?'selected':''}>Igual a (==)</option>
-                <option value="!=" ${rule.operator==='!='?'selected':''}>Diferente de (!=)</option>
-                <option value="contains" ${rule.operator==='contains'?'selected':''}>Contém texto</option>
-                <option value="not_empty" ${rule.operator==='not_empty'?'selected':''}>Estiver Preenchido (Qualquer valor)</option>
-                <option value="is_empty" ${rule.operator==='is_empty'?'selected':''}>Estiver Vazio</option>
-            </select>
+
+        const monitorFieldId = rule.condFieldId || currentLogicFieldId;
+        const condSourceOptions =
+            `<option value="${FORM_CLOCK_COND_ID}" ${monitorFieldId === FORM_CLOCK_COND_ID ? 'selected' : ''}>[Formulário] Cronómetro geral (tempo total)</option>` +
+            fields
+                .map(
+                    (ff) =>
+                        `<option value="${escapeHtmlLogic(ff.id)}" ${monitorFieldId === ff.id ? 'selected' : ''}>${escapeHtmlLogic(logicFieldSelectLabel(ff))}</option>`
+                )
+                .join('');
+        const condFieldSelect = `
+            <div style="margin-bottom:12px;">
+                <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">Campo monitorado (dispara o SE)</label>
+                <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'condFieldId', this.value)" style="margin-bottom:0;">
+                    ${condSourceOptions}
+                </select>
+            </div>
         `;
-        
-        let valInput = (rule.operator === 'is_empty' || rule.operator === 'not_empty') ? '' : `
-            <input type="text" class="prop-input" placeholder="Valor esperado" value="${rule.value || ''}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />
-        `;
+
+        const { opSelect, valInput } = buildLogicConditionUI(rule, ruleIndex, monitorFieldId);
         
         // Actions
         let actionsHTML = '';
         rule.actions.forEach((act, actionIndex) => {
-            const fieldOptions = '<option value="">[Selec. Alvo]</option>' + fields.map(f => `<option value="${f.id}" ${act.targetId===f.id?'selected':''}>${f.label}</option>`).join('');
+            const fieldOptions = buildLogicActionTargetOptions(act.type || 'SHOW', act.targetId);
             
             if (act.type === 'API_VALIDATION') {
                 actionsHTML += `
@@ -1260,10 +2155,13 @@ function renderLogicRules() {
         
         div.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-                <div style="display:flex; gap:12px; flex:1;">
+                <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0;">
+                    ${condFieldSelect}
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;">
                     <div style="background:#f1f5f9; padding:6px 12px; border-radius:6px; color:#334155; font-weight:800; font-size:12px; align-self:flex-start;">SE</div>
-                    <div style="flex:1;">${opSelect}</div>
-                    <div style="flex:1;">${valInput}</div>
+                    <div style="flex:1; min-width:120px;">${opSelect}</div>
+                    <div style="flex:1; min-width:120px;">${valInput}</div>
+                    </div>
                 </div>
                 <div style="cursor:pointer; color:var(--red); padding:4px 8px; font-weight:700; font-size:12px; border:1px solid var(--red); border-radius:4px; margin-left:12px;" onclick="window.removeLogicRule(${ruleIndex})">Excluir Regra</div>
             </div>
@@ -1306,6 +2204,16 @@ window.removeLogicRule = function(rIndex) {
 window.updateLogicRule = function(rIndex, key, val) {
     const field = fields.find(f => f.id === currentLogicFieldId);
     if(field && field.rules[rIndex]) {
+        if (key === 'condFieldId') {
+            if (val === currentLogicFieldId) {
+                delete field.rules[rIndex].condFieldId;
+            } else {
+                field.rules[rIndex].condFieldId = val;
+            }
+            normalizeRuleOperatorForMonitor(field.rules[rIndex]);
+            renderLogicRules();
+            return;
+        }
         field.rules[rIndex][key] = val;
         if(key === 'operator') renderLogicRules();
     }
@@ -1331,7 +2239,14 @@ window.updateLogicAction = function(rIndex, aIndex, key, val) {
     const field = fields.find(f => f.id === currentLogicFieldId);
     if(field && field.rules[rIndex] && field.rules[rIndex].actions[aIndex]) {
         field.rules[rIndex].actions[aIndex][key] = val;
-        if(key === 'type') renderLogicRules();
+        if (key === 'type') {
+            const act = field.rules[rIndex].actions[aIndex];
+            if (val !== 'SHOW' && val !== 'HIDE' && act.targetId) {
+                const tgt = fields.find((x) => x.id === act.targetId);
+                if (tgt && tgt.type === 'section_break') act.targetId = '';
+            }
+            renderLogicRules();
+        }
     }
 };
 

@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="css/vector-icons.css" />
   
   <link rel="stylesheet" href="css/main.css" />
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
+  <script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <!-- jsPDF for Quick Frontend PDF Gen -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -46,6 +48,18 @@
     .prop-group { margin-bottom: 16px; }
     .prop-label { display: block; font-size: 11px; font-weight: 700; color: var(--text3); margin-bottom: 6px; text-transform: uppercase; }
     .prop-input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+    #field-help-editor-host .ql-container { font-size: 13px; min-height: 160px; }
+    #field-help-editor-host .ql-toolbar { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+    /* Quill às vezes deixa <img> com altura 0 sem estes estilos */
+    #field-help-editor-host .ql-editor img {
+      max-width: 100%;
+      height: auto !important;
+      display: block;
+      margin: 10px 0;
+      min-height: 48px;
+      border-radius: 8px;
+      background: #f1f5f9;
+    }
     .canvas-empty { text-align: center; color: var(--text3); font-size: 14px; padding: 40px; border: 2px dashed #cbd5e1; border-radius: 12px; }
     
     /* Strict SPA Lock for Builder Scroll */
@@ -120,7 +134,7 @@
            <div class="toolbox-item" data-type="geofence_check" style="border-left: 3px solid #10b981;"><ion-icon name="location-outline" style="margin-right:6px; font-size:16px; color:#10b981;"></ion-icon>Validar Cerca (Geofence)</div>
            
            <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">AUDITORIA E PROVAS</div>
-           <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Enviar PDF/Doc</div>
+           <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Anexar Arquivo</div>
            <div class="toolbox-item" data-type="photo"><ion-icon name="camera-outline" style="margin-right:6px; font-size:16px;"></ion-icon>Foto (Galeria Livre)</div>
            <div class="toolbox-item" data-type="photo_stamped" style="border-left: 3px solid #f59e0b;"><ion-icon name="scan-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Foto Carimbada (Ao Vivo)</div>
             <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
@@ -222,22 +236,33 @@
   await initPage();
 </script>
 
-<!-- Forms List Modal -->
+<!-- Forms List Modal (árvore de pastas + grelha, estilo Finder no admin) -->
 <div id="forms-list-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
-    <div style="background:#f8fafc; width:800px; height:80vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <div style="background:#f8fafc; width:min(1100px, 95vw); height:85vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
         <div style="padding:24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
             <div>
                <h3 style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
-               <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Selecione um checklist para edita-lo.</p>
+               <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Pastas e modelos — abra uma pasta ou escolha um checklist para editar.</p>
             </div>
             <span style="font-size:24px; cursor:pointer; color:#94a3b8;" onclick="document.getElementById('forms-list-modal').style.display='none'">&times;</span>
         </div>
         <div style="padding:16px 24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:8px;">
             <ion-icon name="search-outline" style="font-size:20px; color:#94a3b8;"></ion-icon>
-            <input type="text" id="form-search" placeholder="Buscar por nome do formulário..." class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none;" >
+            <input type="text" id="form-search" placeholder="Filtrar por nome na pasta atual..." class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none;" >
         </div>
-        <div id="forms-grid" style="flex:1; padding:24px; overflow-y:auto; display:grid; grid-template-columns: repeat(2, 1fr); gap:16px; align-content:start;">
-            <!-- Forms injected by JS -->
+        <div style="flex:1; display:flex; flex-direction:row; min-height:0; background:#f8fafc;">
+            <aside id="forms-folder-tree" style="width:260px; flex-shrink:0; background:white; border-right:1px solid #e2e8f0; padding:12px; overflow-y:auto; font-size:13px;">
+            </aside>
+            <div style="flex:1; display:flex; flex-direction:column; min-width:0; padding:0 24px 24px 24px;">
+                <div id="forms-browser-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:16px 0 12px 0; border-bottom:1px solid #e2e8f0;">
+                    <nav id="forms-folder-breadcrumb" style="font-size:13px; color:#475569; flex:1; min-width:160px;"></nav>
+                    <button type="button" class="btn btn-outline" onclick="window.promptCreateTemplateFolder()" style="font-size:12px; white-space:nowrap;">+ Nova pasta</button>
+                    <button type="button" class="btn btn-primary" onclick="window.createNewChecklistInBrowseFolder()" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
+                </div>
+                <div id="forms-grid" style="flex:1; overflow-y:auto; padding-top:16px; display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:16px; align-content:start;">
+                    <!-- Pastas e formulários injetados por JS -->
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -292,7 +317,7 @@
         <!-- Rules Body -->
         <div style="flex:1; background:#f8fafc; padding:24px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
-               <h4 style="margin:0; color:#334155;">Se este campo for modificado...</h4>
+               <h4 style="margin:0; color:#334155;">Condição (SE) e ações (ENTÃO)</h4>
                <button class="btn btn-primary btn-sm" onclick="window.addLogicRule()">+ Adicionar Regra (SE)</button>
            </div>
            
@@ -328,11 +353,18 @@
     </div>
 </div>
 
-<script>
-  // Cache-buster: always load latest builder
-  const s = document.createElement('script');
-  s.src = 'js/checklists-builder.js?v=' + Date.now();
-  document.head.appendChild(s);
+<script type="module">
+  // Descobre a API real (evita POST para :5500 Live Server) antes do builder
+  import { ensureAdminApiDetected, resolveApiBase } from './js/config.js';
+  await ensureAdminApiDetected();
+  window.__BRSPARK_API_BASE__ = resolveApiBase();
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'js/checklists-builder.js?v=' + Date.now();
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Falha ao carregar checklists-builder.js'));
+    document.head.appendChild(s);
+  });
 </script>
 </body>
 </html>

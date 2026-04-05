@@ -620,6 +620,20 @@ model ChatMessage {
 // ─────────────────────────────────────────────────────────
 // CHECKLISTS FSM E WORKFORCE MANAGEMENT
 // ─────────────────────────────────────────────────────────
+// Pastas do Form Builder (apenas admin — organização de modelos)
+model ChecklistTemplateFolder {
+  id        String   @id @default(cuid())
+  parentId  String?
+  parent    ChecklistTemplateFolder?  @relation("ChecklistTemplateFolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  ChecklistTemplateFolder[] @relation("ChecklistTemplateFolderTree")
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  templates ChecklistTemplate[]
+}
+
 model ChecklistTemplate {
   id          String   @id @default(cuid())
   tenantId    String?  
@@ -630,6 +644,8 @@ model ChecklistTemplate {
   metadata    Json?    // Ex: { icon: "cart", iconLibrary: "Ionicons", iconColor: "#000" }
   version     Int      @default(1)
   isActive    Boolean  @default(true)
+  folderId    String?
+  folder      ChecklistTemplateFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   

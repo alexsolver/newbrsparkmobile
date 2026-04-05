@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal, AppState, type AppStateStatus } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
@@ -20,6 +21,128 @@ import LiveRouteMapCard from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { FieldHelpInstructions } from '../../src/components/FieldHelpInstructions';
+import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
+
+/** Alinhado ao builder do painel — condição “cronómetro geral”. */
+const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
+
+function formatDurationClock(totalSec: number) {
+  const s = Math.max(0, Math.floor(totalSec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
+
+function getSectionTimingKeys(sectionId: string) {
+  return {
+    start: `__section_start_${sectionId}`,
+    end: `__section_end_${sectionId}`,
+  };
+}
+
+/** Duração da etapa em segundos; null se ainda não houve início registado. */
+function getSectionElapsedSeconds(responses: Record<string, any>, sectionId: string, nowMs: number): number | null {
+  const { start, end } = getSectionTimingKeys(sectionId);
+  const s = responses[start];
+  if (!s) return null;
+  const startMs = new Date(s).getTime();
+  if (Number.isNaN(startMs)) return null;
+  const e = responses[end];
+  const endMs = e ? new Date(e).getTime() : nowMs;
+  if (Number.isNaN(endMs)) return null;
+  return Math.max(0, Math.floor((endMs - startMs) / 1000));
+}
+
+function getFormElapsedSeconds(responses: Record<string, any>, nowMs: number): number {
+  const raw = responses.__form_started_at;
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.max(0, Math.floor((nowMs - t) / 1000));
+}
+
+function getFormActiveDisplaySeconds(
+  responses: Record<string, any>,
+  fgSegmentStart: number | null,
+  nowMs: number
+): number {
+  const base = Number(responses.__form_active_seconds);
+  const b = Number.isFinite(base) && base >= 0 ? base : 0;
+  if (fgSegmentStart != null && nowMs >= fgSegmentStart) {
+    return b + Math.floor((nowMs - fgSegmentStart) / 1000);
+  }
+  return b;
+}
+
+/** Resposta extra: notas do técnico por campo (configurável no builder). */
+function technicianCommentKey(fieldId: string) {
+  return `__comment_${fieldId}`;
+}
+
+const MULTIPLE_VALUE_TYPES = new Set([
+  'text',
+  'email',
+  'phone',
+  'date',
+  'number',
+  'photo',
+  'photo_stamped',
+  'file_upload',
+]);
+
+function fieldAllowsMultiple(field: any) {
+  return !!field?.multiple && MULTIPLE_VALUE_TYPES.has(field?.type);
+}
+
+function multiMinItems(field: any): number {
+  if (!fieldAllowsMultiple(field)) return field?.required ? 1 : 0;
+  const raw = field.minItems;
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    const m = parseInt(String(raw), 10);
+    if (Number.isFinite(m) && m >= 0) return field.required ? Math.max(m, 1) : m;
+  }
+  return field.required ? 1 : 0;
+}
+
+function multiMaxItems(field: any): number | null {
+  if (!fieldAllowsMultiple(field)) return null;
+  const raw = field.maxItems;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const m = parseInt(String(raw), 10);
+  if (Number.isFinite(m) && m > 0) return m;
+  return null;
+}
+
+function normalizeResponseArray(raw: any): any[] {
+  if (raw === undefined || raw === null) return [];
+  if (Array.isArray(raw)) return [...raw];
+  return [raw];
+}
+
+function isMultiItemFilled(val: any, fieldType: string): boolean {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'string') return val.trim() !== '';
+  if (typeof val === 'number') return Number.isFinite(val);
+  return true;
+}
+
+/** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
+function isFieldAnswerFilled(field: any, raw: any): boolean {
+  if (!fieldAllowsMultiple(field)) {
+    if (raw === undefined || raw === null) return false;
+    if (typeof raw === 'string') return raw.trim() !== '';
+    if (typeof raw === 'number') return Number.isFinite(raw);
+    return true;
+  }
+  const arr = normalizeResponseArray(raw);
+  const min = multiMinItems(field);
+  const filled = arr.filter((x) => isMultiItemFilled(x, field.type));
+  if (filled.length < min) return false;
+  const max = multiMaxItems(field);
+  if (max != null && arr.length > max) return false;
+  if (field.required && filled.length < 1) return false;
+  return true;
+}
 
 function normalizeEtaMinutes(raw: unknown): number | null {
   if (raw === null || raw === undefined) return null;
@@ -115,6 +238,41 @@ export default function ChecklistEngine() {
 
   const resolvedTaskId =
     typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
+
+  const [ruleTick, setRuleTick] = useState(0);
+  const fgSegmentStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (loading || isReadOnly) return;
+    const idInt = setInterval(() => setRuleTick((x) => x + 1), 1000);
+    return () => clearInterval(idInt);
+  }, [loading, isReadOnly]);
+
+  const draftKeyForForm = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${typeof id === 'string' ? id : Array.isArray(id) ? id[0] : String(id || '')}`;
+
+  useEffect(() => {
+    if (loading || isReadOnly) return;
+    fgSegmentStartRef.current = Date.now();
+    const handle = (next: AppStateStatus) => {
+      const now = Date.now();
+      if (next === 'active') {
+        fgSegmentStartRef.current = now;
+      } else if (fgSegmentStartRef.current != null) {
+        const delta = Math.floor((now - fgSegmentStartRef.current) / 1000);
+        fgSegmentStartRef.current = null;
+        if (delta > 0) {
+          setResponses((prev: any) => {
+            const b = Number(prev.__form_active_seconds) || 0;
+            const nextTotal = b + delta;
+            AsyncStorage.setItem(draftKeyForForm, JSON.stringify({ ...prev, __form_active_seconds: nextTotal })).catch(() => {});
+            return { ...prev, __form_active_seconds: nextTotal };
+          });
+        }
+      }
+    };
+    const sub = AppState.addEventListener('change', handle);
+    return () => sub.remove();
+  }, [loading, isReadOnly, draftKeyForForm]);
 
   useEffect(() => {
     currentTaskRef.current = currentTask;
@@ -245,112 +403,6 @@ export default function ChecklistEngine() {
       }
       handleInput(fieldId, imgUri);
       return true;
-  };
-
-  const handleMediaPicker = async (fieldId: string, type: string) => {
-      if (type === 'file_upload') {
-          try {
-             const res = await DocumentPicker.getDocumentAsync({});
-             if (!res.canceled && res.assets && res.assets.length > 0) {
-                 handleInput(fieldId, res.assets[0].uri);
-             }
-          } catch(e) {}
-      } else {
-          try {
-             if (type === 'photo_stamped' || type === 'facial_recognition') {
-                 
-                 // Intercept custom camera mode for facial recognition
-                 if (type === 'facial_recognition') {
-                     const fieldData = template?.schemaData?.find((f: any) => f.id === fieldId);
-                     console.log("[DEBUG] fieldId:", fieldId, "fieldData.cameraMode:", fieldData?.cameraMode);
-                     
-                     if (fieldData?.cameraMode === 'scanner') {
-                         console.log("[DEBUG] Trying scanner mode...");
-                         if (!cameraPermission?.granted) {
-                             console.log("[DEBUG] Requesting camera permission...");
-                             try {
-                                 const p = await requestCameraPermission();
-                                 if (!p.granted) return Alert.alert("Atenção", "Permissão negada para câmera virtual.");
-                             } catch (permErr: any) {
-                                 console.log("[DEBUG] Permission error:", permErr);
-                             }
-                         }
-                         setScannerFieldId(fieldId);
-                         setShowScanner(true);
-                         return; // Modal will handle the capture
-                     }
-                 }
-
-                 try {
-                     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                     if (status !== 'granted') return Alert.alert("Atenção", "Permissão negada para câmera nativa.");
-                     
-                     const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
-                     if (!res.canceled && res.assets && res.assets.length > 0) {
-                         const imgAsset = res.assets[0];
-
-                         let gpsQuery = "?live=true";
-                         try {
-                             const loc = await Location.getLastKnownPositionAsync({}) || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                             if (loc && loc.coords) {
-                                 const { latitude, longitude } = loc.coords;
-                                 gpsQuery += `&lat=${latitude}&lng=${longitude}`;
-                                 try {
-                                     const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
-                                     if (rev && rev.length > 0) {
-                                        const r = rev[0];
-                                        const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
-                                        gpsQuery += `&addr=${encodeURIComponent(addr)}`;
-                                     }
-                                 } catch(e) {}
-                             }
-                         } catch(e) {}
-
-                         if (type === 'facial_recognition') {
-                             const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri + gpsQuery);
-                             if (!ok) return;
-                         } else {
-                             handleInput(fieldId, imgAsset.uri + gpsQuery);
-                         }
-                     }
-                 } catch (err: any) {
-                     Alert.alert("Câmera Indisponível", err.message || "Erro ao tentar abrir a câmera.");
-                 }
-             } else {
-                 Alert.alert("Adicionar Foto", "Importar foto de onde?", [
-                    { text: "Câmera", onPress: async () => {
-                        try {
-                            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                            if (status !== 'granted') {
-                                Alert.alert("Atenção", "Permissão negada para câmera.");
-                                return;
-                            }
-                            const res = await ImagePicker.launchCameraAsync({ quality: 0.5 });
-                            if (!res.canceled && res.assets && res.assets.length > 0) handleInput(fieldId, res.assets[0].uri);
-                        } catch (camErr: any) {
-                            Alert.alert("Câmera Indisponível", camErr.message || "Não foi possível abrir a câmera. Você está em um simulador?");
-                        }
-                    }},
-                    { text: "Galeria", onPress: async () => {
-                        try {
-                            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                            if (status !== 'granted') {
-                                Alert.alert("Atenção", "Permissão negada para galeria.");
-                                return;
-                            }
-                            const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
-                            if (!res.canceled && res.assets && res.assets.length > 0) handleInput(fieldId, res.assets[0].uri);
-                        } catch (galErr: any) {
-                            Alert.alert("Galeria Indisponível", galErr.message || "Erro ao abrir a galeria.");
-                        }
-                    }},
-                    { text: "Cancelar", style: "cancel" }
-                 ]);
-             }
-          } catch(e: any) {
-              Alert.alert("Erro", "Erro geral na captura de mídia.");
-          }
-      }
   };
 
   // --- Geo Engine: Haversine distance (meters) ---
@@ -912,8 +964,20 @@ export default function ChecklistEngine() {
           }
         });
       }
+      if (!isReadOnly) {
+        if (!initialRes.__form_started_at) {
+          initialRes.__form_started_at = new Date().toISOString();
+        }
+        if (initialRes.__form_active_seconds == null || initialRes.__form_active_seconds === '') {
+          initialRes.__form_active_seconds = 0;
+        }
+      }
       setResponses(initialRes);
-      setStartTime(Date.now());
+      if (initialRes.__form_started_at) {
+        setStartTime(new Date(initialRes.__form_started_at).getTime());
+      } else {
+        setStartTime(Date.now());
+      }
 
       // ── Opção B: Carregar task e mostrar mapa de confirmação ──────
       let shouldShowMap = false;
@@ -976,40 +1040,199 @@ export default function ChecklistEngine() {
     return result;
   };
 
-    const handleInput = (fieldId: string, value: any) => {
+  const handleInput = (fieldId: string, value: any) => {
     if (Object.keys(responses).length === 0) {
-        // Primeira interação de fato do usuário configurará "Em andamento"
-        notifyKanbanStatus('IN_PROGRESS');
+      notifyKanbanStatus('IN_PROGRESS');
     }
     if (isReadOnly) return;
-    
-    // Ignora timestamping para metadados invisíveis
+
     const isMetaField = fieldId.startsWith('__');
     const timeKey = `__time_${fieldId}`;
-    
-    const newRes = { 
-        ...responses, 
-        [fieldId]: value,
-        ...(isMetaField ? {} : { [timeKey]: new Date().toISOString() })
+    const fieldDef = !isMetaField ? template?.schemaData?.find((f: any) => f.id === fieldId) : null;
+    let stored = value;
+    if (fieldAllowsMultiple(fieldDef) && (value === null || value === '')) {
+      stored = [];
+    }
+
+    const newRes = {
+      ...responses,
+      [fieldId]: stored,
+      ...(isMetaField ? {} : { [timeKey]: new Date().toISOString() }),
     };
-    
+
     setResponses(newRes);
-    // AutoSave specifically for this task instance
     const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
     AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
-    
-    // Register as "IN_PROGRESS" on first input
+
     if (taskId) {
-       AsyncStorage.getItem('@brspark_inprogress_tasks').then(str => {
-          let inprogs = [];
-          try { inprogs = JSON.parse(str || '[]'); } catch(e){}
-          if (!Array.isArray(inprogs)) inprogs = [];
-          
-          if (!inprogs.includes(String(taskId))) {
-             inprogs.push(String(taskId));
-             AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(inprogs));
+      AsyncStorage.getItem('@brspark_inprogress_tasks').then((str) => {
+        let inprogs = [];
+        try {
+          inprogs = JSON.parse(str || '[]');
+        } catch (e) {}
+        if (!Array.isArray(inprogs)) inprogs = [];
+
+        if (!inprogs.includes(String(taskId))) {
+          inprogs.push(String(taskId));
+          AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(inprogs));
+        }
+      });
+    }
+  };
+
+  const mergeMediaUriIntoField = (fieldId: string, uri: string) => {
+    const fieldDef = template?.schemaData?.find((f: any) => f.id === fieldId);
+    if (fieldAllowsMultiple(fieldDef)) {
+      const arr = normalizeResponseArray(responses[fieldId]);
+      const max = multiMaxItems(fieldDef);
+      if (max != null && arr.length >= max) {
+        Alert.alert('Limite', `Máximo de ${max} itens neste campo.`);
+        return;
+      }
+      handleInput(fieldId, [...arr, uri]);
+      return;
+    }
+    handleInput(fieldId, uri);
+  };
+
+  const handleMediaPicker = async (fieldId: string, type: string) => {
+    if (type === 'file_upload') {
+      try {
+        const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+        if (res.canceled || !res.assets?.length) return;
+        const asset = res.assets[0];
+        let sizeBytes: number | undefined =
+          typeof asset.size === 'number' && Number.isFinite(asset.size) ? asset.size : undefined;
+        if (sizeBytes == null) {
+          const info = await FileSystem.getInfoAsync(asset.uri);
+          if (info.exists && typeof info.size === 'number') {
+            sizeBytes = info.size;
           }
-       });
+        }
+        if (sizeBytes == null || !Number.isFinite(sizeBytes)) {
+          Alert.alert(
+            'Anexo',
+            'Não foi possível verificar o tamanho do ficheiro. Tente outro ficheiro ou formato.'
+          );
+          return;
+        }
+        const gate = checkAttachmentMeta({
+          sizeBytes,
+          fileName: asset.name ?? null,
+          mimeType: asset.mimeType ?? null,
+        });
+        if (!gate.ok) {
+          Alert.alert('Anexo recusado', gate.message);
+          return;
+        }
+        mergeMediaUriIntoField(fieldId, asset.uri);
+      } catch (e) {
+        Alert.alert('Anexo', 'Não foi possível selecionar o ficheiro.');
+      }
+    } else {
+      try {
+        if (type === 'photo_stamped' || type === 'facial_recognition') {
+          if (type === 'facial_recognition') {
+            const fieldData = template?.schemaData?.find((f: any) => f.id === fieldId);
+            if (fieldData?.cameraMode === 'scanner') {
+              if (!cameraPermission?.granted) {
+                try {
+                  const p = await requestCameraPermission();
+                  if (!p.granted) return Alert.alert('Atenção', 'Permissão negada para câmera virtual.');
+                } catch (permErr: any) {
+                  /* ignore */
+                }
+              }
+              setScannerFieldId(fieldId);
+              setShowScanner(true);
+              return;
+            }
+          }
+
+          try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') return Alert.alert('Atenção', 'Permissão negada para câmera nativa.');
+
+            const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
+            if (!res.canceled && res.assets && res.assets.length > 0) {
+              const imgAsset = res.assets[0];
+
+              let gpsQuery = '?live=true';
+              try {
+                const loc =
+                  (await Location.getLastKnownPositionAsync({})) ||
+                  (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+                if (loc && loc.coords) {
+                  const { latitude, longitude } = loc.coords;
+                  gpsQuery += `&lat=${latitude}&lng=${longitude}`;
+                  try {
+                    const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
+                    if (rev && rev.length > 0) {
+                      const r = rev[0];
+                      const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
+                      gpsQuery += `&addr=${encodeURIComponent(addr)}`;
+                    }
+                  } catch (e) {}
+                }
+              } catch (e) {}
+
+              if (type === 'facial_recognition') {
+                const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri + gpsQuery);
+                if (!ok) return;
+              } else {
+                mergeMediaUriIntoField(fieldId, imgAsset.uri + gpsQuery);
+              }
+            }
+          } catch (err: any) {
+            Alert.alert('Câmera Indisponível', err.message || 'Erro ao tentar abrir a câmera.');
+          }
+        } else {
+          Alert.alert('Adicionar Foto', 'Importar foto de onde?', [
+            {
+              text: 'Câmera',
+              onPress: async () => {
+                try {
+                  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                  if (status !== 'granted') {
+                    Alert.alert('Atenção', 'Permissão negada para câmera.');
+                    return;
+                  }
+                  const res = await ImagePicker.launchCameraAsync({ quality: 0.5 });
+                  if (!res.canceled && res.assets && res.assets.length > 0) {
+                    mergeMediaUriIntoField(fieldId, res.assets[0].uri);
+                  }
+                } catch (camErr: any) {
+                  Alert.alert(
+                    'Câmera Indisponível',
+                    camErr.message || 'Não foi possível abrir a câmera. Você está em um simulador?'
+                  );
+                }
+              },
+            },
+            {
+              text: 'Galeria',
+              onPress: async () => {
+                try {
+                  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                  if (status !== 'granted') {
+                    Alert.alert('Atenção', 'Permissão negada para galeria.');
+                    return;
+                  }
+                  const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
+                  if (!res.canceled && res.assets && res.assets.length > 0) {
+                    mergeMediaUriIntoField(fieldId, res.assets[0].uri);
+                  }
+                } catch (galErr: any) {
+                  Alert.alert('Galeria Indisponível', galErr.message || 'Erro ao abrir a galeria.');
+                }
+              },
+            },
+            { text: 'Cancelar', style: 'cancel' },
+          ]);
+        }
+      } catch (e: any) {
+        Alert.alert('Erro', 'Erro geral na captura de mídia.');
+      }
     }
   };
 
@@ -1070,6 +1293,23 @@ export default function ChecklistEngine() {
           finalResponses[`__section_end_${currentSectionData.id}`] = new Date().toISOString();
       }
 
+      const nowSubmit = Date.now();
+      const formStartIso =
+        typeof finalResponses.__form_started_at === 'string' && finalResponses.__form_started_at
+          ? finalResponses.__form_started_at
+          : new Date(startTime).toISOString();
+      const formFillDurationSeconds = Math.max(
+        0,
+        Math.floor((nowSubmit - new Date(formStartIso).getTime()) / 1000)
+      );
+      let formActiveSeconds = Number(finalResponses.__form_active_seconds) || 0;
+      if (fgSegmentStartRef.current != null) {
+        formActiveSeconds += Math.max(0, Math.floor((nowSubmit - fgSegmentStartRef.current) / 1000));
+      }
+      finalResponses.__form_completed_at = new Date().toISOString();
+      finalResponses.__form_fill_duration_sec = formFillDurationSeconds;
+      finalResponses.__form_active_seconds_final = formActiveSeconds;
+
       const payload = {
         templateId: id,
         taskId: taskId || '',
@@ -1079,10 +1319,12 @@ export default function ChecklistEngine() {
             ...(origMeta.receivedAt ? { receivedAt: origMeta.receivedAt } : {}),
             ...(origMeta.acceptedAt ? { acceptedAt: origMeta.acceptedAt } : {}),
             appVersion: '1.0',
-            durationSeconds: Math.floor((Date.now() - startTime) / 1000),
+            durationSeconds: formFillDurationSeconds,
+            formFillDurationSeconds,
+            formActiveSeconds,
             devicePlatform: 'AppMovel'
         },
-        startedAt: new Date(startTime).toISOString(),
+        startedAt: formStartIso,
         completedAt: new Date().toISOString()
       };
 
@@ -1129,11 +1371,40 @@ export default function ChecklistEngine() {
 
   // --- Logic Engine Evaluator (IF/THEN Rules Central) ---
   const evaluateCondition = (condFieldId: string, op: string, condValue: any, dataModel: any = responses) => {
+      const nowMs = Date.now();
+      const schema = template?.schemaData || [];
+
+      if (condFieldId === FORM_CLOCK_COND_ID) {
+        const elapsed = getFormElapsedSeconds(dataModel, nowMs);
+        const secTarget = parseFloat(String(condValue ?? '0').replace(',', '.')) || 0;
+        if (op === 'form_elapsed_sec_gte') return elapsed >= secTarget;
+        if (op === 'form_elapsed_sec_lte') return elapsed <= secTarget;
+        return false;
+      }
+
+      const condFieldDef = schema.find((x: any) => x.id === condFieldId);
+      if (condFieldDef?.type === 'section_break') {
+        const { start, end } = getSectionTimingKeys(condFieldId);
+        const hasStart = !!dataModel[start];
+        const hasEnd = !!dataModel[end];
+        const elapsed = getSectionElapsedSeconds(dataModel, condFieldId, nowMs);
+        const secTarget = parseFloat(String(condValue ?? '0').replace(',', '.')) || 0;
+
+        if (op === 'section_has_started') return hasStart;
+        if (op === 'section_not_started') return !hasStart;
+        if (op === 'section_has_ended') return hasEnd;
+        if (op === 'section_not_ended') return hasStart && !hasEnd;
+        if (op === 'section_in_progress') return hasStart && !hasEnd;
+        if (op === 'section_elapsed_sec_gte') return elapsed != null && elapsed >= secTarget;
+        if (op === 'section_elapsed_sec_lte') return elapsed != null && elapsed <= secTarget;
+        return false;
+      }
+
       const rawDepVal = dataModel[condFieldId];
       const parseToStr = (val: any) => {
-         if (val === undefined || val === null) return '';
-         if (Array.isArray(val)) return val.join(', ').toLowerCase();
-         return String(val).toLowerCase();
+        if (val === undefined || val === null) return '';
+        if (Array.isArray(val)) return val.map((v) => String(v)).join(', ').toLowerCase();
+        return String(val).toLowerCase();
       };
       
       const depVal = parseToStr(rawDepVal).trim();
@@ -1170,7 +1441,7 @@ export default function ChecklistEngine() {
                  f.rules.forEach((r: any) => {
                      fieldRules.push({
                          ...r,
-                         condFieldId: f.id,
+                         condFieldId: r.condFieldId || f.id,
                          condOperator: r.operator || r.condOperator,
                          condValue: r.value || r.condValue
                      });
@@ -1218,8 +1489,8 @@ export default function ChecklistEngine() {
                   }
               } catch (err: any) {
                   Alert.alert('Bloqueio no Sistema Externo', err.message);
-                  // Limpa o valor para impedir o técnico de avançar com o dado inválido
-                  handleInput(fieldId, '');
+                  const fd = template?.schemaData?.find((f: any) => f.id === fieldId);
+                  handleInput(fieldId, fieldAllowsMultiple(fd) ? [] : '');
               } finally {
                   setValidatingFieldId(null);
               }
@@ -1255,7 +1526,7 @@ export default function ChecklistEngine() {
         const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
         AsyncStorage.setItem(draftKey, JSON.stringify(nextResponses));
      }
-  }, [responses, template]);
+  }, [responses, template, ruleTick]);
 
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
       if (field.type === 'section_break' && !checkSectionBreak) return false; 
@@ -1377,10 +1648,10 @@ export default function ChecklistEngine() {
          if (!isFieldVisible(f)) continue;
          if (isFieldRequired(f)) {
              const ans = responses[f.id];
-             if (ans === undefined || ans === null || String(ans).trim() === '') {
+             if (!isFieldAnswerFilled(f, ans)) {
                  isValid = false;
                  Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
-                 break; // Pare no primeiro erro
+                 break;
              }
          }
      }
@@ -1425,16 +1696,43 @@ export default function ChecklistEngine() {
   const currentPageData = pages[currentPage] || { fields: [], pageTitle: 'Checklist' };
   const currentFieldsToRender = currentPageData.fields;
 
+  const nowClock = Date.now();
+  const formElapsedDisp = getFormElapsedSeconds(responses, nowClock);
+  const activeDisp = getFormActiveDisplaySeconds(responses, fgSegmentStartRef.current, nowClock);
+  const sectionElapsedDisp =
+    currentPageData.id && !isReadOnly
+      ? getSectionElapsedSeconds(responses, currentPageData.id, nowClock)
+      : null;
+  void ruleTick;
+
   return (
     <View style={styles.container}>
       <LinearGradient 
         colors={['#EA580C', '#F97316']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={styles.header}
+        style={[styles.header, { paddingBottom: isReadOnly ? 12 : 8 }]}
       >
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#FFF"/></TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{currentPageData.pageTitle !== 'Página 1' ? currentPageData.pageTitle : (template?.title || 'Checklist')}</Text>
+        <View style={{ flex: 1, marginHorizontal: 8 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{currentPageData.pageTitle !== 'Página 1' ? currentPageData.pageTitle : (template?.title || 'Checklist')}</Text>
+          {!isReadOnly ? (
+            <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: '600', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>
+              Total: {formatDurationClock(formElapsedDisp)} · Em foco (app aberto): {formatDurationClock(activeDisp)}
+              {sectionElapsedDisp != null
+                ? ` · Etapa: ${formatDurationClock(sectionElapsedDisp)}`
+                : currentPageData.id
+                  ? ' · Etapa: —'
+                  : ''}
+            </Text>
+          ) : (
+            <Text style={{ color: 'rgba(255,255,255,0.88)', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>
+              {typeof responses.__form_fill_duration_sec === 'number'
+                ? `Preenchimento: ${formatDurationClock(responses.__form_fill_duration_sec)} total · ${formatDurationClock(Number(responses.__form_active_seconds_final) || 0)} em foco`
+                : ''}
+            </Text>
+          )}
+        </View>
         <View style={{width: 24}}/>
       </LinearGradient>
       
@@ -1562,28 +1860,132 @@ export default function ChecklistEngine() {
                       </View>
                   )}
               
-              {(field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'date') && (
-                <TextInput
-                  style={styles.input}
-                  placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
-                  keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
-                  value={responses[field.id] || ''}
-                  editable={validatingFieldId !== field.id}
-                  onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
-                  onEndEditing={() => handleApiValidation(field.id)}
-                />
-              )}
-              {field.type === 'number' && (
-                <TextInput
-                  style={styles.input}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  value={responses[field.id] || ''}
-                  editable={validatingFieldId !== field.id}
-                  onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
-                  onEndEditing={() => handleApiValidation(field.id)}
-                />
-              )}
+              {(field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'date') &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(responses[field.id]);
+                      const rows = base.length > 0 ? base : [''];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <TextInput
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
+                                keyboardType={
+                                  field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'
+                                }
+                                value={String(rowVal ?? '')}
+                                editable={validatingFieldId !== field.id}
+                                onChangeText={(val) => {
+                                  const masked = applyMask(val, field.textMask);
+                                  const next = [...rows];
+                                  next[idx] = masked;
+                                  handleInput(field.id, next);
+                                }}
+                                onEndEditing={() => handleApiValidation(field.id)}
+                              />
+                              {rows.length > 1 ? (
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    const next = rows.filter((_: any, j: number) => j !== idx);
+                                    handleInput(field.id, next.length ? next : []);
+                                  }}
+                                >
+                                  <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          ))}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => handleInput(field.id, [...rows, ''])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Adicionar linha</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <TextInput
+                    style={styles.input}
+                    placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
+                    keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
+                    value={responses[field.id] || ''}
+                    editable={validatingFieldId !== field.id}
+                    onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                    onEndEditing={() => handleApiValidation(field.id)}
+                  />
+                ))}
+              {field.type === 'number' &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(responses[field.id]);
+                      const rows = base.length > 0 ? base : [''];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <TextInput
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder="0"
+                                keyboardType="numeric"
+                                value={String(rowVal ?? '')}
+                                editable={validatingFieldId !== field.id}
+                                onChangeText={(val) => {
+                                  const masked = applyMask(val, field.textMask);
+                                  const next = [...rows];
+                                  next[idx] = masked;
+                                  handleInput(field.id, next);
+                                }}
+                                onEndEditing={() => handleApiValidation(field.id)}
+                              />
+                              {rows.length > 1 ? (
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    const next = rows.filter((_: any, j: number) => j !== idx);
+                                    handleInput(field.id, next.length ? next : []);
+                                  }}
+                                >
+                                  <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          ))}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => handleInput(field.id, [...rows, ''])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Adicionar valor</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    value={responses[field.id] || ''}
+                    editable={validatingFieldId !== field.id}
+                    onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                    onEndEditing={() => handleApiValidation(field.id)}
+                  />
+                ))}
               {field.type === 'dropdown' && (
                 <View style={{gap: 8}}>
                    {(field.options || '').split(',').map((opt:string, i:number) => {
@@ -1638,7 +2040,7 @@ export default function ChecklistEngine() {
                  let rawFormula = field.calcFormula || '';
                  Object.keys(responses).forEach(key => {
                      let valObj = responses[key];
-                     let val = parseFloat(valObj);
+                     let val = parseFloat(Array.isArray(valObj) ? valObj[0] : valObj);
                      if(isNaN(val)) val = 0;
                      rawFormula = rawFormula.split(key).join(val.toString());
                  });
@@ -1707,26 +2109,55 @@ export default function ChecklistEngine() {
                      >
                        <Ionicons name={field.type === 'file_upload' ? "document-attach" : "camera"} size={32} color={field.type === 'photo_stamped' ? "#d97706" : "#64748b"} />
                        <Text style={[styles.cameraText, field.type === 'photo_stamped' && {color: "#d97706"}]}>
-                         {field.type === 'photo_stamped' ? 'FOTOGRAFAR (GPS OBRIGATÓRIO)' : field.type === 'file_upload' ? 'Anexar Arquivo...' : 'Adicionar Foto...'}
+                         {field.type === 'photo_stamped'
+                           ? fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                             ? 'Adicionar outra foto (GPS)'
+                             : 'FOTOGRAFAR (GPS OBRIGATÓRIO)'
+                           : field.type === 'file_upload'
+                             ? fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                               ? 'Anexar outro ficheiro'
+                               : 'Anexar Arquivo'
+                             : fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                               ? 'Adicionar outra foto...'
+                               : 'Adicionar Foto...'}
                        </Text>
                      </TouchableOpacity>
                   )}
-                   {responses[field.id] && (
-                    <View style={{marginTop:10, padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
+                   {(() => {
+                    const mediaUris = fieldAllowsMultiple(field)
+                      ? normalizeResponseArray(responses[field.id])
+                      : responses[field.id]
+                        ? [responses[field.id]]
+                        : [];
+                    if (mediaUris.length === 0) return null;
+                    return (
+                    <View style={{ marginTop: 10, gap: 10 }}>
+                      {mediaUris.map((oneUri: any, midx: number) => (
+                    <View key={midx} style={{padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
                        {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') && (
                           <View style={{ width: '100%', height: 200, borderRadius: 6, overflow: 'hidden', marginBottom: 10, backgroundColor: '#cbd5e1' }}>
-                             <Image source={{ uri: responses[field.id].split('?')[0] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                             <Image source={{ uri: String(oneUri).split('?')[0] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                           </View>
                        )}
                        <View style={{flexDirection:'row', alignItems:'center'}}>
                            <Ionicons name="checkmark-circle" size={24} color="#15803d" style={{marginRight:8}} />
-                           <Text style={{color:'#15803d', flex:1, fontSize:12}} numberOfLines={1}>{responses[field.id].split('/').pop()}</Text>
-                           <TouchableOpacity onPress={() => handleInput(field.id, null)}>
+                           <Text style={{color:'#15803d', flex:1, fontSize:12}} numberOfLines={1}>{String(oneUri).split('/').pop()}</Text>
+                           <TouchableOpacity onPress={() => {
+                             if (fieldAllowsMultiple(field)) {
+                               const next = normalizeResponseArray(responses[field.id]).filter((_: any, j: number) => j !== midx);
+                               handleInput(field.id, next.length ? next : []);
+                             } else {
+                               handleInput(field.id, null);
+                             }
+                           }}>
                                <Ionicons name="trash" size={24} color="#dc2626" />
                            </TouchableOpacity>
                        </View>
                     </View>
-                  )}
+                      ))}
+                    </View>
+                    );
+                   })()}
                 </View>
               )}
               {field.type === 'barcode_scan' && (
@@ -1871,6 +2302,41 @@ export default function ChecklistEngine() {
                    )}
                  </TouchableOpacity>
               )}
+              {field.type !== 'hidden' && field.allowTechnicianComment ? (
+                <View style={{ marginTop: 14 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 6 }}>
+                    Comentário do técnico <Text style={{ fontWeight: '500', color: '#94a3b8' }}>(opcional)</Text>
+                  </Text>
+                  {isReadOnly ? (
+                    responses[technicianCommentKey(field.id)] ? (
+                      <View
+                        style={{
+                          padding: 12,
+                          backgroundColor: '#fffbeb',
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: '#fde68a',
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: '#422006', lineHeight: 20 }}>
+                          {String(responses[technicianCommentKey(field.id)])}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Sem comentário.</Text>
+                    )
+                  ) : (
+                    <TextInput
+                      style={[styles.input, { minHeight: 88, paddingTop: 12, textAlignVertical: 'top' }]}
+                      placeholder="Notas, observações ou contexto adicional…"
+                      multiline
+                      maxLength={2000}
+                      value={responses[technicianCommentKey(field.id)] || ''}
+                      onChangeText={(t) => handleInput(technicianCommentKey(field.id), t)}
+                    />
+                  )}
+                </View>
+              ) : null}
               </View>
             </View>
           );
