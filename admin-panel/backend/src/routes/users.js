@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const prisma = require('../db');
+const { sendExpoPushToMany } = require('../services/expoPush');
 
 // GET /api/users
 router.get('/', async (req, res) => {
@@ -51,6 +52,28 @@ router.patch('/:id/toggle-active', async (req, res) => {
     if (!current) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: !current.isActive } });
     res.json({ id: user.id, isActive: user.isActive });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/users/:id/disconnect
+router.post('/:id/disconnect', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { currentSessionId: null, currentDeviceId: null }
+    });
+
+    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+    if (tokens.length > 0) {
+      sendExpoPushToMany(tokens, {
+        data: { type: 'FORCE_LOGOUT', reason: 'ADMIN_FORCE' }
+      }).catch(err => console.error('[admin_disconnect_push]', err));
+    }
+
+    res.json({ ok: true, message: 'Sessão encerrada com sucesso.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

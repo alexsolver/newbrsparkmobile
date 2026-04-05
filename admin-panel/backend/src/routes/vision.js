@@ -1,23 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../db');
-const jwt = require('jsonwebtoken');
-
-function anyValidJwt(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Token inválido ou expirado.' });
-  }
-}
+const authUser = require('../middleware/authUser');
 
 // POST /api/vision/verify-face
 // Payload: { imageBase64, provider }
-router.post('/verify-face', anyValidJwt, async (req, res) => {
+router.post('/verify-face', authUser, async (req, res) => {
   try {
     const { imageBase64, provider = 'AUTO' } = req.body;
     const ownerEmail = req.user.email; // Extracted from JWT

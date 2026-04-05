@@ -151,9 +151,9 @@
               <span class="dc-field-hint">Técnico sem OS ativa</span>
             </div>
             <div class="dc-field">
-              <label>Intervalo em Trânsito (min)</label>
-              <input type="number" id="locationIntervalTransitMin" value="2" min="1" max="15" />
-              <span class="dc-field-hint">Deslocamento até o cliente</span>
+              <label>Intervalo em Trânsito (seg)</label>
+              <input type="number" id="locationIntervalTransitSec" value="120" min="15" max="900" step="5" />
+              <span class="dc-field-hint">Mínimo entre leituras GPS em deslocamento (15 s a 15 min). Também grava o equivalente em minutos para compatibilidade.</span>
             </div>
             <div class="dc-field">
               <label>Intervalo em Atendimento (min)</label>
@@ -399,7 +399,7 @@
     <div class="dc-sep">Localização</div>
     <div class="dc-grid-2" style="gap:10px;margin-bottom:0">
       <div class="dc-field"><label>Intervalo Ocioso (min)</label><input type="number" id="d-locationIntervalIdleMin" placeholder="Herdar global"></div>
-      <div class="dc-field"><label>Intervalo em Trânsito (min)</label><input type="number" id="d-locationIntervalTransitMin" placeholder="Herdar global"></div>
+      <div class="dc-field"><label>Intervalo em Trânsito (seg)</label><input type="number" id="d-locationIntervalTransitSec" placeholder="Herdar global" min="15" max="900" step="5"></div>
       <div class="dc-field"><label>Intervalo em Atendimento (min)</label><input type="number" id="d-locationIntervalOnSiteMin" placeholder="Herdar global"></div>
       <div class="dc-field"><label>Filtro de Distância (m)</label><input type="number" id="d-locationDistanceFilterMeters" placeholder="Herdar global"></div>
     </div>
@@ -496,7 +496,12 @@ function populateForm(p) {
   const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
   const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
   set('locationIntervalIdleMin',       p.locationIntervalIdleMin);
-  set('locationIntervalTransitMin',    p.locationIntervalTransitMin);
+  {
+    const sec = (p.locationIntervalTransitSec != null && p.locationIntervalTransitSec !== '')
+      ? +p.locationIntervalTransitSec
+      : (+(p.locationIntervalTransitMin || 2)) * 60;
+    set('locationIntervalTransitSec', Math.min(900, Math.max(15, sec || 120)));
+  }
   set('locationIntervalOnSiteMin',     p.locationIntervalOnSiteMin);
   set('locationDistanceFilterMeters',  p.locationDistanceFilterMeters);
   set('retentionGpsRawDays',           p.retentionGpsRawDays);
@@ -548,7 +553,8 @@ window.saveGlobalPolicy = async () => {
     locationEnabled:              gc('locationEnabled'),
     locationBackgroundEnabled:    gc('locationBackgroundEnabled'),
     locationIntervalIdleMin:      +gv('locationIntervalIdleMin'),
-    locationIntervalTransitMin:   +gv('locationIntervalTransitMin'),
+    locationIntervalTransitSec:   Math.min(900, Math.max(15, +gv('locationIntervalTransitSec') || 120)),
+    locationIntervalTransitMin:   Math.max(1, Math.ceil((+gv('locationIntervalTransitSec') || 120) / 60)),
     locationIntervalOnSiteMin:    +gv('locationIntervalOnSiteMin'),
     locationDistanceFilterMeters: +gv('locationDistanceFilterMeters'),
     retentionGpsRawDays:          +gv('retentionGpsRawDays'),
@@ -621,7 +627,7 @@ window.openDrawer = async (tenantId, name, email) => {
   document.getElementById('dc-overlay').classList.add('open');
 
   // Clear
-  ['locationIntervalIdleMin','locationIntervalTransitMin','locationIntervalOnSiteMin',
+  ['locationIntervalIdleMin','locationIntervalTransitSec','locationIntervalOnSiteMin',
    'locationDistanceFilterMeters','retentionGpsRawDays','retentionEventsYears']
     .forEach(f => { const el = document.getElementById('d-' + f); if(el) el.value = ''; });
   ['legalBasis','outOfPolicyAction','mockGpsAction','rootJailbreakAction']
@@ -633,7 +639,12 @@ window.openDrawer = async (tenantId, name, email) => {
     currentPolicyId = over.id;
     const setOpt = (id, v) => { const el = document.getElementById('d-' + id); if(el && v !== undefined && v !== null) el.value = v; };
     setOpt('locationIntervalIdleMin',    over.locationIntervalIdleMin);
-    setOpt('locationIntervalTransitMin', over.locationIntervalTransitMin);
+    {
+      const sec = (over.locationIntervalTransitSec != null && over.locationIntervalTransitSec !== '')
+        ? +over.locationIntervalTransitSec
+        : (+(over.locationIntervalTransitMin || 2)) * 60;
+      setOpt('locationIntervalTransitSec', Math.min(900, Math.max(15, sec || 120)));
+    }
     setOpt('locationIntervalOnSiteMin',  over.locationIntervalOnSiteMin);
     setOpt('locationDistanceFilterMeters', over.locationDistanceFilterMeters);
     setOpt('retentionGpsRawDays',        over.retentionGpsRawDays);
@@ -658,11 +669,20 @@ window.saveTenantPolicy = async () => {
   if (!currentTenantId) return;
   const get = id => { const el = document.getElementById('d-' + id); return el?.value || undefined; };
   const body = { tenantId: currentTenantId };
-  ['locationIntervalIdleMin','locationIntervalTransitMin','locationIntervalOnSiteMin',
+  ['locationIntervalIdleMin','locationIntervalOnSiteMin',
    'locationDistanceFilterMeters','retentionGpsRawDays','retentionEventsYears',
    'legalBasis','outOfPolicyAction','mockGpsAction','rootJailbreakAction'].forEach(f => {
     const v = get(f); if (v) body[f] = isNaN(v) ? v : +v;
   });
+  const trSec = get('locationIntervalTransitSec');
+  if (trSec) {
+    const n = +trSec;
+    if (Number.isFinite(n)) {
+      const sec = Math.min(900, Math.max(15, n));
+      body.locationIntervalTransitSec = sec;
+      body.locationIntervalTransitMin = Math.max(1, Math.ceil(sec / 60));
+    }
+  }
   try {
     let res;
     if (currentPolicyId) res = await CONFIG.patch(`/collection-policy/${currentPolicyId}`, body);

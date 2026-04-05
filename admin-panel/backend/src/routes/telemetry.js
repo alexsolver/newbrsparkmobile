@@ -1,6 +1,79 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
+const authUser = require('../middleware/authUser');
+const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
+
+/** Sem GPS válido há N segundos → alerta para o técnico (notificação local no app). */
+const STALE_GPS_NOTIFY_SEC = Math.min(
+  3600,
+  Math.max(60, Number(process.env.TRACKING_GPS_STALE_NOTIFY_SEC) || 300)
+);
+
+function parseMetadata(raw) {
+  let m = raw || {};
+  if (typeof m === 'string') {
+    try {
+      m = JSON.parse(m);
+    } catch {
+      m = {};
+    }
+  }
+  return m && typeof m === 'object' ? m : {};
+}
+
+async function clearStaleGpsAlertsForExecutionIds(ids) {
+  const uniq = [...new Set(ids)].filter(Boolean);
+  for (const id of uniq) {
+    try {
+      const ex = await prisma.checklistExecution.findUnique({ where: { id }, select: { metadata: true } });
+      if (!ex) continue;
+      const meta = parseMetadata(ex.metadata);
+      if (!meta.trackingGpsStaleAlertAt) continue;
+      await prisma.checklistExecution.update({
+        where: { id },
+        data: { metadata: { ...meta, trackingGpsStaleAlertAt: null } },
+      });
+    } catch (e) {
+      console.warn('[telemetry] clear stale alert:', id, e.message);
+    }
+  }
+}
+
+async function runStaleGpsAlertCron() {
+  try {
+    const tasks = await prisma.checklistExecution.findMany({
+      where: { status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+      select: { id: true, metadata: true },
+    });
+    const active = tasks.filter((t) => {
+      const m = parseMetadata(t.metadata);
+      return !!(m.trackingStartedAt && !m.trackingEndedAt && !m.trackingPaused);
+    });
+    if (active.length === 0) return;
+    const ages = await latestGpsAgeSecondsByExecutionIds(active.map((t) => t.id));
+    for (const t of active) {
+      const age = ages.get(t.id);
+      const stale = age == null || !Number.isFinite(age) || age >= STALE_GPS_NOTIFY_SEC;
+      const meta = parseMetadata(t.metadata);
+      const next = { ...meta };
+      if (stale) {
+        if (!next.trackingGpsStaleAlertAt) {
+          next.trackingGpsStaleAlertAt = new Date().toISOString();
+          await prisma.checklistExecution.update({ where: { id: t.id }, data: { metadata: next } });
+        }
+      } else if (next.trackingGpsStaleAlertAt) {
+        next.trackingGpsStaleAlertAt = null;
+        await prisma.checklistExecution.update({ where: { id: t.id }, data: { metadata: next } });
+      }
+    }
+  } catch (err) {
+    console.error('[StaleGPS Cron]', err.message);
+  }
+}
+
+setInterval(runStaleGpsAlertCron, 90 * 1000);
+setTimeout(runStaleGpsAlertCron, 8000);
 
 // ─── ETA Background Engine (Server-side Cron) ────────────────────────────────
 // Runs every 2 minutes. Finds all ACCEPTED/IN_PROGRESS tasks that have recent
@@ -196,6 +269,17 @@ router.post('/batch', async (req, res) => {
 
     await prisma.telemetryEvent.createMany({ data: records, skipDuplicates: true });
 
+    const execFreshGps = [
+      ...new Set(
+        records
+          .filter((r) => r.executionId && r.lat != null && r.lng != null)
+          .map((r) => r.executionId)
+      ),
+    ];
+    if (execFreshGps.length) {
+      void clearStaleGpsAlertsForExecutionIds(execFreshGps);
+    }
+
     // ─── ETA Engine (Background) ────────────────────────────────────────────────────────
     (async () => {
       try {
@@ -304,5 +388,35 @@ router.get('/run-eta', async (req, res) => {
   }
 });
 
+// ─── GET /api/telemetry/stale-reminders — app (JWT): OS em tracking sem GPS há 5+ min ──
+router.get('/stale-reminders', authUser, async (req, res) => {
+  try {
+    const email = req.user.email;
+    const tasks = await prisma.checklistExecution.findMany({
+      where: { ownerEmail: email, status: { in: ['ACCEPTED', 'IN_PROGRESS', 'PENDING'] } },
+      select: { id: true, metadata: true },
+    });
+    const flagged = tasks.filter((t) => {
+      const m = parseMetadata(t.metadata);
+      return !!m.trackingGpsStaleAlertAt;
+    });
+    if (flagged.length === 0) return res.json({ reminders: [] });
+    const ages = await latestGpsAgeSecondsByExecutionIds(flagged.map((t) => t.id));
+    const reminders = flagged.map((t) => {
+      const m = parseMetadata(t.metadata);
+      return {
+        executionId: t.id,
+        alertAt: m.trackingGpsStaleAlertAt,
+        title: m.title || null,
+        gpsAgeSeconds: ages.get(t.id) ?? null,
+      };
+    });
+    res.json({ reminders });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.runEtaCron = runEtaCron;
+module.exports.runStaleGpsAlertCron = runStaleGpsAlertCron;

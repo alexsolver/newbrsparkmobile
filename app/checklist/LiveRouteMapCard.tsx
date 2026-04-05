@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  Animated, StyleSheet, Text, TouchableOpacity, View, Easing, Modal, Dimensions, Image
+  Animated, StyleSheet, Text, TouchableOpacity, View, Easing, Modal, Dimensions, Image, ScrollView,
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
@@ -11,6 +12,22 @@ import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiFetch } from '../../src/services/api';
+import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
+
+/**
+ * Android: `react-native-maps` usa Google Maps e precisa de API key no manifest.
+ * Se o bundle Expo não tiver `android.config.googleMaps.apiKey`, o mapa nativo costuma fechar o app.
+ * Neste caso usamos painel sem MapView; navegação = apps externos (Waze / Google Maps via URL).
+ *
+ * `EXPO_PUBLIC_FORCE_TRANSIT_SIMPLE_MAP=1` força sempre o modo simples (útil em testes).
+ */
+function shouldEmbedNativeTransitMap(): boolean {
+  if (Platform.OS !== 'android') return true;
+  if (process.env.EXPO_PUBLIC_FORCE_TRANSIT_SIMPLE_MAP === '1') return false;
+  const k = (Constants.expoConfig as { android?: { config?: { googleMaps?: { apiKey?: string } } } })
+    ?.android?.config?.googleMaps?.apiKey;
+  return typeof k === 'string' && k.trim().length >= 20;
+}
 
 interface Props {
   route: number[][];      // [[lat,lng], ...]
@@ -22,8 +39,73 @@ interface Props {
   taskId?: string | null;
 }
 
+/** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
+function pickDestinationForOsrm(
+  targetLoc: Props['targetLoc'],
+  route: number[][]
+): { lat: number; lng: number } | null {
+  const tlat = targetLoc?.lat;
+  const tlng = targetLoc?.lng;
+  if (
+    tlat != null &&
+    tlng != null &&
+    Number.isFinite(Number(tlat)) &&
+    Number.isFinite(Number(tlng))
+  ) {
+    return { lat: Number(tlat), lng: Number(tlng) };
+  }
+  if (Array.isArray(route) && route.length >= 1) {
+    const last = route[route.length - 1];
+    if (Array.isArray(last) && last.length >= 2) {
+      const a = Number(last[0]);
+      const b = Number(last[1]);
+      if (Number.isFinite(a) && Number.isFinite(b)) return { lat: a, lng: b };
+    }
+  }
+  return null;
+}
+
+async function fetchOsrmDrivingMinutes(
+  oLat: number,
+  oLng: number,
+  dLat: number,
+  dLng: number
+): Promise<{ ok: boolean; minutes?: number }> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=false`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 14000);
+  try {
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json', 'User-Agent': 'BrsparkMobile/1.0' },
+      signal: ctrl.signal,
+    });
+    const text = await r.text();
+    let j: any;
+    try {
+      j = JSON.parse(text);
+    } catch {
+      return { ok: false };
+    }
+    if (!r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return { ok: false };
+    return { ok: true, minutes: Math.max(1, Math.round(j.routes[0].duration / 60)) };
+  } catch {
+    return { ok: false };
+  } finally {
+    clearTimeout(to);
+  }
+}
+
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
-function EtaBadge({ etaMinutes, pct }: { etaMinutes: number | null | undefined; pct: number }) {
+function EtaBadge({
+  etaMinutes,
+  pct,
+  hint,
+}: {
+  etaMinutes: number | null | undefined;
+  pct: number;
+  hint?: string | null;
+}) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -35,11 +117,11 @@ function EtaBadge({ etaMinutes, pct }: { etaMinutes: number | null | undefined; 
     ).start();
   }, []);
 
-  // Smart time formatting
-  let timeStr = 'Calculando...';
-  if (etaMinutes != null) {
-    const hours = Math.floor(etaMinutes / 60);
-    const mins  = etaMinutes % 60;
+  const hasNum = typeof etaMinutes === 'number' && Number.isFinite(etaMinutes);
+  let timeStr = hint || 'Calculando...';
+  if (hasNum) {
+    const hours = Math.floor(etaMinutes as number / 60);
+    const mins  = (etaMinutes as number) % 60;
     timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
   }
 
@@ -159,6 +241,7 @@ const etaStyles = StyleSheet.create({
 const { width, height } = Dimensions.get('window');
 
 export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit, taskId }: Props) {
+  const embedNativeMap = useMemo(() => shouldEmbedNativeTransitMap(), []);
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
@@ -167,9 +250,10 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
   const { user } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
-  
-  // Track pause state natively inside component (or from routeTracker)
+
   const [isPaused, setIsPaused] = useState(false);
+  const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
+  const [etaHint, setEtaHint] = useState<string | null>(null);
 
   // Subscribe to route tracker updates
   useEffect(() => {
@@ -182,10 +266,12 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     const handler = (u: RouteUpdate) => {
       setUpdate(u);
       setMyPos({ lat: u.currentLat, lng: u.currentLng });
-      mapRef.current?.animateCamera(
-        { center: { latitude: u.currentLat, longitude: u.currentLng }, zoom: 16 },
-        { duration: 800 }
-      );
+      if (embedNativeMap) {
+        mapRef.current?.animateCamera(
+          { center: { latitude: u.currentLat, longitude: u.currentLng }, zoom: 16 },
+          { duration: 800 }
+        );
+      }
     };
 
     const statusHandler = ({ status }: any) => {
@@ -199,6 +285,8 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     routeTracker.on('update', handler);
     routeTracker.on('status_changed', statusHandler);
     routeTracker.on('traversed_update', traversedHandler);
+
+    setIsPaused(routeTracker.isPaused());
     
     // Initialize coveredPath if resuming
     setCoveredPath(routeTracker.getTraversedPath());
@@ -212,7 +300,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       routeTracker.off('status_changed', statusHandler);
       routeTracker.off('traversed_update', traversedHandler);
     };
-  }, [visible, route]);
+  }, [visible, route, embedNativeMap]);
 
   // Fetch dynamic OSRM route for point-to-point tasks (e.g. radius tasks)
   useEffect(() => {
@@ -234,77 +322,95 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     }
   }, [visible, zoneType, myPos, targetLoc, dynamicRoute]);
 
-  // ETA no próprio mapa se o pai ainda não tiver valor (GPS + OSRM)
-  const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
+  const osrmDest = useMemo(
+    () => pickDestinationForOsrm(targetLoc, route),
+    [
+      targetLoc?.lat,
+      targetLoc?.lng,
+      route?.length,
+      route?.length ? route[route.length - 1]?.[0] : null,
+      route?.length ? route[route.length - 1]?.[1] : null,
+    ]
+  );
+
+  const parentHasFiniteEta = typeof etaMinutes === 'number' && Number.isFinite(etaMinutes);
+
   useEffect(() => {
     if (!visible) {
       setClientEtaMinutes(null);
+      setEtaHint(null);
       return;
     }
-    if (etaMinutes != null) {
+    if (parentHasFiniteEta) {
       setClientEtaMinutes(null);
+      setEtaHint(null);
       return;
     }
-    const dLat = targetLoc?.lat;
-    const dLng = targetLoc?.lng;
-    if (
-      dLat == null ||
-      dLng == null ||
-      !Number.isFinite(Number(dLat)) ||
-      !Number.isFinite(Number(dLng))
-    ) {
+    if (!osrmDest) {
+      setEtaHint('Sem coordenadas de destino');
       return;
     }
+    const { lat: dLat, lng: dLng } = osrmDest;
+
     let cancelled = false;
-    const fetchEta = async () => {
+    const tick = async () => {
       if (cancelled) return;
       try {
         let oLat = myPos?.lat ?? update?.currentLat;
         let oLng = myPos?.lng ?? update?.currentLng;
         if (oLat == null || oLng == null) {
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== 'granted') return;
+          if (status !== 'granted') {
+            if (!cancelled) setEtaHint('Ative a localização para ver o tempo');
+            return;
+          }
           const pos = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           });
           oLat = pos.coords.latitude;
           oLng = pos.coords.longitude;
         }
-        const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=false`;
-        const init: RequestInit = {
-          headers: { Accept: 'application/json', 'User-Agent': 'BrsparkMobile/1.0' },
-        };
-        if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
-          (init as any).signal = (AbortSignal as any).timeout(12000);
+        if (cancelled) return;
+        let res = await fetchOsrmDrivingMinutes(oLat, oLng, dLat, dLng);
+        if (!res.ok && Number.isFinite(dLat) && Number.isFinite(dLng)) {
+          res = await fetchOsrmDrivingMinutes(oLat, oLng, dLng, dLat);
         }
-        const r = await fetch(url, init);
-        const text = await r.text();
-        let j: any;
-        try {
-          j = JSON.parse(text);
-        } catch {
-          return;
+        if (cancelled) return;
+        if (res.ok && res.minutes != null) {
+          setClientEtaMinutes(res.minutes);
+          setEtaHint(null);
+        } else {
+          setEtaHint('Tempo indisponível (rede/OSRM)');
         }
-        if (cancelled || !r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return;
-        setClientEtaMinutes(Math.max(1, Math.round(j.routes[0].duration / 60)));
       } catch {
-        /* ignore */
+        if (!cancelled) setEtaHint('Tempo indisponível');
       }
     };
-    fetchEta();
-    const iv = setInterval(fetchEta, 18000);
+
+    setEtaHint(null);
+    tick();
+    const iv = setInterval(tick, 20000);
     return () => {
       cancelled = true;
       clearInterval(iv);
     };
-  }, [visible, etaMinutes, targetLoc?.lat, targetLoc?.lng, myPos?.lat, myPos?.lng, update?.currentLat, update?.currentLng]);
+  }, [
+    visible,
+    parentHasFiniteEta,
+    osrmDest?.lat,
+    osrmDest?.lng,
+    myPos?.lat,
+    myPos?.lng,
+    update?.currentLat,
+    update?.currentLng,
+  ]);
 
   if (!visible) return null;
 
   const isDeviation = update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
-  const displayEtaMinutes = etaMinutes != null ? etaMinutes : clientEtaMinutes;
+  const displayEtaMinutes = parentHasFiniteEta ? etaMinutes : clientEtaMinutes;
   
   let statusColor = '#f97316';
   if (isComplete) statusColor = '#16a34a';
@@ -314,17 +420,55 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const centerLat = myPos?.lat ?? (route && route.length > 0 ? route[0][0] : -23.5505);
   const centerLng = myPos?.lng ?? (route && route.length > 0 ? route[0][1] : -46.6333);
 
-  const handlePauseResume = () => {
+  const handlePauseResume = async () => {
+    if (!taskId) {
+      Alert.alert(
+        'Rastreamento',
+        'Sem identificador da OS no mapa — o link do cliente não poderá ser atualizado quando houver rede.'
+      );
+      return;
+    }
     if (isPaused) {
       routeTracker.resume();
-      if (taskId) apiFetch(`/api/tracking/resume/${taskId}`, { method: 'POST' }).catch(()=>{});
-    } else {
-      routeTracker.pause();
-      if (taskId) apiFetch(`/api/tracking/pause/${taskId}`, { method: 'POST' }).catch(()=>{});
+      try {
+        const r = await apiFetch(`/api/tracking/resume/${encodeURIComponent(taskId)}`, {
+          method: 'POST',
+        });
+        if (!r.ok) {
+          console.warn('[tracking] resume servidor', r.status);
+          await enqueueTrackingSync(String(taskId), 'resume');
+        }
+      } catch (e) {
+        console.warn('[tracking] resume offline/falha rede → fila', e);
+        await enqueueTrackingSync(String(taskId), 'resume');
+      }
+      return;
+    }
+    routeTracker.pause();
+    try {
+      const r = await apiFetch(`/api/tracking/pause/${encodeURIComponent(taskId)}`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        console.warn('[tracking] pause servidor', r.status);
+        await enqueueTrackingSync(String(taskId), 'pause');
+      }
+    } catch (e) {
+      console.warn('[tracking] pause offline/falha rede → fila', e);
+      await enqueueTrackingSync(String(taskId), 'pause');
     }
   };
 
   const handleRecenter = async () => {
+    if (!embedNativeMap) {
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setMyPos({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (myPos) {
        mapRef.current?.animateCamera({ center: { latitude: myPos.lat, longitude: myPos.lng }, zoom: 16 }, { duration: 400 });
     } else {
@@ -518,7 +662,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
 
         {/* ──── Premium ETA Badge — always visible during transit ──── */}
         {!isComplete && !isPaused && (
-          <EtaBadge etaMinutes={displayEtaMinutes ?? null} pct={pct} />
+          <EtaBadge etaMinutes={displayEtaMinutes ?? null} pct={pct} hint={etaHint} />
         )}
 
         {/* Deviation Banner Overlay */}

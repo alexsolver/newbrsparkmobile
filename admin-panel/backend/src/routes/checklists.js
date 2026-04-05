@@ -1,7 +1,55 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs').promises;
 const router = express.Router();
 const prisma = require('../db');
+const authUser = require('../middleware/authUser');
+const { adminAuth } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
+const { sendExpoPushToMany } = require('../services/expoPush');
+
+function sameOwnerEmail(execEmail, jwtEmail) {
+  if (!execEmail || !jwtEmail) return false;
+  return String(execEmail).trim().toLowerCase() === String(jwtEmail).trim().toLowerCase();
+}
+
+// Imagens nas instruções rich-text do Form Builder (painel admin autenticado)
+router.post('/help-image', adminAuth, async (req, res) => {
+  try {
+    const { fileBase64, mimeType } = req.body;
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+    }
+    const b64 = String(fileBase64).replace(/\s/g, '');
+    let buf;
+    try {
+      buf = Buffer.from(b64, 'base64');
+    } catch (e) {
+      return res.status(400).json({ error: 'Base64 da imagem inválido.' });
+    }
+    if (buf.length > 2_500_000) {
+      return res.status(400).json({ error: 'Imagem muito grande (máx. ~2,5 MB).' });
+    }
+    if (buf.length < 32) {
+      return res.status(400).json({ error: 'Arquivo inválido.' });
+    }
+    let ext = 'jpg';
+    const mt = String(mimeType || '').toLowerCase();
+    if (mt.includes('png')) ext = 'png';
+    else if (mt.includes('webp')) ext = 'webp';
+    else if (mt.includes('gif')) ext = 'gif';
+    else if (mt.includes('heic') || mt.includes('heif')) ext = 'heic';
+    const dir = path.join(__dirname, '../../public/uploads/checklist-help');
+    await fs.mkdir(dir, { recursive: true });
+    const fname = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+    await fs.writeFile(path.join(dir, fname), buf);
+    const url = `/uploads/checklist-help/${fname}`;
+    res.json({ url });
+  } catch (err) {
+    console.error('[checklists/help-image]', err);
+    res.status(500).json({ error: err.message || 'Falha no upload.' });
+  }
+});
 
 // --- Checklist Templates (O Construtor Salva Aqui, O Celular Lê Daqui) ---
 
@@ -86,14 +134,17 @@ router.delete('/templates/:id', async (req, res) => {
 // --- Execuções (O Celular Descarrega o Outbox Aqui) ---
 
 
-// GET /api/checklists/executions/:taskId
-router.get('/executions/:taskId', async (req, res) => {
+// GET /api/checklists/executions/:taskId (app: JWT + dono da OS)
+router.get('/executions/:taskId', authUser, async (req, res) => {
     try {
         const { taskId } = req.params;
         const exec = await prisma.checklistExecution.findFirst({
             where: { id: taskId }
         });
         if (!exec) return res.status(404).json({ error: 'Execução não encontrada' });
+        if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+            return res.status(403).json({ error: 'Acesso negado a esta execução.' });
+        }
         res.json(exec);
     } catch (err) {
         console.error("GET /api/checklists/executions/:taskId error:", err);
@@ -101,15 +152,17 @@ router.get('/executions/:taskId', async (req, res) => {
     }
 });
 
-// POST /api/checklists/executions
-// PATCH /api/checklists/executions/:taskId/status -> Real-time PING for Kanban tracking
-router.patch('/executions/:taskId/status', async (req, res) => {
+// PATCH /api/checklists/executions/:taskId/status -> Real-time PING + rascunho (app: JWT + dono)
+router.patch('/executions/:taskId/status', authUser, async (req, res) => {
     try {
         const { taskId } = req.params;
         const { status, timestamp, responses } = req.body;
         
         const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
+        if (!sameOwnerEmail(existing.ownerEmail, req.user.email)) {
+            return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+        }
 
         const ts = timestamp ? new Date(timestamp) : new Date();
         const updateData = {};
@@ -147,9 +200,10 @@ router.patch('/executions/:taskId/status', async (req, res) => {
     }
 });
 
-router.post('/executions', async (req, res) => {
+router.post('/executions', authUser, async (req, res) => {
     try {
         const { id, taskId, templateId, ownerEmail, assetId, responses, metadata, gpsLocation, startedAt, completedAt } = req.body;
+        const authEmail = req.user.email;
         
         let execution;
         let finalTemplateId = templateId || id;
@@ -159,6 +213,9 @@ router.post('/executions', async (req, res) => {
         if (taskId) {
             const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
             if (existing) {
+                if (!sameOwnerEmail(existing.ownerEmail, authEmail)) {
+                    return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+                }
                 execution = await prisma.checklistExecution.update({
                     where: { id: taskId },
                     data: {
@@ -179,10 +236,12 @@ router.post('/executions', async (req, res) => {
         
         // Fallback: This is an ad-hoc local checklist execution not dispatched from the cloud. Create it.
         if (!execution) {
+            const resolvedOwner =
+              ownerEmail && sameOwnerEmail(ownerEmail, authEmail) ? ownerEmail : authEmail;
             execution = await prisma.checklistExecution.create({
                 data: {
                     templateId: finalTemplateId,
-                    ownerEmail: ownerEmail || "unknown@owner.com",
+                    ownerEmail: resolvedOwner || 'unknown@owner.com',
                     assetId: assetId || null,
                     status: 'COMPLETED',             // Já chega consolidado do Outbox
                     responses: responses || {},
@@ -212,7 +271,7 @@ router.post('/executions', async (req, res) => {
         
         // Registrar sucesso no Cockpit!
         const payloadSize = JSON.stringify(req.body).length;
-        recordSync(ownerEmail, true, payloadSize);
+        recordSync(execution.ownerEmail || authEmail, true, payloadSize);
         
         res.json({ success: true, executionId: execution.id });
     } catch(err) {
@@ -273,32 +332,22 @@ router.post('/dispatch', async (req, res) => {
         
         console.log(`[DISPATCH] 📍 locationZoneType=${execution.locationZoneType} | polygon.length=${Array.isArray(execution.locationPolygon) ? execution.locationPolygon.length : 'null'} | lat=${execution.locationLat}`);
         
-        // ─── Disparar Push Notification se o técnico tiver token registrado ───
+        // ─── Push se o técnico tiver token (channelId Android = brspark-alerts) ───
         try {
             const user = await prisma.user.findUnique({ where: { email: payload.ownerEmail.toLowerCase() } });
             if (user) {
                 const pushTokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
-                for (const pt of pushTokens) {
-                    await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Accept-encoding': 'gzip, deflate',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            to: pt.token,
-                            sound: 'default',
-                            title: '📢 Nova OS Designada',
-                            body: templateTitle || 'Você recebeu uma nova atividade',
-                            data: { taskId: execution.id }
-                        })
+                if (pushTokens.length > 0) {
+                    await sendExpoPushToMany(pushTokens, {
+                        title: 'Nova OS designada',
+                        body: templateTitle || 'Você recebeu uma nova atividade',
+                        data: { taskId: execution.id },
                     });
+                    console.log(`[DISPATCH] Push enviado para ${pushTokens.length} dispositivo(s).`);
                 }
-                if (pushTokens.length > 0) console.log(`[DISPATCH] 🔔 Push enviado para ${pushTokens.length} dispositivo(s).`);
             }
         } catch (pushErr) {
-            console.error('[DISPATCH] ⚠️ Falha ao tentar enviar Push Expo:', pushErr.message);
+            console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }
         
         res.json({ success: true, task: { id: execution.id, refId: payload.refId } });

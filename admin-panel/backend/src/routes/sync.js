@@ -2,21 +2,7 @@
 const router  = require('express').Router();
 const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
-const jwt = require('jsonwebtoken');
 const { recordSync } = require('../services/cockpitMetrics');
-
-// Middleware flexível: aceita qualquer JWT válido (admin OU user) sem exigir tenantId
-function anyValidJwt(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
-  try {
-    req.jwtPayload = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Token inválido ou expirado.' });
-  }
-}
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -305,9 +291,9 @@ router.get('/config', async (_req, res) => {
 // Fetch active tasks for the mobile app (PENDING + IN_PROGRESS).
 // Side-effect: PENDING tasks are promoted to IN_PROGRESS on first pull,
 // which moves them from "Pendentes" → "Em Campo" in the admin Kanban.
-router.get('/tasks', anyValidJwt, async (req, res) => {
+router.get('/tasks', async (req, res) => {
   try {
-    const ownerEmail = req.query.owner_email || req.jwtPayload?.email;
+    const ownerEmail = req.query.owner_email || req.user?.email;
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
 
     // Fetch all active tasks

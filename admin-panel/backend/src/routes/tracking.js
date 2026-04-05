@@ -10,8 +10,30 @@ const router  = express.Router();
 const prisma  = require('../db');
 const crypto  = require('crypto');
 
+/** Sem GPS com coordenadas dentro deste intervalo → "sem sinal" no link público. Padrão 10 min (mau sinal / intervalos de GPS). Override: TRACKING_GPS_STALE_SEC. */
+const DISPLACEMENT_GPS_STALE_SEC = Math.min(
+  3600,
+  Math.max(120, Number(process.env.TRACKING_GPS_STALE_SEC) || 600)
+);
+
 // Generates a URL-safe random token (16 bytes = 32 hex chars)
 const makeToken = () => crypto.randomBytes(12).toString('hex'); // 24 chars
+
+/** Evita spread de `metadata` null (typeof null === 'object') ou string JSON legada. */
+function cloneExecMetadata(raw) {
+  if (raw == null) return {};
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      if (p && typeof p === 'object' && !Array.isArray(p)) return { ...p };
+    } catch (_) {
+      /* ignore */
+    }
+    return {};
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+  return {};
+}
 
 // ─── POST /api/tracking/start/:taskId ────────────────────────────────────────
 // Called by mobile app when technician presses "Iniciar Deslocamento".
@@ -30,7 +52,7 @@ router.post('/start/:taskId', async (req, res) => {
     }
 
     const token = makeToken();
-    const meta  = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    const meta  = cloneExecMetadata(exec.metadata);
 
     await prisma.checklistExecution.update({
       where: { id: taskId },
@@ -62,7 +84,7 @@ router.post('/end/:taskId', async (req, res) => {
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
 
-    const meta = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    const meta = cloneExecMetadata(exec.metadata);
     const expiry = new Date(Date.now() + 15 * 60 * 1000); // +15 min
 
     await prisma.checklistExecution.update({
@@ -72,8 +94,8 @@ router.post('/end/:taskId', async (req, res) => {
           ...meta,
           trackingEndedAt:   new Date().toISOString(),
           trackingExpiredAt: expiry.toISOString(),
-        }
-      }
+        },
+      },
     });
 
     console.log(`[TRACKING] 🏁 Deslocamento encerrado ${taskId}, expira em ${expiry.toISOString()}`);
@@ -90,11 +112,14 @@ router.post('/pause/:taskId', async (req, res) => {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
-    const meta = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    const meta = cloneExecMetadata(exec.metadata);
+    meta.trackingPaused = true;
+    meta.trackingPausedAt = new Date().toISOString();
     await prisma.checklistExecution.update({
       where: { id: taskId },
-      data: { metadata: { ...meta, trackingPaused: true } }
+      data: { metadata: meta },
     });
+    console.log(`[TRACKING] ⏸ Pausa gravada ${taskId}`);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -107,11 +132,14 @@ router.post('/resume/:taskId', async (req, res) => {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
-    const meta = typeof exec.metadata === 'object' && exec.metadata ? exec.metadata : {};
+    const meta = cloneExecMetadata(exec.metadata);
+    meta.trackingPaused = false;
+    delete meta.trackingPausedAt;
     await prisma.checklistExecution.update({
       where: { id: taskId },
-      data: { metadata: { ...meta, trackingPaused: false } }
+      data: { metadata: meta },
     });
+    console.log(`[TRACKING] ▶ Retomada gravada ${taskId}`);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -121,41 +149,60 @@ router.post('/resume/:taskId', async (req, res) => {
 // ─── GET /api/tracking/:token ─────────────────────────────────────────────────
 // FULLY PUBLIC — no auth required.
 // Returns real-time technician position, ETA, name, avatar, service info.
+/** Lê pausa do metadata mesmo se vier string/number do JSON legado */
+function isTrackingPaused(meta) {
+  if (!meta || typeof meta !== 'object') return false;
+  const v = meta.trackingPaused;
+  if (v === false || v === 0 || v === 'false' || v === '0') return false;
+  if (v === true || v === 1) return true;
+  if (v === 'true' || v === '1') return true;
+  return false;
+}
+
 router.get('/:token', async (req, res) => {
   try {
     const { token } = req.params;
 
-    // Find execution by tracking token stored in metadata JSON
-    const execs = await prisma.checklistExecution.findMany({
+    const selectExec = {
+      id:              true,
+      ownerEmail:      true,
+      status:          true,
+      etaMinutes:      true,
+      locationLat:     true,
+      locationLng:     true,
+      locationAddress: true,
+      locationZoneType:true,
+      locationPolygon: true,
+      metadata:        true,
+    };
+
+    // Índice direto no JSON — evita o bug das "últimas 200 OS" sem o token
+    let exec = await prisma.checklistExecution.findFirst({
       where: {
-        status: { not: 'CANCELLED' }
+        status: { not: 'CANCELLED' },
+        metadata: { path: ['trackingToken'], equals: token },
       },
-      select: {
-        id:              true,
-        ownerEmail:      true,
-        status:          true,
-        etaMinutes:      true,
-        locationLat:     true,
-        locationLng:     true,
-        locationAddress: true,
-        locationZoneType:true,
-        locationPolygon: true,
-        metadata:        true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200, // safety cap
+      select: selectExec,
     });
 
-    const exec = execs.find(e => {
-      const m = e.metadata;
-      return m && typeof m === 'object' && m.trackingToken === token;
-    });
+    if (!exec) {
+      const execs = await prisma.checklistExecution.findMany({
+        where: { status: { not: 'CANCELLED' } },
+        select: selectExec,
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      });
+      exec = execs.find(e => {
+        const m = e.metadata;
+        return m && typeof m === 'object' && m.trackingToken === token;
+      }) || null;
+    }
 
     if (!exec) {
       return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
     }
 
-    const meta = exec.metadata || {};
+    const meta = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
 
     // Check expiry
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -186,29 +233,69 @@ router.get('/:token', async (req, res) => {
       }
     } catch(e) { /* user table may not have phone col yet */ }
 
-    // Latest GPS from telemetry (sempre amarrado à execução desta OS)
+    // GPS: 1) eventos desta execução; 2) se estiverem velhos/ausentes, heartbeats do técnico sem executionId
+    // (o app às vezes envia HEARTBEAT só com ownerEmail; o ETA no painel usa lógica parecida).
     let currentLat = null;
     let currentLng = null;
     let gpsAge     = null;
     try {
-      const ev = await prisma.telemetryEvent.findFirst({
+      const gpsSelect = { lat: true, lng: true, serverTimestamp: true };
+
+      const evExec = await prisma.telemetryEvent.findFirst({
         where: { executionId: exec.id, lat: { not: null }, lng: { not: null } },
         orderBy: { serverTimestamp: 'desc' },
-        select: { lat: true, lng: true, serverTimestamp: true },
+        select: gpsSelect,
       });
+
+      const evOwnerLoose = await prisma.telemetryEvent.findFirst({
+        where: {
+          ownerEmail: exec.ownerEmail,
+          lat: { not: null },
+          lng: { not: null },
+          OR: [{ executionId: null }, { executionId: '' }],
+        },
+        orderBy: { serverTimestamp: 'desc' },
+        select: gpsSelect,
+      });
+
+      const ageSec = (ev) =>
+        ev
+          ? Math.round((Date.now() - new Date(ev.serverTimestamp).getTime()) / 1000)
+          : null;
+
+      let ev = evExec;
+      const execAge = evExec ? ageSec(evExec) : null;
+
+      if (evOwnerLoose) {
+        if (!evExec) {
+          ev = evOwnerLoose;
+        } else if (
+          execAge != null &&
+          execAge > DISPLACEMENT_GPS_STALE_SEC &&
+          new Date(evOwnerLoose.serverTimestamp) > new Date(evExec.serverTimestamp)
+        ) {
+          ev = evOwnerLoose;
+        }
+      }
+
       if (ev) {
         currentLat = typeof ev.lat === 'number' ? ev.lat : parseFloat(ev.lat);
         currentLng = typeof ev.lng === 'number' ? ev.lng : parseFloat(ev.lng);
         if (!Number.isFinite(currentLat)) currentLat = null;
         if (!Number.isFinite(currentLng)) currentLng = null;
         if (currentLat != null && currentLng != null) {
-          gpsAge = Math.round((Date.now() - new Date(ev.serverTimestamp).getTime()) / 1000);
+          gpsAge = ageSec(ev);
         }
       }
     } catch (e) {}
 
-    // Determine if transit is active or ended
+    const isPausedFlag = isTrackingPaused(meta);
     const isEnded = !!meta.trackingEndedAt;
+    const trackingActive = !isEnded && !isPausedFlag;
+    const freshGps =
+      gpsAge != null && Number.isFinite(gpsAge) && gpsAge <= DISPLACEMENT_GPS_STALE_SEC;
+    /** true = link ainda "aberto" mas não há GPS recente (técnico pode ter fechado o app). */
+    const signalLost = trackingActive && !freshGps;
 
     // Build route polyline if available
     let routePolyline = null;
@@ -262,7 +349,9 @@ router.get('/:token', async (req, res) => {
 
       // Status
       isEnded,
-      isPaused:  !!meta.trackingPaused,
+      isPaused:  isPausedFlag,
+      signalLost,
+      gpsStaleAfterSeconds: DISPLACEMENT_GPS_STALE_SEC,
       endedAt:   meta.trackingEndedAt    || null,
       startedAt: meta.trackingStartedAt  || null,
       expiresAt: meta.trackingExpiredAt  || null,

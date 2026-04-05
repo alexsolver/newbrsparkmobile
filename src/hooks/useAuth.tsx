@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { AuthService, TwoFactorRequired, User } from '../services/auth';
+import * as Notifications from 'expo-notifications';
+import { AuthService, TwoFactorRequired, User, subscribeSessionInvalidated, applySessionInvalidatedFromServer } from '../services/auth';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
@@ -31,6 +32,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const next = await AuthService.patchUserInStorage(partial);
       if (next) setUser(next);
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeSessionInvalidated(() => {
+      setUser(null);
+      _setUserRole('CLIENT');
+    });
+    const pushSub = Notifications.addNotificationReceivedListener((notification) => {
+      const t = notification.request?.content?.data?.type;
+      if (t === 'FORCE_LOGOUT') {
+        applySessionInvalidatedFromServer().catch(() => {});
+      }
+    });
+    return () => {
+      unsub();
+      pushSub.remove();
+    };
   }, []);
 
   useEffect(() => {

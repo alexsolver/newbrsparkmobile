@@ -13,6 +13,9 @@ import i18n from '../src/i18n';
 import { loadUnitPreference, loadNumberFormatPreference } from '../src/i18n/formatters';
 import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
+import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
+import { pollStaleGpsReminders } from '../src/services/syncService';
+import { NotificationService } from '../src/services/notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -118,6 +121,26 @@ function AppInitializer() {
     }, 300000);
     
     return () => clearInterval(intervalId);
+  }, [user, loading]);
+
+  // Regista token Expo Push ao iniciar sessão (antes só ao abrir o separador Notificações)
+  useEffect(() => {
+    if (loading || !user) return;
+    NotificationService.registerForPushNotificationsAsync().catch(() => {});
+  }, [user?.id, loading]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    const isTech = !!(user.technicianProfile || user.role === 'TECHNICIAN');
+    if (!isTech) return;
+    const stopBridge = startAppStateTelemetryBridge();
+    const staleId = setInterval(() => {
+      pollStaleGpsReminders().catch(() => {});
+    }, 90 * 1000);
+    return () => {
+      stopBridge();
+      clearInterval(staleId);
+    };
   }, [user, loading]);
 
   return null;

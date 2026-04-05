@@ -93,7 +93,7 @@ router.post('/', async (req, res) => {
     const {
       tenantId, sectorCode, label,
       locationEnabled, locationBackgroundEnabled,
-      locationIntervalIdleMin, locationIntervalTransitMin, locationIntervalOnSiteMin,
+      locationIntervalIdleMin, locationIntervalTransitMin, locationIntervalTransitSec, locationIntervalOnSiteMin,
       locationDistanceFilterMeters,
       retentionGpsRawDays, retentionEventsYears, retentionAuditDays, retentionMetricsDays,
       mockGpsAction, rootJailbreakAction, clockDriftMaxSeconds,
@@ -108,9 +108,16 @@ router.post('/', async (req, res) => {
       label: label || 'Configuração Personalizada',
       ...(locationEnabled            !== undefined && { locationEnabled }),
       ...(locationBackgroundEnabled  !== undefined && { locationBackgroundEnabled }),
-      ...(locationIntervalIdleMin    !== undefined && { locationIntervalIdleMin: parseInt(locationIntervalIdleMin) }),
-      ...(locationIntervalTransitMin !== undefined && { locationIntervalTransitMin: parseInt(locationIntervalTransitMin) }),
-      ...(locationIntervalOnSiteMin  !== undefined && { locationIntervalOnSiteMin: parseInt(locationIntervalOnSiteMin) }),
+      ...(locationIntervalIdleMin    !== undefined && { locationIntervalIdleMin: parseInt(locationIntervalIdleMin, 10) }),
+      ...(locationIntervalTransitMin !== undefined && { locationIntervalTransitMin: parseInt(locationIntervalTransitMin, 10) }),
+      ...(locationIntervalTransitSec !== undefined
+        ? locationIntervalTransitSec === null || locationIntervalTransitSec === ''
+          ? { locationIntervalTransitSec: null }
+          : Number.isFinite(parseInt(locationIntervalTransitSec, 10))
+            ? { locationIntervalTransitSec: parseInt(locationIntervalTransitSec, 10) }
+            : {}
+        : {}),
+      ...(locationIntervalOnSiteMin  !== undefined && { locationIntervalOnSiteMin: parseInt(locationIntervalOnSiteMin, 10) }),
       ...(locationDistanceFilterMeters !== undefined && { locationDistanceFilterMeters: parseInt(locationDistanceFilterMeters) }),
       ...(retentionGpsRawDays   !== undefined && { retentionGpsRawDays: parseInt(retentionGpsRawDays) }),
       ...(retentionEventsYears  !== undefined && { retentionEventsYears: parseInt(retentionEventsYears) }),
@@ -149,7 +156,7 @@ router.patch('/:id', async (req, res) => {
   try {
     const allowed = [
       'label', 'locationEnabled', 'locationBackgroundEnabled',
-      'locationIntervalIdleMin', 'locationIntervalTransitMin', 'locationIntervalOnSiteMin',
+      'locationIntervalIdleMin', 'locationIntervalTransitMin', 'locationIntervalTransitSec', 'locationIntervalOnSiteMin',
       'locationDistanceFilterMeters',
       'retentionGpsRawDays', 'retentionEventsYears', 'retentionAuditDays', 'retentionMetricsDays',
       'mockGpsAction', 'rootJailbreakAction', 'clockDriftMaxSeconds',
@@ -157,9 +164,30 @@ router.patch('/:id', async (req, res) => {
       'requireCheckinPhoto', 'allowOfflineCheckin', 'minOnSiteMinutes',
       'outOfPolicyAction', 'isActive',
     ];
+    const intFields = new Set([
+      'locationIntervalIdleMin', 'locationIntervalTransitMin', 'locationIntervalOnSiteMin',
+      'locationDistanceFilterMeters',
+      'retentionGpsRawDays', 'retentionEventsYears', 'retentionAuditDays', 'retentionMetricsDays',
+      'clockDriftMaxSeconds', 'minOnSiteMinutes',
+    ]);
     const data = {};
     for (const key of allowed) {
-      if (req.body[key] !== undefined) data[key] = req.body[key];
+      if (req.body[key] === undefined) continue;
+      if (key === 'locationIntervalTransitSec') {
+        const v = req.body[key];
+        if (v === null || v === '') data[key] = null;
+        else {
+          const n = parseInt(v, 10);
+          if (Number.isFinite(n)) data[key] = n;
+        }
+        continue;
+      }
+      if (intFields.has(key)) {
+        const n = parseInt(req.body[key], 10);
+        if (Number.isFinite(n)) data[key] = n;
+        continue;
+      }
+      data[key] = req.body[key];
     }
     const updated = await prisma.collectionPolicy.update({ where: { id: req.params.id }, data });
     res.json(updated);

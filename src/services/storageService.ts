@@ -12,7 +12,7 @@
  * - Debug mais simples
  */
 import * as FileSystem from 'expo-file-system/legacy';
-import { API_BASE, getToken } from './auth';
+import { API_BASE, getToken, handleUnauthorizedMaybeSessionInvalidated } from './auth';
 
 export interface UploadResult {
   url: string | null;
@@ -40,6 +40,7 @@ export async function getStorageConfig(): Promise<StorageConfig> {
     const res = await fetch(`${API_BASE}/api/storage/config`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
+    await handleUnauthorizedMaybeSessionInvalidated(res);
     if (!res.ok) throw new Error('config fetch failed');
     const config: StorageConfig = await res.json();
     _storageConfigCache = { config, ts: now };
@@ -81,6 +82,8 @@ export async function uploadFile(localUri: string, remotePath: string): Promise<
       },
       body: JSON.stringify(body),
     });
+
+    await handleUnauthorizedMaybeSessionInvalidated(res);
 
     if (!res.ok) {
       const errText = await res.text();

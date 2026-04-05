@@ -109,6 +109,7 @@ class RouteTrackingService {
 
   async stop() {
     this._active = false;
+    this._paused = false;
     this.subscription?.remove();
     this.subscription = null;
     this.route = [];

@@ -3,12 +3,14 @@ const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
+const crypto  = require('crypto');
+const { sendExpoPushToMany } = require('../services/expoPush');
 
 // ─── POST /api/register ─────────────────────────────────────────────────────
 // Público — cria conta de usuário individual (Tenant + User atomicamente)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, defaultLang = 'pt-BR' } = req.body;
+    const { name, email, password, phone, defaultLang = 'pt-BR', deviceId } = req.body;
     if (!name || !email || !password)
       return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
     if (password.length < 6)
@@ -46,15 +48,31 @@ router.post('/register', async (req, res) => {
       return { tenant, user };
     });
 
+    const newSessionId = crypto.randomUUID();
+    await prisma.user.update({
+      where: { id: result.user.id },
+      data: {
+        lastLogin: new Date(),
+        currentSessionId: newSessionId,
+        currentDeviceId: deviceId || null,
+      },
+    });
+
     const token = jwt.sign(
-      { id: result.user.id, tenantId: result.tenant.id, email, role: 'ADMIN' },
+      {
+        id: result.user.id,
+        tenantId: result.tenant.id,
+        email: result.user.email,
+        role: 'ADMIN',
+        sessionId: newSessionId,
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
 
     res.status(201).json({
       token,
-      user: { id: result.user.id, name, email, tenantId: result.tenant.id },
+      user: { id: result.user.id, name, email: result.user.email, tenantId: result.tenant.id },
     });
   } catch (err) {
     console.error('[register]', err);
@@ -87,13 +105,38 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
-    await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+    // Handle single-device session
+    const { deviceId } = req.body;
+    const newSessionId = crypto.randomUUID();
+
+    // Notificar outros dispositivos: sessão anterior existia e o deviceId mudou (ou antes era desconhecido)
+    const prevDevice = user.currentDeviceId != null ? String(user.currentDeviceId) : '';
+    const nextDevice = deviceId != null ? String(deviceId) : '';
+    const shouldNotifyOtherDevice = user.currentSessionId && prevDevice !== nextDevice;
+    if (shouldNotifyOtherDevice) {
+      const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+      if (tokens.length > 0) {
+        sendExpoPushToMany(tokens, {
+          data: { type: 'FORCE_LOGOUT', reason: 'NEW_LOGIN' }
+        }).catch(err => console.error('[login_kickout]', err));
+      }
+    }
+
+    await prisma.user.update({ 
+      where: { id: user.id }, 
+      data: { 
+        lastLogin: new Date(),
+        currentSessionId: newSessionId,
+        currentDeviceId: deviceId || null 
+      } 
+    });
+
     await prisma.auditLog.create({
       data: { tenantId: user.tenantId, userId: user.id, action: 'USER_LOGIN', resource: email, category: 'AUTH' }
     });
 
     const token = jwt.sign(
-      { id: user.id, tenantId: user.tenantId, email: user.email, role: user.role },
+      { id: user.id, tenantId: user.tenantId, email: user.email, role: user.role, sessionId: newSessionId },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );

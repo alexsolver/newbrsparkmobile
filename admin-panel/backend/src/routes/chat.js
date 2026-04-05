@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const prisma = require('../db'); 
+const prisma = require('../db');
 const authUser = require('../middleware/authUser');
+const { sendExpoPushToMany } = require('../services/expoPush');
 
 router.use(authUser);
 
@@ -46,25 +47,26 @@ router.post('/contacts/request', async (req, res) => {
       }
     });
 
-    // Disparar Push Notification se o destinatário tiver token
+    // Push para o destinatário (Android exige channelId = brspark-alerts, criado no app)
     try {
-      if (userExists) {
-        const pushTokens = await prisma.pushToken.findMany({ where: { userId: userExists.id } });
-        for (const pt of pushTokens) {
-          await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: pt.token,
-              sound: 'default',
-              title: '💬 Novo Pedido de Contato',
-              body: `${req.user.name || email} quer se conectar com você.`
-            })
-          });
-        }
+      const pushTokens = await prisma.pushToken.findMany({ where: { userId: userExists.id } });
+      if (pushTokens.length === 0) {
+        console.warn('[CHAT] Pedido de contato: sem push token para', userExists.email);
+      } else {
+        const requester = await prisma.user.findUnique({
+          where: { id: req.user.id },
+          select: { name: true },
+        });
+        const requesterLabel = requester?.name || email;
+        await sendExpoPushToMany(pushTokens, {
+          title: 'Novo pedido de contato',
+          body: `${requesterLabel} quer se conectar com você no chat.`,
+          data: { type: 'chat_contact_request' },
+        });
+        console.log(`[CHAT] Push pedido de contato: ${pushTokens.length} dispositivo(s) → ${userExists.email}`);
       }
     } catch (pushErr) {
-      console.error('[CHAT] Falha ao enviar Push Expo:', pushErr.message);
+      console.error('[CHAT] Falha ao enviar push:', pushErr.message);
     }
 
     res.json({ success: true, contact });

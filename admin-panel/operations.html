@@ -936,6 +936,8 @@ function buildCard(task, colClass) {
         etaBadge = `<span class="badge" style="background:#f0fdf4;color:#15803d;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="checkmark-done-outline" style="vertical-align:-1px"></ion-icon> Desloc. Encerrado</span>`;
      } else if (task.metadata?.trackingPaused) {
         etaBadge = `<span class="badge" style="background:#fee2e2;color:#dc2626;font-size:9px;margin-left:4px;border:1px solid #fecaca;"><ion-icon name="pause-circle-outline" style="vertical-align:-1px"></ion-icon> Pausado</span>`;
+     } else if (task.trackingSignalLost) {
+        etaBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:9px;margin-left:4px;border:1px solid #fde68a;"><ion-icon name="cloud-offline-outline" style="vertical-align:-1px"></ion-icon> Sem sinal GPS</span>`;
      } else if (task.etaMinutes !== null && task.etaMinutes !== undefined) {
         etaBadge = `<span class="badge" style="background:#dcfce7;color:#166534;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="time-outline" style="vertical-align:-1px"></ion-icon> ETA: ${task.etaMinutes} min</span>`;
      }
@@ -944,7 +946,10 @@ function buildCard(task, colClass) {
          subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#dbeafe;color:#1e40af;font-size:9px"><ion-icon name="car-outline" style="vertical-align:-2px"></ion-icon> Aceito pelo Técnico</span>${etaBadge}</div>`;
      } else {
          const hasStartedTransit = !!task.metadata?.trackingStartedAt;
-         const badgeLabel = hasStartedTransit && !task.metadata?.trackingEndedAt ? 'Em Deslocamento' : 'Executando Form';
+         let badgeLabel = 'Executando Form';
+         if (hasStartedTransit && !task.metadata?.trackingEndedAt) {
+            badgeLabel = task.trackingSignalLost ? 'Desloc. sem sinal' : 'Em Deslocamento';
+         }
          subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> ${badgeLabel}</span>${etaBadge}</div>`;
      }
   } else if (task.status === 'REJECTED') {

@@ -1,6 +1,12 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
+const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
+
+const OPS_GPS_STALE_SEC = Math.min(
+  3600,
+  Math.max(120, Number(process.env.TRACKING_GPS_STALE_SEC) || 600)
+);
 
 // ─── GET /api/operations/tasks ─────────────────────────────────
 // Returns ALL ChecklistExecutions (all statuses) for Kanban monitoring
@@ -28,6 +34,21 @@ router.get('/tasks', async (req, res) => {
     });
     const userMap = users.reduce((acc, u) => { acc[u.email] = u; return acc; }, {});
 
+    const activeTrackingIds = executions
+      .filter((ex) => {
+        let m = ex.metadata || {};
+        if (typeof m === 'string') {
+          try {
+            m = JSON.parse(m);
+          } catch (e) {
+            m = {};
+          }
+        }
+        return !!(m && m.trackingStartedAt && !m.trackingEndedAt && !m.trackingPaused);
+      })
+      .map((ex) => ex.id);
+    const gpsAgeByExec = await latestGpsAgeSecondsByExecutionIds(activeTrackingIds);
+
     const tasks = executions.map(ex => {
       let meta = ex.metadata || {};
       if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch(e){} }
@@ -37,6 +58,13 @@ router.get('/tasks', async (req, res) => {
       const schemaData = ex.template?.schemaData || [];
       const schemaArray = Array.isArray(schemaData) ? schemaData : 
                           (typeof schemaData === 'string' ? JSON.parse(schemaData) : []);
+
+      const trackingLive =
+        !!(meta && meta.trackingStartedAt && !meta.trackingEndedAt && !meta.trackingPaused);
+      const gAge = gpsAgeByExec.get(ex.id);
+      const trackingSignalLost =
+        trackingLive &&
+        (gAge == null || !Number.isFinite(gAge) || gAge > OPS_GPS_STALE_SEC);
 
       return {
         id:          ex.id,
@@ -61,6 +89,8 @@ router.get('/tasks', async (req, res) => {
         completedAt: ex.completedAt,
         syncedAt:    ex.syncedAt,
         etaMinutes:  ex.etaMinutes,
+        trackingGpsAgeSeconds: gAge ?? null,
+        trackingSignalLost,
         // Template fields with labels — used by panel report view
         template: ex.template ? {
           id:     ex.template.id,

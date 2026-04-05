@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -19,6 +19,7 @@ import RouteProgressBar from './RouteProgressBar';
 import LiveRouteMapCard from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
+import { FieldHelpInstructions } from '../../src/components/FieldHelpInstructions';
 
 function normalizeEtaMinutes(raw: unknown): number | null {
   if (raw === null || raw === undefined) return null;
@@ -383,10 +384,9 @@ export default function ChecklistEngine() {
     if (!taskId) return;
     try {
       const res = await apiFetch(`/api/tracking/start/${taskId}`, { method: 'POST' });
-      if (res?.url) {
-        setTrackingUrl(res.url);
-      }
-    } catch(e) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.url) setTrackingUrl(data.url);
+    } catch (e) {
       console.warn('[tracking] could not generate link', e);
     }
   };
@@ -530,11 +530,33 @@ export default function ChecklistEngine() {
       if (label === 'CHEGADA') {
           endTrackingLink();
       }
-      
-      if (status !== 'granted' || lat === 0) {
-          Alert.alert("Atenção", `${label} registrado às ${new Date().toLocaleTimeString('pt-BR')}, mas sem rastreio de GPS.\nMotivo: ${address}`);
+
+      const timeBr = new Date().toLocaleTimeString('pt-BR');
+      if (label === 'CHEGADA') {
+        if (status !== 'granted' || lat === 0) {
+          Alert.alert(
+            'Deslocamento finalizado',
+            `O deslocamento foi encerrado e registrado às ${timeBr}, mas sem coordenadas GPS utilizáveis.\n\nMotivo: ${address}`
+          );
+        } else {
+          Alert.alert(
+            'Deslocamento finalizado',
+            `O trecho de deslocamento foi encerrado (não indica chegada ao local de serviço).\n\n📍 ${address}`
+          );
+        }
+      } else if (label === 'SAIDA') {
+        if (status !== 'granted' || lat === 0) {
+          Alert.alert(
+            'Deslocamento iniciado',
+            `Saída registrada às ${timeBr}, mas sem rastreio de GPS.\n\nMotivo: ${address}`
+          );
+        } else {
+          Alert.alert('Deslocamento iniciado', `Saída registrada com sucesso.\n\n📍 ${address}`);
+        }
+      } else if (status !== 'granted' || lat === 0) {
+        Alert.alert('Atenção', `${label} registrado às ${timeBr}, mas sem rastreio de GPS.\n\nMotivo: ${address}`);
       } else {
-          Alert.alert("Sucesso", `${label} registrado com sucesso!\n\n${address}`);
+        Alert.alert('Sucesso', `${label} registrado com sucesso!\n\n${address}`);
       }
     } catch (e) {
       Alert.alert("Erro Inesperado", "Ocorreu um erro ao tentar processar a operação.");
@@ -586,6 +608,22 @@ export default function ChecklistEngine() {
          });
       }
   }, [taskId, isReadOnly]);
+
+  // Ao focar a OS, reassocia executionId aos heartbeats (link público usa telemetria por OS).
+  useFocusEffect(
+    useCallback(() => {
+      if (!taskId || isReadOnly) return undefined;
+      let cancelled = false;
+      AsyncStorage.getItem('@brspark_email').then((email) => {
+        if (!cancelled) {
+          dataCollectionService.syncExecutionContext(String(taskId), email || undefined);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [taskId, isReadOnly])
+  );
 
   // Sincronização em tempo real das respostas (Debounced)
   useEffect(() => {
@@ -805,7 +843,36 @@ export default function ChecklistEngine() {
       } else {
          const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
          const draftStr = await AsyncStorage.getItem(draftKey);
-         initialRes = draftStr ? JSON.parse(draftStr) : {};
+         let draftRes: Record<string, unknown> = {};
+         try {
+           draftRes = draftStr ? JSON.parse(draftStr) : {};
+           if (!draftRes || typeof draftRes !== 'object' || Array.isArray(draftRes)) draftRes = {};
+         } catch {
+           draftRes = {};
+         }
+
+         // OS em nuvem: servidor tem estado IN_PROGRESS + respostas (debounce PATCH); outro telemóvel
+         // não tinha @draft_tsk_* — precisamos puxar GET para continuar a mesma atividade.
+         if (taskId) {
+           try {
+             const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+             if (res.ok) {
+               const remoteExec = await res.json();
+               const serverR =
+                 remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
+                   ? remoteExec.responses
+                   : {};
+               initialRes = { ...serverR, ...draftRes };
+               if (remoteExec.templateId) realTemplateId = remoteExec.templateId;
+             } else {
+               initialRes = draftRes;
+             }
+           } catch {
+             initialRes = draftRes;
+           }
+         } else {
+           initialRes = draftRes;
+         }
       }
 
       // PASSO 2: Baixa o Template usando o realTemplateId
@@ -1283,6 +1350,26 @@ export default function ChecklistEngine() {
      }
   }, [currentPage, isReadOnly, pages, responses]);
 
+  /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
+  const liveRouteCoordsForMap = useMemo(() => {
+    const rawPoly = currentTask?.locationPolygon;
+    const zt = currentTask?.locationZoneType;
+    if ((zt !== 'route' && zt !== 'segment') || !rawPoly) return [] as number[][];
+    let parsed: any = typeof rawPoly === 'string' ? null : rawPoly;
+    if (!parsed) {
+      try {
+        parsed = JSON.parse(rawPoly as string);
+      } catch {
+        return [];
+      }
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((pt: any) => {
+      if (Array.isArray(pt)) return [parseFloat(pt[0]), parseFloat(pt[1])];
+      return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
+    });
+  }, [currentTask?.locationPolygon, currentTask?.locationZoneType]);
+
   const handleNextPage = () => {
      const currentPageData = pages[currentPage];
      let isValid = true;
@@ -1363,21 +1450,8 @@ export default function ChecklistEngine() {
         const hasTransit = schema.some((f: any) => f.type === 'transit_start');
         if (!hasTransit && currentTask?.locationZoneType !== 'route' && currentTask?.locationZoneType !== 'segment') return null;
 
-        const rawPoly = currentTask?.locationPolygon;
-        let routeCoords: number[][] = [];
-        if ((currentTask?.locationZoneType === 'route' || currentTask?.locationZoneType === 'segment') && rawPoly) {
-            let parsed = typeof rawPoly === 'string' ? null : rawPoly;
-            if (!parsed) {
-                try { parsed = JSON.parse(rawPoly as string); } catch {}
-            }
-            if (Array.isArray(parsed)) {
-                routeCoords = parsed.map((pt: any) => {
-                    if (Array.isArray(pt)) return [parseFloat(pt[0]), parseFloat(pt[1])];
-                    return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
-                });
-            }
-        }
-          
+        const routeCoords = liveRouteCoordsForMap;
+
         const endField = schema.find((f: any) => f.type === 'transit_end');
         const startField = schema.find((f: any) => f.type === 'transit_start');
         
@@ -1389,6 +1463,13 @@ export default function ChecklistEngine() {
         
         const isVisible = showLiveMap || (isTransitStarted && !isTransitFinished);
         const routeDest = getDestFromTaskLike(currentTask || {});
+        const routeEndCoord =
+          routeCoords.length > 0
+            ? {
+                lat: routeCoords[routeCoords.length - 1][0],
+                lng: routeCoords[routeCoords.length - 1][1],
+              }
+            : null;
         const mergedEta = mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
 
         return <LiveRouteMapCard 
@@ -1398,9 +1479,11 @@ export default function ChecklistEngine() {
                   targetLoc={
                     routeDest
                       ? { lat: routeDest.lat, lng: routeDest.lng }
+                      : routeEndCoord
+                      ? { lat: routeEndCoord.lat, lng: routeEndCoord.lng }
                       : { lat: currentTask?.locationLat, lng: currentTask?.locationLng }
                   }
-                  etaMinutes={mergedEta}
+                  etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
                   taskId={resolvedTaskId || undefined}
                   onEndTransit={endField ? () => {
                       const hasValue = !!responses[endField.id];
@@ -1467,7 +1550,10 @@ export default function ChecklistEngine() {
                   <Text style={[styles.label, { marginBottom: field.description ? 6 : 12, fontSize: 15, color: '#0F172A', fontWeight: '800' }]}>
                       {field.icon ? '' : `${field._globalIdx}. `}{field.label}{isFieldRequired(field) ? <Text style={{color: '#EF4444'}}> *</Text> : null}
                   </Text>
-                  {field.description ? <Text style={{fontSize: 12, color: '#64748b', marginBottom: 12}}>{field.description}</Text> : null}
+                  <FieldHelpInstructions
+                    plainDescription={field.description}
+                    helpHtml={field.helpHtml}
+                  />
                   
                   {validatingFieldId === field.id && (
                       <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 6, marginBottom: 12}}>
@@ -1666,7 +1752,7 @@ export default function ChecklistEngine() {
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
                  
                  return (
-                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: buttonColor, flexDirection:'row', gap:8}]} onPress={() => {
+                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: buttonColor, flexDirection:'row', gap:8}]} onPress={async () => {
                        if (isBlocked) {
                            Alert.alert("Atenção", "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo.");
                            return;
@@ -1675,36 +1761,32 @@ export default function ChecklistEngine() {
                            Alert.alert("Aviso", "Esta ação já foi registrada.");
                            return;
                        }
-                       handleTransit(field.id, field.type === 'transit_start' ? 'SAIDA' : 'CHEGADA', field.type === 'transit_end' ? routeTracker.getTraversedPath() : undefined);
-                        // GPS adaptativo: IN_TRANSIT ao sair, ARRIVED ao chegar
-                        AsyncStorage.getItem('@brspark_email').then(email => {
-                          if (field.type === 'transit_start') {
-                            dataCollectionService.setState('IN_TRANSIT', {
-                              executionId: String(taskId || ''),
-                              ownerEmail: email || 'unknown',
-                            }).catch(() => {});
-                            // Ativa captura do tracejado para todas as OS
-                            if (!routeTracker.isActive()) {
-                                routeTracker.start([], 99999).catch(() => {});
-                            }
-                            // Ativar mapa ao vivo se for rota e inicio de deslocamento
-                            if (currentTask?.locationZoneType === 'route' || currentTask?.locationZoneType === 'segment') {
-                              setShowLiveMap(true);
-                            }
-                            // ━ Gerar link de rastreamento para o cliente ━
-                            generateTrackingLink();
-                          } else {
-                            // transit_end — chegou ao local
-                            dataCollectionService.setState('ARRIVED', {
-                              executionId: String(taskId || ''),
-                              ownerEmail: email || 'unknown',
-                              lat: currentTask?.locationLat ? parseFloat(currentTask.locationLat) : undefined,
-                              lng: currentTask?.locationLng ? parseFloat(currentTask.locationLng) : undefined,
-                            }).catch(() => {});
-                            setShowLiveMap(false);
-                            routeTracker.stop(); // Interrompe a escuta do route tracker local
-                          }
-                        });
+                       await handleTransit(
+                         field.id,
+                         field.type === 'transit_start' ? 'SAIDA' : 'CHEGADA',
+                         field.type === 'transit_end' ? routeTracker.getTraversedPath() : undefined
+                       );
+                       const email = await AsyncStorage.getItem('@brspark_email');
+                       if (field.type === 'transit_start') {
+                         dataCollectionService.setState('IN_TRANSIT', {
+                           executionId: String(taskId || ''),
+                           ownerEmail: email || 'unknown',
+                         }).catch(() => {});
+                         // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))
+                         if (currentTask?.locationZoneType === 'route' || currentTask?.locationZoneType === 'segment') {
+                           setShowLiveMap(true);
+                         }
+                         void generateTrackingLink();
+                       } else {
+                         dataCollectionService.setState('ARRIVED', {
+                           executionId: String(taskId || ''),
+                           ownerEmail: email || 'unknown',
+                           lat: currentTask?.locationLat ? parseFloat(String(currentTask.locationLat)) : undefined,
+                           lng: currentTask?.locationLng ? parseFloat(String(currentTask.locationLng)) : undefined,
+                         }).catch(() => {});
+                         setShowLiveMap(false);
+                         routeTracker.stop();
+                       }
                     }}>
                        <Ionicons name={hasValue ? 'checkmark-circle' : (field.type === 'transit_start' ? 'play' : 'stop')} size={20} color="#FFF" />
                        <Text style={{color: '#FFF', fontWeight: 'bold', fontSize:15}}>{hasValue ? labelWhenClicked : labelWhenEmpty}</Text>

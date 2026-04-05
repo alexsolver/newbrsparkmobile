@@ -41,6 +41,8 @@ export interface CollectionPolicy {
   locationBackgroundEnabled: boolean;
   locationIntervalIdleMin: number;
   locationIntervalTransitMin: number;
+  /** Se definido (segundos), tem prioridade sobre locationIntervalTransitMin em IN_TRANSIT. */
+  locationIntervalTransitSec?: number | null;
   locationIntervalOnSiteMin: number;
   locationDistanceFilterMeters: number;
   retentionGpsRawDays: number;
@@ -102,6 +104,15 @@ class DataCollectionService {
 
   getPolicy(): CollectionPolicy { return this.policy; }
 
+  /** Intervalo mínimo entre amostras GPS em IN_TRANSIT (ms). */
+  private _transitTimeIntervalMs(): number {
+    const sec = this.policy.locationIntervalTransitSec;
+    if (sec != null && Number.isFinite(sec) && sec > 0) {
+      return Math.min(900, Math.max(15, sec)) * 1000;
+    }
+    return (this.policy.locationIntervalTransitMin || 2) * 60 * 1000;
+  }
+
   async refreshPolicy(tenantId?: string): Promise<void> {
     try {
       const qs = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
@@ -118,6 +129,15 @@ class DataCollectionService {
 
   getState(): CollectionState { return this.state; }
 
+  /**
+   * Mantém executionId alinhado à OS aberta no checklist (evita HEARTBEAT só com e-mail no servidor).
+   */
+  syncExecutionContext(executionId: string, ownerEmail?: string): void {
+    const id = (executionId || '').trim();
+    if (id) this.currentExecutionId = id;
+    if (ownerEmail && String(ownerEmail).trim()) this.currentOwnerEmail = String(ownerEmail).trim();
+  }
+
   async setState(
     next: CollectionState,
     opts: { executionId?: string; ownerEmail?: string; tenantId?: string; lat?: number; lng?: number } = {}
@@ -125,8 +145,10 @@ class DataCollectionService {
     const prev = this.state;
     this.state = next;
 
-    if (opts.executionId) this.currentExecutionId = opts.executionId;
-    if (opts.ownerEmail)  this.currentOwnerEmail  = opts.ownerEmail;
+    if (opts.executionId != null && String(opts.executionId).trim() !== '') {
+      this.currentExecutionId = String(opts.executionId).trim();
+    }
+    if (opts.ownerEmail) this.currentOwnerEmail = opts.ownerEmail;
     if (opts.tenantId)    this.currentTenantId    = opts.tenantId;
 
     console.log(`[DataCollection] ${prev} → ${next}`);
@@ -201,16 +223,19 @@ class DataCollectionService {
         );
         break;
 
-      case 'IN_TRANSIT':
-        // Distance-based — wakes on movement, not time
+      case 'IN_TRANSIT': {
+        // Tempo + distância: em mau sinal o SO pode não acordar só por movimento; distância mínima 300 m.
+        const transitDist = Math.max(this.policy.locationDistanceFilterMeters || 200, 300);
         this.subscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: this.policy.locationDistanceFilterMeters,
+            distanceInterval: transitDist,
+            timeInterval: this._transitTimeIntervalMs(),
           },
           (loc) => this._onLocation(loc, 'HEARTBEAT')
         );
         break;
+      }
 
       case 'ARRIVED':
       case 'IN_SERVICE':

@@ -9,7 +9,8 @@
  * Módulos: financeiro, seguros, estoque, vault, mídia, documentos, manutenção
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from './auth';
+import * as Notifications from 'expo-notifications';
+import { apiFetch, getToken } from './auth';
 import { 
   addToSyncQueue, getSyncQueue, clearSyncQueueItem, 
   saveStockItemLocal, saveStockMovementLocal,
@@ -17,6 +18,7 @@ import {
 } from '../database';
 import { AuthService } from './auth';
 import { uploadFile } from './storageService';
+import { pushTrackingSyncQueue } from './trackingSyncQueue';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
@@ -31,6 +33,9 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
   try {
     // 0. Enviar eventos de telemetria primeiro (dados de coleta)
     await pushTelemetryBatch();
+
+    // 0b. Pausa/retomada do link público (enfileirado offline no mapa ao vivo)
+    await pushTrackingSyncQueue();
 
     // 1. Prioridade: Enviar checklists concluídos offline
     await pushChecklistOutbox();
@@ -426,6 +431,38 @@ export async function pullCollectionPolicy(tenantId?: string): Promise<void> {
 
 // ── Full sync (chamado no login + pull-to-refresh) ────────────────────────────
 
+/**
+ * Polling: servidor marca OS em tracking sem GPS há 5+ min → notificação local (dedupe por executionId+alertAt).
+ */
+export async function pollStaleGpsReminders(): Promise<void> {
+  try {
+    const token = await getToken();
+    if (!token) return;
+    const res = await apiFetch('/api/telemetry/stale-reminders');
+    if (!res.ok) return;
+    const data = await res.json();
+    const reminders = Array.isArray(data.reminders) ? data.reminders : [];
+    for (const r of reminders) {
+      if (!r?.executionId || !r?.alertAt) continue;
+      const key = `@brspark_stale_gps_shown_${r.executionId}_${r.alertAt}`;
+      const already = await AsyncStorage.getItem(key);
+      if (already) continue;
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Sem sinal de GPS',
+          body: r.title
+            ? `A OS «${String(r.title).slice(0, 80)}» está sem atualização de localização há vários minutos.`
+            : 'Uma OS em deslocamento está sem atualização de GPS.',
+        },
+        trigger: null,
+      });
+      await AsyncStorage.setItem(key, '1');
+    }
+  } catch (e) {
+    console.warn('[SYNC] stale-reminders:', e);
+  }
+}
+
 export async function fullSync(ownerEmail?: string): Promise<void> {
   if (!ownerEmail) return;
   await pushSyncQueue(ownerEmail); // já inclui pushTelemetryBatch
@@ -440,4 +477,5 @@ export async function fullSync(ownerEmail?: string): Promise<void> {
     pullMediaMetadata(ownerEmail),
     pullAssetDocs(ownerEmail),
   ]);
+  await pollStaleGpsReminders();
 }

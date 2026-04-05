@@ -191,6 +191,8 @@ model User {
   auditLogs  AuditLog[]
   pushTokens PushToken[]
   technicianProfile TechnicianProfile?
+  currentSessionId String?
+  currentDeviceId  String?
 
   @@unique([email, tenantId])
 }
@@ -682,6 +684,8 @@ model CollectionPolicy {
   locationBackgroundEnabled     Boolean @default(true)
   locationIntervalIdleMin       Int     @default(30)
   locationIntervalTransitMin    Int     @default(2)
+  /// IN_TRANSIT: intervalo mínimo entre leituras (seg). Se null, usa locationIntervalTransitMin × 60.
+  locationIntervalTransitSec    Int?
   locationIntervalOnSiteMin     Int     @default(5)
   locationDistanceFilterMeters  Int     @default(200)
 

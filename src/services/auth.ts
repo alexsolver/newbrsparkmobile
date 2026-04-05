@@ -1,6 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
+import * as Device from 'expo-device';
+import * as Application from 'expo-application';
+import { Platform, Alert } from 'react-native';
+
+async function getDeviceId(): Promise<string> {
+  try {
+    if (Platform.OS === 'android') {
+      return Application.getAndroidId();
+    } else if (Platform.OS === 'ios') {
+      return (await Application.getIosIdForVendorAsync()) || 'unknown_ios';
+    }
+  } catch (e) {
+    console.warn('Failed to get device id', e);
+  }
+  return Device.osBuildId || 'unknown_device';
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 // Altere MAC_IP para o IP da sua máquina na rede Wi-Fi local quando testar no celular.
@@ -54,33 +70,16 @@ export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
-/** Fetch autenticado — adiciona JWT automaticamente */
-export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  // Log token expiry issues clearly
-  if (res.status === 401) {
-    console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
-  }
-  return res;
-}
-
 // ─── AuthService ─────────────────────────────────────────────────────────────
 export class AuthService {
 
   /** Login — POST /api/login */
   static async login(email: string, password: string): Promise<User> {
+    const deviceId = await getDeviceId();
     const res = await fetch(`${API_BASE}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password, deviceId }),
     });
 
     const data = await res.json();
@@ -111,6 +110,7 @@ export class AuthService {
       throw new Error('Você deve aceitar os Termos de Uso e a Política de Privacidade.');
     }
 
+    const deviceId = await getDeviceId();
     const res = await fetch(`${API_BASE}/api/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -119,6 +119,7 @@ export class AuthService {
         email: params.email.trim().toLowerCase(),
         password: params.password,
         phone: params.phone?.trim() || undefined,
+        deviceId,
       }),
     });
 
@@ -296,4 +297,73 @@ export class AuthService {
       return false;
     }
   }
+}
+
+const SESSION_INVALIDATED_ALERT = {
+  title: 'Sessão encerrada',
+  message:
+    'Sua sessão não é mais válida (outro dispositivo ou atualização de segurança). Faça login novamente.',
+} as const;
+
+const sessionInvalidatedListeners: Array<() => void> = [];
+
+/** AuthProvider deve subscrever para limpar estado React após logout forçado. */
+export function subscribeSessionInvalidated(cb: () => void): () => void {
+  sessionInvalidatedListeners.push(cb);
+  return () => {
+    const i = sessionInvalidatedListeners.indexOf(cb);
+    if (i >= 0) sessionInvalidatedListeners.splice(i, 1);
+  };
+}
+
+/** Logout + alerta + notificação aos listeners (push remoto ou 401 SESSION_INVALIDATED). Idempotente. */
+export async function applySessionInvalidatedFromServer(): Promise<void> {
+  if (!(await getToken())) return;
+  await AuthService.logout();
+  sessionInvalidatedListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+  Alert.alert(SESSION_INVALIDATED_ALERT.title, SESSION_INVALIDATED_ALERT.message);
+}
+
+/** Para fetch manual (ex.: storage): resposta 401 com code SESSION_INVALIDATED. */
+export async function handleUnauthorizedMaybeSessionInvalidated(res: Response): Promise<void> {
+  if (res.status !== 401) return;
+  try {
+    const body = await res.clone().json();
+    if (body?.code === 'SESSION_INVALIDATED') {
+      await applySessionInvalidatedFromServer();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Fetch autenticado — adiciona JWT automaticamente */
+export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  if (res.status === 401) {
+    console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
+    try {
+      const body = await res.clone().json();
+      if (body?.code === 'SESSION_INVALIDATED') {
+        await applySessionInvalidatedFromServer();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return res;
 }

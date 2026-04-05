@@ -101,6 +101,23 @@
       color: #475569;
     }
 
+    #pause-ribbon {
+      display: none;
+      margin-top: 10px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+      border: 1px solid #F59E0B;
+      font-size: 14px;
+      font-weight: 800;
+      color: #92400E;
+      letter-spacing: 0.02em;
+    }
+    #pause-ribbon.show { display: flex; }
+
     .progress-bars {
       display: flex; gap: 6px; margin: 16px 0;
     }
@@ -258,6 +275,7 @@
 <!-- Main Top Card -->
 <div id="top-card">
   <div id="status-title">Aguardando início...</div>
+  <div id="pause-ribbon" role="status" aria-live="polite"><span style="font-size:18px">⏸</span> Deslocamento pausado</div>
   <div id="client-alert" role="status" aria-live="polite"></div>
   
   <div class="progress-bars">
@@ -318,15 +336,42 @@
   // ── Configuration ─────────────────────────────────────────
   const BASE = window.location.origin;
   const token = new URLSearchParams(location.search).get('t');
-  const POLL_MS = 5000; // 5s — equilíbrio entre frescor e carga
+  /** Intervalo entre fim de um ciclo e o próximo (o ciclo inclui fetch API + render + OSRM até ~10s). */
+  const POLL_MS = 3000;
 
   // ── State ─────────────────────────────────────────────────
   let map, techMarker, destMarker, routeLine;
   let lastData = null;
   let arrivedShown = false;
   let pollTimer = null;
+  let pollHalted = false;
+  /** Quando a aba volta ao foco, o SO atrasa setTimeout — próximo ciclo mais rápido. */
+  let pollUrgent = false;
+  let pollRunning = false;
   /** Evita que um render antigo (ex.: OSRM lento) sobrescreva um mais novo */
   let renderGeneration = 0;
+
+  /**
+   * “Sem sinal” alinhado ao servidor (gpsStaleAfterSeconds).
+   * Usa gpsStaleAfterSeconds da API (fallback alinhado ao default do servidor, ex. 600 s).
+   */
+  function isTrackingSignalLost(d) {
+    if (!d || typeof d !== 'object') return false;
+    if (d.isEnded || d.isPaused) return false;
+    const staleSec =
+      d.gpsStaleAfterSeconds != null && isFinite(Number(d.gpsStaleAfterSeconds))
+        ? Number(d.gpsStaleAfterSeconds)
+        : 600;
+    if (d.signalLost === true) return true;
+    if (d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds) && d.gpsAgeSeconds > staleSec) return true;
+    if (
+      (d.gpsAgeSeconds == null || !isFinite(d.gpsAgeSeconds)) &&
+      (d.currentLat == null || d.currentLng == null)
+    ) {
+      return true;
+    }
+    return false;
+  }
 
   /** Distância em metros até o destino, ou null se não der para calcular */
   function distanceToDestMeters(d) {
@@ -349,7 +394,7 @@
 
   function updateClientAlert(d) {
     const el = document.getElementById('client-alert');
-    if (!el) return;
+    if (!el || !d || typeof d !== 'object') return;
     el.className = '';
     el.textContent = '';
 
@@ -399,6 +444,21 @@
       return;
     }
 
+    if (isTrackingSignalLost(d)) {
+      const limMin = Math.round((d.gpsStaleAfterSeconds || 600) / 60);
+      const ageTxt =
+        d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds)
+          ? `Último ponto há cerca de ${Math.round(d.gpsAgeSeconds / 60)} min.`
+          : 'Não recebemos posição com coordenadas recentes.';
+      el.textContent =
+        ageTxt +
+        ' O técnico pode ter fechado o app, reiniciado o telefone ou ficado sem rede. O pin no mapa pode estar desatualizado (limite de frescor: ' +
+        limMin +
+        ' min).';
+      el.classList.add('show', 'warn-unknown');
+      return;
+    }
+
     el.classList.remove('show');
   }
 
@@ -424,11 +484,20 @@
 
   // ─── Polling ───────────────────────────────────────────────
   async function poll() {
+    if (pollHalted || pollRunning) return;
+    pollRunning = true;
     try {
-      const res = await fetch(`${BASE}/api/tracking/${token}`, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-      });
+      const ac = new AbortController();
+      const to = setTimeout(() => ac.abort(), 12000);
+      const res = await fetch(
+        `${BASE}/api/tracking/${encodeURIComponent(token)}?cb=${Date.now()}`,
+        {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+          signal: ac.signal,
+        }
+      );
+      clearTimeout(to);
 
       if (res.status === 404) {
         showExpired('Link inválido ou não encontrado.');
@@ -445,17 +514,33 @@
       lastData = data;
     } catch (e) {
       console.warn('[tracking] poll error', e);
-      // Offline: keep last data, don't crash
+    } finally {
+      pollRunning = false;
+      if (!pollHalted) {
+        const delay = pollUrgent ? 250 : POLL_MS;
+        pollUrgent = false;
+        clearTimeout(pollTimer);
+        pollTimer = setTimeout(poll, delay);
+      }
     }
-    pollTimer = setTimeout(poll, POLL_MS);
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (pollHalted || !token || document.visibilityState !== 'visible') return;
+    pollUrgent = true;
+    clearTimeout(pollTimer);
+    if (!pollRunning) pollTimer = setTimeout(poll, 200);
+  });
 
   // ─── Render ────────────────────────────────────────────────
   
   async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
+    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 10000);
     try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: ac.signal });
+      if (!res.ok) return null;
       const data = await res.json();
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0];
@@ -468,6 +553,8 @@
       }
     } catch (e) {
       console.warn('[tracking] fallback OSRM fetch failed', e);
+    } finally {
+      clearTimeout(to);
     }
     return null;
   }
@@ -475,22 +562,12 @@
     const gen = ++renderGeneration;
     updateTech(d);
 
-    if (d.currentLat && d.currentLng && d.destLat && d.destLng) {
-      const osrmData = await fetchOsrmRoute(d.currentLat, d.currentLng, d.destLat, d.destLng);
-      if (gen !== renderGeneration) return;
-      if (osrmData && osrmData.etaMinutes !== null && d.etaMinutes == null) {
-        d.etaMinutes = osrmData.etaMinutes;
-      }
-      if (osrmData && osrmData.coords) {
-        d.routePolyline = osrmData.coords;
-      }
-    }
-
-    if (gen !== renderGeneration) return;
-
+    // Atualizar título, ETA e mapa ANTES do OSRM — senão, se o router externo travar,
+    // a página fica eternamente em “Aguardando início...” / “--”.
     updateEta(d);
     updateMap(d);
     updateStatus(d);
+    updatePauseRibbon(d);
     updateClientAlert(d);
     updateActions(d);
 
@@ -505,6 +582,25 @@
     }
 
     if (d.isEnded && actualArrived && !arrivedShown) showArrived();
+
+    if (d.currentLat && d.currentLng && d.destLat && d.destLng) {
+      const osrmData = await fetchOsrmRoute(d.currentLat, d.currentLng, d.destLat, d.destLng);
+      if (gen !== renderGeneration) return;
+      let changed = false;
+      if (osrmData && osrmData.etaMinutes !== null && d.etaMinutes == null) {
+        d.etaMinutes = osrmData.etaMinutes;
+        changed = true;
+      }
+      if (osrmData && osrmData.coords) {
+        d.routePolyline = osrmData.coords;
+        changed = true;
+      }
+      if (changed) {
+        updateEta(d);
+        updateMap(d);
+        updateClientAlert(d);
+      }
+    }
   }
 
   function updateTech(d) {
@@ -512,7 +608,13 @@
     document.getElementById('service-title').textContent = d.serviceTitle || '';
     const av = document.getElementById('tech-avatar');
     
-    const isOffline = d.gpsAgeSeconds != null && d.gpsAgeSeconds > 120;
+    const staleSec =
+      d.gpsStaleAfterSeconds != null && isFinite(Number(d.gpsStaleAfterSeconds))
+        ? Number(d.gpsStaleAfterSeconds)
+        : 600;
+    const isOffline =
+      isTrackingSignalLost(d) ||
+      (d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds) && d.gpsAgeSeconds > Math.min(120, staleSec));
     av.classList.remove('aura-green', 'aura-red');
     if (d.gpsAgeSeconds != null && !d.isEnded) {
       if (isOffline) {
@@ -573,11 +675,14 @@
     } else {
        etaVal.style.color = 'var(--text)'; // Reset color
     }
-    
-    // Check if GPS is stale
-    if (d.gpsAgeSeconds != null && d.gpsAgeSeconds > 300) { 
-        etaVal.textContent = 'Aguardando sinal GPS...';
-        return;
+
+    if (isTrackingSignalLost(d)) {
+      etaVal.textContent =
+        d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds)
+          ? 'Sem sinal recente · há ' + Math.round(d.gpsAgeSeconds / 60) + ' min'
+          : 'Sem sinal do aplicativo';
+      etaVal.style.color = '#92400E';
+      return;
     }
 
     if (d.etaMinutes != null) {
@@ -614,9 +719,9 @@
       } else {
         techMarker.setLatLng(ll);
         // Acompanha o técnico enquanto o deslocamento não terminou (mapa não ficava “parado” após o 1º fit)
-        if (!d.isEnded && map) {
+        if (!d.isEnded && map && !isTrackingSignalLost(d)) {
           try {
-            map.panTo(ll, { animate: true, duration: 0.35 });
+            map.panTo(ll);
           } catch (e) {}
         }
       }
@@ -663,6 +768,13 @@
     }
   }
 
+  function updatePauseRibbon(d) {
+    const el = document.getElementById('pause-ribbon');
+    if (!el || !d || typeof d !== 'object') return;
+    if (!d.isEnded && d.isPaused) el.classList.add('show');
+    else el.classList.remove('show');
+  }
+
   function updateStatus(d) {
     const title = document.getElementById('status-title');
     const fill2 = document.getElementById('fill-2');
@@ -695,6 +807,10 @@
       title.textContent = `${techFirstName} pausou o deslocamento`;
       fill2.style.width = '60%'; 
       fill3.style.width = '0%';
+    } else if (isTrackingSignalLost(d)) {
+      title.textContent = `${techFirstName} — sem sinal de localização`;
+      fill2.style.width = '60%';
+      fill3.style.width = '0%';
     } else {
       title.textContent = `${techFirstName} está a caminho`;
       fill2.style.width = '60%'; 
@@ -725,7 +841,9 @@
 
   // ─── Expired States ────────────────────────────────────────
   function showExpired(msg) {
+    pollHalted = true;
     clearTimeout(pollTimer);
+    pollTimer = null;
     hideLoading();
     document.getElementById('expired-sub').textContent = msg || 'Este link de rastreamento expirou.';
     document.getElementById('expired-screen').classList.add('show');

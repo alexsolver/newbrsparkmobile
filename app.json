@@ -58,6 +58,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": true
+        }
+      ],
       "expo-router",
       "@react-native-community/datetimepicker",
       "expo-localization",

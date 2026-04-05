@@ -227,7 +227,12 @@ export const NotificationService = {
     }
 
     try {
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        (Constants as any).easConfig?.projectId;
+      const tokenData = projectId
+        ? await Notifications.getExpoPushTokenAsync({ projectId })
+        : await Notifications.getExpoPushTokenAsync();
       console.log('[BrSpark] Expo Push Token:', tokenData.data);
       try {
          await apiFetch('/api/sync/push_token', {
