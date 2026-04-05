@@ -14,7 +14,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
+import { useResolvedAvatarUri } from '../src/hooks/useResolvedAvatarUri';
 import { AuthService, API_BASE, getToken } from '../src/services/auth';
+import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, getDeviceRegion } from '../src/i18n';
@@ -43,7 +46,8 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
+  const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode } = useTheme();
   const { t, i18n } = useTranslation();
   const [queueCount, setQueueCount] = useState(0);
@@ -77,6 +81,7 @@ export default function ProfileScreen() {
     phone: '',
     role: '',
     avatar: null as string | null,
+    avatarLocalUri: null as string | null,
   });
 
   useEffect(() => {
@@ -242,6 +247,18 @@ export default function ProfileScreen() {
       setSyncing(true);
       const token = await getToken();
 
+      let fileBase64 = asset.base64 as string | undefined;
+      if (!fileBase64 && asset.uri) {
+        try {
+          fileBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!fileBase64) {
+        throw new Error('Não foi possível ler a imagem. Tente outra foto.');
+      }
+
       const ext = asset.uri.split('.').pop() || 'jpg';
       const remotePath = `avatars/${user?.id}_${Date.now()}.${ext}`;
       
@@ -249,7 +266,7 @@ export default function ProfileScreen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          fileBase64: asset.base64,
+          fileBase64,
           mimeType: `image/${ext.toLowerCase() === 'png' ? 'png' : 'jpeg'}`,
           name: `avatar.${ext}`,
           path: remotePath,
@@ -273,7 +290,20 @@ export default function ProfileScreen() {
         throw new Error(`Profile API HTTP ${userRes.status}: ${await userRes.text()}`);
       }
 
-      const np = { ...profile, avatar: finalUrl };
+      let localUri: string | undefined;
+      if (user?.id) {
+        localUri = await writeAvatarFromBase64(user.id, fileBase64, ext);
+      }
+      await patchUser({
+        avatarUrl: finalUrl,
+        ...(localUri ? { avatarLocalUri: localUri } : {}),
+      });
+
+      const np = {
+        ...profile,
+        avatar: finalUrl,
+        ...(localUri ? { avatarLocalUri: localUri } : {}),
+      };
       setProfile(np);
       AsyncStorage.setItem('@user_profile', JSON.stringify(np));
       
@@ -313,8 +343,8 @@ export default function ProfileScreen() {
         {/* ─── Profile Summary Card ─── */}
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} style={styles.headerAvatarWrap}>
-            {profile.avatar ? (
-              <Image source={{ uri: profile.avatar }} style={styles.headerAvatar} />
+            {displayAvatarUri ? (
+              <Image source={{ uri: displayAvatarUri }} style={styles.headerAvatar} />
             ) : (
               <View style={[styles.headerAvatarPlaceholder, { backgroundColor: '#F1F5F9' }]}>
                 <Ionicons name="person" size={40} color={C.textLight} />

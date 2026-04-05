@@ -2,6 +2,8 @@
  * sidebar.js — shared sidebar HTML injected on every page
  */
 
+import { ensureAdminApiDetected } from './config.js';
+
 export const NAV_ITEMS = [
   { page: 'dashboard.html',     icon: 'grid-outline',       label: 'Dashboard',           section: null },
   { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
@@ -73,7 +75,9 @@ export function renderSidebar(alertCount = 3) {
     </aside>`;
 }
 
-export function initPage() {
+export async function initPage() {
+  await ensureAdminApiDetected();
+
   if (!sessionStorage.getItem('brspark_admin_token')) {
     window.location.href = 'index.html';
     return;

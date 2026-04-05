@@ -74,6 +74,33 @@
       font-size: 18px; font-weight: 700; color: var(--text);
     }
 
+    #client-alert {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.45;
+      border: 1px solid transparent;
+    }
+    #client-alert.show { display: block; }
+    #client-alert.warn-pause {
+      background: #FFFBEB;
+      border-color: #FDE68A;
+      color: #92400E;
+    }
+    #client-alert.warn-ended {
+      background: #FEF2F2;
+      border-color: #FECACA;
+      color: #991B1B;
+    }
+    #client-alert.warn-unknown {
+      background: #F1F5F9;
+      border-color: #E2E8F0;
+      color: #475569;
+    }
+
     .progress-bars {
       display: flex; gap: 6px; margin: 16px 0;
     }
@@ -231,6 +258,7 @@
 <!-- Main Top Card -->
 <div id="top-card">
   <div id="status-title">Aguardando início...</div>
+  <div id="client-alert" role="status" aria-live="polite"></div>
   
   <div class="progress-bars">
     <div class="bar-seg" id="pbar-1"><div class="bar-fill" style="width:100%"></div></div>
@@ -290,13 +318,89 @@
   // ── Configuration ─────────────────────────────────────────
   const BASE = window.location.origin;
   const token = new URLSearchParams(location.search).get('t');
-  const POLL_MS = 8000; // 8 seconds
+  const POLL_MS = 5000; // 5s — equilíbrio entre frescor e carga
 
   // ── State ─────────────────────────────────────────────────
   let map, techMarker, destMarker, routeLine;
   let lastData = null;
   let arrivedShown = false;
   let pollTimer = null;
+  /** Evita que um render antigo (ex.: OSRM lento) sobrescreva um mais novo */
+  let renderGeneration = 0;
+
+  /** Distância em metros até o destino, ou null se não der para calcular */
+  function distanceToDestMeters(d) {
+    if (!d || d.currentLat == null || d.currentLng == null || d.destLat == null || d.destLng == null) return null;
+    if (!map) return null;
+    try {
+      return map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const ARRIVED_RADIUS_M = 300;
+
+  function formatDistancePt(meters) {
+    if (meters == null || !isFinite(meters)) return '';
+    if (meters < 1000) return `${Math.round(meters)} m`;
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+
+  function updateClientAlert(d) {
+    const el = document.getElementById('client-alert');
+    if (!el) return;
+    el.className = '';
+    el.textContent = '';
+
+    const m = distanceToDestMeters(d);
+    const hasDest = d.destLat != null && d.destLng != null;
+    const hasTech = d.currentLat != null && d.currentLng != null;
+
+    let actualArrived = false;
+    if (d.isEnded && m != null && m <= ARRIVED_RADIUS_M) actualArrived = true;
+
+    if (d.isEnded) {
+      if (actualArrived) {
+        el.textContent = '';
+        el.className = '';
+        return;
+      }
+      if (m != null && m > ARRIVED_RADIUS_M) {
+        el.textContent =
+          'O deslocamento foi encerrado antes da chegada ao destino (aprox. ' +
+          formatDistancePt(m) +
+          ' do endereço).';
+        el.classList.add('show', 'warn-ended');
+        return;
+      }
+      el.textContent =
+        'O deslocamento foi encerrado; não foi possível confirmar no mapa se o técnico chegou ao endereço (GPS ou destino indisponível).';
+      el.classList.add('show', 'warn-unknown');
+      return;
+    }
+
+    if (d.isPaused) {
+      if (m != null && m > ARRIVED_RADIUS_M) {
+        el.textContent =
+          'O técnico pausou o deslocamento longe do endereço de atendimento (aprox. ' +
+          formatDistancePt(m) +
+          ').';
+        el.classList.add('show', 'warn-pause');
+        return;
+      }
+      if (!hasDest || !hasTech) {
+        el.textContent =
+          'O técnico pausou o deslocamento. Não foi possível comparar a posição com o destino no mapa.';
+        el.classList.add('show', 'warn-unknown');
+        return;
+      }
+      el.classList.remove('show');
+      return;
+    }
+
+    el.classList.remove('show');
+  }
 
   // ─── Init ──────────────────────────────────────────────────
   if (!token) {
@@ -321,7 +425,10 @@
   // ─── Polling ───────────────────────────────────────────────
   async function poll() {
     try {
-      const res = await fetch(`${BASE}/api/tracking/${token}`);
+      const res = await fetch(`${BASE}/api/tracking/${token}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      });
 
       if (res.status === 404) {
         showExpired('Link inválido ou não encontrado.');
@@ -334,7 +441,7 @@
 
       const data = await res.json();
       hideLoading();
-      render(data);
+      await render(data);
       lastData = data;
     } catch (e) {
       console.warn('[tracking] poll error', e);
@@ -365,32 +472,36 @@
     return null;
   }
   async function render(d) {
+    const gen = ++renderGeneration;
     updateTech(d);
-    
-    // Asynchronously try to fetch OSRM route if we have coordinates
+
     if (d.currentLat && d.currentLng && d.destLat && d.destLng) {
       const osrmData = await fetchOsrmRoute(d.currentLat, d.currentLng, d.destLat, d.destLng);
+      if (gen !== renderGeneration) return;
       if (osrmData && osrmData.etaMinutes !== null && d.etaMinutes == null) {
-         d.etaMinutes = osrmData.etaMinutes; // Update ETA dynamically
+        d.etaMinutes = osrmData.etaMinutes;
       }
       if (osrmData && osrmData.coords) {
-         d.routePolyline = osrmData.coords; // Draw precise dynamic path
+        d.routePolyline = osrmData.coords;
       }
     }
+
+    if (gen !== renderGeneration) return;
 
     updateEta(d);
     updateMap(d);
     updateStatus(d);
+    updateClientAlert(d);
     updateActions(d);
 
     let actualArrived = false;
     if (d.isEnded) {
-       if (d.currentLat && d.destLat && map) {
-           try {
-             const dist = map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
-             if (dist <= 300) actualArrived = true;
-           } catch(e) {}
-       }
+      if (d.currentLat && d.destLat && map) {
+        try {
+          const dist = map.distance([d.currentLat, d.currentLng], [d.destLat, d.destLng]);
+          if (dist <= 300) actualArrived = true;
+        } catch (e) {}
+      }
     }
 
     if (d.isEnded && actualArrived && !arrivedShown) showArrived();
@@ -482,6 +593,17 @@
     const hasTech = d.currentLat != null && d.currentLng != null;
     const hasDest = d.destLat != null && d.destLng != null;
 
+    try {
+      if (map && !map._sizeFixed) {
+        map._sizeFixed = true;
+        requestAnimationFrame(() => {
+          try {
+            map.invalidateSize();
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
+
     // Technician marker (avatar circle)
     if (hasTech) {
       const ll = [d.currentLat, d.currentLng];
@@ -491,6 +613,12 @@
         map.setView(ll, 15);
       } else {
         techMarker.setLatLng(ll);
+        // Acompanha o técnico enquanto o deslocamento não terminou (mapa não ficava “parado” após o 1º fit)
+        if (!d.isEnded && map) {
+          try {
+            map.panTo(ll, { animate: true, duration: 0.35 });
+          } catch (e) {}
+        }
       }
     }
 
@@ -511,23 +639,22 @@
     if (d.routePolyline && d.routePolyline.length >= 2) {
       const coords = d.routePolyline.map(c => Array.isArray(c) ? [c[0], c[1]] : [c.lat, c.lng]);
       if (routeLine) {
-         routeLine.setLatLngs(coords);
+        routeLine.setLatLngs(coords);
       } else {
-         routeLine = L.polyline(coords, {
-           color: '#EA580C',
-           weight: 5,
-           opacity: 0.8,
-           dashArray: '8 8',
-         }).addTo(map);
+        routeLine = L.polyline(coords, {
+          color: '#EA580C',
+          weight: 5,
+          opacity: 0.8,
+          dashArray: '8 8',
+        }).addTo(map);
       }
     }
 
-    // Fit bounds to show both tech + destination
+    // Fit bounds to show both tech + destination (apenas na primeira vez com os dois pontos)
     if (hasTech && hasDest) {
       const bounds = L.latLngBounds([[d.currentLat, d.currentLng], [d.destLat, d.destLng]]);
-      // Add the route line to the bounds to ensure the entire path is visible
       if (routeLine) {
-         bounds.extend(routeLine.getBounds());
+        bounds.extend(routeLine.getBounds());
       }
       if (techMarker && !techMarker._hasFitted) {
         map.fitBounds(bounds.pad(0.3), { animate: true });
@@ -584,26 +711,10 @@
     }
   }
 
-  // ─── OSRM Client integration ────────────────────────────────
-  async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
-     try {
-       const qs = `${startLng},${startLat};${endLng},${endLat}`;
-       const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${qs}?overview=full&geometries=geojson`);
-       const json = await res.json();
-       if (json.routes && json.routes.length > 0) {
-         const route = json.routes[0];
-         const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-         const etaMinutes = Math.ceil(route.duration / 60);
-         return { coords, etaMinutes };
-       }
-     } catch(e) {}
-     return null;
-  }
-
   // ─── Arrived State ─────────────────────────────────────────
   function showArrived() {
     arrivedShown = true;
-    clearTimeout(pollTimer);
+    // Mantém o polling ativo para ETA/mapa continuarem coerentes após fechar o overlay
     const ov = document.getElementById('arrived-overlay');
     ov.classList.add('show');
   }

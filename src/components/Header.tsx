@@ -8,6 +8,7 @@ import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
 import { getLocalAssets } from '../database';
 import { Asset } from '../types/asset';
 import { useAuth } from '../hooks/useAuth';
+import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
 
 interface HeaderProps {
@@ -24,6 +25,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const { colors: C } = useTheme();
   const { mode, setMode, guardRef } = useAppContext();
   const { user, userRole } = useAuth();
+  const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
 
   // Pulse animation for the online dot
@@ -201,8 +203,8 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                     }}
                     onPress={() => router.push('/profile')}
                   >
-                    {user?.avatarUrl ? (
-                      <Image source={{ uri: user.avatarUrl }} style={{ width: 38, height: 38 }} />
+                    {avatarUri ? (
+                      <Image source={{ uri: avatarUri }} style={{ width: 38, height: 38 }} />
                     ) : (
                       <Ionicons name="person-outline" size={20} color={C.textSecondary} />
                     )}
@@ -251,8 +253,8 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               onPress={() => router.push('/profile')}
               activeOpacity={0.7}
             >
-              {user?.avatarUrl ? (
-                <Image source={{ uri: user.avatarUrl }} style={{ width: 40, height: 40 }} />
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={{ width: 40, height: 40 }} />
               ) : (
                  <Ionicons name="person-outline" size={22} color={C.textSecondary} />
               )}

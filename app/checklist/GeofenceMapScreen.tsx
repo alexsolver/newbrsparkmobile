@@ -12,6 +12,7 @@ import MapView, { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 
 interface TaskLocation {
   id?: string;
@@ -62,6 +63,7 @@ function nearestRoutePoint(lat: number, lng: number, route: number[][]): number 
 
 export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, onCancel }: Props) {
   const { user } = useAuth();
+  const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
   const [myPos, setMyPos]     = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,11 +224,17 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         showsUserLocation={false}
         showsMyLocationButton={false}
       >
-        {myPos && user?.avatarUrl && (
+        {myPos && (
           <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={999}>
             <View style={styles.userMarkerOutline}>
               <View style={styles.userMarkerInner}>
-                <Image source={{ uri: user.avatarUrl }} style={styles.userMarkerImage} />
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.userMarkerImage} />
+                ) : (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="person" size={18} color="#3b82f6" />
+                  </View>
+                )}
               </View>
             </View>
           </Marker>

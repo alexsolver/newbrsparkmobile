@@ -1,14 +1,71 @@
 /**
  * config.js — Frontend API configuration
- * Quando o painel é aberto via servidor admin (ex.: http://localhost:3001/),
- * usa a mesma origem — assim todas as chamadas batem no backend Prisma + PostgreSQL.
- * Fallback: http://localhost:3001/api (dev com arquivo aberto direto ou outra porta).
+ * O painel precisa da API Prisma + PostgreSQL (pasta admin-panel/backend).
+ * A API oficial é admin-panel/backend (PostgreSQL). A pasta backend/ só repassa npm start → mesma API.
  */
-export function resolveApiBase() {
-  if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol !== 'file:') {
-    return `${window.location.origin}/api`;
+const LS_API_ORIGIN = 'brspark_admin_api_origin';
+
+/** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */
+let _apiBase = null;
+
+/** GET /api/plans sem token → API Prisma responde 401 JSON. */
+async function isPrismaAdminApi(baseUrl) {
+  try {
+    const r = await fetch(`${baseUrl}/plans`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const ct = (r.headers.get('content-type') || '').includes('application/json');
+    return ct && (r.status === 401 || r.status === 403 || r.status === 200);
+  } catch {
+    return false;
   }
-  return 'http://localhost:3001/api';
+}
+
+/**
+ * Descobre o admin-panel/backend (PostgreSQL). Grava origem no localStorage se precisar
+ * (ex.: painel aberto via Live Server).
+ */
+export async function ensureAdminApiDetected() {
+  if (typeof window === 'undefined') return;
+  if (_apiBase) return;
+
+  const ls = localStorage.getItem(LS_API_ORIGIN);
+  if (ls) {
+    _apiBase = `${String(ls).replace(/\/$/, '')}/api`;
+    return;
+  }
+
+  if (window.location?.protocol !== 'file:' && window.location?.hostname) {
+    const same = `${window.location.origin}/api`;
+    if (await isPrismaAdminApi(same)) {
+      _apiBase = same;
+      return;
+    }
+  }
+
+  for (const port of [3001, 3000]) {
+    const base = `http://127.0.0.1:${port}/api`;
+    if (await isPrismaAdminApi(base)) {
+      _apiBase = base;
+      localStorage.setItem(LS_API_ORIGIN, `http://127.0.0.1:${port}`);
+      return;
+    }
+  }
+
+  _apiBase = 'http://127.0.0.1:3001/api';
+}
+
+export function resolveApiBase() {
+  if (_apiBase) return _apiBase;
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem(LS_API_ORIGIN);
+    if (custom) return `${String(custom).replace(/\/$/, '')}/api`;
+    if (window.location?.origin && window.location.protocol !== 'file:') {
+      return `${window.location.origin}/api`;
+    }
+  }
+  return 'http://127.0.0.1:3001/api';
 }
 
 export const CONFIG = {
@@ -29,7 +86,13 @@ export const CONFIG = {
   async get(path) {
     const res = await fetch(`${CONFIG.API_BASE}${path}`, { headers: CONFIG.headers() });
     if (res.status === 401) { sessionStorage.clear(); window.location.href = 'index.html'; return null; }
-    return res.json();
+    const raw = await res.text();
+    try {
+      return JSON.parse(raw);
+    } catch {
+      console.error('[CONFIG.get] Resposta não é JSON — verifique se admin-panel/backend está no ar (PostgreSQL).', path);
+      return { error: 'invalid_response', _raw: raw.slice(0, 120) };
+    }
   },
 
   async post(path, body) {

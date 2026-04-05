@@ -51,11 +51,16 @@
       <div class="login-hint">
         Credenciais de acesso: <code>admin@brspark.com</code> / <code>admin123</code>
       </div>
+      <p class="login-hint" style="margin-top:12px;font-size:11px;line-height:1.45;color:var(--text3)">
+        API única em PostgreSQL. Rode: <code>cd admin-panel/backend && npm run dev</code> ou <code>cd backend && npm start</code> e abra o painel pela URL do terminal (ex. <code>http://localhost:3001/index.html</code>).
+      </p>
     </div>
   </div>
 
   <script type="module">
-    import { CONFIG } from './js/config.js';
+    import { CONFIG, ensureAdminApiDetected } from './js/config.js';
+
+    await ensureAdminApiDetected();
 
     // If already logged in, go to dashboard
     if (sessionStorage.getItem('brspark_admin_token')) window.location.href = 'dashboard.html';

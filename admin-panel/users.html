@@ -102,7 +102,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
-  initPage();
+  await initPage();
 
   const roleMap = { ADMIN:'badge-red', MANAGER:'badge-amber', USER:'badge-gray' };
   const roleLbl = { ADMIN:'<ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin', MANAGER:'<ion-icon name="construct-outline"></ion-icon> Gestor', USER:'<ion-icon name="person-outline" style="vertical-align:-2px"></ion-icon> Usuário' };

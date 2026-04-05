@@ -38,7 +38,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
-  initPage();
+  await initPage();
 
   const catMap   = { AUTH:'badge-blue', DATA:'badge-green', ADMIN:'badge-accent', SYSTEM:'badge-amber' };
   const catLabel = { AUTH:'<ion-icon name="lock-closed-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Auth', DATA:'<ion-icon name="stats-chart-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Dados', ADMIN:'<ion-icon name="shield-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin', SYSTEM:'<ion-icon name="settings-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Sistema' };

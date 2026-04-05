@@ -158,6 +158,10 @@ router.get('/:token', async (req, res) => {
     const meta = exec.metadata || {};
 
     // Check expiry
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     if (meta.trackingExpiredAt && new Date() > new Date(meta.trackingExpiredAt)) {
       return res.status(410).json({
         expired: true,
@@ -182,7 +186,7 @@ router.get('/:token', async (req, res) => {
       }
     } catch(e) { /* user table may not have phone col yet */ }
 
-    // Latest GPS from telemetry
+    // Latest GPS from telemetry (sempre amarrado à execução desta OS)
     let currentLat = null;
     let currentLng = null;
     let gpsAge     = null;
@@ -193,11 +197,15 @@ router.get('/:token', async (req, res) => {
         select: { lat: true, lng: true, serverTimestamp: true },
       });
       if (ev) {
-        currentLat = ev.lat;
-        currentLng = ev.lng;
-        gpsAge = Math.round((Date.now() - new Date(ev.serverTimestamp).getTime()) / 1000); // seconds
+        currentLat = typeof ev.lat === 'number' ? ev.lat : parseFloat(ev.lat);
+        currentLng = typeof ev.lng === 'number' ? ev.lng : parseFloat(ev.lng);
+        if (!Number.isFinite(currentLat)) currentLat = null;
+        if (!Number.isFinite(currentLng)) currentLng = null;
+        if (currentLat != null && currentLng != null) {
+          gpsAge = Math.round((Date.now() - new Date(ev.serverTimestamp).getTime()) / 1000);
+        }
       }
-    } catch(e) {}
+    } catch (e) {}
 
     // Determine if transit is active or ended
     const isEnded = !!meta.trackingEndedAt;
@@ -206,6 +214,22 @@ router.get('/:token', async (req, res) => {
     let routePolyline = null;
     if (exec.locationPolygon && Array.isArray(exec.locationPolygon) && exec.locationPolygon.length >= 2) {
       routePolyline = exec.locationPolygon; // [[lat,lng], ...]
+    }
+
+    let destLat = exec.locationLat;
+    let destLng = exec.locationLng;
+    if ((!destLat || !destLng) && exec.locationPolygon) {
+      try {
+        const poly =
+          typeof exec.locationPolygon === 'string'
+            ? JSON.parse(exec.locationPolygon)
+            : exec.locationPolygon;
+        if (Array.isArray(poly) && poly.length > 0) {
+          const p0 = poly[0];
+          destLat = p0?.[0] ?? p0?.lat ?? destLat;
+          destLng = p0?.[1] ?? p0?.lng ?? destLng;
+        }
+      } catch (_) {}
     }
 
     return res.json({
@@ -220,9 +244,9 @@ router.get('/:token', async (req, res) => {
       currentLng,
       gpsAgeSeconds: gpsAge,
 
-      // Destination
-      destLat:     exec.locationLat,
-      destLng:     exec.locationLng,
+      // Destination (fallback: primeiro vértice do polígono)
+      destLat,
+      destLng,
       destAddress: exec.locationAddress || meta.locationAddress || null,
 
       // Service info

@@ -1,19 +1,13 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "brspark-api",
+  "version": "2.0.0",
+  "private": true,
+  "description": "API única: PostgreSQL via admin-panel/backend (Prisma). SQLite foi removido.",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "sqlite3": "^6.0.1"
+    "start": "npm --prefix ../admin-panel/backend run start",
+    "dev": "npm --prefix ../admin-panel/backend run dev",
+    "db:migrate": "npm --prefix ../admin-panel/backend run db:migrate",
+    "db:seed": "npm --prefix ../admin-panel/backend run db:seed",
+    "db:studio": "npm --prefix ../admin-panel/backend run db:studio"
   }
 }

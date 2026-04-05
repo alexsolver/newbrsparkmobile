@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -20,6 +20,54 @@ import LiveRouteMapCard from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 
+function normalizeEtaMinutes(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.max(0, Math.round(raw));
+  const n = parseInt(String(raw).trim(), 10);
+  return Number.isFinite(n) ? Math.max(0, n) : null;
+}
+
+/** Destino para OSRM: raiz da execução ou primeiro ponto do polígono/rota */
+function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
+  if (!task || typeof task !== 'object') return null;
+  const lat0 = task.locationLat ?? task.metadata?.locationLat;
+  const lng0 = task.locationLng ?? task.metadata?.locationLng;
+  const latN = typeof lat0 === 'number' && Number.isFinite(lat0) ? lat0 : parseFloat(String(lat0 ?? '').trim().replace(',', '.'));
+  const lngN = typeof lng0 === 'number' && Number.isFinite(lng0) ? lng0 : parseFloat(String(lng0 ?? '').trim().replace(',', '.'));
+  if (
+    Number.isFinite(latN) &&
+    Number.isFinite(lngN) &&
+    latN >= -90 &&
+    latN <= 90 &&
+    lngN >= -180 &&
+    lngN <= 180
+  ) {
+    return { lat: latN, lng: lngN };
+  }
+  let poly = task.locationPolygon ?? task.metadata?.locationPolygon;
+  if (typeof poly === 'string') {
+    try {
+      poly = JSON.parse(poly);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(poly) || poly.length === 0) return null;
+  const p0 = poly[0];
+  let la: number;
+  let ln: number;
+  if (Array.isArray(p0)) {
+    la = parseFloat(String(p0[0]));
+    ln = parseFloat(String(p0[1]));
+  } else if (p0 && typeof p0 === 'object') {
+    la = parseFloat(String((p0 as any).lat));
+    ln = parseFloat(String((p0 as any).lng ?? (p0 as any).lon));
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
+  return { lat: la, lng: ln };
+}
 
 export default function ChecklistEngine() {
   const { id, taskId } = useLocalSearchParams();
@@ -36,6 +84,9 @@ export default function ChecklistEngine() {
   // Geofence map state (Opção B)
   const [showGeoMap, setShowGeoMap]         = useState(false);
   const [currentTask, setCurrentTask]       = useState<any>(null);
+  /** ETA mostrado no mapa — independente de currentTask, para não ficar preso a `if (!prev) return prev` */
+  const [mapEtaMinutes, setMapEtaMinutes]   = useState<number | null>(null);
+  const currentTaskRef = useRef<any>(null);
   const [geoMapChecked, setGeoMapChecked]   = useState(false);
   const [geofenceFailMode, setGeofenceFailMode] = useState<'block'|'warn'>('warn');
   
@@ -54,14 +105,24 @@ export default function ChecklistEngine() {
   // Tracking share link state
   const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
 
-
   const [sigModalVisible, setSigModalVisible] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
   const [currentSigField, setCurrentSigField] = useState<string|null>(null);
   const [currentStrokeState, setCurrentStrokeState] = useState<string>('');
   const currentStrokeRef = React.useRef<string>('');
   const [completedStrokes, setCompletedStrokes] = useState<string[]>([]);
-  
+
+  const resolvedTaskId =
+    typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
+
+  useEffect(() => {
+    currentTaskRef.current = currentTask;
+  }, [currentTask]);
+
+  useEffect(() => {
+    setMapEtaMinutes(null);
+  }, [resolvedTaskId]);
+
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -542,52 +603,127 @@ export default function ChecklistEngine() {
   }, [responses, taskId, isReadOnly]);
 
 
-  // Poller to update ETA in real-time — fetches directly from server so it works
-  // even while the user is inside this screen (the home screen pullTasks doesn't run here)
+  // Poller to update ETA em tempo real + estado dedicado (mapEtaMinutes) para o badge não depender só de currentTask
   useEffect(() => {
-    if (!taskId || isReadOnly) return;
-    
-    const fetchEta = async () => {
-      try {
-        // First try local cache (fast)
-        const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-        const cloudTasks = JSON.parse(cloudTasksStr);
-        const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(taskId));
-        if (cachedTask?.etaMinutes != null) {
-          setCurrentTask((prev: any) => {
-            if (!prev || prev.etaMinutes === cachedTask.etaMinutes) return prev;
-            return { ...prev, etaMinutes: cachedTask.etaMinutes };
-          });
-        }
+    if (!resolvedTaskId || isReadOnly) return;
 
-        // Then fetch fresh ETA directly from server (resolves even if cache is stale)
-        const res = await apiFetch(`/api/checklists/executions/${taskId}`);
-        if (res.ok) {
-          const { trackingUrl: tUrl } = await res.json();
-          setTrackingUrl(tUrl);
-          const data = await res.json();
-          if (data.etaMinutes != null) {
-            // Update local cache
-            const updatedTasks = cloudTasks.map((t: any) =>
-              String(t.id) === String(taskId) ? { ...t, etaMinutes: data.etaMinutes } : t
-            );
-            await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(updatedTasks));
-            // Update state
-            setCurrentTask((prev: any) => {
-              if (!prev) return prev;
-              return { ...prev, etaMinutes: data.etaMinutes };
-            });
-          }
+    const fetchLocalOsrmEtaMinutes = async (
+      destLat: number,
+      destLng: number
+    ): Promise<number | null> => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return null;
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const oLng = pos.coords.longitude;
+        const oLat = pos.coords.latitude;
+        const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${destLng},${destLat}?overview=false`;
+        const init: RequestInit = {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'BrsparkMobile/1.0',
+          },
+        };
+        if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+          (init as any).signal = (AbortSignal as any).timeout(15000);
         }
-      } catch(e) {
-        // Offline: silent
+        const r = await fetch(url, init);
+        const text = await r.text();
+        let j: any;
+        try {
+          j = JSON.parse(text);
+        } catch {
+          return null;
+        }
+        if (!r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return null;
+        return Math.max(1, Math.round(j.routes[0].duration / 60));
+      } catch {
+        return null;
       }
     };
 
-    fetchEta(); // Run immediately on mount
-    const interval = setInterval(fetchEta, 15000); // Then every 15s
+    const persistEta = async (cloudTasks: any[], minutes: number) => {
+      const updatedTasks = cloudTasks.map((t: any) =>
+        String(t.id) === String(resolvedTaskId) ? { ...t, etaMinutes: minutes } : t
+      );
+      await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(updatedTasks));
+    };
+
+    const fetchEta = async () => {
+      try {
+        let cloudTasks: any[] = [];
+        try {
+          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+          const parsed = JSON.parse(cloudTasksStr);
+          cloudTasks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          cloudTasks = [];
+        }
+
+        const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
+        const cachedNorm = normalizeEtaMinutes(cachedTask?.etaMinutes);
+        if (cachedNorm !== null) {
+          setMapEtaMinutes(cachedNorm);
+          setCurrentTask((prev: any) => {
+            if (!prev || prev.etaMinutes === cachedNorm) return prev;
+            return { ...prev, etaMinutes: cachedNorm };
+          });
+        }
+
+        const destFallback =
+          getDestFromTaskLike(cachedTask || {}) ||
+          getDestFromTaskLike(currentTaskRef.current || {});
+
+        const res = await apiFetch(`/api/checklists/executions/${resolvedTaskId}`);
+        if (!res.ok) {
+          if (destFallback) {
+            const localEta = await fetchLocalOsrmEtaMinutes(destFallback.lat, destFallback.lng);
+            const n = normalizeEtaMinutes(localEta);
+            if (n !== null) {
+              setMapEtaMinutes(n);
+              await persistEta(cloudTasks, n);
+            }
+          }
+          return;
+        }
+
+        const data: any = await res.json();
+
+        const tUrl =
+          data?.trackingUrl ??
+          (data?.metadata && typeof data.metadata === 'object' ? data.metadata.trackingUrl : null);
+        if (tUrl) setTrackingUrl(String(tUrl));
+
+        let finalEta = normalizeEtaMinutes(data?.etaMinutes);
+        const dest =
+          getDestFromTaskLike(data) || destFallback || getDestFromTaskLike(currentTaskRef.current || {});
+
+        if (finalEta === null && dest) {
+          const localEta = await fetchLocalOsrmEtaMinutes(dest.lat, dest.lng);
+          finalEta = normalizeEtaMinutes(localEta);
+        }
+
+        if (finalEta !== null) {
+          await persistEta(cloudTasks, finalEta);
+          setMapEtaMinutes(finalEta);
+          setCurrentTask((prev: any) => (prev ? { ...prev, etaMinutes: finalEta } : prev));
+        }
+      } catch {
+        const dest = getDestFromTaskLike(currentTaskRef.current || {});
+        if (dest) {
+          const localEta = await fetchLocalOsrmEtaMinutes(dest.lat, dest.lng);
+          const n = normalizeEtaMinutes(localEta);
+          if (n !== null) setMapEtaMinutes(n);
+        }
+      }
+    };
+
+    fetchEta();
+    const interval = setInterval(fetchEta, 15000);
     return () => clearInterval(interval);
-  }, [taskId, isReadOnly]);
+  }, [resolvedTaskId, isReadOnly]);
 
 
   useEffect(() => {
@@ -1252,14 +1388,20 @@ export default function ChecklistEngine() {
         if (startField && responses[startField.id]) isTransitStarted = true;
         
         const isVisible = showLiveMap || (isTransitStarted && !isTransitFinished);
+        const routeDest = getDestFromTaskLike(currentTask || {});
+        const mergedEta = mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
 
         return <LiveRouteMapCard 
                   route={routeCoords} 
                   visible={isVisible}
                   zoneType={currentTask?.locationZoneType}
-                  targetLoc={{ lat: currentTask?.locationLat, lng: currentTask?.locationLng }}
-                  etaMinutes={currentTask?.etaMinutes}
-                  taskId={typeof taskId === 'string' ? taskId : undefined}
+                  targetLoc={
+                    routeDest
+                      ? { lat: routeDest.lat, lng: routeDest.lng }
+                      : { lat: currentTask?.locationLat, lng: currentTask?.locationLng }
+                  }
+                  etaMinutes={mergedEta}
+                  taskId={resolvedTaskId || undefined}
                   onEndTransit={endField ? () => {
                       const hasValue = !!responses[endField.id];
                       if (!hasValue) {

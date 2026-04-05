@@ -18,7 +18,7 @@ async function runEtaCron() {
     const mapsInt = await prisma.integration.findFirst({
       where: { type: 'MAPS', name: 'OSRM', status: 'ACTIVE' }
     }).catch(() => null);
-    const osrmBase = mapsInt?.baseUrl || 'http://router.project-osrm.org';
+    const osrmBase = (mapsInt?.baseUrl || 'https://router.project-osrm.org').replace(/\/$/, '');
 
     for (const task of activeTasks) {
       const meta = typeof task.metadata === 'object' && task.metadata ? task.metadata : {};
@@ -210,7 +210,7 @@ router.post('/batch', async (req, res) => {
         }
 
         const mapsInt = await prisma.integration.findFirst({ where: { type: 'MAPS', name: 'OSRM', status: 'ACTIVE' } });
-        const osrmBaseUrl = mapsInt?.baseUrl || 'http://router.project-osrm.org';
+        const osrmBaseUrl = (mapsInt?.baseUrl || 'https://router.project-osrm.org').replace(/\/$/, '');
 
         for (const execId of Object.keys(latestEvents)) {
           const ev = latestEvents[execId];

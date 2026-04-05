@@ -65,7 +65,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
-  initPage();
+  await initPage();
 
   const chanIcon  = { EMAIL:'<ion-icon name="mail-outline"></ion-icon>', PUSH:'<ion-icon name="smartphone-outline"></ion-icon>', WHATSAPP:'<ion-icon name="logo-whatsapp"></ion-icon>', SMS:'<ion-icon name="chatbox-ellipses-outline"></ion-icon>' };
   const statusMap = { SENT:'badge-green', DELIVERED:'badge-blue', FAILED:'badge-red', BOUNCED:'badge-amber' };

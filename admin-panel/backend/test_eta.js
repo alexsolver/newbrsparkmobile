@@ -38,7 +38,7 @@ async function main() {
 
   console.log(`\nTesting OSRM: current=(${currentLat},${currentLng}) -> dest=(${destLat},${destLng})`);
   
-  const osrmUrl = `http://router.project-osrm.org/route/v1/driving/${currentLng},${currentLat};${destLng},${destLat}?overview=false`;
+  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${currentLng},${currentLat};${destLng},${destLat}?overview=false`;
   console.log('OSRM URL:', osrmUrl);
   
   const r = await fetch(osrmUrl, { signal: AbortSignal.timeout(8000) });

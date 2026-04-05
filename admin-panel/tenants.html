@@ -85,7 +85,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
-  initPage();
+  await initPage();
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
   const statusLbl = { TRIAL:'Trial', ACTIVE:'Ativo', SUSPENDED:'Suspenso', CANCELLED:'Cancelado' };

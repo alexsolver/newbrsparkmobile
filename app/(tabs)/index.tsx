@@ -42,6 +42,51 @@ const SERVICE_CATEGORIES = [
   { id: 'Tecnologia',  labelKey: 'technology',    icon: 'laptop-outline',         color: '#6366F1' },
 ];
 
+const OSRM_PUBLIC_BASE = 'https://router.project-osrm.org';
+/** Limite seguro para o demo público OSRM (1 origem + destinos) */
+const OSRM_MAX_DESTINATIONS = 90;
+/** Polilinha completa: URLs longas falham em alguns dispositivos */
+const OSRM_MAX_WAYPOINTS_FOR_GEOMETRY = 28;
+
+function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
+  const rawLat = t?.locationLat ?? t?.metadata?.locationLat ?? t?.metadata?.lat;
+  const rawLng = t?.locationLng ?? t?.metadata?.locationLng ?? t?.metadata?.lng;
+  const lat =
+    typeof rawLat === 'number' && Number.isFinite(rawLat)
+      ? rawLat
+      : parseFloat(String(rawLat ?? '').trim().replace(',', '.'));
+  const lng =
+    typeof rawLng === 'number' && Number.isFinite(rawLng)
+      ? rawLng
+      : parseFloat(String(rawLng ?? '').trim().replace(',', '.'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+async function fetchOsrmJson(url: string): Promise<any> {
+  const init: RequestInit = {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'BrsparkMobile/1.0',
+    },
+  };
+  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+    (init as any).signal = (AbortSignal as any).timeout(28000);
+  }
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Resposta inválida do OSRM (HTTP ${res.status}).`);
+  }
+  if (!res.ok) {
+    throw new Error((data && (data.message || data.code)) || `OSRM HTTP ${res.status}`);
+  }
+  return data;
+}
 
 // ─── Busca inteligente ─────────────────────────────────────────────
 function smartMatch(provider: any, query: string): boolean {
@@ -108,6 +153,9 @@ export default function DashboardScreen() {
   const [providerSortMode, setProviderSortMode] = useState<'NEWEST' | 'OLDEST' | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>('NEWEST');
   const [osrmDurations, setOsrmDurations] = useState<Record<string, number>>({});
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
+  /** Qual modo está a ser calculado (spinner nos chips — não confundir com providerSortMode até terminar) */
+  const [osrmOptimizingMode, setOsrmOptimizingMode] = useState<null | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>(null);
+  const lastOsrmPendingKeyRef = useRef<string>('');
   const [providerSearch, setProviderSearch] = useState('');
   const [isProviderMenuExpanded, setIsProviderMenuExpanded] = useState(true);
   const [activeCardDropdown, setActiveCardDropdown] = useState<string | null>(null);
@@ -125,45 +173,63 @@ export default function DashboardScreen() {
   const [rejectReason, setRejectReason] = useState("");
 
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
-    const pendentes = providerTasks.filter(t => {
+    const pendentesAll = providerTasks.filter((t) => {
         let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
         if (s === 'RECEIVED') s = 'PENDING';
         return s === providerTab;
-    }).filter(t => t.locationLat && t.locationLng);
+    });
+    const pendentes = pendentesAll
+      .map((t) => ({ t, c: parseCoordLatLng(t) }))
+      .filter((x): x is { t: any; c: { lat: number; lng: number } } => x.c !== null)
+      .map((x) => ({ ...x.t, locationLat: x.c.lat, locationLng: x.c.lng }));
 
     if (pendentes.length === 0) {
         Alert.alert("Aviso", "Não há nenhuma atividade pendente com coordenadas de destino cadastradas para criar percurso.");
         return;
     }
 
+    let slice = pendentes;
+    if (pendentes.length > OSRM_MAX_DESTINATIONS) {
+      slice = pendentes.slice(0, OSRM_MAX_DESTINATIONS);
+      Alert.alert(
+        'Limite de pontos',
+        `Só os primeiros ${OSRM_MAX_DESTINATIONS} destinos com coordenadas entram no cálculo (limite do serviço OSRM).`
+      );
+    }
+
     setIsOptimizingRoute(true);
+    setOsrmOptimizingMode(mode);
     try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') throw new Error("Permissão de GPS negada.");
 
         const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        
-        const coordPairs = [`${location.coords.longitude},${location.coords.latitude}`];
-        pendentes.forEach(p => coordPairs.push(`${p.locationLng},${p.locationLat}`));
+        const oLng = location.coords.longitude;
+        const oLat = location.coords.latitude;
 
-        const url = `https://router.project-osrm.org/table/v1/driving/${coordPairs.join(';')}?sources=0`;
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        if (data.code !== 'Ok' || !data.durations) {
-            throw new Error("O servidor OSRM falhou ou devolveu retorno vazio.");
+        const coordPairs = [`${oLng},${oLat}`];
+        slice.forEach((p) => coordPairs.push(`${p.locationLng},${p.locationLat}`));
+
+        const tableUrl = `${OSRM_PUBLIC_BASE}/table/v1/driving/${coordPairs.join(';')}?sources=0`;
+        const data = await fetchOsrmJson(tableUrl);
+
+        if (data.code !== 'Ok' || !data.durations || !Array.isArray(data.durations[0])) {
+            const hint = data.message || data.code || '';
+            throw new Error(
+              hint ? `OSRM: ${hint}` : 'O servidor OSRM falhou ou devolveu retorno vazio.'
+            );
         }
 
-        const durList = data.durations[0]; 
+        const durList = data.durations[0];
         const newDurs: Record<string, number> = {};
-        pendentes.forEach((p, index) => {
+        slice.forEach((p, index) => {
             const val = durList[index + 1];
-            newDurs[p.id] = (val !== null && val !== undefined) ? val : 999999;
+            newDurs[String(p.id)] = (val !== null && val !== undefined) ? val : 999999;
         });
 
-        const sortedPendentes = [...pendentes].sort((a,b) => {
-           const d1 = newDurs[a.id] ?? 999999;
-           const d2 = newDurs[b.id] ?? 999999;
+        const sortedPendentes = [...slice].sort((a,b) => {
+           const d1 = newDurs[String(a.id)] ?? 999999;
+           const d2 = newDurs[String(b.id)] ?? 999999;
            if (mode === 'OSRM_SLA_ROUTE') {
                const getScore = (item: any, durationSecs: number) => {
                    const durationMins = durationSecs / 60;
@@ -181,45 +247,58 @@ export default function DashboardScreen() {
            return d1 - d2;
         });
 
-        const routePairs = [`${location.coords.longitude},${location.coords.latitude}`];
-        sortedPendentes.forEach(p => routePairs.push(`${p.locationLng},${p.locationLat}`));
+        const routePairs = [`${oLng},${oLat}`];
+        sortedPendentes.forEach((p) => routePairs.push(`${p.locationLng},${p.locationLat}`));
         try {
-            const routeUrl = `https://router.project-osrm.org/route/v1/driving/${routePairs.join(';')}?overview=full&geometries=geojson`;
-            const routeRes = await fetch(routeUrl);
-            const routeData = await routeRes.json();
-            if (routeData.code === 'Ok' && routeData.routes && routeData.routes[0]) {
+            if (routePairs.length <= OSRM_MAX_WAYPOINTS_FOR_GEOMETRY) {
+              const routeUrl = `${OSRM_PUBLIC_BASE}/route/v1/driving/${routePairs.join(';')}?overview=full&geometries=geojson`;
+              const routeData = await fetchOsrmJson(routeUrl);
+              if (routeData.code === 'Ok' && routeData.routes?.[0]?.geometry?.coordinates) {
                 const coordsArray = routeData.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
                     latitude: coord[1],
                     longitude: coord[0]
                 }));
                 setOsrmRouteCoords(coordsArray);
-            } else {
+              } else {
                 setOsrmRouteCoords([]);
+              }
+            } else {
+              setOsrmRouteCoords([]);
             }
         } catch (e) {
-            console.warn("Could not fetch route geometry: ", e);
+            console.warn('Could not fetch route geometry: ', e);
             setOsrmRouteCoords([]);
         }
 
         setOsrmDurations(newDurs);
         setProviderSortMode(mode);
+        lastOsrmPendingKeyRef.current = slice.map((p) => String(p.id)).sort().join('|');
     } catch (err: any) {
-        Alert.alert("Erro de Roteamento", err.message);
+        Alert.alert("Erro de Roteamento", err?.message || String(err));
     } finally {
         setIsOptimizingRoute(false);
+        setOsrmOptimizingMode(null);
     }
   };
 
   const onSortRoutePress = (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
       if (providerSortMode === mode) return;
-      
-      const pendentesIds = providerTasks.filter(t => {
+
+      const pendentesIds = providerTasks
+        .filter((t) => {
           let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
           if (s === 'RECEIVED') s = 'PENDING';
           return s === providerTab;
-      }).filter(t => t.locationLat && t.locationLng).map(t => String(t.id));
+        })
+        .filter((t) => parseCoordLatLng(t) !== null)
+        .map((t) => String(t.id));
 
-      const needsRecalc = pendentesIds.some(id => osrmDurations[id] === undefined) || Object.keys(osrmDurations).length === 0;
+      const pendingKey = [...pendentesIds].sort().join('|');
+      const listChanged = lastOsrmPendingKeyRef.current !== '' && lastOsrmPendingKeyRef.current !== pendingKey;
+      const needsRecalc =
+        listChanged ||
+        pendentesIds.some((id) => osrmDurations[id] === undefined) ||
+        Object.keys(osrmDurations).length === 0;
 
       if (needsRecalc) {
           handleOptimizeRoute(mode);
@@ -388,10 +467,13 @@ export default function DashboardScreen() {
             const year = isNaN(dt.getFullYear()) ? '2026' : dt.getFullYear();
             
             const isCompleted = !!executedMap[String(t.id)];
-            
+            const geo = parseCoordLatLng(t);
+
             return {
                ...t,
                id: String(t.id),
+               locationLat: geo?.lat ?? t.locationLat ?? null,
+               locationLng: geo?.lng ?? t.locationLng ?? null,
                title: `OS ${t.id} | ${t.title || 'Manutenção'}`,
                status: isCompleted ? 'COMPLETED' : 
                        inprogressTasks.includes(String(t.id)) ? 'IN_PROGRESS' : 'PENDING',
@@ -1335,7 +1417,7 @@ export default function DashboardScreen() {
                   disabled={isOptimizingRoute || providerTab !== 'PENDING'}
                   style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OSRM_ROUTE' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
                >
-                  {isOptimizingRoute && providerSortMode === 'OSRM_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name="rocket" size={16} color={providerSortMode === 'OSRM_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
+                  {osrmOptimizingMode === 'OSRM_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name="rocket" size={16} color={providerSortMode === 'OSRM_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
                   <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_ROUTE' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Rota</Text>
                </TouchableOpacity>
                <TouchableOpacity 
@@ -1343,7 +1425,7 @@ export default function DashboardScreen() {
                   disabled={isOptimizingRoute || providerTab !== 'PENDING'}
                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF3C7' : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
                >
-                  {isOptimizingRoute && providerSortMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
+                  {osrmOptimizingMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#94A3B8'} style={{ marginRight: 6 }} />}
                   <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_SLA_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_SLA_ROUTE' ? '#D97706' : '#64748B', textTransform: 'uppercase' }}>Rota + Vencimento</Text>
                </TouchableOpacity>
                
@@ -1378,8 +1460,8 @@ export default function DashboardScreen() {
                 .filter(t => providerSearch === '' || t.id.toLowerCase().includes(providerSearch.toLowerCase()) || (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())))
                 .sort((a,b) => {
                    if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
-                       const d1 = osrmDurations[a.id] ?? 999999;
-                       const d2 = osrmDurations[b.id] ?? 999999;
+                       const d1 = osrmDurations[String(a.id)] ?? 999999;
+                       const d2 = osrmDurations[String(b.id)] ?? 999999;
                        
                        if (providerSortMode === 'OSRM_SLA_ROUTE') {
                            const getScore = (item: any, durationSecs: number) => {

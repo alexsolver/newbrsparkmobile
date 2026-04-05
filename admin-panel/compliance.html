@@ -92,7 +92,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
-  initPage();
+  await initPage();
 
   const typeMap = { TERMS_OF_USE:'badge-green', PRIVACY_POLICY:'badge-blue', LGPD_DPA:'badge-accent', COOKIE_POLICY:'badge-amber' };
   const typeLbl = { TERMS_OF_USE:'Termos de Uso', PRIVACY_POLICY:'Política de Privacidade', LGPD_DPA:'DPA LGPD', COOKIE_POLICY:'Cookies' };

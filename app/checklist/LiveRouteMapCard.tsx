@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiFetch } from '../../src/services/api';
@@ -165,6 +166,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
   const { user } = useAuth();
+  const avatarUri = useResolvedAvatarUri(user);
   
   // Track pause state natively inside component (or from routeTracker)
   const [isPaused, setIsPaused] = useState(false);
@@ -232,11 +234,77 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     }
   }, [visible, zoneType, myPos, targetLoc, dynamicRoute]);
 
+  // ETA no próprio mapa se o pai ainda não tiver valor (GPS + OSRM)
+  const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
+  useEffect(() => {
+    if (!visible) {
+      setClientEtaMinutes(null);
+      return;
+    }
+    if (etaMinutes != null) {
+      setClientEtaMinutes(null);
+      return;
+    }
+    const dLat = targetLoc?.lat;
+    const dLng = targetLoc?.lng;
+    if (
+      dLat == null ||
+      dLng == null ||
+      !Number.isFinite(Number(dLat)) ||
+      !Number.isFinite(Number(dLng))
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const fetchEta = async () => {
+      if (cancelled) return;
+      try {
+        let oLat = myPos?.lat ?? update?.currentLat;
+        let oLng = myPos?.lng ?? update?.currentLng;
+        if (oLat == null || oLng == null) {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') return;
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          oLat = pos.coords.latitude;
+          oLng = pos.coords.longitude;
+        }
+        const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=false`;
+        const init: RequestInit = {
+          headers: { Accept: 'application/json', 'User-Agent': 'BrsparkMobile/1.0' },
+        };
+        if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+          (init as any).signal = (AbortSignal as any).timeout(12000);
+        }
+        const r = await fetch(url, init);
+        const text = await r.text();
+        let j: any;
+        try {
+          j = JSON.parse(text);
+        } catch {
+          return;
+        }
+        if (cancelled || !r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return;
+        setClientEtaMinutes(Math.max(1, Math.round(j.routes[0].duration / 60)));
+      } catch {
+        /* ignore */
+      }
+    };
+    fetchEta();
+    const iv = setInterval(fetchEta, 18000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [visible, etaMinutes, targetLoc?.lat, targetLoc?.lng, myPos?.lat, myPos?.lng, update?.currentLat, update?.currentLng]);
+
   if (!visible) return null;
 
   const isDeviation = update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
+  const displayEtaMinutes = etaMinutes != null ? etaMinutes : clientEtaMinutes;
   
   let statusColor = '#f97316';
   if (isComplete) statusColor = '#16a34a';
@@ -407,8 +475,8 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           {myPos && (
             <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={100}>
               <View style={styles.userMarkerContainer}>
-                {user?.avatarUrl ? (
-                  <Image source={{ uri: user.avatarUrl }} style={styles.userMarkerImage} />
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.userMarkerImage} />
                 ) : (
                   <Ionicons name="person" size={20} color="#3b82f6" />
                 )}
@@ -450,7 +518,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
 
         {/* ──── Premium ETA Badge — always visible during transit ──── */}
         {!isComplete && !isPaused && (
-          <EtaBadge etaMinutes={etaMinutes ?? null} pct={pct} />
+          <EtaBadge etaMinutes={displayEtaMinutes ?? null} pct={pct} />
         )}
 
         {/* Deviation Banner Overlay */}

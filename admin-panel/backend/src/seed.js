@@ -38,6 +38,190 @@ async function main() {
   ]);
   console.log(`✅ Plans: ${plans.map(p => p.name).join(', ')}`);
 
+  // ── Locale + tenants + usuários demo (painel com listas preenchidas) ───────
+  const locBr = await prisma.localeProfile.upsert({
+    where: { countryCode: 'BR' },
+    update: {},
+    create: {
+      countryCode: 'BR',
+      name: 'Brasil',
+      language: 'pt-BR',
+      currency: 'BRL',
+      currencySymbol: 'R$',
+      dateFormat: 'DD/MM/YYYY',
+      numberFormat: 'PT_STYLE',
+      timezone: 'America/Sao_Paulo',
+      taxIdLabel: 'CPF',
+      postalCodeLabel: 'CEP',
+      measureSystem: 'METRIC',
+    },
+  });
+  const locUs = await prisma.localeProfile.upsert({
+    where: { countryCode: 'US' },
+    update: {},
+    create: {
+      countryCode: 'US',
+      name: 'United States',
+      language: 'en-US',
+      currency: 'USD',
+      currencySymbol: '$',
+      dateFormat: 'MM/DD/YYYY',
+      numberFormat: 'US_STYLE',
+      timezone: 'America/New_York',
+      taxIdLabel: 'Tax ID',
+      postalCodeLabel: 'ZIP',
+      measureSystem: 'IMPERIAL',
+    },
+  });
+
+  const adminRow = await prisma.admin.findUnique({ where: { email: adminEmail } });
+  const basicPlan = plans.find((p) => p.name === 'Basic');
+  const proPlan = plans.find((p) => p.name === 'Pro');
+
+  const tenantDemo = await prisma.tenant.upsert({
+    where: { email: 'conta-demo@brspark.com' },
+    update: { localeId: locBr.id, status: 'ACTIVE' },
+    create: {
+      name: 'Conta Demonstração',
+      slug: 'conta-demonstracao',
+      email: 'conta-demo@brspark.com',
+      ownerName: 'Maria Souza',
+      phone: '+5511987654321',
+      localeId: locBr.id,
+      status: 'ACTIVE',
+      defaultLang: 'pt-BR',
+    },
+  });
+
+  const now = new Date();
+  const nextMonth = new Date(now);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+  await prisma.subscription.upsert({
+    where: { tenantId: tenantDemo.id },
+    update: {},
+    create: {
+      tenantId: tenantDemo.id,
+      planId: proPlan.id,
+      billingCycle: 'MONTHLY',
+      status: 'ACTIVE',
+      currentStart: now,
+      currentEnd: nextMonth,
+    },
+  });
+
+  const demoUserHash = await bcrypt.hash('demo123', 10);
+  await prisma.user.upsert({
+    where: { email_tenantId: { email: 'maria@brspark.com', tenantId: tenantDemo.id } },
+    update: {},
+    create: {
+      tenantId: tenantDemo.id,
+      email: 'maria@brspark.com',
+      name: 'Maria Souza',
+      password: demoUserHash,
+      role: 'ADMIN',
+      isActive: true,
+      lastLogin: now,
+    },
+  });
+
+  const tenantTrial = await prisma.tenant.upsert({
+    where: { email: 'trial@startup.io' },
+    update: { localeId: locUs.id },
+    create: {
+      name: 'Startup Trial',
+      slug: 'startup-trial',
+      email: 'trial@startup.io',
+      ownerName: 'Alex Founder',
+      localeId: locUs.id,
+      status: 'TRIAL',
+      defaultLang: 'en-US',
+    },
+  });
+
+  await prisma.subscription.upsert({
+    where: { tenantId: tenantTrial.id },
+    update: {},
+    create: {
+      tenantId: tenantTrial.id,
+      planId: basicPlan.id,
+      billingCycle: 'MONTHLY',
+      status: 'TRIALING',
+      currentStart: now,
+      currentEnd: nextMonth,
+      trialEndsAt: nextMonth,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email_tenantId: { email: 'alex@startup.io', tenantId: tenantTrial.id } },
+    update: {},
+    create: {
+      tenantId: tenantTrial.id,
+      email: 'alex@startup.io',
+      name: 'Alex Founder',
+      password: demoUserHash,
+      role: 'ADMIN',
+      isActive: true,
+    },
+  });
+
+  let assetDemo = await prisma.asset.findFirst({
+    where: { tenantId: tenantDemo.id, title: 'Apartamento Paulista' },
+  });
+  if (!assetDemo) {
+    assetDemo = await prisma.asset.create({
+      data: {
+        tenantId: tenantDemo.id,
+        title: 'Apartamento Paulista',
+        type: 'REAL_ESTATE',
+        status: 'Operacional',
+        description: 'Imóvel residencial — dados de demonstração do seed',
+        imageUrl: 'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?w=800&q=80',
+      },
+    });
+  }
+
+  const stockSku = 'DEMO-FILTRO-001';
+  const existingStock = await prisma.stockItem.findFirst({
+    where: { assetId: assetDemo.id, sku: stockSku },
+  });
+  if (!existingStock) {
+    await prisma.stockItem.create({
+      data: {
+        assetId: assetDemo.id,
+        name: 'Filtro de ar condicionado',
+        sku: stockSku,
+        currentStock: 1,
+        minStock: 5,
+        unit: 'un',
+      },
+    });
+  }
+
+  const auditCount = await prisma.auditLog.count();
+  if (auditCount < 2 && adminRow) {
+    await prisma.auditLog.createMany({
+      data: [
+        {
+          adminId: adminRow.id,
+          action: 'SEED_DEMO',
+          resource: 'PostgreSQL',
+          category: 'SYSTEM',
+          metadata: { note: 'Dados de demonstração inseridos pelo seed' },
+        },
+        {
+          tenantId: tenantDemo.id,
+          adminId: adminRow.id,
+          action: 'TENANT_REVIEW',
+          resource: tenantDemo.name,
+          category: 'ADMIN',
+        },
+      ],
+    });
+  }
+  console.log('✅ Demo: 2 tenants, assinaturas, usuários, 1 bem, estoque crítico de exemplo, auditoria');
+
   // ── Feature Flags ──────────────────────────────────────
   const flags = [
     { key: 'stock',     label: 'Módulo de Estoque',    description: 'Gestão de almoxarifado e movimentações',  icon: 'cube-outline', enabled: true },

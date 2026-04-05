@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearLocalDatabase } from '../database';
+import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 // Altere MAC_IP para o IP da sua máquina na rede Wi-Fi local quando testar no celular.
 // Em simulador use 'localhost'. Em Expo Go no device, use seu IP da rede (ex: 192.168.1.10).
 const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessário
-/** Porta da API unificada (admin-panel/backend + PostgreSQL). Backend SQLite legado: 3002. */
+/** Porta da API (admin-panel/backend + PostgreSQL). */
 const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
 export const API_BASE = __DEV__
   ? `http://${MAC_IP}:${DEV_API_PORT}`
@@ -19,6 +20,8 @@ export interface User {
   tenantId: string;
   role: string;
   avatarUrl?: string;
+  /** file:// após cache local (offline) */
+  avatarLocalUri?: string;
   tenant?: {
     id: string;
     name: string;
@@ -130,8 +133,25 @@ export class AuthService {
     return data.user as User;
   }
 
+  /** Atualiza utilizador em memória persistente (ex.: cache de avatar). */
+  static async patchUserInStorage(partial: Partial<User>): Promise<User | null> {
+    const u = await AuthService.getUser();
+    if (!u) return null;
+    const next = { ...u, ...partial };
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(next));
+    return next;
+  }
+
   /** Logout — limpa JWT e dados locais */
   static async logout(): Promise<void> {
+    const existing = await AuthService.getUser();
+    if (existing?.id) {
+      try {
+        await deleteAvatarCache(existing.id);
+      } catch {
+        /* ignore */
+      }
+    }
     const keys = [
       TOKEN_KEY, 
       USER_KEY, 
@@ -173,9 +193,11 @@ export class AuthService {
         await AuthService.logout();
         return null;
       }
-      const user = await res.json();
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
-      return user;
+      const serverUser = (await res.json()) as User;
+      const prev = await AuthService.getUser();
+      const merged = await mergeServerUserWithLocalAvatar(prev, serverUser);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
+      return merged;
     } catch {
       // Sem internet — retorna o usuário local (modo offline)
       return AuthService.getUser();
@@ -184,9 +206,17 @@ export class AuthService {
 
   /** Exclusão de conta (LGPD) */
   static async deleteAccount(): Promise<void> {
+    const existing = await AuthService.getUser();
     try {
       await apiFetch('/api/me', { method: 'DELETE' });
     } finally {
+      if (existing?.id) {
+        try {
+          await deleteAvatarCache(existing.id);
+        } catch {
+          /* ignore */
+        }
+      }
       await AsyncStorage.clear();
     }
   }

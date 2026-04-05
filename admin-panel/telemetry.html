@@ -206,7 +206,7 @@
 import { initPage } from './js/sidebar.js';
 import { CONFIG }   from './js/config.js';
 
-initPage();
+await initPage();
 
 // Init date input to today
 document.getElementById('filter-date-from').valueAsDate = new Date();

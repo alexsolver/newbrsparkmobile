@@ -1,8 +1,9 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { AuthService, TwoFactorRequired, User } from '../services/auth';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
+import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
 
 interface AuthContextType {
   user: User | null;
@@ -14,6 +15,7 @@ interface AuthContextType {
   completeLoginWithOtp: (challengeToken: string, otp: string) => Promise<void>;
   userRole: 'CLIENT' | 'TECHNICIAN';
   setUserRole: (role: 'CLIENT' | 'TECHNICIAN') => Promise<void>;
+  patchUser: (partial: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +25,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userRole, _setUserRole] = useState<'CLIENT' | 'TECHNICIAN'>('CLIENT');
 
+  const runAvatarWarm = useCallback((u: User | null) => {
+    if (!u) return;
+    warmAvatarCacheForUser(u, async partial => {
+      const next = await AuthService.patchUserInStorage(partial);
+      if (next) setUser(next);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     AuthService.getUser()
       .then(localUser => {
@@ -31,8 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (localUser) {
           AuthService.validateSession()
             .then(fresh => {
-              if (fresh) setUser(fresh);
-              else setUser(null); // Token expirado e limpo do ASyncStorage
+              if (fresh) {
+                setUser(fresh);
+                runAvatarWarm(fresh);
+              } else setUser(null); // Token expirado e limpo do ASyncStorage
             })
             .catch(() => {});
         }
@@ -47,12 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
          setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [runAvatarWarm]);
+
+  const patchUser = async (partial: Partial<User>) => {
+    const next = await AuthService.patchUserInStorage(partial);
+    if (next) setUser(next);
+  };
 
   const login = async (email: string, password: string) => {
     // TwoFactorRequired é relançado para a tela de login capturar
     const u = await AuthService.login(email, password);
     setUser(u);
+    runAvatarWarm(u);
     const defaultRole = u.technicianProfile ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
@@ -63,12 +81,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const completeLoginWithOtp = async (challengeToken: string, otp: string) => {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
+    runAvatarWarm(u);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-2fa failed:', err));
   };
 
   const register = async (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => {
     const u = await AuthService.register(data);
     setUser(u);
+    runAvatarWarm(u);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-register failed:', err));
   };
 
@@ -92,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, deleteAccount, completeLoginWithOtp, userRole, setUserRole }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, deleteAccount, completeLoginWithOtp, userRole, setUserRole, patchUser }}>
       {children}
     </AuthContext.Provider>
   );

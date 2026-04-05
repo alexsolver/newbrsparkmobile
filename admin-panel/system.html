@@ -71,7 +71,7 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
-  initPage();
+  await initPage();
 
   // Check API health
   fetch(`${CONFIG.API_BASE.replace('/api','')}/health`)

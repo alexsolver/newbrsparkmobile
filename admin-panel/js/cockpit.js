@@ -1,7 +1,7 @@
 import { initPage } from './sidebar.js';
 import { CONFIG }   from './config.js';
 
-initPage();
+await initPage();
 
 // ── Chart.js Setup (Datadog Theme) ────────────────────────────────────────────
 const ctx = document.getElementById('liveChart').getContext('2d');
