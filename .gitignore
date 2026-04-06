@@ -40,3 +40,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Backups de base de dados (dados sensíveis: credenciais, PII, etc.)
+# Gerados localmente pelo painel/scripts — nunca versionar.
+admin-panel/backend/backups/*.sql.gz
+admin-panel/backend/backups/*.sql
+admin-panel/backups/.last_auto_backup
