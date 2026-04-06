@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const prisma = require('../db');
 const { testIntegration } = require('../lib/integrationTester');
+const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 
 // GET /api/integrations
 router.get('/', async (_req, res) => {
@@ -43,8 +44,12 @@ router.post('/:id/test', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { name, type, description, icon, apiKey, baseUrl, webhookUrl, status = 'ACTIVE', metadata } = req.body;
+    let resolvedBase = baseUrl;
+    if (type === 'MAPS' && name === 'OSRM' && baseUrl) {
+      resolvedBase = normalizeOsrmBaseUrl(baseUrl);
+    }
     const integration = await prisma.integration.create({
-      data: { name, type, description, icon, apiKey, baseUrl, webhookUrl, status, metadata }
+      data: { name, type, description, icon, apiKey, baseUrl: resolvedBase, webhookUrl, status, metadata }
     });
     await prisma.auditLog.create({ data: { adminId: req.admin.id, action: 'INTEGRATION_ADD', resource: name, category: 'ADMIN' } });
     res.status(201).json({ ...integration, apiKey: integration.apiKey ? '••••••••' : null });
@@ -55,7 +60,13 @@ router.post('/', async (req, res) => {
 // PATCH /api/integrations/:id
 router.patch('/:id', async (req, res) => {
   try {
-    const integration = await prisma.integration.update({ where: { id: req.params.id }, data: req.body });
+    const existing = await prisma.integration.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: 'Integração não encontrada.' });
+    let data = { ...req.body };
+    if (existing.type === 'MAPS' && existing.name === 'OSRM' && data.baseUrl) {
+      data = { ...data, baseUrl: normalizeOsrmBaseUrl(data.baseUrl) };
+    }
+    const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({ ...integration, apiKey: integration.apiKey ? '••••••••' : null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

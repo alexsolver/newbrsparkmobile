@@ -6,6 +6,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const bcrypt  = require('bcryptjs');
 const prisma  = require('./db');
+const { normalizeOsrmBaseUrl } = require('./lib/osrmBaseUrl');
 
 async function main() {
   console.log('🌱 Seeding BrSpark Admin database...\n');
@@ -484,6 +485,30 @@ async function main() {
     });
   }
   console.log(`✅ Notification templates: ${templates.length} seeded`);
+
+  // ── OSRM (Integrações → Mapas) — override com OSRM_BASE_URL no .env ────────
+  const osrmBase = normalizeOsrmBaseUrl(
+    process.env.OSRM_BASE_URL || 'http://osrm.lansolver.com:5000'
+  );
+  const osrmRow = await prisma.integration.findFirst({ where: { type: 'MAPS', name: 'OSRM' } });
+  if (osrmRow) {
+    await prisma.integration.update({
+      where: { id: osrmRow.id },
+      data: { baseUrl: osrmBase, status: 'ACTIVE' },
+    });
+    console.log(`✅ OSRM (integração): baseUrl atualizado → ${osrmBase}`);
+  } else {
+    await prisma.integration.create({
+      data: {
+        name: 'OSRM',
+        type: 'MAPS',
+        description: 'Open Source Routing Machine — ETAs (servidor Lansolver ou OSRM_BASE_URL)',
+        baseUrl: osrmBase,
+        status: 'ACTIVE',
+      },
+    });
+    console.log(`✅ OSRM (integração): criado → ${osrmBase}`);
+  }
 
   console.log('\n🎉 Seed concluído com sucesso!');
   console.log(`   Admin: ${adminEmail} / ${process.env.ADMIN_PASSWORD || 'admin123'}\n`);

@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["BrsparkLocationIntegrityModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.brsparklocationintegrity.BrsparkLocationIntegrityModule"]
+  }
+}

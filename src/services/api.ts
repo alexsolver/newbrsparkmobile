@@ -1,5 +1,6 @@
 import { Asset } from '../types/asset';
 import { getSyncQueue, clearSyncQueueItem, saveAssetsLocal, saveConfigLocal, saveProviders, getProviders } from '../database';
+import { primeOsrmBaseFromConfig } from './osrmConfig';
 import { apiFetch, API_BASE } from './auth';
 import { fullSync } from './syncService';
 
@@ -107,6 +108,7 @@ export class ApiService {
       if (res.ok) {
         const config = await res.json();
         saveConfigLocal(config);
+        primeOsrmBaseFromConfig(config);
         console.log('[SYNC] ✅ Config sincronizado.');
       }
     } catch (e) {

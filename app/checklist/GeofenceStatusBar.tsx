@@ -3,8 +3,8 @@
  * Persistent bar at the top of the checklist showing real-time geofence status.
  * Polls GPS every 15 seconds and classifies: inside / border / outside.
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -74,21 +74,6 @@ export default function GeofenceStatusBar({ task }: Props) {
   const [detail, setDetail]     = useState('Verificando posição...');
   const [progress, setProgress] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  // Pulse animation when outside
-  useEffect(() => {
-    if (status === 'outside') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.03, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      pulse.setValue(1);
-    }
-  }, [status]);
 
   const check = async () => {
     if (!task) { setStatus('no_zone'); setDetail('Sem zona definida nesta OS.'); return; }
@@ -155,7 +140,7 @@ export default function GeofenceStatusBar({ task }: Props) {
   const text = colors[status];
 
   return (
-    <Animated.View style={[styles.bar, { backgroundColor: bg, borderColor: border, transform: [{ scale: pulse }] }]}>
+    <View style={[styles.bar, { backgroundColor: bg, borderColor: border }]}>
       <TouchableOpacity onPress={() => { setExpanded(e => !e); check(); }} activeOpacity={0.8}>
         <View style={styles.row}>
           <View style={[styles.dot, { backgroundColor: border }]} />
@@ -176,7 +161,7 @@ export default function GeofenceStatusBar({ task }: Props) {
           </Text>
         )}
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }
 

@@ -6,6 +6,7 @@ const morgan  = require('morgan');
 
 const { adminAuth } = require('./middleware/auth');
 const prisma          = require('./db');
+const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('./lib/osrmBaseUrl');
 
 // Routes
 const authRoutes          = require('./routes/auth');       // admin login
@@ -35,6 +36,7 @@ const collectionPolicyRoutes = require('./routes/collection-policy');
 const telemetryRoutes        = require('./routes/telemetry');
 const metricsRoutes          = require('./routes/metrics');
 const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
+const osrmProxyRoutes        = require('./routes/osrm-proxy'); // app: geometria OSRM via backend
 
 const path = require('path');
 
@@ -265,10 +267,21 @@ app.get('/api/config', async (req, res) => {
       icon: m.icon || 'grid-outline',
     }));
 
+    // URL base OSRM para o app (Integrações → OSRM); fallback = demo público
+    let osrmBaseUrl = DEFAULT_OSRM_BASE;
+    try {
+      const osrmRow = await prisma.integration.findFirst({
+        where: { name: 'OSRM', status: 'ACTIVE' },
+        select: { baseUrl: true },
+      });
+      if (osrmRow?.baseUrl) osrmBaseUrl = normalizeOsrmBaseUrl(osrmRow.baseUrl);
+    } catch (_) { /* mantém default */ }
+
     res.json({ 
       assetTypes, 
       categories, 
       locale, // Send the formatting rules (currency, dateFormat, etc)
+      osrmBaseUrl,
       updatedAt: new Date() 
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -295,6 +308,7 @@ app.use('/api/collection-policy',  adminAuth, collectionPolicyRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app
 app.use('/api/metrics',            adminAuth, metricsRoutes);
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
+app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
 
 // ── 404 ───────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));

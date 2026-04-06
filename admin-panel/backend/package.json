@@ -11,6 +11,7 @@
     "db:backup": "bash scripts/backup.sh manual",
     "db:seed": "node src/seed.js",
     "db:studio": "npx prisma studio",
+    "backfill:os-numbers": "node scripts/backfillOsNumbers.js",
     "dropbox:check": "node scripts/check_dropbox.js",
     "dropbox:exchange": "node scripts/exchange_dbx.js",
     "dropbox:test-token": "node scripts/test_dbx.js",

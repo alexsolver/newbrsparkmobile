@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml:2:13-83
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml:2:13-83
+	package
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml
+	xmlns:android
+		ADDED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml:2:23-81
+uses-sdk
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml reason: use-sdk injection requested
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml
+	android:targetSdkVersion
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml
+	android:minSdkVersion
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-location-integrity/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13787454069461546998.xml

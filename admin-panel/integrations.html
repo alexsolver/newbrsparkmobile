@@ -292,12 +292,13 @@
             <div><div class="int-name">OSRM</div><div class="int-cat">Mapas / Routing</div></div>
             <span class="int-status inactive" id="status-osrm" style="margin-left:auto">○ Público</span>
           </div>
-          <div class="int-desc">Substitui a API pública do OSRM pelo seu servidor próprio para calcular ETAs precisos em tempo real sem rate limits.</div>
+          <div class="int-desc">Servidor OSRM para ETAs no painel e telemetria. Indique só a <strong>base</strong> (host + porta); o backend usa <code>/route/v1/driving</code>. Se colar o URL completo até <code>/match/v1/driving</code>, o sufixo é ignorado.</div>
           <div class="int-fields" id="fields-osrm">
-            <input class="form-control" id="url-osrm" placeholder="Base URL (ex: http://osrm.empresa.com.br)" />
+            <input class="form-control" id="url-osrm" placeholder="http://osrm.lansolver.com:5000" />
           </div>
           <div class="int-actions">
             <button class="btn btn-primary btn-sm" onclick="saveInt('osrm','MAPS','OSRM',['url-osrm'],['baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-osrm" style="display:none" onclick="testInt('osrm')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
             <button class="btn btn-danger btn-sm" id="del-osrm" style="display:none" onclick="deleteIntByName('OSRM')">Remover</button>
           </div>
         </div>
@@ -384,7 +385,7 @@
   };
 
   // type → typeLabel legível para exibição
-  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push' };
+  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push', MAPS:'Mapas' };
 
   let activeInts = {};   // name → integration object
 
@@ -462,6 +463,11 @@
     const data = await CONFIG.get('/integrations') || [];
     activeInts = {};
     data.forEach(i => { activeInts[i.name] = i; });
+
+    const urlOsrm = document.getElementById('url-osrm');
+    if (urlOsrm) {
+      urlOsrm.value = activeInts['OSRM']?.baseUrl || 'http://osrm.lansolver.com:5000';
+    }
 
     let count = 0;
     Object.entries(CARD_MAP).forEach(([name, { slug }]) => {

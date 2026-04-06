@@ -112,8 +112,13 @@
     }
     .task-card-id {
       font-size: 9px;
-      color: var(--text3);
+      color: var(--text2);
       font-family: monospace;
+      font-weight: 800;
+    }
+    /* ion-icon usa Shadow DOM: cliques no ícone não herdam closest() até ao <button> */
+    .btn-reopen-revision ion-icon {
+      pointer-events: none;
     }
 
     /* ── Column Colors ───────────────────────────────────────── */
@@ -284,7 +289,7 @@
     .pdf-header-banner {
        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 30%, #e2e8f0 100%);
        height: 70px; border-radius: 8px; position: relative;
-       margin-top: 5px; margin-bottom: 30px;
+       margin-top: 5px; margin-bottom: 22px;
     }
     .pdf-summary-plate {
        position: absolute; left: 50%; transform: translateX(-50%); top: 15px;
@@ -380,6 +385,12 @@
     
     .pdf-pill { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 12px; font-size: 11px; font-weight: 700; }
     
+    /* Marcadores do mapa de deslocamento: avatar do técnico (Leaflet divIcon) */
+    .leaflet-div-icon.pdf-transit-tech-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+
     .pdf-photo-grid {
        display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
     }
@@ -424,7 +435,7 @@
         <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
           <option value="">Todos os técnicos</option>
         </select>
-        <input class="filter-input" type="text" id="filter-search" placeholder="<ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon>  Buscar OS, ID, título..." oninput="applyFilters()" style="min-width:240px" />
+        <input class="filter-input" type="text" id="filter-search" placeholder="Buscar OS, ID, título…" oninput="applyFilters()" style="min-width:240px" />
         <button class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ Atualizar</button>
         <button class="btn btn-primary btn-sm" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
       </div>
@@ -527,6 +538,58 @@
     <div class="modal-footer">
       <button class="btn btn-danger btn-sm" id="detail-cancel-btn" onclick="cancelTask()" style="display:none"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS</button>
       <button class="btn btn-ghost btn-sm" onclick="closeDetailModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Snapshot de revisão (histórico) ───────────────────────── -->
+<div class="modal-overlay" id="revision-snapshot-modal" style="display:none;opacity:1;pointer-events:all;z-index:10050;">
+  <div class="modal modal-lg" style="max-width:760px;width:96vw;">
+    <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title" id="revision-snapshot-title">Revisão</span>
+      <button type="button" class="modal-close" onclick="closeRevisionSnapshotModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="report-tabs" id="revision-snapshot-tabs">
+      <button type="button" class="report-tab active" id="rev-snap-tab-form" onclick="switchRevisionSnapshotTab('form')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
+      <button type="button" class="report-tab" id="rev-snap-tab-meta" onclick="switchRevisionSnapshotTab('meta')"><ion-icon name="cloud-upload-outline" style="vertical-align:-2px"></ion-icon> Metadados do envio</button>
+      <button type="button" class="report-tab" id="rev-snap-tab-json" onclick="switchRevisionSnapshotTab('json')"><ion-icon name="code-outline" style="vertical-align:-2px"></ion-icon> Respostas (JSON)</button>
+    </div>
+    <div class="modal-body" id="revision-snapshot-body" style="max-height:62vh;overflow-y:auto;"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeRevisionSnapshotModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Reabrir FT para revisão (admin) ───────────────────────── -->
+<div class="modal-overlay" id="reopen-revision-modal" data-reopen-task-id="" style="display:none;opacity:1;pointer-events:all;z-index:10060;">
+  <div class="modal" style="max-width:500px;width:95%;">
+    <div class="modal-header">
+      <span class="modal-title"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> Reabrir para revisão</span>
+      <button type="button" class="modal-close" onclick="window.closeReopenRevisionModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+      <p style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 12px;">
+        A FT <strong id="reopen-revision-ft-label">—</strong> volta para «Em campo» (mesmo número). Quem deve executar esta revisão?
+      </p>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+          <input type="radio" name="reopen-assign" id="reopen-revision-same" value="same" checked onchange="window.toggleReopenRevisionTechUi()" />
+          <span style="font-size:13px;line-height:1.4"><strong>Manter o mesmo técnico</strong><br><span id="reopen-revision-current-email" style="color:var(--text3);font-size:12px"></span></span>
+        </label>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;">
+          <input type="radio" name="reopen-assign" id="reopen-revision-other" value="other" onchange="window.toggleReopenRevisionTechUi()" />
+          <span style="font-size:13px;line-height:1.4"><strong>Atribuir a outro técnico</strong><br><span style="color:var(--text3);font-size:11px">Utilizador com login no app móvel</span></span>
+        </label>
+        <div id="reopen-revision-tech-wrap" style="display:none;padding-left:4px;">
+          <label class="form-label" for="reopen-revision-tech-select">Técnico</label>
+          <select id="reopen-revision-tech-select" class="form-control" style="width:100%;font-size:13px"></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="gap:8px;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeReopenRevisionModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="reopen-revision-confirm-btn">Reabrir OS</button>
     </div>
   </div>
 </div>
@@ -767,17 +830,236 @@ function shortId(id) {
   return id ? id.slice(0,8).toUpperCase() : '—';
 }
 
+/** Número FT convencional ou recorte do id técnico (cartões / busca). */
+function displayOsLabel(task) {
+  const on = task && task.osNumber && String(task.osNumber).trim();
+  if (on) return on;
+  return shortId(task && task.id);
+}
+
 function statusColClass(status) {
-  const map = { PENDING: 'col-pending', IN_PROGRESS: 'col-progress', COMPLETED: 'col-completed', SYNCED: 'col-completed' };
+  const map = {
+    PENDING: 'col-pending',
+    IN_PROGRESS: 'col-progress',
+    PAUSED: 'col-progress',
+    COMPLETED: 'col-completed',
+    SYNCED: 'col-completed',
+  };
   if (!status) return 'col-error';
   return map[status.toUpperCase()] || 'col-error';
 }
+
+// ── Reabrir para revisão (modal + técnico) ───────────────────
+let reopenRevisionTaskId = null;
+let _reopenUsersCache = null;
+
+window.toggleReopenRevisionTechUi = function () {
+  const other = document.getElementById('reopen-revision-other')?.checked;
+  const wrap = document.getElementById('reopen-revision-tech-wrap');
+  if (wrap) wrap.style.display = other ? 'block' : 'none';
+};
+
+window.closeReopenRevisionModal = function () {
+  const el = document.getElementById('reopen-revision-modal');
+  if (el) {
+    el.style.display = 'none';
+    el.dataset.reopenTaskId = '';
+  }
+  reopenRevisionTaskId = null;
+};
+
+window.openReopenRevisionModal = async function (taskId) {
+  const tid = taskId != null ? String(taskId).trim() : '';
+  if (!tid) {
+    alert('ID da OS em falta. Actualize o quadro (F5) e tente de novo.');
+    return;
+  }
+  reopenRevisionTaskId = tid;
+  const modalEl = document.getElementById('reopen-revision-modal');
+  if (modalEl) modalEl.dataset.reopenTaskId = tid;
+  const task = allTasks.find((t) => String(t.id) === String(tid));
+  if (!task) {
+    reopenRevisionTaskId = null;
+    if (modalEl) modalEl.dataset.reopenTaskId = '';
+    alert('Tarefa não encontrada. Actualize o quadro (F5).');
+    return;
+  }
+  document.getElementById('reopen-revision-ft-label').textContent = displayOsLabel(task);
+  document.getElementById('reopen-revision-current-email').textContent = task.ownerEmail || '—';
+  document.getElementById('reopen-revision-same').checked = true;
+  document.getElementById('reopen-revision-other').checked = false;
+  window.toggleReopenRevisionTechUi();
+
+  const sel = document.getElementById('reopen-revision-tech-select');
+  sel.innerHTML = '<option value="">A carregar…</option>';
+  document.getElementById('reopen-revision-modal').style.display = 'flex';
+
+  const escOpt = (s) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
+
+  try {
+    if (!_reopenUsersCache) {
+      const res = await CONFIG.get('/users?limit=500');
+      _reopenUsersCache = (res && Array.isArray(res.data) ? res.data : []).filter((u) => u.isActive !== false);
+    }
+    const cur = String(task.ownerEmail || '').toLowerCase();
+    const sorted = [..._reopenUsersCache].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' })
+    );
+    if (sorted.length === 0) {
+      sel.innerHTML = '<option value="">Nenhum utilizador activo</option>';
+      return;
+    }
+    sel.innerHTML = sorted
+      .map((u) => {
+        const em = String(u.email || '');
+        return `<option value="${escOpt(em)}">${escOpt(u.name || '')} — ${escOpt(em)}</option>`;
+      })
+      .join('');
+    const firstOther = sorted.find((u) => String(u.email || '').toLowerCase() !== cur);
+    sel.value = firstOther ? firstOther.email : sorted[0].email;
+  } catch (e) {
+    console.error('[reopen] users', e);
+    sel.innerHTML = '<option value="">Erro ao carregar utilizadores</option>';
+  }
+};
+
+let _reopenRevisionSubmitting = false;
+window.submitReopenRevision = async function () {
+  if (_reopenRevisionSubmitting) {
+    alert('Já existe um pedido de reabertura em curso. Aguarde a conclusão ou recarregue a página (F5).');
+    return;
+  }
+  const modalEl = document.getElementById('reopen-revision-modal');
+  const taskId =
+    reopenRevisionTaskId ||
+    (modalEl && modalEl.dataset.reopenTaskId ? String(modalEl.dataset.reopenTaskId).trim() : '');
+  if (!taskId) {
+    alert('Não foi possível identificar a OS. Feche o modal, actualize o quadro (F5) e tente de novo.');
+    console.warn('[reopen] submit sem taskId');
+    return;
+  }
+  const task = allTasks.find((t) => String(t.id) === String(taskId));
+  const btn = document.getElementById('reopen-revision-confirm-btn');
+  const btnLabel = btn ? btn.textContent : '';
+  const sameRadio = document.getElementById('reopen-revision-same');
+  const same = sameRadio ? sameRadio.checked : true;
+  let body = {};
+  if (same) {
+    const keep = String(task?.ownerEmail || '').trim();
+    if (keep) body = { targetOwnerEmail: keep };
+  } else {
+    const v = String(document.getElementById('reopen-revision-tech-select').value || '').trim();
+    if (!v) {
+      alert('Seleccione o técnico.');
+      return;
+    }
+    body = { targetOwnerEmail: v };
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'A reabrir…';
+  }
+  _reopenRevisionSubmitting = true;
+  const reopenUrl = `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(taskId)}/reopen-for-revision`;
+  const ac = new AbortController();
+  const abortT = setTimeout(() => ac.abort(), 90000);
+  try {
+    const r = await fetch(reopenUrl, {
+      method: 'POST',
+      headers: CONFIG.headers(),
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (r.status === 401) {
+      sessionStorage.clear();
+      window.location.href = 'index.html';
+      return;
+    }
+    if (!r.ok) {
+      let data = {};
+      try {
+        data = await r.json();
+      } catch (e) {
+        data = {};
+      }
+      alert(data.error || 'Erro ' + r.status);
+      return;
+    }
+    try {
+      await r.json();
+    } catch (e) {
+      /* corpo vazio ou não-JSON — sucesso mesmo assim */
+    }
+    window.closeReopenRevisionModal();
+    const msg =
+      !same && task && body.targetOwnerEmail
+        ? 'OS reaberta e atribuída. O novo técnico verá a tarefa após sincronizar o app.'
+        : 'OS reaberta. O técnico verá a actividade em «Em campo» após sincronizar o app.';
+    alert(msg);
+    _reopenUsersCache = null;
+    await window.loadBoard();
+  } catch (e) {
+    const msg = e && e.name === 'AbortError' ? 'Tempo esgotado ao contactar a API. Verifique se o backend está no ar e a rede.' : (e.message || String(e));
+    alert('Falha de rede: ' + msg);
+  } finally {
+    clearTimeout(abortT);
+    _reopenRevisionSubmitting = false;
+    if (btn) {
+      btn.disabled = false;
+      if (btnLabel) btn.textContent = btnLabel;
+    }
+  }
+};
+
+function elFromComposedPath(e, matcher) {
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  for (const n of path) {
+    if (!n || n.nodeType !== 1) continue;
+    if (typeof matcher === 'string') {
+      if (n.matches && n.matches(matcher)) return n;
+    } else if (typeof matcher === 'function' && matcher(n)) return n;
+  }
+  return null;
+}
+
+document.addEventListener(
+  'click',
+  (e) => {
+    let reopenCardBtn =
+      elFromComposedPath(e, '.btn-reopen-revision') ||
+      (e.target && e.target.closest && e.target.closest('.btn-reopen-revision'));
+    if (reopenCardBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = reopenCardBtn.getAttribute('data-reopen-task-id');
+      void window.openReopenRevisionModal(id);
+      return;
+    }
+    let confirmBtn =
+      elFromComposedPath(e, '#reopen-revision-confirm-btn') ||
+      (e.target && e.target.closest && e.target.closest('#reopen-revision-confirm-btn'));
+    if (!confirmBtn || confirmBtn.id !== 'reopen-revision-confirm-btn' || confirmBtn.disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void window.submitReopenRevision();
+  },
+  true
+);
 
 // ── Load Board ────────────────────────────────────────────────
 window.loadBoard = async function() {
   try {
     const data = await CONFIG.get(`/operations/tasks?_t=${Date.now()}`);
     if (!data) return;
+    if (!Array.isArray(data)) {
+      console.error('[OPS] /operations/tasks não devolveu array:', data);
+      alert('A API devolveu um formato inesperado ao carregar o quadro. Veja a consola (F12) ou confirme o login.');
+      return;
+    }
     allTasks = data;
     populateEmailFilter(data);
     applyFilters();
@@ -788,16 +1070,16 @@ window.loadBoard = async function() {
 };
 
 function renderStats(tasks) {
-  const pending   = tasks.filter(t => ['PENDING','RECEIVED','ACCEPTED'].includes(t.status)).length;
-  const progress  = tasks.filter(t => t.status === 'IN_PROGRESS').length;
+  const pending   = tasks.filter(t => t.status === 'PENDING').length;
+  const progress  = tasks.filter(t => ['RECEIVED','ACCEPTED','IN_PROGRESS','PAUSED'].includes(t.status)).length;
   const completed = tasks.filter(t => ['COMPLETED','SYNCED'].includes(t.status)).length;
   const cancelled = tasks.filter(t => t.status === 'CANCELLED').length;
-  const errors    = tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED'].includes(t.status)).length;
+  const errors    = tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','PAUSED','COMPLETED','SYNCED','CANCELLED'].includes(t.status)).length;
   const total     = tasks.length;
 
   const defs = [
     { label: 'Total de OS',   value: total,     color: 'var(--accent)',  icon: 'git-branch-outline' },
-    { label: 'Pendentes',     value: pending,   color: 'var(--amber)',   icon: 'hourglass-outline' },
+    { label: 'Não iniciadas', value: pending,   color: 'var(--amber)',   icon: 'hourglass-outline' },
     { label: 'Em Campo',      value: progress,  color: 'var(--blue)',    icon: 'construct-outline' },
     { label: 'Concluídas',    value: completed, color: 'var(--green)',   icon: 'checkmark-circle-outline' },
     { label: 'Canceladas',    value: cancelled, color: 'var(--text3)',   icon: 'close-circle-outline' },
@@ -832,7 +1114,9 @@ window.applyFilters = function() {
       (t.id   || '').toLowerCase().includes(searchFilter) ||
       (t.title|| '').toLowerCase().includes(searchFilter) ||
       (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
-      (t.refId||'').toLowerCase().includes(searchFilter);
+      (t.refId||'').toLowerCase().includes(searchFilter) ||
+      String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
+      String(t.lastSubmittedRevision ?? '').includes(searchFilter);
     return matchEmail && matchSearch;
   });
 
@@ -872,6 +1156,7 @@ function renderKanban(tasks) {
      if (st.text) {
         res = res.filter(t => 
            (t.id || '').toLowerCase().includes(st.text) || 
+           (t.osNumber || '').toLowerCase().includes(st.text) || 
            (t.title || '').toLowerCase().includes(st.text) || 
            (t.ownerEmail || '').toLowerCase().includes(st.text) ||
            (t.refId || '').toLowerCase().includes(st.text)
@@ -895,10 +1180,10 @@ function renderKanban(tasks) {
 
   const cols = {
     pending:   processCol(tasks.filter(t => t.status === 'PENDING'), 'pending'),
-    progress:  processCol(tasks.filter(t => ['RECEIVED','ACCEPTED','IN_PROGRESS'].includes(t.status)), 'progress'),
+    progress:  processCol(tasks.filter(t => ['RECEIVED','ACCEPTED','IN_PROGRESS','PAUSED'].includes(t.status)), 'progress'),
     completed: processCol(tasks.filter(t => ['COMPLETED','SYNCED'].includes(t.status)), 'completed'),
     cancelled: processCol(tasks.filter(t => ['CANCELLED', 'REJECTED'].includes(t.status)), 'cancelled'),
-    error:     processCol(tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','COMPLETED','SYNCED','CANCELLED','REJECTED'].includes(t.status)), 'error'),
+    error:     processCol(tasks.filter(t => !['PENDING','RECEIVED','ACCEPTED','IN_PROGRESS','PAUSED','COMPLETED','SYNCED','CANCELLED','REJECTED'].includes(t.status)), 'error'),
   };
 
   document.getElementById('cnt-pending').textContent   = cols.pending.length;
@@ -921,12 +1206,50 @@ function renderKanban(tasks) {
   document.getElementById('col-error').innerHTML     = render(cols.error,     'col-error');
 }
 
+/** Pausa de atendimento (formulário): status PAUSED, metadata ou rascunho com __form_paused_since. */
+function opsAttendancePaused(task) {
+  const st = String(task.status || '').toUpperCase();
+  if (st === 'PAUSED') return true;
+  if (task.metadata && task.metadata.executionPaused === true) return true;
+  const r = task.responses;
+  if (r && typeof r === 'object' && !Array.isArray(r) && r.__form_paused_since) return true;
+  return false;
+}
+
+function opsPauseReasonText(task) {
+  if (task.metadata && task.metadata.lastPauseReasonSummary) {
+    return String(task.metadata.lastPauseReasonSummary);
+  }
+  const r = task.responses;
+  if (!r || typeof r !== 'object') return '';
+  let hist = r.__pause_history;
+  if (typeof hist === 'string') {
+    try { hist = JSON.parse(hist); } catch (e) { hist = null; }
+  }
+  if (!Array.isArray(hist)) return '';
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const ev = hist[i];
+    if (ev && (ev.endedAt == null || ev.endedAt === '') && ev.startedAt) {
+      return [ev.categoryLabel, ev.subLabel, ev.detail].filter(Boolean).join(' — ');
+    }
+  }
+  return '';
+}
+
 function buildCard(task, colClass) {
-  const title  = task.title || task.metadata?.title || `OS #${shortId(task.id)}`;
+  const refTitle = task.title || task.metadata?.title;
+  const titlePlain = refTitle || `OS ${displayOsLabel(task)}`;
+  const titleHtml = refTitle
+    ? String(refTitle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    : `OS <strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>`;
   const refId  = task.refId || task.metadata?.refId || '—';
   
   let subBadge = '';
-  if (task.status === 'PENDING') {
+  const stUp = String(task.status || '').toUpperCase();
+  if (opsAttendancePaused(task) && stUp !== 'PENDING' && stUp !== 'RECEIVED') {
+     const reason = String(opsPauseReasonText(task) || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+     subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap;align-items:flex-start"><span class="badge" style="background:#fee2e2;color:#991b1b;font-size:9px;border:1px solid #fecaca"><ion-icon name="pause-circle-outline" style="vertical-align:-2px"></ion-icon> Atendimento pausado</span><span class="badge" style="background:#fff7ed;color:#9a3412;font-size:9px;max-width:100%;white-space:normal;word-break:break-word;line-height:1.25">${reason}</span></div>`;
+  } else if (task.status === 'PENDING') {
      subBadge = '<span class="badge" style="background:#fef9c3;color:#a16207;font-size:9px;margin-bottom:6px">⏳ Aguardando Envio</span>';
   } else if (task.status === 'RECEIVED') {
      subBadge = '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:9px;margin-bottom:6px"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Aparelho Recebeu</span>';
@@ -958,10 +1281,15 @@ function buildCard(task, colClass) {
 
   const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
+  const reopenForRevisionBtn =
+    colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(String(task.status || '').toUpperCase())
+      ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
+      : '';
+
   return `
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
       ${subBadge}
-      <div class="task-card-title" title="${title}">${title}</div>
+      <div class="task-card-title" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
       <div class="task-card-email" style="margin-bottom:8px">
         <ion-icon name="person-outline" style="font-size:11px"></ion-icon>
         ${task.ownerEmail || '—'}
@@ -977,9 +1305,12 @@ function buildCard(task, colClass) {
       </div>
 
       <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
-          <span class="task-card-id">#${shortId(task.id)}</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
+          <span class="task-card-id">#<strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong></span>
+          <span style="display:flex; align-items:center; gap:4px; flex-wrap:wrap">
+          ${['COMPLETED','SYNCED'].includes(task.status) && Number(task.lastSubmittedRevision) > 0 ? `<span class="badge" style="font-size:8px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe">Rev. ${task.lastSubmittedRevision}</span>` : ''}
           ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
+          </span>
         </div>
         ${task.metadata?.trackingToken ? `
         <div style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center" onclick="event.stopPropagation()">
@@ -991,6 +1322,7 @@ function buildCard(task, colClass) {
             📋 Copiar
           </button>
         </div>` : ''}
+        ${reopenForRevisionBtn}
       </div>
     </div>`;
 }
@@ -999,12 +1331,132 @@ function buildCard(task, colClass) {
 let _currentTask = null;
 let _currentTab = 'info';
 
+/** Ícones Leaflet (início / fim) com foto do técnico — PDF e separador Relatório */
+function buildTransitTechMapIcons(task) {
+  const t = task || {};
+  const rawAvatar = t.ownerAvatar || '';
+  let avatarUrl = '';
+  if (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://') || rawAvatar.startsWith('data:image')) {
+    avatarUrl = rawAvatar;
+  } else if (rawAvatar.startsWith('/')) {
+    avatarUrl = `${window.location.origin}${rawAvatar}`;
+  } else {
+    avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
+  }
+  const safe = String(avatarUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const makeIcon = (borderColor) =>
+    L.divIcon({
+      className: 'pdf-transit-tech-marker',
+      html:
+        '<div style="width:32px;height:32px;border-radius:50%;overflow:hidden;border:3px solid ' +
+        borderColor +
+        ';box-shadow:0 2px 8px rgba(0,0,0,0.35);background:#e2e8f0;">' +
+        '<img src="' +
+        safe +
+        '" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>' +
+        '</div>',
+      iconSize: [38, 38],
+      iconAnchor: [19, 19],
+    });
+  return { startIcon: makeIcon('#3b82f6'), endIcon: makeIcon('#ef4444') };
+}
+
 function switchTab(tab) {
   _currentTab = tab;
   ['info','report','raw'].forEach(t => {
     document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
   });
   if (_currentTask) renderModalBody(_currentTask);
+}
+
+/**
+ * Mapa de deslocamento no relatório. mapElementId = id do div Leaflet.
+ * setMapRef(map|null) — guardar referência para remove() ao fechar / re-render.
+ * getPreviousMap() — mapa Leaflet anterior a remover antes de criar outro no mesmo fluxo.
+ */
+function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
+  setTimeout(() => {
+    const mapEl = document.getElementById(mapElementId);
+    const prev = getPreviousMap ? getPreviousMap() : null;
+    if (prev) {
+      try {
+        prev.remove();
+      } catch (e) {}
+      if (setMapRef) setMapRef(null);
+    }
+
+    if (!mapEl || !t || !t.responses) {
+      if (mapEl) {
+        mapEl.innerHTML =
+          '<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: Element not found or responses missing.</div>';
+      }
+      return;
+    }
+
+    const resps = t.responses;
+    const { startGPS: trStart, endGPS: trEnd } = extractTransitEndpointsForReport(resps);
+    const startPos = trStart
+      ? {
+          coordinates: { lat: trStart.lat, lng: trStart.lng },
+          lat: trStart.lat,
+          lng: trStart.lng,
+          timestamp: trStart.time,
+          traversedPath: undefined,
+        }
+      : null;
+    const endPos = trEnd
+      ? {
+          coordinates: { lat: trEnd.lat, lng: trEnd.lng },
+          lat: trEnd.lat,
+          lng: trEnd.lng,
+          timestamp: trEnd.time,
+          traversedPath: trEnd.traversedPath,
+        }
+      : null;
+
+    let pathData = [];
+    if (endPos && endPos.traversedPath) pathData = endPos.traversedPath;
+
+    const fallbackEnd = pathData.length > 0 ? pathData[pathData.length - 1] : null;
+    const fallbackStart = pathData.length > 0 ? pathData[0] : null;
+
+    const endLat = (endPos?.coordinates?.lat ?? endPos?.lat) ?? (fallbackEnd ? fallbackEnd[0] : undefined);
+    const endLng = (endPos?.coordinates?.lng ?? endPos?.lng) ?? (fallbackEnd ? fallbackEnd[1] : undefined);
+
+    const startLat = (startPos?.coordinates?.lat ?? startPos?.lat) ?? (fallbackStart ? fallbackStart[0] : undefined);
+    const startLng = (startPos?.coordinates?.lng ?? startPos?.lng) ?? (fallbackStart ? fallbackStart[1] : undefined);
+
+    if (endLat !== undefined) {
+      try {
+        const map = L.map(mapElementId).setView([endLat, endLng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const { startIcon, endIcon } = buildTransitTechMapIcons(t);
+
+        const polyline = L.polyline(pathData, { color: '#EA580C', weight: 5 }).addTo(map);
+
+        if (startLat !== undefined) {
+          L.marker([startLat, startLng], { icon: startIcon })
+            .addTo(map)
+            .bindPopup('<b>Saída (Início do Deslocamento)</b>');
+        }
+        L.marker([endLat, endLng], { icon: endIcon })
+          .addTo(map)
+          .bindPopup('<b>Chegada (Fim do Deslocamento)</b>')
+          .openPopup();
+
+        if (setMapRef) setMapRef(map);
+        if (pathData.length > 1) {
+          setTimeout(() => map.fitBounds(polyline.getBounds(), { padding: [20, 20] }), 250);
+        }
+      } catch (err) {
+        mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
+        if (setMapRef) setMapRef(null);
+      }
+    } else {
+      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: endLat is undefined.<br/>endPos = ${JSON.stringify(endPos)}</div>`;
+    }
+  }, 150);
 }
 
 function renderModalBody(t) {
@@ -1019,76 +1471,452 @@ function renderModalBody(t) {
       body.innerHTML = buildInfoTab(t);
   } else if (_currentTab === 'report') {
       body.innerHTML = buildReportTab(t);
-      
-      setTimeout(() => {
-          const mapEl = document.getElementById('report-transit-map');
-          if (mapEl && t && t.responses) {
-              const resps = t.responses;
-              let startPos = null;
-              let endPos = null;
-              
-              Object.values(resps).forEach(val => {
-                  if (!val) return;
-                  const vStr = typeof val === 'string' ? val : JSON.stringify(val);
-                  if (vStr.includes('"action":"SAIDA"')) {
-                      try { const j = typeof val === 'object' ? val : JSON.parse(val); startPos = j; }catch(e){}
-                  } else if (vStr.includes('"action":"CHEGADA"')) {
-                      try { const j = typeof val === 'object' ? val : JSON.parse(val); endPos = j; }catch(e){}
-                  }
-              });
-
-              let pathData = [];
-              if (endPos && endPos.traversedPath) pathData = endPos.traversedPath;
-
-              const fallbackEnd = pathData.length > 0 ? pathData[pathData.length - 1] : null;
-              const fallbackStart = pathData.length > 0 ? pathData[0] : null;
-
-              // Precedência correta: O evento disparado pelo operador ao clicar em INICIAR/FINALIZAR é sempre absoluto. A trilha é secundária.
-              const endLat = (endPos?.coordinates?.lat ?? endPos?.lat) ?? (fallbackEnd ? fallbackEnd[0] : undefined);
-              const endLng = (endPos?.coordinates?.lng ?? endPos?.lng) ?? (fallbackEnd ? fallbackEnd[1] : undefined);
-              
-              const startLat = (startPos?.coordinates?.lat ?? startPos?.lat) ?? (fallbackStart ? fallbackStart[0] : undefined);
-              const startLng = (startPos?.coordinates?.lng ?? startPos?.lng) ?? (fallbackStart ? fallbackStart[1] : undefined);
-
-              if (endLat !== undefined) {
-                  try {
-                      if (window._reportTransitMap) { window._reportTransitMap.remove(); }
-                  } catch(e){}
-                  window._reportTransitMap = null;
-                  
-                  try {
-                      const map = L.map('report-transit-map').setView([endLat, endLng], 15);
-                      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                      
-                      const startIcon = L.divIcon({ html: '<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
-                      const endIcon = L.divIcon({ html: '<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
-                      
-                      const polyline = L.polyline(pathData, { color: '#EA580C', weight: 5 }).addTo(map); 
-                      
-                      if (startLat !== undefined) {
-                          L.marker([startLat, startLng], {icon: startIcon}).addTo(map).bindPopup('<b>Saída (Início do Deslocamento)</b>');
-                      }
-                      L.marker([endLat, endLng], {icon: endIcon}).addTo(map).bindPopup('<b>Chegada (Fim do Deslocamento)</b>').openPopup();
-                      
-                      window._reportTransitMap = map;
-                      if (pathData.length > 1) {
-                          setTimeout(() => map.fitBounds(polyline.getBounds(), { padding: [20,20] }), 250);
-                      }
-                  } catch(err) {
-                      if (mapEl) mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
-                  }
-              } else {
-                  if (mapEl) {
-                      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: endLat is undefined.<br/>endPos = ${JSON.stringify(endPos)}</div>`;
-                  }
-              }
-          } else {
-              if (mapEl) mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: Element not found or responses missing.</div>`;
-          }
-      }, 150);
+      tryInitReportTransitMap(
+        t,
+        'report-transit-map',
+        (map) => {
+          window._reportTransitMap = map;
+        },
+        () => window._reportTransitMap
+      );
   } else {
       body.innerHTML = buildRawTab(t);
   }
+}
+
+/** Duração em segundos → texto pt-BR (relatório / PDF). */
+function fmtDurationPtBr(sec) {
+  if (sec == null || !Number.isFinite(Number(sec)) || Number(sec) < 0) return '—';
+  const n = Math.floor(Number(sec));
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = Math.floor(n % 60);
+  return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+}
+
+function parsePauseHistoryFromResponses(responses) {
+  if (!responses || typeof responses !== 'object') return [];
+  let h = responses.__pause_history;
+  if (typeof h === 'string') {
+    try {
+      h = JSON.parse(h);
+    } catch (e) {
+      h = [];
+    }
+  }
+  return Array.isArray(h) ? h : [];
+}
+
+function sumPauseDurationSeconds(pauseHist) {
+  let total = 0;
+  if (!Array.isArray(pauseHist)) return 0;
+  for (const ev of pauseHist) {
+    if (!ev) continue;
+    if (ev.endedAt == null || ev.endedAt === '') continue;
+    if (ev.durationSec == null || !Number.isFinite(Number(ev.durationSec))) continue;
+    total += Math.max(0, Number(ev.durationSec));
+  }
+  return total;
+}
+
+/** Linhas <tr>…</tr> da tabela de pausas (modal / PDF). */
+function buildPauseHistoryTableRowsHtml(pauseHist, escFn, fmtDurFn, tdStyle) {
+  if (!Array.isArray(pauseHist) || pauseHist.length === 0) return '';
+  const td = tdStyle || 'padding:8px;border-bottom:1px solid var(--border);vertical-align:top;font-size:11px';
+  return pauseHist
+    .map((ev, idx) => {
+      const hasEnd = ev.endedAt != null && String(ev.endedAt).trim() !== '';
+      const dur =
+        hasEnd && ev.durationSec != null && Number.isFinite(Number(ev.durationSec))
+          ? fmtDurFn(Number(ev.durationSec))
+          : ev.startedAt && !hasEnd
+            ? 'Em curso / sem fim'
+            : '—';
+      const line = [ev.categoryLabel, ev.subLabel, ev.detail].filter(Boolean).join(' — ');
+      const start = ev.startedAt
+        ? new Date(ev.startedAt).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '—';
+      const end = hasEnd
+        ? new Date(ev.endedAt).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '—';
+      return `<tr><td style="${td};font-weight:800">${idx + 1}</td><td style="${td}">${escFn(line)}</td><td style="${td};font-size:10px;color:#64748b">${start}<br/>→ ${end}</td><td style="${td};font-weight:700">${dur}</td></tr>`;
+    })
+    .join('');
+}
+
+/**
+ * Bloco “Pausas” para o cartão de produtividade (modal Informações + aba Relatório).
+ */
+function buildPauseProductivityBlockHtml(t) {
+  const responses = t.responses || {};
+  const metadata = t.metadata || {};
+  const pauseHist = parsePauseHistoryFromResponses(responses);
+  const esc = (s) =>
+    String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  const totalSec = sumPauseDurationSeconds(pauseHist);
+  const metaLines = [];
+  if (metadata.lastPauseReasonSummary) {
+    metaLines.push(
+      `<div style="font-size:10px;margin-bottom:6px;line-height:1.4"><span style="color:var(--text3);font-weight:700">Último resumo (sincronizado):</span> ${esc(String(metadata.lastPauseReasonSummary))}</div>`
+    );
+  }
+  if (responses.__form_paused_since) {
+    const d = new Date(responses.__form_paused_since);
+    if (!isNaN(d.getTime())) {
+      metaLines.push(
+        `<div style="font-size:10px;margin-bottom:6px;line-height:1.4"><span style="color:var(--text3);font-weight:700">Início da pausa no formulário:</span> ${d.toLocaleString('pt-BR')}</div>`
+      );
+    }
+  }
+
+  const rows = buildPauseHistoryTableRowsHtml(pauseHist, esc, fmtDurationPtBr, null);
+  let body = '';
+  if (pauseHist.length > 0) {
+    body += `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px;font-size:11px">
+      <span><span style="color:var(--text3);font-weight:700">Tempo total em pausa:</span> <strong>${totalSec > 0 ? fmtDurationPtBr(totalSec) : '—'}</strong></span>
+      <span><span style="color:var(--text3);font-weight:700">Registos:</span> <strong>${pauseHist.length}</strong></span>
+    </div>`;
+    body += `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:#fffbeb">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#fef3c7">
+          <th style="text-align:left;padding:6px 8px;font-size:9px;color:#78350f;font-weight:800">#</th>
+          <th style="text-align:left;padding:6px 8px;font-size:9px;color:#78350f;font-weight:800">Motivo</th>
+          <th style="text-align:left;padding:6px 8px;font-size:9px;color:#78350f;font-weight:800">Início → Fim</th>
+          <th style="text-align:left;padding:6px 8px;font-size:9px;color:#78350f;font-weight:800">Duração</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  } else {
+    body += `<div style="font-size:11px;color:var(--text3);line-height:1.45">Nenhum histórico de pausas nas respostas.</div>`;
+  }
+
+  if (metaLines.length === 0 && pauseHist.length === 0) {
+    return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+      <div style="font-size:10px;font-weight:900;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Pausas no atendimento</div>
+      ${body}
+    </div>`;
+  }
+
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+    <div style="font-size:10px;font-weight:900;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Pausas no atendimento</div>
+    ${metaLines.join('')}
+    ${body}
+  </div>`;
+}
+
+/** Fragmento HTML de pausas dentro do bloco cinza “Produtividade” do PDF. */
+function buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf) {
+  const metadata = t.metadata || {};
+  const pauseHist = parsePauseHistoryFromResponses(responses);
+  const totalSec = sumPauseDurationSeconds(pauseHist);
+  const metaBits = [];
+  if (metadata.lastPauseReasonSummary) {
+    metaBits.push(
+      `<div style="font-size:6px;line-height:1.2;margin-bottom:2px"><span style="color:#64748b;font-weight:700">Último resumo:</span> ${escPdf(String(metadata.lastPauseReasonSummary))}</div>`
+    );
+  }
+  if (responses.__form_paused_since) {
+    const d = new Date(responses.__form_paused_since);
+    if (!isNaN(d.getTime())) {
+      metaBits.push(
+        `<div style="font-size:6px;line-height:1.2;margin-bottom:2px"><span style="color:#64748b;font-weight:700">Pausa no formulário:</span> ${d.toLocaleString('pt-BR')}</div>`
+      );
+    }
+  }
+  const tdPdf = 'padding:4px 6px;border-bottom:1px solid #fde68a;vertical-align:top;font-size:8px';
+  const rows = buildPauseHistoryTableRowsHtml(pauseHist, escPdf, fmtDurPdf, tdPdf);
+  if (!rows && metaBits.length === 0) {
+    return `<div style="margin-top:4px;padding-top:3px;border-top:1px dashed #e2e8f0">
+      <div style="font-size:6px;font-weight:900;color:#92400e;letter-spacing:.3px;text-transform:uppercase;margin-bottom:2px">Pausas</div>
+      <div style="font-size:6px;color:#94a3b8">Sem registo de pausas.</div>
+    </div>`;
+  }
+  let inner = metaBits.join('');
+  if (rows) {
+    inner += `<div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:6px;margin:4px 0 2px;color:#475569">
+      <span><span style="color:#94a3b8;font-weight:700">Tempo em pausa:</span> <strong style="color:#0f172a">${totalSec > 0 ? fmtDurPdf(totalSec) : '—'}</strong></span>
+      <span><span style="color:#94a3b8;font-weight:700">Registos:</span> <strong style="color:#0f172a">${pauseHist.length}</strong></span>
+    </div>`;
+    inner += `<table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:4px;overflow:hidden;margin-top:2px">
+      <thead><tr style="background:#fef3c7">
+        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">#</th>
+        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Motivo</th>
+        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Início → Fim</th>
+        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Duração</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+  return `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #e2e8f0;background:linear-gradient(180deg,#fffbeb 0%,#fff 55%);border-radius:4px;padding-left:4px;padding-right:4px;padding-bottom:4px;box-sizing:border-box">
+    <div style="font-size:6px;font-weight:900;color:#92400e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px">Pausas no atendimento</div>
+    ${inner}
+  </div>`;
+}
+
+/** Mesma lógica do PDF: SAÍDA/CHEGADA com timestamp para produtividade. */
+function extractTransitEndpointsForReport(responses) {
+  let startGPS = null;
+  let endGPS = null;
+  if (!responses) return { startGPS, endGPS };
+  Object.values(responses).forEach((val) => {
+    if (!val) return;
+    const vStr = typeof val === 'string' ? val : JSON.stringify(val);
+    if (vStr.includes('"action":"SAIDA"')) {
+      try {
+        const j = typeof val === 'object' ? val : JSON.parse(val);
+        const lat = j.coordinates?.lat ?? j.lat;
+        const lng = j.coordinates?.lng ?? j.lng;
+        if (lat !== undefined) startGPS = { lat, lng, addr: j.address || '', time: j.timestamp };
+      } catch (e) { /* ignore */ }
+    } else if (vStr.includes('"action":"CHEGADA"')) {
+      try {
+        const j = typeof val === 'object' ? val : JSON.parse(val);
+        const lat = j.coordinates?.lat ?? j.lat;
+        const lng = j.coordinates?.lng ?? j.lng;
+        if (lat !== undefined) {
+          endGPS = { lat, lng, addr: j.address || '', time: j.timestamp, traversedPath: j.traversedPath };
+        }
+      } catch (e) { /* ignore */ }
+    }
+  });
+  return { startGPS, endGPS };
+}
+
+function computeTransitSecondsFromEndpoints(startGPS, endGPS) {
+  if (!startGPS || !endGPS || !startGPS.time || !endGPS.time) return null;
+  const dt = Math.floor((new Date(endGPS.time).getTime() - new Date(startGPS.time).getTime()) / 1000);
+  if (!Number.isFinite(dt) || dt <= 0) return 1;
+  return dt;
+}
+
+/** Alinhado ao backend `operations.js` — tipos e rótulos de section_break em schemas antigos/importados. */
+function normTypeOps(t) {
+  const s = String(t == null ? '' : t).trim().replace(/[\s-]+/g, '_');
+  return s ? s.toLowerCase() : '';
+}
+function effTypeOps(f) {
+  if (!f || typeof f !== 'object') return '';
+  const raw = f.type ?? f.fieldType ?? f.kind ?? f.component ?? f.controlType;
+  return normTypeOps(raw);
+}
+function resolveSectionLabelClient(field) {
+  if (!field || typeof field !== 'object') return '';
+  const meta = field.metadata && typeof field.metadata === 'object' ? field.metadata : null;
+  const props = field.properties && typeof field.properties === 'object' ? field.properties : null;
+  const cfg = field.config && typeof field.config === 'object' ? field.config : null;
+  const candidates = [
+    field.label,
+    field.title,
+    field.name,
+    field.text,
+    field.sectionTitle,
+    field.question,
+    field.placeholder,
+    field.caption,
+    field.displayName,
+    field.rotulo,
+    field.nome,
+    meta && meta.label,
+    meta && meta.title,
+    meta && meta.name,
+    meta && meta.sectionTitle,
+    props && props.label,
+    props && props.title,
+    cfg && cfg.label,
+    cfg && cfg.title,
+  ];
+  for (const c of candidates) {
+    if (c != null && String(c).trim() !== '') return String(c).trim();
+  }
+  return '';
+}
+function parseSchemaArrayOps(schemaData) {
+  if (Array.isArray(schemaData)) return schemaData;
+  if (typeof schemaData === 'string') {
+    try {
+      const p = JSON.parse(schemaData);
+      if (Array.isArray(p)) return p;
+      if (p && typeof p === 'object' && Array.isArray(p.schema)) return p.schema;
+      if (p && typeof p === 'object' && Array.isArray(p.fields)) return p.fields;
+      if (p && typeof p === 'object' && Array.isArray(p.blocks)) return p.blocks;
+      if (p && typeof p === 'object' && p.form && Array.isArray(p.form.fields)) return p.form.fields;
+    } catch (e) {
+      return [];
+    }
+    return [];
+  }
+  if (schemaData && typeof schemaData === 'object') {
+    if (Array.isArray(schemaData.schema)) return schemaData.schema;
+    if (Array.isArray(schemaData.fields)) return schemaData.fields;
+    if (Array.isArray(schemaData.blocks)) return schemaData.blocks;
+    if (schemaData.form && Array.isArray(schemaData.form.fields)) return schemaData.form.fields;
+  }
+  return [];
+}
+function sectionLabelsFromSchemaData(schemaData) {
+  const map = Object.create(null);
+  parseSchemaArrayOps(schemaData).forEach((f) => {
+    if (!f || !f.id) return;
+    if (effTypeOps(f) !== 'section_break') return;
+    const lab = resolveSectionLabelClient(f);
+    if (lab) map[f.id] = lab;
+  });
+  return map;
+}
+
+/**
+ * Tempos por etapa (`__section_start_<id>` / `__section_end_<id>` no app).
+ * Usa `template.sectionBreaks` da API (section_break não vem em `template.fields`).
+ * `templateOpt` opcional: com `schemaData` (GET ?id=) corrige rótulos que ainda são só `field_*`.
+ * Inclui fallbacks: chaves `__section_start_*` nas respostas (ex.: page_1 antes do 1º separador).
+ */
+function collectSectionTimingRows(sectionBreaks, responses, templateOpt) {
+  const rows = [];
+  const seen = new Set();
+  if (!responses || typeof responses !== 'object') return rows;
+
+  const labelById = Object.create(null);
+  if (Array.isArray(sectionBreaks)) {
+    sectionBreaks.forEach((s) => {
+      if (s && s.id && s.label != null && String(s.label).trim() !== '') {
+        labelById[s.id] = String(s.label).trim();
+      }
+    });
+  }
+  if (templateOpt && templateOpt.schemaData != null) {
+    const fromSchema = sectionLabelsFromSchemaData(templateOpt.schemaData);
+    Object.keys(fromSchema).forEach((sid) => {
+      const lab = fromSchema[sid];
+      if (!lab) return;
+      const cur = labelById[sid];
+      if (!cur || cur === sid || /^field_\d+$/i.test(String(cur))) {
+        labelById[sid] = lab;
+      }
+    });
+  }
+
+  const pushRow = (id, labelHint) => {
+    if (!id || seen.has(id)) return;
+    const startIso = responses['__section_start_' + id];
+    const endIso = responses['__section_end_' + id];
+    let sec = null;
+    if (startIso && endIso) {
+      const a = new Date(startIso).getTime();
+      const b = new Date(endIso).getTime();
+      if (!Number.isNaN(a) && !Number.isNaN(b)) sec = Math.max(0, Math.floor((b - a) / 1000));
+    }
+    const hint = labelHint != null && String(labelHint).trim() !== '' ? String(labelHint).trim() : '';
+    let lab = '';
+    if (hint && hint !== id) lab = hint;
+    else if (labelById[id]) lab = labelById[id];
+    else if (id === 'page_1') lab = 'Início (antes da 1ª etapa)';
+    else lab = hint || id;
+    rows.push({ sectionId: id, label: lab.trim() || id, sec });
+    seen.add(id);
+  };
+
+  if (Array.isArray(sectionBreaks)) {
+    sectionBreaks.forEach((f) => {
+      if (!f || !f.id) return;
+      pushRow(f.id, f.label);
+    });
+  }
+
+  Object.keys(responses).forEach((k) => {
+    const m = k.match(/^__section_start_(.+)$/);
+    if (!m) return;
+    const id = m[1];
+    if (seen.has(id)) return;
+    pushRow(id, labelById[id] || (id === 'page_1' ? 'Início (antes da 1ª etapa)' : id));
+  });
+
+  // "Início (antes da 1ª etapa)" = page_1 — cronologicamente vem antes das demais etapas no formulário
+  rows.sort((a, b) => {
+    const p = (r) => (r.sectionId === 'page_1' ? 0 : 1);
+    return p(a) - p(b);
+  });
+
+  return rows;
+}
+
+function buildRevisionHistoryHtml(t) {
+  const loaded = t._revisionHistoryLoaded === true;
+  const revs = Array.isArray(t.revisionHistory) ? t.revisionHistory : [];
+  const esc = (s) => String(s ?? '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fd = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
+
+  if (!loaded) {
+    return `
+    <div class="report-field" style="margin-top:10px">
+      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-value" style="color:var(--text3)">A carregar…</div>
+    </div>`;
+  }
+  if (t._revisionHistoryFetchFailed) {
+    return `
+    <div class="report-field" style="margin-top:10px">
+      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-value" style="color:var(--amber)">Não foi possível carregar o histórico (rede ou servidor).</div>
+    </div>`;
+  }
+  if (revs.length === 0) {
+    return `
+    <div class="report-field" style="margin-top:10px">
+      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-value" style="color:var(--text3)">Nenhum registo (OS sem conclusões indexadas).</div>
+    </div>`;
+  }
+  const rows = revs
+    .map(
+      (r) => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-weight:800">${r.revision}</td>
+      <td style="padding:6px 8px;font-size:12px">${fd(r.completedAt)}</td>
+      <td style="padding:6px 8px;font-size:11px;font-family:monospace;word-break:break-all">${r.submissionId ? esc(r.submissionId) : '—'}</td>
+      <td style="padding:6px 8px;white-space:nowrap">
+        <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px;padding:4px 8px"
+          onclick="window.openRevisionSnapshotModal(${JSON.stringify(t.id)}, ${r.revision})">Ver respostas</button>
+      </td>
+    </tr>`
+    )
+    .join('');
+  return `
+    <div class="report-field" style="margin-top:10px">
+      <div class="report-field-label" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
+        <span>Histórico de revisões (${revs.length})</span>
+        <span style="display:flex;flex-wrap:wrap;gap:6px">
+          <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
+            onclick="window.downloadRevisionsCsv(${JSON.stringify(t.id)}, false)">Exportar CSV</button>
+          <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
+            onclick="window.downloadRevisionsCsv(${JSON.stringify(t.id)}, true)">CSV com respostas</button>
+        </span>
+      </div>
+      <div style="overflow-x:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--surface2);text-align:left">
+            <th style="padding:8px;width:48px">#</th><th style="padding:8px">Concluída em</th><th style="padding:8px">Submission ID</th><th style="padding:8px;width:1%">Ações</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function buildInfoTab(t) {
@@ -1099,6 +1927,28 @@ function buildInfoTab(t) {
   const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'DESCONHECIDO'}</span>`;
   const desc = t.description || t.metadata?.description || '';
   const gps  = t.gpsLocation;
+  const lsr = Number(t.lastSubmittedRevision) || 0;
+  const reopenN = Number(t.metadata?.reopenCount) || 0;
+
+  const responsesI = t.responses || {};
+  const { startGPS: stI, endGPS: enI } = extractTransitEndpointsForReport(responsesI);
+  const transitSecI = computeTransitSecondsFromEndpoints(stI, enI);
+  const osWallI =
+    t.startedAt && t.completedAt
+      ? Math.max(0, Math.floor((new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime()) / 1000))
+      : null;
+  const exI = osWallI != null && transitSecI != null ? Math.max(0, osWallI - transitSecI) : null;
+  const fillI = Number(t.metadata?.formFillDurationSeconds ?? t.metadata?.durationSeconds ?? responsesI.__form_fill_duration_sec);
+  const actI = Number(t.metadata?.formActiveSeconds ?? responsesI.__form_active_seconds_final);
+  const secRowsI = collectSectionTimingRows(t.template?.sectionBreaks, responsesI, t.template);
+  const escI = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const secLineI =
+    secRowsI
+      .map((r) => {
+        const short = r.label.length > 48 ? r.label.slice(0, 48) + '…' : r.label;
+        return `<strong>${escI(short)}</strong>: ${r.sec != null ? fmtDurationPtBr(r.sec) : '—'}`;
+      })
+      .join(' · ') || '<span style="color:var(--text3)">Sem registros de etapa</span>';
 
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -1156,6 +2006,30 @@ function buildInfoTab(t) {
         <div class="report-field-label">Sincronizado em</div>
         <div class="report-field-value ${t.syncedAt ? '' : 'empty'}">${t.syncedAt ? new Date(t.syncedAt).toLocaleString('pt-BR') : 'Pendente de sync'}</div>
       </div>
+      <div class="report-field">
+        <div class="report-field-label">Última revisão concluída</div>
+        <div class="report-field-value">${lsr > 0 ? lsr : '<span style="color:var(--text3)">—</span>'}</div>
+      </div>
+      <div class="report-field">
+        <div class="report-field-label">Reaberturas (nova revisita)</div>
+        <div class="report-field-value">${reopenN > 0 ? reopenN : '<span style="color:var(--text3)">—</span>'}</div>
+      </div>
+    </div>
+    ${buildRevisionHistoryHtml(t)}
+    <div class="report-field" style="margin-top:6px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <div class="report-field-label">Produtividade do técnico</div>
+      <div class="report-field-value" style="padding-top:6px;font-size:12px;line-height:1.45">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px">
+          <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">OS (execução início → fim)</span><br><strong>${osWallI != null ? fmtDurationPtBr(osWallI) : '—'}</strong></div>
+          <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">Deslocamento (saída → chegada)</span><br><strong>${transitSecI != null ? fmtDurationPtBr(transitSecI) : '—'}</strong></div>
+          <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">Fora do desloc. (estim.: OS − desloc.)</span><br><strong>${exI != null ? fmtDurationPtBr(exI) : '—'}</strong></div>
+          <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">Formulário / app em foco</span><br><strong>${fmtDurationPtBr(fillI)}</strong> · <strong>${fmtDurationPtBr(actI)}</strong></div>
+        </div>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--text)">
+          <span style="font-weight:800;color:var(--text2)">Tempo por etapa:</span> ${secLineI}
+        </div>
+        ${buildPauseProductivityBlockHtml(t)}
+      </div>
     </div>
     ${desc ? `<div class="report-field"><div class="report-field-label">Descrição</div><div class="report-field-value">${desc}</div></div>` : ''}
     ${gps ? `<div class="report-field">
@@ -1170,19 +2044,8 @@ function buildReportTab(t) {
   const fields    = template?.fields;
   const hasResp   = Object.keys(responses).length > 0;
 
-  // Extrair GPS markers para montar o Mapa no Painel
-  let startGPS = null;
-  let endGPS = null;
-  Object.values(responses).forEach(val => {
-     if (!val) return;
-     const vStr = typeof val === 'string' ? val : JSON.stringify(val);
-     if (vStr.includes('"action":"SAIDA"')) {
-         try { const j=JSON.parse(vStr); startGPS = j.coordinates || j; }catch(e){}
-     }
-     if (vStr.includes('"action":"CHEGADA"')) {
-         try { const j=JSON.parse(vStr); endGPS = j; }catch(e){}
-     }
-  });
+  // GPS deslocamento (mapa + produtividade) — alinhado ao PDF
+  const { startGPS, endGPS } = extractTransitEndpointsForReport(responses);
 
   if (!hasResp) {
     return `<div style="text-align:center;padding:40px 20px;color:var(--text3)">
@@ -1192,27 +2055,101 @@ function buildReportTab(t) {
     </div>`;
   }
 
+  const escHtml = (t) => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function mediaCapLine(responses, fieldId, index) {
+    if (!responses || !fieldId) return '';
+    const raw = responses['__media_cap_' + fieldId];
+    let cap = '';
+    if (Array.isArray(raw) && raw[index] != null) cap = String(raw[index]).trim();
+    else if (typeof raw === 'string' && index === 0) cap = raw.trim();
+    if (!cap) return '';
+    return `<div style="font-size:11px;color:#475569;margin-top:6px;font-style:italic;line-height:1.35">Comentários: ${escHtml(cap)}</div>`;
+  }
+
   // Render a single field value, handling special types
-  const renderFieldValue = (val, fieldType) => {
+  const renderFieldValue = (val, fieldType, responses, fieldId) => {
     if (val === undefined || val === null || val === '') return '<em style="color:var(--text3)">(não respondido)</em>';
     if (Array.isArray(val)) {
       if (val.length === 0) return '<em style="color:var(--text3)">(não respondido)</em>';
       return val.map((item, i) => {
         const s = String(item);
         const isUrl = s.startsWith('http') || s.startsWith('file://');
+        const capHtml = mediaCapLine(responses, fieldId, i);
+        if (fieldType === 'file_upload' && isUrl) {
+          const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+          const base = s.split('?')[0];
+          let fname = base.split('/').pop() || 'anexo';
+          try { fname = decodeURIComponent(fname); } catch (e) {}
+          const fnameEsc = escHtml(fname);
+          return `<div style="margin-bottom:6px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download ${val.length > 1 ? 'anexo ' + (i + 1) + ' — ' : ''}${fnameEsc}</a>${capHtml}</div>`;
+        }
         if ((fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') && isUrl) {
           const clean = s.split('?')[0];
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-          return `<div style="margin-top:8px"><img src="${clean.replace(/"/g,'%22')}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div></div>`;
+          return `<div style="margin-top:8px"><img src="${clean.replace(/"/g,'%22')}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div>${capHtml}</div>`;
         }
         if (isUrl) {
-          return `<div style="margin-bottom:4px"><a href="${s}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Anexo ${i+1}</a></div>`;
+          return `<div style="margin-bottom:4px"><a href="${s}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Anexo ${i+1}</a>${capHtml}</div>`;
         }
         return `<span style="display:inline-block;margin:2px 4px 2px 0;padding:4px 8px;background:#f1f5f9;border-radius:6px;font-size:12px">${s.replace(/</g,'&lt;')}</span>`;
       }).join('');
     }
     if (typeof val === 'boolean') return val ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Sim' : '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Não';
+    if (fieldType === 'location_pick') {
+      let o = null;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) o = val;
+      else {
+        try { o = JSON.parse(String(val)); } catch (e) { o = null; }
+      }
+      if (o && o.version === 1 && o.gps && o.pin && typeof o.gps.lat === 'number' && typeof o.gps.lng === 'number' && typeof o.pin.lat === 'number' && typeof o.pin.lng === 'number') {
+        const acc = (o.gps.accuracy != null && o.gps.accuracy !== '') ? ' · precisão ~' + Number(o.gps.accuracy).toFixed(0) + ' m' : '';
+        const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const qg = encodeURIComponent(o.gps.lat + ',' + o.gps.lng);
+        const qp = encodeURIComponent(o.pin.lat + ',' + o.pin.lng);
+        const mapSrc =
+          'https://staticmap.openstreetmap.de/staticmap.php?center=' +
+          o.pin.lat +
+          ',' +
+          o.pin.lng +
+          '&zoom=17&size=520x200&maptype=mapnik&markers=' +
+          o.pin.lat +
+          ',' +
+          o.pin.lng +
+          ',red-pushpin';
+        let html = '<div style="padding:10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">';
+        html +=
+          '<div style="margin-bottom:10px;border-radius:8px;overflow:hidden;border:1px solid #93c5fd;max-width:100%;background:#e2e8f0">' +
+          '<img src="' +
+          mapSrc.replace(/"/g, '%22') +
+          '" alt="Mapa" style="width:100%;max-height:200px;object-fit:cover;display:block" onerror="this.style.display=\'none\'"/>' +
+          '</div>';
+        html += '<div style="font-size:11px;font-weight:700;color:#0f172a;margin-bottom:6px"><ion-icon name="navigate-outline" style="vertical-align:-2px"></ion-icon> GPS do dispositivo</div>';
+        html += '<div style="font-size:11px;color:#475569;margin-bottom:2px">' + o.gps.lat.toFixed(6) + ', ' + o.gps.lng.toFixed(6) + acc + '</div>';
+        if (o.addressGps) html += '<div style="font-size:10px;color:#64748b;margin-bottom:8px">' + esc(o.addressGps) + '</div>';
+        html += '<div style="font-size:11px;font-weight:700;color:#0f172a;margin-bottom:6px"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Posição no mapa (alfinete)</div>';
+        html += '<div style="font-size:11px;color:#475569;margin-bottom:2px">' + o.pin.lat.toFixed(6) + ', ' + o.pin.lng.toFixed(6) + '</div>';
+        if (o.addressPin) html += '<div style="font-size:10px;color:#64748b;margin-bottom:8px">' + esc(o.addressPin) + '</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:11px"><a href="https://www.google.com/maps?q=' + qg + '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Abrir GPS no mapa</a> <a href="https://www.google.com/maps?q=' + qp + '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600"><ion-icon name="pin-outline" style="vertical-align:-2px"></ion-icon> Abrir alfinete no mapa</a></div>';
+        if (o.capturedAt) {
+          try {
+            const d = new Date(o.capturedAt);
+            if (!isNaN(d.getTime())) html += '<div style="font-size:9px;color:#94a3b8;margin-top:8px">Registrado: ' + d.toLocaleString('pt-BR') + '</div>';
+          } catch (e2) {}
+        }
+        html += '</div>';
+        return html;
+      }
+      return '<em style="color:var(--text3)">(dados de localização inválidos)</em>';
+    }
     const str = String(val);
+    if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
+      const capHtml = mediaCapLine(responses, fieldId, 0);
+      const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      const base = str.split('?')[0];
+      let fname = base.split('/').pop() || 'anexo';
+      try { fname = decodeURIComponent(fname); } catch (e) {}
+      return `<div><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download — ${escHtml(fname)}</a>${capHtml}</div>`;
+    }
     // Signature: SIG_V1|meta:{...}|path1|path2|...
     if (str.startsWith('SIG_V1|')) {
       const allParts = str.replace('SIG_V1|', '').split('|').filter(Boolean);
@@ -1260,9 +2197,10 @@ function buildReportTab(t) {
         return html;
       } catch(e) {}
     }
-    // Image/file URL
+    // Image/file URL (fotos já tratadas acima por tipo; aqui fallback genérico)
     if (str.startsWith('http') || str.startsWith('file://')) {
-      return `<a href="${str}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>`;
+      const capHtml = mediaCapLine(responses, fieldId, 0);
+      return `<div><a href="${str}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>${capHtml}</div>`;
     }
     return str;
   };
@@ -1289,7 +2227,7 @@ function buildReportTab(t) {
         if (Array.isArray(val)) return val.some(x => x !== undefined && x !== null && String(x).trim() !== '');
         return true;
       })();
-      const displayHtml = renderFieldValue(val, field.type);
+      const displayHtml = renderFieldValue(val, field.type, responses, field.id);
       items += `<div class="report-response-item">
         <div class="report-response-q">${field.label || field.id}</div>
         <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
@@ -1310,8 +2248,9 @@ function buildReportTab(t) {
     // Add orphaned fields (things filled in the app but missing in the current template schema)
     const templateFieldIds = fields.map(f => f.id);
     Object.entries(responses).forEach(([key, val]) => {
+      if (key.startsWith('__')) return;
       if (!templateFieldIds.includes(key)) {
-         const displayHtml = renderFieldValue(val, null);
+         const displayHtml = renderFieldValue(val, null, responses, key);
          if (displayHtml.includes('não respondido')) return;
          let qLabel = key;
          if (String(val).includes('"action":"SAIDA"')) qLabel = 'Registro de GPS Coletado (Saída)';
@@ -1326,7 +2265,8 @@ function buildReportTab(t) {
   } else {
     // Sem template: renderiza as chaves do response diretamente
     Object.entries(responses).forEach(([key, val]) => {
-      const displayHtml = renderFieldValue(val, null);
+      if (key.startsWith('__')) return;
+      const displayHtml = renderFieldValue(val, null, responses, key);
       items += `<div class="report-response-item">
         <div class="report-response-q">${key}</div>
         <div class="report-response-a">${displayHtml}</div>
@@ -1334,7 +2274,7 @@ function buildReportTab(t) {
     });
   }
 
-  const title = t.title || t.metadata?.title || `OS #${t.id.slice(0,8).toUpperCase()}`;
+  const title = t.title || t.metadata?.title || `OS ${displayOsLabel(t)}`;
   
   const fDate = (d) => d ? new Date(d).toLocaleString('pt-BR') : '<span style="color:#94a3b8;font-style:italic">Não reg.</span>';
 
@@ -1347,6 +2287,22 @@ function buildReportTab(t) {
     const s = Math.floor(sec % 60);
     return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
   };
+
+  const transitSecRep = computeTransitSecondsFromEndpoints(startGPS, endGPS);
+  const osWallRep =
+    t.startedAt && t.completedAt
+      ? Math.max(0, Math.floor((new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime()) / 1000))
+      : null;
+  const exTransitRep =
+    osWallRep != null && transitSecRep != null ? Math.max(0, osWallRep - transitSecRep) : null;
+  const sectionRowsRep = collectSectionTimingRows(t.template?.sectionBreaks, responses, t.template);
+  const secLineRep =
+    sectionRowsRep
+      .map((r) => {
+        const short = r.label.length > 44 ? r.label.slice(0, 44) + '…' : r.label;
+        return `<strong>${escHtml(short)}</strong>: ${r.sec != null ? fmtHmsRep(r.sec) : '—'}`;
+      })
+      .join(' · ') || '<span style="color:var(--text3)">Sem registros de etapa</span>';
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -1366,8 +2322,14 @@ function buildReportTab(t) {
          <div style="font-size:10px;"><strong style="color:var(--text2)">Início:</strong> ${fDate(t.startedAt)}</div>
          <div style="font-size:10px;"><strong style="color:var(--text2)">Conclusão:</strong> ${fDate(t.completedAt)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Sincronização / Envio Nuvem:</strong> ${fDate(t.syncedAt)}</div>
-         <div style="font-size:10px;grid-column:1/-1;padding-top:6px;margin-top:4px;border-top:1px dashed var(--border)"><strong style="color:var(--text2)">Tempo total no formulário:</strong> ${fmtHmsRep(fillSecRep)}</div>
+         <div style="font-size:10px;grid-column:1/-1;padding-top:6px;margin-top:4px;border-top:1px dashed var(--border);font-weight:800;color:var(--text)">Produtividade</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Duração da OS (início da execução → conclusão):</strong> ${fmtHmsRep(osWallRep)}</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo de deslocamento (saída → chegada):</strong> ${transitSecRep != null ? fmtHmsRep(transitSecRep) : '—'}</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Fora do deslocamento (estimativa: OS − desloc.):</strong> ${exTransitRep != null ? fmtHmsRep(exTransitRep) : '—'}</div>
+         <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo total no formulário (relógio):</strong> ${fmtHmsRep(fillSecRep)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo com app em foco:</strong> ${fmtHmsRep(activeSecRep)}</div>
+         <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Tempo por etapa:</strong> ${secLineRep}</div>
+         <div style="font-size:10px;grid-column:1/-1">${buildPauseProductivityBlockHtml(t)}</div>
          ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
       </div>
     </div>
@@ -1410,8 +2372,8 @@ window.openDetail = function(id) {
   _currentTask = t;
   _currentTab = t.status === 'COMPLETED' || t.status === 'SYNCED' ? 'report' : 'info';
 
-  const title = t.title || t.metadata?.title || `OS #${t.id.slice(0,8).toUpperCase()}`;
-  const statusBadgeMap = { PENDING: 'badge-amber', RECEIVED: 'badge-blue', ACCEPTED: 'badge-blue', IN_PROGRESS: 'badge-blue', COMPLETED: 'badge-green', SYNCED: 'badge-green', CANCELLED: 'badge-red', REJECTED: 'badge-red' };
+  const title = t.title || t.metadata?.title || `OS ${displayOsLabel(t)}`;
+  const statusBadgeMap = { PENDING: 'badge-amber', RECEIVED: 'badge-blue', ACCEPTED: 'badge-blue', IN_PROGRESS: 'badge-blue', PAUSED: 'badge-red', COMPLETED: 'badge-green', SYNCED: 'badge-green', CANCELLED: 'badge-red', REJECTED: 'badge-red' };
   const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'?'}</span>`;
 
   document.getElementById('detail-modal-title').textContent = title;
@@ -1434,12 +2396,53 @@ window.openDetail = function(id) {
 
   renderModalBody(t);
   document.getElementById('detail-modal').style.display = 'flex';
+
+  void (async () => {
+    try {
+      const [taskOutcome, revOutcome] = await Promise.allSettled([
+        fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, { headers: CONFIG.headers() }),
+        fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(id)}/revisions`, { headers: CONFIG.headers() }),
+      ]);
+
+      if (taskOutcome.status !== 'fulfilled') return;
+      const rTask = taskOutcome.value;
+      if (!rTask.ok) return;
+      const arr = await rTask.json();
+      const found = Array.isArray(arr) ? arr.find((x) => x.id === id) : null;
+      if (!found) return;
+
+      let revisionHistory = [];
+      const revOk = revOutcome.status === 'fulfilled' && revOutcome.value.ok;
+      if (revOk) {
+        try {
+          const j = await revOutcome.value.json();
+          revisionHistory = Array.isArray(j) ? j : [];
+        } catch {
+          revisionHistory = [];
+        }
+      }
+      found.revisionHistory = revisionHistory;
+      found._revisionHistoryLoaded = true;
+      found._revisionHistoryFetchFailed = !revOk;
+
+      const idx = allTasks.findIndex((x) => x.id === id);
+      if (idx >= 0) allTasks[idx] = found;
+      if (currentDetailId !== id) return;
+      _currentTask = found;
+      renderModalBody(found);
+    } catch (e) {
+      console.warn('[openDetail] refresh', e);
+    }
+  })();
 };
 
 window.switchTab = switchTab;
 
 window.printReport = async function() {
   if (!_currentTask) return;
+
+  const pdfBtn = document.getElementById('detail-pdf-btn');
+  const prevPdfLabel = pdfBtn ? pdfBtn.innerHTML : '';
 
   // Always fetch fresh data so responses (GPS) are never stale from initial load
   let t = _currentTask;
@@ -1455,7 +2458,19 @@ window.printReport = async function() {
     }
   } catch(e) { console.warn('[PDF] Could not refresh task data, using cached.', e); }
 
-  const shortId = t.id.slice(0, 10).toLowerCase();
+  const finishPdfBtn = () => {
+    if (pdfBtn) {
+      pdfBtn.disabled = false;
+      pdfBtn.innerHTML = prevPdfLabel || '<ion-icon name="print-outline" style="vertical-align:-2px"></ion-icon> PDF';
+    }
+  };
+
+  try {
+  if (pdfBtn) {
+    pdfBtn.disabled = true;
+    pdfBtn.innerHTML = '<ion-icon name="hourglass-outline" style="vertical-align:-2px"></ion-icon> A gerar…';
+  }
+
   const responses = t.responses || {};
   const fields = t.template?.fields || [];
   
@@ -1488,13 +2503,54 @@ window.printReport = async function() {
   let photoHtml = '';
   let qNum = 1;
 
+  const escPdf = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const locationPickStaticMapUrl = (lat, lng, w, h) => {
+    const W = w || 560;
+    const H = h || 220;
+    return 'https://staticmap.openstreetmap.de/staticmap.php?center=' + lat + ',' + lng + '&zoom=17&size=' + W + 'x' + H + '&maptype=mapnik&markers=' + lat + ',' + lng + ',red-pushpin';
+  };
+  const buildLocationPickPdfHtml = (o) => {
+    const plat = o.pin.lat;
+    const plng = o.pin.lng;
+    const glat = o.gps.lat;
+    const glng = o.gps.lng;
+    const acc = (o.gps.accuracy != null && o.gps.accuracy !== '') ? ' · precisão ~' + Number(o.gps.accuracy).toFixed(0) + ' m' : '';
+    const mapSrc = locationPickStaticMapUrl(plat, plng);
+    const qPin = encodeURIComponent(plat + ',' + plng);
+    const qGps = encodeURIComponent(glat + ',' + glng);
+    let capturedLine = '';
+    if (o.capturedAt) {
+      try {
+        const d = new Date(o.capturedAt);
+        if (!isNaN(d.getTime())) capturedLine = '<div style="font-size:9px;color:#94a3b8;margin-top:10px">Registado: ' + d.toLocaleString('pt-BR') + '</div>';
+      } catch (e1) {}
+    }
+    return (
+      '<div style="border:1px solid #bae6fd;border-radius:10px;overflow:hidden;background:#f0f9ff;max-width:560px">' +
+        '<img src="' + mapSrc + '" alt="Mapa" style="width:100%;height:auto;display:block;min-height:140px;max-height:240px;object-fit:cover;background:#e2e8f0" onerror="var n=this.nextElementSibling;if(n)n.style.display=\'block\';this.style.display=\'none\';" />' +
+        '<div class="pdf-loc-fallback" style="display:none;padding:12px;background:#e2e8f0;font-size:10px;color:#64748b;text-align:center">Pré-visualização do mapa indisponível — use os links abaixo.</div>' +
+        '<div style="padding:12px 14px">' +
+          '<div style="font-size:11px;font-weight:900;color:#0c4a6e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Alfinete no mapa</div>' +
+          (o.addressPin ? '<div style="font-size:12px;color:#0f172a;line-height:1.45;margin-bottom:4px">' + escPdf(o.addressPin) + '</div>' : '') +
+          '<div style="font-size:10px;color:#64748b;font-family:monospace;margin-bottom:10px">' + plat.toFixed(6) + ', ' + plng.toFixed(6) + '</div>' +
+          '<div style="font-size:11px;font-weight:900;color:#0369a1;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">GPS do dispositivo</div>' +
+          (o.addressGps ? '<div style="font-size:12px;color:#0f172a;line-height:1.45;margin-bottom:4px">' + escPdf(o.addressGps) + '</div>' : '') +
+          '<div style="font-size:10px;color:#64748b;font-family:monospace">' + glat.toFixed(6) + ', ' + glng.toFixed(6) + acc + '</div>' +
+          capturedLine +
+          '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;font-size:10px;font-weight:700">' +
+            '<a href="https://www.google.com/maps?q=' + qPin + '" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:none"><ion-icon name="pin-outline" style="vertical-align:-2px"></ion-icon> Google Maps (alfinete)</a>' +
+            '<a href="https://www.google.com/maps?q=' + qGps + '" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:none"><ion-icon name="navigate-outline" style="vertical-align:-2px"></ion-icon> Google Maps (GPS)</a>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  };
+
   // Transit logic extractors
   let startGPS = null;
   let endGPS = null;
 
   const allResponseVals = Object.values(responses);
-  console.log('[PDF DEBUG] responses keys:', Object.keys(responses));
-  console.log('[PDF DEBUG] response values:', allResponseVals);
 
   allResponseVals.forEach(val => {
      if (!val) return;
@@ -1519,6 +2575,22 @@ window.printReport = async function() {
   });
 
   const order = Array.isArray(fields) && fields.length > 0 ? fields.map(f => f.id) : Object.keys(responses);
+
+  /** Comentários por foto/anexo (`__media_cap_<fieldId>`) — alinhados ao índice do item no array de URLs */
+  const pdfMediaCapHtml = (fieldId, index) => {
+    if (!fieldId) return '';
+    const raw = responses['__media_cap_' + fieldId];
+    let cap = '';
+    if (Array.isArray(raw) && raw[index] != null) cap = String(raw[index]).trim();
+    else if (typeof raw === 'string' && index === 0) cap = raw.trim();
+    if (!cap) return '';
+    return (
+      '<div style="font-size:10px;color:#422006;margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;line-height:1.45">' +
+      '<strong style="color:#713f12">Comentários:</strong> ' +
+      escPdf(cap) +
+      '</div>'
+    );
+  };
   
   order.forEach(id => {
       const fieldDef = fields.find(f => f.id === id);
@@ -1561,14 +2633,65 @@ window.printReport = async function() {
 
       if (val === undefined || val === null || val === '') {
           displayVal = '<span style="color:#94a3b8;font-style:italic">Não preenchido</span>';
+      } else if (fieldDef && fieldDef.type === 'location_pick') {
+          let loc = val;
+          if (typeof val === 'string') {
+            try { loc = JSON.parse(val); } catch (e) { loc = null; }
+          }
+          if (
+            loc &&
+            loc.version === 1 &&
+            loc.gps &&
+            loc.pin &&
+            typeof loc.gps.lat === 'number' &&
+            typeof loc.gps.lng === 'number' &&
+            typeof loc.pin.lat === 'number' &&
+            typeof loc.pin.lng === 'number'
+          ) {
+            displayVal = buildLocationPickPdfHtml(loc);
+          } else {
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Dados de localização inválidos</span>';
+          }
+      } else if (fieldDef && fieldDef.type === 'file_upload') {
+          const escAttr = (s) => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+          const escText = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const attachList = Array.isArray(val)
+            ? val.filter((v) => typeof v === 'string' && (v.startsWith('http') || v.startsWith('file://')))
+            : typeof val === 'string' && (val.startsWith('http') || val.startsWith('file://'))
+              ? [val]
+              : [];
+          if (attachList.length === 0) {
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem anexo enviado</span>';
+          } else {
+            displayVal = attachList
+              .map((u, i) => {
+                if (u.startsWith('file://')) {
+                  return `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` + pdfMediaCapHtml(id, i);
+                }
+                const base = u.split('?')[0];
+                let name = base.split('/').pop() || 'anexo';
+                try { name = decodeURIComponent(name); } catch (e2) {}
+                const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
+                return `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${idx}${escText(name)}</a></div>` + pdfMediaCapHtml(id, i);
+              })
+              .join('');
+          }
       } else {
-          const isPhoto = rawVal.startsWith('http') || rawVal.startsWith('file://') || rawVal.startsWith('data:image');
-          const isSig = rawVal.startsWith('SIG_V1|');
+          const isSig = typeof val === 'string' && rawVal.startsWith('SIG_V1|');
+          const photoUris = (function () {
+            const ok = (s) =>
+              typeof s === 'string' &&
+              (s.startsWith('http') || s.startsWith('file://') || s.startsWith('data:image'));
+            if (Array.isArray(val)) return val.filter(ok);
+            if (ok(val)) return [val];
+            return [];
+          })();
+          const isPhoto = photoUris.length > 0;
           
           let isMap = false;
           let mapLat, mapLng;
           let mapAddr = '';
-          if (typeof val === 'object' && val !== null) {
+          if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
               if (val.lat !== undefined && val.lng !== undefined) { isMap = true; mapLat = val.lat; mapLng = val.lng; mapAddr = val.address || ''; }
               else if (val.coordinates && val.coordinates.lat !== undefined) { isMap = true; mapLat = val.coordinates.lat; mapLng = val.coordinates.lng; mapAddr = val.address || ''; }
           } else if (typeof val === 'string' && val.startsWith('{')) {
@@ -1580,22 +2703,24 @@ window.printReport = async function() {
     
           if (isPhoto) {
               const timestamp = t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : fd(t.createdAt);
-              if (rawVal.startsWith('file://')) {
-                  displayVal = `
+              const stampTypes = fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition';
+              const onePhotoCard = (singleVal, fotoIndex, capIdx) => {
+                if (singleVal.startsWith('file://')) {
+                  return (
+                    `
                     <div style="margin-top: 8px; max-width: 350px; background:#f8fafc; padding:20px; text-align:center; border:2px dashed #cbd5e1; border-radius:8px;">
                        <ion-icon name="cloud-offline-outline" style="font-size:32px; color:#94a3b8; margin-bottom:8px;"></ion-icon>
-                       <div style="font-size:12px; color:#475569; font-weight:800;">MÍDIA PENDENTE</div>
+                       <div style="font-size:12px; color:#475569; font-weight:800;">MÍDIA PENDENTE${fotoIndex ? ' (' + fotoIndex + ')' : ''}</div>
                        <div style="font-size:10px; color:#94a3b8; margin-top:4px;">Aguardando o aplicativo recuperar o sinal de internet para realizar o upload da Foto.</div>
-                    </div>`;
-              } else {
-              let gpsComplement = '';
-              if (val.includes('live') || fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition') {
+                    </div>` + pdfMediaCapHtml(id, capIdx)
+                  );
+                }
+                let gpsComplement = '';
+                if (singleVal.includes('live') || stampTypes) {
                   let locationStr = '';
-                  
-                  // Extract from URL query params
                   let photoLat, photoLng, photoAddr;
                   try {
-                      const urlParts = val.split('?');
+                      const urlParts = singleVal.split('?');
                       if (urlParts.length > 1) {
                           const params = new URLSearchParams(urlParts[1]);
                           if (params.has('lat') && params.has('lng')) {
@@ -1616,18 +2741,22 @@ window.printReport = async function() {
                       locationStr = `<br/><span style="margin-top:3px; display:inline-block">📍 ${t.locationAddress || 'Destino O.S.'}</span> <br/><span style="color:#FFF8F0">🧭 Lat: ${parseFloat(t.locationLat).toFixed(5)}, Lng: ${parseFloat(t.locationLng).toFixed(5)}</span>`;
                   }
                   gpsComplement = locationStr;
-              }
-
-              displayVal = `
+                }
+                const showFooter = !!(gpsComplement || singleVal.includes('live') || stampTypes);
+                const idxLine = photoUris.length > 1 ? ` · Foto ${fotoIndex}` : '';
+                return (
+                  `
                 <div class="pdf-photo-card" style="margin-top: 8px; max-width: 350px; background: #EA580C; border-radius: 8px; border: 1px solid #c2410c; overflow: hidden; display: flex; flex-direction: column;">
-                   <img src="${val.split('?')[0]}" class="pdf-photo-img" style="border-radius: 0; width: 100%; height: auto; min-height: 180px; object-fit: cover; display: block;" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
-                   ${gpsComplement || val.includes('live') || fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition' ? `
+                   <img src="${singleVal.split('?')[0]}" class="pdf-photo-img" style="border-radius: 0; width: 100%; height: auto; min-height: 180px; object-fit: cover; display: block;" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
+                   ${showFooter ? `
                    <div style="background: #EA580C; color: #fff; padding: 10px 12px; font-size: 8px; font-weight: 700; line-height: 1.4; box-sizing: border-box; font-family: monospace;">
-                      🕒 ${timestamp}
+                      🕒 ${timestamp}${idxLine}
                       ${gpsComplement}
                    </div>` : ''}
-                </div>`;
-              }
+                </div>` + pdfMediaCapHtml(id, capIdx)
+                );
+              };
+              displayVal = photoUris.map((u, i) => onePhotoCard(u, String(i + 1), i)).join('');
           } else if (typeof val === 'boolean') {
               displayVal = val ? '<span class="pdf-pill">Sim</span>' : '<span class="pdf-pill" style="background:#ef4444">Não</span>';
           } else if (Array.isArray(val)) {
@@ -1898,6 +3027,40 @@ window.printReport = async function() {
       avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
   }
 
+  const transitSecProd = computeTransitSecondsFromEndpoints(startGPS, endGPS);
+  const osWallSecProd =
+    t.startedAt && t.completedAt
+      ? Math.max(0, Math.floor((new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime()) / 1000))
+      : null;
+  const exTransitSecProd =
+    osWallSecProd != null && transitSecProd != null ? Math.max(0, osWallSecProd - transitSecProd) : null;
+  const sectionRowsProd = collectSectionTimingRows(t.template?.sectionBreaks, responses, t.template);
+  let sectionLineProd = sectionRowsProd
+    .map((r) => {
+      const short = r.label.length > 24 ? r.label.slice(0, 24) + '…' : r.label;
+      return `<strong>${escPdf(short)}</strong> ${r.sec != null ? fmtDurPdf(r.sec) : '—'}`;
+    })
+    .join(' <span style="color:#cbd5e1">|</span> ');
+  if (sectionLineProd.length > 400) sectionLineProd = sectionLineProd.slice(0, 400) + '…';
+
+  const pdfPauseInProdHtml = buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf);
+
+  const pdfProdBlock = `
+      <div style="border-top:1px solid #e2e8f0; padding:3px 8px 5px; background:linear-gradient(180deg,#f8fafc 0%,#fff 100%); box-sizing:border-box;">
+        <div style="font-size:6px;font-weight:900;color:#64748b;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px">Produtividade do técnico</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px 8px;font-size:6px;line-height:1.12;color:#475569;align-items:flex-start">
+          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">OS (ini→fim)</span><br><strong style="font-size:8px;color:#0f172a">${durationStr}</strong></div>
+          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">Desloc.</span><br><strong style="font-size:8px;color:#0f172a">${transitSecProd != null ? fmtDurPdf(transitSecProd) : '—'}</strong></div>
+          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">Fora desl. (est.)</span><br><strong style="font-size:8px;color:#0f172a">${exTransitSecProd != null ? fmtDurPdf(exTransitSecProd) : '—'}</strong></div>
+          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">No form.</span><br><strong style="font-size:8px;color:#0f172a">${formFillStrPdf}</strong></div>
+          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">App foco</span><br><strong style="font-size:8px;color:#0f172a">${formActiveStrPdf}</strong></div>
+        </div>
+        <div style="font-size:6px;color:#475569;line-height:1.15;margin-top:3px;padding-top:2px;border-top:1px dashed #e2e8f0">
+          <span style="font-weight:800;color:#334155">Etapas:</span> ${sectionLineProd || '<span style="color:#94a3b8">—</span>'}
+        </div>
+        ${pdfPauseInProdHtml}
+      </div>`;
+
   document.getElementById('print-report').innerHTML = `
     <div class="pdf-topbar" style="border-bottom:none">
        <div style="display:flex; align-items:center; gap:8px;">
@@ -1914,7 +3077,7 @@ window.printReport = async function() {
        <div style="position:absolute; top:-20px; right:-20px; width:150px; height:150px; background:#ffffff10; border-radius:50%"></div>
        <div class="pdf-summary-plate">
           <h2>RELATÓRIO DA ATIVIDADE</h2>
-          <span>${t.id}</span>
+          <span>${t.osNumber || t.id}${(() => { const n = Number(t.lastSubmittedRevision) || 0; return n > 0 ? ` · Revisão ${n}` : ''; })()}</span>
        </div>
        <div class="pdf-tech-info">
           <div class="pdf-tech-texts">
@@ -1934,7 +3097,7 @@ window.printReport = async function() {
       <div style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
         <ion-icon name="document-text-outline" style="font-size:16px; color:#94a3b8"></ion-icon>
         <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
-        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
+        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', PAUSED:'#fee2e2', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', PAUSED:'#991b1b', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', PAUSED:'Pausada', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
       </div>
 
       <!-- 3-column cards -->
@@ -1950,7 +3113,10 @@ window.printReport = async function() {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID da Tarefa</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${t.osNumber || '—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Revisão (última concl.)</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px">${Number(t.lastSubmittedRevision) > 0 ? Number(t.lastSubmittedRevision) : '—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
           <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
           ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #f1f5f9"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
         </div>
@@ -1978,10 +3144,11 @@ window.printReport = async function() {
         </div>
 
       </div>
+      ${pdfProdBlock}
     </div>
 
-    <div class="pdf-box" style="margin-top: 8px; margin-bottom: 8px;">
-       <div class="pdf-box-title">LINHA DO TEMPO OPERACIONAL</div>
+    <div class="pdf-box" style="margin-top: 6px; margin-bottom: 6px; padding-bottom: 8px;">
+       <div class="pdf-box-title" style="margin-bottom:8px">LINHA DO TEMPO OPERACIONAL</div>
        <div class="pdf-timeline">
           <div class="pdf-timeline-node">
              <div class="pdf-timeline-icon bg-blue"><ion-icon name="create-outline"></ion-icon></div>
@@ -2008,18 +3175,6 @@ window.printReport = async function() {
              <div class="pdf-timeline-label">Conclusão</div>
              <div class="pdf-timeline-date">${fd(t.completedAt)}</div>
           </div>
-       </div>
-       <div class="pdf-total-time">
-          <span>DURAÇÃO (OS — início→fim)</span>
-          <strong>${durationStr}</strong>
-       </div>
-       <div class="pdf-total-time" style="margin-top:6px">
-          <span>TEMPO NO FORMULÁRIO (total)</span>
-          <strong>${formFillStrPdf}</strong>
-       </div>
-       <div class="pdf-total-time" style="margin-top:6px">
-          <span>TEMPO COM APP EM FOCO</span>
-          <strong>${formActiveStrPdf}</strong>
        </div>
     </div>
     
@@ -2059,8 +3214,7 @@ window.printReport = async function() {
               const map = L.map('pdf-transit-map', { zoomControl: false, attributionControl: false, fadeAnimation: false, zoomAnimation: false }).setView([endGPS.lat, endGPS.lng], 15);
               L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
               
-              const startIcon = L.divIcon({ html: '<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
-              const endIcon = L.divIcon({ html: '<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5)"></div>', className: '', iconSize: [22,22], iconAnchor: [11,11] });
+              const { startIcon, endIcon } = buildTransitTechMapIcons(t);
               
               const latlngs = (endGPS.traversedPath || []).map(c => [c[0], c[1]]);
               const polyline = L.polyline(latlngs, { color: '#EA580C', weight: 5 }).addTo(map);
@@ -2091,12 +3245,163 @@ window.printReport = async function() {
   } else {
       setTimeout(() => window.print(), 100);
   }
+  } catch (pdfErr) {
+    console.error('[PDF] Falha ao montar relatório:', pdfErr);
+    alert('Não foi possível gerar o PDF.\n\n' + (pdfErr && pdfErr.message ? pdfErr.message : String(pdfErr)));
+  } finally {
+    finishPdfBtn();
+  }
 };
 
 window.closeDetailModal = () => {
   document.getElementById('detail-modal').style.display = 'none';
   currentDetailId = null;
   _currentTask = null;
+};
+
+function escForPre(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+let _revisionSnapshotTab = 'form';
+
+function renderRevisionSnapshotBody() {
+  const tab = _revisionSnapshotTab;
+  const body = document.getElementById('revision-snapshot-body');
+  const data = window._revisionSnapshotData;
+  const fakeT = window._revisionSnapshotFakeTask;
+  if (!body || !data || !fakeT) return;
+
+  if (window._revisionSnapshotTransitMap) {
+    try {
+      window._revisionSnapshotTransitMap.remove();
+    } catch (e) {}
+    window._revisionSnapshotTransitMap = null;
+  }
+
+  if (tab === 'form') {
+    const html = buildReportTab(fakeT).replace(
+      /id="report-transit-map"/g,
+      'id="revision-snapshot-transit-map"'
+    );
+    body.innerHTML = html;
+    tryInitReportTransitMap(
+      fakeT,
+      'revision-snapshot-transit-map',
+      (map) => {
+        window._revisionSnapshotTransitMap = map;
+      },
+      () => window._revisionSnapshotTransitMap
+    );
+  } else if (tab === 'meta') {
+    body.innerHTML = `<pre class="report-field-value mono" style="white-space:pre-wrap;max-height:55vh;overflow:auto;padding:12px">${escForPre(JSON.stringify(data.metadataSnapshot ?? null, null, 2))}</pre>`;
+  } else {
+    body.innerHTML = `<pre class="report-field-value mono" style="white-space:pre-wrap;max-height:55vh;overflow:auto;padding:12px">${escForPre(JSON.stringify(data.responses ?? {}, null, 2))}</pre>`;
+  }
+}
+
+window.switchRevisionSnapshotTab = function (tab) {
+  _revisionSnapshotTab = tab;
+  ['form', 'meta', 'json'].forEach((x) => {
+    document.getElementById('rev-snap-tab-' + x)?.classList.toggle('active', x === tab);
+  });
+  renderRevisionSnapshotBody();
+};
+
+window.openRevisionSnapshotModal = async function (execId, revision) {
+  const base = _currentTask;
+  if (!base || base.id !== execId) {
+    alert('Abra primeiro o detalhe desta OS na Central de Operações.');
+    return;
+  }
+  _revisionSnapshotTab = 'form';
+  ['form', 'meta', 'json'].forEach((x) => {
+    document.getElementById('rev-snap-tab-' + x)?.classList.toggle('active', x === 'form');
+  });
+
+  document.getElementById('revision-snapshot-title').textContent =
+    `Revisão ${revision} — ${displayOsLabel(base)}`;
+  document.getElementById('revision-snapshot-body').innerHTML =
+    '<div style="padding:24px;color:var(--text3)">A carregar…</div>';
+  document.getElementById('revision-snapshot-modal').style.display = 'flex';
+
+  try {
+    const r = await fetch(
+      `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(execId)}/revisions/${encodeURIComponent(revision)}`,
+      { headers: CONFIG.headers() }
+    );
+    if (!r.ok) {
+      const txt = await r.text();
+      document.getElementById('revision-snapshot-body').innerHTML =
+        '<div style="padding:24px;color:var(--red)">Não foi possível carregar esta revisão. ' +
+        escForPre(txt.slice(0, 500)) +
+        '</div>';
+      return;
+    }
+    const data = await r.json();
+    const snapMeta =
+      data.metadataSnapshot && typeof data.metadataSnapshot === 'object' && !Array.isArray(data.metadataSnapshot)
+        ? data.metadataSnapshot
+        : {};
+    const baseMeta =
+      typeof base.metadata === 'object' && base.metadata && !Array.isArray(base.metadata) ? base.metadata : {};
+    const fakeT = {
+      ...base,
+      responses:
+        data.responses && typeof data.responses === 'object' && !Array.isArray(data.responses)
+          ? data.responses
+          : {},
+      metadata: { ...baseMeta, ...snapMeta },
+    };
+    window._revisionSnapshotData = data;
+    window._revisionSnapshotFakeTask = fakeT;
+    renderRevisionSnapshotBody();
+  } catch (e) {
+    document.getElementById('revision-snapshot-body').innerHTML =
+      '<div style="padding:24px;color:var(--red)">' + escForPre(e.message || String(e)) + '</div>';
+  }
+};
+
+window.closeRevisionSnapshotModal = function () {
+  if (window._revisionSnapshotTransitMap) {
+    try {
+      window._revisionSnapshotTransitMap.remove();
+    } catch (e) {}
+    window._revisionSnapshotTransitMap = null;
+  }
+  window._revisionSnapshotData = null;
+  window._revisionSnapshotFakeTask = null;
+  document.getElementById('revision-snapshot-modal').style.display = 'none';
+};
+
+window.downloadRevisionsCsv = async function (execId, includeResponses) {
+  const q = includeResponses ? '?includeResponses=1' : '';
+  const url = `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(execId)}/revisions/export${q}`;
+  try {
+    const r = await fetch(url, { headers: CONFIG.headers() });
+    if (!r.ok) {
+      const txt = await r.text();
+      alert('Falha ao exportar CSV: ' + (txt || r.status));
+      return;
+    }
+    const blob = await r.blob();
+    let fname = `revisoes_${String(execId).slice(0, 8)}.csv`;
+    const cd = r.headers.get('Content-Disposition');
+    if (cd) {
+      const m = /filename="([^"]+)"/.exec(cd);
+      if (m) fname = m[1];
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert('Erro de rede ao exportar CSV.');
+  }
 };
 
 window.cancelTask = async function(bypassConfirm = false) {
@@ -2666,7 +3971,7 @@ window.confirmDispatch = async function() {
       if (locationPayload.locationZoneType === 'segment') modeDesc = `Trecho A↔B (${locationPayload.locationRadius}m em cada ponto)`;
       if (locationPayload.locationZoneType === 'polygon') modeDesc = `Polígono`;
       const hasGeo = locationPayload.locationLat ? `\n📍 Validação: ${modeDesc}` : '';
-      alert(`✅ OS enviada com sucesso!\nID: ${res.task?.id}${hasGeo}`);
+      alert(`✅ OS enviada com sucesso!\nNº: ${res.task?.osNumber || res.task?.id}${hasGeo}`);
     } else {
       alert('Erro: ' + (res.error || 'desconhecido'));
     }

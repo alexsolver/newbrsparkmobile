@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Text, Animated } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Text, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,89 @@ import { Asset } from '../types/asset';
 import { useAuth } from '../hooks/useAuth';
 import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
+import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
+
+/** Aura amarela (anél exterior) quando GPS indisponível ou sem fix. */
+const GPS_AURA_COLOR = '#FACC15';
+const GPS_AURA_SHADOW = '#CA8A04';
+
+function AvatarConnectivityStack({
+  ringSize,
+  touchSize,
+  imageSize,
+  placeholderIconSize,
+  dotColor,
+  gpsIssue,
+  gpsAuraDiameter,
+  avatarUri,
+  onPress,
+  textSecondary,
+}: {
+  ringSize: number;
+  touchSize: number;
+  imageSize: number;
+  placeholderIconSize: number;
+  dotColor: string;
+  gpsIssue: boolean;
+  gpsAuraDiameter: number;
+  avatarUri: string | null | undefined;
+  onPress: () => void;
+  textSecondary: string;
+}) {
+  return (
+    <View style={{ width: ringSize, height: ringSize, justifyContent: 'center', alignItems: 'center' }}>
+      {gpsIssue ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: gpsAuraDiameter,
+            height: gpsAuraDiameter,
+            borderRadius: gpsAuraDiameter / 2,
+            borderWidth: 3,
+            borderColor: GPS_AURA_COLOR,
+            shadowColor: GPS_AURA_SHADOW,
+            shadowOpacity: Platform.OS === 'ios' ? 0.45 : 0.38,
+            shadowRadius: 9,
+            shadowOffset: { width: 0, height: 0 },
+            ...(Platform.OS === 'android' ? { elevation: 5 } : {}),
+          }}
+        />
+      ) : null}
+      <View
+        style={{
+          width: ringSize,
+          height: ringSize,
+          borderRadius: ringSize / 2,
+          borderWidth: 3,
+          borderColor: dotColor,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <TouchableOpacity
+          style={{
+            width: touchSize,
+            height: touchSize,
+            borderRadius: touchSize / 2,
+            backgroundColor: '#fff',
+            overflow: 'hidden',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          onPress={onPress}
+          activeOpacity={0.7}
+        >
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={{ width: imageSize, height: imageSize }} />
+          ) : (
+            <Ionicons name="person-outline" size={placeholderIconSize} color={textSecondary} />
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 interface HeaderProps {
   showAssetTools?: boolean;
@@ -27,6 +110,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const { user, userRole } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
+  const gpsIssue = useGpsAuraIssue();
 
   // Pulse animation for the online dot
   const pulse = useRef(new Animated.Value(1)).current;
@@ -190,26 +274,18 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {!isProfile ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ 
-                  width: 48, height: 48, borderRadius: 24, 
-                  borderWidth: 3, borderColor: dotColor, 
-                  justifyContent: 'center', alignItems: 'center' 
-                }}>
-                  <TouchableOpacity
-                    style={{ 
-                      width: 38, height: 38, borderRadius: 19, 
-                      backgroundColor: '#fff', overflow: 'hidden',
-                      justifyContent: 'center', alignItems: 'center'
-                    }}
-                    onPress={() => router.push('/profile')}
-                  >
-                    {avatarUri ? (
-                      <Image source={{ uri: avatarUri }} style={{ width: 38, height: 38 }} />
-                    ) : (
-                      <Ionicons name="person-outline" size={20} color={C.textSecondary} />
-                    )}
-                  </TouchableOpacity>
-                </View>
+                <AvatarConnectivityStack
+                  ringSize={48}
+                  touchSize={38}
+                  imageSize={38}
+                  placeholderIconSize={20}
+                  dotColor={dotColor}
+                  gpsIssue={gpsIssue}
+                  gpsAuraDiameter={56}
+                  avatarUri={avatarUri}
+                  onPress={() => router.push('/profile')}
+                  textSecondary={C.textSecondary}
+                />
               </View>
             ) : (
               <View style={{ width: 40 }} />
@@ -239,27 +315,18 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
         
         {/* Right: QR + Profile (with Aura) */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ 
-            width: 50, height: 50, borderRadius: 25, 
-            borderWidth: 3, borderColor: dotColor, 
-            justifyContent: 'center', alignItems: 'center' 
-          }}>
-            <TouchableOpacity 
-              style={{ 
-                width: 40, height: 40, borderRadius: 20, 
-                backgroundColor: '#fff', overflow: 'hidden',
-                justifyContent: 'center', alignItems: 'center'
-              }} 
-              onPress={() => router.push('/profile')}
-              activeOpacity={0.7}
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={{ width: 40, height: 40 }} />
-              ) : (
-                 <Ionicons name="person-outline" size={22} color={C.textSecondary} />
-              )}
-            </TouchableOpacity>
-          </View>
+          <AvatarConnectivityStack
+            ringSize={50}
+            touchSize={40}
+            imageSize={40}
+            placeholderIconSize={22}
+            dotColor={dotColor}
+            gpsIssue={gpsIssue}
+            gpsAuraDiameter={58}
+            avatarUri={avatarUri}
+            onPress={() => router.push('/profile')}
+            textSecondary={C.textSecondary}
+          />
         </View>
       </View>
     </SafeAreaView>

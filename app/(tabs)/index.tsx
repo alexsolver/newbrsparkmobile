@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image,
   RefreshControl, Dimensions, NativeSyntheticEvent, NativeScrollEvent, Alert, Modal,
@@ -22,8 +22,10 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../../src/context/AppContext';
 import { API_BASE, apiFetch } from '../../src/services/auth';
+import { getOsrmBaseUrl } from '../../src/services/osrmConfig';
+import { fetchTravelDurationsFromOrigin, fetchStitchedDrivingRouteLatLng } from '../../src/services/osrmClient';
 import { useManualSync } from '../../src/hooks/useManualSync';
-import { pushSyncQueue, pullTasks } from '../../src/services/syncService';
+import { pushSyncQueue, pullTasks, enqueueExecutionStatusPatch } from '../../src/services/syncService';
 import MapView, { Marker, Callout, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 
@@ -42,11 +44,20 @@ const SERVICE_CATEGORIES = [
   { id: 'Tecnologia',  labelKey: 'technology',    icon: 'laptop-outline',         color: '#6366F1' },
 ];
 
-const OSRM_PUBLIC_BASE = 'https://router.project-osrm.org';
-/** Limite seguro para o demo público OSRM (1 origem + destinos) */
+/** Limite seguro para o OSRM (1 origem + destinos) */
 const OSRM_MAX_DESTINATIONS = 90;
-/** Polilinha completa: URLs longas falham em alguns dispositivos */
+/** Mantido na assinatura por compatibilidade; a geometria segue o mapa de deslocamento (só trechos OSRM). */
 const OSRM_MAX_WAYPOINTS_FOR_GEOMETRY = 28;
+/** Igual a `LiveRouteMapCard`: voltar a pedir geometria até o GPS/OSRM responder. */
+const OSRM_ROUTE_MAP_RETRY_MS = 12000;
+
+/** Número FT convencional ou recorte do id técnico (cartões prestador). */
+function providerTaskOsLabel(task: { osNumber?: string | null; id: string }) {
+  const raw = task.osNumber;
+  if (raw != null && String(raw).trim() !== '') return String(raw).trim();
+  const id = String(task.id);
+  return id.split('_').pop()?.substring(0, 12) || id.substring(0, 12);
+}
 
 function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
   const rawLat = t?.locationLat ?? t?.metadata?.locationLat ?? t?.metadata?.lat;
@@ -64,28 +75,148 @@ function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
   return { lat, lng };
 }
 
-async function fetchOsrmJson(url: string): Promise<any> {
-  const init: RequestInit = {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'BrsparkMobile/1.0',
-    },
-  };
-  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
-    (init as any).signal = (AbortSignal as any).timeout(28000);
+/** Mesma ordenação da lista “Rota do dia” (para polilinha bater com os números 1,2,3…). */
+function sortTasksForOsrmRoute(
+  tasks: any[],
+  mode: 'NEWEST' | 'OLDEST' | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE',
+  osrmDurations: Record<string, number>
+): any[] {
+  return [...tasks].sort((a, b) => {
+    if (mode === 'OSRM_ROUTE' || mode === 'OSRM_SLA_ROUTE') {
+      const d1 = osrmDurations[String(a.id)] ?? 999999;
+      const d2 = osrmDurations[String(b.id)] ?? 999999;
+      if (mode === 'OSRM_SLA_ROUTE') {
+        const getScore = (item: any, durationSecs: number) => {
+          const durationMins = durationSecs / 60;
+          if (!item.dueDate) return durationMins;
+          const msToDue = new Date(item.dueDate).getTime() - Date.now();
+          const minsToDue = msToDue / 60000;
+          let urgencyDiscount = 0;
+          if (minsToDue < 0) urgencyDiscount = 999999;
+          else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
+          else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
+          return durationMins - urgencyDiscount;
+        };
+        return getScore(a, d1) - getScore(b, d2);
+      }
+      return d1 - d2;
+    }
+    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (isNaN(tA) || isNaN(tB)) return 0;
+    return mode === 'NEWEST' ? tB - tA : tA - tB;
+  });
+}
+
+function taskMetadataRecord(t: any): Record<string, unknown> {
+  const m = t?.metadata;
+  if (m == null) return {};
+  if (typeof m === 'string') {
+    try {
+      const o = JSON.parse(m);
+      return o && typeof o === 'object' ? o : {};
+    } catch {
+      return {};
+    }
   }
-  const res = await fetch(url, init);
-  const text = await res.text();
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Resposta inválida do OSRM (HTTP ${res.status}).`);
+  if (typeof m === 'object') return m as Record<string, unknown>;
+  return {};
+}
+
+/** OS reaberta pelo admin para nova revisão (metadado até RECEIVED/ACCEPTED no servidor). */
+function isProviderRevisionTask(t: any): boolean {
+  const meta = taskMetadataRecord(t);
+  return (
+    meta.reopenForRevisionPending === true ||
+    meta.reopenForRevisionPending === 'true' ||
+    String(meta.reopenForRevisionPending || '').toLowerCase() === 'true'
+  );
+}
+
+const SERVER_COMPLETED_STATUSES = new Set([
+  'COMPLETED',
+  'SYNCED',
+  'DONE',
+  'CLOSED',
+  'FINISHED',
+  'COMPLETE',
+  'ARCHIVED',
+]);
+
+function effectiveProviderTaskStatus(
+  t: any,
+  completedIds: Set<string>,
+  inprogressIds: Set<string>
+): string {
+  const raw = String(t.status || 'PENDING').toUpperCase();
+  /** OS reaberta no admin: servidor manda PENDING/IN_PROGRESS/… — o cache local «executada» não pode esconder isso. */
+  const serverActive = ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(raw);
+  if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
+  if (completedIds.has(String(t.id)) && !serverActive) return 'COMPLETED';
+  const meta = taskMetadataRecord(t);
+  const reopenRevision =
+    meta.reopenForRevisionPending === true ||
+    meta.reopenForRevisionPending === 'true' ||
+    String(meta.reopenForRevisionPending || '').toLowerCase() === 'true';
+  // Revisão: como OS nova em Pendentes até aceitar; depois de «Iniciar» o id entra em inprogressIds e deve ir para «Em andamento».
+  if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
+    if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
+    return 'PENDING';
   }
-  if (!res.ok) {
-    throw new Error((data && (data.message || data.code)) || `OSRM HTTP ${res.status}`);
-  }
-  return data;
+  const pausedByMeta =
+    meta.executionPaused === true ||
+    meta.executionPaused === 'true' ||
+    String(meta.executionPaused || '').toLowerCase() === 'true';
+  if (raw === 'PAUSED' || pausedByMeta) return 'PAUSED';
+  if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
+  if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
+  if (raw === 'RECEIVED') return 'PENDING';
+  // Servidor pode mandar ACCEPTED após aceite no Kanban; a UI só conhece PENDING / IN_PROGRESS / COMPLETED nas abas.
+  if (raw === 'ACCEPTED') return 'PENDING';
+  return raw === 'PENDING' || raw === '' ? 'PENDING' : raw;
+}
+
+function providerTabMatchesTask(
+  tab: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
+  status: string
+): boolean {
+  // PAUSED: mesma aba que «Em andamento» (OS já iniciada; cartão vermelho com badge de pausa).
+  if (tab === 'PENDING') return status === 'PENDING';
+  if (tab === 'IN_PROGRESS') return status === 'IN_PROGRESS' || status === 'PAUSED';
+  return status === tab;
+}
+
+/** Cor do cartão alinhada ao estado efetivo (evita ficar cinza/âmbar se `order.color` ficou desatualizado). */
+function providerTaskListAccentColor(
+  t: any,
+  completedIds: Set<string>,
+  inprogressIds: Set<string>
+): string {
+  const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+  if (eff === 'COMPLETED') return '#10B981';
+  if (eff === 'PAUSED') return '#EF4444';
+  if (inprogressIds.has(String(t.id)) || t.isAccepted) return '#F59E0B';
+  return '#94A3B8';
+}
+
+/**
+ * Mesma abordagem do mapa de deslocamento (`LiveRouteMapCard`): cada perna usa `fetchDrivingGeometryLatLng`
+ * via `fetchStitchedDrivingRouteLatLng` (OSRM direto → várias bases → proxy backend por trecho).
+ */
+async function fetchDayRoutePolylineCoords(
+  _apiBase: string,
+  oLat: number,
+  oLng: number,
+  sortedPendentes: { locationLat: number; locationLng: number }[],
+  _maxWaypointsIgnored: number
+): Promise<{ latitude: number; longitude: number }[]> {
+  const waypoints = [
+    { lat: oLat, lng: oLng },
+    ...sortedPendentes.map((p) => ({ lat: p.locationLat, lng: p.locationLng })),
+  ];
+  const ring = await fetchStitchedDrivingRouteLatLng(waypoints, { timeoutMs: 120000 });
+  if (!ring || ring.length < 2) return [];
+  return ring.map(([la, ln]) => ({ latitude: la, longitude: ln }));
 }
 
 // ─── Busca inteligente ─────────────────────────────────────────────
@@ -172,11 +303,86 @@ export default function DashboardScreen() {
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  /** Pendentes com coordenadas, na mesma ordem da lista quando “Rota” está ativa (mapa alinhado à timeline). */
+  const routeMapTasksOrdered = useMemo(() => {
+    const base = providerTasks.filter((t) => {
+      const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+      if (!providerTabMatchesTask(providerTab, s)) return false;
+      return parseCoordLatLng(t) != null;
+    });
+    if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
+      return sortTasksForOsrmRoute(base, providerSortMode, osrmDurations);
+    }
+    return sortTasksForOsrmRoute(base, 'NEWEST', {});
+  }, [providerTasks, completedIds, inprogressIds, providerTab, providerSortMode, osrmDurations]);
+
+  const providerStageCounts = useMemo(() => {
+    let pending = 0;
+    let inProgress = 0;
+    let completed = 0;
+    for (const task of providerTasks) {
+      const s = effectiveProviderTaskStatus(task, completedIds, inprogressIds);
+      if (providerTabMatchesTask('PENDING', s)) pending += 1;
+      else if (providerTabMatchesTask('IN_PROGRESS', s)) inProgress += 1;
+      else if (providerTabMatchesTask('COMPLETED', s)) completed += 1;
+    }
+    return { pending, inProgress, completed };
+  }, [providerTasks, completedIds, inprogressIds]);
+
+  /** Geometria “Rota do dia” = mesmo padrão que deslocamento: tentar ao abrir e a cada 12s até haver polilinha. */
+  useEffect(() => {
+    if (!showRouteMap) return;
+    if (providerSortMode !== 'OSRM_ROUTE' && providerSortMode !== 'OSRM_SLA_ROUTE') return;
+
+    const normalized = routeMapTasksOrdered
+      .map((t) => {
+        const c = parseCoordLatLng(t);
+        if (!c) return null;
+        return { locationLat: c.lat, locationLng: c.lng };
+      })
+      .filter((x): x is { locationLat: number; locationLng: number } => x != null);
+    if (normalized.length === 0) return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let geometryOk = false;
+
+    const attempt = async () => {
+      if (cancelled || geometryOk) return;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const line = await fetchDayRoutePolylineCoords(
+          API_BASE,
+          loc.coords.latitude,
+          loc.coords.longitude,
+          normalized,
+          OSRM_MAX_WAYPOINTS_FOR_GEOMETRY
+        );
+        if (cancelled) return;
+        if (line.length >= 2) {
+          geometryOk = true;
+          setOsrmRouteCoords(line);
+          if (intervalId) clearInterval(intervalId);
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[route map] geometria', e);
+      }
+    };
+
+    void attempt();
+    intervalId = setInterval(() => void attempt(), OSRM_ROUTE_MAP_RETRY_MS);
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [showRouteMap, providerSortMode, routeMapTasksOrdered]);
+
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
     const pendentesAll = providerTasks.filter((t) => {
-        let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-        if (s === 'RECEIVED') s = 'PENDING';
-        return s === providerTab;
+      const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+      return providerTabMatchesTask(providerTab, s);
     });
     const pendentes = pendentesAll
       .map((t) => ({ t, c: parseCoordLatLng(t) }))
@@ -207,25 +413,17 @@ export default function DashboardScreen() {
         const oLng = location.coords.longitude;
         const oLat = location.coords.latitude;
 
-        const coordPairs = [`${oLng},${oLat}`];
-        slice.forEach((p) => coordPairs.push(`${p.locationLng},${p.locationLat}`));
-
-        const tableUrl = `${OSRM_PUBLIC_BASE}/table/v1/driving/${coordPairs.join(';')}?sources=0`;
-        const data = await fetchOsrmJson(tableUrl);
-
-        if (data.code !== 'Ok' || !data.durations || !Array.isArray(data.durations[0])) {
-            const hint = data.message || data.code || '';
-            throw new Error(
-              hint ? `OSRM: ${hint}` : 'O servidor OSRM falhou ou devolveu retorno vazio.'
-            );
-        }
-
-        const durList = data.durations[0];
-        const newDurs: Record<string, number> = {};
-        slice.forEach((p, index) => {
-            const val = durList[index + 1];
-            newDurs[String(p.id)] = (val !== null && val !== undefined) ? val : 999999;
-        });
+        const osrmBase = await getOsrmBaseUrl();
+        const { byId: newDurs } = await fetchTravelDurationsFromOrigin(
+          osrmBase,
+          oLat,
+          oLng,
+          slice.map((p) => ({
+            id: String(p.id),
+            locationLat: p.locationLat,
+            locationLng: p.locationLng,
+          }))
+        );
 
         const sortedPendentes = [...slice].sort((a,b) => {
            const d1 = newDurs[String(a.id)] ?? 999999;
@@ -247,32 +445,25 @@ export default function DashboardScreen() {
            return d1 - d2;
         });
 
-        const routePairs = [`${oLng},${oLat}`];
-        sortedPendentes.forEach((p) => routePairs.push(`${p.locationLng},${p.locationLat}`));
-        try {
-            if (routePairs.length <= OSRM_MAX_WAYPOINTS_FOR_GEOMETRY) {
-              const routeUrl = `${OSRM_PUBLIC_BASE}/route/v1/driving/${routePairs.join(';')}?overview=full&geometries=geojson`;
-              const routeData = await fetchOsrmJson(routeUrl);
-              if (routeData.code === 'Ok' && routeData.routes?.[0]?.geometry?.coordinates) {
-                const coordsArray = routeData.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
-                    latitude: coord[1],
-                    longitude: coord[0]
-                }));
-                setOsrmRouteCoords(coordsArray);
-              } else {
-                setOsrmRouteCoords([]);
-              }
-            } else {
-              setOsrmRouteCoords([]);
-            }
-        } catch (e) {
-            console.warn('Could not fetch route geometry: ', e);
-            setOsrmRouteCoords([]);
-        }
-
         setOsrmDurations(newDurs);
         setProviderSortMode(mode);
         lastOsrmPendingKeyRef.current = slice.map((p) => String(p.id)).sort().join('|');
+
+        /* Polilinha: vários trechos OSRM — não bloquear o spinner nem a lista (igual prioridade ao ordenamento). */
+        void (async () => {
+          try {
+            const polyCoords = await fetchDayRoutePolylineCoords(
+              API_BASE,
+              oLat,
+              oLng,
+              sortedPendentes,
+              OSRM_MAX_WAYPOINTS_FOR_GEOMETRY
+            );
+            setOsrmRouteCoords(polyCoords);
+          } catch (e) {
+            if (__DEV__) console.warn('[route poly] pós-otimização', e);
+          }
+        })();
     } catch (err: any) {
         Alert.alert("Erro de Roteamento", err?.message || String(err));
     } finally {
@@ -286,9 +477,8 @@ export default function DashboardScreen() {
 
       const pendentesIds = providerTasks
         .filter((t) => {
-          let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-          if (s === 'RECEIVED') s = 'PENDING';
-          return s === providerTab;
+          const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+          return providerTabMatchesTask(providerTab, s);
         })
         .filter((t) => parseCoordLatLng(t) !== null)
         .map((t) => String(t.id));
@@ -304,6 +494,51 @@ export default function DashboardScreen() {
           handleOptimizeRoute(mode);
       } else {
           setProviderSortMode(mode);
+          void (async () => {
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status !== 'granted') return;
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+              const pendentesAll = providerTasks.filter((t) => {
+                const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+                return providerTabMatchesTask(providerTab, s);
+              });
+              const pendentes = pendentesAll
+                .map((t) => ({ t, c: parseCoordLatLng(t) }))
+                .filter((x): x is { t: any; c: { lat: number; lng: number } } => x.c !== null)
+                .map((x) => ({ ...x.t, locationLat: x.c.lat, locationLng: x.c.lng }));
+              if (pendentes.length === 0) return;
+              const sortedPendentes = [...pendentes].sort((a, b) => {
+                const d1 = osrmDurations[String(a.id)] ?? 999999;
+                const d2 = osrmDurations[String(b.id)] ?? 999999;
+                if (mode === 'OSRM_SLA_ROUTE') {
+                  const getScore = (item: any, durationSecs: number) => {
+                    const durationMins = durationSecs / 60;
+                    if (!item.dueDate) return durationMins;
+                    const msToDue = new Date(item.dueDate).getTime() - Date.now();
+                    const minsToDue = msToDue / 60000;
+                    let urgencyDiscount = 0;
+                    if (minsToDue < 0) urgencyDiscount = 999999;
+                    else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
+                    else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
+                    return durationMins - urgencyDiscount;
+                  };
+                  return getScore(a, d1) - getScore(b, d2);
+                }
+                return d1 - d2;
+              });
+              const polyCoords = await fetchDayRoutePolylineCoords(
+                API_BASE,
+                loc.coords.latitude,
+                loc.coords.longitude,
+                sortedPendentes,
+                OSRM_MAX_WAYPOINTS_FOR_GEOMETRY
+              );
+              setOsrmRouteCoords(polyCoords);
+            } catch (e) {
+              console.warn('[route poly] atualizar ao mudar modo', e);
+            }
+          })();
       }
   };
 
@@ -369,12 +604,13 @@ export default function DashboardScreen() {
          const { AgendaService } = require('../../src/services/agendaService');
          const { pullTasks } = require('../../src/services/syncService');
          
-         // Aguarda a tarefa de sincronizar antes de renderizar (timeout de 3s para não travar UI)
-         await Promise.race([
-            pullTasks(email),
-            new Promise(resolve => setTimeout(resolve, 3000))
-         ]).catch(e => console.warn('[loadData] pullTasks falhou (offline?):', e));
-         
+         // Sincroniza OS da nuvem; o race só limita o “primeiro tick” — sempre esperamos o pull terminar
+         // antes de ler a agenda, senão o AsyncStorage pode ainda ter cache antigo (sem osNumber / FT).
+         const pullPromise = pullTasks(email).catch((err: unknown) =>
+           console.warn('[loadData] pullTasks falhou (offline?):', err)
+         );
+         await Promise.race([pullPromise, new Promise((r) => setTimeout(r, 3000))]);
+         await pullPromise;
          const events = await AgendaService.getUnifiedAgenda(email);
          
          const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
@@ -391,9 +627,9 @@ export default function DashboardScreen() {
          for (const ex of executedTasksRaw) {
              const item = typeof ex === 'string' ? { id: ex, completedAt: new Date().toISOString() } : ex;
              if (typeof ex === 'string') updatedExecs = true;
-             
-             const age = now - new Date(item.completedAt).getTime();
-             if (age <= THIRTY_DAYS_MS) {
+             const completedTs = new Date(item.completedAt ?? 0).getTime();
+             const age = Number.isFinite(completedTs) ? now - completedTs : 0;
+             if (!Number.isFinite(completedTs) || age <= THIRTY_DAYS_MS) {
                  validExecs.push(item);
                  executedMap[String(item.id)] = item;
              } else {
@@ -438,6 +674,7 @@ export default function DashboardScreen() {
                      id: key,
                      source: 'CHECKLIST',
                      category: 'TASK',
+                     status: 'COMPLETED',
                      title: exData.title || `OS Fechada (ID: ${key.substring(0,6)})`,
                      description: exData.description || 'Esta Ordem de Serviço foi concluída e arquivada pelo servidor central.',
                      startDate: exData.completedAt,
@@ -460,35 +697,45 @@ export default function DashboardScreen() {
          });
          
          console.log('AGENDA EVENTS LOADED:', events.length, 'INJECTED:', combinedEvents.length - events.length, 'FILTERED:', pt_filtered.length);
+         const completedSetForMap = new Set(Object.keys(executedMap));
+         const inprogSetForMap = new Set(inprogressTasks.map((id: string) => String(id)));
          const mapped = pt_filtered.map((t: any) => {
             const dt = new Date(t.startDate || Date.now());
             const day = isNaN(dt.getDate()) ? '29' : dt.getDate().toString().padStart(2,'0');
             const month = isNaN(dt.getMonth()) ? '03' : (dt.getMonth() + 1).toString().padStart(2,'0');
             const year = isNaN(dt.getFullYear()) ? '2026' : dt.getFullYear();
-            
-            const isCompleted = !!executedMap[String(t.id)];
+
             const geo = parseCoordLatLng(t);
+            const eff = effectiveProviderTaskStatus(t, completedSetForMap, inprogSetForMap);
 
             return {
                ...t,
                id: String(t.id),
+               osNumber: t.osNumber ?? null,
                locationLat: geo?.lat ?? t.locationLat ?? null,
                locationLng: geo?.lng ?? t.locationLng ?? null,
-               title: `OS ${t.id} | ${t.title || 'Manutenção'}`,
-               status: isCompleted ? 'COMPLETED' : 
-                       inprogressTasks.includes(String(t.id)) ? 'IN_PROGRESS' : 'PENDING',
+               title: `${providerTaskOsLabel({ ...t, id: String(t.id) })} — ${t.title || 'Manutenção'}`,
+               status: eff,
                isPendingSync: pendingSyncIds.has(String(t.id)),
                isCachedLocally: cachedExecutionKeys.has(`@brspark_execution_${t.id}`),
                service: t.title || 'Serviço Gên.',
                createdAt: t.startDate || new Date().toISOString(),
                dueDate: t.metadata?.dueDate || t.endDate || new Date(new Date().getTime() + 86400000).toISOString(),
                description: t.description || 'Nenhuma descrição detalhada foi fornecida para esta Ordem de Serviço.',
-               color: isCompleted ? '#10B981' : 
-                      (inprogressTasks.includes(String(t.id)) || acceptedTasks.includes(String(t.id))) ? '#F59E0B' : 
-                      '#94A3B8',
+               color: providerTaskListAccentColor(
+                 {
+                   ...t,
+                   id: String(t.id),
+                   status: eff,
+                   isAccepted: acceptedTasks.includes(String(t.id)),
+                 },
+                 completedSetForMap,
+                 inprogSetForMap
+               ),
                refId: t.refId,
                icon: t.metadata?.icon || t.icon || null,
-               isAccepted: acceptedTasks.includes(String(t.id))
+               isAccepted: acceptedTasks.includes(String(t.id)),
+               pauseReasonSummary: t.metadata?.lastPauseReasonSummary || null,
             };
          });
          // Default to NEWEST based on createdAt
@@ -1349,11 +1596,17 @@ export default function DashboardScreen() {
             {/* Provider Top Tabs */}
             <View style={{ flexDirection: 'row', marginHorizontal: 16, backgroundColor: '#F1F5F9', borderRadius: 14, padding: 4 }}>
               {[
-                { id: 'PENDING', label: 'Pendentes', color: '#D97706' },
-                { id: 'IN_PROGRESS', label: 'Em andamento', color: '#3B82F6' },
-                { id: 'COMPLETED', label: 'Concluídas', color: '#10B981' }
-              ].map(tab => {
+                { id: 'PENDING' as const, label: 'Pendentes', color: '#D97706' },
+                { id: 'IN_PROGRESS' as const, label: 'Em andamento', color: '#3B82F6' },
+                { id: 'COMPLETED' as const, label: 'Concluídas', color: '#10B981' },
+              ].map((tab) => {
               const isActive = providerTab === tab.id;
+              const stageCount =
+                tab.id === 'PENDING'
+                  ? providerStageCounts.pending
+                  : tab.id === 'IN_PROGRESS'
+                    ? providerStageCounts.inProgress
+                    : providerStageCounts.completed;
               return (
                 <TouchableOpacity
                   key={tab.id}
@@ -1370,8 +1623,12 @@ export default function DashboardScreen() {
                     shadowColor: isActive ? '#000' : 'transparent', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isActive ? 0.1 : 0, shadowRadius: 4, elevation: isActive ? 2 : 0
                   }}
                 >
-                  <Text style={{ fontSize: 11, fontWeight: isActive ? '900' : '700', color: isActive ? tab.color : '#64748B' }}>
+                  <Text
+                    style={{ fontSize: 11, fontWeight: isActive ? '900' : '700', color: isActive ? tab.color : '#64748B', textAlign: 'center' }}
+                    numberOfLines={2}
+                  >
                     {tab.label}
+                    <Text style={{ fontWeight: '800', opacity: isActive ? 0.92 : 0.85 }}>{` (${stageCount})`}</Text>
                   </Text>
                 </TouchableOpacity>
               );
@@ -1434,9 +1691,8 @@ export default function DashboardScreen() {
 
           {/* Provider Content Placeholder / List */}
           {providerTasks.filter(t => {
-            let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-            if (s === 'RECEIVED') s = 'PENDING';
-            return s === providerTab;
+            const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+            return providerTabMatchesTask(providerTab, s);
           }).length === 0 ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: 40 }}>
             <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
@@ -1453,11 +1709,10 @@ export default function DashboardScreen() {
             <View style={{ padding: 16 }}>
               {providerTasks
                 .filter(t => {
-                  let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-                  if (s === 'RECEIVED') s = 'PENDING';
-                  return s === providerTab;
+                  const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
+                  return providerTabMatchesTask(providerTab, s);
                 })
-                .filter(t => providerSearch === '' || t.id.toLowerCase().includes(providerSearch.toLowerCase()) || (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())))
+                .filter(t => providerSearch === '' || t.id.toLowerCase().includes(providerSearch.toLowerCase()) || (t.osNumber && String(t.osNumber).toLowerCase().includes(providerSearch.toLowerCase())) || (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())))
                 .sort((a,b) => {
                    if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
                        const d1 = osrmDurations[String(a.id)] ?? 999999;
@@ -1490,22 +1745,25 @@ export default function DashboardScreen() {
                    if (isNaN(tA) || isNaN(tB)) return 0;
                    return providerSortMode === 'NEWEST' ? tB - tA : tA - tB;
                 })
-                .map((order, index, arr) => (
+                .map((order, index, arr) => {
+                const listAccent = providerTaskListAccentColor(order, completedIds, inprogressIds);
+                const listEff = effectiveProviderTaskStatus(order, completedIds, inprogressIds);
+                return (
                 <View key={order.id} style={{ flexDirection: 'row', alignItems: 'stretch', marginBottom: 12 }}>
                   <View
                     style={{
                       flex: 1,
                       borderRadius: 16, overflow: 'hidden',
-                      shadowColor: order.color, shadowOffset: { width: 0, height: 3 },
+                      shadowColor: listAccent, shadowOffset: { width: 0, height: 3 },
                       shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
                     }}
                   >
                     {/* Gradient background wash from status color */}
                     <LinearGradient
-                      colors={[`${order.color}22`, `${order.color}08`, '#FFFFFF']}
+                      colors={[`${listAccent}22`, `${listAccent}08`, '#FFFFFF']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      style={{ borderRadius: 16, borderWidth: 1, borderColor: `${order.color}30` }}
+                      style={{ borderRadius: 16, borderWidth: 1, borderColor: `${listAccent}30` }}
                     >
                     <TouchableOpacity
                       activeOpacity={0.85}
@@ -1518,7 +1776,7 @@ export default function DashboardScreen() {
                       {/* Wide left accent bar */}
                       <View style={{
                         width: 6, borderTopLeftRadius: 16, borderBottomLeftRadius: 16,
-                        backgroundColor: order.color,
+                        backgroundColor: listAccent,
                       }} />
 
                       {/* Icon area with status tint */}
@@ -1528,14 +1786,14 @@ export default function DashboardScreen() {
                       }}>
                         <View style={{
                           width: 48, height: 48, borderRadius: 12,
-                          backgroundColor: `${order.color}20`,
-                          borderWidth: 1.5, borderColor: `${order.color}40`,
+                          backgroundColor: `${listAccent}20`,
+                          borderWidth: 1.5, borderColor: `${listAccent}40`,
                           justifyContent: 'center', alignItems: 'center',
                         }}>
                           <Ionicons
                             name={(order.icon as any) || 'construct-outline'}
                             size={24}
-                            color={order.color}
+                            color={listAccent}
                           />
                         </View>
                       </View>
@@ -1543,10 +1801,58 @@ export default function DashboardScreen() {
                       {/* Right Content */}
                       <View style={{ flex: 1, paddingVertical: 14, paddingRight: 14 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ fontSize: 10, fontWeight: '800', color: order.color, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                              OS {order.id.split('_').pop()?.substring(0, 12) || order.id.substring(0, 12)}
-                            </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                            <View
+                              style={{
+                                flexShrink: 1,
+                                backgroundColor: `${listAccent}26`,
+                                paddingHorizontal: 8,
+                                paddingVertical: 4,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: `${listAccent}4D`,
+                              }}
+                            >
+                              <Text
+                                style={{ fontSize: 10, fontWeight: '900', color: '#0F172A', letterSpacing: 0.35 }}
+                                numberOfLines={1}
+                              >
+                                {providerTaskOsLabel(order)}
+                              </Text>
+                            </View>
+                            {listEff === 'PAUSED' && (
+                              <View
+                                style={{
+                                  backgroundColor: '#FEE2E2',
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 2,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: '#FECACA',
+                                }}
+                              >
+                                <Text style={{ fontSize: 8, fontWeight: '900', color: '#B91C1C' }}>{t('pause.listBadge')}</Text>
+                              </View>
+                            )}
+                            {isProviderRevisionTask(order) && (
+                              <View
+                                style={{
+                                  backgroundColor: '#EEF2FF',
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 2,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: '#C7D2FE',
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <Ionicons name="refresh-circle-outline" size={11} color="#4338CA" style={{ marginRight: 3 }} />
+                                <Text style={{ fontSize: 8, fontWeight: '900', color: '#3730A3', letterSpacing: 0.2 }}>
+                                  {t('home.revisionBadge')}
+                                </Text>
+                              </View>
+                            )}
                             {(order as any).etaMinutes !== undefined && (order as any).etaMinutes !== null && (
                                <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center' }}>
                                   <Ionicons name="location" size={10} color="#166534" style={{ marginRight: 2 }} />
@@ -1554,7 +1860,7 @@ export default function DashboardScreen() {
                                </View>
                             )}
                           </View>
-                          {order.status === 'COMPLETED' && (
+                          {listEff === 'COMPLETED' && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                {order.isCachedLocally && !order.isPendingSync && (
                                    <Ionicons name="arrow-down" size={14} color="#10B981" style={{ marginRight: 2, marginTop: 2, fontWeight: '900' }} />
@@ -1583,7 +1889,7 @@ export default function DashboardScreen() {
 
                         {/* Footer dropdown */}
                         <TouchableOpacity
-                          style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: `${order.color}20`, paddingTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                          style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: `${listAccent}20`, paddingTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
                           onPress={() => setActiveCardDropdown(activeCardDropdown === order.id ? null : order.id)}
                         >
                           <Text style={{ fontSize: 10, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -1616,6 +1922,9 @@ export default function DashboardScreen() {
                             const coords = order.locationLat && order.locationLng ? { latitude: Number(order.locationLat), longitude: Number(order.locationLng) } : null;
                             if (coords) setRouteMapCenterObj({ lat: coords.latitude, lng: coords.longitude });
                             else setRouteMapCenterObj(null);
+                            if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
+                              setOsrmRouteCoords([]);
+                            }
                             setShowRouteMap(true);
                          }}
                          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF2F2' : '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706' }}>
@@ -1627,7 +1936,8 @@ export default function DashboardScreen() {
                     </View>
                 )}
                 </View>
-              ))}
+              );
+              })}
             </View>
           )}
         </ScrollView>
@@ -1747,9 +2057,31 @@ export default function DashboardScreen() {
                            )}
                        </View>
                      ) : null}
-                     <Text style={{ fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
-                       OS {String(selectedTask.id).split('_').pop() || selectedTask.id}
-                     </Text>
+                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap', paddingHorizontal: 8 }}>
+                       <View
+                         style={{
+                           backgroundColor: `${(selectedTask as { color?: string }).color || '#64748B'}26`,
+                           paddingHorizontal: 12,
+                           paddingVertical: 6,
+                           borderRadius: 10,
+                           borderWidth: 1,
+                           borderColor: `${(selectedTask as { color?: string }).color || '#64748B'}4D`,
+                           maxWidth: '100%',
+                         }}
+                       >
+                         <Text
+                           style={{
+                             fontSize: 13,
+                             fontWeight: '900',
+                             color: '#0F172A',
+                             letterSpacing: 0.4,
+                             textAlign: 'center',
+                           }}
+                         >
+                           {providerTaskOsLabel(selectedTask)}
+                         </Text>
+                       </View>
+                     </View>
                      <Text style={{ fontSize: 22, fontWeight: '900', color: '#0F172A', textAlign: 'center', lineHeight: 28, marginBottom: 20 }}>
                        {selectedTask.service}
                      </Text>
@@ -1915,20 +2247,115 @@ export default function DashboardScreen() {
                   </View>
                   )}
 
-                  {selectedTask.status === 'IN_PROGRESS' && (
-                  <View style={{ flexDirection: 'row', gap: 12 }}>
-                     <TouchableOpacity 
-                        onPress={() => {
-                           if (!selectedTask.refId || selectedTask.refId === 'null') {
-                               Alert.alert("Erro", "Formulário não associado a esta Atividade.");
+                  {(selectedTask.status === 'IN_PROGRESS' || selectedTask.status === 'PAUSED') && (
+                  <View style={{ gap: 12 }}>
+                     {selectedTask.status === 'PAUSED' ? (
+                       <>
+                         {(selectedTask as any).pauseReasonSummary ? (
+                           <View
+                             style={{
+                               backgroundColor: '#FEF2F2',
+                               borderRadius: 12,
+                               padding: 12,
+                               borderWidth: 1,
+                               borderColor: '#FECACA',
+                             }}
+                           >
+                             <Text style={{ fontSize: 11, fontWeight: '800', color: '#991B1B', marginBottom: 4 }}>
+                               {t('pause.listBadge')}
+                             </Text>
+                             <Text style={{ fontSize: 13, color: '#450A0A', lineHeight: 18 }}>
+                               {String((selectedTask as any).pauseReasonSummary)}
+                             </Text>
+                           </View>
+                         ) : null}
+                         <TouchableOpacity
+                           onPress={async () => {
+                             if (!selectedTask.refId || selectedTask.refId === 'null') {
+                               Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
                                return;
+                             }
+                             const id = String(selectedTask.id);
+                             const ts = new Date().toISOString();
+                             await enqueueExecutionStatusPatch(id, {
+                               status: 'IN_PROGRESS',
+                               timestamp: ts,
+                               metadata: { executionPaused: false, lastResumedAt: ts },
+                             });
+                             try {
+                               const raw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+                               let arr: any[] = [];
+                               try {
+                                 arr = JSON.parse(raw);
+                               } catch {
+                                 arr = [];
+                               }
+                               if (!Array.isArray(arr)) arr = [];
+                               const ix = arr.findIndex((x: any) => String(x.id) === id);
+                               if (ix >= 0) {
+                                 arr[ix] = {
+                                   ...arr[ix],
+                                   status: 'IN_PROGRESS',
+                                   metadata: {
+                                     ...(arr[ix].metadata || {}),
+                                     executionPaused: false,
+                                     lastResumedAt: ts,
+                                   },
+                                 };
+                                 await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(arr));
+                               }
+                             } catch {}
+                             setTaskModalVisible(false);
+                             loadData(false);
+                             router.push({
+                               pathname: '/checklist/[id]',
+                               params: { id: selectedTask.refId, taskId: selectedTask.id },
+                             } as any);
+                           }}
+                           style={{
+                             backgroundColor: '#DC2626',
+                             paddingVertical: 16,
+                             borderRadius: 14,
+                             alignItems: 'center',
+                             shadowColor: '#DC2626',
+                             shadowOffset: { width: 0, height: 4 },
+                             shadowOpacity: 0.3,
+                             shadowRadius: 8,
+                             elevation: 4,
+                           }}
+                         >
+                           <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>{t('pause.unpauseBtn')}</Text>
+                         </TouchableOpacity>
+                       </>
+                     ) : (
+                       <TouchableOpacity
+                         onPress={() => {
+                           if (!selectedTask.refId || selectedTask.refId === 'null') {
+                             Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
+                             return;
                            }
                            setTaskModalVisible(false);
-                           router.push({ pathname: '/checklist/[id]', params: { id: selectedTask.refId, taskId: selectedTask.id } } as any);
-                        }}
-                        style={{ flex: 1, backgroundColor: '#3B82F6', paddingVertical: 16, borderRadius: 14, alignItems: 'center', shadowColor: '#3B82F6', shadowOffset: {width:0,height:4}, shadowOpacity:0.3, shadowRadius:8, elevation: 4 }}>
+                           router.push({
+                             pathname: '/checklist/[id]',
+                             params: { id: selectedTask.refId, taskId: selectedTask.id },
+                           } as any);
+                         }}
+                         style={{
+                           flex: 1,
+                           backgroundColor: '#3B82F6',
+                           paddingVertical: 16,
+                           borderRadius: 14,
+                           alignItems: 'center',
+                           shadowColor: '#3B82F6',
+                           shadowOffset: { width: 0, height: 4 },
+                           shadowOpacity: 0.3,
+                           shadowRadius: 8,
+                           elevation: 4,
+                         }}
+                       >
                          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Iniciar / Retomar</Text>
-                     </TouchableOpacity>
+                       </TouchableOpacity>
+                     )}
                   </View>
                   )}
 
@@ -1984,13 +2411,9 @@ export default function DashboardScreen() {
                }}
              showsUserLocation
            >
-             {providerTasks.filter(t => {
-               let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-               if (s === 'RECEIVED') s = 'PENDING';
-               if (s !== 'PENDING') return false;
-               return !!(t.locationLat && t.locationLng);
-             }).map((task, index) => {
-                const coords = { latitude: Number(task.locationLat), longitude: Number(task.locationLng) };
+             {routeMapTasksOrdered.map((task, index) => {
+                const c = parseCoordLatLng(task)!;
+                const coords = { latitude: c.lat, longitude: c.lng };
                 return (
                    <Marker key={`rm-${task.id}`} coordinate={coords} zIndex={100 - index}>
                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 }}>
@@ -2012,18 +2435,20 @@ export default function DashboardScreen() {
              })}
              
              {osrmRouteCoords.length > 0 ? (
-               <Polyline 
-                 coordinates={osrmRouteCoords} 
-                 strokeColor="#3B82F6" 
-                 strokeWidth={5} 
+               <Polyline
+                 key={`osrm-poly-${osrmRouteCoords.length}-${String(osrmRouteCoords[0]?.latitude)}`}
+                 coordinates={osrmRouteCoords}
+                 strokeColor="#3B82F6"
+                 strokeWidth={5}
+                 lineJoin="round"
+                 lineCap="round"
                />
              ) : (
                <Polyline 
-                 coordinates={providerTasks.filter(t => {
-                   let s = completedIds.has(String(t.id)) ? 'COMPLETED' : inprogressIds.has(String(t.id)) ? 'IN_PROGRESS' : (t.status || 'PENDING');
-                   if (s === 'RECEIVED') s = 'PENDING';
-                   return s === 'PENDING' && !!(t.locationLat && t.locationLng);
-                 }).map(t => ({ latitude: Number(t.locationLat), longitude: Number(t.locationLng) }))} 
+                 coordinates={routeMapTasksOrdered.map((t) => {
+                   const c = parseCoordLatLng(t)!;
+                   return { latitude: c.lat, longitude: c.lng };
+                 })} 
                  strokeColor="#3B82F6" 
                  strokeWidth={2} 
                  lineDashPattern={[15, 10]}

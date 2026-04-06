@@ -1,0 +1,10 @@
+{
+  "name": "brspark-automatic-time",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

@@ -7,6 +7,7 @@
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 const ANDROID_CHANNEL_ID = 'brspark-alerts';
+const MAX_MESSAGES_PER_REQUEST = 100;
 
 async function sendExpoPush(to, payload) {
   const body = {
@@ -49,17 +50,78 @@ async function sendExpoPush(to, payload) {
 }
 
 /**
+ * Envia em lote (recomendado pela Expo) — um POST com até 100 mensagens.
  * @param {Array<{ token: string }|string>} entries
  * @param {{ title?: string, body?: string, data?: object }} payload
+ * @returns {Promise<{ ok: boolean, sent: number, errors: number, tickets: object[] }>}
  */
 async function sendExpoPushToMany(entries, payload) {
-  const results = [];
+  const tokens = [];
   for (const entry of entries) {
     const to = typeof entry === 'string' ? entry : entry?.token;
-    if (!to || typeof to !== 'string') continue;
-    results.push(await sendExpoPush(to, payload));
+    if (to && typeof to === 'string') tokens.push(to);
   }
-  return results;
+
+  if (tokens.length === 0) {
+    return { ok: true, sent: 0, errors: 0, tickets: [] };
+  }
+
+  const baseMsg = {
+    sound: 'default',
+    channelId: ANDROID_CHANNEL_ID,
+    priority: 'high',
+    ...payload,
+  };
+
+  let sent = 0;
+  let errors = 0;
+  const tickets = [];
+
+  for (let i = 0; i < tokens.length; i += MAX_MESSAGES_PER_REQUEST) {
+    const chunk = tokens.slice(i, i + MAX_MESSAGES_PER_REQUEST);
+    const messages = chunk.map((to) => ({ to, ...baseMsg }));
+
+    const res = await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+
+    let json = {};
+    try {
+      json = await res.json();
+    } catch (e) {
+      console.error('[ExpoPush] Resposta não-JSON:', e?.message || e);
+      errors += chunk.length;
+      continue;
+    }
+
+    if (!res.ok) {
+      console.error('[ExpoPush] HTTP', res.status, JSON.stringify(json).slice(0, 800));
+      errors += chunk.length;
+      continue;
+    }
+
+    const raw = json.data;
+    const batchTickets = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+    tickets.push(...batchTickets);
+
+    for (const t of batchTickets) {
+      if (!t || typeof t !== 'object') continue;
+      if (t.status === 'error') {
+        errors++;
+        console.error('[ExpoPush] ticket error:', t.message, JSON.stringify(t.details || '').slice(0, 300));
+      } else if (t.status === 'ok') {
+        sent++;
+      }
+    }
+  }
+
+  return { ok: errors === 0, sent, errors, tickets };
 }
 
 module.exports = {

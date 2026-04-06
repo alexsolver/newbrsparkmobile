@@ -16,6 +16,8 @@ import { AppProvider } from '../src/context/AppContext';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService } from '../src/services/notifications';
+import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
+import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -172,11 +174,15 @@ export default function RootLayout() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
-        <AuthProvider>
-          <AppProvider>
-            <MainLayout />
-          </AppProvider>
-        </AuthProvider>
+        <AutomaticTimeGate>
+          <GpsIntegrityGate>
+            <AuthProvider>
+              <AppProvider>
+                <MainLayout />
+              </AppProvider>
+            </AuthProvider>
+          </GpsIntegrityGate>
+        </AutomaticTimeGate>
       </ThemeProvider>
     </I18nextProvider>
   );

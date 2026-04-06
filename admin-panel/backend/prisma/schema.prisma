@@ -652,8 +652,16 @@ model ChecklistTemplate {
   executions  ChecklistExecution[]
 }
 
+/// Contador global por período AAAA-MM (fuso America/Sao_Paulo) para FT-AAAA-MM-NNNNNNN.
+model OsSerialCounter {
+  periodKey String @id
+  lastSeq   Int    @default(0)
+}
+
 model ChecklistExecution {
   id          String   @id @default(cuid())
+  /// Número convencional ex.: FT-2026-04-0000001. Único entre valores não nulos (índice parcial SQL; ver migration).
+  osNumber    String?
   templateId  String?
   template    ChecklistTemplate? @relation(fields: [templateId], references: [id])
   ownerEmail  String   // Email do Técnico/Coordenador
@@ -661,7 +669,11 @@ model ChecklistExecution {
   status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SYNCED
   responses   Json?    // Respostas nativas das perguntas (null enquanto PENDING)
   metadata    Json?    // Metadata do smartphone
-  
+  /// Última revisão concluída e sincronizada (0 = nunca; próximo submit = +1)
+  lastSubmittedRevision Int @default(0)
+
+  revisions ChecklistExecutionRevision[]
+
   // Localização do Local de Serviço (Geofencing)
   locationAddress  String?  // Endereço legível pelo gestor
   locationLat      Float?   // Latitude do ponto de destino (para radius)
@@ -681,6 +693,23 @@ model ChecklistExecution {
   @@index([ownerEmail])
   @@index([status])
   @@index([ownerEmail, status])
+}
+
+/// Snapshot imutável por conclusão (revisita = nova linha; FT/osNumber estáveis na execução).
+model ChecklistExecutionRevision {
+  id               String   @id @default(cuid())
+  executionId      String
+  execution        ChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  revision         Int
+  responses        Json
+  metadataSnapshot Json?
+  completedAt      DateTime?
+  /// Idempotência CRM / retries do outbox (único quando preenchido)
+  submissionId     String?  @unique
+  createdAt        DateTime @default(now())
+
+  @@unique([executionId, revision])
+  @@index([executionId])
 }
 
 // ─────────────────────────────────────────────────────────

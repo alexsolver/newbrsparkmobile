@@ -29,6 +29,7 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+.com.greenworldsoft.syncfolderspro
 
 # local env files
 .env
@@ -46,3 +47,7 @@ yarn-error.*
 admin-panel/backend/backups/*.sql.gz
 admin-panel/backend/backups/*.sql
 admin-panel/backups/.last_auto_backup
+
+# Uploads locais (JPEG/PNG/PDF, etc.) — não versionar; evita repo inchado e ficheiros tratados como texto
+admin-panel/backend/public/uploads/**
+!admin-panel/backend/public/uploads/.gitkeep

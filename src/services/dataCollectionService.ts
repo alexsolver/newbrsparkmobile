@@ -170,17 +170,19 @@ class DataCollectionService {
     if (eventType) {
       let lat = opts.lat;
       let lng = opts.lng;
-      
+      let accuracy: number | undefined;
+
       // se n passou loc no opts e for evento importante (ex: TRANSIT_START), força coleta no ato
       if (!lat && !lng && (eventType === 'TRANSIT_START' || eventType === 'GEOFENCE_ENTER' || eventType === 'OS_START' || eventType === 'CHECKIN')) {
-         const burst = await this.burstCapture();
-         if (burst) {
-            lat = burst.lat;
-            lng = burst.lng;
-         }
+        const burst = await this.burstCapture();
+        if (burst) {
+          lat = burst.lat;
+          lng = burst.lng;
+          accuracy = burst.accuracy;
+        }
       }
-      
-      await this.recordEvent(eventType, { previousState: prev, lat, lng });
+
+      await this.recordEvent(eventType, { previousState: prev, lat, lng, accuracy });
     }
 
     // Start new location strategy for this state
@@ -291,15 +293,27 @@ class DataCollectionService {
     const isMock = detectMockLocation(lat, lng, accuracy);
     if (isMock) {
       if (this.policy.mockGpsAction === 'BLOCK') {
-        await this.recordEvent('FRAUD_FLAG', { reason: 'MOCK_LOCATION', lat, lng });
+        await this.recordEvent('FRAUD_FLAG', {
+          reason: 'MOCK_LOCATION',
+          lat,
+          lng,
+          accuracy: accuracy ?? undefined,
+        });
         return; // don't record the fraudulent location
       }
-      await this.recordEvent('FRAUD_FLAG', { reason: 'MOCK_LOCATION', severity: 'HIGH', lat, lng });
+      await this.recordEvent('FRAUD_FLAG', {
+        reason: 'MOCK_LOCATION',
+        severity: 'HIGH',
+        lat,
+        lng,
+        accuracy: accuracy ?? undefined,
+      });
     }
 
-    await this.enqueueEvent({
-      eventType: type,
-      lat, lng, accuracy: accuracy ?? undefined,
+    await this.recordEvent(type, {
+      lat,
+      lng,
+      accuracy: accuracy ?? undefined,
       altitude: altitude ?? undefined,
       speed: speed ?? undefined,
       heading: heading ?? undefined,

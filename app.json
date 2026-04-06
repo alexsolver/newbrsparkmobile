@@ -15,6 +15,14 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSExceptionDomains": {
+            "osrm.lansolver.com": {
+              "NSIncludesSubdomains": true,
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        },
         "CFBundleLocalizations": [
           "pt",
           "en",
@@ -30,6 +38,7 @@
       "bundleIdentifier": "com.anonymous.BrsparkMobile"
     },
     "android": {
+      "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -54,6 +63,7 @@
       ],
       "package": "com.anonymous.BrsparkMobile"
     },
+    "extra": {},
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -66,6 +76,8 @@
         }
       ],
       "expo-router",
+      "expo-font",
+      "expo-asset",
       "@react-native-community/datetimepicker",
       "expo-localization",
       "expo-audio",

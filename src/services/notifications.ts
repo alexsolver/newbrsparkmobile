@@ -195,10 +195,10 @@ export const NotificationService = {
       return null;
     }
 
-    // Verificar se está rodando no Expo Go e Android (SDK 53 removeu suporte a Push no Expo Go Android)
+    // Expo Go no Android: push remoto não suportado (SDK 53+; continua em SDK 54)
     const isExpoGo = Constants.appOwnership === 'expo';
     if (Platform.OS === 'android' && isExpoGo) {
-      console.log('[BrSpark] Push notifications nativas não suportadas no Expo Go Android SDK 53+.');
+      console.log('[BrSpark] Push remoto não disponível no Expo Go Android (use dev/production build com EAS).');
       return null;
     }
 
@@ -217,7 +217,13 @@ export const NotificationService = {
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
       finalStatus = status;
     }
 
@@ -230,21 +236,38 @@ export const NotificationService = {
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ??
         (Constants as any).easConfig?.projectId;
-      const tokenData = projectId
-        ? await Notifications.getExpoPushTokenAsync({ projectId })
-        : await Notifications.getExpoPushTokenAsync();
+      if (!projectId || String(projectId).trim() === '') {
+        console.warn(
+          '[BrSpark] Push: falta extra.eas.projectId no manifest. Corra `npx eas init` na raiz do projeto (ou defina EAS_PROJECT_ID / EXPO_PUBLIC_EAS_PROJECT_ID no .env) e faça nova build iOS.'
+        );
+        return null;
+      }
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       console.log('[BrSpark] Expo Push Token:', tokenData.data);
       try {
-         await apiFetch('/api/sync/push_token', {
-            method: 'POST',
-            body: JSON.stringify({ token: tokenData.data, device: Platform.OS })
-         });
+        const res = await apiFetch('/api/sync/push_token', {
+          method: 'POST',
+          body: JSON.stringify({ token: tokenData.data, device: Platform.OS }),
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[BrSpark] push_token HTTP', res.status, txt.slice(0, 200));
+        } else {
+          console.log('[BrSpark] push_token registado no servidor (OK)');
+        }
       } catch (err) {
-         console.log('[BrSpark] Falha ao sincronizar token push no backend', err);
+        console.log('[BrSpark] Falha ao sincronizar token push no backend', err);
       }
       return tokenData.data;
-    } catch (e) {
-      console.log('[BrSpark] Erro ao obter push token:', e);
+    } catch (e: unknown) {
+      const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: string }).code : '';
+      if (code === 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID') {
+        console.warn(
+          '[BrSpark] Push sem projectId EAS. `npx eas init` + credenciais iOS em `eas credentials` (chave APNs).'
+        );
+      } else {
+        console.log('[BrSpark] Erro ao obter push token:', e);
+      }
       return null;
     }
   },

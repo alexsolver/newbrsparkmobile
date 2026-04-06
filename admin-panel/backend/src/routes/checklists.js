@@ -7,6 +7,7 @@ const authUser = require('../middleware/authUser');
 const { adminAuth } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
 
 function sameOwnerEmail(execEmail, jwtEmail) {
   if (!execEmail || !jwtEmail) return false;
@@ -51,6 +52,112 @@ router.post('/help-image', adminAuth, async (req, res) => {
   }
 });
 
+// --- Pastas de modelos (Form Builder → «Meus formulários») ---
+router.get('/template-folders', async (req, res) => {
+  try {
+    const rows = await prisma.checklistTemplateFolder.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /checklists/template-folders', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/template-folders', async (req, res) => {
+  try {
+    const { name, parentId } = req.body;
+    if (!name || typeof name !== 'string' || !String(name).trim()) {
+      return res.status(400).json({ error: 'Nome da pasta é obrigatório.' });
+    }
+    let parentIdNorm =
+      parentId == null || parentId === '' ? null : String(parentId);
+    if (parentIdNorm) {
+      const p = await prisma.checklistTemplateFolder.findUnique({
+        where: { id: parentIdNorm },
+      });
+      if (!p) {
+        return res.status(400).json({ error: 'Pasta pai não encontrada.' });
+      }
+    }
+    const row = await prisma.checklistTemplateFolder.create({
+      data: {
+        name: String(name).trim(),
+        parentId: parentIdNorm,
+      },
+    });
+    res.json(row);
+  } catch (err) {
+    console.error('POST /checklists/template-folders', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/template-folders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !String(name).trim()) {
+      return res.status(400).json({ error: 'Nome inválido.' });
+    }
+    const row = await prisma.checklistTemplateFolder.update({
+      where: { id },
+      data: { name: String(name).trim() },
+    });
+    res.json(row);
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Pasta não encontrada.' });
+    }
+    console.error('PATCH /checklists/template-folders/:id', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/template-folders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.checklistTemplateFolder.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Pasta não encontrada.' });
+    }
+    console.error('DELETE /checklists/template-folders/:id', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Mover modelo para outra pasta (dropdown no modal) */
+router.patch('/templates/:id/folder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { folderId } = req.body;
+    if (folderId === '' || folderId === undefined) folderId = null;
+    else folderId = String(folderId);
+    if (folderId) {
+      const fo = await prisma.checklistTemplateFolder.findUnique({
+        where: { id: folderId },
+      });
+      if (!fo) {
+        return res.status(400).json({ error: 'Pasta de destino não encontrada.' });
+      }
+    }
+    const updated = await prisma.checklistTemplate.update({
+      where: { id },
+      data: { folderId },
+    });
+    res.json(updated);
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Formulário não encontrado.' });
+    }
+    console.error('PATCH /checklists/templates/:id/folder', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Checklist Templates (O Construtor Salva Aqui, O Celular Lê Daqui) ---
 
 // GET /api/checklists/templates (Mobile puxa os modelos)
@@ -85,15 +192,36 @@ router.get('/templates/:id', async (req, res) => {
 // POST /api/checklists/templates (Admin Panel salva um schema)
 router.post('/templates', async (req, res) => {
     try {
-        const { id, title, description, settings, schemaData, metadata } = req.body;
-        
+        const { id, title, description, settings, metadata } = req.body;
+        let { schemaData, folderId } = req.body;
+        if (typeof schemaData === 'string') {
+            try {
+                schemaData = JSON.parse(schemaData);
+            } catch {
+                schemaData = [];
+            }
+        }
+        if (!Array.isArray(schemaData)) schemaData = [];
+        let folderIdNorm =
+            folderId === undefined ? undefined : folderId === '' || folderId === null ? null : String(folderId);
+        if (folderIdNorm) {
+            const fo = await prisma.checklistTemplateFolder.findUnique({
+                where: { id: folderIdNorm },
+            });
+            if (!fo) {
+                return res.status(400).json({ error: 'Pasta (folderId) não encontrada.' });
+            }
+        }
+
         // Upsert logica para editar formulário existente se vier ID
         if(id && typeof id === 'string') {
             const existing = await prisma.checklistTemplate.findUnique({ where: { id }});
             if(existing) {
+                const updateData = { title, description, settings, schemaData, metadata };
+                if (folderIdNorm !== undefined) updateData.folderId = folderIdNorm;
                 const updated = await prisma.checklistTemplate.update({
                     where: { id },
-                    data: { title, description, settings, schemaData, metadata }
+                    data: updateData
                 });
                 return res.json(updated);
             }
@@ -105,8 +233,9 @@ router.post('/templates', async (req, res) => {
                 title, 
                 description, 
                 settings: settings || {}, 
-                schemaData: schemaData || [],
-                metadata: metadata || {} 
+                schemaData,
+                metadata: metadata || {},
+                folderId: folderIdNorm === undefined ? null : folderIdNorm,
             }
         });
         res.json(created);
@@ -157,6 +286,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
     try {
         const { taskId } = req.params;
         const { status, timestamp, responses } = req.body;
+        const statusNorm = typeof status === 'string' ? status.trim().toUpperCase() : null;
         
         const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
@@ -166,27 +296,85 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
         const ts = timestamp ? new Date(timestamp) : new Date();
         const updateData = {};
-        
-        const weights = { 'PENDING': 0, 'RECEIVED': 1, 'ACCEPTED': 2, 'IN_PROGRESS': 3, 'COMPLETED': 4, 'SYNCED': 5, 'CANCELLED': 99 };
-        const newW = weights[status] || 0;
-        const oldW = weights[existing.status] || 0;
 
-        // Somente atualize o status se ele avança o state machine (ou é lateral)
-        if (newW >= oldW) {
-            updateData.status = status;
+        let mergedMeta =
+            typeof existing.metadata === 'object' && existing.metadata && !Array.isArray(existing.metadata)
+                ? { ...existing.metadata }
+                : {};
+        const reqMeta = req.body.metadata;
+        if (reqMeta && typeof reqMeta === 'object' && !Array.isArray(reqMeta)) {
+            mergedMeta = { ...mergedMeta, ...reqMeta };
         }
 
-        if (status === 'RECEIVED') {
-           updateData.metadata = { ...(typeof existing.metadata === 'object' && existing.metadata ? existing.metadata : {}), receivedAt: ts };
-        } else if (status === 'ACCEPTED') {
-           updateData.metadata = { ...(typeof existing.metadata === 'object' && existing.metadata ? existing.metadata : {}), acceptedAt: ts };
-        } else if (status === 'IN_PROGRESS') {
-           if (!existing.startedAt) updateData.startedAt = ts;
+        const weights = {
+            PENDING: 0,
+            RECEIVED: 1,
+            ACCEPTED: 2,
+            IN_PROGRESS: 3,
+            PAUSED: 3,
+            COMPLETED: 4,
+            SYNCED: 5,
+            CANCELLED: 99,
+        };
+        const newW = statusNorm ? (weights[statusNorm] || 0) : 0;
+        const oldW = weights[existing.status] || 0;
+
+        if (newW >= oldW && statusNorm) {
+            updateData.status = statusNorm;
+        }
+
+        if (statusNorm === 'RECEIVED') {
+            mergedMeta.receivedAt = ts;
+            // Revisão reaberta pelo admin: após o telemóvel confirmar receção, volta ao fluxo normal (Pendentes → Aceitar).
+            delete mergedMeta.reopenForRevisionPending;
+        } else if (statusNorm === 'ACCEPTED') {
+            mergedMeta.acceptedAt = ts;
+            delete mergedMeta.reopenForRevisionPending;
+        } else if (statusNorm === 'IN_PROGRESS') {
+            if (!existing.startedAt) updateData.startedAt = ts;
+            delete mergedMeta.reopenForRevisionPending;
         }
 
         if (responses) {
             updateData.responses = responses;
         }
+
+        // Pausa de atendimento: o app envia debounce só com `responses` + __form_paused_since — sem `status`.
+        // Sem isto a OS ficava IN_PROGRESS na central mesmo com o técnico em pausa.
+        if (responses && typeof responses === 'object' && !Array.isArray(responses) && responses.__form_paused_since) {
+            const exSt = String(existing.status || '');
+            if (!['COMPLETED', 'SYNCED', 'CANCELLED'].includes(exSt)) {
+                const pW = weights.PAUSED;
+                if (pW >= oldW) {
+                    updateData.status = 'PAUSED';
+                    mergedMeta.executionPaused = true;
+                    if (!mergedMeta.lastPauseAt) mergedMeta.lastPauseAt = String(responses.__form_paused_since);
+                    if (!mergedMeta.lastPauseReasonSummary) {
+                        let hist = responses.__pause_history;
+                        if (typeof hist === 'string') {
+                            try {
+                                hist = JSON.parse(hist);
+                            } catch {
+                                hist = null;
+                            }
+                        }
+                        if (Array.isArray(hist)) {
+                            for (let i = hist.length - 1; i >= 0; i--) {
+                                const ev = hist[i];
+                                if (ev && (ev.endedAt == null || ev.endedAt === '') && ev.startedAt) {
+                                    mergedMeta.lastPauseReasonSummary = [ev.categoryLabel, ev.subLabel, ev.detail]
+                                        .filter(Boolean)
+                                        .join(' — ');
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        updateData.metadata = mergedMeta;
 
         const execution = await prisma.checklistExecution.update({
             where: { id: taskId },
@@ -207,6 +395,11 @@ router.post('/executions', authUser, async (req, res) => {
         
         let execution;
         let finalTemplateId = templateId || id;
+        const metaIn = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+        const submissionId =
+            typeof metaIn.submissionId === 'string' && metaIn.submissionId.trim() ? metaIn.submissionId.trim() : null;
+        let clientRev = parseInt(String(metaIn.submissionRevision ?? req.body.submissionRevision ?? ''), 10);
+        const completedAtD = completedAt ? new Date(completedAt) : new Date();
         
         // If the task was dispatched from the cloud, the mobile app sends taskId. 
         // We update the existing PENDING execution instead of creating a new one!
@@ -216,41 +409,137 @@ router.post('/executions', authUser, async (req, res) => {
                 if (!sameOwnerEmail(existing.ownerEmail, authEmail)) {
                     return res.status(403).json({ error: 'Acesso negado a esta OS.' });
                 }
-                execution = await prisma.checklistExecution.update({
-                    where: { id: taskId },
-                    data: {
-                        status: 'COMPLETED',
-                        responses: responses || {},
-                        metadata: {
-                            ...(typeof existing.metadata === 'object' && existing.metadata ? existing.metadata : {}),
-                            ...(metadata || {})
-                        },
-                        gpsLocation: gpsLocation || null,
-                        startedAt: startedAt ? new Date(startedAt) : existing.startedAt,
-                        completedAt: completedAt ? new Date(completedAt) : new Date(),
-                        syncedAt: new Date()
+
+                if (submissionId) {
+                    const dup = await prisma.checklistExecutionRevision.findUnique({
+                        where: { submissionId },
+                    });
+                    if (dup) {
+                        return res.json({ success: true, executionId: existing.id, idempotent: true });
                     }
+                }
+
+                const lastSub = Number(existing.lastSubmittedRevision) || 0;
+                const expectedNext = lastSub + 1;
+                const stEx = String(existing.status || '').toUpperCase();
+
+                if (!Number.isFinite(clientRev) || clientRev < 1) {
+                    if (lastSub === 0) {
+                        clientRev = 1;
+                    } else if (['COMPLETED', 'SYNCED'].includes(stEx)) {
+                        const hasLastRev = await prisma.checklistExecutionRevision.findUnique({
+                            where: {
+                                executionId_revision: { executionId: taskId, revision: lastSub },
+                            },
+                        });
+                        if (hasLastRev) {
+                            return res.json({ success: true, executionId: existing.id, idempotent: true });
+                        }
+                        return res.status(400).json({
+                            error: 'Estado da execução inconsistente (revisão em falta). Contacte o suporte.',
+                            lastSubmittedRevision: lastSub,
+                        });
+                    } else {
+                        clientRev = lastSub + 1;
+                    }
+                }
+
+                const existingRev = await prisma.checklistExecutionRevision.findUnique({
+                    where: {
+                        executionId_revision: { executionId: taskId, revision: clientRev },
+                    },
+                });
+                if (existingRev) {
+                    return res.json({ success: true, executionId: existing.id, idempotent: true });
+                }
+
+                if (clientRev !== expectedNext) {
+                    return res.status(422).json({
+                        error: 'revision_mismatch',
+                        expectedNext,
+                        lastSubmittedRevision: lastSub,
+                    });
+                }
+
+                const existingMeta =
+                    typeof existing.metadata === 'object' && existing.metadata && !Array.isArray(existing.metadata)
+                        ? { ...existing.metadata }
+                        : {};
+
+                execution = await prisma.$transaction(async (tx) => {
+                    await tx.checklistExecutionRevision.create({
+                        data: {
+                            executionId: taskId,
+                            revision: clientRev,
+                            responses: responses || {},
+                            metadataSnapshot: metaIn,
+                            completedAt: completedAtD,
+                            submissionId: submissionId || null,
+                        },
+                    });
+                    return tx.checklistExecution.update({
+                        where: { id: taskId },
+                        data: {
+                            status: 'COMPLETED',
+                            lastSubmittedRevision: clientRev,
+                            responses: responses || {},
+                            metadata: { ...existingMeta, ...metaIn },
+                            gpsLocation: gpsLocation || null,
+                            startedAt: startedAt ? new Date(startedAt) : existing.startedAt,
+                            completedAt: completedAtD,
+                            syncedAt: new Date(),
+                        },
+                    });
                 });
             }
         }
         
         // Fallback: This is an ad-hoc local checklist execution not dispatched from the cloud. Create it.
         if (!execution) {
+            if (!Number.isFinite(clientRev) || clientRev < 1) clientRev = 1;
+            if (clientRev !== 1) {
+                return res.status(422).json({ error: 'revision_mismatch', expectedNext: 1, lastSubmittedRevision: 0 });
+            }
+            if (submissionId) {
+                const dup = await prisma.checklistExecutionRevision.findUnique({ where: { submissionId } });
+                if (dup) {
+                    const ex = await prisma.checklistExecution.findUnique({ where: { id: dup.executionId } });
+                    if (ex) {
+                        return res.json({ success: true, executionId: ex.id, idempotent: true });
+                    }
+                }
+            }
             const resolvedOwner =
               ownerEmail && sameOwnerEmail(ownerEmail, authEmail) ? ownerEmail : authEmail;
-            execution = await prisma.checklistExecution.create({
-                data: {
-                    templateId: finalTemplateId,
-                    ownerEmail: resolvedOwner || 'unknown@owner.com',
-                    assetId: assetId || null,
-                    status: 'COMPLETED',             // Já chega consolidado do Outbox
-                    responses: responses || {},
-                    metadata: metadata || {},
-                    gpsLocation: gpsLocation || null,
-                    startedAt: startedAt ? new Date(startedAt) : null,
-                    completedAt: completedAt ? new Date(completedAt) : new Date(),
-                    syncedAt: new Date()
-                }
+            const osNumber = await allocateNextFtOsNumber(prisma);
+            execution = await prisma.$transaction(async (tx) => {
+                const ex = await tx.checklistExecution.create({
+                    data: {
+                        osNumber,
+                        templateId: finalTemplateId,
+                        ownerEmail: resolvedOwner || 'unknown@owner.com',
+                        assetId: assetId || null,
+                        status: 'COMPLETED',
+                        lastSubmittedRevision: 1,
+                        responses: responses || {},
+                        metadata: metaIn,
+                        gpsLocation: gpsLocation || null,
+                        startedAt: startedAt ? new Date(startedAt) : null,
+                        completedAt: completedAtD,
+                        syncedAt: new Date(),
+                    },
+                });
+                await tx.checklistExecutionRevision.create({
+                    data: {
+                        executionId: ex.id,
+                        revision: 1,
+                        responses: responses || {},
+                        metadataSnapshot: metaIn,
+                        completedAt: completedAtD,
+                        submissionId: submissionId || null,
+                    },
+                });
+                return ex;
             });
         }
         
@@ -290,26 +579,31 @@ router.post('/dispatch', async (req, res) => {
             return res.status(400).json({ error: "ownerEmail and refId are required" });
         }
         
-        // Try to find the real template to get title/description
+        // Try to find the real template to get title/description (+ tenantId para push)
         let templateTitle = payload.title || 'Nova OS Designada';
         let templateDesc = payload.description || 'Tarefa de rotina despachada.';
         let realTemplateId = null;
-        
+        let loadedTemplate = null;
+
         try {
-            const template = await prisma.checklistTemplate.findUnique({ where: { id: payload.refId } });
-            if (template) {
-                realTemplateId = template.id;
-                templateTitle = template.title;
-                templateDesc = template.description || templateDesc;
+            loadedTemplate = await prisma.checklistTemplate.findUnique({ where: { id: payload.refId } });
+            if (loadedTemplate) {
+                realTemplateId = loadedTemplate.id;
+                templateTitle = loadedTemplate.title;
+                templateDesc = loadedTemplate.description || templateDesc;
             }
-        } catch(e) { /* template not found is OK for ad-hoc */ }
+        } catch (e) {
+            /* template not found is OK for ad-hoc */
+        }
 
         // Cada dispatch cria uma OS independente — sem deduplicação automática.
         // Admin pode cancelar OS via Central de Operações se necessário.
 
 
+        const osNumber = await allocateNextFtOsNumber(prisma);
         const execution = await prisma.checklistExecution.create({
             data: {
+                osNumber,
                 templateId: realTemplateId,    // nullable FK — ok if null
                 ownerEmail: payload.ownerEmail,
                 status: 'PENDING',
@@ -332,25 +626,69 @@ router.post('/dispatch', async (req, res) => {
         
         console.log(`[DISPATCH] 📍 locationZoneType=${execution.locationZoneType} | polygon.length=${Array.isArray(execution.locationPolygon) ? execution.locationPolygon.length : 'null'} | lat=${execution.locationLat}`);
         
-        // ─── Push se o técnico tiver token (channelId Android = brspark-alerts) ───
+        // ─── Push (channelId Android = brspark-alerts) ───
+        // User é único por (email, tenantId). findFirst só por email podia apanhar o tenant
+        // errado → zero PushToken. Com tenant do template restringimos; sem tenant, todos os Users com o e-mail.
         try {
-            const user = await prisma.user.findUnique({ where: { email: payload.ownerEmail.toLowerCase() } });
-            if (user) {
-                const pushTokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
-                if (pushTokens.length > 0) {
-                    await sendExpoPushToMany(pushTokens, {
+            const emailRaw = String(payload.ownerEmail || '').trim();
+            const emailFilter = { equals: emailRaw, mode: 'insensitive' };
+
+            let userIds = [];
+            if (loadedTemplate && loadedTemplate.tenantId) {
+                const u = await prisma.user.findFirst({
+                    where: {
+                        isActive: true,
+                        tenantId: loadedTemplate.tenantId,
+                        email: emailFilter,
+                    },
+                    select: { id: true, email: true },
+                });
+                if (u) userIds = [u.id];
+            } else {
+                const users = await prisma.user.findMany({
+                    where: { isActive: true, email: emailFilter },
+                    select: { id: true, email: true },
+                });
+                userIds = users.map((x) => x.id);
+                if (users.length > 1) {
+                    console.warn(
+                        '[DISPATCH] Vários utilizadores ativos com o mesmo e-mail (tenant distinto); push a todos os que tiverem token:',
+                        emailRaw
+                    );
+                }
+            }
+
+            if (userIds.length === 0) {
+                console.warn('[DISPATCH] Push ignorado: nenhum utilizador ativo com este e-mail:', emailRaw);
+            } else {
+                const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+                if (pushTokens.length === 0) {
+                    console.warn(
+                        '[DISPATCH] Push ignorado: técnico sem token (app logado + notificações). email=',
+                        emailRaw,
+                        'userIds=',
+                        userIds.join(',')
+                    );
+                } else {
+                    const pushRes = await sendExpoPushToMany(pushTokens, {
                         title: 'Nova OS designada',
                         body: templateTitle || 'Você recebeu uma nova atividade',
-                        data: { taskId: execution.id },
+                        data: { taskId: execution.id, type: 'os_dispatched' },
                     });
-                    console.log(`[DISPATCH] Push enviado para ${pushTokens.length} dispositivo(s).`);
+                    if (pushRes && pushRes.ok === false) {
+                        console.error('[DISPATCH] Expo push falhou:', pushRes);
+                    } else {
+                        console.log(
+                            `[DISPATCH] Push Expo: ${pushRes?.sent ?? '?'} ok / ${pushTokens.length} token(s)`
+                        );
+                    }
                 }
             }
         } catch (pushErr) {
             console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }
         
-        res.json({ success: true, task: { id: execution.id, refId: payload.refId } });
+        res.json({ success: true, task: { id: execution.id, refId: payload.refId, osNumber: execution.osNumber } });
     } catch (err) {
         console.error("POST /api/checklists/dispatch error:", err);
         res.status(500).json({ error: err.message });

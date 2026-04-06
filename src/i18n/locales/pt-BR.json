@@ -41,6 +41,23 @@
     "year": "ano",
     "month": "mês"
   },
+  "deviceTime": {
+    "checking": "A verificar data e hora…",
+    "blockTitle": "Data e hora do dispositivo",
+    "blockBodyAndroid": "Para utilizar o BrSpark, ative a data e hora automáticas e o fuso horário automático em Definições → Geral → Data e hora.",
+    "blockBodyIos": "O relógio do iPhone está muito diferente do servidor (mais de 3 minutos). Ative «Definir automaticamente» em Definições → Geral → Data e hora e confirme que tem ligação à internet.",
+    "openSettings": "Abrir definições",
+    "verifyAgain": "Verificar novamente"
+  },
+  "gpsIntegrity": {
+    "checking": "A verificar integridade do GPS…",
+    "blockTitle": "Localização não confiável",
+    "blockBodyAndroidSettings": "Foi detetada uma app de localização fictícia (ex.: Fake GPS) ou modo de teste nas opções de programador. Desative a app de localização fictícia e repor as definições de localização reais para continuar.",
+    "blockBodyAndroidPosition": "O sistema reportou que a posição atual é simulada. Desative apps de GPS falso e use apenas a localização real do dispositivo.",
+    "blockBodyIos": "A posição parece estar a ser simulada por software (por exemplo depuração com localização fictícia). Use apenas o GPS real do iPhone para utilizar o BrSpark.",
+    "openSettings": "Abrir definições",
+    "verifyAgain": "Verificar novamente"
+  },
   "tabs": {
     "home": "Início",
     "assets": "Bens",
@@ -611,6 +628,7 @@
     "searchTitle": "O que você está procurando?",
     "noProviders": "Nenhum prestador encontrado",
     "activePortfolio": "Portfólio",
+    "revisionBadge": "Revisão",
     "nextAgenda": "Agenda",
     "sort": {
       "default": "Filtro Padrão",
@@ -1113,6 +1131,94 @@
       "DAMAGE": "Dano",
       "WARRANTY": "Garantia",
       "OTHER": "Outro"
+    }
+  },
+  "pause": {
+    "pickCategory": "Motivo da pausa",
+    "pickSub": "Detalhe do motivo",
+    "modalLeadCategory": "Escolha a categoria que melhor descreve esta interrupção no atendimento.",
+    "modalLeadSub": "Selecione a opção específica. O cronómetro permanece congelado até continuar.",
+    "subNeedsDescription": "Descrição obrigatória",
+    "optionCount": "{{count}} opção",
+    "optionCount_plural": "{{count}} opções",
+    "otherDetail": "Descreva o motivo",
+    "otherDetailHint": "Obrigatório — mínimo de 12 caracteres",
+    "confirmPause": "Confirmar pausa",
+    "back": "Voltar",
+    "pausedTitle": "Em pausa",
+    "pausedHint": "O tempo de atendimento está congelado",
+    "pauseClock": "Tempo em pausa",
+    "overlayReasonLabel": "Motivo",
+    "continueBtn": "Continuar",
+    "exitBtn": "Sair da OS",
+    "exitTitle": "Sair da ordem de serviço?",
+    "exitMsg": "O rascunho será guardado. O atendimento ficará suspenso (pausado) na lista até despausar.",
+    "blockedTitle": "Atendimento suspenso",
+    "blockedHint": "Despause para voltar a preencher o formulário.",
+    "unpauseBtn": "Despausar atendimento",
+    "listBadge": "Pausada",
+    "validationDetail": "Descreva o motivo (mín. 12 caracteres).",
+    "cat": {
+      "personal": "Pessoal / necessidades",
+      "operational": "Operacional no serviço",
+      "logistics": "Deslocamento / logística",
+      "client_site": "Cliente / local",
+      "equipment": "Equipamento / veículo",
+      "safety": "Segurança / condições",
+      "communication": "Comunicação / sistema",
+      "admin": "Administrativo",
+      "other": "Outros"
+    },
+    "sub": {
+      "personal": {
+        "meal": "Refeição / lanche",
+        "rest": "Pausa / descanso",
+        "hygiene": "Higiene / sanitário",
+        "other": "Outro (pessoal) — especificar"
+      },
+      "operational": {
+        "wait_parts": "Aguardar peças / material",
+        "wait_approval": "Aguardar aprovação / orientação",
+        "redo_work": "Refazer etapa / retrabalho",
+        "other": "Outro (operacional) — especificar"
+      },
+      "logistics": {
+        "traffic": "Trânsito / atraso no percurso",
+        "fuel": "Abastecimento",
+        "parking": "Estacionamento / acesso",
+        "other": "Outro (logística) — especificar"
+      },
+      "client_site": {
+        "client_absent": "Cliente ausente",
+        "site_closed": "Local fechado / sem acesso",
+        "access_denied": "Acesso negado ao local",
+        "other": "Outro (local) — especificar"
+      },
+      "equipment": {
+        "tool_failure": "Falha de ferramenta / equipamento",
+        "vehicle_issue": "Problema no veículo",
+        "ppe": "EPI / equipamento de proteção",
+        "other": "Outro (equipamento) — especificar"
+      },
+      "safety": {
+        "weather": "Condições climáticas",
+        "hazard": "Risco / condição insegura",
+        "incident": "Incidente / emergência",
+        "other": "Outro (segurança) — especificar"
+      },
+      "communication": {
+        "call_supervisor": "Contactar supervisor / central",
+        "system_down": "Sistema / app indisponível",
+        "other": "Outro (comunicação) — especificar"
+      },
+      "admin": {
+        "documentation": "Documentação / registo",
+        "billing": "Faturação / aprovação comercial",
+        "other": "Outro (administrativo) — especificar"
+      },
+      "other": {
+        "free": "Especificar motivo"
+      }
     }
   }
 }

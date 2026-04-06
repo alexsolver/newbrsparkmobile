@@ -287,52 +287,87 @@ router.get('/config', async (_req, res) => {
   }
 });
 
+function mapChecklistExecutionToSyncTask(ex) {
+  let meta = ex.metadata || {};
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch (e) {
+      meta = {};
+    }
+  }
+
+  const refId = meta.refId || ex.templateId || null;
+  const title = meta.title || ex.template?.title || 'Nova OS Designada';
+  const description = meta.description || ex.template?.description || 'Tarefa de rotina despachada.';
+
+  const isDone = ['COMPLETED', 'SYNCED'].includes(String(ex.status || '').toUpperCase());
+  const anchorDate = isDone && ex.completedAt ? ex.completedAt : ex.createdAt;
+
+  return {
+    id: ex.id,
+    osNumber: ex.osNumber || null,
+    lastSubmittedRevision: ex.lastSubmittedRevision ?? 0,
+    refId,
+    ownerEmail: ex.ownerEmail,
+    category: 'TASK',
+    startDate: anchorDate,
+    endDate: new Date(new Date(anchorDate).getTime() + 86400000),
+    isAllDay: true,
+    source: 'CHECKLIST',
+    metadata: meta,
+    title,
+    description,
+    status: ex.status,
+    locationLat: ex.locationLat || null,
+    locationLng: ex.locationLng || null,
+    locationRadius: ex.locationRadius || null,
+    locationAddress: ex.locationAddress || null,
+    locationZoneType: ex.locationZoneType || null,
+    locationPolygon: ex.locationPolygon || null,
+    etaMinutes: ex.etaMinutes || null,
+  };
+}
+
 // ─── GET /api/sync/tasks ──────────────────────────────────────────────────────
-// Fetch active tasks for the mobile app (PENDING + IN_PROGRESS).
-// Side-effect: PENDING tasks are promoted to IN_PROGRESS on first pull,
-// which moves them from "Pendentes" → "Em Campo" in the admin Kanban.
+// OS ativas (pendentes / em campo) + concluídas recentes no servidor (para aba «Concluídas»
+// sem depender só do AsyncStorage local do telemóvel).
 router.get('/tasks', async (req, res) => {
   try {
-    const ownerEmail = req.query.owner_email || req.user?.email;
+    const ownerEmail = String(req.query.owner_email || req.user?.email || '').trim();
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
 
-    // Fetch all active tasks
+    const ownerWhere = { equals: ownerEmail, mode: 'insensitive' };
+
     const activeExecs = await prisma.checklistExecution.findMany({
-        where: { ownerEmail, status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS'] } },
-        include: { template: true }
+      where: {
+        ownerEmail: ownerWhere,
+        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+      },
+      include: { template: true },
     });
 
-    const userTasks = activeExecs.map(ex => {
-        let meta = ex.metadata || {};
-        if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch(e){} }
-
-        const refId       = meta.refId || ex.templateId || null;
-        const title       = meta.title       || ex.template?.title       || 'Nova OS Designada';
-        const description = meta.description || ex.template?.description || 'Tarefa de rotina despachada.';
-
-        return {
-            id: ex.id, refId, ownerEmail: ex.ownerEmail,
-            category: "TASK",
-            startDate: ex.createdAt,
-            endDate: new Date(new Date(ex.createdAt).getTime() + 86400000),
-            isAllDay: true, source: "CHECKLIST",
-            metadata: meta, title, description,
-            status: ex.status,
-            // Geofencing location
-            locationLat:      ex.locationLat      || null,
-            locationLng:      ex.locationLng      || null,
-            locationRadius:   ex.locationRadius   || null,
-            locationAddress:  ex.locationAddress  || null,
-            locationZoneType: ex.locationZoneType || null,
-            locationPolygon:  ex.locationPolygon  || null,
-            etaMinutes:       ex.etaMinutes       || null,
-        };
+    const doneExecs = await prisma.checklistExecution.findMany({
+      where: {
+        ownerEmail: ownerWhere,
+        status: { in: ['COMPLETED', 'SYNCED'] },
+      },
+      orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 400,
+      include: { template: true },
     });
 
-    console.log(`[sync/tasks] ✅ ${ownerEmail} → ${userTasks.length} OS(s) ativas`);
+    const seen = new Set(activeExecs.map((e) => e.id));
+    const merged = [...activeExecs, ...doneExecs.filter((e) => !seen.has(e.id))];
+
+    const userTasks = merged.map(mapChecklistExecutionToSyncTask);
+
+    console.log(
+      `[sync/tasks] ✅ ${ownerEmail} → ${activeExecs.length} ativa(s) + ${doneExecs.length} concl./sync → ${userTasks.length} no payload`
+    );
     res.json(userTasks);
   } catch (err) {
-    console.error("[sync/tasks]", err);
+    console.error('[sync/tasks]', err);
     res.status(500).json({ error: err.message });
   }
 });

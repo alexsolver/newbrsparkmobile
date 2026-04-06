@@ -3,6 +3,8 @@ const router = require('express').Router();
 const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
+const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('../lib/osrmBaseUrl');
+const { osrmEtaMinutesMatchOrRoute } = require('../lib/osrmEta');
 
 /** Sem GPS válido há N segundos → alerta para o técnico (notificação local no app). */
 const STALE_GPS_NOTIFY_SEC = Math.min(
@@ -91,7 +93,7 @@ async function runEtaCron() {
     const mapsInt = await prisma.integration.findFirst({
       where: { type: 'MAPS', name: 'OSRM', status: 'ACTIVE' }
     }).catch(() => null);
-    const osrmBase = (mapsInt?.baseUrl || 'https://router.project-osrm.org').replace(/\/$/, '');
+    const osrmBase = normalizeOsrmBaseUrl(mapsInt?.baseUrl || DEFAULT_OSRM_BASE);
 
     for (const task of activeTasks) {
       const meta = typeof task.metadata === 'object' && task.metadata ? task.metadata : {};
@@ -116,43 +118,46 @@ async function runEtaCron() {
 
       if (!destLat || !destLng) continue;
 
-      // Find latest GPS event for this task from telemetry
-      const latestEv = await prisma.telemetryEvent.findFirst({
+      // Trace recente (cron) → OSRM Match com timestamps/radiuses/tidy; fallback Route no helper
+      let traceRows = await prisma.telemetryEvent.findMany({
         where: { executionId: task.id, lat: { not: null }, lng: { not: null } },
         orderBy: { serverTimestamp: 'desc' },
-        select: { lat: true, lng: true, serverTimestamp: true }
+        take: 18,
+        select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
       });
+      traceRows.reverse();
 
-      // If no telemetry event, try to find the latest heartbeat from ownerEmail regardless
-      const fallbackEv = !latestEv ? await prisma.telemetryEvent.findFirst({
-        where: { ownerEmail: task.ownerEmail, lat: { not: null }, lng: { not: null } },
-        orderBy: { serverTimestamp: 'desc' },
-        select: { lat: true, lng: true }
-      }) : null;
+      if (traceRows.length === 0) {
+        const fallbackEv = await prisma.telemetryEvent.findFirst({
+          where: { ownerEmail: task.ownerEmail, lat: { not: null }, lng: { not: null } },
+          orderBy: { serverTimestamp: 'desc' },
+          select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
+        });
+        if (fallbackEv) traceRows = [fallbackEv];
+      }
 
-      const gps = latestEv || fallbackEv;
-      if (!gps) continue;
+      if (traceRows.length === 0) continue;
 
-      // Skip if GPS is stale (>30 minutes old)
-      if (latestEv?.serverTimestamp) {
-        const ageMin = (Date.now() - new Date(latestEv.serverTimestamp).getTime()) / 60000;
+      const newestTs = traceRows[traceRows.length - 1].serverTimestamp;
+      if (newestTs) {
+        const ageMin = (Date.now() - new Date(newestTs).getTime()) / 60000;
         if (ageMin > 30) continue;
       }
 
-      // Call OSRM
+      const trace = traceRows.map((row) => ({
+        lat: row.lat,
+        lng: row.lng,
+        at: row.serverTimestamp || row.deviceTimestamp || null,
+      }));
+
       try {
-        const url = `${osrmBase}/route/v1/driving/${gps.lng},${gps.lat};${destLng},${destLat}?overview=false`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        if (r.ok) {
-          const data = await r.json();
-          if (data.routes && data.routes[0]) {
-            const etaMinutes = Math.round(data.routes[0].duration / 60);
-            await prisma.checklistExecution.update({
-              where: { id: task.id },
-              data: { etaMinutes }
-            });
-            console.log(`[ETA Cron] Task ${task.id}: ${etaMinutes} min`);
-          }
+        const etaMinutes = await osrmEtaMinutesMatchOrRoute(osrmBase, trace, destLat, destLng);
+        if (etaMinutes != null) {
+          await prisma.checklistExecution.update({
+            where: { id: task.id },
+            data: { etaMinutes },
+          });
+          console.log(`[ETA Cron] Task ${task.id}: ${etaMinutes} min (match/route)`);
         }
       } catch (_) {}
     }
@@ -288,16 +293,12 @@ router.post('/batch', async (req, res) => {
         const execEvents = records.filter(r => r.executionId && r.lat !== null && r.lng !== null);
         if (execEvents.length === 0) return;
         
-        const latestEvents = {};
-        for (const ev of execEvents) {
-          latestEvents[ev.executionId] = ev; 
-        }
+        const execIds = [...new Set(execEvents.map((e) => e.executionId))];
 
         const mapsInt = await prisma.integration.findFirst({ where: { type: 'MAPS', name: 'OSRM', status: 'ACTIVE' } });
-        const osrmBaseUrl = (mapsInt?.baseUrl || 'https://router.project-osrm.org').replace(/\/$/, '');
+        const osrmBaseUrl = normalizeOsrmBaseUrl(mapsInt?.baseUrl || DEFAULT_OSRM_BASE);
 
-        for (const execId of Object.keys(latestEvents)) {
-          const ev = latestEvents[execId];
+        for (const execId of execIds) {
           const task = await prisma.checklistExecution.findUnique({
             where: { id: execId },
             select: { status: true, locationLat: true, locationLng: true, locationZoneType: true, locationPolygon: true, metadata: true }
@@ -319,25 +320,30 @@ router.post('/batch', async (req, res) => {
           const meta = typeof task?.metadata === 'object' && task?.metadata ? task.metadata : {};
 
           if (task && (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && destLat && destLng && !meta.trackingPaused && !meta.trackingEndedAt) {
-            const osrmUrl = `${osrmBaseUrl}/route/v1/driving/${ev.lng},${ev.lat};${destLng},${destLat}?overview=false`;
-            
-            try {
-              const osrmRes = await fetch(osrmUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
-              if (osrmRes.ok) {
-                const data = await osrmRes.json();
-                if (data.routes && data.routes.length > 0) {
-                  const durationSecs = data.routes[0].duration;
-                  const etaMinutes = Math.round(durationSecs / 60);
+            let traceRows = await prisma.telemetryEvent.findMany({
+              where: { executionId: execId, lat: { not: null }, lng: { not: null } },
+              orderBy: { serverTimestamp: 'desc' },
+              take: 18,
+              select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
+            });
+            traceRows.reverse();
+            const trace = traceRows.map((row) => ({
+              lat: row.lat,
+              lng: row.lng,
+              at: row.serverTimestamp || row.deviceTimestamp || null,
+            }));
 
-                  await prisma.checklistExecution.update({
-                    where: { id: execId },
-                    data: { etaMinutes }
-                  });
-                  console.log(`[ETA Engine] Updated task ${execId} ETA: ${etaMinutes} min`);
-                }
+            try {
+              const etaMinutes = await osrmEtaMinutesMatchOrRoute(osrmBaseUrl, trace, destLat, destLng);
+              if (etaMinutes != null) {
+                await prisma.checklistExecution.update({
+                  where: { id: execId },
+                  data: { etaMinutes },
+                });
+                console.log(`[ETA Engine] Updated task ${execId} ETA: ${etaMinutes} min (match/route)`);
               }
-            } catch(e) {
-              // Ignore timeouts/network errors from external free API
+            } catch (e) {
+              // Ignore timeouts/network errors
             }
           }
         }

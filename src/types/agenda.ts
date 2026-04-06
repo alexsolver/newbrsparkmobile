@@ -2,6 +2,8 @@ export type EventCategory = 'BOOKING' | 'MAINTENANCE' | 'FINANCE' | 'INSURANCE' 
 
 export interface AgendaEvent {
   id: string;
+  /** Número convencional da OS (ex. FT-2026-04-0000001), quando vindo da nuvem */
+  osNumber?: string | null;
   assetId?: string;       // Optional: tied to a specific asset
   title: string;
   description?: string;

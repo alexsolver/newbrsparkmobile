@@ -2,6 +2,21 @@
 const https  = require('https');
 const http   = require('http');
 
+function normEnum(v) {
+  return String(v ?? '')
+    .replace(/\uFEFF/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+/** Integração OSRM no painel — nome deve ser OSRM; tipo às vezes veio legado / inconsistente na BD */
+function isOsrmIntegration(integration) {
+  const name = normEnum(integration?.name);
+  const type = normEnum(integration?.type);
+  if (name === 'OSRM') return true;
+  return type === 'MAPS' && /^OSRM\b/i.test(String(integration?.name || '').replace(/\uFEFF/g, '').trim());
+}
+
 /**
  * Testa uma integração fazendo uma chamada real ao provider.
  * @param {object} integration  Registro do banco (inclui apiKey completa)
@@ -36,6 +51,11 @@ async function testIntegration(integration) {
     if (name === 'Dropbox')       return testDropbox(integration);
     if (name === 'Amazon S3')     return testS3(integration);
     if (name === 'Cloudflare R2') return testR2(integration);
+  }
+
+  // ── Mapas / OSRM (nome "OSRM" mesmo se type na BD não for MAPS — evita "teste não implementado")
+  if (isOsrmIntegration(integration)) {
+    return testOsrm(integration);
   }
 
   return { ok: false, message: `Teste não implementado para "${name}"` };
@@ -302,6 +322,41 @@ async function testUpcItemDb({ apiKey, baseUrl }) {
     if (r.status === 404) return { ok: true, message: 'UPCItemDB conectado ✓ (Produto de teste não encontrado)' }; 
     return { ok: false, message: `Integração retornou HTTP ${r.status}` };
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
+}
+
+// ── OSRM (MAPS) — testa Match (timestamps + radiuses + tidy) como telemetria/ETA ──
+async function testOsrm(integration) {
+  const { normalizeOsrmBaseUrl } = require('./osrmBaseUrl');
+  const base = normalizeOsrmBaseUrl(integration.baseUrl || '');
+  const t1 = Math.floor(Date.now() / 1000) - 120;
+  const t2 = t1 + 60;
+  const coordStr = '-46.6333,-23.5505;-46.6417,-23.5489';
+  const tsStr = `${t1};${t2}`;
+  const radiuses = '50;50';
+  const matchUrl = `${base}/match/v1/driving/${coordStr}?timestamps=${tsStr}&radiuses=${radiuses}&tidy=true`;
+  try {
+    const r = await fetch(matchUrl, { method: 'GET', signal: AbortSignal.timeout(12000) });
+    const text = await r.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      data = null;
+    }
+    if (r.ok && data && Array.isArray(data.matchings) && data.matchings[0] && typeof data.matchings[0].duration === 'number') {
+      return { ok: true, message: 'OSRM Match respondeu com duração válida ✓' };
+    }
+    const routeUrl = `${base}/route/v1/driving/-46.6333,-23.5505;-46.6417,-23.5489?overview=false`;
+    const r2 = await fetch(routeUrl, { method: 'GET', signal: AbortSignal.timeout(12000) });
+    const data2 = r2.ok ? await r2.json().catch(() => null) : null;
+    if (r2.ok && data2 && data2.routes && data2.routes[0] && typeof data2.routes[0].duration === 'number') {
+      return { ok: true, message: 'OSRM Route OK (Match indisponível neste servidor) ✓' };
+    }
+    if (!r.ok) return { ok: false, message: `OSRM Match HTTP ${r.status}` };
+    return { ok: false, message: (data && data.message) || 'Resposta OSRM Match sem matchings' };
+  } catch (e) {
+    return { ok: false, message: e.message || 'Falha de rede ao contatar OSRM' };
+  }
 }
 
 module.exports = { testIntegration };

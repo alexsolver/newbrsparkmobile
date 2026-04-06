@@ -13,6 +13,7 @@ import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
+import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src/services/osrmClient';
 
 /**
  * Android: `react-native-maps` usa Google Maps e precisa de API key no manifest.
@@ -33,6 +34,7 @@ interface Props {
   route: number[][];      // [[lat,lng], ...]
   visible: boolean;       // set true when transit_start is pressed
   zoneType?: string | null;
+  /** Destino explícito; pode omitir se `route` tiver pontos (o mapa usa o último vértice). */
   targetLoc?: { lat?: number | null; lng?: number | null };
   etaMinutes?: number | null;
   onEndTransit?: () => void;
@@ -65,37 +67,6 @@ function pickDestinationForOsrm(
   return null;
 }
 
-async function fetchOsrmDrivingMinutes(
-  oLat: number,
-  oLng: number,
-  dLat: number,
-  dLng: number
-): Promise<{ ok: boolean; minutes?: number }> {
-  const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=false`;
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 14000);
-  try {
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'User-Agent': 'BrsparkMobile/1.0' },
-      signal: ctrl.signal,
-    });
-    const text = await r.text();
-    let j: any;
-    try {
-      j = JSON.parse(text);
-    } catch {
-      return { ok: false };
-    }
-    if (!r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return { ok: false };
-    return { ok: true, minutes: Math.max(1, Math.round(j.routes[0].duration / 60)) };
-  } catch {
-    return { ok: false };
-  } finally {
-    clearTimeout(to);
-  }
-}
-
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
 function EtaBadge({
   etaMinutes,
@@ -118,11 +89,14 @@ function EtaBadge({
   }, []);
 
   const hasNum = typeof etaMinutes === 'number' && Number.isFinite(etaMinutes);
-  let timeStr = hint || 'Calculando...';
+  const waiting = !hasNum;
+  let timeStr = 'Calculando...';
   if (hasNum) {
     const hours = Math.floor(etaMinutes as number / 60);
-    const mins  = (etaMinutes as number) % 60;
+    const mins = (etaMinutes as number) % 60;
     timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
+  } else if (hint) {
+    timeStr = hint;
   }
 
   return (
@@ -140,14 +114,13 @@ function EtaBadge({
             <View style={etaStyles.dot} />
           </View>
           <Text style={etaStyles.label}>EM ROTA</Text>
-          <Ionicons name="navigate" size={10} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />
+          <Ionicons name="navigate" size={9} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />
         </View>
 
         {/* Main time display */}
         <Text style={etaStyles.time}>{timeStr}</Text>
 
-        {/* Sub label */}
-        <Text style={etaStyles.sub}>tempo estimado de chegada</Text>
+        {!waiting && <Text style={etaStyles.sub}>tempo estimado de chegada</Text>}
 
         {/* Progress bar if we have route data */}
         {pct > 0 && (
@@ -166,68 +139,69 @@ const etaStyles = StyleSheet.create({
     bottom: 185,
     left: 16,
     zIndex: 20,
-    borderRadius: 18,
+    borderRadius: 14,
     shadowColor: '#f97316',
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 12,
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   gradient: {
-    paddingHorizontal: 16,
-    paddingTop: 11,
-    paddingBottom: 12,
-    borderRadius: 18,
-    minWidth: 140,
+    paddingHorizontal: 11,
+    paddingTop: 7,
+    paddingBottom: 8,
+    borderRadius: 14,
+    minWidth: 112,
+    maxWidth: 220,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   dotWrapper: {
-    width: 12, height: 12,
+    width: 10, height: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    marginRight: 5,
   },
   dot: {
-    width: 6, height: 6,
-    borderRadius: 3,
+    width: 5, height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#fff',
     position: 'absolute',
   },
   pulseDot: {
-    width: 10, height: 10,
-    borderRadius: 5,
+    width: 8, height: 8,
+    borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
     position: 'absolute',
   },
   label: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 1.2,
+    letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
   time: {
-    fontSize: 26,
+    fontSize: 17,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -0.5,
-    lineHeight: 30,
+    letterSpacing: -0.3,
+    lineHeight: 21,
   },
   sub: {
-    fontSize: 10,
+    fontSize: 9,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '500',
-    marginTop: 2,
+    marginTop: 1,
   },
   progressTrack: {
-    height: 3,
+    height: 2,
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: 2,
-    marginTop: 8,
+    marginTop: 5,
     overflow: 'hidden',
   },
   progressFill: {
@@ -254,6 +228,12 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const [isPaused, setIsPaused] = useState(false);
   const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
   const [etaHint, setEtaHint] = useState<string | null>(null);
+
+  /** Refs: o efeito do ETA não pode depender de myPos/update — cada GPS reiniciava o efeito e abortava o fetch OSRM. */
+  const myPosRef = useRef(myPos);
+  const updateRef = useRef(update);
+  myPosRef.current = myPos;
+  updateRef.current = update;
 
   // Subscribe to route tracker updates
   useEffect(() => {
@@ -302,25 +282,102 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     };
   }, [visible, route, embedNativeMap]);
 
-  // Fetch dynamic OSRM route for point-to-point tasks (e.g. radius tasks)
+  // Linha no mapa: polilinha do template (≥2 pontos) OU reta OSRM + upgrade para geometria real.
+  // Destino = mesmo critério do ETA (pickDestinationForOsrm), não só targetLoc — senão falha quando o pai manda lat/lng indefinidos mas há pontos na rota.
+  const routeDestKey =
+    route?.length && route.length > 0
+      ? `${route[route.length - 1][0]},${route[route.length - 1][1]}`
+      : '';
+
   useEffect(() => {
-    if (visible && zoneType !== 'route' && zoneType !== 'segment' && myPos && targetLoc?.lat && targetLoc?.lng && !dynamicRoute) {
-      const fetchOsrm = async () => {
-        try {
-          const url = `https://router.project-osrm.org/route/v1/driving/${myPos.lng},${myPos.lat};${targetLoc.lng},${targetLoc.lat}?overview=full&geometries=geojson`;
-          const res = await fetch(url);
-          const data = await res.json();
-          if (data.routes && data.routes.length > 0) {
-            const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]); // OSRM gives lng,lat
-            setDynamicRoute(coords);
-          }
-        } catch (e) {
-          console.warn('[LiveRouteMap] OSRM fetch failed', e);
-        }
-      };
-      fetchOsrm();
+    if (!visible) {
+      setDynamicRoute(null);
+      return;
     }
-  }, [visible, zoneType, myPos, targetLoc, dynamicRoute]);
+    // Sempre pedir geometria OSRM (GPS → destino): templates com ≥3 vértices em linha quase reta
+    // não traziam pedido nenhum e o mapa ficava só com a polilinha “admin”.
+    const dest = pickDestinationForOsrm(targetLoc, route);
+    if (!dest) return;
+
+    let cancelled = false;
+    let osrmGeometryOk = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const attempt = async () => {
+      if (cancelled || osrmGeometryOk) return;
+      // Mesma origem que o ETA (routeTracker pode ter GPS antes do setState em myPos).
+      let oLat = myPosRef.current?.lat ?? updateRef.current?.currentLat;
+      let oLng = myPosRef.current?.lng ?? updateRef.current?.currentLng;
+      if (oLat == null || oLng == null) {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') return;
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          oLat = pos.coords.latitude;
+          oLng = pos.coords.longitude;
+        } catch {
+          return;
+        }
+      }
+      if (cancelled) return;
+      const dLat = dest.lat;
+      const dLng = dest.lng;
+      if (!Number.isFinite(dLat) || !Number.isFinite(dLng)) return;
+
+      const straight: number[][] = [
+        [oLat, oLng],
+        [dLat, dLng],
+      ];
+      // Com template denso, não mostrar reta de fallback por cima — só polilinha OSRM ou o laranja do template.
+      if (!cancelled && (!route || route.length <= 2)) {
+        setDynamicRoute(straight);
+      }
+
+      const line = await fetchDrivingGeometryLatLng(oLat, oLng, dLat, dLng);
+      if (cancelled) return;
+      if (line && line.length >= 2) {
+        osrmGeometryOk = true;
+        setDynamicRoute(line);
+        if (intervalId) clearInterval(intervalId);
+      } else if (!cancelled && route && route.length > 2) {
+        setDynamicRoute(null);
+      } else if (!cancelled && (!route || route.length <= 2)) {
+        setDynamicRoute(straight);
+      }
+    };
+
+    void attempt();
+    intervalId = setInterval(() => void attempt(), 12000);
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [visible, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng]);
+
+  // Encaixa rota + utilizador no ecrã (initialRegion sozinho cortava linhas longas).
+  useEffect(() => {
+    if (!embedNativeMap || !expanded) return;
+    const pts: { latitude: number; longitude: number }[] = [];
+    const pushRing = (ring: number[][]) => {
+      for (const c of ring) {
+        if (c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+          pts.push({ latitude: c[0], longitude: c[1] });
+        }
+      }
+    };
+    if (dynamicRoute && dynamicRoute.length >= 2) pushRing(dynamicRoute);
+    else if (route && route.length >= 2) pushRing(route);
+    if (myPos) pts.push({ latitude: myPos.lat, longitude: myPos.lng });
+    if (pts.length < 2) return;
+
+    const t = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(pts, {
+        edgePadding: { top: 130, right: 36, bottom: 240, left: 36 },
+        animated: true,
+      });
+    }, 450);
+    return () => clearTimeout(t);
+  }, [embedNativeMap, expanded, dynamicRoute, route, myPos?.lat, myPos?.lng]);
 
   const osrmDest = useMemo(
     () => pickDestinationForOsrm(targetLoc, route),
@@ -347,7 +404,8 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       return;
     }
     if (!osrmDest) {
-      setEtaHint('Sem coordenadas de destino');
+      setClientEtaMinutes(null);
+      setEtaHint(null);
       return;
     }
     const { lat: dLat, lng: dLng } = osrmDest;
@@ -356,12 +414,15 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     const tick = async () => {
       if (cancelled) return;
       try {
-        let oLat = myPos?.lat ?? update?.currentLat;
-        let oLng = myPos?.lng ?? update?.currentLng;
+        let oLat = myPosRef.current?.lat ?? updateRef.current?.currentLat;
+        let oLng = myPosRef.current?.lng ?? updateRef.current?.currentLng;
         if (oLat == null || oLng == null) {
           const { status } = await Location.requestForegroundPermissionsAsync();
           if (status !== 'granted') {
-            if (!cancelled) setEtaHint('Ative a localização para ver o tempo');
+            if (!cancelled) {
+              setClientEtaMinutes(null);
+              setEtaHint(null);
+            }
             return;
           }
           const pos = await Location.getCurrentPositionAsync({
@@ -371,19 +432,20 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           oLng = pos.coords.longitude;
         }
         if (cancelled) return;
-        let res = await fetchOsrmDrivingMinutes(oLat, oLng, dLat, dLng);
-        if (!res.ok && Number.isFinite(dLat) && Number.isFinite(dLng)) {
-          res = await fetchOsrmDrivingMinutes(oLat, oLng, dLng, dLat);
-        }
+        const res = await fetchDrivingLegEtaMinutes(oLat, oLng, dLat, dLng);
         if (cancelled) return;
         if (res.ok && res.minutes != null) {
           setClientEtaMinutes(res.minutes);
           setEtaHint(null);
         } else {
-          setEtaHint('Tempo indisponível (rede/OSRM)');
+          setClientEtaMinutes(null);
+          setEtaHint(null);
         }
       } catch {
-        if (!cancelled) setEtaHint('Tempo indisponível');
+        if (!cancelled) {
+          setClientEtaMinutes(null);
+          setEtaHint(null);
+        }
       }
     };
 
@@ -394,16 +456,17 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       cancelled = true;
       clearInterval(iv);
     };
-  }, [
-    visible,
-    parentHasFiniteEta,
-    osrmDest?.lat,
-    osrmDest?.lng,
-    myPos?.lat,
-    myPos?.lng,
-    update?.currentLat,
-    update?.currentLng,
-  ]);
+  }, [visible, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
+
+  /** Esconde polilinha do template quando há percurso dinâmico útil (evita duas linhas ou reta por cima da rota). */
+  const suppressTemplatePolyline =
+    !!(
+      route &&
+      route.length >= 2 &&
+      dynamicRoute &&
+      dynamicRoute.length >= 2 &&
+      (route.length === 2 || dynamicRoute.length > 2)
+    );
 
   if (!visible) return null;
 
@@ -569,19 +632,23 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           followsUserLocation={false}
           showsCompass={false}
         >
-          {route && route.length >= 2 && (
+          {route && route.length >= 2 && !suppressTemplatePolyline && (
             <Polyline
-              coordinates={route.map(c => ({ latitude: c[0], longitude: c[1] }))}
+              coordinates={route.map((c) => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#ea580c"
               strokeWidth={2}
-              lineDashPattern={[12, 8]}
+              lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
+              zIndex={800}
+              geodesic
             />
           )}
           {coveredPath && coveredPath.length >= 2 && (
             <Polyline
-              coordinates={coveredPath.map(c => ({ latitude: c[0], longitude: c[1] }))}
+              coordinates={coveredPath.map((c) => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#3b82f6"
-              strokeWidth={7}
+              strokeWidth={3}
+              zIndex={900}
+              geodesic
             />
           )}
           
@@ -596,18 +663,35 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </>
           )}
 
-          {zoneType === 'segment' && route && route.length >= 2 && (
+          {zoneType === 'segment' && route && route.length >= 2 && !suppressTemplatePolyline && (
             <>
+              <Polyline
+                coordinates={[
+                  { latitude: route[0][0], longitude: route[0][1] },
+                  { latitude: route[1][0], longitude: route[1][1] },
+                ]}
+                strokeColor="#a855f7"
+                strokeWidth={2}
+                lineDashPattern={Platform.OS === 'android' ? undefined : [10, 6]}
+                zIndex={750}
+                geodesic
+              />
               <Marker coordinate={{ latitude: route[0][0], longitude: route[0][1] }} title="Ponto A" pinColor="#2563eb" />
               <Marker coordinate={{ latitude: route[1][0], longitude: route[1][1] }} title="Ponto B" pinColor="#d946ef" />
-              {/* Note: In a real advanced app, we'd draw the segment polyline just like GeofenceMapScreen */}
             </>
           )}
           
-          {/* Render point-to-point dynamic route line and target marker */}
+          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível) */}
           {dynamicRoute && dynamicRoute.length >= 2 && (
              <>
-               <Polyline coordinates={dynamicRoute.map(c => ({ latitude: c[0], longitude: c[1] }))} strokeColor="#3b82f6" strokeWidth={2} lineDashPattern={[8, 8]} />
+               <Polyline
+                 coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                 strokeColor="#2563eb"
+                 strokeWidth={2}
+                 lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
+                 zIndex={1000}
+                 geodesic={false}
+               />
                <Marker coordinate={{ latitude: dynamicRoute[dynamicRoute.length - 1][0], longitude: dynamicRoute[dynamicRoute.length - 1][1] }} title="Destino">
                  <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
                    <FontAwesome5 name="flag-checkered" size={12} color="#fff" />

@@ -1,5 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('./src/db');
+const { allocateNextFtOsNumber } = require('./src/lib/ftOsNumber');
 
 async function main() {
   const email = 'alex@brspark.com';
@@ -19,9 +19,11 @@ async function main() {
 
   for (let t of tasks) {
     const dueDate = new Date(Date.now() + t.dueHours * 3600000).toISOString();
-    
+    const osNumber = await allocateNextFtOsNumber(prisma);
+
     await prisma.checklistExecution.create({
       data: {
+        osNumber,
         ownerEmail: email,
         status: t.status,
         locationLat: t.lat,
@@ -38,4 +40,6 @@ async function main() {
   console.log("✅ 5 atendimentos de teste para Rota+SLA criados com sucesso!");
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());

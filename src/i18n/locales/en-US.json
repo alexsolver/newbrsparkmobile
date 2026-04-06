@@ -41,6 +41,23 @@
     "year": "year",
     "month": "month"
   },
+  "deviceTime": {
+    "checking": "Checking date and time…",
+    "blockTitle": "Device date and time",
+    "blockBodyAndroid": "To use BrSpark, turn on automatic date and time and automatic time zone in Settings → System → Date & time (or General → Date & Time on some devices).",
+    "blockBodyIos": "Your iPhone clock differs from the server by more than 3 minutes. Turn on “Set Automatically” in Settings → General → Date & Time and ensure you have an internet connection.",
+    "openSettings": "Open settings",
+    "verifyAgain": "Check again"
+  },
+  "gpsIntegrity": {
+    "checking": "Verifying GPS integrity…",
+    "blockTitle": "Location not trusted",
+    "blockBodyAndroidSettings": "A mock-location app (e.g. Fake GPS) or developer mock location appears to be enabled. Turn it off and use real device location to continue.",
+    "blockBodyAndroidPosition": "The system reports your current position is mocked. Disable fake GPS apps and use only real GNSS location.",
+    "blockBodyIos": "Your position appears to be software-simulated (e.g. Xcode/custom location). Use only real iPhone GPS to use BrSpark.",
+    "openSettings": "Open settings",
+    "verifyAgain": "Check again"
+  },
   "tabs": {
     "home": "Home",
     "assets": "Properties",
@@ -611,6 +628,7 @@
     "searchTitle": "What are you looking for?",
     "noProviders": "No providers found",
     "activePortfolio": "Portfolio",
+    "revisionBadge": "Revision",
     "nextAgenda": "Availability",
     "sort": {
       "default": "Default Sort",
@@ -1113,6 +1131,94 @@
       "DAMAGE": "Damage",
       "WARRANTY": "Warranty",
       "OTHER": "Other"
+    }
+  },
+  "pause": {
+    "pickCategory": "Pause reason",
+    "pickSub": "Reason details",
+    "modalLeadCategory": "Pick the category that best describes this break in the visit.",
+    "modalLeadSub": "Choose the specific reason. The timer stays frozen until you resume.",
+    "subNeedsDescription": "Description required",
+    "optionCount": "{{count}} option",
+    "optionCount_plural": "{{count}} options",
+    "otherDetail": "Describe the reason",
+    "otherDetailHint": "Required — at least 12 characters",
+    "confirmPause": "Confirm pause",
+    "back": "Back",
+    "pausedTitle": "Paused",
+    "pausedHint": "Service time is frozen",
+    "pauseClock": "Time paused",
+    "overlayReasonLabel": "Reason",
+    "continueBtn": "Resume",
+    "exitBtn": "Leave work order",
+    "exitTitle": "Leave this work order?",
+    "exitMsg": "Your draft will be saved. The visit will stay suspended (paused) in the list until you unpause.",
+    "blockedTitle": "Visit suspended",
+    "blockedHint": "Unpause to continue filling the form.",
+    "unpauseBtn": "Unpause visit",
+    "listBadge": "Paused",
+    "validationDetail": "Describe the reason (min. 12 characters).",
+    "cat": {
+      "personal": "Personal needs",
+      "operational": "On-site operations",
+      "logistics": "Travel / logistics",
+      "client_site": "Client / site",
+      "equipment": "Equipment / vehicle",
+      "safety": "Safety / conditions",
+      "communication": "Communication / systems",
+      "admin": "Administrative",
+      "other": "Other"
+    },
+    "sub": {
+      "personal": {
+        "meal": "Meal / snack",
+        "rest": "Break / rest",
+        "hygiene": "Hygiene / restroom",
+        "other": "Other (personal) — specify"
+      },
+      "operational": {
+        "wait_parts": "Waiting for parts / material",
+        "wait_approval": "Waiting for approval / guidance",
+        "redo_work": "Redo step / rework",
+        "other": "Other (operational) — specify"
+      },
+      "logistics": {
+        "traffic": "Traffic / delay en route",
+        "fuel": "Refueling",
+        "parking": "Parking / access",
+        "other": "Other (logistics) — specify"
+      },
+      "client_site": {
+        "client_absent": "Client absent",
+        "site_closed": "Site closed / no access",
+        "access_denied": "Access denied",
+        "other": "Other (site) — specify"
+      },
+      "equipment": {
+        "tool_failure": "Tool / equipment failure",
+        "vehicle_issue": "Vehicle issue",
+        "ppe": "PPE missing / issue",
+        "other": "Other (equipment) — specify"
+      },
+      "safety": {
+        "weather": "Weather conditions",
+        "hazard": "Hazard / unsafe condition",
+        "incident": "Incident / emergency",
+        "other": "Other (safety) — specify"
+      },
+      "communication": {
+        "call_supervisor": "Contact supervisor / dispatch",
+        "system_down": "System / app unavailable",
+        "other": "Other (communication) — specify"
+      },
+      "admin": {
+        "documentation": "Documentation / paperwork",
+        "billing": "Billing / commercial approval",
+        "other": "Other (admin) — specify"
+      },
+      "other": {
+        "free": "Specify reason"
+      }
     }
   }
 }

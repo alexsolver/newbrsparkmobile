@@ -9,6 +9,8 @@
  * Retorna um IntegritySnapshot consumido pelo dataCollectionService.
  */
 import * as Device from 'expo-device';
+import * as Battery from 'expo-battery';
+import * as Network from 'expo-network';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
@@ -78,35 +80,72 @@ function detectRootJailbreak(): boolean {
 
 // ── Clock drift detection ───────────────────────────────────────────────────
 let _serverTimeDiff: number | null = null; // ms: positive = device ahead of server
+let _lastClockDriftFetchMs = 0;
+const CLOCK_DRIFT_MIN_INTERVAL_MS = 60_000;
 
 export async function measureClockDrift(): Promise<number | null> {
+  const now = Date.now();
+  if (_lastClockDriftFetchMs > 0 && now - _lastClockDriftFetchMs < CLOCK_DRIFT_MIN_INTERVAL_MS) {
+    return _serverTimeDiff;
+  }
   try {
     const t0 = Date.now();
     const res = await apiFetch('/health');
     const t1 = Date.now();
+    _lastClockDriftFetchMs = Date.now();
     if (!res.ok) return _serverTimeDiff;
     const body = await res.json();
     if (!body.ts) return _serverTimeDiff;
-    const serverTs  = new Date(body.ts).getTime();
+    const serverTs = new Date(body.ts).getTime();
     const roundTrip = (t1 - t0) / 2;
     _serverTimeDiff = Math.round(t0 + roundTrip - serverTs);
     return _serverTimeDiff;
   } catch {
+    _lastClockDriftFetchMs = Date.now();
     return _serverTimeDiff;
   }
 }
 
 async function getNetworkType(): Promise<IntegritySnapshot['networkType']> {
-  // Mocked for now to prevent ExpoNetwork native module crash.
-  // The Dev Client needs to be rebuilt to include expo-network's native iOS/Android code.
-  return 'UNKNOWN';
+  try {
+    const state = await Network.getNetworkStateAsync();
+    if (state.isConnected === false || state.type === Network.NetworkStateType.NONE) {
+      return 'OFFLINE';
+    }
+    switch (state.type) {
+      case Network.NetworkStateType.WIFI:
+        return 'WIFI';
+      case Network.NetworkStateType.CELLULAR:
+        // expo-network não distingue 4G/5G; alinhado ao comentário do schema (WIFI | 4G | 5G)
+        return '4G';
+      case Network.NetworkStateType.UNKNOWN:
+      case undefined:
+        return state.isConnected ? 'UNKNOWN' : 'OFFLINE';
+      default:
+        return 'UNKNOWN';
+    }
+  } catch {
+    return 'UNKNOWN';
+  }
 }
 
-// ── Battery ─────────────────────────────────────────────────────────────────
 async function getBattery(): Promise<{ level: number | null; charging: boolean | null }> {
-  // Mocked for now to prevent ExpoBattery native module crash.
-  // Requires iOS/Android Dev Client rebuild.
-  return { level: null, charging: null };
+  try {
+    const available = await Battery.isAvailableAsync();
+    if (!available) return { level: null, charging: null };
+    const power = await Battery.getPowerStateAsync();
+    const raw = power.batteryLevel;
+    const level = typeof raw === 'number' && raw >= 0 && raw <= 1 ? raw : null;
+    let charging: boolean | null = null;
+    if (power.batteryState === Battery.BatteryState.CHARGING || power.batteryState === Battery.BatteryState.FULL) {
+      charging = true;
+    } else if (power.batteryState === Battery.BatteryState.UNPLUGGED) {
+      charging = false;
+    }
+    return { level, charging };
+  } catch {
+    return { level: null, charging: null };
+  }
 }
 
 // ── Pseudonymized deviceId ───────────────────────────────────────────────────

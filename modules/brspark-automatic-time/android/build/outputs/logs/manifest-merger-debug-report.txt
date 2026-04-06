@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml:2:13-83
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml:2:13-83
+	package
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml
+	xmlns:android
+		ADDED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml:2:23-81
+uses-sdk
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml reason: use-sdk injection requested
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml
+INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml
+	android:targetSdkVersion
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml
+	android:minSdkVersion
+		INJECTED from /Users/alex/Desktop/BrsparkMobile/modules/brspark-automatic-time/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest5392881415839484434.xml

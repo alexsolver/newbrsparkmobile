@@ -297,24 +297,42 @@ router.get('/:token', async (req, res) => {
     /** true = link ainda "aberto" mas não há GPS recente (técnico pode ter fechado o app). */
     const signalLost = trackingActive && !freshGps;
 
-    // Build route polyline if available
+    // Polilinha do template (painel), até o cliente pedir rota nas ruas via /api/osrm/route-polyline
     let routePolyline = null;
-    if (exec.locationPolygon && Array.isArray(exec.locationPolygon) && exec.locationPolygon.length >= 2) {
-      routePolyline = exec.locationPolygon; // [[lat,lng], ...]
+    try {
+      let poly = exec.locationPolygon;
+      if (typeof poly === 'string') poly = JSON.parse(poly);
+      if (Array.isArray(poly) && poly.length >= 2) {
+        routePolyline = poly.map((pt) => {
+          if (Array.isArray(pt) && pt.length >= 2) return [Number(pt[0]), Number(pt[1])];
+          if (pt && pt.lat != null && pt.lng != null) return [Number(pt.lat), Number(pt.lng)];
+          return null;
+        }).filter((row) => row && row.every((n) => Number.isFinite(n)));
+        if (routePolyline.length < 2) routePolyline = null;
+      }
+    } catch (_) {
+      routePolyline = null;
     }
 
-    let destLat = exec.locationLat;
-    let destLng = exec.locationLng;
-    if ((!destLat || !destLng) && exec.locationPolygon) {
+    let destLat = exec.locationLat != null ? Number(exec.locationLat) : null;
+    let destLng = exec.locationLng != null ? Number(exec.locationLng) : null;
+    if ((!Number.isFinite(destLat) || !Number.isFinite(destLng)) && exec.locationPolygon) {
       try {
         const poly =
           typeof exec.locationPolygon === 'string'
             ? JSON.parse(exec.locationPolygon)
             : exec.locationPolygon;
         if (Array.isArray(poly) && poly.length > 0) {
-          const p0 = poly[0];
-          destLat = p0?.[0] ?? p0?.lat ?? destLat;
-          destLng = p0?.[1] ?? p0?.lng ?? destLng;
+          // Rota/segmento: destino costuma ser o último vértice, não o primeiro
+          const p = poly[poly.length - 1];
+          const la = p?.[0] ?? p?.lat;
+          const ln = p?.[1] ?? p?.lng;
+          const nla = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
+          const nln = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
+          if (Number.isFinite(nla) && Number.isFinite(nln)) {
+            destLat = nla;
+            destLng = nln;
+          }
         }
       } catch (_) {}
     }

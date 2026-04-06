@@ -10,6 +10,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiFetch, getToken } from './auth';
 import { 
   addToSyncQueue, getSyncQueue, clearSyncQueueItem, 
@@ -24,6 +25,81 @@ import { pushTrackingSyncQueue } from './trackingSyncQueue';
 
 let isSyncing = false;
 
+const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
+
+export type ExecutionStatusPatchBody = Record<string, unknown>;
+
+/**
+ * PATCH /api/checklists/executions/:taskId/status — tenta já; se falhar, guarda para o próximo pushSyncQueue.
+ */
+export async function enqueueExecutionStatusPatch(
+  taskId: string,
+  body: ExecutionStatusPatchBody
+): Promise<void> {
+  if (!taskId || typeof taskId !== 'string') return;
+  try {
+    const res = await apiFetch(`/api/checklists/executions/${taskId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return;
+  } catch {
+    /* offline */
+  }
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    let arr: unknown[] = [];
+    try {
+      arr = raw ? JSON.parse(raw) : [];
+    } catch {
+      arr = [];
+    }
+    if (!Array.isArray(arr)) arr = [];
+    arr.push({ taskId, body, queuedAt: Date.now() });
+    await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(arr));
+  } catch (e) {
+    console.warn('[SYNC] Falha ao enfileirar PATCH de estado da OS:', e);
+  }
+}
+
+async function pushExecutionStatusOutbox(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    if (!raw) return;
+    let arr: { taskId: string; body: ExecutionStatusPatchBody }[] = [];
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
+      return;
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return;
+
+    const remaining: typeof arr = [];
+    for (const item of arr) {
+      if (!item?.taskId || !item.body) continue;
+      try {
+        const res = await apiFetch(`/api/checklists/executions/${item.taskId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.body),
+        });
+        if (!res.ok) remaining.push(item);
+      } catch {
+        remaining.push(item);
+      }
+    }
+    if (remaining.length === 0) {
+      await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
+    } else {
+      await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(remaining));
+    }
+  } catch (e) {
+    console.warn('[SYNC] pushExecutionStatusOutbox:', e);
+  }
+}
+
 export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
   if (isSyncing) {
     console.log('[SYNC] Sincronização já em andamento, ignorando...');
@@ -36,6 +112,9 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
 
     // 0b. Pausa/retomada do link público (enfileirado offline no mapa ao vivo)
     await pushTrackingSyncQueue();
+
+    // 0c. PATCH de estado de execução (ex.: PAUSED / IN_PROGRESS) enfileirado offline
+    await pushExecutionStatusOutbox();
 
     // 1. Prioridade: Enviar checklists concluídos offline
     await pushChecklistOutbox();
@@ -70,6 +149,105 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
 
 // ── Helpers genéricos ─────────────────────────────────────────────────────────
 
+/** URIs locais que precisam de upload antes do POST da execução (não enviar file:// / content:// ao servidor). */
+function isLocalMediaUri(val: unknown): val is string {
+  if (typeof val !== 'string' || !val.trim()) return false;
+  const base = val.split('?')[0].trim().toLowerCase();
+  if (base.startsWith('http://') || base.startsWith('https://')) return false;
+  if (base.startsWith('file://')) return true;
+  if (base.startsWith('content://')) return true;
+  if (base.startsWith('ph://') || base.startsWith('assets-library://')) return true;
+  return false;
+}
+
+function guessExtFromUri(uri: string): string {
+  const pathOnly = uri.split('?')[0];
+  const m = pathOnly.match(/\.([a-z0-9]{2,5})$/i);
+  if (m) return m[1].toLowerCase();
+  return 'jpg';
+}
+
+/**
+ * Garante caminho file:// legível por readAsStringAsync (Android content://, iOS ph://, etc.).
+ */
+async function ensureUploadableFileUri(uri: string): Promise<string> {
+  const withoutQuery = uri.split('?')[0];
+  if (withoutQuery.startsWith('file://')) return withoutQuery;
+  if (
+    withoutQuery.startsWith('content://') ||
+    withoutQuery.startsWith('ph://') ||
+    withoutQuery.startsWith('assets-library://')
+  ) {
+    const ext = guessExtFromUri(withoutQuery);
+    const dest = `${FileSystem.cacheDirectory}chk_sync_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+    await FileSystem.copyAsync({ from: withoutQuery, to: dest });
+    return dest;
+  }
+  return withoutQuery;
+}
+
+async function uploadOneLocalMediaField(
+  localUriWithMaybeQuery: string,
+  payload: { taskId?: string; templateId?: string; ownerEmail?: string },
+  fieldKey: string,
+  indexSuffix: string
+): Promise<string | null> {
+  const emailSafe = (payload.ownerEmail || 'anon').replace(/[^a-zA-Z0-9]/g, '_');
+  const readable = await ensureUploadableFileUri(localUriWithMaybeQuery);
+  const ext = guessExtFromUri(readable) || 'jpg';
+  const remotePath = `checklists/${emailSafe}/${payload.taskId || payload.templateId}_${fieldKey}${indexSuffix}_${Date.now()}.${ext}`;
+  console.log(`[SYNC] Upload mídia checklist: ${readable.slice(0, 80)}… → ${remotePath}`);
+  const upRes = await uploadFile(readable, remotePath);
+  return upRes?.url || null;
+}
+
+/** Substitui file:// / content:// / arrays de URIs por URLs públicas antes de POST /executions. */
+async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
+  if (!payload?.responses || typeof payload.responses !== 'object') return;
+  const responses = payload.responses as Record<string, unknown>;
+
+  for (const key of Object.keys(responses)) {
+    if (key.startsWith('__')) continue;
+
+    const val = responses[key];
+
+    if (typeof val === 'string' && isLocalMediaUri(val)) {
+      try {
+        const url = await uploadOneLocalMediaField(val, payload, key, '');
+        if (url) {
+          responses[key] = url;
+          console.log(`[SYNC] Campo ${key} → URL remota`);
+        }
+      } catch (e: any) {
+        console.warn(`[SYNC] Falha upload mídia campo ${key}:`, e?.message || e);
+      }
+      continue;
+    }
+
+    if (Array.isArray(val)) {
+      let anyChange = false;
+      const next: unknown[] = [];
+      for (let i = 0; i < val.length; i++) {
+        const item = val[i];
+        if (typeof item === 'string' && isLocalMediaUri(item)) {
+          try {
+            const url = await uploadOneLocalMediaField(item, payload, key, `_i${i}`);
+            if (url) {
+              next.push(url);
+              anyChange = true;
+              continue;
+            }
+          } catch (e: any) {
+            console.warn(`[SYNC] Falha upload mídia ${key}[${i}]:`, e?.message || e);
+          }
+        }
+        next.push(item);
+      }
+      if (anyChange) responses[key] = next;
+    }
+  }
+}
+
 async function pushChecklistOutbox() {
   try {
      const raw = await AsyncStorage.getItem('@brspark_outbox');
@@ -89,30 +267,7 @@ async function pushChecklistOutbox() {
      const syncedIds: any[] = [];
      for (const payload of outbox) {
          try {
-             // Intercept responses to upload local media/signatures
-             if (payload.responses) {
-                 for (const key of Object.keys(payload.responses)) {
-                     const val = payload.responses[key];
-                     if (typeof val === 'string' && val.startsWith('file://')) {
-                         const cleanUri = val.split('?')[0]; // discard queries like ?live=true
-                         const ext = cleanUri.split('.').pop() || 'jpg';
-                         const emailSafe = (payload.ownerEmail || 'anon').replace(/[^a-zA-Z0-9]/g, '_');
-                         // Randomize path so it doesn't overwrite
-                         const remotePath = `checklists/${emailSafe}/${payload.taskId || payload.templateId}_${key}_${Date.now()}.${ext}`;
-                         try {
-                              console.log(`[SYNC] Fazendo upload offline da mídia: ${cleanUri}`);
-                              const upRes = await uploadFile(cleanUri, remotePath);
-                              if (upRes && upRes.url) {
-                                  payload.responses[key] = upRes.url;
-                                  console.log(`[SYNC] Mídia substituída por URL remota: ${upRes.url}`);
-                              }
-                         } catch (e: any) {
-                              console.warn(`[SYNC] Falha ao enviar mídia do form offline ${key}:`, e);
-                              // se falhar, não jogamos erro na queue inteira para não travar (mas vai falhar embaixo se o backend exigir URL)
-                         }
-                     }
-                 }
-             }
+             await uploadLocalMediaInChecklistPayload(payload);
 
              const res = await apiFetch('/api/checklists/executions', {
                  method: 'POST',
@@ -310,6 +465,244 @@ export async function pullMaintenances(ownerEmail?: string): Promise<void> {
   await pullModule(`/api/sync/maintenances${q}`, key);
 }
 
+/** metadata vindo como objeto ou string JSON (legado / cópias) */
+function parseTaskMetadata(meta: unknown): Record<string, unknown> {
+  if (meta == null) return {};
+  if (typeof meta === 'string') {
+    try {
+      const o = JSON.parse(meta);
+      return o && typeof o === 'object' ? (o as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof meta === 'object') return meta as Record<string, unknown>;
+  return {};
+}
+
+function isPausedLikeTask(t: any): boolean {
+  const raw = String(t?.status || '').toUpperCase();
+  if (raw === 'PAUSED') return true;
+  const m = parseTaskMetadata(t?.metadata);
+  const ep = m.executionPaused;
+  return ep === true || ep === 'true' || String(ep || '').toLowerCase() === 'true';
+}
+
+function isResumedLocalSnapshot(t: any): boolean {
+  const raw = String(t?.status || '').toUpperCase();
+  if (raw !== 'IN_PROGRESS') return false;
+  const m = parseTaskMetadata(t?.metadata);
+  const ep = m.executionPaused;
+  return ep === false || ep === 'false' || String(ep || '').toLowerCase() === 'false';
+}
+
+/**
+ * Evita apagar pausa/retomada local ao puxar lista: o servidor pode ainda não refletir o último PATCH.
+ */
+function pickOsNumber(remote: any, prev: any | undefined): string | null | undefined {
+  const r = remote?.osNumber != null && String(remote.osNumber).trim() !== '' ? String(remote.osNumber).trim() : null;
+  const p = prev?.osNumber != null && String(prev.osNumber).trim() !== '' ? String(prev.osNumber).trim() : null;
+  return r ?? p ?? remote?.osNumber ?? prev?.osNumber ?? null;
+}
+
+function pickLastSubmittedRevision(remote: any, prev: any | undefined): number {
+  const r = Number(remote?.lastSubmittedRevision);
+  const p = Number(prev?.lastSubmittedRevision);
+  const rn = Number.isFinite(r) ? r : 0;
+  const pn = Number.isFinite(p) ? p : 0;
+  return Math.max(rn, pn);
+}
+
+function remoteHasReopenRevisionPending(rMeta: Record<string, unknown>): boolean {
+  return (
+    rMeta.reopenForRevisionPending === true ||
+    rMeta.reopenForRevisionPending === 'true' ||
+    String(rMeta.reopenForRevisionPending || '').toLowerCase() === 'true'
+  );
+}
+
+/** O servidor remove reopenForRevisionPending após RECEIVED/ACCEPTED/IN_PROGRESS; não reintroduzir do cache local. */
+function stripStaleReopenFromMergedMetadata(
+  rMeta: Record<string, unknown>,
+  merged: Record<string, unknown>
+): void {
+  if (remoteHasReopenRevisionPending(rMeta)) return;
+  delete merged.reopenForRevisionPending;
+}
+
+function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): any {
+  const rMeta = parseTaskMetadata(remote?.metadata);
+  const lsr = pickLastSubmittedRevision(remote, prev);
+  if (!prev) {
+    return { ...remote, metadata: { ...rMeta }, osNumber: pickOsNumber(remote, prev), lastSubmittedRevision: lsr };
+  }
+  const pMeta = parseTaskMetadata(prev.metadata);
+
+  if (isResumedLocalSnapshot(prev) && isPausedLikeTask(remote)) {
+    const mergedMeta = {
+      ...rMeta,
+      ...pMeta,
+      executionPaused: false,
+    };
+    stripStaleReopenFromMergedMetadata(rMeta, mergedMeta);
+    return {
+      ...remote,
+      osNumber: pickOsNumber(remote, prev),
+      lastSubmittedRevision: lsr,
+      status: 'IN_PROGRESS',
+      metadata: mergedMeta,
+    };
+  }
+
+  if (isPausedLikeTask(prev) && !isPausedLikeTask(remote)) {
+    const rs = String(remote.status || '').toUpperCase();
+    if (rs === 'IN_PROGRESS' || rs === 'RECEIVED' || rs === 'PENDING' || rs === 'ACCEPTED') {
+      const mergedMeta = {
+        ...rMeta,
+        executionPaused: true,
+        lastPauseAt: pMeta.lastPauseAt ?? rMeta.lastPauseAt,
+        lastPauseReasonSummary: pMeta.lastPauseReasonSummary ?? rMeta.lastPauseReasonSummary,
+      };
+      stripStaleReopenFromMergedMetadata(rMeta, mergedMeta);
+      return {
+        ...remote,
+        osNumber: pickOsNumber(remote, prev),
+        lastSubmittedRevision: lsr,
+        status: 'PAUSED',
+        metadata: mergedMeta,
+      };
+    }
+  }
+
+  return {
+    ...remote,
+    metadata: { ...rMeta },
+    osNumber: pickOsNumber(remote, prev),
+    lastSubmittedRevision: lsr,
+  };
+}
+
+/** PATCH de execução ainda na fila (offline ou falha): deve vencer sobre o GET /tasks até sincronizar. */
+async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise<any[]> {
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
+    try {
+      arr = raw ? JSON.parse(raw) : [];
+    } catch {
+      return tasks;
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return tasks;
+
+    const lastBodyByTask = new Map<string, ExecutionStatusPatchBody>();
+    for (const item of arr) {
+      if (!item?.taskId || !item.body) continue;
+      const st = String(item.body.status || '').toUpperCase();
+      if (!st) continue;
+      lastBodyByTask.set(String(item.taskId), item.body);
+    }
+    if (lastBodyByTask.size === 0) return tasks;
+
+    return tasks.map((t) => {
+      const body = lastBodyByTask.get(String(t.id));
+      if (!body) return t;
+      const st = String(body.status || '').toUpperCase();
+      if (st !== 'PAUSED' && st !== 'IN_PROGRESS') return t;
+      const m = parseTaskMetadata(t.metadata);
+      const bm = parseTaskMetadata(body.metadata);
+      if (st === 'PAUSED') {
+        return {
+          ...t,
+          status: 'PAUSED',
+          metadata: { ...m, executionPaused: true, ...bm },
+        };
+      }
+      return {
+        ...t,
+        status: 'IN_PROGRESS',
+        metadata: { ...m, executionPaused: false, ...bm },
+      };
+    });
+  } catch {
+    return tasks;
+  }
+}
+
+const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
+
+/**
+ * OS reaberta para revisão: o mesmo id pode ainda estar em «aceites» do ciclo anterior.
+ * Limpa só accepted_tasks para voltar a exigir «Aceitar».
+ *
+ * Não limpar @brspark_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET
+ * (até RECEIVED/ACCEPTED/IN_PROGRESS no servidor), apagar inprogress a cada pullTasks
+ * desfaz o «Iniciar» e a OS nunca fica na aba Em andamento.
+ */
+async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<void> {
+  if (!Array.isArray(tasks) || tasks.length === 0) return;
+  const idSet = new Set<string>();
+  for (const t of tasks) {
+    if (t?.id == null) continue;
+    const m = parseTaskMetadata(t.metadata);
+    const rp =
+      m.reopenForRevisionPending === true ||
+      m.reopenForRevisionPending === 'true' ||
+      String(m.reopenForRevisionPending || '').toLowerCase() === 'true';
+    if (rp) idSet.add(String(t.id));
+  }
+  if (idSet.size === 0) return;
+  try {
+    const accRaw = await AsyncStorage.getItem('@brspark_accepted_tasks');
+    let acc: string[] = [];
+    try {
+      acc = accRaw ? JSON.parse(accRaw) : [];
+    } catch {
+      acc = [];
+    }
+    if (!Array.isArray(acc)) acc = [];
+    const accNext = acc.filter((id) => !idSet.has(String(id)));
+    if (accNext.length !== acc.length) {
+      const removed = acc.filter((id) => idSet.has(String(id)));
+      await AsyncStorage.setItem('@brspark_accepted_tasks', JSON.stringify(accNext));
+      console.log(`[pullTasks] revisão: removidos de accepted_tasks: ${removed.join(', ')}`);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Admin reabriu a OS: tirar o id de @brspark_executed_tasks para o cartão e o checklist voltarem a editáveis. */
+async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]): Promise<void> {
+  if (!Array.isArray(remoteTasks) || remoteTasks.length === 0) return;
+  const activeIds = new Set<string>();
+  for (const t of remoteTasks) {
+    const st = String(t?.status || '').toUpperCase();
+    if (ACTIVE_TASK_STATUSES.has(st) && t?.id != null) activeIds.add(String(t.id));
+  }
+  if (activeIds.size === 0) return;
+  try {
+    const raw = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
+    let arr: any[] = [];
+    try {
+      arr = raw ? JSON.parse(raw) : [];
+    } catch {
+      return;
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    const next = arr.filter((e) => {
+      const id = typeof e === 'string' ? e : e?.id;
+      if (id == null) return true;
+      return !activeIds.has(String(id));
+    });
+    if (next.length !== arr.length) {
+      await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(next));
+      console.log(`[pullTasks] Cache executed_tasks limpo para ${arr.length - next.length} OS(s) activas no servidor`);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function pullTasks(ownerEmail?: string): Promise<void> {
   const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
   console.log(`[pullTasks] 🔄 Iniciando para email: "${ownerEmail}" | URL: /api/sync/tasks${q}`);
@@ -322,9 +715,32 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         if (remoteTasks.length > 0) {
           console.log(`[pullTasks] Primeira OS: id=${remoteTasks[0].id} | title=${remoteTasks[0].title}`);
         }
-        
+
+        await removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks);
+
+        let existingList: any[] = [];
+        try {
+          const exRaw = await AsyncStorage.getItem('@brspark_cloud_tasks');
+          const ex = exRaw ? JSON.parse(exRaw) : [];
+          existingList = Array.isArray(ex) ? ex : [];
+        } catch {
+          existingList = [];
+        }
+        const prevById = new Map(existingList.map((t: any) => [String(t.id), t]));
+
+        const hadPriorTasksPull =
+          (await AsyncStorage.getItem('@brspark_pull_tasks_ever')) === '1';
+
+        const mergedRemote = remoteTasks.map((remote: any) =>
+          mergeRemoteCloudTaskWithPrevious(remote, prevById.get(String(remote.id)))
+        );
+
+        let processedTasks = await overlayExecutionStatusOutboxOnTasks(mergedRemote);
+
+        await clearLocalAcceptedTasksForRevisionReopen(processedTasks);
+
         // Add receivedAt timestamp so the server knows when the phone got it
-        const processedTasks = remoteTasks.map((t: any) => {
+        processedTasks = processedTasks.map((t: any) => {
             if (t.metadata && t.metadata.receivedAt) return t; // Already has it
             return {
                 ...t,
@@ -346,6 +762,34 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
                 body: JSON.stringify({ status: 'RECEIVED', timestamp: new Date().toISOString() })
             }))).catch(() => {});
         }
+
+        // Igual ao chat: aviso local quando a sync traz OS novas (push remoto do painel é independente).
+        if (hadPriorTasksPull) {
+          const newTasks = remoteTasks.filter((t: any) => {
+            const id = String(t.id);
+            if (prevById.has(id)) return false;
+            const st = String(t.status || '').toUpperCase();
+            return st === 'PENDING' || st === 'RECEIVED';
+          });
+          if (newTasks.length === 1) {
+            const ttl = String(newTasks[0].title || 'Nova OS').slice(0, 120);
+            Notifications.scheduleNotificationAsync({
+              content: { title: 'Nova OS designada', body: ttl, sound: 'default' },
+              trigger: null,
+            }).catch(() => {});
+          } else if (newTasks.length > 1) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Novas OS designadas',
+                body: `${newTasks.length} novas atividades na sua lista.`,
+                sound: 'default',
+              },
+              trigger: null,
+            }).catch(() => {});
+          }
+        }
+
+        await AsyncStorage.setItem('@brspark_pull_tasks_ever', '1');
         console.log(`[pullTasks] 💾 Cache @brspark_cloud_tasks atualizado`);
     } else {
         const err = await res.text();

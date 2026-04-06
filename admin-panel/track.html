@@ -534,25 +534,35 @@
 
   // ─── Render ────────────────────────────────────────────────
   
+  /**
+   * Geometria pelas ruas via API BrSpark (mesmo proxy do app — OSRM do painel, sem CORS no browser).
+   */
   async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+    const qs = new URLSearchParams({
+      oLat: String(startLat),
+      oLng: String(startLng),
+      dLat: String(endLat),
+      dLng: String(endLng),
+    });
     const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), 10000);
+    const to = setTimeout(() => ac.abort(), 90000);
     try {
-      const res = await fetch(url, { signal: ac.signal });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        // OSRM returns GeoJSON coordinates in [lng, lat] format
-        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-        return {
-          coords: coords,
-          etaMinutes: Math.ceil((route.duration || 0) / 60)
-        };
+      const res = await fetch(`${BASE}/api/osrm/route-polyline?${qs}`, {
+        signal: ac.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !Array.isArray(data.coordinates) || data.coordinates.length < 2) {
+        return null;
       }
+      const coords = data.coordinates.map((c) =>
+        Array.isArray(c) && c.length >= 2 ? [Number(c[0]), Number(c[1])] : null
+      ).filter(Boolean);
+      if (coords.length < 2) return null;
+      return { coords, etaMinutes: null };
     } catch (e) {
-      console.warn('[tracking] fallback OSRM fetch failed', e);
+      console.warn('[tracking] rota via API falhou', e);
     } finally {
       clearTimeout(to);
     }

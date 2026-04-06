@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Image, Modal, AppState, type AppStateStatus } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+  Modal,
+  AppState,
+  Platform,
+  type AppStateStatus,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -13,6 +30,7 @@ import { PanResponder } from 'react-native';
 import { colors } from '../../src/theme/colors';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/services/auth';
+import { fetchDrivingLegEtaMinutes } from '../../src/services/osrmClient';
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
@@ -20,8 +38,35 @@ import RouteProgressBar from './RouteProgressBar';
 import LiveRouteMapCard from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
-import { FieldHelpInstructions } from '../../src/components/FieldHelpInstructions';
+import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
+import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
+import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
+import { enqueueExecutionStatusPatch, pushSyncQueue } from '../../src/services/syncService';
+
+/** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
+const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  personal: 'person-outline',
+  operational: 'construct-outline',
+  logistics: 'car-outline',
+  client_site: 'business-outline',
+  equipment: 'hammer-outline',
+  safety: 'shield-checkmark-outline',
+  communication: 'chatbubbles-outline',
+  admin: 'document-text-outline',
+  other: 'ellipsis-horizontal-circle-outline',
+};
+const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
+  personal: '#7C3AED',
+  operational: '#EA580C',
+  logistics: '#0369A1',
+  client_site: '#059669',
+  equipment: '#475569',
+  safety: '#DC2626',
+  communication: '#4F46E5',
+  admin: '#CA8A04',
+  other: '#64748B',
+};
 
 /** Alinhado ao builder do painel — condição “cronómetro geral”. */
 const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
@@ -40,6 +85,81 @@ function getSectionTimingKeys(sectionId: string) {
   };
 }
 
+const PAUSE_HISTORY_KEY = '__pause_history';
+
+function newSubmissionId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function parsePauseHistory(responses: Record<string, any>): any[] {
+  const h = responses[PAUSE_HISTORY_KEY];
+  if (Array.isArray(h)) return h;
+  if (typeof h === 'string') {
+    try {
+      const p = JSON.parse(h);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/** Resumo do motivo da pausa ainda aberta (sem fechar o intervalo). */
+function getOpenPauseSummaryFromResponses(prev: Record<string, any>): string {
+  const hist = parsePauseHistory(prev);
+  for (let i = hist.length - 1; i >= 0; i--) {
+    if (hist[i]?.endedAt == null && hist[i]?.startedAt) {
+      return [hist[i].categoryLabel, hist[i].subLabel, hist[i].detail].filter(Boolean).join(' — ');
+    }
+  }
+  return '';
+}
+
+function pauseEventWindowMs(ev: any): { start: number; end: number } | null {
+  const s = ev?.startedAt ? new Date(ev.startedAt).getTime() : NaN;
+  const e = ev?.endedAt ? new Date(ev.endedAt).getTime() : NaN;
+  if (Number.isNaN(s) || Number.isNaN(e)) return null;
+  return { start: s, end: e };
+}
+
+function getCompletedPauseSeconds(responses: Record<string, any>): number {
+  let sec = 0;
+  for (const ev of parsePauseHistory(responses)) {
+    if (ev?.endedAt != null && ev?.durationSec != null) {
+      sec += Math.max(0, Number(ev.durationSec) || 0);
+    }
+  }
+  return sec;
+}
+
+function getActivePauseSeconds(responses: Record<string, any>, nowMs: number): number {
+  const since = responses.__form_paused_since;
+  if (!since) return 0;
+  const t = new Date(since).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.max(0, Math.floor((nowMs - t) / 1000));
+}
+
+function getTotalPausedSeconds(responses: Record<string, any>, nowMs: number): number {
+  return getCompletedPauseSeconds(responses) + getActivePauseSeconds(responses, nowMs);
+}
+
+function overlapSeconds(
+  windowStart: number,
+  windowEnd: number,
+  pauseStart: number,
+  pauseEnd: number
+): number {
+  const lo = Math.max(windowStart, pauseStart);
+  const hi = Math.min(windowEnd, pauseEnd);
+  return hi > lo ? Math.floor((hi - lo) / 1000) : 0;
+}
+
 /** Duração da etapa em segundos; null se ainda não houve início registado. */
 function getSectionElapsedSeconds(responses: Record<string, any>, sectionId: string, nowMs: number): number | null {
   const { start, end } = getSectionTimingKeys(sectionId);
@@ -50,7 +170,19 @@ function getSectionElapsedSeconds(responses: Record<string, any>, sectionId: str
   const e = responses[end];
   const endMs = e ? new Date(e).getTime() : nowMs;
   if (Number.isNaN(endMs)) return null;
-  return Math.max(0, Math.floor((endMs - startMs) / 1000));
+  let sec = Math.max(0, Math.floor((endMs - startMs) / 1000));
+  for (const ev of parsePauseHistory(responses)) {
+    const w = pauseEventWindowMs(ev);
+    if (w) sec -= overlapSeconds(startMs, endMs, w.start, w.end);
+  }
+  const since = responses.__form_paused_since;
+  if (since) {
+    const pt = new Date(since).getTime();
+    if (!Number.isNaN(pt)) {
+      sec -= overlapSeconds(startMs, endMs, pt, nowMs);
+    }
+  }
+  return Math.max(0, sec);
 }
 
 function getFormElapsedSeconds(responses: Record<string, any>, nowMs: number): number {
@@ -58,7 +190,8 @@ function getFormElapsedSeconds(responses: Record<string, any>, nowMs: number): n
   if (!raw) return 0;
   const t = new Date(raw).getTime();
   if (Number.isNaN(t)) return 0;
-  return Math.max(0, Math.floor((nowMs - t) / 1000));
+  const elapsed = Math.max(0, Math.floor((nowMs - t) / 1000));
+  return Math.max(0, elapsed - getTotalPausedSeconds(responses, nowMs));
 }
 
 function getFormActiveDisplaySeconds(
@@ -68,6 +201,7 @@ function getFormActiveDisplaySeconds(
 ): number {
   const base = Number(responses.__form_active_seconds);
   const b = Number.isFinite(base) && base >= 0 ? base : 0;
+  if (responses.__form_paused_since) return b;
   if (fgSegmentStart != null && nowMs >= fgSegmentStart) {
     return b + Math.floor((nowMs - fgSegmentStart) / 1000);
   }
@@ -92,6 +226,58 @@ const MULTIPLE_VALUE_TYPES = new Set([
 
 function fieldAllowsMultiple(field: any) {
   return !!field?.multiple && MULTIPLE_VALUE_TYPES.has(field?.type);
+}
+
+/** Legendas/comentários por item de foto ou ficheiro (quando allowMediaDescription no template). */
+function mediaCaptionStorageKey(fieldId: string) {
+  return `__media_cap_${fieldId}`;
+}
+
+function normalizeMediaCaptions(field: any, raw: any, mediaCount: number): string[] {
+  if (mediaCount <= 0) return [];
+  if (!fieldAllowsMultiple(field)) {
+    const s =
+      typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw) && raw[0] != null
+          ? String(raw[0])
+          : '';
+    return [s];
+  }
+  const base = Array.isArray(raw)
+    ? raw.map((x) => (x == null ? '' : String(x)))
+    : typeof raw === 'string'
+      ? [raw]
+      : [];
+  const out = [...base];
+  while (out.length < mediaCount) out.push('');
+  if (out.length > mediaCount) out.length = mediaCount;
+  return out;
+}
+
+function getMediaCaptionAt(field: any, responses: Record<string, any>, index: number): string {
+  const ck = mediaCaptionStorageKey(field.id);
+  const raw = responses[ck];
+  if (!fieldAllowsMultiple(field)) {
+    if (index !== 0) return '';
+    return typeof raw === 'string' ? raw : '';
+  }
+  const arr = Array.isArray(raw)
+    ? raw.map((x) => (x == null ? '' : String(x)))
+    : typeof raw === 'string'
+      ? [raw]
+      : [];
+  return arr[index] != null ? String(arr[index]) : '';
+}
+
+function shapeMediaCaptionStored(field: any, captions: string[]): string | string[] {
+  if (captions.length === 0) {
+    return fieldAllowsMultiple(field) ? [] : '';
+  }
+  if (!fieldAllowsMultiple(field)) {
+    return captions[0] ?? '';
+  }
+  return captions;
 }
 
 function multiMinItems(field: any): number {
@@ -129,6 +315,7 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
 /** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   if (!fieldAllowsMultiple(field)) {
+    if (field.type === 'location_pick') return isLocationPickAnswerValid(raw);
     if (raw === undefined || raw === null) return false;
     if (typeof raw === 'string') return raw.trim() !== '';
     if (typeof raw === 'number') return Number.isFinite(raw);
@@ -149,6 +336,18 @@ function normalizeEtaMinutes(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return Math.max(0, Math.round(raw));
   const n = parseInt(String(raw).trim(), 10);
   return Number.isFinite(n) ? Math.max(0, n) : null;
+}
+
+/**
+ * Par [a,b] vindo de polígono: pode ser GeoJSON [lng,lat] ou legado [lat,lng].
+ * Heurística para BR: se o 1.º valor parece longitude e o 2.º latitude, troca.
+ */
+function normalizePolygonPairToLatLng(a: number, b: number): [number, number] {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return [a, b];
+  const firstLooksLng = a <= -20 && a >= -80;
+  const secondLooksLat = b >= -35 && b <= 15;
+  if (firstLooksLng && secondLooksLat) return [b, a];
+  return [a, b];
 }
 
 /** Destino para OSRM: raiz da execução ou primeiro ponto do polígono/rota */
@@ -183,6 +382,7 @@ function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
   if (Array.isArray(p0)) {
     la = parseFloat(String(p0[0]));
     ln = parseFloat(String(p0[1]));
+    [la, ln] = normalizePolygonPairToLatLng(la, ln);
   } else if (p0 && typeof p0 === 'object') {
     la = parseFloat(String((p0 as any).lat));
     ln = parseFloat(String((p0 as any).lng ?? (p0 as any).lon));
@@ -193,15 +393,39 @@ function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
   return { lat: la, lng: ln };
 }
 
+/** Modo de visualização dentro da etapa (definido no separador de secção no builder). */
+function normalizeSectionFillMode(v: any): 'inherit' | 'list' | 'wizard' {
+  if (v === 'list' || v === 'wizard') return v;
+  return 'inherit';
+}
+
+function resolvePageInnerMode(
+  page: { sectionFillMode?: string } | null | undefined,
+  globalFill: 'full' | 'wizard' | 'hybrid'
+): 'list' | 'wizard' {
+  const m = normalizeSectionFillMode(page?.sectionFillMode);
+  if (m === 'list') return 'list';
+  if (m === 'wizard') return 'wizard';
+  return globalFill === 'wizard' ? 'wizard' : 'list';
+}
+
 export default function ChecklistEngine() {
+  const { t } = useTranslation();
   const { id, taskId } = useLocalSearchParams();
   const router = useRouter();
-  
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
   const [template, setTemplate] = useState<any>(null);
   const [responses, setResponses] = useState<any>({});
+  const responsesForPauseExitRef = useRef(responses);
+  responsesForPauseExitRef.current = responses;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [wizardIndex, setWizardIndex] = useState(0);
+  /** Dentro de uma etapa em modo híbrido com «um campo de cada vez» só nessa etapa */
+  const [hybridInnerWizardIndex, setHybridInnerWizardIndex] = useState(0);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [isReadOnly, setIsReadOnly] = useState(false);
 
@@ -241,6 +465,24 @@ export default function ChecklistEngine() {
 
   const [ruleTick, setRuleTick] = useState(0);
   const fgSegmentStartRef = useRef<number | null>(null);
+  /** Próximo número de revisão a enviar em POST /executions (lastSubmittedRevision + 1). */
+  const nextSubmissionRevisionRef = useRef(1);
+  /** Pausa de sessão ou pausa imposta pelo servidor — não contar tempo em foco. */
+  const timersFrozenRef = useRef(false);
+
+  const [serverPausedExecution, setServerPausedExecution] = useState(false);
+  const [pauseReasonModalVisible, setPauseReasonModalVisible] = useState(false);
+  const [pausePickerStep, setPausePickerStep] = useState<'category' | 'sub'>('category');
+  const [pauseSelectedCategory, setPauseSelectedCategory] = useState<PauseCategoryDef | null>(null);
+  const [pauseDetailDraft, setPauseDetailDraft] = useState('');
+  const [pauseHighlightSubId, setPauseHighlightSubId] = useState<string | null>(null);
+  /** Evita dois Alert seguidos ao premir o mesmo fluxo duas vezes muito rápido. */
+  const pauseExitAlertGateRef = useRef(0);
+  /**
+   * Após confirmar «Sair da OS», o router.back() dispara beforeRemove com __form_paused_since ainda true
+   * (o estado só limpa depois). Sem isto, o listener mostrava o mesmo Alert outra vez.
+   */
+  const pauseExitBypassBeforeRemoveUntilRef = useRef(0);
 
   useEffect(() => {
     if (loading || isReadOnly) return;
@@ -250,10 +492,28 @@ export default function ChecklistEngine() {
 
   const draftKeyForForm = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${typeof id === 'string' ? id : Array.isArray(id) ? id[0] : String(id || '')}`;
 
+  const flushForegroundSegmentToResponses = useCallback(() => {
+    const now = Date.now();
+    if (fgSegmentStartRef.current == null) return;
+    const delta = Math.floor((now - fgSegmentStartRef.current) / 1000);
+    fgSegmentStartRef.current = null;
+    if (delta <= 0) return;
+    setResponses((prev: any) => {
+      const b = Number(prev.__form_active_seconds) || 0;
+      const nextTotal = b + delta;
+      AsyncStorage.setItem(draftKeyForForm, JSON.stringify({ ...prev, __form_active_seconds: nextTotal })).catch(() => {});
+      return { ...prev, __form_active_seconds: nextTotal };
+    });
+  }, [draftKeyForForm]);
+
   useEffect(() => {
     if (loading || isReadOnly) return;
     fgSegmentStartRef.current = Date.now();
     const handle = (next: AppStateStatus) => {
+      if (timersFrozenRef.current) {
+        if (next !== 'active') fgSegmentStartRef.current = null;
+        return;
+      }
       const now = Date.now();
       if (next === 'active') {
         fgSegmentStartRef.current = now;
@@ -273,6 +533,12 @@ export default function ChecklistEngine() {
     const sub = AppState.addEventListener('change', handle);
     return () => sub.remove();
   }, [loading, isReadOnly, draftKeyForForm]);
+
+  useEffect(() => {
+    const frozen = !!(serverPausedExecution || responses.__form_paused_since);
+    timersFrozenRef.current = frozen;
+    if (frozen) fgSegmentStartRef.current = null;
+  }, [serverPausedExecution, responses.__form_paused_since]);
 
   useEffect(() => {
     currentTaskRef.current = currentTask;
@@ -402,6 +668,9 @@ export default function ChecklistEngine() {
           }
       }
       handleInput(fieldId, imgUri);
+      if (fieldData?.allowMediaDescription) {
+        handleInput(mediaCaptionStorageKey(fieldId), '');
+      }
       return true;
   };
 
@@ -451,6 +720,10 @@ export default function ChecklistEngine() {
   // ───────────────────────────────────────────────────
 
   const handleTransit = async (fieldId: string, label: string, traversedPath?: number[][]) => {
+    if (serverPausedExecution || responses.__form_paused_since) {
+      Alert.alert(t('common.attention'), t('pause.pausedTitle'));
+      return;
+    }
     const isGeofenceCheck = label === 'VALIDACAO_CERCA';
     try {
       setSubmitting(true);
@@ -682,10 +955,20 @@ export default function ChecklistEngine() {
      if (isReadOnly || !taskId || Object.keys(responses).length === 0) return;
      
      const timeoutId = setTimeout(() => {
+         const body: Record<string, unknown> = { responses };
+         if (responses.__form_paused_since) {
+           body.status = 'PAUSED';
+           body.timestamp = responses.__form_paused_since;
+           body.metadata = {
+             executionPaused: true,
+             lastPauseReasonSummary: getOpenPauseSummaryFromResponses(responses),
+             lastPauseAt: responses.__form_paused_since,
+           };
+         }
          apiFetch(`/api/checklists/executions/${taskId}/status`, {
              method: 'PATCH',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ responses })
+             body: JSON.stringify(body)
          }).catch(() => {});
      }, 2000); // 2 second debounce
      
@@ -709,26 +992,8 @@ export default function ChecklistEngine() {
         });
         const oLng = pos.coords.longitude;
         const oLat = pos.coords.latitude;
-        const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${destLng},${destLat}?overview=false`;
-        const init: RequestInit = {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'BrsparkMobile/1.0',
-          },
-        };
-        if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
-          (init as any).signal = (AbortSignal as any).timeout(15000);
-        }
-        const r = await fetch(url, init);
-        const text = await r.text();
-        let j: any;
-        try {
-          j = JSON.parse(text);
-        } catch {
-          return null;
-        }
-        if (!r.ok || j.code !== 'Ok' || j.routes?.[0]?.duration == null) return null;
-        return Math.max(1, Math.round(j.routes[0].duration / 60));
+        const res = await fetchDrivingLegEtaMinutes(oLat, oLng, destLat, destLng);
+        return res.ok && res.minutes != null ? res.minutes : null;
       } catch {
         return null;
       }
@@ -830,10 +1095,14 @@ export default function ChecklistEngine() {
       if (!Array.isArray(execs)) execs = [];
       
       const isCompleted = taskId && execs.some(e => (typeof e === 'string' ? e : e.id) === String(taskId));
+      let lastSubmittedRevForNext = 0;
       
       let realTemplateId = id as string;
       let initialRes: any = {};
-      
+      let serverPausedFlag = false;
+      let remotePausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
+      let cloudPausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
+
       // PASSO 1: Resolve a Execução PRIMEIRO. Se for um ghost antigo, o ID passado era o taskId e não o templateId. 
       // Ao baixar a execução, extraímos o verdadeiro templateId dela!
       if (isCompleted) {
@@ -907,20 +1176,66 @@ export default function ChecklistEngine() {
          // não tinha @draft_tsk_* — precisamos puxar GET para continuar a mesma atividade.
          if (taskId) {
            try {
+             const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+             let cloudTasksEarly: any[] = [];
+             try {
+               const pe = JSON.parse(cloudTasksStr);
+               cloudTasksEarly = Array.isArray(pe) ? pe : [];
+             } catch {
+               cloudTasksEarly = [];
+             }
+             const ctEarly = cloudTasksEarly.find((t: any) => String(t.id) === String(taskId));
+             if (ctEarly?.status === 'PAUSED') serverPausedFlag = true;
+             if (ctEarly != null && ctEarly.lastSubmittedRevision != null) {
+               lastSubmittedRevForNext = Math.max(
+                 lastSubmittedRevForNext,
+                 Number(ctEarly.lastSubmittedRevision) || 0
+               );
+             }
+             const cm = ctEarly?.metadata;
+             if (cm && typeof cm === 'object') {
+               if (cm.lastPauseAt) cloudPausedMeta.lastPauseAt = String(cm.lastPauseAt);
+               if (cm.lastPauseReasonSummary) cloudPausedMeta.lastPauseReasonSummary = String(cm.lastPauseReasonSummary);
+             }
+           } catch {}
+
+           try {
              const res = await apiFetch(`/api/checklists/executions/${taskId}`);
              if (res.ok) {
                const remoteExec = await res.json();
+               if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+               const rm = remoteExec.metadata;
+               if (rm && typeof rm === 'object') {
+                 if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                 if (rm.lastPauseReasonSummary) remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+               }
                const serverR =
                  remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
                    ? remoteExec.responses
                    : {};
                initialRes = { ...serverR, ...draftRes };
                if (remoteExec.templateId) realTemplateId = remoteExec.templateId;
+               lastSubmittedRevForNext = Math.max(
+                 lastSubmittedRevForNext,
+                 Number(remoteExec.lastSubmittedRevision) || 0
+               );
              } else {
                initialRes = draftRes;
              }
            } catch {
              initialRes = draftRes;
+           }
+           if (lastSubmittedRevForNext === 0 && taskId) {
+             try {
+               const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
+               if (execStr) {
+                 const c = JSON.parse(execStr);
+                 lastSubmittedRevForNext = Math.max(
+                   lastSubmittedRevForNext,
+                   Number(c.lastSubmittedRevision) || 0
+                 );
+               }
+             } catch {}
            }
          } else {
            initialRes = draftRes;
@@ -953,9 +1268,22 @@ export default function ChecklistEngine() {
       setTemplate(tmpl);
 
       // Injetar Default Values (AutoFill) para campos vazios
+      const skipDefaultValueTypes = new Set([
+        'section_break',
+        'photo',
+        'photo_stamped',
+        'facial_recognition',
+        'file_upload',
+        'signature',
+        'geofence_check',
+        'location_pick',
+        'transit_start',
+        'transit_end',
+        'hidden',
+      ]);
       if (tmpl.schemaData) {
         tmpl.schemaData.forEach((f: any) => {
-          if (!initialRes[f.id] && f.defaultValue) {
+          if (!initialRes[f.id] && f.defaultValue && !skipDefaultValueTypes.has(f.type)) {
              let auto = String(f.defaultValue);
              auto = auto.replace(/{{date}}/g, new Date().toLocaleDateString('pt-BR'));
              auto = auto.replace(/{{time}}/g, new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
@@ -972,7 +1300,57 @@ export default function ChecklistEngine() {
           initialRes.__form_active_seconds = 0;
         }
       }
+
+      if (taskId && !isCompleted) {
+        let nextRev = lastSubmittedRevForNext + 1;
+        try {
+          const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
+          let outbox: any[] = [];
+          try {
+            outbox = JSON.parse(outboxStr);
+          } catch {
+            outbox = [];
+          }
+          if (!Array.isArray(outbox)) outbox = [];
+          const match = outbox.find((o: any) => o.taskId === taskId);
+          const obRev = match?.metadata?.submissionRevision;
+          if (Number.isFinite(Number(obRev)) && Number(obRev) > 0) {
+            nextRev = Number(obRev);
+          }
+        } catch {}
+        nextSubmissionRevisionRef.current = nextRev;
+      } else if (!taskId && !isCompleted) {
+        nextSubmissionRevisionRef.current = 1;
+      }
+
+      if (taskId && !isCompleted && serverPausedFlag && !initialRes.__form_paused_since) {
+        const pauseAt =
+          remotePausedMeta.lastPauseAt || cloudPausedMeta.lastPauseAt || new Date().toISOString();
+        const summary =
+          remotePausedMeta.lastPauseReasonSummary || cloudPausedMeta.lastPauseReasonSummary || '';
+        initialRes.__form_paused_since = pauseAt;
+        const hist = parsePauseHistory(initialRes);
+        const hasOpen = hist.some((ev: any) => ev?.endedAt == null && ev?.startedAt);
+        if (!hasOpen) {
+          initialRes[PAUSE_HISTORY_KEY] = [
+            ...hist,
+            {
+              id: `hydrated_${Date.now()}`,
+              categoryId: '__hydrated__',
+              subId: '__hydrated__',
+              categoryLabel: '',
+              subLabel: summary,
+              detail: undefined,
+              startedAt: pauseAt,
+              endedAt: null,
+              durationSec: null,
+            },
+          ];
+        }
+      }
+
       setResponses(initialRes);
+      setServerPausedExecution(!isCompleted && !!taskId && serverPausedFlag);
       if (initialRes.__form_started_at) {
         setStartTime(new Date(initialRes.__form_started_at).getTime());
       } else {
@@ -1040,11 +1418,266 @@ export default function ChecklistEngine() {
     return result;
   };
 
-  const handleInput = (fieldId: string, value: any) => {
-    if (Object.keys(responses).length === 0) {
-      notifyKanbanStatus('IN_PROGRESS');
+  const updateLocalCloudTaskFields = useCallback(
+    async (tid: string, patch: { status?: string; metadata?: Record<string, unknown> }) => {
+      try {
+        const raw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+        let arr: any[] = [];
+        try {
+          const p = JSON.parse(raw);
+          arr = Array.isArray(p) ? p : [];
+        } catch {
+          arr = [];
+        }
+        const i = arr.findIndex((x: any) => String(x.id) === String(tid));
+        if (i < 0) return;
+        const row = arr[i];
+        arr[i] = {
+          ...row,
+          ...(patch.status ? { status: patch.status } : {}),
+          metadata: { ...(row.metadata || {}), ...(patch.metadata || {}) },
+        };
+        await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(arr));
+      } catch {}
+    },
+    []
+  );
+
+  const unpauseExecutionFromServer = useCallback(async () => {
+    if (!resolvedTaskId) return;
+    const ts = new Date().toISOString();
+    await enqueueExecutionStatusPatch(resolvedTaskId, {
+      status: 'IN_PROGRESS',
+      timestamp: ts,
+      metadata: { executionPaused: false, lastResumedAt: ts },
+    });
+    await updateLocalCloudTaskFields(resolvedTaskId, {
+      status: 'IN_PROGRESS',
+      metadata: { executionPaused: false, lastResumedAt: ts },
+    });
+    setServerPausedExecution(false);
+    fgSegmentStartRef.current = Date.now();
+  }, [resolvedTaskId, updateLocalCloudTaskFields]);
+
+  const confirmStartPause = (cat: PauseCategoryDef, subId: string, detail: string) => {
+    const sub = cat.subs.find((s) => s.id === subId);
+    if (!sub) return;
+    if (sub.requiresDetail && detail.trim().length < PAUSE_DETAIL_MIN_LEN) {
+      Alert.alert(t('common.attention'), t('pause.validationDetail'));
+      return;
     }
+    void routeTracker.pause();
+
+    const catLabel = t(cat.i18nKey);
+    const subLabel = t(sub.i18nKey);
+    const startedAt = new Date().toISOString();
+    const evId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    setResponses((prev: any) => {
+      const now = Date.now();
+      let base = { ...prev };
+      if (fgSegmentStartRef.current != null) {
+        const delta = Math.floor((now - fgSegmentStartRef.current) / 1000);
+        fgSegmentStartRef.current = null;
+        if (delta > 0) {
+          const b = Number(base.__form_active_seconds) || 0;
+          base.__form_active_seconds = b + delta;
+        }
+      }
+      const hist = parsePauseHistory(base);
+      const ev = {
+        id: evId,
+        categoryId: cat.id,
+        subId: sub.id,
+        detail: sub.requiresDetail ? detail.trim() : undefined,
+        categoryLabel: catLabel,
+        subLabel,
+        startedAt,
+        endedAt: null,
+        durationSec: null,
+      };
+      const next = {
+        ...base,
+        __form_paused_since: startedAt,
+        [PAUSE_HISTORY_KEY]: [...hist, ev],
+      };
+      void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+      if (resolvedTaskId) {
+        const summary = getOpenPauseSummaryFromResponses(next);
+        const tid = resolvedTaskId;
+        queueMicrotask(() => {
+          void updateLocalCloudTaskFields(tid, {
+            status: 'PAUSED',
+            metadata: {
+              executionPaused: true,
+              lastPauseReasonSummary: summary,
+              lastPauseAt: startedAt,
+            },
+          });
+          void enqueueExecutionStatusPatch(tid, {
+            status: 'PAUSED',
+            timestamp: startedAt,
+            responses: next,
+            metadata: {
+              executionPaused: true,
+              lastPauseReasonSummary: summary,
+              lastPauseAt: startedAt,
+            },
+          });
+          void AsyncStorage.getItem('@brspark_email').then((email) => pushSyncQueue(email || undefined));
+        });
+      }
+      return next;
+    });
+    setPauseReasonModalVisible(false);
+    setPausePickerStep('category');
+    setPauseSelectedCategory(null);
+    setPauseDetailDraft('');
+    setPauseHighlightSubId(null);
+  };
+
+  const resumeFromPauseOverlay = () => {
+    const endedAt = new Date().toISOString();
+    setResponses((prev: any) => {
+      const hist = [...parsePauseHistory(prev)];
+      for (let i = hist.length - 1; i >= 0; i--) {
+        if (hist[i]?.endedAt == null && hist[i]?.startedAt) {
+          const st = new Date(hist[i].startedAt).getTime();
+          const en = new Date(endedAt).getTime();
+          hist[i] = {
+            ...hist[i],
+            endedAt,
+            durationSec: Math.max(0, Math.floor((en - st) / 1000)),
+          };
+          break;
+        }
+      }
+      const next: any = { ...prev };
+      delete next.__form_paused_since;
+      next[PAUSE_HISTORY_KEY] = hist;
+      void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+      return next;
+    });
+    void routeTracker.resume();
+    fgSegmentStartRef.current = Date.now();
+    if (resolvedTaskId) {
+      void (async () => {
+        await enqueueExecutionStatusPatch(resolvedTaskId, {
+          status: 'IN_PROGRESS',
+          timestamp: endedAt,
+          metadata: { executionPaused: false, lastResumedAt: endedAt },
+        });
+        await updateLocalCloudTaskFields(resolvedTaskId, {
+          status: 'IN_PROGRESS',
+          metadata: { executionPaused: false, lastResumedAt: endedAt },
+        });
+        setServerPausedExecution(false);
+      })();
+    } else {
+      setServerPausedExecution(false);
+    }
+  };
+
+  const applyPauseExitAndThen = useCallback(
+    (navigateAway: () => void) => {
+      const endedAt = new Date().toISOString();
+      const prev = responsesForPauseExitRef.current;
+      const summary = getOpenPauseSummaryFromResponses(prev);
+      void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(prev));
+      void (async () => {
+        try {
+          if (resolvedTaskId) {
+            await updateLocalCloudTaskFields(resolvedTaskId, {
+              status: 'PAUSED',
+              metadata: {
+                executionPaused: true,
+                lastPauseReasonSummary: summary,
+                lastPauseAt: endedAt,
+              },
+            });
+            void enqueueExecutionStatusPatch(resolvedTaskId, {
+              status: 'PAUSED',
+              timestamp: endedAt,
+              responses: prev,
+              metadata: {
+                executionPaused: true,
+                lastPauseReasonSummary: summary,
+                lastPauseAt: endedAt,
+              },
+            });
+          }
+        } finally {
+          navigateAway();
+        }
+      })();
+    },
+    [draftKeyForForm, resolvedTaskId, updateLocalCloudTaskFields]
+  );
+
+  const promptPauseExit = useCallback((onConfirmedExit: () => void) => {
+    const now = Date.now();
+    if (now - pauseExitAlertGateRef.current < 800) return;
+    pauseExitAlertGateRef.current = now;
+    const resetGate = () => {
+      pauseExitAlertGateRef.current = 0;
+    };
+    Alert.alert(
+      t('pause.exitTitle'),
+      t('pause.exitMsg'),
+      [
+        { text: t('common.cancel'), style: 'cancel', onPress: resetGate },
+        {
+          text: t('pause.exitBtn'),
+          style: 'destructive',
+          onPress: () => {
+            resetGate();
+            pauseExitBypassBeforeRemoveUntilRef.current = Date.now() + 4000;
+            onConfirmedExit();
+          },
+        },
+      ],
+      Platform.OS === 'android' ? { cancelable: true, onDismiss: resetGate } : undefined
+    );
+  }, [t]);
+
+  const exitPauseToList = useCallback(() => {
+    promptPauseExit(() => applyPauseExitAndThen(() => router.back()));
+  }, [promptPauseExit, applyPauseExitAndThen, router]);
+
+  useEffect(() => {
+    if (!taskId || isReadOnly) return undefined;
+    const sub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data?: { action: unknown } }) => {
+      if (Date.now() < pauseExitBypassBeforeRemoveUntilRef.current) {
+        return;
+      }
+      if (!responses.__form_paused_since) return;
+      e.preventDefault();
+      const action = e.data?.action;
+      promptPauseExit(() =>
+        applyPauseExitAndThen(() => {
+          if (action != null) {
+            navigation.dispatch(action as never);
+          } else {
+            router.back();
+          }
+        })
+      );
+    });
+    return sub;
+  }, [
+    navigation,
+    taskId,
+    isReadOnly,
+    responses.__form_paused_since,
+    applyPauseExitAndThen,
+    router,
+    promptPauseExit,
+  ]);
+
+  const handleInput = (fieldId: string, value: any) => {
     if (isReadOnly) return;
+    if (serverPausedExecution) return;
+    if (responses.__form_paused_since) return;
 
     const isMetaField = fieldId.startsWith('__');
     const timeKey = `__time_${fieldId}`;
@@ -1054,15 +1687,20 @@ export default function ChecklistEngine() {
       stored = [];
     }
 
-    const newRes = {
-      ...responses,
-      [fieldId]: stored,
-      ...(isMetaField ? {} : { [timeKey]: new Date().toISOString() }),
-    };
-
-    setResponses(newRes);
     const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-    AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+
+    setResponses((prev: any) => {
+      if (Object.keys(prev).length === 0) {
+        notifyKanbanStatus('IN_PROGRESS');
+      }
+      const newRes = {
+        ...prev,
+        [fieldId]: stored,
+        ...(isMetaField ? {} : { [timeKey]: new Date().toISOString() }),
+      };
+      void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+      return newRes;
+    });
 
     if (taskId) {
       AsyncStorage.getItem('@brspark_inprogress_tasks').then((str) => {
@@ -1082,6 +1720,7 @@ export default function ChecklistEngine() {
 
   const mergeMediaUriIntoField = (fieldId: string, uri: string) => {
     const fieldDef = template?.schemaData?.find((f: any) => f.id === fieldId);
+    const capKey = mediaCaptionStorageKey(fieldId);
     if (fieldAllowsMultiple(fieldDef)) {
       const arr = normalizeResponseArray(responses[fieldId]);
       const max = multiMaxItems(fieldDef);
@@ -1089,10 +1728,19 @@ export default function ChecklistEngine() {
         Alert.alert('Limite', `Máximo de ${max} itens neste campo.`);
         return;
       }
-      handleInput(fieldId, [...arr, uri]);
+      const next = [...arr, uri];
+      handleInput(fieldId, next);
+      if (fieldDef?.allowMediaDescription) {
+        const caps = normalizeMediaCaptions(fieldDef, responses[capKey], arr.length);
+        caps.push('');
+        handleInput(capKey, caps);
+      }
       return;
     }
     handleInput(fieldId, uri);
+    if (fieldDef?.allowMediaDescription) {
+      handleInput(capKey, '');
+    }
   };
 
   const handleMediaPicker = async (fieldId: string, type: string) => {
@@ -1237,6 +1885,23 @@ export default function ChecklistEngine() {
   };
 
   const submitExecution = async () => {
+    if (responses.__form_paused_since) {
+      Alert.alert(t('common.attention'), t('pause.pausedTitle'));
+      return;
+    }
+    const schemaAll = template?.schemaData || [];
+    for (const f of schemaAll) {
+      if (f.type === 'section_break' || f.type === 'hidden') continue;
+      if (!isFieldVisible(f)) continue;
+      if (isFieldRequired(f)) {
+        const ans = responses[f.id];
+        if (!isFieldAnswerFilled(f, ans)) {
+          Alert.alert('Atenção', `O campo '${f.label || f.id}' é obrigatório antes de concluir.`);
+          return;
+        }
+      }
+    }
+
     setSubmitting(true);
     try {
       // Registrar que a tarefa (OS) foi executada para mover para 'Concluídas'
@@ -1275,6 +1940,7 @@ export default function ChecklistEngine() {
       
       // Resgatar recebimento ou aceite originais
       let origMeta: any = {};
+      let osNumMeta: string | undefined;
       try {
           const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
           const cloudTasks = JSON.parse(cloudTasksStr);
@@ -1285,12 +1951,21 @@ export default function ChecklistEngine() {
                acceptedAt: origTask.metadata.acceptedAt
              };
           }
+          if (origTask?.osNumber != null && String(origTask.osNumber).trim() !== '') {
+            osNumMeta = String(origTask.osNumber).trim();
+          }
       } catch(e) {}
 
-      const currentSectionData = pages[currentPage];
       let finalResponses = { ...responses };
-      if (currentSectionData && currentSectionData.id && !isReadOnly) {
-          finalResponses[`__section_end_${currentSectionData.id}`] = new Date().toISOString();
+      if (!isReadOnly) {
+        schemaAll.forEach((f: any) => {
+          if (f.type !== 'section_break') return;
+          const startK = `__section_start_${f.id}`;
+          const endK = `__section_end_${f.id}`;
+          if (finalResponses[startK] && !finalResponses[endK]) {
+            finalResponses[endK] = new Date().toISOString();
+          }
+        });
       }
 
       const nowSubmit = Date.now();
@@ -1300,7 +1975,8 @@ export default function ChecklistEngine() {
           : new Date(startTime).toISOString();
       const formFillDurationSeconds = Math.max(
         0,
-        Math.floor((nowSubmit - new Date(formStartIso).getTime()) / 1000)
+        Math.floor((nowSubmit - new Date(formStartIso).getTime()) / 1000) -
+          getTotalPausedSeconds(finalResponses, nowSubmit)
       );
       let formActiveSeconds = Number(finalResponses.__form_active_seconds) || 0;
       if (fgSegmentStartRef.current != null) {
@@ -1318,6 +1994,10 @@ export default function ChecklistEngine() {
         metadata: { 
             ...(origMeta.receivedAt ? { receivedAt: origMeta.receivedAt } : {}),
             ...(origMeta.acceptedAt ? { acceptedAt: origMeta.acceptedAt } : {}),
+            submissionRevision: nextSubmissionRevisionRef.current,
+            submissionId: newSubmissionId(),
+            ...(taskId ? { executionId: String(taskId) } : {}),
+            ...(osNumMeta ? { osNumber: osNumMeta } : {}),
             appVersion: '1.0',
             durationSeconds: formFillDurationSeconds,
             formFillDurationSeconds,
@@ -1501,31 +2181,34 @@ export default function ChecklistEngine() {
   useEffect(() => {
      const rules = getAllRules();
      if (rules.length === 0) return;
-     if (Object.keys(responses).length === 0) return; // Prevent firing on absolute empty baseline
-     
-     let hasChanges = false;
-     let nextResponses = { ...responses };
 
-     rules.forEach((rule: any) => {
-        if (evaluateCondition(rule.condFieldId, rule.condOperator, rule.condValue, nextResponses)) {
-            rule.actions?.forEach((action: any) => {
-               if (action.type === 'SET_VALUE' && action.targetId) {
-                  const currentVal = nextResponses[action.targetId];
-                  const targetVal = action.value || '';
-                  if (currentVal !== targetVal) {
-                     nextResponses[action.targetId] = targetVal;
-                     hasChanges = true;
-                  }
-               }
-            });
-        }
+     const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+
+     setResponses((prev: any) => {
+        if (Object.keys(prev).length === 0) return prev;
+
+        let hasChanges = false;
+        const nextResponses = { ...prev };
+
+        rules.forEach((rule: any) => {
+           if (evaluateCondition(rule.condFieldId, rule.condOperator, rule.condValue, nextResponses)) {
+              rule.actions?.forEach((action: any) => {
+                 if (action.type === 'SET_VALUE' && action.targetId) {
+                    const currentVal = nextResponses[action.targetId];
+                    const targetVal = action.value || '';
+                    if (currentVal !== targetVal) {
+                       nextResponses[action.targetId] = targetVal;
+                       hasChanges = true;
+                    }
+                 }
+              });
+           }
+        });
+
+        if (!hasChanges) return prev;
+        void AsyncStorage.setItem(draftKey, JSON.stringify(nextResponses));
+        return nextResponses;
      });
-
-     if (hasChanges) {
-        setResponses(nextResponses);
-        const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-        AsyncStorage.setItem(draftKey, JSON.stringify(nextResponses));
-     }
   }, [responses, template, ruleTick]);
 
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
@@ -1578,48 +2261,146 @@ export default function ChecklistEngine() {
 
   // --- Paginator Chunking Engine ---
   const schema = template?.schemaData || [];
-  let rawPages: { fields: any[], pageTitle: string, id: string, isVisible: boolean }[] = [];
+  let rawPages: {
+    fields: any[];
+    pageTitle: string;
+    id: string;
+    isVisible: boolean;
+    sectionFillMode?: string;
+    openingSectionId?: string;
+  }[] = [];
   let _curFields: any[] = [];
   let _globalIndex = 1;
   let _currentSectionTitle = 'Página 1';
   let _currentSectionId = 'page_1';
   let _currentSectionVisible = true;
+  let _openingSectionBreak: any = null;
 
   schema.forEach((f: any) => {
-     if (f.type === 'section_break') {
-         if (_curFields.length > 0 || rawPages.length > 0) {
-             rawPages.push({ fields: _curFields, pageTitle: _currentSectionTitle, id: _currentSectionId, isVisible: _currentSectionVisible });
-         }
-         _curFields = [];
-         _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
-         _currentSectionId = f.id;
-         _currentSectionVisible = isFieldVisible(f, true);
-     } else {
-         _curFields.push({ ...f, _globalIdx: _globalIndex++ });
-     }
+    if (f.type === 'section_break') {
+      if (_curFields.length > 0 || rawPages.length > 0) {
+        rawPages.push({
+          fields: _curFields,
+          pageTitle: _currentSectionTitle,
+          id: _currentSectionId,
+          isVisible: _currentSectionVisible,
+          sectionFillMode: _openingSectionBreak?.sectionFillMode,
+          openingSectionId: _openingSectionBreak?.id || '__preamble__',
+        });
+      }
+      _curFields = [];
+      _openingSectionBreak = f;
+      _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
+      _currentSectionId = f.id;
+      _currentSectionVisible = isFieldVisible(f, true);
+    } else {
+      _curFields.push({ ...f, _globalIdx: _globalIndex++ });
+    }
   });
   if (_curFields.length > 0 || rawPages.length === 0) {
-      rawPages.push({ fields: _curFields, pageTitle: _currentSectionTitle, id: _currentSectionId, isVisible: _currentSectionVisible });
+    rawPages.push({
+      fields: _curFields,
+      pageTitle: _currentSectionTitle,
+      id: _currentSectionId,
+      isVisible: _currentSectionVisible,
+      sectionFillMode: _openingSectionBreak?.sectionFillMode,
+      openingSectionId: _openingSectionBreak?.id || '__preamble__',
+    });
   }
 
   const pages = rawPages.filter(p => p.isVisible);
 
+  const rawAppFill = template?.settings?.appFillMode;
+  const fillMode: 'full' | 'wizard' | 'hybrid' =
+    rawAppFill === 'wizard' || rawAppFill === 'hybrid' ? rawAppFill : 'full';
+  const effectiveFillMode = isReadOnly ? 'full' : fillMode;
+
+  const displayPages = useMemo(() => {
+    if (effectiveFillMode === 'full') {
+      return [
+        {
+          fields: pages.flatMap((p) => p.fields),
+          pageTitle: template?.title || 'Checklist',
+          id: '__full__',
+          isVisible: true,
+          sectionFillMode: undefined,
+          openingSectionId: undefined,
+        },
+      ];
+    }
+    return pages;
+  }, [effectiveFillMode, pages, template?.title]);
+
+  /** Passos do assistente global: cada entrada é um ou vários campos (secção em modo lista agrupa). */
+  const wizardSteps = useMemo(() => {
+    if (effectiveFillMode !== 'wizard') return [] as { fields: any[] }[];
+    const steps: { fields: any[] }[] = [];
+    let buf: any[] = [];
+    let opening: any = null;
+    const flush = () => {
+      if (buf.length === 0) return;
+      const vis = buf.filter((x) => isFieldVisible(x));
+      if (vis.length === 0) {
+        buf = [];
+        return;
+      }
+      const mode = resolvePageInnerMode({ sectionFillMode: opening?.sectionFillMode }, 'wizard');
+      if (mode === 'wizard') {
+        vis.forEach((field) => steps.push({ fields: [field] }));
+      } else {
+        steps.push({ fields: vis });
+      }
+      buf = [];
+    };
+    schema.forEach((f: any) => {
+      if (f.type === 'section_break') {
+        flush();
+        opening = f;
+        return;
+      }
+      if (f.type === 'hidden') return;
+      buf.push(f);
+    });
+    flush();
+    return steps;
+  }, [effectiveFillMode, schema, ruleTick, responses, template]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+    setWizardIndex(0);
+    setHybridInnerWizardIndex(0);
+  }, [id, taskId, template?.id]);
+
+  useEffect(() => {
+    if (effectiveFillMode !== 'wizard') return;
+    const max = Math.max(0, wizardSteps.length - 1);
+    setWizardIndex((w) => Math.min(w, max));
+  }, [effectiveFillMode, wizardSteps.length]);
+
   // Focus Section Tracking
   useEffect(() => {
-     const currentSectionData = pages[currentPage];
-     if (currentSectionData && currentSectionData.id && !isReadOnly && Object.keys(responses).length > 0) {
-        const startKey = `__section_start_${currentSectionData.id}`;
-        if (!responses[startKey]) {
-            setResponses((prev: any) => {
-                if(prev[startKey]) return prev;
-                const newRes = { ...prev, [startKey]: new Date().toISOString() };
-                const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-                AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
-                return newRes;
-            });
-        }
-     }
-  }, [currentPage, isReadOnly, pages, responses]);
+    if (effectiveFillMode === 'wizard') return;
+    const currentSectionData = displayPages[currentPage];
+    if (
+      !currentSectionData ||
+      !currentSectionData.id ||
+      currentSectionData.id === '__full__' ||
+      isReadOnly ||
+      Object.keys(responses).length === 0
+    ) {
+      return;
+    }
+    const startKey = `__section_start_${currentSectionData.id}`;
+    if (!responses[startKey]) {
+      setResponses((prev: any) => {
+        if (prev[startKey]) return prev;
+        const newRes = { ...prev, [startKey]: new Date().toISOString() };
+        const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+        AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+        return newRes;
+      });
+    }
+  }, [effectiveFillMode, currentPage, isReadOnly, displayPages, responses, taskId, id]);
 
   /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
   const liveRouteCoordsForMap = useMemo(() => {
@@ -1636,13 +2417,28 @@ export default function ChecklistEngine() {
     }
     if (!Array.isArray(parsed)) return [];
     return parsed.map((pt: any) => {
-      if (Array.isArray(pt)) return [parseFloat(pt[0]), parseFloat(pt[1])];
+      if (Array.isArray(pt)) {
+        const a = parseFloat(pt[0]);
+        const b = parseFloat(pt[1]);
+        return normalizePolygonPairToLatLng(a, b);
+      }
       return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
     });
   }, [currentTask?.locationPolygon, currentTask?.locationZoneType]);
 
+  /** Deve rodar antes de qualquer return antecipado (loading / mapa), senão viola as regras dos hooks. */
+  const sessionPauseOpenEvent = useMemo(() => {
+    const active = Boolean(responses.__form_paused_since) && !!resolvedTaskId && !isReadOnly;
+    if (!active) return null;
+    const hist = parsePauseHistory(responses);
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if (hist[i]?.endedAt == null && hist[i]?.startedAt) return hist[i];
+    }
+    return null;
+  }, [responses, resolvedTaskId, isReadOnly]);
+
   const handleNextPage = () => {
-     const currentPageData = pages[currentPage];
+     const currentPageData = displayPages[currentPage];
      let isValid = true;
      for (const f of currentPageData.fields) {
          if (!isFieldVisible(f)) continue;
@@ -1656,16 +2452,81 @@ export default function ChecklistEngine() {
          }
      }
 
-     if (isValid && currentPage < pages.length - 1) {
-         if (currentPageData && currentPageData.id && !isReadOnly) {
+     if (isValid && currentPage < displayPages.length - 1) {
+         if (currentPageData && currentPageData.id && currentPageData.id !== '__full__' && !isReadOnly) {
             const endKey = `__section_end_${currentPageData.id}`;
-            const newRes = { ...responses, [endKey]: new Date().toISOString() };
-            setResponses(newRes);
             const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-            AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+            setResponses((prev: any) => {
+               const newRes = { ...prev, [endKey]: new Date().toISOString() };
+               void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+               return newRes;
+            });
          }
          setCurrentPage(p => p + 1);
+         setHybridInnerWizardIndex(0);
      }
+  };
+
+  const handleWizardNext = () => {
+    const step = wizardSteps[wizardIndex];
+    if (!step || !step.fields.length) return;
+    for (const f of step.fields) {
+      if (!isFieldVisible(f)) continue;
+      if (isFieldRequired(f)) {
+        const ans = responses[f.id];
+        if (!isFieldAnswerFilled(f, ans)) {
+          Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
+          return;
+        }
+      }
+    }
+    if (wizardIndex < wizardSteps.length - 1) {
+      setWizardIndex((w) => w + 1);
+    }
+  };
+
+  const handleWizardPrev = () => {
+    if (wizardIndex > 0) setWizardIndex((w) => w - 1);
+  };
+
+  const handleHybridInnerNext = () => {
+    const page = displayPages[currentPage];
+    if (!page) return;
+    const vis = (page.fields || []).filter((x: any) => isFieldVisible(x));
+    const cur = vis[hybridInnerWizardIndex];
+    if (!cur) return;
+    if (isFieldRequired(cur)) {
+      const ans = responses[cur.id];
+      if (!isFieldAnswerFilled(cur, ans)) {
+        Alert.alert('Atenção', `O campo '${cur.label}' é obrigatório.`);
+        return;
+      }
+    }
+    if (hybridInnerWizardIndex < vis.length - 1) {
+      setHybridInnerWizardIndex((i) => i + 1);
+    } else if (currentPage < displayPages.length - 1) {
+      handleNextPage();
+    }
+  };
+
+  const handleHybridPagePrev = () => {
+    const page = displayPages[currentPage];
+    const inner = page ? resolvePageInnerMode(page, 'hybrid') : 'list';
+    if (inner === 'wizard' && hybridInnerWizardIndex > 0) {
+      setHybridInnerWizardIndex((i) => i - 1);
+      return;
+    }
+    if (currentPage <= 0) return;
+    const newPage = currentPage - 1;
+    const pp = displayPages[newPage];
+    setCurrentPage(newPage);
+    const pm = pp ? resolvePageInnerMode(pp, 'hybrid') : 'list';
+    if (pm === 'wizard') {
+      const nv = (pp?.fields || []).filter((x: any) => isFieldVisible(x)).length;
+      setHybridInnerWizardIndex(Math.max(0, nv - 1));
+    } else {
+      setHybridInnerWizardIndex(0);
+    }
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -1693,17 +2554,66 @@ export default function ChecklistEngine() {
     );
   }
 
-  const currentPageData = pages[currentPage] || { fields: [], pageTitle: 'Checklist' };
-  const currentFieldsToRender = currentPageData.fields;
+  const hybridPage = displayPages[currentPage] || null;
+  const hybridInnerMode =
+    effectiveFillMode === 'hybrid' && hybridPage
+      ? resolvePageInnerMode(hybridPage, 'hybrid')
+      : 'list';
+  const hybridVisibleFields =
+    effectiveFillMode === 'hybrid' && hybridPage
+      ? (hybridPage.fields || []).filter((x: any) => isFieldVisible(x))
+      : [];
+
+  const basePageData = displayPages[currentPage] || { fields: [], pageTitle: 'Checklist', id: '' };
+
+  const currentPageData =
+    effectiveFillMode === 'wizard'
+      ? {
+          fields: wizardSteps[wizardIndex]?.fields || [],
+          pageTitle: template?.title || 'Checklist',
+          id: '__wizard__',
+        }
+      : basePageData;
+
+  const currentFieldsToRender =
+    effectiveFillMode === 'wizard'
+      ? wizardSteps[wizardIndex]?.fields || []
+      : effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard'
+        ? hybridVisibleFields[hybridInnerWizardIndex]
+          ? [hybridVisibleFields[hybridInnerWizardIndex]]
+          : []
+        : basePageData.fields;
 
   const nowClock = Date.now();
   const formElapsedDisp = getFormElapsedSeconds(responses, nowClock);
   const activeDisp = getFormActiveDisplaySeconds(responses, fgSegmentStartRef.current, nowClock);
   const sectionElapsedDisp =
-    currentPageData.id && !isReadOnly
+    currentPageData.id &&
+    currentPageData.id !== '__full__' &&
+    currentPageData.id !== '__wizard__' &&
+    !isReadOnly
       ? getSectionElapsedSeconds(responses, currentPageData.id, nowClock)
       : null;
+
+  const sectionElapsedBadge =
+    currentPageData.id &&
+    currentPageData.id !== '__full__' &&
+    currentPageData.id !== '__wizard__'
+      ? getSectionElapsedSeconds(responses, currentPageData.id, nowClock)
+      : null;
+
   void ruleTick;
+
+  const headerPageTitle =
+    effectiveFillMode === 'wizard'
+      ? template?.title || 'Checklist'
+      : currentPageData.pageTitle !== 'Página 1'
+        ? currentPageData.pageTitle
+        : template?.title || 'Checklist';
+
+  const sessionPauseActive =
+    Boolean(responses.__form_paused_since) && !!resolvedTaskId && !isReadOnly;
+  const pauseSecondsLive = sessionPauseActive ? getActivePauseSeconds(responses, nowClock) : 0;
 
   return (
     <View style={styles.container}>
@@ -1711,29 +2621,42 @@ export default function ChecklistEngine() {
         colors={['#EA580C', '#F97316']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={[styles.header, { paddingBottom: isReadOnly ? 12 : 8 }]}
+        style={[styles.header, { paddingBottom: 16 }]}
       >
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#FFF"/></TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            if (taskId && !isReadOnly && responses.__form_paused_since) {
+              exitPauseToList();
+              return;
+            }
+            router.back();
+          }}
+        >
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
         <View style={{ flex: 1, marginHorizontal: 8 }}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{currentPageData.pageTitle !== 'Página 1' ? currentPageData.pageTitle : (template?.title || 'Checklist')}</Text>
-          {!isReadOnly ? (
-            <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: '600', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>
-              Total: {formatDurationClock(formElapsedDisp)} · Em foco (app aberto): {formatDurationClock(activeDisp)}
-              {sectionElapsedDisp != null
-                ? ` · Etapa: ${formatDurationClock(sectionElapsedDisp)}`
-                : currentPageData.id
-                  ? ' · Etapa: —'
-                  : ''}
-            </Text>
+          <Text style={styles.headerTitle} numberOfLines={2}>
+            {headerPageTitle}
+          </Text>
+        </View>
+        <View style={{ width: 40, alignItems: 'flex-end' }}>
+          {taskId && !isReadOnly && !responses.__form_paused_since ? (
+            <TouchableOpacity
+              onPress={() => {
+                setPausePickerStep('category');
+                setPauseSelectedCategory(null);
+                setPauseDetailDraft('');
+                setPauseHighlightSubId(null);
+                setPauseReasonModalVisible(true);
+              }}
+              accessibilityLabel={t('pause.pausedTitle')}
+            >
+              <Ionicons name="pause-circle" size={28} color="#FFF" />
+            </TouchableOpacity>
           ) : (
-            <Text style={{ color: 'rgba(255,255,255,0.88)', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>
-              {typeof responses.__form_fill_duration_sec === 'number'
-                ? `Preenchimento: ${formatDurationClock(responses.__form_fill_duration_sec)} total · ${formatDurationClock(Number(responses.__form_active_seconds_final) || 0)} em foco`
-                : ''}
-            </Text>
+            <View style={{ width: 24 }} />
           )}
         </View>
-        <View style={{width: 24}}/>
       </LinearGradient>
       
       {/* Opção A: Status bar em tempo real */}
@@ -1770,16 +2693,35 @@ export default function ChecklistEngine() {
             : null;
         const mergedEta = mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
 
+        const targetForMap =
+          routeDest ||
+          routeEndCoord ||
+          (() => {
+            const la = currentTask?.locationLat;
+            const ln = currentTask?.locationLng;
+            const latN = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
+            const lngN = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
+            if (
+              Number.isFinite(latN) &&
+              Number.isFinite(lngN) &&
+              latN >= -90 &&
+              latN <= 90 &&
+              lngN >= -180 &&
+              lngN <= 180
+            ) {
+              return { lat: latN, lng: lngN };
+            }
+            return null;
+          })();
+
         return <LiveRouteMapCard 
                   route={routeCoords} 
                   visible={isVisible}
                   zoneType={currentTask?.locationZoneType}
                   targetLoc={
-                    routeDest
-                      ? { lat: routeDest.lat, lng: routeDest.lng }
-                      : routeEndCoord
-                      ? { lat: routeEndCoord.lat, lng: routeEndCoord.lng }
-                      : { lat: currentTask?.locationLat, lng: currentTask?.locationLng }
+                    targetForMap
+                      ? { lat: targetForMap.lat, lng: targetForMap.lng }
+                      : undefined
                   }
                   etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
                   taskId={resolvedTaskId || undefined}
@@ -1795,14 +2737,47 @@ export default function ChecklistEngine() {
                />;
       })()}
 
-      {pages.length > 1 && (
-         <View style={styles.progressBarWrapper}>
-            <View style={[styles.progressBarFill, { width: `${((currentPage + 1) / pages.length) * 100}%` }]} />
-            <Text style={styles.progressText}>Página {currentPage + 1} de {pages.length}</Text>
-         </View>
-      )}
+      {effectiveFillMode === 'wizard' && wizardSteps.length > 0 ? (
+        <View style={styles.progressBarWrapper}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${((wizardIndex + 1) / wizardSteps.length) * 100}%` },
+            ]}
+          />
+          <Text style={styles.progressText}>
+            Passo {wizardIndex + 1} de {wizardSteps.length}
+          </Text>
+        </View>
+      ) : effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard' && hybridVisibleFields.length > 0 ? (
+        <View style={styles.progressBarWrapper}>
+          <View
+            style={[
+              styles.progressBarFill,
+              {
+                width: `${((hybridInnerWizardIndex + 1) / hybridVisibleFields.length) * 100}%`,
+              },
+            ]}
+          />
+          <Text style={styles.progressText}>
+            Campo {hybridInnerWizardIndex + 1} de {hybridVisibleFields.length} · {basePageData.pageTitle || 'Etapa'}
+          </Text>
+        </View>
+      ) : effectiveFillMode === 'hybrid' && displayPages.length > 1 ? (
+        <View style={styles.progressBarWrapper}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${((currentPage + 1) / displayPages.length) * 100}%` },
+            ]}
+          />
+          <Text style={styles.progressText}>
+            Página {currentPage + 1} de {displayPages.length}
+          </Text>
+        </View>
+      ) : null}
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: 12 }]}>
         {isReadOnly && (
             <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
                 <Ionicons name="information-circle" size={24} color="#3B82F6" style={{marginRight: 8}}/>
@@ -1845,13 +2820,30 @@ export default function ChecklistEngine() {
                  </View>
               )}
               <View style={{ flex: 1 }}>
-                  <Text style={[styles.label, { marginBottom: field.description ? 6 : 12, fontSize: 15, color: '#0F172A', fontWeight: '800' }]}>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        marginBottom:
+                          field.description?.trim() &&
+                          isFieldInstructionsVisible(field) &&
+                          !String(field.helpHtml || '').trim()
+                            ? 6
+                            : 12,
+                        fontSize: 15,
+                        color: '#0F172A',
+                        fontWeight: '800',
+                      },
+                    ]}
+                  >
                       {field.icon ? '' : `${field._globalIdx}. `}{field.label}{isFieldRequired(field) ? <Text style={{color: '#EF4444'}}> *</Text> : null}
                   </Text>
-                  <FieldHelpInstructions
-                    plainDescription={field.description}
-                    helpHtml={field.helpHtml}
-                  />
+                  {isFieldInstructionsVisible(field) ? (
+                    <FieldHelpInstructions
+                      plainDescription={field.description}
+                      helpHtml={field.helpHtml}
+                    />
+                  ) : null}
                   
                   {validatingFieldId === field.id && (
                       <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 6, marginBottom: 12}}>
@@ -2143,16 +3135,57 @@ export default function ChecklistEngine() {
                            <Ionicons name="checkmark-circle" size={24} color="#15803d" style={{marginRight:8}} />
                            <Text style={{color:'#15803d', flex:1, fontSize:12}} numberOfLines={1}>{String(oneUri).split('/').pop()}</Text>
                            <TouchableOpacity onPress={() => {
+                             const ck = mediaCaptionStorageKey(field.id);
                              if (fieldAllowsMultiple(field)) {
-                               const next = normalizeResponseArray(responses[field.id]).filter((_: any, j: number) => j !== midx);
+                               const uris = normalizeResponseArray(responses[field.id]);
+                               const next = uris.filter((_: any, j: number) => j !== midx);
                                handleInput(field.id, next.length ? next : []);
+                               if (field.allowMediaDescription) {
+                                 const caps = normalizeMediaCaptions(field, responses[ck], uris.length);
+                                 caps.splice(midx, 1);
+                                 handleInput(ck, shapeMediaCaptionStored(field, caps));
+                               }
                              } else {
                                handleInput(field.id, null);
+                               if (field.allowMediaDescription) {
+                                 handleInput(ck, '');
+                               }
                              }
                            }}>
                                <Ionicons name="trash" size={24} color="#dc2626" />
                            </TouchableOpacity>
                        </View>
+                       {field.allowMediaDescription ? (
+                         <View style={{ marginTop: 10 }}>
+                           <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569', marginBottom: 4 }}>
+                             Comentários{' '}
+                             <Text style={{ fontWeight: '500', color: '#94a3b8' }}>(opcional)</Text>
+                           </Text>
+                           {isReadOnly ? (
+                             getMediaCaptionAt(field, responses, midx).trim() ? (
+                               <Text style={{ fontSize: 13, color: '#334155', fontStyle: 'italic', lineHeight: 20 }}>
+                                 {getMediaCaptionAt(field, responses, midx)}
+                               </Text>
+                             ) : (
+                               <Text style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Sem comentário por item.</Text>
+                             )
+                           ) : (
+                             <TextInput
+                               style={[styles.input, { minHeight: 44, paddingVertical: 8, textAlignVertical: 'top' }]}
+                               placeholder="Opcional — notas sobre este item…"
+                               value={getMediaCaptionAt(field, responses, midx)}
+                               onChangeText={(t) => {
+                                 const ck = mediaCaptionStorageKey(field.id);
+                                 const caps = normalizeMediaCaptions(field, responses[ck], mediaUris.length);
+                                 caps[midx] = t;
+                                 handleInput(ck, shapeMediaCaptionStored(field, caps));
+                               }}
+                               maxLength={500}
+                               multiline
+                             />
+                           )}
+                         </View>
+                       ) : null}
                     </View>
                       ))}
                     </View>
@@ -2171,7 +3204,7 @@ export default function ChecklistEngine() {
               {(field.type === 'transit_start' || field.type === 'transit_end') && (() => {
                  let isBlocked = false;
                  if (field.type === 'transit_end') {
-                     const startField = currentFieldsToRender.find(f => f.type === 'transit_start');
+                     const startField = template?.schemaData?.find((f: any) => f.type === 'transit_start');
                      if (startField && (!responses[startField.id] || responses[startField.id].trim() === '')) {
                          isBlocked = true;
                      }
@@ -2224,6 +3257,15 @@ export default function ChecklistEngine() {
                     </TouchableOpacity>
                  );
               })()}
+              {field.type === 'location_pick' && (
+                <ChecklistLocationPickField
+                  value={responses[field.id]}
+                  onChange={(json) => handleInput(field.id, json || '')}
+                  disabled={isReadOnly}
+                  primaryColor={colors.primary}
+                  requireOnlineValidation={!!field.requireOnlineValidation}
+                />
+              )}
               {field.type === 'geofence_check' && (
                 <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#e2e8f0', borderColor:'#cbd5e1', borderWidth:1, flexDirection:'row', gap:8}]} onPress={() => ensureOnlineValidation(field, async () => {
                    await handleTransit(field.id, 'VALIDACAO_CERCA');
@@ -2342,34 +3384,200 @@ export default function ChecklistEngine() {
           );
         })}
         </View>
-        
-        <View style={styles.footerNav}>
-           {currentPage > 0 ? (
-              <TouchableOpacity style={styles.navBtnPrev} onPress={() => setCurrentPage(p => p - 1)}>
-                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
-              </TouchableOpacity>
-           ) : <View style={{flex: 1}} />}
-
-           {currentPage < pages.length - 1 ? (
-              <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>
-                  <Text style={styles.navBtnText}>{"Avançar >"}</Text>
-              </TouchableOpacity>
-           ) : !isReadOnly ? (
-              <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
-                 {submitting ? <ActivityIndicator color="#FFF"/> : (
-                   <View style={{flexDirection:'row', alignItems:'center', justifyContent: 'center', gap:8}}>
-                     <Text style={styles.submitText}>CONCLUIR OS</Text>
-                     <Ionicons name="checkmark-done" size={24} color="#FFF" />
-                   </View>
-                 )}
-              </TouchableOpacity>
-           ) : (
-              <View style={{flex: 1, padding: 18, alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', marginLeft: 6}}>
-                 <Text style={{color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5}}>Fim do Relatório</Text>
-              </View>
-           )}
-        </View>
       </ScrollView>
+
+      <View
+        style={[
+          styles.checklistBottomDock,
+          { paddingBottom: Math.max(insets.bottom, 10) },
+        ]}
+      >
+        {!isReadOnly ? (
+          <View style={styles.timeBadgesRow}>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeLabel}>Total</Text>
+              <Text style={styles.timeBadgeValue}>{formatDurationClock(formElapsedDisp)}</Text>
+            </View>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeLabel}>Foco</Text>
+              <Text style={styles.timeBadgeValue}>{formatDurationClock(activeDisp)}</Text>
+            </View>
+            {currentPageData.id &&
+            currentPageData.id !== '__full__' &&
+            currentPageData.id !== '__wizard__' ? (
+              <View style={styles.timeBadge}>
+                <Text style={styles.timeBadgeLabel}>Etapa</Text>
+                <Text style={styles.timeBadgeValue}>
+                  {sectionElapsedDisp != null ? formatDurationClock(sectionElapsedDisp) : '—'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : typeof responses.__form_fill_duration_sec === 'number' ? (
+          <View style={styles.timeBadgesRow}>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeLabel}>Total</Text>
+              <Text style={styles.timeBadgeValue}>
+                {formatDurationClock(responses.__form_fill_duration_sec)}
+              </Text>
+            </View>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeLabel}>Foco</Text>
+              <Text style={styles.timeBadgeValue}>
+                {formatDurationClock(Number(responses.__form_active_seconds_final) || 0)}
+              </Text>
+            </View>
+            {currentPageData.id &&
+            currentPageData.id !== '__full__' &&
+            currentPageData.id !== '__wizard__' ? (
+              <View style={styles.timeBadge}>
+                <Text style={styles.timeBadgeLabel}>Etapa</Text>
+                <Text style={styles.timeBadgeValue}>
+                  {sectionElapsedBadge != null ? formatDurationClock(sectionElapsedBadge) : '—'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.footerNav}>
+          {effectiveFillMode === 'wizard' ? (
+            <>
+              {wizardIndex > 0 ? (
+                <TouchableOpacity style={styles.navBtnPrev} onPress={handleWizardPrev}>
+                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+              {wizardIndex < wizardSteps.length - 1 ? (
+                <TouchableOpacity style={styles.navBtnNext} onPress={handleWizardNext}>
+                  <Text style={styles.navBtnText}>{"Seguinte >"}</Text>
+                </TouchableOpacity>
+              ) : !isReadOnly ? (
+                <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
+                  {submitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Ionicons name="checkmark-done" size={24} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={{
+                    flex: 1,
+                    padding: 18,
+                    alignItems: 'center',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    marginLeft: 6,
+                  }}
+                >
+                  <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Fim do Relatório
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard' ? (
+            <>
+              {currentPage > 0 || hybridInnerWizardIndex > 0 ? (
+                <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
+                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+              {hybridInnerWizardIndex < hybridVisibleFields.length - 1 ? (
+                <TouchableOpacity style={styles.navBtnNext} onPress={handleHybridInnerNext}>
+                  <Text style={styles.navBtnText}>{"Seguinte >"}</Text>
+                </TouchableOpacity>
+              ) : currentPage < displayPages.length - 1 ? (
+                <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>
+                  <Text style={styles.navBtnText}>{"Avançar >"}</Text>
+                </TouchableOpacity>
+              ) : !isReadOnly ? (
+                <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
+                  {submitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Ionicons name="checkmark-done" size={24} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={{
+                    flex: 1,
+                    padding: 18,
+                    alignItems: 'center',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    marginLeft: 6,
+                  }}
+                >
+                  <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Fim do Relatório
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              {currentPage > 0 ? (
+                <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
+                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+
+              {currentPage < displayPages.length - 1 ? (
+                <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>
+                  <Text style={styles.navBtnText}>{"Avançar >"}</Text>
+                </TouchableOpacity>
+              ) : !isReadOnly ? (
+                <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
+                  {submitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Ionicons name="checkmark-done" size={24} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={{
+                    flex: 1,
+                    padding: 18,
+                    alignItems: 'center',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    marginLeft: 6,
+                  }}
+                >
+                  <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Fim do Relatório
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      </View>
 
       {sigModalVisible && (
         <View style={StyleSheet.absoluteFillObject}>
@@ -2490,6 +3698,499 @@ export default function ChecklistEngine() {
         </View>
       </Modal>
 
+      <Modal visible={pauseReasonModalVisible} animationType="slide" onRequestClose={() => setPauseReasonModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#EEF2F6' }}>
+          <LinearGradient
+            colors={['#EA580C', '#F97316']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              paddingTop: insets.top + 10,
+              paddingBottom: 18,
+              paddingHorizontal: 18,
+              borderBottomLeftRadius: 22,
+              borderBottomRightRadius: 22,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+              {pausePickerStep === 'sub' ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setPausePickerStep('category');
+                    setPauseSelectedCategory(null);
+                    setPauseHighlightSubId(null);
+                    setPauseDetailDraft('');
+                  }}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 10,
+                  }}
+                >
+                  <Ionicons name="chevron-back" size={26} color="#fff" />
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 10,
+                  }}
+                >
+                  <Ionicons name="pause-circle" size={22} color="#fff" />
+                </View>
+              )}
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.4, lineHeight: 28 }}>
+                  {pausePickerStep === 'category' ? t('pause.pickCategory') : t('pause.pickSub')}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    color: 'rgba(255,255,255,0.9)',
+                    lineHeight: 18,
+                    marginTop: 8,
+                  }}
+                >
+                  {pausePickerStep === 'category' ? t('pause.modalLeadCategory') : t('pause.modalLeadSub')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setPauseReasonModalVisible(false)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {pausePickerStep === 'category'
+              ? PAUSE_CATEGORIES.map((cat) => {
+                  const c = PAUSE_PICKER_CAT_COLOR[cat.id] || colors.primary;
+                  const ic = PAUSE_PICKER_CAT_ICON[cat.id] || 'folder-outline';
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      activeOpacity={0.88}
+                      onPress={() => {
+                        setPauseSelectedCategory(cat);
+                        setPausePickerStep('sub');
+                        setPauseHighlightSubId(null);
+                        setPauseDetailDraft('');
+                      }}
+                      style={{
+                        backgroundColor: '#fff',
+                        borderRadius: 18,
+                        marginBottom: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 14,
+                        paddingHorizontal: 14,
+                        borderWidth: 1,
+                        borderColor: '#F1F5F9',
+                        shadowColor: '#0f172a',
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: 0.07,
+                        shadowRadius: 14,
+                        elevation: 4,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 54,
+                          height: 54,
+                          borderRadius: 16,
+                          backgroundColor: `${c}18`,
+                          borderWidth: 1,
+                          borderColor: `${c}35`,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          marginRight: 14,
+                        }}
+                      >
+                        <Ionicons name={ic} size={26} color={c} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', lineHeight: 22 }}>{t(cat.i18nKey)}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#94a3b8', marginTop: 3 }}>
+                          {t('pause.optionCount', { count: cat.subs.length })}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: '#F8FAFC',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              : pauseSelectedCategory
+                ? (() => {
+                    const subAccent = PAUSE_PICKER_CAT_COLOR[pauseSelectedCategory.id] || colors.primary;
+                    return pauseSelectedCategory.subs.map((sub) => {
+                      const selected = pauseHighlightSubId === sub.id;
+                      return (
+                        <TouchableOpacity
+                          key={sub.id}
+                          activeOpacity={0.88}
+                          onPress={() => {
+                            if (sub.requiresDetail) {
+                              setPauseHighlightSubId(sub.id);
+                              setPauseDetailDraft('');
+                            } else if (pauseSelectedCategory) {
+                              confirmStartPause(pauseSelectedCategory, sub.id, '');
+                            }
+                          }}
+                          style={{
+                            backgroundColor: selected ? '#FFFBEB' : '#fff',
+                            borderRadius: 16,
+                            marginBottom: 10,
+                            paddingVertical: 14,
+                            paddingHorizontal: 14,
+                            borderWidth: selected ? 2 : 1,
+                            borderColor: selected ? subAccent : '#EEF2F6',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            shadowColor: '#0f172a',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: selected ? 0.1 : 0.05,
+                            shadowRadius: 10,
+                            elevation: selected ? 3 : 2,
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: subAccent,
+                              marginRight: 14,
+                              opacity: selected ? 1 : 0.45,
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a', lineHeight: 20 }}>{t(sub.i18nKey)}</Text>
+                            {sub.requiresDetail ? (
+                              <View
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  marginTop: 6,
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 3,
+                                  borderRadius: 8,
+                                  backgroundColor: '#FFEDD5',
+                                  borderWidth: 1,
+                                  borderColor: '#FDBA74',
+                                }}
+                              >
+                                <Text style={{ fontSize: 10, fontWeight: '800', color: '#C2410C', letterSpacing: 0.2 }}>
+                                  {t('pause.subNeedsDescription')}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Ionicons
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={24}
+                            color={selected ? subAccent : '#E2E8F0'}
+                          />
+                        </TouchableOpacity>
+                      );
+                    });
+                  })()
+                : null}
+
+            {pausePickerStep === 'sub' && pauseHighlightSubId && pauseSelectedCategory ? (
+              <View
+                style={{
+                  marginTop: 8,
+                  backgroundColor: '#fff',
+                  borderRadius: 18,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                  shadowColor: '#0f172a',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 16,
+                  elevation: 3,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#475569', marginBottom: 8 }}>{t('pause.otherDetail')}</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    borderColor: '#E2E8F0',
+                    padding: 14,
+                    minHeight: 112,
+                    textAlignVertical: 'top',
+                    fontSize: 15,
+                    color: '#0f172a',
+                  }}
+                  multiline
+                  placeholder={t('pause.otherDetailHint')}
+                  placeholderTextColor="#94A3B8"
+                  value={pauseDetailDraft}
+                  onChangeText={setPauseDetailDraft}
+                  maxLength={500}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={{ marginTop: 14, borderRadius: 16, overflow: 'hidden' }}
+                  onPress={() => {
+                    if (pauseSelectedCategory && pauseHighlightSubId) {
+                      confirmStartPause(pauseSelectedCategory, pauseHighlightSubId, pauseDetailDraft);
+                    }
+                  }}
+                >
+                  <LinearGradient
+                    colors={['#EA580C', '#DC2626']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}
+                  >
+                    <Ionicons name="pause-circle" size={22} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{t('pause.confirmPause')}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={sessionPauseActive} transparent animationType="fade">
+        <LinearGradient
+          colors={['#0c0a09', '#1c1917', '#292524']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'center',
+              paddingHorizontal: 20,
+              paddingTop: insets.top + 16,
+              paddingBottom: insets.bottom + 20,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                borderRadius: 28,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.12)',
+                paddingVertical: 26,
+                paddingHorizontal: 22,
+                width: '100%',
+                maxWidth: 420,
+                alignSelf: 'center',
+              }}
+            >
+              <View style={{ alignItems: 'center', marginBottom: 18 }}>
+                <LinearGradient
+                  colors={['#fb923c', '#ea580c', '#dc2626']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    width: 76,
+                    height: 76,
+                    borderRadius: 38,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: '#ea580c',
+                    shadowOffset: { width: 0, height: 10 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 18,
+                    elevation: 10,
+                  }}
+                >
+                  <Ionicons name="pause" size={34} color="#fff" />
+                </LinearGradient>
+              </View>
+              <Text
+                style={{
+                  color: '#fafaf9',
+                  fontSize: 22,
+                  fontWeight: '800',
+                  textAlign: 'center',
+                  letterSpacing: -0.3,
+                }}
+              >
+                {t('pause.pausedTitle')}
+              </Text>
+              <Text
+                style={{
+                  color: '#a8a29e',
+                  fontSize: 14,
+                  textAlign: 'center',
+                  marginTop: 8,
+                  lineHeight: 20,
+                  paddingHorizontal: 4,
+                }}
+              >
+                {t('pause.pausedHint')}
+              </Text>
+
+              {sessionPauseOpenEvent ? (
+                <View
+                  style={{
+                    marginTop: 20,
+                    backgroundColor: 'rgba(0,0,0,0.22)',
+                    borderRadius: 16,
+                    padding: 14,
+                    borderLeftWidth: 3,
+                    borderLeftColor: '#f97316',
+                  }}
+                >
+                  <Text style={{ color: '#78716c', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                    {t('pause.overlayReasonLabel')}
+                  </Text>
+                  <Text style={{ color: '#e7e5e4', fontSize: 16, fontWeight: '700', marginTop: 6, lineHeight: 22 }}>
+                    {String(sessionPauseOpenEvent.categoryLabel || sessionPauseOpenEvent.subLabel || '')}
+                  </Text>
+                  {sessionPauseOpenEvent.categoryLabel && sessionPauseOpenEvent.subLabel ? (
+                    <Text style={{ color: '#a8a29e', fontSize: 13, marginTop: 4 }}>{String(sessionPauseOpenEvent.subLabel)}</Text>
+                  ) : null}
+                  {sessionPauseOpenEvent.detail ? (
+                    <Text
+                      style={{ color: '#d6d3d1', fontSize: 13, marginTop: 10, lineHeight: 18 }}
+                      numberOfLines={6}
+                    >
+                      {String(sessionPauseOpenEvent.detail)}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View
+                style={{
+                  marginTop: 22,
+                  marginBottom: 22,
+                  backgroundColor: 'rgba(0,0,0,0.28)',
+                  borderRadius: 18,
+                  paddingVertical: 16,
+                  paddingHorizontal: 12,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <Ionicons name="time-outline" size={17} color="#fca5a5" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#fca5a5', fontSize: 12, fontWeight: '700', letterSpacing: 0.4 }}>
+                    {t('pause.pauseClock')}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontSize: 44,
+                    fontWeight: '800',
+                    textAlign: 'center',
+                    fontVariant: ['tabular-nums'],
+                    ...(Platform.OS === 'android' ? { fontFamily: 'monospace' } : {}),
+                  }}
+                >
+                  {formatDurationClock(pauseSecondsLive)}
+                </Text>
+              </View>
+
+              <TouchableOpacity activeOpacity={0.92} onPress={resumeFromPauseOverlay} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
+                <LinearGradient
+                  colors={['#f97316', '#ea580c', '#dc2626']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{
+                    paddingVertical: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="play" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{t('pause.continueBtn')}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={exitPauseToList}
+                style={{
+                  paddingVertical: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.22)',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                }}
+              >
+                <Text style={{ color: '#e7e5e4', fontWeight: '700', fontSize: 15, textAlign: 'center' }}>{t('pause.exitBtn')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </LinearGradient>
+      </Modal>
+
+      <Modal
+        visible={serverPausedExecution && !isReadOnly && !responses.__form_paused_since}
+        transparent
+        animationType="fade"
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+            justifyContent: 'center',
+            padding: 24,
+            paddingTop: insets.top + 20,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 12 }}>
+            {t('pause.blockedTitle')}
+          </Text>
+          <Text style={{ color: '#94a3b8', fontSize: 15, textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
+            {t('pause.blockedHint')}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#f97316', paddingVertical: 18, borderRadius: 16 }}
+            onPress={() => void unpauseExecutionFromServer()}
+          >
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 17, textAlign: 'center' }}>{t('pause.unpauseBtn')}</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -2544,11 +4245,55 @@ const styles = StyleSheet.create({
       color: '#475569',
       zIndex: 2
   },
+  checklistBottomDock: {
+    backgroundColor: '#ffffff',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 10,
+    paddingHorizontal: 14,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  timeBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  timeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    gap: 6,
+  },
+  timeBadgeLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  timeBadgeValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontVariant: ['tabular-nums'],
+  },
   footerNav: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: 20
+      marginTop: 0
   },
   navBtnPrev: {
       padding: 18,

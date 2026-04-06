@@ -8,6 +8,29 @@ const LS_API_ORIGIN = 'brspark_admin_api_origin';
 /** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */
 let _apiBase = null;
 
+/**
+ * Se o painel está em localhost/127.0.0.1 na mesma porta que a origem gravada no localStorage,
+ * usa sempre o hostname da página actual. Evita misturar localhost vs 127.0.0.1 (origens diferentes
+ * no browser) — o GET pode parecer OK e o POST / CORS falhar ou ficar pendente.
+ */
+function normalizeLoopbackApiOrigin(storedOrigin) {
+  if (typeof window === 'undefined' || !window.location?.hostname) return storedOrigin;
+  try {
+    const a = new URL(String(storedOrigin).replace(/\/$/, ''));
+    const b = window.location;
+    const aPort = a.port || (a.protocol === 'https:' ? '443' : '80');
+    const bPort = b.port || (b.protocol === 'https:' ? '443' : '80');
+    const aLoop = a.hostname === 'localhost' || a.hostname === '127.0.0.1';
+    const bLoop = b.hostname === 'localhost' || b.hostname === '127.0.0.1';
+    if (aLoop && bLoop && aPort === bPort && a.protocol === b.protocol) {
+      return `${b.protocol}//${b.hostname}${b.port ? `:${b.port}` : ''}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return String(storedOrigin).replace(/\/$/, '');
+}
+
 /** GET /api/plans sem token → API Prisma responde 401 JSON. */
 async function isPrismaAdminApi(baseUrl) {
   try {
@@ -32,7 +55,15 @@ export async function ensureAdminApiDetected() {
 
   const ls = localStorage.getItem(LS_API_ORIGIN);
   if (ls) {
-    _apiBase = `${String(ls).replace(/\/$/, '')}/api`;
+    const origin = normalizeLoopbackApiOrigin(ls);
+    if (origin !== String(ls).replace(/\/$/, '')) {
+      try {
+        localStorage.setItem(LS_API_ORIGIN, origin);
+      } catch {
+        /* ignore */
+      }
+    }
+    _apiBase = `${origin}/api`;
     return;
   }
 
@@ -60,7 +91,7 @@ export function resolveApiBase() {
   if (_apiBase) return _apiBase;
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem(LS_API_ORIGIN);
-    if (custom) return `${String(custom).replace(/\/$/, '')}/api`;
+    if (custom) return `${normalizeLoopbackApiOrigin(custom)}/api`;
     if (window.location?.origin && window.location.protocol !== 'file:') {
       return `${window.location.origin}/api`;
     }
