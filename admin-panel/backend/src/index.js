@@ -29,6 +29,7 @@ const dashboardRoutes     = require('./routes/dashboard');
 const i18nRoutes          = require('./routes/i18n');
 const storageRoutes       = require('./routes/storage');
 const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile (custos, seguros, vault…)
+const mobileWarehouseRoutes = require('./routes/mobileWarehouse');
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
@@ -71,6 +72,7 @@ app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
+app.use('/api/sync',    mobileWarehouseRoutes); // app: armazém móvel do técnico
 app.use('/api/storage', storageRoutes);       // app: POST /api/storage/upload | GET /api/storage/config
 app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartilhamento
 app.use('/api/chat',    chatRoutes);          // app: social & chat
