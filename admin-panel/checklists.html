@@ -537,10 +537,13 @@
       position: relative;
     }
     #ai-form-modal-panel.ai-form-panel-wide {
-      width: min(640px, 100%) !important;
+      width: min(720px, 100%) !important;
     }
     #ai-form-modal-panel.ai-form-panel-context {
       width: min(520px, 100%) !important;
+    }
+    #ai-form-modal-panel.ai-form-panel-context.ai-form-panel-wide {
+      width: min(720px, 100%) !important;
     }
     .ai-form-ctx-grid {
       display: grid;
@@ -776,6 +779,153 @@
       font-size: 11px;
       color: #334155;
       line-height: 1.5;
+    }
+    .ai-wizard-progress-wrap {
+      margin-bottom: 14px;
+    }
+    .ai-wizard-progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .ai-wizard-progress-meta span:last-child {
+      font-weight: 600;
+      color: #7c3aed;
+      font-size: 11px;
+    }
+    .ai-wizard-progress-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+    .ai-wizard-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      transition: width 0.25s ease;
+    }
+    .ai-wizard-step-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 6px;
+      line-height: 1.3;
+    }
+    .ai-wizard-step-sub {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0 0 14px;
+      line-height: 1.45;
+    }
+    .ai-wizard-meta-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .ai-wizard-meta-stats span {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      color: #475569;
+    }
+    .ai-wizard-item-host {
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 16px 18px;
+      background: #fff;
+      margin-bottom: 14px;
+    }
+    .ai-wizard-item-host .ai-item-card {
+      border: none;
+      padding: 0;
+      background: transparent;
+    }
+    .ai-wizard-label-block label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .ai-wizard-label-block input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 10px;
+    }
+    .ai-wizard-identified {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #7c3aed;
+      margin-bottom: 8px;
+    }
+    #ai-form-wizard-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    #ai-form-wizard-nav .ai-wizard-nav-right {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .ai-form-phase-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #5b21b6;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .ai-form-upload-advanced {
+      margin-bottom: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px 14px 12px;
+      background: #fff;
+    }
+    .ai-form-upload-advanced > summary {
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+      color: #475569;
+      user-select: none;
+      list-style: none;
+    }
+    .ai-form-upload-advanced > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ai-form-upload-advanced[open] > summary {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
     }
   </style>
 </head>
@@ -1168,81 +1318,111 @@
         <h3 style="margin:0 0 8px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;">
           <ion-icon name="sparkles" style="color:#7c3aed"></ion-icon> Assistente IA
         </h3>
-        <p class="ai-form-lead">Envie uma planilha <strong>.xlsx</strong>. A IA lê o ficheiro, mostra cada campo com <strong>botões de opção</strong> para confirmar o tipo; só depois monta o formulário no canvas.</p>
+        <p class="ai-form-lead"><strong>Três fases:</strong> (1) envia o Excel → (2) confirma <em>um bloco de cada vez</em> (título, tipo, listas…) → (3) só no fim vê a pré-visualização e aplica ao canvas.</p>
       </div>
       <button type="button" id="ai-form-close-btn" class="btn btn-ghost btn-sm" onclick="window.closeAiFormModal()" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
     <div id="ai-form-upload-section">
-      <label class="prop-label">Ficheiro Excel</label>
+      <div class="ai-form-phase-pill" id="ai-form-phase-upload-label">Fase 1 · Enviar Excel</div>
+      <label class="prop-label">Ficheiro Excel (.xlsx)</label>
       <input id="ai-form-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="prop-input" style="margin-bottom:12px;" />
-      <label class="prop-label">Objectivo do formulário</label>
-      <textarea id="ai-form-objective" class="prop-input" rows="2" placeholder="Ex.: inspecção de elevadores em obra…" style="resize:vertical; margin-bottom:10px;"></textarea>
-      <div class="ai-form-ctx-grid">
+      <details class="ai-form-upload-advanced">
+        <summary>Contexto para a IA — opcional (objectivo, sector, tipos de campo…)</summary>
         <div>
-          <label class="prop-label" for="ai-form-sector">Sector / área</label>
-          <input id="ai-form-sector" type="text" class="prop-input" placeholder="Ex.: manutenção, RH…" />
+          <label class="prop-label">Objectivo do formulário</label>
+          <textarea id="ai-form-objective" class="prop-input" rows="2" placeholder="Ex.: inspecção de elevadores em obra…" style="resize:vertical; margin-bottom:10px;"></textarea>
+          <div class="ai-form-ctx-grid">
+            <div>
+              <label class="prop-label" for="ai-form-sector">Sector / área</label>
+              <input id="ai-form-sector" type="text" class="prop-input" placeholder="Ex.: manutenção, RH…" />
+            </div>
+            <div>
+              <label class="prop-label" for="ai-form-kind">Tipo</label>
+              <select id="ai-form-kind" class="prop-input">
+                <option value="checklist">Checklist / inspeção</option>
+                <option value="report">Relatório / registo</option>
+                <option value="survey">Questionário</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+          </div>
+          <div class="ai-form-ctx-checks">
+            <label><input type="checkbox" id="ai-ctx-stamped" /> Foto carimbada</label>
+            <label><input type="checkbox" id="ai-ctx-barcode" /> Código barras</label>
+            <label><input type="checkbox" id="ai-ctx-gps" /> GPS / mapa</label>
+            <label><input type="checkbox" id="ai-ctx-geofence" /> Cerca geográfica</label>
+            <label><input type="checkbox" id="ai-ctx-transit" /> Deslocamento</label>
+            <label><input type="checkbox" id="ai-ctx-facial" /> Biometria facial</label>
+            <label><input type="checkbox" id="ai-ctx-signature" /> Assinatura</label>
+            <label><input type="checkbox" id="ai-ctx-calc" /> Campos calculados</label>
+          </div>
+          <label class="prop-label">Instruções extra (ex.: «cada folha é uma etapa»)</label>
+          <textarea id="ai-form-hint" class="prop-input" rows="2" placeholder="Opcional…" style="resize:vertical; margin-bottom:0;"></textarea>
         </div>
-        <div>
-          <label class="prop-label" for="ai-form-kind">Tipo</label>
-          <select id="ai-form-kind" class="prop-input">
-            <option value="checklist">Checklist / inspeção</option>
-            <option value="report">Relatório / registo</option>
-            <option value="survey">Questionário</option>
-            <option value="other">Outro</option>
-          </select>
-        </div>
+      </details>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+        <button type="button" id="ai-form-generate-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormAnalyze()">Ler Excel com IA →</button>
+        <button type="button" id="ai-form-cancel-btn" class="btn btn-outline btn-sm" onclick="window.closeAiFormModal()">Fechar</button>
       </div>
-      <div class="ai-form-ctx-checks">
-        <label><input type="checkbox" id="ai-ctx-stamped" /> Foto carimbada</label>
-        <label><input type="checkbox" id="ai-ctx-barcode" /> Código barras</label>
-        <label><input type="checkbox" id="ai-ctx-gps" /> GPS / mapa</label>
-        <label><input type="checkbox" id="ai-ctx-geofence" /> Cerca geográfica</label>
-        <label><input type="checkbox" id="ai-ctx-transit" /> Deslocamento</label>
-        <label><input type="checkbox" id="ai-ctx-facial" /> Biometria facial</label>
-        <label><input type="checkbox" id="ai-ctx-signature" /> Assinatura</label>
-        <label><input type="checkbox" id="ai-ctx-calc" /> Campos calculados</label>
-      </div>
-      <label class="prop-label">Instruções opcionais (ex.: «cada folha é uma etapa»)</label>
-      <textarea id="ai-form-hint" class="prop-input" rows="2" placeholder="Opcional…" style="resize:vertical; margin-bottom:12px;"></textarea>
-      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
-        <button type="button" id="ai-form-generate-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormAnalyze()">Analisar planilha</button>
-        <button type="button" id="ai-form-cancel-btn" class="btn btn-outline btn-sm" onclick="window.closeAiFormModal()">Cancelar</button>
-      </div>
+      <p style="font-size:11px;color:#64748b;margin:0;line-height:1.45;">Depois deste passo abre a <strong>revisão assistida</strong> (um campo ou etapa por ecrã).</p>
     </div>
     <div id="ai-form-validate-section" style="display:none; margin-bottom:14px;">
-      <div class="prop-label">Título do formulário</div>
-      <input id="ai-form-session-title" type="text" class="prop-input" style="margin-bottom:10px;" placeholder="Ex.: Inspeção de campo" />
-      <div class="prop-label">Descrição pública (opcional)</div>
-      <textarea id="ai-form-session-desc" class="prop-input" rows="2" placeholder="Visível no app…" style="resize:vertical; margin-bottom:12px;"></textarea>
+      <div class="ai-form-phase-pill">Fase 2 · Revisão assistida (campo a campo)</div>
       <details id="ai-form-history" class="ai-form-history">
-        <summary>Resumo da análise e histórico de escolhas</summary>
+        <summary>O que a IA leu no Excel</summary>
         <div id="ai-form-history-static" class="ai-history-meta"></div>
         <ul class="ai-history-proposals" id="ai-form-history-proposals" style="list-style:disc;"></ul>
-        <div class="ai-history-live-title">Escolhas atuais (atualiza ao clicar nos botões)</div>
-        <ul id="ai-form-history-live"></ul>
       </details>
-      <div class="prop-label" style="margin-bottom:8px;">Confirmar cada bloco</div>
-      <p style="font-size:12px; color:#64748b; margin:0 0 10px; line-height:1.4;">Escolha o tipo em cada cartão. Para listas (dropdown), pode editar as opções sugeridas antes de gerar.</p>
-      <div id="ai-form-items"></div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        <button type="button" id="ai-form-back-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Recomeçar</button>
-        <button type="button" id="ai-form-final-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormFinalBuild()">Gerar formulário</button>
+      <div id="ai-form-wizard-root">
+        <div class="ai-wizard-progress-wrap">
+          <div class="ai-wizard-progress-meta">
+            <span id="ai-wizard-step-label">Passo 1 de 1</span>
+            <span id="ai-wizard-step-kind-badge"></span>
+          </div>
+          <div class="ai-wizard-progress-bar" aria-hidden="true">
+            <div id="ai-wizard-progress-fill" class="ai-wizard-progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+        <h4 id="ai-wizard-heading" class="ai-wizard-step-title">Criação assistida</h4>
+        <p id="ai-wizard-sub" class="ai-wizard-step-sub"></p>
+        <div id="ai-form-wizard-body">
+          <div id="ai-wizard-step-meta" style="display:none;">
+            <div class="ai-wizard-meta-stats" id="ai-wizard-meta-stats"></div>
+            <label class="prop-label" for="ai-form-session-title">Título do formulário</label>
+            <input id="ai-form-session-title" type="text" class="prop-input" style="margin-bottom:10px;" placeholder="Ex.: Inspeção de campo" />
+            <label class="prop-label" for="ai-form-session-desc">Descrição pública (opcional)</label>
+            <textarea id="ai-form-session-desc" class="prop-input" rows="2" placeholder="Visível no app…" style="resize:vertical; margin-bottom:0;"></textarea>
+          </div>
+          <div id="ai-wizard-item-host" class="ai-wizard-item-host" style="display:none;"></div>
+        </div>
+        <div id="ai-form-wizard-nav">
+          <button type="button" id="ai-form-back-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Recomeçar tudo</button>
+          <div class="ai-wizard-nav-right">
+            <button type="button" id="ai-wizard-prev-btn" class="btn btn-ghost btn-sm" onclick="window.brsparkAiWizardPrev()">← Anterior</button>
+            <button type="button" id="ai-wizard-next-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiWizardNext()">Continuar</button>
+          </div>
+        </div>
       </div>
+      <div id="ai-form-items" style="display:none;" aria-hidden="true"></div>
+      <button type="button" id="ai-form-final-btn" style="display:none;" onclick="window.brsparkAiFormFinalBuild()"></button>
     </div>
     <div id="ai-form-status" style="font-size:12px; min-height:20px; margin-bottom:10px;"></div>
-    <div id="ai-form-preview-wrap">
-      <div class="prop-label" style="margin-bottom:6px;">Pré-visualização</div>
-      <div id="ai-form-preview" style="border-radius:10px; padding:12px; margin-bottom:14px; min-height:80px;">
-        <span class="ai-preview-muted" style="font-size:12px;">Analise primeiro um ficheiro .xlsx e confirme os cartões acima.</span>
+    <div id="ai-form-draft-chrome" style="display:none;">
+      <div class="ai-form-phase-pill" style="margin-bottom:10px;">Fase 3 · Rascunho pronto</div>
+      <div id="ai-form-preview-wrap">
+        <div class="prop-label" style="margin-bottom:6px;">Pré-visualização do formulário</div>
+        <div id="ai-form-preview" style="border-radius:10px; padding:12px; margin-bottom:14px; min-height:80px;">
+          <span class="ai-preview-muted" style="font-size:12px;">Gere o formulário na fase 2 para ver aqui o resumo dos campos.</span>
+        </div>
+        <div id="ai-form-post-build" style="display:none; margin-bottom:12px;">
+          <button type="button" id="ai-form-new-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Nova análise (outro Excel)</button>
+        </div>
       </div>
-      <div id="ai-form-post-build" style="display:none; margin-bottom:12px;">
-        <button type="button" id="ai-form-new-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Nova análise (outro Excel)</button>
+      <p class="ai-form-footnote">Requer a integração <strong>OpenAI</strong> em Integrações no painel (ou <code>OPENAI_API_KEY</code> no servidor). PDF e Word podem ser suportados mais tarde.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button type="button" id="ai-form-replace-btn" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;" onclick="window.applyAiFormDraftReplace()">Substituir canvas</button>
+        <button type="button" id="ai-form-append-btn" class="btn btn-outline btn-sm" onclick="window.applyAiFormDraftAppend()">Anexar ao fim</button>
       </div>
-    </div>
-    <p class="ai-form-footnote">Requer a integração <strong>OpenAI</strong> em Integrações no painel (ou <code>OPENAI_API_KEY</code> no servidor). PDF e Word podem ser suportados mais tarde.</p>
-    <div style="display:flex; flex-wrap:wrap; gap:8px;">
-      <button type="button" id="ai-form-replace-btn" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;" onclick="window.applyAiFormDraftReplace()">Substituir canvas</button>
-      <button type="button" id="ai-form-append-btn" class="btn btn-outline btn-sm" onclick="window.applyAiFormDraftAppend()">Anexar ao fim</button>
     </div>
   </div>
 </div>

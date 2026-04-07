@@ -109,7 +109,7 @@ router.post('/ai/build-form', adminAuth, async (req, res) => {
     if (!rawItems || !Array.isArray(rawItems)) {
       return res.status(400).json({ error: 'Corpo inválido: falta "items" (array).' });
     }
-    const { items, warnings: w1 } = normalizeProposalsFromLlm({ items: rawItems });
+    const { items, warnings: w1 } = normalizeProposalsFromLlm({ items: rawItems }, {});
     if (!items.length) {
       return res.status(400).json({ error: 'Lista "items" vazia ou inválida após validação.' });
     }

@@ -4,148 +4,88 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BrSpark Admin — API Docs</title>
   <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" crossorigin="anonymous" />
   <style>
-    .endpoint { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; margin-bottom:12px; }
-    .endpoint-header { display:flex; align-items:center; gap:10px; margin-bottom:8px; cursor:pointer; }
-    .method { font-size:10px; font-weight:900; padding:3px 8px; border-radius:4px; font-family:monospace; }
-    .method-get    { background:rgba(16,185,129,0.15); color:#10B981; }
-    .method-post   { background:rgba(59,130,246,0.15); color:#3B82F6; }
-    .method-put    { background:rgba(245,158,11,0.15); color:#F59E0B; }
-    .method-delete { background:rgba(239,68,68,0.15);  color:#EF4444; }
-    .endpoint-path { font-family:monospace; font-size:12px; color:var(--text); font-weight:700; }
-    .endpoint-desc { font-size:11px; color:var(--text3); margin-left:auto; }
-    .endpoint-body { display:none; border-top:1px solid var(--border); padding-top:12px; margin-top:8px; }
-    .endpoint.open .endpoint-body { display:block; }
-    .code-block { background:var(--bg); border-radius:6px; padding:12px; font-family:monospace; font-size:11px; color:#A5D6FF; overflow-x:auto; line-height:1.6; white-space:pre; }
-    .param-table th, .param-table td { padding:6px 10px; font-size:11px; }
-    .param-table th { color:var(--text3); }
-    .param-table td { color:var(--text2); }
-    .param-name { color:var(--accent); font-family:monospace; font-weight:700; }
-    .api-version-badge { background:var(--accent-dim); color:var(--accent); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:800; }
+    .api-docs-intro { font-size:12px; color:var(--text2); line-height:1.55; max-width:920px; margin-bottom:16px; }
+    .api-docs-intro code { font-size:11px; background:var(--surface2); padding:2px 6px; border-radius:4px; }
+    #swagger-ui { min-height:calc(100vh - 200px); }
+    #swagger-ui .swagger-ui { font-family: inherit; }
+    #swagger-ui .topbar { display: none; }
+    #swagger-ui .info .title { font-size: 1.25rem; }
   </style>
 </head>
 <body>
 <div class="admin-layout">
   <div class="main-content">
     <div class="topbar">
-      <span class="topbar-title">API Documentation</span>
+      <span class="topbar-title">Documentação da API</span>
       <div class="topbar-actions">
-        <span class="api-version-badge">v1.0.0</span>
-        <button class="btn btn-ghost btn-sm"><ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Exportar OpenAPI</button>
-        <button class="btn btn-primary btn-sm">+ Gerar API Key</button>
+        <a class="btn btn-ghost btn-sm" href="openapi.json" download="brspark-openapi.json">
+          <ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon>
+          Descarregar OpenAPI (JSON)
+        </a>
+        <a class="btn btn-ghost btn-sm" href="openapi.json" target="_blank" rel="noopener">
+          Abrir JSON
+        </a>
       </div>
     </div>
     <div class="page-body">
-
-      <!-- Overview -->
-      <div class="panel" style="margin-bottom:20px">
+      <div class="panel" style="margin-bottom:16px">
         <div class="panel-body">
-          <div class="grid-3">
-            <div>
-              <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:6px">Base URL</div>
-              <code style="font-size:12px;color:var(--accent);background:var(--accent-dim);padding:6px 10px;border-radius:6px;display:block">https://api.brspark.com/v1</code>
-            </div>
-            <div>
-              <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:6px">Autenticação</div>
-              <code style="font-size:12px;color:var(--amber);background:var(--amber-dim);padding:6px 10px;border-radius:6px;display:block">Bearer &lt;API_KEY&gt;</code>
-            </div>
-            <div>
-              <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:6px">Rate Limit</div>
-              <code style="font-size:12px;color:var(--green);background:var(--green-dim);padding:6px 10px;border-radius:6px;display:block">1.000 req / hora</code>
-            </div>
-          </div>
+          <p class="api-docs-intro">
+            Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code>
+            e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por
+            <code>admin-panel/scripts/build-openapi.js</code> — após alterar rotas, execute
+            <code>npm run openapi</code> na pasta <code>admin-panel/backend</code>.
+          </p>
+          <p class="api-docs-intro">
+            <strong>Admin:</strong> obtenha JWT com <code>POST /api/auth/login</code> e use <em>Authorize → bearerAdmin</em>.<br />
+            <strong>App:</strong> <code>POST /api/login</code> ou <code>POST /api/register</code> → <em>bearerApp</em>.
+            Rotas públicas não exigem cabeçalho <code>Authorization</code>.
+          </p>
         </div>
       </div>
-
-      <!-- Endpoints por grupo -->
-      <div id="endpoints-container"></div>
-
+      <div id="swagger-ui"></div>
     </div>
   </div>
 </div>
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
+
   await initPage();
 
-  const GROUPS = [
-    {
-      title: '<ion-icon name="construct-outline" style="vertical-align:-2px"></ion-icon> Bens (Assets)', endpoints: [
-        { method:'GET',    path:'/assets',         desc:'Lista todos os bens do tenant',
-          params:[['Authorization','header','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Bearer token'],['page','query','number','','Página (padrão: 1)'],['limit','query','number','','Itens por página (máx 100)']],
-          response:`{\n  "data": [\n    {\n      "id": "T001-abc123",\n      "title": "Casa de Praia",\n      "type": "REAL_ESTATE",\n      "status": "Operacional",\n      "createdAt": "2024-01-15T10:30:00Z"\n    }\n  ],\n  "total": 412,\n  "page": 1\n}` },
-        { method:'POST',   path:'/assets',         desc:'Cria um novo bem',
-          params:[['Authorization','header','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Bearer token'],['title','body','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Nome do bem'],['type','body','enum','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','REAL_ESTATE | TERRESTRIAL | AQUATIC | SPECIAL | OTHER']],
-          response:`{ "id": "T001-xyz789", "title": "Apartamento SP", "type": "REAL_ESTATE" }` },
-        { method:'GET',    path:'/assets/:id',     desc:'Retorna detalhes de um bem',
-          params:[['id','path','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do bem']],
-          response:`{ "id": "T001-abc123", "title": "Casa de Praia", "details": { ... } }` },
-        { method:'PUT',    path:'/assets/:id',     desc:'Atualiza um bem existente',
-          params:[['id','path','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do bem'],['body','body','object','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Campos a atualizar']],
-          response:`{ "updated": true }` },
-        { method:'DELETE', path:'/assets/:id',     desc:'Remove um bem', params:[['id','path','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do bem']], response:`{ "deleted": true }` },
-      ]
-    },
-    {
-      title: '<ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Estoque', endpoints: [
-        { method:'GET',  path:'/stock',           desc:'Lista itens de estoque do tenant',
-          params:[['assetId','query','string','','Filtrar por bem'],['belowMin','query','boolean','','Somente abaixo do mínimo']],
-          response:`{ "data": [{ "id": "...", "name": "Óleo Motor", "currentStock": 2, "minStock": 5 }] }` },
-        { method:'POST', path:'/stock/movement',  desc:'Registra movimentação de estoque',
-          params:[['itemId','body','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do item'],['type','body','enum','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','IN | OUT | TRANSFER'],['quantity','body','number','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Quantidade'],['reason','body','string','','Motivo']],
-          response:`{ "movement": { "id": "...", "type": "OUT", "quantity": 3, "timestamp": "..." } }` },
-      ]
-    },
-    {
-      title: '<ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon> Custos', endpoints: [
-        { method:'GET',  path:'/costs',           desc:'Resumo de custos por bem ou período', params:[['assetId','query','string','','Filtrar por bem'],['from','query','date','','Data inicial'],['to','query','date','','Data final']], response:`{ "totalExpenses": 12500.00, "totalRevenues": 8000.00, "net": -4500.00 }` },
-        { method:'POST', path:'/costs/record',    desc:'Lança uma despesa ou receita', params:[['assetId','body','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do bem'],['type','body','enum','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','EXPENSE | REVENUE'],['amount','body','number','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Valor'],['category','body','string','','Categoria']], response:`{ "id": "...", "recorded": true }` },
-      ]
-    },
-    {
-      title: '<ion-icon name="notifications-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Webhooks', endpoints: [
-        { method:'POST', path:'/webhooks',        desc:'Registra um endpoint para receber eventos', params:[['url','body','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','URL de destino'],['events','body','array','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','Eventos: asset.created, stock.low, cost.recorded…'],['secret','body','string','','Chave para validar assinatura HMAC']], response:`{ "id": "wh_abc123", "status": "active" }` },
-        { method:'GET',  path:'/webhooks/:id/logs',desc:'Histórico de entregas do webhook', params:[['id','path','string','<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>','ID do webhook']], response:`{ "deliveries": [{ "status": 200, "ts": "...", "duration_ms": 142 }] }` },
-      ]
-    },
-  ];
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.crossOrigin = 'anonymous';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Falha ao carregar: ' + src));
+      document.body.appendChild(s);
+    });
+  }
 
-  const container = document.getElementById('endpoints-container');
-  GROUPS.forEach(group => {
-    const panel = document.createElement('div');
-    panel.className = 'panel';
-    panel.style.marginBottom = '20px';
-    panel.innerHTML = `<div class="panel-header"><span class="panel-title">${group.title}</span><span class="badge badge-gray">${group.endpoints.length} endpoints</span></div>
-      <div class="panel-body" style="padding-top:0">${
-        group.endpoints.map(ep => `
-          <div class="endpoint" onclick="this.classList.toggle('open')">
-            <div class="endpoint-header">
-              <span class="method method-${ep.method.toLowerCase()}">${ep.method}</span>
-              <span class="endpoint-path">${ep.path}</span>
-              <span class="endpoint-desc">${ep.desc}</span>
-              <span style="color:var(--text3);font-size:12px">▸</span>
-            </div>
-            <div class="endpoint-body">
-              <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Parâmetros</div>
-              <table class="param-table" style="width:100%;border-collapse:collapse;margin-bottom:16px">
-                <thead><tr><th>Nome</th><th>Em</th><th>Tipo</th><th>Req.</th><th>Descrição</th></tr></thead>
-                <tbody>${ep.params.map(([n,i,t,r,d]) => `
-                  <tr>
-                    <td><span class="param-name">${n}</span></td>
-                    <td><span class="badge badge-gray">${i}</span></td>
-                    <td style="color:var(--amber)">${t}</td>
-                    <td>${r ? '<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon>' : '—'}</td>
-                    <td>${d}</td>
-                  </tr>`).join('')}
-                </tbody>
-              </table>
-              <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Resposta (200)</div>
-              <div class="code-block">${ep.response}</div>
-            </div>
-          </div>`).join('')
-      }</div>`;
-    container.appendChild(panel);
-  });
+  await loadScript('https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js');
+
+  if (typeof SwaggerUIBundle === 'undefined') {
+    document.getElementById('swagger-ui').innerHTML =
+      '<p style="color:var(--red);padding:16px">Não foi possível carregar o Swagger UI (rede ou CDN).</p>';
+  } else {
+    const specUrl = new URL('openapi.json', window.location.href).href;
+    window.ui = SwaggerUIBundle({
+      url: specUrl,
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 2,
+      defaultModelExpandDepth: 2,
+      filter: true,
+      tryItOutEnabled: true,
+      persistAuthorization: true,
+      displayRequestDuration: true,
+    });
+  }
 </script>
 </body>
 </html>

@@ -138,10 +138,51 @@ function buildFormContextBlock(ctx) {
   return '### Contexto do formulário (definido pelo administrador)\n' + lines.join('\n') + '\n';
 }
 
+/** Rótulos curtos para botões no assistente «analisar planilha». */
+const ANALYZE_OPTION_SHORT_PT = {
+  text: 'Texto livre',
+  number: 'Número',
+  phone: 'Telefone',
+  email: 'E-mail',
+  date: 'Data / hora',
+  checkbox: 'Checkbox',
+  yes_no: 'Sim / Não',
+  dropdown: 'Lista (dropdown)',
+  multiselect: 'Múltipla escolha',
+  rating: 'Estrelas',
+  file_upload: 'Anexo (ficheiro)',
+  photo: 'Fotografia',
+  signature: 'Assinatura',
+  location_pick: 'GPS / mapa',
+  hidden: 'Oculto',
+  photo_stamped: 'Foto carimbada',
+  barcode_scan: 'Código barras',
+  facial_recognition: 'Biometria facial',
+  transit_start: 'Início deslocamento',
+  transit_end: 'Fim deslocamento',
+  geofence_check: 'Cerca (geofence)',
+  calculated: 'Calculado',
+};
+
+/**
+ * Opções-padrão por tipo (uma por tipo permitido na fase analisar), para o utilizador nunca ficar só com 2 botões.
+ * @param {Record<string, unknown>} [formContext]
+ * @returns {{ type: string, shortLabel: string, hint: string }[]}
+ */
+function buildDefaultAnalyzeProposalOptions(formContext = {}) {
+  const types = buildAnalyzeFieldTypesList(formContext);
+  return types.map((type) => ({
+    type,
+    shortLabel: ANALYZE_OPTION_SHORT_PT[type] || type,
+    hint: '',
+  }));
+}
+
 module.exports = {
   FIELD_SPECS,
   ALLOWED_FIELD_TYPES,
   buildAnalyzeFieldTypesList,
+  buildDefaultAnalyzeProposalOptions,
   formatAnalyzeFieldTypesForPrompt,
   formatSchemaTypeDocBlock,
   buildFormContextBlock,

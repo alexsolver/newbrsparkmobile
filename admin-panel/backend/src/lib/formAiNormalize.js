@@ -1,6 +1,46 @@
 'use strict';
 
-const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
+const { ALLOWED_FIELD_TYPES, buildDefaultAnalyzeProposalOptions } = require('./formAiFieldCatalog');
+
+/**
+ * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
+ * @param {string} itemKey
+ * @param {object[]} options — já normalizados
+ * @param {Record<string, unknown>} [formContext]
+ */
+function mergeFieldOptionsWithAnalyzePalette(itemKey, options, formContext) {
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
+  const palette = buildDefaultAnalyzeProposalOptions(ctx);
+  const byType = new Map();
+  const order = [];
+  for (const o of options) {
+    if (!o || !o.type) continue;
+    if (!byType.has(o.type)) {
+      byType.set(o.type, o);
+      order.push(o.type);
+    }
+  }
+  for (const p of palette) {
+    if (!byType.has(p.type)) {
+      byType.set(p.type, {
+        key: `${itemKey}_pal_${p.type}`,
+        type: p.type,
+        shortLabel: p.shortLabel,
+        hint: p.hint || '',
+      });
+      order.push(p.type);
+    }
+  }
+  if (order.length === 0) {
+    return palette.map((p, j) => ({
+      key: `${itemKey}_pal_${p.type}_${j}`,
+      type: p.type,
+      shortLabel: p.shortLabel,
+      hint: p.hint || '',
+    }));
+  }
+  return order.map((t) => byType.get(t)).filter(Boolean);
+}
 
 function randomFieldId(usedIds) {
   let id;
@@ -372,9 +412,10 @@ function normalizeProposalOption(raw, kind) {
 /**
  * Valida e normaliza a lista de itens devolvida pela fase «analisar planilha».
  * @param {unknown} parsed
+ * @param {Record<string, unknown>} [formContext] — tipos avançados na paleta conforme checkboxes do painel
  * @returns {{ items: object[], warnings: string[] }}
  */
-function normalizeProposalsFromLlm(parsed) {
+function normalizeProposalsFromLlm(parsed, formContext) {
   const warnings = [];
   const rawItems = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.items : null;
   const arr = Array.isArray(rawItems) ? rawItems : [];
@@ -382,6 +423,7 @@ function normalizeProposalsFromLlm(parsed) {
     warnings.push('A IA não devolveu itens (lista vazia).');
     return { items: [], warnings };
   }
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
   const items = [];
   arr.forEach((raw, i) => {
     if (!raw || typeof raw !== 'object') return;
@@ -404,12 +446,14 @@ function normalizeProposalsFromLlm(parsed) {
         ];
         warnings.push(`Secção «${label}»: opções geradas por defeito.`);
       }
-    } else if (options.length < 2) {
-      options = [
-        { key: `${key}_text`, type: 'text', shortLabel: 'Texto livre', hint: '' },
-        { key: `${key}_num`, type: 'number', shortLabel: 'Número', hint: '' },
-      ];
-      warnings.push(`Campo «${label}»: opções de tipo geradas por defeito.`);
+    } else {
+      const thin = options.length < 2;
+      options = mergeFieldOptionsWithAnalyzePalette(key, options, ctx);
+      if (thin) {
+        warnings.push(
+          `Campo «${label}»: a IA sugeriu poucos tipos — o menu foi alargado com os tipos habituais do BrSpark (pode escolher outro).`
+        );
+      }
     }
     const keys = new Set();
     options = options.map((o, j) => {

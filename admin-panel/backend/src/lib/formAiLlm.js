@@ -174,7 +174,7 @@ async function analyzeSpreadsheetProposals(input) {
   const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.18);
   const title = sanitizeTemplateText(parsed.title, 200) || 'Formulário (IA)';
   const description = sanitizeTemplateText(parsed.description, 500);
-  const { items, warnings: normWarnings } = normalizeProposalsFromLlm(parsed);
+  const { items, warnings: normWarnings } = normalizeProposalsFromLlm(parsed, formContext);
   const { items: itemsAdjusted, warnings: heurWarnings } = applyColumnSignalsToProposals(
     items,
     input.columnSignals || [],

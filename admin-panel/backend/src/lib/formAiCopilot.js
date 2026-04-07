@@ -214,12 +214,10 @@ async function runFormCopilot(input) {
  * @param {Record<string, unknown>} [formContext]
  */
 async function suggestLogicRules(schemaData, userGoal, formContext = {}) {
-  const typeDoc = formatSchemaTypeDocBlock();
   const ctxBlock = buildFormContextBlock(formContext);
   const systemPrompt = `És especialista em regras condicionais do Form Builder BrSpark.
 Cada regra no app: monitoriza um campo (ou cronómetro); SE condição; ENTÃO acções (mostrar/ocultar/tornar obrigatório).
-
-Tipos de campo (referência): ${typeDoc}
+Usa apenas rótulos de campos que existam no JSON do schema enviado pelo utilizador.
 
 Devolves APENAS JSON válido:
 {

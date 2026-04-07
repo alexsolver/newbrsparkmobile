@@ -3958,10 +3958,12 @@ window.saveFieldLogic = function() {
     window.hideLogicModal();
 };
 
-// ─── Assistente IA: Excel .xlsx → analisar → confirmar tipos → schemaData ─────────
+// ─── Assistente IA: Excel .xlsx → analisar → wizard passo a passo → schemaData ─────────
 window.__brsparkAiDraft = null;
 /** @type {{ items: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
 window.__brsparkAiSession = null;
+/** @type {{ step: number, selections: Record<string, { optionKey?: string, required?: boolean, options?: string }>, labelByKey: Record<string, string> } | null} */
+window.__brsparkAiWizardState = null;
 
 function escapeHtmlAi(s) {
     return String(s ?? '')
@@ -4014,6 +4016,8 @@ function setAiFormLoading(on, phase) {
         'ai-form-append-btn',
         'ai-form-session-title',
         'ai-form-session-desc',
+        'ai-wizard-prev-btn',
+        'ai-wizard-next-btn',
     ].forEach((id) => {
         const n = document.getElementById(id);
         if (n) n.disabled = !!on;
@@ -4026,15 +4030,20 @@ function aiFormSetWizardStep(step) {
     const panel = document.getElementById('ai-form-modal-panel');
     const previewWrap = document.getElementById('ai-form-preview-wrap');
     const postBuild = document.getElementById('ai-form-post-build');
+    const draftChrome = document.getElementById('ai-form-draft-chrome');
     if (upload) upload.style.display = step === 'upload' ? 'block' : 'none';
     if (validate) validate.style.display = step === 'validate' ? 'block' : 'none';
     if (panel) {
-        panel.classList.toggle('ai-form-panel-wide', step === 'validate');
+        panel.classList.toggle('ai-form-panel-wide', step === 'validate' || step === 'done');
     }
+    const showDraftUi = step === 'done';
     if (previewWrap) {
-        previewWrap.style.display = step === 'validate' ? 'none' : 'block';
+        previewWrap.style.display = showDraftUi ? 'block' : 'none';
     }
-    if (postBuild) postBuild.style.display = step === 'done' ? 'block' : 'none';
+    if (draftChrome) {
+        draftChrome.style.display = showDraftUi ? 'block' : 'none';
+    }
+    if (postBuild) postBuild.style.display = showDraftUi ? 'block' : 'none';
 }
 
 function clearAiFormHistoryDom() {
@@ -4042,8 +4051,6 @@ function clearAiFormHistoryDom() {
     if (hs) hs.innerHTML = '';
     const hp = document.getElementById('ai-form-history-proposals');
     if (hp) hp.innerHTML = '';
-    const hl = document.getElementById('ai-form-history-live');
-    if (hl) hl.innerHTML = '';
     const hist = document.getElementById('ai-form-history');
     if (hist) hist.open = false;
 }
@@ -4096,54 +4103,7 @@ function renderAiFormHistorySession(sess) {
     });
 
     const hist = document.getElementById('ai-form-history');
-    if (hist) hist.open = true;
-    updateAiFormHistoryLive();
-}
-
-function updateAiFormHistoryLive() {
-    const liveEl = document.getElementById('ai-form-history-live');
-    if (!liveEl) return;
-    liveEl.innerHTML = '';
-    document.querySelectorAll('#ai-form-items .ai-item-card').forEach(function (card) {
-        const li = document.createElement('li');
-        const kind = (card.querySelector('.ai-item-kind') && card.querySelector('.ai-item-kind').textContent) || '';
-        const label =
-            (card.querySelector('.ai-item-label') && card.querySelector('.ai-item-label').textContent) || '';
-        const active = card.querySelector('.ai-opt-btn.is-active');
-        const choice = active ? active.textContent.trim() : '—';
-        let extra = '';
-        const req = card.querySelector('.ai-required-cb');
-        if (req && kind.indexOf('Campo') !== -1 && req.checked) {
-            extra = ' <span style="color:#b45309;">· obrigatório</span>';
-        }
-        li.innerHTML =
-            '<strong>' +
-            escapeHtmlAi(kind) +
-            ':</strong> ' +
-            escapeHtmlAi(label) +
-            ' → <span style="color:#5b21b6;">' +
-            escapeHtmlAi(choice) +
-            '</span>' +
-            extra;
-        liveEl.appendChild(li);
-    });
-    if (!liveEl.children.length) {
-        const li = document.createElement('li');
-        li.style.color = '#94a3b8';
-        li.textContent = '(ainda sem cartões)';
-        liveEl.appendChild(li);
-    }
-}
-
-function ensureAiHistoryLiveUpdates() {
-    const v = document.getElementById('ai-form-validate-section');
-    if (!v || v._aiHistChangeBound) return;
-    v._aiHistChangeBound = true;
-    v.addEventListener('change', function (ev) {
-        if (ev.target && ev.target.classList && ev.target.classList.contains('ai-required-cb')) {
-            updateAiFormHistoryLive();
-        }
-    });
+    if (hist) hist.open = false;
 }
 
 function updateAiCardOptionsVisibility(card) {
@@ -4156,8 +4116,8 @@ function updateAiCardOptionsVisibility(card) {
     }
 }
 
-function ensureAiItemsDelegation() {
-    const root = document.getElementById('ai-form-items');
+function ensureAiWizardItemDelegation() {
+    const root = document.getElementById('ai-wizard-item-host');
     if (!root || root._aiDelegBound) return;
     root._aiDelegBound = true;
     root.addEventListener('click', function (ev) {
@@ -4170,98 +4130,291 @@ function ensureAiItemsDelegation() {
         });
         card.dataset.selectedOption = btn.getAttribute('data-option-key') || '';
         updateAiCardOptionsVisibility(card);
-        updateAiFormHistoryLive();
     });
 }
 
-function renderAiFormValidateCards(items) {
-    ensureAiItemsDelegation();
-    const root = document.getElementById('ai-form-items');
-    if (!root) return;
-    root.innerHTML = '';
-    (items || []).forEach(function (item) {
-        const card = document.createElement('div');
-        card.className = 'ai-item-card';
-        card.dataset.itemKey = item.key;
-        card.dataset.selectedOption = item.recommendedOptionKey || '';
+/**
+ * @param {HTMLElement} host
+ * @param {object} item
+ * @param {Record<string, { optionKey?: string, required?: boolean, options?: string }>} [savedSel]
+ * @param {string} [labelOverride]
+ */
+function renderAiWizardItemCard(host, item, savedSel, labelOverride) {
+    if (!host || !item) return;
+    ensureAiWizardItemDelegation();
+    host.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'ai-item-card';
+    card.dataset.itemKey = item.key;
+    const prev = savedSel && savedSel[item.key];
+    let selectedKey = (prev && prev.optionKey) || item.recommendedOptionKey || '';
 
-        const kindEl = document.createElement('div');
-        kindEl.className = 'ai-item-kind';
-        kindEl.textContent = item.kind === 'section_break' ? 'Etapa / secção' : 'Campo';
-        card.appendChild(kindEl);
+    const identified = document.createElement('div');
+    identified.className = 'ai-wizard-identified';
+    identified.textContent = 'O que a IA extraiu';
+    host.appendChild(identified);
 
-        const lab = document.createElement('p');
-        lab.className = 'ai-item-label';
-        lab.textContent = item.label || '';
-        card.appendChild(lab);
+    const kindEl = document.createElement('div');
+    kindEl.className = 'ai-item-kind';
+    kindEl.textContent = item.kind === 'section_break' ? 'Etapa / secção' : 'Campo';
+    card.appendChild(kindEl);
 
-        if (item.context) {
-            const ctx = document.createElement('p');
-            ctx.className = 'ai-item-context';
-            ctx.textContent = item.context;
-            card.appendChild(ctx);
+    const labelBlock = document.createElement('div');
+    labelBlock.className = 'ai-wizard-label-block';
+    const ll = document.createElement('label');
+    ll.setAttribute('for', 'ai-wizard-label-input');
+    ll.textContent = item.kind === 'section_break' ? 'Título da etapa no formulário' : 'Rótulo do campo (cabeçalho da coluna)';
+    const labelInp = document.createElement('input');
+    labelInp.type = 'text';
+    labelInp.id = 'ai-wizard-label-input';
+    labelInp.value = (labelOverride != null ? labelOverride : item.label) || '';
+    labelBlock.appendChild(ll);
+    labelBlock.appendChild(labelInp);
+    card.appendChild(labelBlock);
+
+    if (item.context) {
+        const ctx = document.createElement('p');
+        ctx.className = 'ai-item-context';
+        ctx.textContent = item.context;
+        card.appendChild(ctx);
+    }
+
+    const choose = document.createElement('p');
+    choose.style.fontSize = '12px';
+    choose.style.fontWeight = '700';
+    choose.style.color = '#475569';
+    choose.style.margin = '12px 0 8px';
+    choose.textContent =
+        item.kind === 'section_break'
+            ? 'Como deve funcionar esta etapa no app?'
+            : 'Tipo de campo e comportamento';
+    card.appendChild(choose);
+
+    const row = document.createElement('div');
+    row.className = 'ai-opt-row';
+    let hasActive = false;
+    (item.options || []).forEach(function (opt) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ai-opt-btn';
+        if (opt.key === selectedKey) {
+            b.classList.add('is-active');
+            hasActive = true;
         }
-
-        const row = document.createElement('div');
-        row.className = 'ai-opt-row';
-        let hasActive = false;
-        (item.options || []).forEach(function (opt) {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'ai-opt-btn';
-            if (opt.key === item.recommendedOptionKey) {
-                b.classList.add('is-active');
-                hasActive = true;
-            }
-            b.setAttribute('data-item-key', item.key);
-            b.setAttribute('data-option-key', opt.key);
-            b.setAttribute('data-option-type', opt.type || '');
-            let bt = opt.shortLabel || opt.type || '';
-            if (opt.hint) bt += ' — ' + opt.hint;
-            b.textContent = bt;
-            row.appendChild(b);
-        });
-        if (!hasActive && row.firstElementChild) {
-            row.firstElementChild.classList.add('is-active');
-            card.dataset.selectedOption = row.firstElementChild.getAttribute('data-option-key') || '';
-        }
-        card.appendChild(row);
-
-        if (item.kind !== 'section_break') {
-            const reqRow = document.createElement('div');
-            reqRow.className = 'ai-required-row';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.className = 'ai-required-cb';
-            cb.id = 'ai-req-' + item.key.replace(/[^a-z0-9_-]/gi, '_');
-            const lbl = document.createElement('label');
-            lbl.setAttribute('for', cb.id);
-            lbl.textContent = 'Obrigatório';
-            reqRow.appendChild(cb);
-            reqRow.appendChild(lbl);
-            card.appendChild(reqRow);
-        }
-
-        const optWrap = document.createElement('div');
-        optWrap.className = 'ai-suggest-options-wrap';
-        optWrap.style.display = 'none';
-        const labOpt = document.createElement('label');
-        labOpt.textContent = 'Opções da lista (vírgulas), se aplicável';
-        const ta = document.createElement('textarea');
-        ta.className = 'ai-suggest-options';
-        ta.placeholder = 'Ex.: Sim, Não, N/A';
-        if (item.suggestedOptions) ta.value = item.suggestedOptions;
-        optWrap.appendChild(labOpt);
-        optWrap.appendChild(ta);
-        card.appendChild(optWrap);
-
-        root.appendChild(card);
-        updateAiCardOptionsVisibility(card);
+        b.setAttribute('data-item-key', item.key);
+        b.setAttribute('data-option-key', opt.key);
+        b.setAttribute('data-option-type', opt.type || '');
+        let bt = opt.shortLabel || opt.type || '';
+        if (opt.hint) bt += ' — ' + opt.hint;
+        b.textContent = bt;
+        row.appendChild(b);
     });
-    updateAiFormHistoryLive();
+    if (!hasActive && row.firstElementChild) {
+        row.firstElementChild.classList.add('is-active');
+        selectedKey = row.firstElementChild.getAttribute('data-option-key') || '';
+    }
+    card.dataset.selectedOption = selectedKey;
+    card.appendChild(row);
+
+    if (item.kind !== 'section_break') {
+        const reqRow = document.createElement('div');
+        reqRow.className = 'ai-required-row';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'ai-required-cb';
+        cb.id = 'ai-req-' + item.key.replace(/[^a-z0-9_-]/gi, '_');
+        if (prev && prev.required) cb.checked = true;
+        const lbl = document.createElement('label');
+        lbl.setAttribute('for', cb.id);
+        lbl.textContent = 'Preenchimento obrigatório no app';
+        reqRow.appendChild(cb);
+        reqRow.appendChild(lbl);
+        card.appendChild(reqRow);
+    }
+
+    const optWrap = document.createElement('div');
+    optWrap.className = 'ai-suggest-options-wrap';
+    optWrap.style.display = 'none';
+    const labOpt = document.createElement('label');
+    labOpt.textContent = 'Valores da lista (separados por vírgula)';
+    const ta = document.createElement('textarea');
+    ta.className = 'ai-suggest-options';
+    ta.placeholder = 'Ex.: Sim, Não, N/A';
+    const sug =
+        (prev && prev.options != null && String(prev.options).trim()) || item.suggestedOptions || '';
+    if (sug) ta.value = sug;
+    optWrap.appendChild(labOpt);
+    optWrap.appendChild(ta);
+    card.appendChild(optWrap);
+
+    host.appendChild(card);
+    updateAiCardOptionsVisibility(card);
 }
+
+function aiWizardPersistCurrentItem() {
+    const sess = window.__brsparkAiSession;
+    const st = window.__brsparkAiWizardState;
+    if (!sess || !st || st.step < 1) return;
+    const items = sess.items || [];
+    const idx = st.step - 1;
+    const item = items[idx];
+    if (!item || !item.key) return;
+    const host = document.getElementById('ai-wizard-item-host');
+    const card = host && host.querySelector('.ai-item-card');
+    if (!card) return;
+    const labelInp = document.getElementById('ai-wizard-label-input');
+    if (labelInp) {
+        st.labelByKey[item.key] = String(labelInp.value || '').trim() || item.label;
+    }
+    const optionKey =
+        card.dataset.selectedOption ||
+        (function () {
+            const a = card.querySelector('.ai-opt-btn.is-active');
+            return a ? a.getAttribute('data-option-key') : '';
+        })();
+    const sel = { optionKey: optionKey || '' };
+    const req = card.querySelector('.ai-required-cb');
+    if (req && req.checked) sel.required = true;
+    const ta = card.querySelector('.ai-suggest-options');
+    if (ta && ta.value.trim()) sel.options = ta.value.trim();
+    st.selections[item.key] = sel;
+}
+
+function initAiFormWizardAfterAnalyze() {
+    const sess = window.__brsparkAiSession;
+    if (!sess || !Array.isArray(sess.items)) return;
+    const labelByKey = {};
+    (sess.items || []).forEach(function (it) {
+        if (it && it.key) labelByKey[it.key] = String(it.label || '').trim() || '';
+    });
+    window.__brsparkAiWizardState = {
+        step: 0,
+        selections: {},
+        labelByKey: labelByKey,
+    };
+    renderAiFormWizardStep();
+}
+
+function aiFormWizardTotalSteps() {
+    const sess = window.__brsparkAiSession;
+    const n = sess && Array.isArray(sess.items) ? sess.items.length : 0;
+    return 1 + n;
+}
+
+function renderAiFormWizardStep() {
+    const sess = window.__brsparkAiSession;
+    const st = window.__brsparkAiWizardState;
+    const metaEl = document.getElementById('ai-wizard-step-meta');
+    const host = document.getElementById('ai-wizard-item-host');
+    const stepLabel = document.getElementById('ai-wizard-step-label');
+    const badge = document.getElementById('ai-wizard-step-kind-badge');
+    const fill = document.getElementById('ai-wizard-progress-fill');
+    const heading = document.getElementById('ai-wizard-heading');
+    const sub = document.getElementById('ai-wizard-sub');
+    const prevBtn = document.getElementById('ai-wizard-prev-btn');
+    const nextBtn = document.getElementById('ai-wizard-next-btn');
+    if (!sess || !st || !metaEl || !host) return;
+
+    const total = aiFormWizardTotalSteps();
+    const step = st.step;
+    const pct = total > 0 ? Math.round(((step + 1) / total) * 100) : 0;
+    if (fill) fill.style.width = pct + '%';
+    if (stepLabel) stepLabel.textContent = 'Passo ' + (step + 1) + ' de ' + total;
+
+    if (step === 0) {
+        metaEl.style.display = 'block';
+        host.style.display = 'none';
+        if (badge) badge.textContent = 'Introdução';
+        if (heading) heading.textContent = 'Antes de rever cada campo';
+        if (sub) {
+            sub.textContent =
+                'Confirme o título e a descrição do formulário. A seguir, vamos percorrer cada etapa e campo extraídos do Excel — um de cada vez.';
+        }
+        const stats = document.getElementById('ai-wizard-meta-stats');
+        if (stats) {
+            const items = sess.items || [];
+            let sections = 0;
+            let fields = 0;
+            items.forEach(function (it) {
+                if (it.kind === 'section_break') sections++;
+                else fields++;
+            });
+            stats.innerHTML =
+                '<span>' +
+                items.length +
+                ' blocos no total</span><span>' +
+                sections +
+                ' etapas</span><span>' +
+                fields +
+                ' campos</span>';
+        }
+        const stIn = document.getElementById('ai-form-session-title');
+        const sdIn = document.getElementById('ai-form-session-desc');
+        if (stIn && (stIn.value == null || stIn.value === '')) stIn.value = sess.title || '';
+        if (sdIn && (sdIn.value == null || sdIn.value === '')) sdIn.value = sess.description || '';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.textContent = 'Começar revisão →';
+    } else {
+        metaEl.style.display = 'none';
+        host.style.display = 'block';
+        const items = sess.items || [];
+        const idx = step - 1;
+        const item = items[idx];
+        if (!item) return;
+        if (badge) badge.textContent = item.kind === 'section_break' ? 'Etapa' : 'Campo';
+        if (heading) {
+            heading.textContent =
+                item.kind === 'section_break' ? 'Confirmar esta etapa' : 'Confirmar este campo';
+        }
+        if (sub) {
+            sub.textContent =
+                'Ajuste o rótulo, o tipo e as opções se precisar. Quando estiver correto, avance para o seguinte.';
+        }
+        renderAiWizardItemCard(host, item, st.selections, st.labelByKey[item.key]);
+        if (prevBtn) prevBtn.disabled = false;
+        if (nextBtn) {
+            nextBtn.textContent = step >= items.length ? 'Gerar formulário' : 'OK, avançar →';
+        }
+    }
+}
+
+window.brsparkAiWizardPrev = function () {
+    const st = window.__brsparkAiWizardState;
+    if (!st || st.step <= 0) return;
+    aiWizardPersistCurrentItem();
+    st.step -= 1;
+    renderAiFormWizardStep();
+};
+
+window.brsparkAiWizardNext = function () {
+    const st = window.__brsparkAiWizardState;
+    const sess = window.__brsparkAiSession;
+    if (!st || !sess) return;
+    const items = sess.items || [];
+    if (st.step === 0) {
+        const stIn = document.getElementById('ai-form-session-title');
+        const sdIn = document.getElementById('ai-form-session-desc');
+        if (stIn) sess.title = String(stIn.value || '').trim();
+        if (sdIn) sess.description = String(sdIn.value || '').trim();
+        st.step = 1;
+        renderAiFormWizardStep();
+        return;
+    }
+    aiWizardPersistCurrentItem();
+    if (st.step >= items.length) {
+        window.brsparkAiFormFinalBuild();
+        return;
+    }
+    st.step += 1;
+    renderAiFormWizardStep();
+};
 
 function collectAiFormSelections() {
+    const st = window.__brsparkAiWizardState;
+    if (st && st.selections) {
+        aiWizardPersistCurrentItem();
+        return Object.assign({}, st.selections);
+    }
     const selections = {};
     document.querySelectorAll('#ai-form-items .ai-item-card').forEach(function (card) {
         const key = card.dataset.itemKey;
@@ -4322,14 +4475,17 @@ function collectCopilotFormContext() {
 window.brsparkAiFormWizardReset = function () {
     window.__brsparkAiSession = null;
     window.__brsparkAiDraft = null;
+    window.__brsparkAiWizardState = null;
     const itemsRoot = document.getElementById('ai-form-items');
     if (itemsRoot) itemsRoot.innerHTML = '';
+    const wizHost = document.getElementById('ai-wizard-item-host');
+    if (wizHost) wizHost.innerHTML = '';
     const status = document.getElementById('ai-form-status');
     if (status) status.textContent = '';
     const preview = document.getElementById('ai-form-preview');
     if (preview) {
         preview.innerHTML =
-            '<span class="ai-preview-muted" style="font-size:12px;">Analise primeiro um ficheiro .xlsx e confirme os cartões acima.</span>';
+            '<span class="ai-preview-muted" style="font-size:12px;">Gere o formulário na fase 2 para ver aqui o resumo dos campos.</span>';
     }
     const fi = document.getElementById('ai-form-file');
     if (fi) fi.value = '';
@@ -4350,6 +4506,8 @@ window.brsparkAiFormWizardReset = function () {
         if (el) el.checked = false;
     });
     clearAiFormHistoryDom();
+    const adv = document.querySelector('#ai-form-upload-section .ai-form-upload-advanced');
+    if (adv) adv.open = false;
     aiFormSetWizardStep('upload');
 };
 
@@ -4362,10 +4520,9 @@ window.openAiFormModal = function () {
     const genBtn = document.getElementById('ai-form-generate-btn');
     if (genBtn) {
         genBtn.disabled = false;
-        genBtn.textContent = 'Analisar planilha';
+        genBtn.textContent = 'Ler Excel com IA →';
     }
     setAiFormLoading(false);
-    ensureAiHistoryLiveUpdates();
     m.style.display = 'flex';
 };
 
@@ -4436,14 +4593,15 @@ window.brsparkAiFormAnalyze = async function () {
         const sdIn = document.getElementById('ai-form-session-desc');
         if (stIn) stIn.value = window.__brsparkAiSession.title || '';
         if (sdIn) sdIn.value = window.__brsparkAiSession.description || '';
-        renderAiFormValidateCards(items);
+        initAiFormWizardAfterAnalyze();
         renderAiFormHistorySession(window.__brsparkAiSession);
         aiFormSetWizardStep('validate');
         if (status) {
             const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
             status.textContent =
                 (data.truncated ? 'Aviso: conteúdo truncado. ' : '') +
-                (w || 'Confirme os tipos abaixo e clique em «Gerar formulário».');
+                (w ||
+                    'Use «Começar revisão» e confirme cada etapa e campo; no último passo clique em «Gerar formulário».');
         }
         if (preview) {
             preview.innerHTML =
@@ -4453,12 +4611,13 @@ window.brsparkAiFormAnalyze = async function () {
         console.error(e);
         if (status) status.textContent = 'Erro: ' + (e.message || e);
         window.__brsparkAiSession = null;
+        window.__brsparkAiWizardState = null;
         aiFormSetWizardStep('upload');
     } finally {
         setAiFormLoading(false);
         if (btn) {
             btn.disabled = false;
-            btn.textContent = 'Analisar planilha';
+            btn.textContent = 'Ler Excel com IA →';
         }
     }
 };
@@ -4485,6 +4644,15 @@ window.brsparkAiFormFinalBuild = async function () {
         window.__brsparkAiSession.title = titleOut;
         window.__brsparkAiSession.description = descOut;
     }
+    const wst = window.__brsparkAiWizardState;
+    const itemsForBuild = (sess.items || []).map(function (it) {
+        if (!it || !it.key) return it;
+        const lb = wst && wst.labelByKey ? wst.labelByKey[it.key] : null;
+        if (lb != null && String(lb).trim() !== '') {
+            return Object.assign({}, it, { label: String(lb).trim() });
+        }
+        return it;
+    });
     setAiFormLoading(true, 'build');
     try {
         const res = await fetch(`${brsparkApiBase()}/checklists/ai/build-form`, {
@@ -4496,7 +4664,7 @@ window.brsparkAiFormFinalBuild = async function () {
             body: JSON.stringify({
                 title: titleOut,
                 description: descOut,
-                items: sess.items,
+                items: itemsForBuild,
                 selections: selections,
             }),
         });
@@ -4585,6 +4753,250 @@ window.applyAiFormDraftReplace = function () {
 
 window.applyAiFormDraftAppend = function () {
     applyAiDraftToCanvas('append');
+};
+
+/* ---------- Copiloto IA (chat + patch + lógica) ---------- */
+if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];
+if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
+
+function renderCopilotMessages() {
+    const root = document.getElementById('ai-copilot-messages');
+    if (!root) return;
+    root.innerHTML = '';
+    (window.__brsparkCopilotMessages || []).forEach(function (m) {
+        if (!m || (m.role !== 'user' && m.role !== 'assistant')) return;
+        const div = document.createElement('div');
+        div.className = 'ai-copilot-bubble ' + (m.role === 'user' ? 'user' : 'assistant');
+        div.textContent = String(m.content || '');
+        root.appendChild(div);
+    });
+    root.scrollTop = root.scrollHeight;
+}
+
+window.toggleAiCopilotPanel = function () {
+    const p = document.getElementById('ai-copilot-panel');
+    if (!p) return;
+    const open = !p.classList.contains('is-open');
+    p.classList.toggle('is-open', open);
+    p.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) renderCopilotMessages();
+};
+
+window.brsparkCopilotClear = function () {
+    window.__brsparkCopilotMessages = [];
+    renderCopilotMessages();
+    window.__brsparkCopilotLast = null;
+    window.__brsparkCopilotLogicLast = null;
+    const ab = document.getElementById('ai-copilot-apply-btn');
+    if (ab) ab.disabled = true;
+    const lb = document.getElementById('ai-copilot-apply-logic-btn');
+    if (lb) {
+        lb.disabled = true;
+        lb.style.display = 'none';
+    }
+    const ph = document.getElementById('ai-copilot-patch-hint');
+    if (ph) ph.style.display = 'none';
+    const lh = document.getElementById('ai-copilot-logic-hint');
+    if (lh) lh.style.display = 'none';
+};
+
+window.brsparkCopilotSend = async function () {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
+        return;
+    }
+    const inp = document.getElementById('ai-copilot-input');
+    const text = inp ? String(inp.value || '').trim() : '';
+    if (!text) {
+        alert('Escreva uma mensagem.');
+        return;
+    }
+    window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
+    window.__brsparkCopilotMessages.push({ role: 'user', content: text });
+    if (inp) inp.value = '';
+    renderCopilotMessages();
+
+    let summary = '';
+    if (window.__brsparkAiSession) {
+        summary =
+            'Ficheiro analisado: ' +
+            (window.__brsparkAiSession.sourceFileName || '') +
+            (window.__brsparkAiSession.hint ? '\nNotas: ' + window.__brsparkAiSession.hint : '');
+    }
+
+    try {
+        const res = await fetch(brsparkApiBase() + '/checklists/ai/session/chat', {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer ' + token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                messages: window.__brsparkCopilotMessages,
+                schemaData: fields,
+                formContext: collectCopilotFormContext(),
+                spreadsheetSummary: summary.slice(0, 12000),
+            }),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (e2) {
+            data = {};
+        }
+        if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
+
+        window.__brsparkCopilotMessages.push({ role: 'assistant', content: data.replyText || '(sem texto)' });
+        window.__brsparkCopilotLast = data;
+        renderCopilotMessages();
+
+        const hasPatch =
+            data.schemaPatch &&
+            data.schemaPatch.operations &&
+            data.schemaPatch.operations.length > 0;
+        let changed = false;
+        if (hasPatch && Array.isArray(data.schemaData)) {
+            try {
+                changed = JSON.stringify(data.schemaData) !== JSON.stringify(fields);
+            } catch (e3) {
+                changed = true;
+            }
+        }
+        const applyBtn = document.getElementById('ai-copilot-apply-btn');
+        if (applyBtn) applyBtn.disabled = !changed;
+        const ph = document.getElementById('ai-copilot-patch-hint');
+        if (ph) ph.style.display = changed ? 'block' : 'none';
+
+        window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
+        const hasLog = window.__brsparkCopilotLogicLast.length > 0;
+        const lb = document.getElementById('ai-copilot-apply-logic-btn');
+        if (lb) {
+            lb.style.display = hasLog ? 'inline-flex' : 'none';
+            lb.disabled = !hasLog;
+        }
+        const lh = document.getElementById('ai-copilot-logic-hint');
+        if (lh) lh.style.display = hasLog ? 'block' : 'none';
+    } catch (e) {
+        console.error(e);
+        window.__brsparkCopilotMessages.push({
+            role: 'assistant',
+            content: 'Erro: ' + (e.message || e),
+        });
+        renderCopilotMessages();
+    }
+};
+
+window.brsparkCopilotApplyPatch = function () {
+    const data = window.__brsparkCopilotLast;
+    if (!data || !Array.isArray(data.schemaData)) return;
+    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
+    window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
+    fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(data.schemaData)));
+    ensureCanvasSchemaHasSection();
+    renderCanvas();
+    const ub = document.getElementById('ai-copilot-undo-btn');
+    if (ub) ub.disabled = false;
+    const ab = document.getElementById('ai-copilot-apply-btn');
+    if (ab) ab.disabled = true;
+    const ph = document.getElementById('ai-copilot-patch-hint');
+    if (ph) ph.style.display = 'none';
+};
+
+window.brsparkCopilotUndo = function () {
+    const st = window.__brsparkSchemaUndoStack;
+    if (!st || !st.length) return;
+    fields = JSON.parse(st.pop());
+    renderCanvas();
+    const ub = document.getElementById('ai-copilot-undo-btn');
+    if (ub) ub.disabled = st.length === 0;
+};
+
+window.brsparkCopilotSuggestLogic = async function () {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
+        return;
+    }
+    const g = document.getElementById('ai-copilot-logic-goal');
+    const goal = g ? String(g.value || '').trim() : '';
+    if (!goal) {
+        alert('Descreva o que a lógica deve fazer.');
+        return;
+    }
+    try {
+        const res = await fetch(brsparkApiBase() + '/checklists/ai/suggest-logic', {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer ' + token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                schemaData: fields,
+                userGoal: goal,
+                formContext: collectCopilotFormContext(),
+            }),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (e2) {
+            data = {};
+        }
+        if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
+
+        window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
+        const chunk =
+            (data.replyText ? data.replyText + '\n\n' : '') +
+            (data.logicSuggestions && data.logicSuggestions.length
+                ? 'Sugestões: ' + data.logicSuggestions.length + ' regra(s) mapeada(s) para os campos.'
+                : 'Sem regras mapeáveis — verifique os rótulos.');
+        window.__brsparkCopilotMessages.push({ role: 'assistant', content: chunk.trim() });
+        renderCopilotMessages();
+
+        window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
+        const hasLog = window.__brsparkCopilotLogicLast.length > 0;
+        const lb = document.getElementById('ai-copilot-apply-logic-btn');
+        if (lb) {
+            lb.style.display = hasLog ? 'inline-flex' : 'none';
+            lb.disabled = !hasLog;
+        }
+        const lh = document.getElementById('ai-copilot-logic-hint');
+        if (lh) lh.style.display = hasLog ? 'block' : 'none';
+    } catch (e) {
+        console.error(e);
+        alert(e.message || String(e));
+    }
+};
+
+window.brsparkCopilotApplyLogic = function () {
+    const list = window.__brsparkCopilotLogicLast;
+    if (!list || !list.length) return;
+    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
+    window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
+    list.forEach(function (s) {
+        const mon = fields.find(function (f) {
+            return f.id === s.monitorFieldId;
+        });
+        if (!mon) return;
+        if (!mon.rules) mon.rules = [];
+        mon.rules.push({
+            condFieldId: s.monitorFieldId,
+            operator: s.operator || '==',
+            value: s.value != null ? String(s.value) : '',
+            actions: [{ type: s.actionType || 'SHOW', targetId: s.targetFieldId, value: '' }],
+        });
+    });
+    renderCanvas();
+    const ub = document.getElementById('ai-copilot-undo-btn');
+    if (ub) ub.disabled = false;
+    const lb = document.getElementById('ai-copilot-apply-logic-btn');
+    if (lb) {
+        lb.disabled = true;
+        lb.style.display = 'none';
+    }
+    const lh = document.getElementById('ai-copilot-logic-hint');
+    if (lh) lh.style.display = 'none';
 };
 
 /**
