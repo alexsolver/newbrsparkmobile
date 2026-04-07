@@ -195,6 +195,10 @@ function providerTaskListAccentColor(
   const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
   if (eff === 'COMPLETED') return '#10B981';
   if (eff === 'PAUSED') return '#EF4444';
+  // Revisão (reopenForRevisionPending): índigo — coerente com o badge; só ativo em pendente / em andamento
+  if (isProviderRevisionTask(t) && (eff === 'PENDING' || eff === 'IN_PROGRESS')) {
+    return '#6366F1';
+  }
   if (inprogressIds.has(String(t.id)) || t.isAccepted) return '#F59E0B';
   return '#94A3B8';
 }
