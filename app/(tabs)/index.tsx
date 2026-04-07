@@ -26,6 +26,7 @@ import { getOsrmBaseUrl } from '../../src/services/osrmConfig';
 import { fetchTravelDurationsFromOrigin, fetchStitchedDrivingRouteLatLng } from '../../src/services/osrmClient';
 import { useManualSync } from '../../src/hooks/useManualSync';
 import { pushSyncQueue, pullTasks, enqueueExecutionStatusPatch } from '../../src/services/syncService';
+import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import MapView, { Marker, Callout, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 
@@ -50,14 +51,6 @@ const OSRM_MAX_DESTINATIONS = 90;
 const OSRM_MAX_WAYPOINTS_FOR_GEOMETRY = 28;
 /** Igual a `LiveRouteMapCard`: voltar a pedir geometria até o GPS/OSRM responder. */
 const OSRM_ROUTE_MAP_RETRY_MS = 12000;
-
-/** Número FT convencional ou recorte do id técnico (cartões prestador). */
-function providerTaskOsLabel(task: { osNumber?: string | null; id: string }) {
-  const raw = task.osNumber;
-  if (raw != null && String(raw).trim() !== '') return String(raw).trim();
-  const id = String(task.id);
-  return id.split('_').pop()?.substring(0, 12) || id.substring(0, 12);
-}
 
 function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
   const rawLat = t?.locationLat ?? t?.metadata?.locationLat ?? t?.metadata?.lat;
@@ -123,14 +116,27 @@ function taskMetadataRecord(t: any): Record<string, unknown> {
   return {};
 }
 
-/** OS reaberta pelo admin para nova revisão (metadado até RECEIVED/ACCEPTED no servidor). */
+function metaFlagTrue(meta: Record<string, unknown>, key: string): boolean {
+  const v = meta[key];
+  return v === true || v === 'true' || String(v ?? '').toLowerCase() === 'true';
+}
+
+/**
+ * Ciclo de revisão após reabertura no painel: `reopenForRevisionPending` só até RECEIVED/ACCEPTED/IN_PROGRESS;
+ * `revisionVisitActive` mantém-se na visita; legado: `reopenCount > 0` em execuções ainda activas.
+ */
+function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown>): boolean {
+  if (metaFlagTrue(meta, 'reopenForRevisionPending') || metaFlagTrue(meta, 'revisionVisitActive')) return true;
+  const rc = Number(meta.reopenCount);
+  return Number.isFinite(rc) && rc > 0;
+}
+
+/** OS em visita de revisão (cor índigo / badge) enquanto não concluída no servidor. */
 function isProviderRevisionTask(t: any): boolean {
+  const st = String(t?.status || '').toUpperCase();
+  if (['COMPLETED', 'SYNCED', 'CANCELLED', 'DONE', 'CLOSED', 'ARCHIVED'].includes(st)) return false;
   const meta = taskMetadataRecord(t);
-  return (
-    meta.reopenForRevisionPending === true ||
-    meta.reopenForRevisionPending === 'true' ||
-    String(meta.reopenForRevisionPending || '').toLowerCase() === 'true'
-  );
+  return taskMetadataIndicatesRevisionVisit(t, meta);
 }
 
 const SERVER_COMPLETED_STATUSES = new Set([
@@ -154,10 +160,7 @@ function effectiveProviderTaskStatus(
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
   if (completedIds.has(String(t.id)) && !serverActive) return 'COMPLETED';
   const meta = taskMetadataRecord(t);
-  const reopenRevision =
-    meta.reopenForRevisionPending === true ||
-    meta.reopenForRevisionPending === 'true' ||
-    String(meta.reopenForRevisionPending || '').toLowerCase() === 'true';
+  const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   // Revisão: como OS nova em Pendentes até aceitar; depois de «Iniciar» o id entra em inprogressIds e deve ir para «Em andamento».
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
     if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
@@ -195,7 +198,7 @@ function providerTaskListAccentColor(
   const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds);
   if (eff === 'COMPLETED') return '#10B981';
   if (eff === 'PAUSED') return '#EF4444';
-  // Revisão (reopenForRevisionPending): índigo — coerente com o badge; só ativo em pendente / em andamento
+  // Revisão (reabertura admin): índigo — coerente com o badge; pendente ou em andamento (não em pausa)
   if (isProviderRevisionTask(t) && (eff === 'PENDING' || eff === 'IN_PROGRESS')) {
     return '#6366F1';
   }
@@ -718,7 +721,7 @@ export default function DashboardScreen() {
                osNumber: t.osNumber ?? null,
                locationLat: geo?.lat ?? t.locationLat ?? null,
                locationLng: geo?.lng ?? t.locationLng ?? null,
-               title: `${providerTaskOsLabel({ ...t, id: String(t.id) })} — ${t.title || 'Manutenção'}`,
+               title: `${taskOsLabel({ ...t, id: String(t.id) })} — ${t.title || 'Manutenção'}`,
                status: eff,
                isPendingSync: pendingSyncIds.has(String(t.id)),
                isCachedLocally: cachedExecutionKeys.has(`@brspark_execution_${t.id}`),
@@ -1821,7 +1824,7 @@ export default function DashboardScreen() {
                                 style={{ fontSize: 10, fontWeight: '900', color: '#0F172A', letterSpacing: 0.35 }}
                                 numberOfLines={1}
                               >
-                                {providerTaskOsLabel(order)}
+                                {taskOsLabel(order)}
                               </Text>
                             </View>
                             {listEff === 'PAUSED' && (
@@ -2082,7 +2085,7 @@ export default function DashboardScreen() {
                              textAlign: 'center',
                            }}
                          >
-                           {providerTaskOsLabel(selectedTask)}
+                           {taskOsLabel(selectedTask)}
                          </Text>
                        </View>
                      </View>

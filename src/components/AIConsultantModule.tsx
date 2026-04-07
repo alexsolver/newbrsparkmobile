@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Dimensions,
+  Animated, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -19,6 +20,83 @@ interface Props {
 }
 
 type Tab = 'basic' | 'premium';
+
+/** Barra linear indeterminada — não há percentual real na chamada ao LLM; só feedback visual de atividade. */
+function IndeterminateProgressBar({
+  active,
+  barColor,
+  trackColor,
+}: {
+  active: boolean;
+  barColor: string;
+  trackColor: string;
+}) {
+  const [trackW, setTrackW] = useState(0);
+  const tx = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!active || trackW <= 0) {
+      tx.setValue(0);
+      return;
+    }
+    const barW = barWFor(trackW);
+    tx.setValue(-barW);
+    const loop = Animated.loop(
+      Animated.timing(tx, {
+        toValue: trackW,
+        duration: 1200,
+        useNativeDriver: true,
+        easing: Easing.linear,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      tx.setValue(0);
+    };
+  }, [active, trackW, tx]);
+
+  return (
+    <View
+      style={[IP.track, { backgroundColor: trackColor }]}
+      onLayout={(e) => setTrackW(Math.round(e.nativeEvent.layout.width))}
+    >
+      {trackW > 0 && active && (
+        <Animated.View
+          style={[
+            IP.bar,
+            {
+              width: barWFor(trackW),
+              backgroundColor: barColor,
+              transform: [{ translateX: tx }],
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
+
+function barWFor(trackW: number) {
+  return Math.max(28, Math.round(trackW * 0.36));
+}
+
+const IP = StyleSheet.create({
+  track: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  bar: {
+    height: '100%',
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+});
 
 export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
   const { t } = useTranslation();
@@ -109,6 +187,9 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
       <View style={S.center}>
         <ActivityIndicator size="large" color={colors.accent} />
         <Text style={S.loadingText}>{t('ai.analyzingData')}</Text>
+        <View style={S.loadingProgressWrap}>
+          <IndeterminateProgressBar active={loading} barColor={colors.accent} trackColor="#E2E8F0" />
+        </View>
       </View>
     );
   }
@@ -283,9 +364,12 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
                         ))}
 
                         {sending && (
-                          <View style={[S.bubble, S.bubbleAI]}>
-                            <ActivityIndicator size="small" color="#A855F7" />
-                            <Text style={[S.bubbleText, { marginLeft: 8 }]}>{t('ai.thinking')}</Text>
+                          <View style={[S.bubble, S.bubbleAI, S.thinkingBubble]}>
+                            <View style={S.thinkingRow}>
+                              <ActivityIndicator size="small" color="#A855F7" />
+                              <Text style={[S.bubbleText, S.thinkingLabel]}>{t('ai.thinking')}</Text>
+                            </View>
+                            <IndeterminateProgressBar active={sending} barColor="#A855F7" trackColor="#E9D5FF" />
                           </View>
                         )}
                       </ScrollView>
@@ -326,6 +410,7 @@ const S = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 11, color: colors.textSecondary, marginTop: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  loadingProgressWrap: { width: '72%', maxWidth: 280, marginTop: 4 },
 
   // Tabs
   tabRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
@@ -372,6 +457,9 @@ const S = StyleSheet.create({
   bubble: { maxWidth: '85%', padding: 14, borderRadius: 18, marginBottom: 8, flexDirection: 'row' },
   bubbleUser: { backgroundColor: colors.accent, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   bubbleAI: { backgroundColor: '#F3E8FF', alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
+  thinkingBubble: { flexDirection: 'column', alignItems: 'stretch' },
+  thinkingRow: { flexDirection: 'row', alignItems: 'center' },
+  thinkingLabel: { marginLeft: 8, flexShrink: 1 },
   bubbleText: { fontSize: 13, fontWeight: '600', color: '#1E1B4B', lineHeight: 18, flex: 1 },
   bubbleTextUser: { color: '#fff' },
 

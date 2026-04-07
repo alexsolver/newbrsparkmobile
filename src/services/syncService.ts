@@ -521,13 +521,21 @@ function remoteHasReopenRevisionPending(rMeta: Record<string, unknown>): boolean
   );
 }
 
-/** O servidor remove reopenForRevisionPending após RECEIVED/ACCEPTED/IN_PROGRESS; não reintroduzir do cache local. */
+function remoteHasRevisionVisitActive(rMeta: Record<string, unknown>): boolean {
+  return (
+    rMeta.revisionVisitActive === true ||
+    rMeta.revisionVisitActive === 'true' ||
+    String(rMeta.revisionVisitActive || '').toLowerCase() === 'true'
+  );
+}
+
+/** Não reintroduzir metadados de revisão que o servidor já limpou (após sync / nova conclusão). */
 function stripStaleReopenFromMergedMetadata(
   rMeta: Record<string, unknown>,
   merged: Record<string, unknown>
 ): void {
-  if (remoteHasReopenRevisionPending(rMeta)) return;
-  delete merged.reopenForRevisionPending;
+  if (!remoteHasReopenRevisionPending(rMeta)) delete merged.reopenForRevisionPending;
+  if (!remoteHasRevisionVisitActive(rMeta)) delete merged.revisionVisitActive;
 }
 
 function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): any {
@@ -637,6 +645,7 @@ const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PRO
  * Não limpar @brspark_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET
  * (até RECEIVED/ACCEPTED/IN_PROGRESS no servidor), apagar inprogress a cada pullTasks
  * desfaz o «Iniciar» e a OS nunca fica na aba Em andamento.
+ * (revisionVisitActive mantém-se na visita; não entra nesta limpeza.)
  */
 async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<void> {
   if (!Array.isArray(tasks) || tasks.length === 0) return;

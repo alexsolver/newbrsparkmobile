@@ -4,6 +4,12 @@ const prisma  = require('../db');
 const { adminAuth } = require('../middleware/auth');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
+const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
+const {
+  parseTemplateSchemaArray,
+  effectiveFormFieldType,
+  stripRevisionSessionEvidenceInPlace,
+} = require('../lib/revisionSessionFields');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -32,41 +38,10 @@ function stripProductivityFromResponses(raw) {
   return out;
 }
 
-/**
- * Revisão administrativa: remove evidências que pertencem à sessão anterior (novo deslocamento, nova assinatura, etc.).
- * Tipos alinhados ao app (`checklist/[id].tsx`) e ao builder.
- */
-const REVISION_CLEAR_FIELD_TYPES = new Set([
-  'signature',
-  'transit_start',
-  'transit_end',
-  'geofence_check',
-  'facial_recognition',
-]);
-
 function stripResponsesForRevision(raw, templateSchemaData) {
   const out = stripProductivityFromResponses(raw);
-  const schema = parseTemplateSchemaArray(templateSchemaData);
-  for (const f of schema) {
-    if (!f || !f.id) continue;
-    const nt = effectiveFormFieldType(f);
-    if (REVISION_CLEAR_FIELD_TYPES.has(nt)) {
-      delete out[f.id];
-    }
-  }
+  stripRevisionSessionEvidenceInPlace(out, templateSchemaData);
   return out;
-}
-
-function normalizeFormFieldType(t) {
-  const s = String(t == null ? '' : t).trim().replace(/[\s-]+/g, '_');
-  return s ? s.toLowerCase() : '';
-}
-
-/** Tipo do campo no JSON do modelo (aliases entre versões / importações). */
-function effectiveFormFieldType(field) {
-  if (!field || typeof field !== 'object') return '';
-  const raw = field.type ?? field.fieldType ?? field.kind ?? field.component ?? field.controlType;
-  return normalizeFormFieldType(raw);
 }
 
 /** Nome da etapa no builder pode estar em várias chaves conforme versão/import do schema. */
@@ -102,28 +77,22 @@ function resolveSectionBreakLabel(field) {
   return '';
 }
 
-function parseTemplateSchemaArray(schemaData) {
-  if (Array.isArray(schemaData)) return schemaData;
-  if (typeof schemaData === 'string') {
-    try {
-      const p = JSON.parse(schemaData);
-      if (Array.isArray(p)) return p;
-      if (p && typeof p === 'object' && Array.isArray(p.schema)) return p.schema;
-      if (p && typeof p === 'object' && Array.isArray(p.fields)) return p.fields;
-      if (p && typeof p === 'object' && Array.isArray(p.blocks)) return p.blocks;
-      if (p && typeof p === 'object' && p.form && Array.isArray(p.form.fields)) return p.form.fields;
-    } catch (e) {
-      return [];
+/** Campos sob `section_break` com `multiple` → valores em `responses.__section_repeat_<sectionId>[].<fieldId>`. */
+function buildRepeatFieldMap(schemaArray) {
+  const out = Object.create(null);
+  if (!Array.isArray(schemaArray)) return out;
+  let repeatSid = null;
+  for (const f of schemaArray) {
+    if (!f || !f.id) continue;
+    const nt = effectiveFormFieldType(f);
+    if (nt === 'section_break') {
+      repeatSid = f.multiple ? String(f.id) : null;
+      continue;
     }
-    return [];
+    if (nt === 'hidden') continue;
+    if (repeatSid) out[String(f.id)] = repeatSid;
   }
-  if (schemaData && typeof schemaData === 'object') {
-    if (Array.isArray(schemaData.schema)) return schemaData.schema;
-    if (Array.isArray(schemaData.fields)) return schemaData.fields;
-    if (Array.isArray(schemaData.blocks)) return schemaData.blocks;
-    if (schemaData.form && Array.isArray(schemaData.form.fields)) return schemaData.form.fields;
-  }
-  return [];
+  return out;
 }
 
 // ─── GET /api/operations/tasks ─────────────────────────────────
@@ -141,7 +110,14 @@ router.get('/tasks', async (req, res) => {
 
     const executions = await prisma.checklistExecution.findMany({
       where,
-      include: { template: true },
+      include: {
+        template: true,
+        revisions: {
+          select: { revision: true },
+          orderBy: { revision: 'desc' },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: parseInt(limit),
     });
@@ -186,7 +162,10 @@ router.get('/tasks', async (req, res) => {
       return {
         id:          ex.id,
         osNumber:    ex.osNumber || null,
-        lastSubmittedRevision: ex.lastSubmittedRevision ?? 0,
+        lastSubmittedRevision: effectiveLastSubmittedRevision(
+          ex.lastSubmittedRevision,
+          ex.revisions?.[0]?.revision
+        ),
         refId:       meta.refId || ex.templateId || null,
         ownerEmail:  ex.ownerEmail,
         ownerAvatar: userMap[ex.ownerEmail]?.avatarUrl || null,
@@ -230,8 +209,10 @@ router.get('/tasks', async (req, res) => {
                         id: f.id,
                         label: human || rawLab || f.id,
                         type: 'section_break',
+                        multiple: !!f.multiple,
                       };
                     }),
+          repeatFieldMap: buildRepeatFieldMap(schemaArray),
           /** Só em GET ?id=… — permite ao painel resolver títulos de etapa se sectionBreaks vier com fallback igual ao id. */
           ...(includeSchemaRaw ? { schemaData: ex.template.schemaData } : {}),
         } : null,
@@ -526,6 +507,8 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
       delete mergedMeta[k];
     }
     mergedMeta.reopenForRevisionPending = true;
+    /** Mantém-se até nova submissão COMPLETED (o app mostra «revisão» durante toda a visita). */
+    mergedMeta.revisionVisitActive = true;
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);
 

@@ -9,6 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { AgendaService } from '../../src/services/agendaService';
+import { taskOsLabel } from '../../src/utils/taskOsLabel';
 
 /** Alinhado ao painel / sync: OS fechada na API ou só em cache local. */
 const CLOUD_DONE = new Set(['COMPLETED', 'SYNCED', 'DONE', 'CLOSED', 'FINISHED', 'COMPLETE', 'ARCHIVED']);
@@ -172,7 +173,10 @@ export default function OrdersScreen() {
                   activeOpacity={0.8}
                   onPress={() => {
                      if (order.refId) {
-                        router.push(`/checklist/${order.refId}` as any);
+                        router.push({
+                          pathname: '/checklist/[id]',
+                          params: { id: String(order.refId), taskId: String(order.id) },
+                        } as any);
                      }
                   }}
                 >
@@ -180,21 +184,21 @@ export default function OrdersScreen() {
                     <Ionicons name="construct" size={22} color={order.color} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    {order.osNumber ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
-                        <View
-                          style={[
-                            styles.orderOsBadge,
-                            {
-                              backgroundColor: `${order.color || '#6366F1'}26`,
-                              borderColor: `${order.color || '#6366F1'}55`,
-                            },
-                          ]}
-                        >
-                          <Text style={styles.orderOsBadgeText}>{order.osNumber}</Text>
-                        </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                      <View
+                        style={[
+                          styles.orderOsBadge,
+                          {
+                            backgroundColor: `${order.color || '#6366F1'}26`,
+                            borderColor: `${order.color || '#6366F1'}55`,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.orderOsBadgeText}>
+                          {taskOsLabel({ id: order.id, osNumber: order.osNumber ?? null })}
+                        </Text>
                       </View>
-                    ) : null}
+                    </View>
                     <Text style={styles.orderService}>{order.service}</Text>
                     <Text style={styles.orderProvider}>{order.provider}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 12 }}>

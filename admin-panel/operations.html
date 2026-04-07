@@ -386,9 +386,34 @@
     .pdf-pill { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 12px; font-size: 11px; font-weight: 700; }
     
     /* Marcadores do mapa de deslocamento: avatar do técnico (Leaflet divIcon) */
-    .leaflet-div-icon.pdf-transit-tech-marker {
+    .leaflet-marker-icon.leaflet-div-icon.pdf-transit-tech-marker {
       background: transparent !important;
       border: none !important;
+      padding: 0 !important;
+      margin-left: 0 !important;
+      margin-top: 0 !important;
+    }
+    .pdf-transit-tech-avatar {
+      box-sizing: border-box;
+      display: block;
+      border-radius: 50%;
+      overflow: hidden;
+      background: transparent !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pdf-transit-tech-avatar img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      vertical-align: top;
+    }
+    @media print {
+      .leaflet-marker-icon.leaflet-div-icon.pdf-transit-tech-marker,
+      .pdf-transit-tech-avatar {
+        background: transparent !important;
+      }
     }
 
     .pdf-photo-grid {
@@ -546,7 +571,7 @@
 <div class="modal-overlay" id="revision-snapshot-modal" style="display:none;opacity:1;pointer-events:all;z-index:10050;">
   <div class="modal modal-lg" style="max-width:760px;width:96vw;">
     <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
-      <span class="modal-title" id="revision-snapshot-title">Revisão</span>
+      <span class="modal-title" id="revision-snapshot-title">Submissão</span>
       <button type="button" class="modal-close" onclick="closeRevisionSnapshotModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="report-tabs" id="revision-snapshot-tabs">
@@ -828,6 +853,48 @@ function timeAgo(dateStr) {
 
 function shortId(id) {
   return id ? id.slice(0,8).toUpperCase() : '—';
+}
+
+/** Índice da última submissão concluída (1, 2, 3…): cruza API com histórico carregado no modal. */
+function displayLastConcludedRevisionNumber(t) {
+  if (!t) return 0;
+  let n = Number(t.lastSubmittedRevision) || 0;
+  const revs = Array.isArray(t.revisionHistory) ? t.revisionHistory : [];
+  for (const r of revs) n = Math.max(n, Number(r.revision) || 0);
+  return n;
+}
+
+/**
+ * A 1.ª conclusão é indexada como 1 na BD, mas não é «revisão» no sentido de nova visita.
+ * Badge nos cartões só a partir da 2.ª submissão.
+ */
+function completedTaskSubmissionBadgeHtml(task) {
+  const st = String(task && task.status || '').toUpperCase();
+  if (!['COMPLETED', 'SYNCED'].includes(st)) return '';
+  const n = displayLastConcludedRevisionNumber(task);
+  if (n < 2) return '';
+  return `<span class="badge" style="font-size:8px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe">${n}.ª submissão</span>`;
+}
+
+function reopenRevisionPendingFromTask(t) {
+  const m = t && t.metadata;
+  if (!m || typeof m !== 'object') return false;
+  const tk = (x) => x === true || x === 'true' || String(x ?? '').toLowerCase() === 'true';
+  if (tk(m.reopenForRevisionPending) || tk(m.revisionVisitActive)) return true;
+  return false;
+}
+
+/** Texto curto para cabeçalho PDF: não chamar 1.ª conclusão de «revisão». */
+function revisionContextSubtitle(t) {
+  if (!t) return '';
+  const n = displayLastConcludedRevisionNumber(t);
+  const rc = Number(t.metadata && t.metadata.reopenCount) || 0;
+  const pen = reopenRevisionPendingFromTask(t);
+  const parts = [];
+  if (n >= 2) parts.push(`${n}.ª submissão indexada`);
+  if (rc > 0) parts.push(`${rc} reabertura${rc !== 1 ? 's' : ''}`);
+  if (pen) parts.push('nova visita pendente');
+  return parts.length ? ' · ' + parts.join(' · ') : '';
 }
 
 /** Número FT convencional ou recorte do id técnico (cartões / busca). */
@@ -1308,7 +1375,7 @@ function buildCard(task, colClass) {
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
           <span class="task-card-id">#<strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong></span>
           <span style="display:flex; align-items:center; gap:4px; flex-wrap:wrap">
-          ${['COMPLETED','SYNCED'].includes(task.status) && Number(task.lastSubmittedRevision) > 0 ? `<span class="badge" style="font-size:8px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe">Rev. ${task.lastSubmittedRevision}</span>` : ''}
+          ${completedTaskSubmissionBadgeHtml(task)}
           ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
           </span>
         </div>
@@ -1348,12 +1415,12 @@ function buildTransitTechMapIcons(task) {
     L.divIcon({
       className: 'pdf-transit-tech-marker',
       html:
-        '<div style="width:32px;height:32px;border-radius:50%;overflow:hidden;border:3px solid ' +
+        '<div class="pdf-transit-tech-avatar" style="width:32px;height:32px;border:3px solid ' +
         borderColor +
-        ';box-shadow:0 2px 8px rgba(0,0,0,0.35);background:#e2e8f0;">' +
+        ';box-shadow:0 2px 8px rgba(0,0,0,0.25);">' +
         '<img src="' +
         safe +
-        '" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>' +
+        '" alt="" loading="lazy"/>' +
         '</div>',
       iconSize: [38, 38],
       iconAnchor: [19, 19],
@@ -1770,6 +1837,82 @@ function parseSchemaArrayOps(schemaData) {
   }
   return [];
 }
+
+/** Mapa campo → id da secção repetível (`multiple`); vem do API ou é derivado de `schemaData`. */
+function buildRepeatFieldMapFromTemplate(template) {
+  if (
+    template &&
+    template.repeatFieldMap &&
+    typeof template.repeatFieldMap === 'object' &&
+    !Array.isArray(template.repeatFieldMap)
+  ) {
+    return template.repeatFieldMap;
+  }
+  const sch = parseSchemaArrayOps(template && template.schemaData);
+  const out = Object.create(null);
+  let repeatSid = null;
+  for (const f of sch) {
+    if (!f || !f.id) continue;
+    const typ = effTypeOps(f);
+    if (typ === 'section_break') {
+      repeatSid = f.multiple ? String(f.id) : null;
+      continue;
+    }
+    if (typ === 'hidden') continue;
+    if (repeatSid) out[String(f.id)] = repeatSid;
+  }
+  return out;
+}
+
+function normalizeSectionRepeatRows(responses, sectionId) {
+  const k = '__section_repeat_' + sectionId;
+  const raw = responses && responses[k];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((r) => r && typeof r === 'object' && !Array.isArray(r));
+}
+
+/**
+ * Agrupa campos consecutivos do template que pertencem à mesma secção repetível (`repeatMap`).
+ * Usado no relatório e no PDF para listar por instância (linha) em vez de por tipo de campo.
+ */
+function groupTemplateFieldsByRepeatRuns(fields, repeatMap) {
+  if (!Array.isArray(fields) || fields.length === 0) return [];
+  const map = repeatMap && typeof repeatMap === 'object' ? repeatMap : {};
+  const segments = [];
+  let i = 0;
+  while (i < fields.length) {
+    const f = fields[i];
+    const rsid = map[f.id];
+    if (!rsid) {
+      segments.push({ kind: 'plain', fields: [f] });
+      i++;
+      continue;
+    }
+    const sid = rsid;
+    const group = [];
+    while (i < fields.length) {
+      const ff = fields[i];
+      if (map[ff.id] !== sid) break;
+      group.push(ff);
+      i++;
+    }
+    segments.push({ kind: 'repeat', sectionId: sid, fields: group });
+  }
+  return segments;
+}
+
+function repeatSectionLabelFromTemplate(template, sectionId) {
+  if (!sectionId) return 'Secção repetível';
+  const fromSchema = sectionLabelsFromSchemaData(template && template.schemaData);
+  if (fromSchema[sectionId]) return fromSchema[sectionId];
+  const br =
+    template && Array.isArray(template.sectionBreaks)
+      ? template.sectionBreaks.find((s) => s && s.id === sectionId)
+      : null;
+  if (br && br.label != null && String(br.label).trim() !== '') return String(br.label).trim();
+  return 'Secção repetível';
+}
+
 function sectionLabelsFromSchemaData(schemaData) {
   const map = Object.create(null);
   parseSchemaArrayOps(schemaData).forEach((f) => {
@@ -1865,21 +2008,21 @@ function buildRevisionHistoryHtml(t) {
   if (!loaded) {
     return `
     <div class="report-field" style="margin-top:10px">
-      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-label">Histórico de submissões</div>
       <div class="report-field-value" style="color:var(--text3)">A carregar…</div>
     </div>`;
   }
   if (t._revisionHistoryFetchFailed) {
     return `
     <div class="report-field" style="margin-top:10px">
-      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-label">Histórico de submissões</div>
       <div class="report-field-value" style="color:var(--amber)">Não foi possível carregar o histórico (rede ou servidor).</div>
     </div>`;
   }
   if (revs.length === 0) {
     return `
     <div class="report-field" style="margin-top:10px">
-      <div class="report-field-label">Histórico de revisões</div>
+      <div class="report-field-label">Histórico de submissões</div>
       <div class="report-field-value" style="color:var(--text3)">Nenhum registo (OS sem conclusões indexadas).</div>
     </div>`;
   }
@@ -1900,7 +2043,7 @@ function buildRevisionHistoryHtml(t) {
   return `
     <div class="report-field" style="margin-top:10px">
       <div class="report-field-label" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
-        <span>Histórico de revisões (${revs.length})</span>
+        <span>Histórico de submissões (${revs.length}) · #1 = conclusão inicial</span>
         <span style="display:flex;flex-wrap:wrap;gap:6px">
           <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
             onclick="window.downloadRevisionsCsv(${JSON.stringify(t.id)}, false)">Exportar CSV</button>
@@ -1927,8 +2070,9 @@ function buildInfoTab(t) {
   const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'DESCONHECIDO'}</span>`;
   const desc = t.description || t.metadata?.description || '';
   const gps  = t.gpsLocation;
-  const lsr = Number(t.lastSubmittedRevision) || 0;
+  const lsr = displayLastConcludedRevisionNumber(t);
   const reopenN = Number(t.metadata?.reopenCount) || 0;
+  const revisionReopenPending = reopenRevisionPendingFromTask(t);
 
   const responsesI = t.responses || {};
   const { startGPS: stI, endGPS: enI } = extractTransitEndpointsForReport(responsesI);
@@ -1942,6 +2086,10 @@ function buildInfoTab(t) {
   const actI = Number(t.metadata?.formActiveSeconds ?? responsesI.__form_active_seconds_final);
   const secRowsI = collectSectionTimingRows(t.template?.sectionBreaks, responsesI, t.template);
   const escI = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ftRaw = t.osNumber != null && String(t.osNumber).trim() ? String(t.osNumber).trim() : '';
+  const ftDisplay = ftRaw
+    ? `<span style="font-weight:800">${escI(ftRaw)}</span>`
+    : '<span style="color:var(--text3)">—</span> <span style="color:var(--text3);font-size:11px;font-weight:500">(sem FT atribuído no servidor)</span>';
   const secLineI =
     secRowsI
       .map((r) => {
@@ -1959,6 +2107,10 @@ function buildInfoTab(t) {
       <div class="report-field">
         <div class="report-field-label">Status</div>
         <div class="report-field-value" style="background:transparent;padding:0">${statusBadge}</div>
+      </div>
+      <div class="report-field" style="grid-column:1/-1">
+        <div class="report-field-label">N.º FT</div>
+        <div class="report-field-value mono">${ftDisplay}</div>
       </div>
       <div class="report-field">
         <div class="report-field-label">Técnico Designado</div>
@@ -2007,12 +2159,32 @@ function buildInfoTab(t) {
         <div class="report-field-value ${t.syncedAt ? '' : 'empty'}">${t.syncedAt ? new Date(t.syncedAt).toLocaleString('pt-BR') : 'Pendente de sync'}</div>
       </div>
       <div class="report-field">
-        <div class="report-field-label">Última revisão concluída</div>
-        <div class="report-field-value">${lsr > 0 ? lsr : '<span style="color:var(--text3)">—</span>'}</div>
+        <div class="report-field-label">Submissões indexadas (última)</div>
+        <div class="report-field-value">${
+          lsr <= 0
+            ? '<span style="color:var(--text3)">—</span>'
+            : lsr === 1
+              ? '1 <span style="color:var(--text3);font-weight:600">(conclusão inicial — não é revisão)</span>'
+              : String(lsr)
+        }</div>
       </div>
       <div class="report-field">
         <div class="report-field-label">Reaberturas (nova revisita)</div>
         <div class="report-field-value">${reopenN > 0 ? reopenN : '<span style="color:var(--text3)">—</span>'}</div>
+      </div>
+      <div class="report-field" style="grid-column:1/-1">
+        <div class="report-field-label">Identificação do ciclo de revisão</div>
+        <div class="report-field-value" style="font-size:12px;line-height:1.45">
+          ${revisionReopenPending
+            ? '<span style="font-weight:800;color:#4338ca">OS reaberta pelo painel — aguarda nova conclusão no app (revisão em curso).</span>'
+            : reopenN > 0 && lsr > 0
+              ? `<span>Foram registadas <strong>${reopenN}</strong> reabertura(s) administrativa(s); última submissão concluída no servidor: índice <strong>${lsr}</strong>${lsr === 1 ? ' (conclusão inicial)' : ''}.</span>`
+              : reopenN > 0 && lsr === 0
+                ? `<span><strong>${reopenN}</strong> reabertura(s) administrativa(s); ainda sem submissão concluída indexada nesta execução (aguarda envio do técnico).</span>`
+                : lsr > 0
+                  ? `<span>Há <strong>${lsr}</strong> submissão(ões) indexada(s); índice 1 = primeira conclusão, 2+ = novas visitas ou reenvios após reabertura.</span>`
+                  : '<span style="color:var(--text3)">Sem reaberturas nem submissões concluídas indexadas.</span>'}
+        </div>
       </div>
     </div>
     ${buildRevisionHistoryHtml(t)}
@@ -2056,9 +2228,12 @@ function buildReportTab(t) {
   }
 
   const escHtml = (t) => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  function mediaCapLine(responses, fieldId, index) {
+  function mediaCapLine(responses, fieldId, index, rowScope) {
     if (!responses || !fieldId) return '';
-    const raw = responses['__media_cap_' + fieldId];
+    const raw =
+      rowScope && typeof rowScope === 'object'
+        ? rowScope['__media_cap_' + fieldId]
+        : responses['__media_cap_' + fieldId];
     let cap = '';
     if (Array.isArray(raw) && raw[index] != null) cap = String(raw[index]).trim();
     else if (typeof raw === 'string' && index === 0) cap = raw.trim();
@@ -2067,14 +2242,14 @@ function buildReportTab(t) {
   }
 
   // Render a single field value, handling special types
-  const renderFieldValue = (val, fieldType, responses, fieldId) => {
+  const renderFieldValue = (val, fieldType, responses, fieldId, rowScope) => {
     if (val === undefined || val === null || val === '') return '<em style="color:var(--text3)">(não respondido)</em>';
     if (Array.isArray(val)) {
       if (val.length === 0) return '<em style="color:var(--text3)">(não respondido)</em>';
       return val.map((item, i) => {
         const s = String(item);
         const isUrl = s.startsWith('http') || s.startsWith('file://');
-        const capHtml = mediaCapLine(responses, fieldId, i);
+        const capHtml = mediaCapLine(responses, fieldId, i, rowScope);
         if (fieldType === 'file_upload' && isUrl) {
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
           const base = s.split('?')[0];
@@ -2143,7 +2318,7 @@ function buildReportTab(t) {
     }
     const str = String(val);
     if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
-      const capHtml = mediaCapLine(responses, fieldId, 0);
+      const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
       const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
       const base = str.split('?')[0];
       let fname = base.split('/').pop() || 'anexo';
@@ -2199,7 +2374,7 @@ function buildReportTab(t) {
     }
     // Image/file URL (fotos já tratadas acima por tipo; aqui fallback genérico)
     if (str.startsWith('http') || str.startsWith('file://')) {
-      const capHtml = mediaCapLine(responses, fieldId, 0);
+      const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
       return `<div><a href="${str}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>${capHtml}</div>`;
     }
     return str;
@@ -2208,40 +2383,76 @@ function buildReportTab(t) {
   // Se temos as definições do template, renderiza com labels
   let items = '';
   if (Array.isArray(fields) && fields.length > 0) {
-    fields.forEach(field => {
-      let val = responses[field.id];
-      
-      // Graciously recover mismatched IDs for GPS fields (if template changed but mobile cached an old ID)
-      if ((val === undefined || val === null || val === '') && (field.type === 'transit_start' || field.type === 'transit_end')) {
-         const targetAction = field.type === 'transit_start' ? '"action":"SAIDA"' : '"action":"CHEGADA"';
-         const orphanedMatchKey = Object.keys(responses).find(k => String(responses[k]).includes(targetAction));
-         if (orphanedMatchKey) {
-             val = responses[orphanedMatchKey];
-             // Remover para não renderizar de novo lá embaixo nos orfãos
-             delete responses[orphanedMatchKey];
-         }
+    const repeatMap = buildRepeatFieldMapFromTemplate(template);
+    const pushFieldInstance = (field, val, rowScope, instSuffix) => {
+      let v = val;
+      if (
+        (v === undefined || v === null || v === '') &&
+        (field.type === 'transit_start' || field.type === 'transit_end') &&
+        !rowScope
+      ) {
+        const targetAction = field.type === 'transit_start' ? '"action":"SAIDA"' : '"action":"CHEGADA"';
+        const orphanedMatchKey = Object.keys(responses).find((k) => String(responses[k]).includes(targetAction));
+        if (orphanedMatchKey) {
+          v = responses[orphanedMatchKey];
+          delete responses[orphanedMatchKey];
+        }
       }
-      
       const hasVal = (() => {
-        if (val === undefined || val === null || val === '') return false;
-        if (Array.isArray(val)) return val.some(x => x !== undefined && x !== null && String(x).trim() !== '');
+        if (v === undefined || v === null || v === '') return false;
+        if (Array.isArray(v)) return v.some((x) => x !== undefined && x !== null && String(x).trim() !== '');
         return true;
       })();
-      const displayHtml = renderFieldValue(val, field.type, responses, field.id);
+      const displayHtml = renderFieldValue(v, field.type, responses, field.id, rowScope || undefined);
+      const qHead = field.label || field.id;
+      const qLab = instSuffix ? `${qHead} <span style="font-size:10px;font-weight:800;color:#6d28d9">(${instSuffix})</span>` : qHead;
       items += `<div class="report-response-item">
-        <div class="report-response-q">${field.label || field.id}</div>
+        <div class="report-response-q">${qLab}</div>
         <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
       </div>`;
       if (field.allowTechnicianComment) {
         const ck = '__comment_' + field.id;
-        const cv = responses[ck];
+        const cv = rowScope && typeof rowScope === 'object' ? rowScope[ck] : responses[ck];
         if (cv !== undefined && cv !== null && String(cv).trim() !== '') {
           const safe = String(cv).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
           items += `<div class="report-response-item" style="margin-top:-4px">
-            <div class="report-response-q" style="font-size:10px;color:#92400e;font-weight:700">Comentário do técnico · ${field.label || field.id}</div>
+            <div class="report-response-q" style="font-size:10px;color:#92400e;font-weight:700">Comentário do técnico · ${qHead}${instSuffix ? ' (' + instSuffix + ')' : ''}</div>
             <div class="report-response-a" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#422006;line-height:1.45">${safe}</div>
           </div>`;
         }
+      }
+    };
+
+    const fieldSegments = groupTemplateFieldsByRepeatRuns(fields, repeatMap);
+    fieldSegments.forEach((seg) => {
+      if (seg.kind === 'plain') {
+        seg.fields.forEach((field) => {
+          pushFieldInstance(field, responses[field.id], null, '');
+        });
+        return;
+      }
+      const sectionId = seg.sectionId;
+      const groupFields = seg.fields;
+      const rows = normalizeSectionRepeatRows(responses, sectionId);
+      const secTitle = repeatSectionLabelFromTemplate(template, sectionId);
+      if (rows.length === 0) {
+        groupFields.forEach((field) => {
+          pushFieldInstance(field, responses[field.id], null, '');
+        });
+      } else if (rows.length === 1) {
+        const row = rows[0];
+        groupFields.forEach((field) => {
+          pushFieldInstance(field, row[field.id], row, '');
+        });
+      } else {
+        rows.forEach((row, ri) => {
+          items += `<div class="report-repeat-instance" style="margin-bottom:14px;padding:12px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">`;
+          items += `<div style="font-weight:800;color:#4f46e5;font-size:12px;margin-bottom:10px">${escHtml(secTitle)} · Instância ${ri + 1}</div>`;
+          groupFields.forEach((field) => {
+            pushFieldInstance(field, row[field.id], row, '');
+          });
+          items += `</div>`;
+        });
       }
     });
     
@@ -2574,12 +2785,122 @@ window.printReport = async function() {
      }
   });
 
-  const order = Array.isArray(fields) && fields.length > 0 ? fields.map(f => f.id) : Object.keys(responses);
+  const repeatMapPdf = buildRepeatFieldMapFromTemplate(t.template || {});
+  const pdfEntries = [];
+  if (Array.isArray(fields) && fields.length > 0) {
+    const fieldsPdfList = fields.filter(
+      (f) => f && f.type !== 'transit_start' && f.type !== 'transit_end'
+    );
+    const pdfSegments = groupTemplateFieldsByRepeatRuns(fieldsPdfList, repeatMapPdf);
+    const labelBySidPdf = sectionLabelsFromSchemaData(t.template && t.template.schemaData);
+    pdfSegments.forEach((seg) => {
+      if (seg.kind === 'plain') {
+        seg.fields.forEach((fd0) => {
+          pdfEntries.push({
+            id: fd0.id,
+            fieldDef: fd0,
+            row: null,
+            rowIdx: null,
+            repeatSid: null,
+            omitInstanceInLabel: true,
+          });
+        });
+        return;
+      }
+      const rows = normalizeSectionRepeatRows(responses, seg.sectionId);
+      const secLab =
+        labelBySidPdf[seg.sectionId] || repeatSectionLabelFromTemplate(t.template, seg.sectionId);
+      if (rows.length === 0) {
+        seg.fields.forEach((fd0) => {
+          pdfEntries.push({
+            id: fd0.id,
+            fieldDef: fd0,
+            row: null,
+            rowIdx: null,
+            repeatSid: null,
+            omitInstanceInLabel: true,
+          });
+        });
+      } else if (rows.length === 1) {
+        seg.fields.forEach((fd0) => {
+          pdfEntries.push({
+            id: fd0.id,
+            fieldDef: fd0,
+            row: rows[0],
+            rowIdx: 0,
+            repeatSid: seg.sectionId,
+            omitInstanceInLabel: true,
+          });
+        });
+      } else {
+        rows.forEach((row, ri) => {
+          pdfEntries.push({
+            kind: '__repeat_hdr',
+            sectionLabel: secLab,
+            instanceNum: ri + 1,
+          });
+          seg.fields.forEach((fd0) => {
+            pdfEntries.push({
+              id: fd0.id,
+              fieldDef: fd0,
+              row,
+              rowIdx: ri,
+              repeatSid: seg.sectionId,
+              omitInstanceInLabel: true,
+            });
+          });
+        });
+      }
+    });
+  } else {
+    const order = Object.keys(responses);
+    order.forEach((id) => {
+      const fd0 = Array.isArray(fields) && fields.length ? fields.find((f) => f.id === id) : null;
+      if (fd0 && (fd0.type === 'transit_start' || fd0.type === 'transit_end')) return;
+      const rsid = repeatMapPdf[id];
+      if (rsid) {
+        const rows = normalizeSectionRepeatRows(responses, rsid);
+        if (rows.length === 0) {
+          pdfEntries.push({
+            id,
+            fieldDef: fd0,
+            row: null,
+            rowIdx: null,
+            repeatSid: null,
+            omitInstanceInLabel: true,
+          });
+        } else {
+          rows.forEach((row, ri) => {
+            pdfEntries.push({
+              id,
+              fieldDef: fd0,
+              row,
+              rowIdx: ri,
+              repeatSid: rsid,
+              omitInstanceInLabel: false,
+            });
+          });
+        }
+      } else {
+        pdfEntries.push({
+          id,
+          fieldDef: fd0,
+          row: null,
+          rowIdx: null,
+          repeatSid: null,
+          omitInstanceInLabel: true,
+        });
+      }
+    });
+  }
 
-  /** Comentários por foto/anexo (`__media_cap_<fieldId>`) — alinhados ao índice do item no array de URLs */
-  const pdfMediaCapHtml = (fieldId, index) => {
+  /** Comentários por foto/anexo (`__media_cap_<fieldId>`) — por linha em secções repetíveis */
+  const pdfMediaCapHtml = (fieldId, index, rowScope) => {
     if (!fieldId) return '';
-    const raw = responses['__media_cap_' + fieldId];
+    const raw =
+      rowScope && typeof rowScope === 'object'
+        ? rowScope['__media_cap_' + fieldId]
+        : responses['__media_cap_' + fieldId];
     let cap = '';
     if (Array.isArray(raw) && raw[index] != null) cap = String(raw[index]).trim();
     else if (typeof raw === 'string' && index === 0) cap = raw.trim();
@@ -2591,11 +2912,24 @@ window.printReport = async function() {
       '</div>'
     );
   };
-  
-  order.forEach(id => {
-      const fieldDef = fields.find(f => f.id === id);
-      const label = fieldDef ? (fieldDef.label || fieldDef.id) : id;
-      let val = responses[id];
+
+  pdfEntries.forEach((entry) => {
+      if (entry.kind === '__repeat_hdr') {
+        responseHtml +=
+          '<div style="margin:20px 0 8px;padding:10px 14px;background:#eef2ff;border-left:4px solid #6366f1;border-radius:0 10px 10px 0;font-size:12px;font-weight:800;color:#3730a3">' +
+          escPdf(entry.sectionLabel) +
+          ' · Instância ' +
+          entry.instanceNum +
+          '</div>';
+        return;
+      }
+      const { id, fieldDef, row, rowIdx, repeatSid } = entry;
+      const labelBase = fieldDef ? (fieldDef.label || fieldDef.id) : id;
+      const label =
+        row != null && repeatSid != null && !entry.omitInstanceInLabel
+          ? `${labelBase} · Instância ${rowIdx + 1}`
+          : labelBase;
+      let val = row ? row[id] : responses[id];
       
       const rawVal = String(val);
 
@@ -2666,13 +3000,13 @@ window.printReport = async function() {
             displayVal = attachList
               .map((u, i) => {
                 if (u.startsWith('file://')) {
-                  return `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` + pdfMediaCapHtml(id, i);
+                  return `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` + pdfMediaCapHtml(id, i, row);
                 }
                 const base = u.split('?')[0];
                 let name = base.split('/').pop() || 'anexo';
                 try { name = decodeURIComponent(name); } catch (e2) {}
                 const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
-                return `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${idx}${escText(name)}</a></div>` + pdfMediaCapHtml(id, i);
+                return `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${idx}${escText(name)}</a></div>` + pdfMediaCapHtml(id, i, row);
               })
               .join('');
           }
@@ -2712,7 +3046,7 @@ window.printReport = async function() {
                        <ion-icon name="cloud-offline-outline" style="font-size:32px; color:#94a3b8; margin-bottom:8px;"></ion-icon>
                        <div style="font-size:12px; color:#475569; font-weight:800;">MÍDIA PENDENTE${fotoIndex ? ' (' + fotoIndex + ')' : ''}</div>
                        <div style="font-size:10px; color:#94a3b8; margin-top:4px;">Aguardando o aplicativo recuperar o sinal de internet para realizar o upload da Foto.</div>
-                    </div>` + pdfMediaCapHtml(id, capIdx)
+                    </div>` + pdfMediaCapHtml(id, capIdx, row)
                   );
                 }
                 let gpsComplement = '';
@@ -2753,7 +3087,7 @@ window.printReport = async function() {
                       🕒 ${timestamp}${idxLine}
                       ${gpsComplement}
                    </div>` : ''}
-                </div>` + pdfMediaCapHtml(id, capIdx)
+                </div>` + pdfMediaCapHtml(id, capIdx, row)
                 );
               };
               displayVal = photoUris.map((u, i) => onePhotoCard(u, String(i + 1), i)).join('');
@@ -2815,14 +3149,21 @@ window.printReport = async function() {
       }
       
       let timeHtml = '';
-      if (responses[`__time_${id}`]) {
-          const tIso = responses[`__time_${id}`];
+      let tIso = null;
+      if (repeatSid != null && rowIdx != null) {
+        tIso = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
+      }
+      if (!tIso) tIso = responses[`__time_${id}`];
+      if (tIso) {
           const humanTime = new Date(tIso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
           timeHtml = `<span style="font-size:9px; color:#94a3b8; margin-left:8px; font-weight:600; text-transform:none;"><ion-icon name="time-outline" style="vertical-align:-2px; margin-right:2px;"></ion-icon>${humanTime}</span>`;
       }
 
       const techCommentKey = '__comment_' + id;
-      const techCommentRaw = fieldDef && fieldDef.allowTechnicianComment && responses[techCommentKey] ? String(responses[techCommentKey]).trim() : '';
+      const techCommentRaw =
+        fieldDef && fieldDef.allowTechnicianComment
+          ? String((row && typeof row === 'object' ? row[techCommentKey] : null) || responses[techCommentKey] || '').trim()
+          : '';
       const techCommentPdf = techCommentRaw
         ? `<div class="pdf-a" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:10px;color:#713f12;line-height:1.45"><strong>Comentário do técnico:</strong> ${techCommentRaw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
         : '';
@@ -3077,7 +3418,7 @@ window.printReport = async function() {
        <div style="position:absolute; top:-20px; right:-20px; width:150px; height:150px; background:#ffffff10; border-radius:50%"></div>
        <div class="pdf-summary-plate">
           <h2>RELATÓRIO DA ATIVIDADE</h2>
-          <span>${t.osNumber || t.id}${(() => { const n = Number(t.lastSubmittedRevision) || 0; return n > 0 ? ` · Revisão ${n}` : ''; })()}</span>
+          <span>${displayOsLabel(t)}${revisionContextSubtitle(t)}</span>
        </div>
        <div class="pdf-tech-info">
           <div class="pdf-tech-texts">
@@ -3113,8 +3454,8 @@ window.printReport = async function() {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${t.osNumber || '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Revisão (última concl.)</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px">${Number(t.lastSubmittedRevision) > 0 ? Number(t.lastSubmittedRevision) : '—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${displayOsLabel(t)}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px">${(() => { const _lr = displayLastConcludedRevisionNumber(t); if (_lr <= 0) return '—'; if (_lr === 1) return '1 (inicial)'; return String(_lr); })()}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
           <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
@@ -3322,8 +3663,13 @@ window.openRevisionSnapshotModal = async function (execId, revision) {
     document.getElementById('rev-snap-tab-' + x)?.classList.toggle('active', x === 'form');
   });
 
-  document.getElementById('revision-snapshot-title').textContent =
-    `Revisão ${revision} — ${displayOsLabel(base)}`;
+  {
+    const rN = Number(revision) || 0;
+    document.getElementById('revision-snapshot-title').textContent =
+      rN <= 1
+        ? `Conclusão inicial (#${rN}) — ${displayOsLabel(base)}`
+        : `Submissão n.º ${rN} — ${displayOsLabel(base)}`;
+  }
   document.getElementById('revision-snapshot-body').innerHTML =
     '<div style="padding:24px;color:var(--text3)">A carregar…</div>';
   document.getElementById('revision-snapshot-modal').style.display = 'flex';
@@ -3971,7 +4317,7 @@ window.confirmDispatch = async function() {
       if (locationPayload.locationZoneType === 'segment') modeDesc = `Trecho A↔B (${locationPayload.locationRadius}m em cada ponto)`;
       if (locationPayload.locationZoneType === 'polygon') modeDesc = `Polígono`;
       const hasGeo = locationPayload.locationLat ? `\n📍 Validação: ${modeDesc}` : '';
-      alert(`✅ OS enviada com sucesso!\nNº: ${res.task?.osNumber || res.task?.id}${hasGeo}`);
+      alert(`✅ OS enviada com sucesso!\nNº: ${res.task ? displayOsLabel(res.task) : '—'}${hasGeo}`);
     } else {
       alert('Erro: ' + (res.error || 'desconhecido'));
     }

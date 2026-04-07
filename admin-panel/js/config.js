@@ -8,6 +8,26 @@ const LS_API_ORIGIN = 'brspark_admin_api_origin';
 /** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */
 let _apiBase = null;
 
+/** Origem sem barra final; se alguém gravou …/api no localStorage, não duplicar ao acrescentar /api. */
+function normalizeStoredApiOrigin(raw) {
+  let s = String(raw || '').trim().replace(/\/+$/, '');
+  if (!s) return s;
+  try {
+    const u = new URL(s);
+    const path = (u.pathname || '').replace(/\/+$/, '');
+    if (path.toLowerCase() === '/api') {
+      u.pathname = '';
+      return u.origin;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (/^https?:\/\/.+\/api$/i.test(s)) {
+    return s.slice(0, -4);
+  }
+  return s;
+}
+
 /**
  * Se o painel está em localhost/127.0.0.1 na mesma porta que a origem gravada no localStorage,
  * usa sempre o hostname da página actual. Evita misturar localhost vs 127.0.0.1 (origens diferentes
@@ -55,7 +75,7 @@ export async function ensureAdminApiDetected() {
 
   const ls = localStorage.getItem(LS_API_ORIGIN);
   if (ls) {
-    const origin = normalizeLoopbackApiOrigin(ls);
+    const origin = normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(ls));
     if (origin !== String(ls).replace(/\/$/, '')) {
       try {
         localStorage.setItem(LS_API_ORIGIN, origin);
@@ -91,7 +111,7 @@ export function resolveApiBase() {
   if (_apiBase) return _apiBase;
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem(LS_API_ORIGIN);
-    if (custom) return `${normalizeLoopbackApiOrigin(custom)}/api`;
+    if (custom) return `${normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(custom))}/api`;
     if (window.location?.origin && window.location.protocol !== 'file:') {
       return `${window.location.origin}/api`;
     }

@@ -8,6 +8,23 @@ const { adminAuth } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
+const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionFields');
+
+function execMetaReopenRevisionPending(m) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return false;
+    const r = m.reopenForRevisionPending;
+    return r === true || r === 'true' || String(r ?? '').toLowerCase() === 'true';
+}
+
+function execMetaRevisionVisitActive(m) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return false;
+    const r = m.revisionVisitActive;
+    return r === true || r === 'true' || String(r ?? '').toLowerCase() === 'true';
+}
+
+function execMetaInOpenRevisionVisit(m) {
+    return execMetaReopenRevisionPending(m) || execMetaRevisionVisitActive(m);
+}
 
 function sameOwnerEmail(execEmail, jwtEmail) {
   if (!execEmail || !jwtEmail) return false;
@@ -288,11 +305,26 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
         const { status, timestamp, responses } = req.body;
         const statusNorm = typeof status === 'string' ? status.trim().toUpperCase() : null;
         
-        const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
+        const existing = await prisma.checklistExecution.findUnique({
+            where: { id: taskId },
+            include: { template: true },
+        });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
         if (!sameOwnerEmail(existing.ownerEmail, req.user.email)) {
             return res.status(403).json({ error: 'Acesso negado a esta OS.' });
         }
+
+        let existingMeta = existing.metadata;
+        if (typeof existingMeta === 'string') {
+            try {
+                existingMeta = JSON.parse(existingMeta);
+            } catch {
+                existingMeta = {};
+            }
+        }
+        const inOpenRevisionVisit = execMetaInOpenRevisionVisit(
+            existingMeta && typeof existingMeta === 'object' && !Array.isArray(existingMeta) ? existingMeta : {}
+        );
 
         const ts = timestamp ? new Date(timestamp) : new Date();
         const updateData = {};
@@ -333,9 +365,23 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
         } else if (statusNorm === 'IN_PROGRESS') {
             if (!existing.startedAt) updateData.startedAt = ts;
             delete mergedMeta.reopenForRevisionPending;
+        } else if (statusNorm && ['COMPLETED', 'SYNCED', 'CANCELLED'].includes(statusNorm)) {
+            delete mergedMeta.revisionVisitActive;
+            delete mergedMeta.reopenForRevisionPending;
         }
 
-        if (responses) {
+        const clearsReopenPending =
+            statusNorm && ['RECEIVED', 'ACCEPTED', 'IN_PROGRESS'].includes(statusNorm);
+
+        if (responses && typeof responses === 'object' && !Array.isArray(responses)) {
+            if (inOpenRevisionVisit && !clearsReopenPending) {
+                const copy = { ...responses };
+                stripRevisionSessionEvidenceInPlace(copy, existing.template?.schemaData);
+                updateData.responses = copy;
+            } else {
+                updateData.responses = responses;
+            }
+        } else if (responses) {
             updateData.responses = responses;
         }
 
@@ -483,7 +529,12 @@ router.post('/executions', authUser, async (req, res) => {
                             status: 'COMPLETED',
                             lastSubmittedRevision: clientRev,
                             responses: responses || {},
-                            metadata: { ...existingMeta, ...metaIn },
+                            metadata: (() => {
+                                const nm = { ...existingMeta, ...metaIn };
+                                delete nm.revisionVisitActive;
+                                delete nm.reopenForRevisionPending;
+                                return nm;
+                            })(),
                             gpsLocation: gpsLocation || null,
                             startedAt: startedAt ? new Date(startedAt) : existing.startedAt,
                             completedAt: completedAtD,

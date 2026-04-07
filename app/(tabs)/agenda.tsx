@@ -136,7 +136,10 @@ export default function AgendaScreen() {
         onPress={() => {
            // Se a fonte for CHECKLIST, abre o motor dinâmico
            if (ev.source === 'CHECKLIST' && ev.refId) {
-              router.push(`/checklist/${ev.refId}` as any);
+              router.push({
+                pathname: '/checklist/[id]',
+                params: { id: String(ev.refId), taskId: String(ev.id) },
+              } as any);
            } else {
               Alert.alert(ev.title, `${ev.description || ''}\nAtivo: ${asset?.title || 'Geral'}`);
            }
@@ -344,7 +347,10 @@ export default function AgendaScreen() {
                         activeOpacity={0.8}
                         onPress={() => {
                            if (ev.source === 'CHECKLIST' && ev.refId) {
-                              router.push(`/checklist/${ev.refId}` as any);
+                              router.push({
+                                pathname: '/checklist/[id]',
+                                params: { id: String(ev.refId), taskId: String(ev.id) },
+                              } as any);
                            } else {
                               Alert.alert(ev.title, `${ev.description || ''}\nAtivo: ${r.title}`);
                            }

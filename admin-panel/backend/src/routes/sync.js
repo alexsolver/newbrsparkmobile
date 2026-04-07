@@ -3,6 +3,7 @@ const router  = require('express').Router();
 const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
 const { recordSync } = require('../services/cockpitMetrics');
+const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -307,7 +308,10 @@ function mapChecklistExecutionToSyncTask(ex) {
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
-    lastSubmittedRevision: ex.lastSubmittedRevision ?? 0,
+    lastSubmittedRevision: effectiveLastSubmittedRevision(
+      ex.lastSubmittedRevision,
+      ex.revisions?.[0]?.revision
+    ),
     refId,
     ownerEmail: ex.ownerEmail,
     category: 'TASK',
@@ -339,12 +343,20 @@ router.get('/tasks', async (req, res) => {
 
     const ownerWhere = { equals: ownerEmail, mode: 'insensitive' };
 
+    const revInclude = {
+      revisions: {
+        select: { revision: true },
+        orderBy: { revision: 'desc' },
+        take: 1,
+      },
+    };
+
     const activeExecs = await prisma.checklistExecution.findMany({
       where: {
         ownerEmail: ownerWhere,
         status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
       },
-      include: { template: true },
+      include: { template: true, ...revInclude },
     });
 
     const doneExecs = await prisma.checklistExecution.findMany({
@@ -354,7 +366,7 @@ router.get('/tasks', async (req, res) => {
       },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 400,
-      include: { template: true },
+      include: { template: true, ...revInclude },
     });
 
     const seen = new Set(activeExecs.map((e) => e.id));

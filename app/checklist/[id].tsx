@@ -41,6 +41,7 @@ import { dataCollectionService } from '../../src/services/dataCollectionService'
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
+import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
 import { enqueueExecutionStatusPatch, pushSyncQueue } from '../../src/services/syncService';
 
@@ -86,6 +87,77 @@ function getSectionTimingKeys(sectionId: string) {
 }
 
 const PAUSE_HISTORY_KEY = '__pause_history';
+
+function metaRevisionVisitContext(m: unknown): boolean {
+  if (!m || typeof m !== 'object') return false;
+  const r = m as Record<string, unknown>;
+  const tk = (x: unknown) => x === true || x === 'true' || String(x ?? '').toLowerCase() === 'true';
+  if (tk(r.reopenForRevisionPending) || tk(r.revisionVisitActive)) return true;
+  const rc = Number(r.reopenCount);
+  return Number.isFinite(rc) && rc > 0;
+}
+
+/** OS terminal na API: só visualização, salvo contexto de revisão (reaberta pelo admin). */
+const EXEC_VIEW_ONLY_STATUSES = new Set(['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED']);
+
+function executionIsViewOnly(exec: unknown): boolean {
+  if (!exec || typeof exec !== 'object') return false;
+  const e = exec as Record<string, unknown>;
+  const st = String(e.status || '').toUpperCase();
+  if (!EXEC_VIEW_ONLY_STATUSES.has(st)) return false;
+  const m = e.metadata;
+  if (metaRevisionVisitContext(m)) return false;
+  return true;
+}
+
+const REVISION_SESSION_FIELD_TYPES = new Set([
+  'signature',
+  'transit_start',
+  'transit_end',
+  'geofence_check',
+  'facial_recognition',
+]);
+
+function effectiveSchemaFieldType(f: any): string {
+  const raw = f?.type ?? f?.fieldType ?? f?.kind ?? f?.component ?? f?.controlType;
+  return String(raw ?? '')
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+/** Assinatura, deslocamento, geofence facial, etc. — não reaproveitar na nova sessão de revisão. */
+function stripRevisionSessionFieldResponses(res: Record<string, any>, schemaData: any[] | undefined): void {
+  if (!Array.isArray(schemaData)) return;
+  for (const f of schemaData) {
+    if (!f?.id) continue;
+    if (REVISION_SESSION_FIELD_TYPES.has(effectiveSchemaFieldType(f))) {
+      delete res[f.id];
+    }
+  }
+}
+
+/** Remove cronómetros / produtividade da visita anterior (mesmo executionId em revisão). */
+function stripFormProductivityTimerFields(res: Record<string, any>, schemaData: any[] | undefined): void {
+  const fixed = new Set([
+    '__form_started_at',
+    '__form_active_seconds',
+    '__form_paused_since',
+    '__form_completed_at',
+    '__form_fill_duration_sec',
+    '__form_active_seconds_final',
+    PAUSE_HISTORY_KEY,
+  ]);
+  for (const k of fixed) delete res[k];
+  if (Array.isArray(schemaData)) {
+    for (const f of schemaData) {
+      if (f?.type === 'section_break' && f?.id) {
+        delete res[`__section_start_${f.id}`];
+        delete res[`__section_end_${f.id}`];
+      }
+    }
+  }
+}
 
 function newSubmissionId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -213,19 +285,78 @@ function technicianCommentKey(fieldId: string) {
   return `__comment_${fieldId}`;
 }
 
-const MULTIPLE_VALUE_TYPES = new Set([
-  'text',
-  'email',
-  'phone',
-  'date',
-  'number',
-  'photo',
-  'photo_stamped',
-  'file_upload',
+/** Tipos em que «múltiplo» não se aplica (secção usa outro fluxo; calculado/transit são especiais). */
+const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
+  'section_break',
+  'hidden',
+  'calculated',
+  'transit_start',
+  'transit_end',
 ]);
 
 function fieldAllowsMultiple(field: any) {
-  return !!field?.multiple && MULTIPLE_VALUE_TYPES.has(field?.type);
+  return !!(field?.multiple && field?.type && !MULTIPLE_EXCLUDED_FIELD_TYPES.has(field.type));
+}
+
+function sectionAllowsRepeat(sectionField: any) {
+  return sectionField?.type === 'section_break' && !!sectionField?.multiple;
+}
+
+function sectionRepeatStorageKey(sectionId: string) {
+  return `__section_repeat_${sectionId}`;
+}
+
+function sectionRepeatMinRows(sectionField: any): number {
+  const raw = sectionField?.minItems;
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    const m = parseInt(String(raw), 10);
+    if (Number.isFinite(m) && m >= 0) return m;
+  }
+  return 0;
+}
+
+function sectionRepeatMaxRows(sectionField: any): number | null {
+  const raw = sectionField?.maxItems;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const m = parseInt(String(raw), 10);
+  if (Number.isFinite(m) && m > 0) return m;
+  return null;
+}
+
+/** Comentário do técnico guardado dentro de uma linha de secção repetível. */
+function rowTechnicianCommentKey(fieldId: string) {
+  return `_comment_${fieldId}`;
+}
+
+type SectionRepeatScope = { sectionId: string; rowIndex: number };
+
+function getRepeatRows(responses: Record<string, any>, sectionId: string): Record<string, any>[] {
+  const raw = responses[sectionRepeatStorageKey(sectionId)];
+  return Array.isArray(raw) ? raw : [];
+}
+
+function getScopedFieldValue(
+  responses: Record<string, any>,
+  scope: SectionRepeatScope | null | undefined,
+  fieldId: string
+) {
+  if (!scope) return responses[fieldId];
+  const rows = getRepeatRows(responses, scope.sectionId);
+  const row = rows[scope.rowIndex];
+  return row && typeof row === 'object' ? row[fieldId] : undefined;
+}
+
+function getScopedTechComment(
+  responses: Record<string, any>,
+  scope: SectionRepeatScope | null | undefined,
+  fieldId: string
+) {
+  if (!scope) return responses[technicianCommentKey(fieldId)] || '';
+  const rows = getRepeatRows(responses, scope.sectionId);
+  const row = rows[scope.rowIndex];
+  if (!row || typeof row !== 'object') return '';
+  const v = row[rowTechnicianCommentKey(fieldId)];
+  return v != null ? String(v) : '';
 }
 
 /** Legendas/comentários por item de foto ou ficheiro (quando allowMediaDescription no template). */
@@ -270,6 +401,21 @@ function getMediaCaptionAt(field: any, responses: Record<string, any>, index: nu
   return arr[index] != null ? String(arr[index]) : '';
 }
 
+function getMediaCaptionAtScoped(
+  field: any,
+  responses: Record<string, any>,
+  scope: SectionRepeatScope | null | undefined,
+  index: number
+): string {
+  if (!scope) return getMediaCaptionAt(field, responses, index);
+  const ck = mediaCaptionStorageKey(field.id);
+  const rows = getRepeatRows(responses, scope.sectionId);
+  const row = rows[scope.rowIndex];
+  const synthetic: Record<string, any> = {};
+  if (row && typeof row === 'object' && ck in row) synthetic[ck] = row[ck];
+  return getMediaCaptionAt(field, synthetic, index);
+}
+
 function shapeMediaCaptionStored(field: any, captions: string[]): string | string[] {
   if (captions.length === 0) {
     return fieldAllowsMultiple(field) ? [] : '';
@@ -307,8 +453,24 @@ function normalizeResponseArray(raw: any): any[] {
 
 function isMultiItemFilled(val: any, fieldType: string): boolean {
   if (val === undefined || val === null) return false;
+  if (fieldType === 'location_pick') return isLocationPickAnswerValid(val);
+  if (fieldType === 'geofence_check') {
+    try {
+      const j = typeof val === 'string' ? JSON.parse(val || '{}') : val;
+      return !!(j && (j.insideZone === true || j.geofence?.insideZone === true));
+    } catch {
+      return false;
+    }
+  }
+  if (fieldType === 'multiselect' && typeof val === 'string') {
+    return val.split(',').some((s) => s.trim() !== '');
+  }
+  if (fieldType === 'signature' && typeof val === 'string') {
+    return val.trim() !== '' && (val.startsWith('SIG_V1|') || val.length > 8);
+  }
   if (typeof val === 'string') return val.trim() !== '';
   if (typeof val === 'number') return Number.isFinite(val);
+  if (typeof val === 'boolean') return true;
   return true;
 }
 
@@ -409,6 +571,26 @@ function resolvePageInnerMode(
   return globalFill === 'wizard' ? 'wizard' : 'list';
 }
 
+/**
+ * Modo global no app: se todas as secções estão em «inherit», usa settings.appFillMode (legado).
+ * Caso contrário: scroll único quando todas são lista; híbrido se alguma secção for assistente.
+ */
+function computeEffectiveFillModeFromTemplate(
+  schema: any[],
+  settings: any
+): 'full' | 'wizard' | 'hybrid' {
+  const breaks = (schema || []).filter((f: any) => f.type === 'section_break');
+  const allInherit = breaks.every(
+    (f: any) => !f.sectionFillMode || f.sectionFillMode === 'inherit'
+  );
+  if (allInherit) {
+    const raw = settings?.appFillMode;
+    if (raw === 'wizard' || raw === 'hybrid') return raw;
+    return 'full';
+  }
+  return breaks.some((f: any) => f.sectionFillMode === 'wizard') ? 'hybrid' : 'full';
+}
+
 export default function ChecklistEngine() {
   const { t } = useTranslation();
   const { id, taskId } = useLocalSearchParams();
@@ -426,6 +608,8 @@ export default function ChecklistEngine() {
   const [wizardIndex, setWizardIndex] = useState(0);
   /** Dentro de uma etapa em modo híbrido com «um campo de cada vez» só nessa etapa */
   const [hybridInnerWizardIndex, setHybridInnerWizardIndex] = useState(0);
+  /** Menu de etapas (settings.appSectionStart === 'hub') antes de entrar numa secção */
+  const [hubPicking, setHubPicking] = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [isReadOnly, setIsReadOnly] = useState(false);
 
@@ -441,6 +625,7 @@ export default function ChecklistEngine() {
   // Scanner Modal & Virtual Camera State
   const [showScanner, setShowScanner] = useState(false);
   const [scannerFieldId, setScannerFieldId] = useState<string | null>(null);
+  const [scannerScope, setScannerScope] = useState<SectionRepeatScope | null>(null);
   
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
@@ -456,6 +641,7 @@ export default function ChecklistEngine() {
   const [sigModalVisible, setSigModalVisible] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
   const [currentSigField, setCurrentSigField] = useState<string|null>(null);
+  const [currentSigScope, setCurrentSigScope] = useState<SectionRepeatScope | null>(null);
   const [currentStrokeState, setCurrentStrokeState] = useState<string>('');
   const currentStrokeRef = React.useRef<string>('');
   const [completedStrokes, setCompletedStrokes] = useState<string[]>([]);
@@ -609,16 +795,17 @@ export default function ChecklistEngine() {
           }
           
           const metaStr = `meta:${JSON.stringify(meta)}`;
-          handleInput(currentSigField as string, "SIG_V1|" + metaStr + "|" + allStrk.join('|'));
+          handleInput(currentSigField as string, "SIG_V1|" + metaStr + "|" + allStrk.join('|'), currentSigScope);
       } catch(e) {
           Alert.alert("Aviso", "A assinatura foi salva sem todos os metadados ativos (GPS lento ou sem rede offline).");
           // Fallback just in case
           const allStrk = [...completedStrokes];
           if(currentStrokeRef.current !== '') allStrk.push(currentStrokeRef.current);
-          handleInput(currentSigField as string, "SIG_V1|" + allStrk.join('|'));
+          handleInput(currentSigField as string, "SIG_V1|" + allStrk.join('|'), currentSigScope);
       } finally {
           setSavingSignature(false);
           setSigModalVisible(false);
+          setCurrentSigScope(null);
       }
   };
 
@@ -642,7 +829,12 @@ export default function ChecklistEngine() {
       await action();
   };
 
-  const processFacialImage = async (fieldId: string, imgBase64: string, imgUri: string) => {
+  const processFacialImage = async (
+    fieldId: string,
+    imgBase64: string,
+    imgUri: string,
+    scope?: SectionRepeatScope | null
+  ) => {
       const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
       if (fieldData?.requireOnlineValidation) {
           try {
@@ -667,9 +859,9 @@ export default function ChecklistEngine() {
               return false;
           }
       }
-      handleInput(fieldId, imgUri);
+      handleInput(fieldId, imgUri, scope);
       if (fieldData?.allowMediaDescription) {
-        handleInput(mediaCaptionStorageKey(fieldId), '');
+        handleInput(mediaCaptionStorageKey(fieldId), '', scope);
       }
       return true;
   };
@@ -719,7 +911,12 @@ export default function ChecklistEngine() {
   };
   // ───────────────────────────────────────────────────
 
-  const handleTransit = async (fieldId: string, label: string, traversedPath?: number[][]) => {
+  const handleTransit = async (
+    fieldId: string,
+    label: string,
+    traversedPath?: number[][],
+    scope?: SectionRepeatScope | null
+  ) => {
     if (serverPausedExecution || responses.__form_paused_since) {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
@@ -774,7 +971,7 @@ export default function ChecklistEngine() {
         if (!taskLocation || (!taskLocation.locationLat && !taskLocation.locationPolygon)) {
           // No location on task — just record GPS evidence, do NOT block
           const payload = { action: label, timestamp: new Date().toISOString(), coordinates: { lat, lng }, address, geofence: { validated: false, reason: 'NO_TASK_LOCATION' } };
-          handleInput(fieldId, JSON.stringify(payload));
+          handleInput(fieldId, JSON.stringify(payload), scope);
           Alert.alert("⚠️ Localização Registrada", `GPS capturado com sucesso.\n\n📍 ${address}\n\nEsta OS não possui zona de geofencing definida — nenhuma validação aplicada.`);
           return;
         }
@@ -814,7 +1011,7 @@ export default function ChecklistEngine() {
           }
         };
 
-        handleInput(fieldId, JSON.stringify(evidencePayload));
+        handleInput(fieldId, JSON.stringify(evidencePayload), scope);
 
         if (insideZone) {
           const distMsg = distanceMeters !== null ? `\n📏 Distância: ${distanceMeters}m (raio: ${requiredMeters}m)` : '';
@@ -827,7 +1024,7 @@ export default function ChecklistEngine() {
 
           if (failMode === 'block') {
             // Remove a resposta para bloquear o avanço
-            handleInput(fieldId, '');
+            handleInput(fieldId, '', scope);
             Alert.alert("🚫 Cerca Eletrônica: BLOQUEADO", `${errorMsg}\n\n📍 Sua posição: ${address}`);
           } else {
             // Modo warn: registra desvio mas permite continuar
@@ -849,7 +1046,7 @@ export default function ChecklistEngine() {
           payload.traversedPath = traversedPath;
       }
       
-      handleInput(fieldId, JSON.stringify(payload));
+      handleInput(fieldId, JSON.stringify(payload), scope);
       
       // Auto-encerrar o public link se for evento de CHEGADA
       if (label === 'CHEGADA') {
@@ -1085,7 +1282,7 @@ export default function ChecklistEngine() {
     loadTemplate();
     // Stop route tracking when leaving the checklist
     return () => { routeTracker.stop().catch(() => {}); };
-  }, [id]);
+  }, [id, resolvedTaskId]);
 
   const loadTemplate = async () => {
     try {
@@ -1095,6 +1292,8 @@ export default function ChecklistEngine() {
       if (!Array.isArray(execs)) execs = [];
       
       const isCompleted = taskId && execs.some(e => (typeof e === 'string' ? e : e.id) === String(taskId));
+      /** Só leitura: lista local de concluídas OU estado terminal na API (sem revisão ativa). */
+      let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
       
       let realTemplateId = id as string;
@@ -1102,11 +1301,14 @@ export default function ChecklistEngine() {
       let serverPausedFlag = false;
       let remotePausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
       let cloudPausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
+      /** Só preenchidos no ramo editável; usados após o template para reset de cronómetros em revisão. */
+      let serverR: Record<string, any> = {};
+      let reopenRevisionPending = false;
+      let draftRes: Record<string, unknown> = {};
 
       // PASSO 1: Resolve a Execução PRIMEIRO. Se for um ghost antigo, o ID passado era o taskId e não o templateId. 
       // Ao baixar a execução, extraímos o verdadeiro templateId dela!
       if (isCompleted) {
-         setIsReadOnly(true);
          let execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
          let needFetch = !execStr;
          
@@ -1162,9 +1364,12 @@ export default function ChecklistEngine() {
              } catch(e) {}
          }
       } else {
+         serverR = {};
+         reopenRevisionPending = false;
+
          const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
          const draftStr = await AsyncStorage.getItem(draftKey);
-         let draftRes: Record<string, unknown> = {};
+         draftRes = {};
          try {
            draftRes = draftStr ? JSON.parse(draftStr) : {};
            if (!draftRes || typeof draftRes !== 'object' || Array.isArray(draftRes)) draftRes = {};
@@ -1175,6 +1380,7 @@ export default function ChecklistEngine() {
          // OS em nuvem: servidor tem estado IN_PROGRESS + respostas (debounce PATCH); outro telemóvel
          // não tinha @draft_tsk_* — precisamos puxar GET para continuar a mesma atividade.
          if (taskId) {
+           let ctEarly: any = null;
            try {
              const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
              let cloudTasksEarly: any[] = [];
@@ -1184,7 +1390,7 @@ export default function ChecklistEngine() {
              } catch {
                cloudTasksEarly = [];
              }
-             const ctEarly = cloudTasksEarly.find((t: any) => String(t.id) === String(taskId));
+             ctEarly = cloudTasksEarly.find((t: any) => String(t.id) === String(taskId));
              if (ctEarly?.status === 'PAUSED') serverPausedFlag = true;
              if (ctEarly != null && ctEarly.lastSubmittedRevision != null) {
                lastSubmittedRevForNext = Math.max(
@@ -1194,6 +1400,7 @@ export default function ChecklistEngine() {
              }
              const cm = ctEarly?.metadata;
              if (cm && typeof cm === 'object') {
+               if (metaRevisionVisitContext(cm)) reopenRevisionPending = true;
                if (cm.lastPauseAt) cloudPausedMeta.lastPauseAt = String(cm.lastPauseAt);
                if (cm.lastPauseReasonSummary) cloudPausedMeta.lastPauseReasonSummary = String(cm.lastPauseReasonSummary);
              }
@@ -1203,17 +1410,29 @@ export default function ChecklistEngine() {
              const res = await apiFetch(`/api/checklists/executions/${taskId}`);
              if (res.ok) {
                const remoteExec = await res.json();
-               if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
-               const rm = remoteExec.metadata;
-               if (rm && typeof rm === 'object') {
-                 if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
-                 if (rm.lastPauseReasonSummary) remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+               if (executionIsViewOnly(remoteExec)) {
+                 readOnlyMode = true;
+                 reopenRevisionPending = false;
+                 serverR =
+                   remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
+                     ? remoteExec.responses
+                     : {};
+                 initialRes = { ...serverR };
+               } else {
+                 if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+                 const rm = remoteExec.metadata;
+                 if (rm && typeof rm === 'object') {
+                   if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
+                   if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                   if (rm.lastPauseReasonSummary)
+                     remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                 }
+                 serverR =
+                   remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
+                     ? remoteExec.responses
+                     : {};
+                 initialRes = { ...serverR, ...draftRes };
                }
-               const serverR =
-                 remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
-                   ? remoteExec.responses
-                   : {};
-               initialRes = { ...serverR, ...draftRes };
                if (remoteExec.templateId) realTemplateId = remoteExec.templateId;
                lastSubmittedRevForNext = Math.max(
                  lastSubmittedRevForNext,
@@ -1225,6 +1444,31 @@ export default function ChecklistEngine() {
            } catch {
              initialRes = draftRes;
            }
+
+           // Offline / GET falhou: cache local diz COMPLETED → manter só leitura como no servidor
+           if (!readOnlyMode && ctEarly) {
+             const stCloud = String(ctEarly.status || '').toUpperCase();
+             if (
+               EXEC_VIEW_ONLY_STATUSES.has(stCloud) &&
+               !metaRevisionVisitContext(ctEarly.metadata)
+             ) {
+               readOnlyMode = true;
+               reopenRevisionPending = false;
+               try {
+                 const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
+                 if (execStr) {
+                   const c = JSON.parse(execStr);
+                   if (c.responses && typeof c.responses === 'object' && !Array.isArray(c.responses)) {
+                     initialRes = { ...c.responses };
+                   }
+                   if (c.templateId) realTemplateId = c.templateId;
+                 }
+               } catch {
+                 /* mantém initialRes */
+               }
+             }
+           }
+
            if (lastSubmittedRevForNext === 0 && taskId) {
              try {
                const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
@@ -1267,6 +1511,25 @@ export default function ChecklistEngine() {
       
       setTemplate(tmpl);
 
+      // Nova visita de revisão: zerar cronómetros de produtividade (respostas de campos mantêm-se)
+      if (taskId && !readOnlyMode) {
+        const completedMarkersOnServer =
+          !!(serverR.__form_completed_at || serverR.__form_fill_duration_sec);
+        const shouldResetProductivityTimers =
+          reopenRevisionPending ||
+          (lastSubmittedRevForNext >= 1 &&
+            completedMarkersOnServer &&
+            Object.keys(draftRes).length === 0);
+        if (shouldResetProductivityTimers) {
+          stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
+          stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
+          void routeTracker.stop().catch(() => {});
+          try {
+            await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
+          } catch {}
+        }
+      }
+
       // Injetar Default Values (AutoFill) para campos vazios
       const skipDefaultValueTypes = new Set([
         'section_break',
@@ -1281,7 +1544,7 @@ export default function ChecklistEngine() {
         'transit_end',
         'hidden',
       ]);
-      if (tmpl.schemaData) {
+      if (!readOnlyMode && tmpl.schemaData) {
         tmpl.schemaData.forEach((f: any) => {
           if (!initialRes[f.id] && f.defaultValue && !skipDefaultValueTypes.has(f.type)) {
              let auto = String(f.defaultValue);
@@ -1292,7 +1555,7 @@ export default function ChecklistEngine() {
           }
         });
       }
-      if (!isReadOnly) {
+      if (!readOnlyMode) {
         if (!initialRes.__form_started_at) {
           initialRes.__form_started_at = new Date().toISOString();
         }
@@ -1301,7 +1564,7 @@ export default function ChecklistEngine() {
         }
       }
 
-      if (taskId && !isCompleted) {
+      if (taskId && !readOnlyMode) {
         let nextRev = lastSubmittedRevForNext + 1;
         try {
           const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
@@ -1319,11 +1582,11 @@ export default function ChecklistEngine() {
           }
         } catch {}
         nextSubmissionRevisionRef.current = nextRev;
-      } else if (!taskId && !isCompleted) {
+      } else if (!taskId) {
         nextSubmissionRevisionRef.current = 1;
       }
 
-      if (taskId && !isCompleted && serverPausedFlag && !initialRes.__form_paused_since) {
+      if (taskId && !readOnlyMode && serverPausedFlag && !initialRes.__form_paused_since) {
         const pauseAt =
           remotePausedMeta.lastPauseAt || cloudPausedMeta.lastPauseAt || new Date().toISOString();
         const summary =
@@ -1349,8 +1612,9 @@ export default function ChecklistEngine() {
         }
       }
 
+      setIsReadOnly(readOnlyMode);
       setResponses(initialRes);
-      setServerPausedExecution(!isCompleted && !!taskId && serverPausedFlag);
+      setServerPausedExecution(!readOnlyMode && !!taskId && serverPausedFlag);
       if (initialRes.__form_started_at) {
         setStartTime(new Date(initialRes.__form_started_at).getTime());
       } else {
@@ -1359,7 +1623,7 @@ export default function ChecklistEngine() {
 
       // ── Opção B: Carregar task e mostrar mapa de confirmação ──────
       let shouldShowMap = false;
-      if (taskId && !isReadOnly) {
+      if (taskId && !readOnlyMode) {
         try {
           const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
           const cloudTasks = JSON.parse(cloudTasksStr);
@@ -1382,7 +1646,7 @@ export default function ChecklistEngine() {
           }
         } catch(e) { console.error('[GeoMap] erro:', e); }
       } else {
-        console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'isReadOnly=', isReadOnly);
+        console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'readOnlyMode=', readOnlyMode);
       }
 
       // Only mark loading done after geo state is set — prevents form flash
@@ -1674,16 +1938,15 @@ export default function ChecklistEngine() {
     promptPauseExit,
   ]);
 
-  const handleInput = (fieldId: string, value: any) => {
+  const handleInput = (fieldId: string, value: any, scope?: SectionRepeatScope | null) => {
     if (isReadOnly) return;
     if (serverPausedExecution) return;
     if (responses.__form_paused_since) return;
 
     const isMetaField = fieldId.startsWith('__');
-    const timeKey = `__time_${fieldId}`;
     const fieldDef = !isMetaField ? template?.schemaData?.find((f: any) => f.id === fieldId) : null;
     let stored = value;
-    if (fieldAllowsMultiple(fieldDef) && (value === null || value === '')) {
+    if (fieldDef && fieldAllowsMultiple(fieldDef) && (value === null || value === '')) {
       stored = [];
     }
 
@@ -1693,6 +1956,25 @@ export default function ChecklistEngine() {
       if (Object.keys(prev).length === 0) {
         notifyKanbanStatus('IN_PROGRESS');
       }
+
+      if (scope) {
+        const rkey = sectionRepeatStorageKey(scope.sectionId);
+        const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+        while (rows.length <= scope.rowIndex) rows.push({});
+        const prevRow = rows[scope.rowIndex] && typeof rows[scope.rowIndex] === 'object' ? rows[scope.rowIndex] : {};
+        const row = { ...prevRow, [fieldId]: stored };
+        rows[scope.rowIndex] = row;
+        const tkey = `__time_${scope.sectionId}_r${scope.rowIndex}_${fieldId}`;
+        const newRes = {
+          ...prev,
+          [rkey]: rows,
+          ...(!isMetaField ? { [tkey]: new Date().toISOString() } : {}),
+        };
+        void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+        return newRes;
+      }
+
+      const timeKey = `__time_${fieldId}`;
       const newRes = {
         ...prev,
         [fieldId]: stored,
@@ -1718,32 +2000,38 @@ export default function ChecklistEngine() {
     }
   };
 
-  const mergeMediaUriIntoField = (fieldId: string, uri: string) => {
+  const mergeMediaUriIntoField = (fieldId: string, uri: string, scope?: SectionRepeatScope | null) => {
     const fieldDef = template?.schemaData?.find((f: any) => f.id === fieldId);
     const capKey = mediaCaptionStorageKey(fieldId);
+    const curVal = getScopedFieldValue(responses, scope || null, fieldId);
+    const rowForCap =
+      scope && responses[sectionRepeatStorageKey(scope.sectionId)]?.[scope.rowIndex];
+    const curCapRaw =
+      scope && rowForCap && typeof rowForCap === 'object' ? rowForCap[capKey] : responses[capKey];
+
     if (fieldAllowsMultiple(fieldDef)) {
-      const arr = normalizeResponseArray(responses[fieldId]);
+      const arr = normalizeResponseArray(curVal);
       const max = multiMaxItems(fieldDef);
       if (max != null && arr.length >= max) {
         Alert.alert('Limite', `Máximo de ${max} itens neste campo.`);
         return;
       }
       const next = [...arr, uri];
-      handleInput(fieldId, next);
+      handleInput(fieldId, next, scope);
       if (fieldDef?.allowMediaDescription) {
-        const caps = normalizeMediaCaptions(fieldDef, responses[capKey], arr.length);
+        const caps = normalizeMediaCaptions(fieldDef, curCapRaw, arr.length);
         caps.push('');
-        handleInput(capKey, caps);
+        handleInput(capKey, caps, scope);
       }
       return;
     }
-    handleInput(fieldId, uri);
+    handleInput(fieldId, uri, scope);
     if (fieldDef?.allowMediaDescription) {
-      handleInput(capKey, '');
+      handleInput(capKey, '', scope);
     }
   };
 
-  const handleMediaPicker = async (fieldId: string, type: string) => {
+  const handleMediaPicker = async (fieldId: string, type: string, scope?: SectionRepeatScope | null) => {
     if (type === 'file_upload') {
       try {
         const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
@@ -1773,7 +2061,7 @@ export default function ChecklistEngine() {
           Alert.alert('Anexo recusado', gate.message);
           return;
         }
-        mergeMediaUriIntoField(fieldId, asset.uri);
+        mergeMediaUriIntoField(fieldId, asset.uri, scope);
       } catch (e) {
         Alert.alert('Anexo', 'Não foi possível selecionar o ficheiro.');
       }
@@ -1792,6 +2080,7 @@ export default function ChecklistEngine() {
                 }
               }
               setScannerFieldId(fieldId);
+              setScannerScope(scope ?? null);
               setShowScanner(true);
               return;
             }
@@ -1825,10 +2114,15 @@ export default function ChecklistEngine() {
               } catch (e) {}
 
               if (type === 'facial_recognition') {
-                const ok = await processFacialImage(fieldId, imgAsset.base64 || '', imgAsset.uri + gpsQuery);
+                const ok = await processFacialImage(
+                  fieldId,
+                  imgAsset.base64 || '',
+                  imgAsset.uri + gpsQuery,
+                  scope
+                );
                 if (!ok) return;
               } else {
-                mergeMediaUriIntoField(fieldId, imgAsset.uri + gpsQuery);
+                mergeMediaUriIntoField(fieldId, imgAsset.uri + gpsQuery, scope);
               }
             }
           } catch (err: any) {
@@ -1847,7 +2141,7 @@ export default function ChecklistEngine() {
                   }
                   const res = await ImagePicker.launchCameraAsync({ quality: 0.5 });
                   if (!res.canceled && res.assets && res.assets.length > 0) {
-                    mergeMediaUriIntoField(fieldId, res.assets[0].uri);
+                    mergeMediaUriIntoField(fieldId, res.assets[0].uri, scope);
                   }
                 } catch (camErr: any) {
                   Alert.alert(
@@ -1868,7 +2162,7 @@ export default function ChecklistEngine() {
                   }
                   const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
                   if (!res.canceled && res.assets && res.assets.length > 0) {
-                    mergeMediaUriIntoField(fieldId, res.assets[0].uri);
+                    mergeMediaUriIntoField(fieldId, res.assets[0].uri, scope);
                   }
                 } catch (galErr: any) {
                   Alert.alert('Galeria Indisponível', galErr.message || 'Erro ao abrir a galeria.');
@@ -1890,15 +2184,73 @@ export default function ChecklistEngine() {
       return;
     }
     const schemaAll = template?.schemaData || [];
+    const bySection: Record<string, any[]> = {};
+    const sectionHeaders: Record<string, any> = {};
+    let curSecKey = '__root__';
     for (const f of schemaAll) {
-      if (f.type === 'section_break' || f.type === 'hidden') continue;
-      if (!isFieldVisible(f)) continue;
-      if (isFieldRequired(f)) {
-        const ans = responses[f.id];
-        if (!isFieldAnswerFilled(f, ans)) {
-          Alert.alert('Atenção', `O campo '${f.label || f.id}' é obrigatório antes de concluir.`);
+      if (f.type === 'section_break') {
+        curSecKey = f.id;
+        sectionHeaders[curSecKey] = f;
+        continue;
+      }
+      if (f.type === 'hidden' || !f.id) continue;
+      if (!bySection[curSecKey]) bySection[curSecKey] = [];
+      bySection[curSecKey].push(f);
+    }
+    const validateFlatFields = (fields: any[]) => {
+      for (const f of fields) {
+        if (!isFieldVisible(f)) continue;
+        if (isFieldRequired(f)) {
+          const ans = responses[f.id];
+          if (!isFieldAnswerFilled(f, ans)) {
+            Alert.alert('Atenção', `O campo '${f.label || f.id}' é obrigatório antes de concluir.`);
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+    for (const [secKey, fields] of Object.entries(bySection)) {
+      if (secKey === '__root__') {
+        if (!validateFlatFields(fields)) return;
+        continue;
+      }
+      const sh = sectionHeaders[secKey];
+      const repeat = sh && sectionAllowsRepeat(sh);
+      if (repeat) {
+        const rows = getRepeatRows(responses, secKey);
+        const minR = sectionRepeatMinRows(sh);
+        const maxR = sectionRepeatMaxRows(sh);
+        if (rows.length < minR) {
+          Alert.alert(
+            'Atenção',
+            `A secção "${sh.label || secKey}" exige pelo menos ${minR} preenchimento(s) repetido(s).`
+          );
           return;
         }
+        if (maxR != null && rows.length > maxR) {
+          Alert.alert(
+            'Atenção',
+            `A secção "${sh.label || secKey}" admite no máximo ${maxR} preenchimento(s).`
+          );
+          return;
+        }
+        const n = Math.max(rows.length, minR, 1);
+        for (const f of fields) {
+          if (!isFieldVisible(f)) continue;
+          for (let ri = 0; ri < n; ri++) {
+            const ans = rows[ri]?.[f.id];
+            if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) {
+              Alert.alert(
+                'Atenção',
+                `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório antes de concluir.`
+              );
+              return;
+            }
+          }
+        }
+      } else {
+        if (!validateFlatFields(fields)) return;
       }
     }
 
@@ -2310,13 +2662,23 @@ export default function ChecklistEngine() {
 
   const pages = rawPages.filter(p => p.isVisible);
 
-  const rawAppFill = template?.settings?.appFillMode;
-  const fillMode: 'full' | 'wizard' | 'hybrid' =
-    rawAppFill === 'wizard' || rawAppFill === 'hybrid' ? rawAppFill : 'full';
+  const fillMode: 'full' | 'wizard' | 'hybrid' = computeEffectiveFillModeFromTemplate(
+    schema,
+    template?.settings
+  );
   const effectiveFillMode = isReadOnly ? 'full' : fillMode;
 
+  const appSectionStart: 'direct' | 'hub' =
+    !isReadOnly && template?.settings?.appSectionStart === 'hub' ? 'hub' : 'direct';
+  const appHubSectionOrder: 'free' | 'sequential' =
+    template?.settings?.appHubSectionOrder === 'sequential' ? 'sequential' : 'free';
+  const useSectionHub = appSectionStart === 'hub';
+  /** Com hub + lista completa, passamos a paginar por secção em vez do scroll único. */
+  const paginateSectionsForLayout =
+    effectiveFillMode !== 'full' || (useSectionHub && effectiveFillMode === 'full');
+
   const displayPages = useMemo(() => {
-    if (effectiveFillMode === 'full') {
+    if (!paginateSectionsForLayout) {
       return [
         {
           fields: pages.flatMap((p) => p.fields),
@@ -2329,12 +2691,21 @@ export default function ChecklistEngine() {
       ];
     }
     return pages;
-  }, [effectiveFillMode, pages, template?.title]);
+  }, [paginateSectionsForLayout, pages, template?.title]);
 
   /** Passos do assistente global: cada entrada é um ou vários campos (secção em modo lista agrupa). */
   const wizardSteps = useMemo(() => {
-    if (effectiveFillMode !== 'wizard') return [] as { fields: any[] }[];
-    const steps: { fields: any[] }[] = [];
+    if (effectiveFillMode !== 'wizard')
+      return [] as {
+        fields: any[];
+        sectionRepeat?: { sectionId: string; sectionField: any };
+        sectionOpeningId: string;
+      }[];
+    const steps: {
+      fields: any[];
+      sectionRepeat?: { sectionId: string; sectionField: any };
+      sectionOpeningId: string;
+    }[] = [];
     let buf: any[] = [];
     let opening: any = null;
     const flush = () => {
@@ -2344,11 +2715,18 @@ export default function ChecklistEngine() {
         buf = [];
         return;
       }
+      const sectionOpeningId = opening?.id || '__preamble__';
       const mode = resolvePageInnerMode({ sectionFillMode: opening?.sectionFillMode }, 'wizard');
       if (mode === 'wizard') {
-        vis.forEach((field) => steps.push({ fields: [field] }));
+        vis.forEach((field) =>
+          steps.push({ fields: [field], sectionOpeningId })
+        );
       } else {
-        steps.push({ fields: vis });
+        const sectionRepeat =
+          opening && opening.type === 'section_break' && sectionAllowsRepeat(opening)
+            ? { sectionId: opening.id, sectionField: opening }
+            : undefined;
+        steps.push({ fields: vis, sectionRepeat, sectionOpeningId });
       }
       buf = [];
     };
@@ -2372,14 +2750,158 @@ export default function ChecklistEngine() {
   }, [id, taskId, template?.id]);
 
   useEffect(() => {
+    if (!useSectionHub) {
+      setHubPicking(false);
+      return;
+    }
+    setHubPicking(pages.length > 1);
+  }, [useSectionHub, pages.length, id, taskId, template?.id]);
+
+  useEffect(() => {
     if (effectiveFillMode !== 'wizard') return;
     const max = Math.max(0, wizardSteps.length - 1);
     setWizardIndex((w) => Math.min(w, max));
   }, [effectiveFillMode, wizardSteps.length]);
 
+  /** Em modo lista completa, agrupa campos por secção para suportar secções repetíveis. */
+  const fullRenderChunks = useMemo(() => {
+    if (effectiveFillMode !== 'full')
+      return null as null | { kind: 'flat' | 'repeat'; sectionField?: any; fields: any[] }[];
+    if (useSectionHub && !isReadOnly)
+      return null as null | { kind: 'flat' | 'repeat'; sectionField?: any; fields: any[] }[];
+    const sch = template?.schemaData || [];
+    const chunks: { kind: 'flat' | 'repeat'; sectionField?: any; fields: any[] }[] = [];
+    let pendingFields: any[] = [];
+    let sectionHeader: any | null = null;
+    let g = 1;
+    const emit = () => {
+      if (pendingFields.length === 0) return;
+      const withIdx = pendingFields.map((f) => ({ ...f, _globalIdx: g++ }));
+      if (sectionHeader?.multiple) {
+        chunks.push({ kind: 'repeat', sectionField: sectionHeader, fields: withIdx });
+      } else {
+        chunks.push({ kind: 'flat', fields: withIdx });
+      }
+      pendingFields = [];
+    };
+    for (const f of sch) {
+      if (f.type === 'section_break') {
+        emit();
+        sectionHeader = f;
+      } else if (f.type !== 'hidden') {
+        pendingFields.push(f);
+      }
+    }
+    emit();
+    return chunks;
+  }, [effectiveFillMode, template?.schemaData, ruleTick, useSectionHub, isReadOnly]);
+
+  const schemaPageFieldsComplete = (pageIdx: number) => {
+    const p = pages[pageIdx];
+    if (!p) return false;
+    const openingId = p.openingSectionId || '__preamble__';
+    const sb =
+      openingId !== '__preamble__'
+        ? (template?.schemaData || []).find(
+            (x: any) => x.id === openingId && x.type === 'section_break'
+          )
+        : null;
+    if (sb && sectionAllowsRepeat(sb)) {
+      const rows = getRepeatRows(responses, sb.id);
+      const minR = sectionRepeatMinRows(sb);
+      const maxR = sectionRepeatMaxRows(sb);
+      if (rows.length < minR) return false;
+      if (maxR != null && rows.length > maxR) return false;
+      const n = Math.max(rows.length, minR, 1);
+      for (const f of p.fields || []) {
+        if (!isFieldVisible(f)) continue;
+        for (let ri = 0; ri < n; ri++) {
+          const ans = rows[ri]?.[f.id];
+          if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) return false;
+        }
+      }
+      return true;
+    }
+    for (const f of p.fields || []) {
+      if (!isFieldVisible(f)) continue;
+      if (isFieldRequired(f)) {
+        const ans = responses[f.id];
+        if (!isFieldAnswerFilled(f, ans)) return false;
+      }
+    }
+    return true;
+  };
+
+  const wizardOpeningSectionComplete = (openingId: string) => {
+    for (const step of wizardSteps) {
+      if (step.sectionOpeningId !== openingId) continue;
+      if (step.sectionRepeat?.sectionField) {
+        const sb = step.sectionRepeat.sectionField;
+        const sid = step.sectionRepeat.sectionId;
+        const rows = getRepeatRows(responses, sid);
+        const minR = sectionRepeatMinRows(sb);
+        const maxR = sectionRepeatMaxRows(sb);
+        if (rows.length < minR) return false;
+        if (maxR != null && rows.length > maxR) return false;
+        const n = Math.max(rows.length, minR, 1);
+        for (const f of step.fields) {
+          if (!isFieldVisible(f)) continue;
+          for (let ri = 0; ri < n; ri++) {
+            const ans = rows[ri]?.[f.id];
+            if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) return false;
+          }
+        }
+      } else {
+        for (const f of step.fields) {
+          if (!isFieldVisible(f)) continue;
+          if (isFieldRequired(f)) {
+            const ans = responses[f.id];
+            if (!isFieldAnswerFilled(f, ans)) return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
+
+  const hubSectionSatisfied = (pageIdx: number) => {
+    if (effectiveFillMode === 'wizard') {
+      const oid = pages[pageIdx]?.openingSectionId || '__preamble__';
+      return wizardOpeningSectionComplete(oid);
+    }
+    return schemaPageFieldsComplete(pageIdx);
+  };
+
+  const hubSectionUnlocked = (pageIdx: number) => {
+    if (appHubSectionOrder !== 'sequential') return true;
+    for (let j = 0; j < pageIdx; j++) {
+      if (!hubSectionSatisfied(j)) return false;
+    }
+    return true;
+  };
+
+  const openHubSection = (pageIdx: number) => {
+    if (!hubSectionUnlocked(pageIdx)) {
+      Alert.alert(
+        'Ordem das etapas',
+        'Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.'
+      );
+      return;
+    }
+    setCurrentPage(pageIdx);
+    setHybridInnerWizardIndex(0);
+    if (effectiveFillMode === 'wizard') {
+      const oid = pages[pageIdx]?.openingSectionId || '__preamble__';
+      const ix = wizardSteps.findIndex((s) => s.sectionOpeningId === oid);
+      setWizardIndex(ix >= 0 ? ix : 0);
+    }
+    setHubPicking(false);
+  };
+
   // Focus Section Tracking
   useEffect(() => {
     if (effectiveFillMode === 'wizard') return;
+    if (useSectionHub && hubPicking) return;
     const currentSectionData = displayPages[currentPage];
     if (
       !currentSectionData ||
@@ -2400,7 +2922,17 @@ export default function ChecklistEngine() {
         return newRes;
       });
     }
-  }, [effectiveFillMode, currentPage, isReadOnly, displayPages, responses, taskId, id]);
+  }, [
+    effectiveFillMode,
+    currentPage,
+    isReadOnly,
+    displayPages,
+    responses,
+    taskId,
+    id,
+    useSectionHub,
+    hubPicking,
+  ]);
 
   /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
   const liveRouteCoordsForMap = useMemo(() => {
@@ -2470,13 +3002,46 @@ export default function ChecklistEngine() {
   const handleWizardNext = () => {
     const step = wizardSteps[wizardIndex];
     if (!step || !step.fields.length) return;
-    for (const f of step.fields) {
-      if (!isFieldVisible(f)) continue;
-      if (isFieldRequired(f)) {
-        const ans = responses[f.id];
-        if (!isFieldAnswerFilled(f, ans)) {
-          Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
-          return;
+    if (step.sectionRepeat?.sectionField) {
+      const sb = step.sectionRepeat.sectionField;
+      const sid = step.sectionRepeat.sectionId;
+      const rows = getRepeatRows(responses, sid);
+      const minR = sectionRepeatMinRows(sb);
+      const maxR = sectionRepeatMaxRows(sb);
+      if (rows.length < minR) {
+        Alert.alert(
+          'Atenção',
+          `A secção "${sb.label || ''}" exige pelo menos ${minR} preenchimento(s).`
+        );
+        return;
+      }
+      if (maxR != null && rows.length > maxR) {
+        Alert.alert('Atenção', `Máximo de ${maxR} instâncias nesta secção.`);
+        return;
+      }
+      const n = Math.max(rows.length, minR, 1);
+      for (const f of step.fields) {
+        if (!isFieldVisible(f)) continue;
+        for (let ri = 0; ri < n; ri++) {
+          const ans = rows[ri]?.[f.id];
+          if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) {
+            Alert.alert(
+              'Atenção',
+              `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório.`
+            );
+            return;
+          }
+        }
+      }
+    } else {
+      for (const f of step.fields) {
+        if (!isFieldVisible(f)) continue;
+        if (isFieldRequired(f)) {
+          const ans = responses[f.id];
+          if (!isFieldAnswerFilled(f, ans)) {
+            Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
+            return;
+          }
         }
       }
     }
@@ -2611,9 +3176,32 @@ export default function ChecklistEngine() {
         ? currentPageData.pageTitle
         : template?.title || 'Checklist';
 
+  const displayHeaderTitle =
+    useSectionHub && hubPicking ? template?.title || 'Checklist' : headerPageTitle;
+
   const sessionPauseActive =
     Boolean(responses.__form_paused_since) && !!resolvedTaskId && !isReadOnly;
   const pauseSecondsLive = sessionPauseActive ? getActivePauseSeconds(responses, nowClock) : 0;
+
+  const pageOpeningSectionId = (currentPageData as { openingSectionId?: string }).openingSectionId;
+  const openingSectionBreakField =
+    pageOpeningSectionId &&
+    pageOpeningSectionId !== '__preamble__' &&
+    pageOpeningSectionId !== '__full__' &&
+    pageOpeningSectionId !== '__wizard__'
+      ? template?.schemaData?.find(
+          (x: any) => x.id === pageOpeningSectionId && x.type === 'section_break'
+        )
+      : null;
+
+  const paginatedSectionRepeatEnabled =
+    effectiveFillMode !== 'full' &&
+    effectiveFillMode !== 'wizard' &&
+    !!openingSectionBreakField &&
+    sectionAllowsRepeat(openingSectionBreakField);
+
+  const wizardStepSectionRepeat =
+    effectiveFillMode === 'wizard' ? wizardSteps[wizardIndex]?.sectionRepeat : undefined;
 
   return (
     <View style={styles.container}>
@@ -2623,21 +3211,52 @@ export default function ChecklistEngine() {
         end={{ x: 1, y: 0 }}
         style={[styles.header, { paddingBottom: 16 }]}
       >
-        <TouchableOpacity
-          onPress={() => {
-            if (taskId && !isReadOnly && responses.__form_paused_since) {
-              exitPauseToList();
-              return;
-            }
-            router.back();
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (taskId && !isReadOnly && responses.__form_paused_since) {
+                exitPauseToList();
+                return;
+              }
+              router.back();
+            }}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          {useSectionHub && pages.length > 1 && !isReadOnly ? (
+            <TouchableOpacity
+              onPress={() => {
+                if (!hubPicking) setHubPicking(true);
+              }}
+              disabled={hubPicking}
+              style={{ padding: 4, opacity: hubPicking ? 0.4 : 1 }}
+              accessibilityLabel="Menu de etapas"
+            >
+              <Ionicons name="grid-outline" size={22} color="#FFF" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <View style={{ flex: 1, marginHorizontal: 8 }}>
           <Text style={styles.headerTitle} numberOfLines={2}>
-            {headerPageTitle}
+            {displayHeaderTitle}
           </Text>
+          {taskId ? (
+            <Text
+              style={{
+                color: 'rgba(255,255,255,0.92)',
+                fontSize: 12,
+                fontWeight: '700',
+                marginTop: 4,
+                letterSpacing: 0.2,
+              }}
+              numberOfLines={1}
+            >
+              {taskOsLabel({
+                id: String(taskId),
+                osNumber: currentTask?.osNumber ?? null,
+              })}
+            </Text>
+          ) : null}
         </View>
         <View style={{ width: 40, alignItems: 'flex-end' }}>
           {taskId && !isReadOnly && !responses.__form_paused_since ? (
@@ -2737,7 +3356,9 @@ export default function ChecklistEngine() {
                />;
       })()}
 
-      {effectiveFillMode === 'wizard' && wizardSteps.length > 0 ? (
+      {!(useSectionHub && hubPicking) &&
+      effectiveFillMode === 'wizard' &&
+      wizardSteps.length > 0 ? (
         <View style={styles.progressBarWrapper}>
           <View
             style={[
@@ -2749,7 +3370,10 @@ export default function ChecklistEngine() {
             Passo {wizardIndex + 1} de {wizardSteps.length}
           </Text>
         </View>
-      ) : effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard' && hybridVisibleFields.length > 0 ? (
+      ) : !(useSectionHub && hubPicking) &&
+        effectiveFillMode === 'hybrid' &&
+        hybridInnerMode === 'wizard' &&
+        hybridVisibleFields.length > 0 ? (
         <View style={styles.progressBarWrapper}>
           <View
             style={[
@@ -2763,7 +3387,9 @@ export default function ChecklistEngine() {
             Campo {hybridInnerWizardIndex + 1} de {hybridVisibleFields.length} · {basePageData.pageTitle || 'Etapa'}
           </Text>
         </View>
-      ) : effectiveFillMode === 'hybrid' && displayPages.length > 1 ? (
+      ) : !(useSectionHub && hubPicking) &&
+        effectiveFillMode === 'hybrid' &&
+        displayPages.length > 1 ? (
         <View style={styles.progressBarWrapper}>
           <View
             style={[
@@ -2773,6 +3399,21 @@ export default function ChecklistEngine() {
           />
           <Text style={styles.progressText}>
             Página {currentPage + 1} de {displayPages.length}
+          </Text>
+        </View>
+      ) : !(useSectionHub && hubPicking) &&
+        useSectionHub &&
+        paginateSectionsForLayout &&
+        displayPages.length > 1 ? (
+        <View style={styles.progressBarWrapper}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${((currentPage + 1) / displayPages.length) * 100}%` },
+            ]}
+          />
+          <Text style={styles.progressText}>
+            Etapa {currentPage + 1} de {displayPages.length}
           </Text>
         </View>
       ) : null}
@@ -2785,10 +3426,74 @@ export default function ChecklistEngine() {
             </View>
         )}
         <View pointerEvents={isReadOnly ? "none" : "auto"} style={{ gap: 16 }}>
-        {currentFieldsToRender.length === 0 && (
-            <Text style={{textAlign: 'center', color: '#64748b', marginVertical: 32}}>Nenhum campo nesta etapa.</Text>
-        )}
-        {currentFieldsToRender.map((field: any) => {
+        {useSectionHub && hubPicking && pages.length > 1 ? (
+          <View style={{ gap: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>
+              Etapas do formulário
+            </Text>
+            <Text style={{ fontSize: 13, color: '#64748b', marginTop: -6 }}>
+              {appHubSectionOrder === 'sequential'
+                ? 'Conclua cada etapa por ordem para desbloquear a seguinte.'
+                : 'Toque na etapa que quiser preencher — em qualquer ordem.'}
+            </Text>
+            {pages.map((pg, idx) => {
+              const done = hubSectionSatisfied(idx);
+              const unlocked = hubSectionUnlocked(idx);
+              return (
+                <TouchableOpacity
+                  key={String(pg.id || idx)}
+                  activeOpacity={0.85}
+                  onPress={() => openHubSection(idx)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 16,
+                    borderRadius: 12,
+                    borderWidth: 2,
+                    borderColor: done ? '#86efac' : unlocked ? '#e2e8f0' : '#cbd5e1',
+                    backgroundColor: unlocked ? '#fff' : '#f8fafc',
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      backgroundColor: done ? '#dcfce7' : '#f1f5f9',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {done ? (
+                      <Ionicons name="checkmark-circle" size={26} color="#16a34a" />
+                    ) : appHubSectionOrder === 'sequential' && !unlocked ? (
+                      <Ionicons name="lock-closed-outline" size={22} color="#94a3b8" />
+                    ) : (
+                      <Text style={{ fontWeight: '800', color: '#64748b' }}>{idx + 1}</Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }} numberOfLines={2}>
+                      {pg.pageTitle || `Etapa ${idx + 1}`}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                      {(pg.fields || []).filter((x: any) => isFieldVisible(x)).length}{' '}
+                      campo(s) visível(eis)
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
+        {!(useSectionHub && hubPicking && pages.length > 1)
+          ? (() => {
+          const renderFieldList = (fields: any[], scope: SectionRepeatScope | null) =>
+            fields.map((field: any) => {
+          const vv = (fid: string) => getScopedFieldValue(responses, scope, fid);
+          const hi = (fid: string, v: any) => handleInput(fid, v, scope);
           if (!isFieldVisible(field)) return null;
 
           const renderFieldIcon = (f: any) => {
@@ -2856,7 +3561,7 @@ export default function ChecklistEngine() {
                 (fieldAllowsMultiple(field) ? (
                   <View style={{ gap: 10 }}>
                     {(() => {
-                      const base = normalizeResponseArray(responses[field.id]);
+                      const base = normalizeResponseArray(vv(field.id));
                       const rows = base.length > 0 ? base : [''];
                       const maxM = multiMaxItems(field);
                       const canAdd = maxM == null || rows.length < maxM;
@@ -2876,7 +3581,7 @@ export default function ChecklistEngine() {
                                   const masked = applyMask(val, field.textMask);
                                   const next = [...rows];
                                   next[idx] = masked;
-                                  handleInput(field.id, next);
+                                  hi(field.id, next);
                                 }}
                                 onEndEditing={() => handleApiValidation(field.id)}
                               />
@@ -2884,7 +3589,7 @@ export default function ChecklistEngine() {
                                 <TouchableOpacity
                                   onPress={() => {
                                     const next = rows.filter((_: any, j: number) => j !== idx);
-                                    handleInput(field.id, next.length ? next : []);
+                                    hi(field.id, next.length ? next : []);
                                   }}
                                 >
                                   <Ionicons name="remove-circle" size={28} color="#dc2626" />
@@ -2894,7 +3599,7 @@ export default function ChecklistEngine() {
                           ))}
                           {canAdd ? (
                             <TouchableOpacity
-                              onPress={() => handleInput(field.id, [...rows, ''])}
+                              onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
                               <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
@@ -2910,9 +3615,9 @@ export default function ChecklistEngine() {
                     style={styles.input}
                     placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
                     keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
-                    value={responses[field.id] || ''}
+                    value={vv(field.id) || ''}
                     editable={validatingFieldId !== field.id}
-                    onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                    onChangeText={(val) => hi(field.id, applyMask(val, field.textMask))}
                     onEndEditing={() => handleApiValidation(field.id)}
                   />
                 ))}
@@ -2920,7 +3625,7 @@ export default function ChecklistEngine() {
                 (fieldAllowsMultiple(field) ? (
                   <View style={{ gap: 10 }}>
                     {(() => {
-                      const base = normalizeResponseArray(responses[field.id]);
+                      const base = normalizeResponseArray(vv(field.id));
                       const rows = base.length > 0 ? base : [''];
                       const maxM = multiMaxItems(field);
                       const canAdd = maxM == null || rows.length < maxM;
@@ -2938,7 +3643,7 @@ export default function ChecklistEngine() {
                                   const masked = applyMask(val, field.textMask);
                                   const next = [...rows];
                                   next[idx] = masked;
-                                  handleInput(field.id, next);
+                                  hi(field.id, next);
                                 }}
                                 onEndEditing={() => handleApiValidation(field.id)}
                               />
@@ -2946,7 +3651,7 @@ export default function ChecklistEngine() {
                                 <TouchableOpacity
                                   onPress={() => {
                                     const next = rows.filter((_: any, j: number) => j !== idx);
-                                    handleInput(field.id, next.length ? next : []);
+                                    hi(field.id, next.length ? next : []);
                                   }}
                                 >
                                   <Ionicons name="remove-circle" size={28} color="#dc2626" />
@@ -2956,7 +3661,7 @@ export default function ChecklistEngine() {
                           ))}
                           {canAdd ? (
                             <TouchableOpacity
-                              onPress={() => handleInput(field.id, [...rows, ''])}
+                              onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
                               <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
@@ -2972,62 +3677,336 @@ export default function ChecklistEngine() {
                     style={styles.input}
                     placeholder="0"
                     keyboardType="numeric"
-                    value={responses[field.id] || ''}
+                    value={vv(field.id) || ''}
                     editable={validatingFieldId !== field.id}
-                    onChangeText={(val) => handleInput(field.id, applyMask(val, field.textMask))}
+                    onChangeText={(val) => hi(field.id, applyMask(val, field.textMask))}
                     onEndEditing={() => handleApiValidation(field.id)}
                   />
                 ))}
-              {field.type === 'dropdown' && (
-                <View style={{gap: 8}}>
-                   {(field.options || '').split(',').map((opt:string, i:number) => {
-                     const val = opt.trim();
-                     if(!val) return null;
-                     const active = responses[field.id] === val;
-                     return (
-                       <TouchableOpacity key={i} onPress={() => handleInput(field.id, val)}
-                         style={{padding:14, borderRadius:8, backgroundColor: active ? colors.primary : '#f8fafc', borderWidth:1, borderColor: active ? colors.primary : '#cbd5e1'}}>
-                         <Text style={{color: active ? '#FFF' : '#475569', fontWeight: active ? '800':'600'}}>{val}</Text>
-                       </TouchableOpacity>
-                     );
-                   })}
-                </View>
-              )}
-              {field.type === 'multiselect' && (
-                <View style={{gap: 8}}>
-                   {(field.options || '').split(',').map((opt:string, i:number) => {
-                     const val = opt.trim();
-                     if(!val) return null;
-                     const currentStr = responses[field.id] || '';
-                     const activeArray = currentStr.split(',').map((s:string) => s.trim()).filter((s:string) => s);
-                     const isActive = activeArray.includes(val);
-                     
-                     const toggle = () => {
+              {field.type === 'dropdown' &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(vv(field.id));
+                      const rows = base.length > 0 ? base : [''];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => (
+                            <View key={idx} style={{ gap: 8 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748b', minWidth: 28 }}>
+                                  {idx + 1}.
+                                </Text>
+                                <View style={{ flex: 1, gap: 8 }}>
+                                  {(field.options || '').split(',').map((opt: string, i: number) => {
+                                    const val = opt.trim();
+                                    if (!val) return null;
+                                    const active = String(rowVal ?? '') === val;
+                                    return (
+                                      <TouchableOpacity
+                                        key={i}
+                                        onPress={() => {
+                                          const next = [...rows];
+                                          next[idx] = val;
+                                          hi(field.id, next);
+                                        }}
+                                        style={{
+                                          padding: 12,
+                                          borderRadius: 8,
+                                          backgroundColor: active ? colors.primary : '#f8fafc',
+                                          borderWidth: 1,
+                                          borderColor: active ? colors.primary : '#cbd5e1',
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            color: active ? '#FFF' : '#475569',
+                                            fontWeight: active ? '800' : '600',
+                                          }}
+                                        >
+                                          {val}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+                                {rows.length > 1 ? (
+                                  <TouchableOpacity
+                                    onPress={() => {
+                                      const next = rows.filter((_: any, j: number) => j !== idx);
+                                      hi(field.id, next.length ? next : []);
+                                    }}
+                                  >
+                                    <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
+                            </View>
+                          ))}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => hi(field.id, [...rows, ''])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                                Adicionar linha
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {(field.options || '').split(',').map((opt: string, i: number) => {
+                      const val = opt.trim();
+                      if (!val) return null;
+                      const active = vv(field.id) === val;
+                      return (
+                        <TouchableOpacity
+                          key={i}
+                          onPress={() => hi(field.id, val)}
+                          style={{
+                            padding: 14,
+                            borderRadius: 8,
+                            backgroundColor: active ? colors.primary : '#f8fafc',
+                            borderWidth: 1,
+                            borderColor: active ? colors.primary : '#cbd5e1',
+                          }}
+                        >
+                          <Text style={{ color: active ? '#FFF' : '#475569', fontWeight: active ? '800' : '600' }}>
+                            {val}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              {field.type === 'multiselect' &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(vv(field.id));
+                      const rows = base.length > 0 ? base : [''];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => {
+                            const currentStr = String(rowVal ?? '');
+                            const activeArray = currentStr
+                              .split(',')
+                              .map((s: string) => s.trim())
+                              .filter((s: string) => s);
+                            return (
+                              <View key={idx} style={{ gap: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748b', marginTop: 10 }}>
+                                    {idx + 1}.
+                                  </Text>
+                                  <View style={{ flex: 1, gap: 8 }}>
+                                    {(field.options || '').split(',').map((opt: string, i: number) => {
+                                      const val = opt.trim();
+                                      if (!val) return null;
+                                      const isActive = activeArray.includes(val);
+                                      const toggle = () => {
+                                        let newArr = [...activeArray];
+                                        if (isActive) newArr = newArr.filter((x) => x !== val);
+                                        else newArr.push(val);
+                                        const next = [...rows];
+                                        next[idx] = newArr.join(', ');
+                                        hi(field.id, next);
+                                      };
+                                      return (
+                                        <TouchableOpacity
+                                          key={i}
+                                          onPress={toggle}
+                                          style={{
+                                            padding: 14,
+                                            borderRadius: 8,
+                                            backgroundColor: isActive ? '#f0fdf4' : '#f8fafc',
+                                            borderWidth: 1,
+                                            borderColor: isActive ? colors.primary : '#cbd5e1',
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name={isActive ? 'checkbox' : 'square-outline'}
+                                            size={22}
+                                            color={isActive ? colors.primary : '#94a3b8'}
+                                            style={{ marginRight: 10 }}
+                                          />
+                                          <Text
+                                            style={{
+                                              color: isActive ? colors.primary : '#475569',
+                                              fontWeight: isActive ? '800' : '600',
+                                            }}
+                                          >
+                                            {val}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+                                  </View>
+                                  {rows.length > 1 ? (
+                                    <TouchableOpacity
+                                      onPress={() => {
+                                        const next = rows.filter((_: any, j: number) => j !== idx);
+                                        hi(field.id, next.length ? next : []);
+                                      }}
+                                      style={{ marginTop: 8 }}
+                                    >
+                                      <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                    </TouchableOpacity>
+                                  ) : null}
+                                </View>
+                              </View>
+                            );
+                          })}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => hi(field.id, [...rows, ''])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                                Adicionar linha
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {(field.options || '').split(',').map((opt: string, i: number) => {
+                      const val = opt.trim();
+                      if (!val) return null;
+                      const currentStr = vv(field.id) || '';
+                      const activeArray = currentStr
+                        .split(',')
+                        .map((s: string) => s.trim())
+                        .filter((s: string) => s);
+                      const isActive = activeArray.includes(val);
+                      const toggle = () => {
                         let newArr = [...activeArray];
-                        if(isActive) newArr = newArr.filter(x => x !== val);
+                        if (isActive) newArr = newArr.filter((x) => x !== val);
                         else newArr.push(val);
-                        handleInput(field.id, newArr.join(', '));
-                     };
-                     
-                     return (
-                       <TouchableOpacity key={i} onPress={toggle}
-                         style={{padding:14, borderRadius:8, backgroundColor: isActive ? '#f0fdf4' : '#f8fafc', borderWidth:1, borderColor: isActive ? colors.primary : '#cbd5e1', flexDirection: 'row', alignItems: 'center'}}>
-                         <Ionicons name={isActive ? "checkbox" : "square-outline"} size={22} color={isActive ? colors.primary : '#94a3b8'} style={{marginRight: 10}}/>
-                         <Text style={{color: isActive ? colors.primary : '#475569', fontWeight: isActive ? '800':'600'}}>{val}</Text>
-                       </TouchableOpacity>
-                     );
-                   })}
-                </View>
-              )}
-              {field.type === 'rating' && (
-                <View style={{flexDirection:'row', gap:10, justifyContent:'center', paddingVertical:10}}>
-                   {[1,2,3,4,5].map(star => (
-                      <TouchableOpacity key={star} onPress={() => handleInput(field.id, star)}>
-                         <Ionicons name={responses[field.id] >= star ? "star" : "star-outline"} size={42} color={responses[field.id] >= star ? "#f59e0b" : "#cbd5e1"} />
+                        hi(field.id, newArr.join(', '));
+                      };
+                      return (
+                        <TouchableOpacity
+                          key={i}
+                          onPress={toggle}
+                          style={{
+                            padding: 14,
+                            borderRadius: 8,
+                            backgroundColor: isActive ? '#f0fdf4' : '#f8fafc',
+                            borderWidth: 1,
+                            borderColor: isActive ? colors.primary : '#cbd5e1',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Ionicons
+                            name={isActive ? 'checkbox' : 'square-outline'}
+                            size={22}
+                            color={isActive ? colors.primary : '#94a3b8'}
+                            style={{ marginRight: 10 }}
+                          />
+                          <Text
+                            style={{ color: isActive ? colors.primary : '#475569', fontWeight: isActive ? '800' : '600' }}
+                          >
+                            {val}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              {field.type === 'rating' &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(vv(field.id));
+                      const rows = base.length > 0 ? base : [0];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => {
+                            const num = Number(rowVal);
+                            const cur = Number.isFinite(num) ? num : 0;
+                            return (
+                              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748b', minWidth: 28 }}>
+                                  {idx + 1}.
+                                </Text>
+                                <View style={{ flex: 1, flexDirection: 'row', gap: 10, justifyContent: 'center', paddingVertical: 6 }}>
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <TouchableOpacity
+                                      key={star}
+                                      onPress={() => {
+                                        const next = [...rows];
+                                        next[idx] = star;
+                                        hi(field.id, next);
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name={cur >= star ? 'star' : 'star-outline'}
+                                        size={36}
+                                        color={cur >= star ? '#f59e0b' : '#cbd5e1'}
+                                      />
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                {rows.length > 1 ? (
+                                  <TouchableOpacity
+                                    onPress={() => {
+                                      const next = rows.filter((_: any, j: number) => j !== idx);
+                                      hi(field.id, next.length ? next : []);
+                                    }}
+                                  >
+                                    <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
+                            );
+                          })}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => hi(field.id, [...rows, 0])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                                Adicionar avaliação
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', paddingVertical: 10 }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity key={star} onPress={() => hi(field.id, star)}>
+                        <Ionicons
+                          name={vv(field.id) >= star ? 'star' : 'star-outline'}
+                          size={42}
+                          color={vv(field.id) >= star ? '#f59e0b' : '#cbd5e1'}
+                        />
                       </TouchableOpacity>
-                   ))}
-                </View>
-              )}
+                    ))}
+                  </View>
+                ))}
               {field.type === 'calculated' && (() => {
                  let rawFormula = field.calcFormula || '';
                  Object.keys(responses).forEach(key => {
@@ -3039,8 +4018,8 @@ export default function ChecklistEngine() {
                  let result = 0;
                  try { result = eval(rawFormula); } catch(e){}
                  
-                 if(responses[field.id] !== result) {
-                     setTimeout(() => handleInput(field.id, result), 0);
+                 if(vv(field.id) !== result) {
+                     setTimeout(() => hi(field.id, result), 0);
                  }
                  
                  return (
@@ -3049,23 +4028,95 @@ export default function ChecklistEngine() {
                    </View>
                  );
               })()}
-              {(field.type === 'checkbox' || field.type === 'yes_no') && (
-                <View style={styles.radioGroup}>
-                   <TouchableOpacity 
-                     style={[styles.radio, responses[field.id] === 'Sim' && styles.radioActive]}
-                     onPress={() => handleInput(field.id, 'Sim')}
-                   ><Text style={[styles.radioText, responses[field.id] === 'Sim' && {color: '#FFF'}]}>Sim</Text></TouchableOpacity>
-                   <TouchableOpacity 
-                     style={[styles.radio, responses[field.id] === 'Não' && styles.radioActive]}
-                     onPress={() => handleInput(field.id, 'Não')}
-                   ><Text style={[styles.radioText, responses[field.id] === 'Não' && {color: '#FFF'}]}>Não</Text></TouchableOpacity>
-                </View>
-              )}
+              {(field.type === 'checkbox' || field.type === 'yes_no') &&
+                (fieldAllowsMultiple(field) ? (
+                  <View style={{ gap: 10 }}>
+                    {(() => {
+                      const base = normalizeResponseArray(vv(field.id));
+                      const rows = base.length > 0 ? base : [''];
+                      const maxM = multiMaxItems(field);
+                      const canAdd = maxM == null || rows.length < maxM;
+                      return (
+                        <>
+                          {rows.map((rowVal: any, idx: number) => (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748b', minWidth: 22 }}>
+                                {idx + 1}.
+                              </Text>
+                              <View style={[styles.radioGroup, { flex: 1 }]}>
+                                <TouchableOpacity
+                                  style={[styles.radio, String(rowVal) === 'Sim' && styles.radioActive]}
+                                  onPress={() => {
+                                    const next = [...rows];
+                                    next[idx] = 'Sim';
+                                    hi(field.id, next);
+                                  }}
+                                >
+                                  <Text style={[styles.radioText, String(rowVal) === 'Sim' && { color: '#FFF' }]}>
+                                    Sim
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.radio, String(rowVal) === 'Não' && styles.radioActive]}
+                                  onPress={() => {
+                                    const next = [...rows];
+                                    next[idx] = 'Não';
+                                    hi(field.id, next);
+                                  }}
+                                >
+                                  <Text style={[styles.radioText, String(rowVal) === 'Não' && { color: '#FFF' }]}>
+                                    Não
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                              {rows.length > 1 ? (
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    const next = rows.filter((_: any, j: number) => j !== idx);
+                                    hi(field.id, next.length ? next : []);
+                                  }}
+                                >
+                                  <Ionicons name="remove-circle" size={28} color="#dc2626" />
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          ))}
+                          {canAdd ? (
+                            <TouchableOpacity
+                              onPress={() => hi(field.id, [...rows, ''])}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                            >
+                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                                Adicionar resposta
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  <View style={styles.radioGroup}>
+                    <TouchableOpacity
+                      style={[styles.radio, vv(field.id) === 'Sim' && styles.radioActive]}
+                      onPress={() => hi(field.id, 'Sim')}
+                    >
+                      <Text style={[styles.radioText, vv(field.id) === 'Sim' && { color: '#FFF' }]}>Sim</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.radio, vv(field.id) === 'Não' && styles.radioActive]}
+                      onPress={() => hi(field.id, 'Não')}
+                    >
+                      <Text style={[styles.radioText, vv(field.id) === 'Não' && { color: '#FFF' }]}>Não</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
               {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition' || field.type === 'file_upload') && (
                 <View>
                   {field.type === 'facial_recognition' ? (
                      <TouchableOpacity 
-                         onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type))}
+                         onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))}
                          activeOpacity={0.8}
                          style={{
                              borderRadius: 16, overflow: 'hidden', marginVertical: 4,
@@ -3097,19 +4148,19 @@ export default function ChecklistEngine() {
                   ) : (
                      <TouchableOpacity 
                         style={[styles.cameraBox]} 
-                        onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type))}
+                        onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))}
                      >
                        <Ionicons name={field.type === 'file_upload' ? "document-attach" : "camera"} size={32} color={field.type === 'photo_stamped' ? "#d97706" : "#64748b"} />
                        <Text style={[styles.cameraText, field.type === 'photo_stamped' && {color: "#d97706"}]}>
                          {field.type === 'photo_stamped'
-                           ? fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                           ? fieldAllowsMultiple(field) && normalizeResponseArray(vv(field.id)).length > 0
                              ? 'Adicionar outra foto (GPS)'
                              : 'FOTOGRAFAR (GPS OBRIGATÓRIO)'
                            : field.type === 'file_upload'
-                             ? fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                             ? fieldAllowsMultiple(field) && normalizeResponseArray(vv(field.id)).length > 0
                                ? 'Anexar outro ficheiro'
                                : 'Anexar Arquivo'
-                             : fieldAllowsMultiple(field) && normalizeResponseArray(responses[field.id]).length > 0
+                             : fieldAllowsMultiple(field) && normalizeResponseArray(vv(field.id)).length > 0
                                ? 'Adicionar outra foto...'
                                : 'Adicionar Foto...'}
                        </Text>
@@ -3117,9 +4168,9 @@ export default function ChecklistEngine() {
                   )}
                    {(() => {
                     const mediaUris = fieldAllowsMultiple(field)
-                      ? normalizeResponseArray(responses[field.id])
-                      : responses[field.id]
-                        ? [responses[field.id]]
+                      ? normalizeResponseArray(vv(field.id))
+                      : vv(field.id)
+                        ? [vv(field.id)]
                         : [];
                     if (mediaUris.length === 0) return null;
                     return (
@@ -3136,19 +4187,25 @@ export default function ChecklistEngine() {
                            <Text style={{color:'#15803d', flex:1, fontSize:12}} numberOfLines={1}>{String(oneUri).split('/').pop()}</Text>
                            <TouchableOpacity onPress={() => {
                              const ck = mediaCaptionStorageKey(field.id);
+                             const rowForCap =
+                               scope && responses[sectionRepeatStorageKey(scope.sectionId)]?.[scope.rowIndex];
+                             const capRaw =
+                               scope && rowForCap && typeof rowForCap === 'object'
+                                 ? rowForCap[ck]
+                                 : responses[ck];
                              if (fieldAllowsMultiple(field)) {
-                               const uris = normalizeResponseArray(responses[field.id]);
+                               const uris = normalizeResponseArray(vv(field.id));
                                const next = uris.filter((_: any, j: number) => j !== midx);
-                               handleInput(field.id, next.length ? next : []);
+                               hi(field.id, next.length ? next : []);
                                if (field.allowMediaDescription) {
-                                 const caps = normalizeMediaCaptions(field, responses[ck], uris.length);
+                                 const caps = normalizeMediaCaptions(field, capRaw, uris.length);
                                  caps.splice(midx, 1);
-                                 handleInput(ck, shapeMediaCaptionStored(field, caps));
+                                 hi(ck, shapeMediaCaptionStored(field, caps));
                                }
                              } else {
-                               handleInput(field.id, null);
+                               hi(field.id, null);
                                if (field.allowMediaDescription) {
-                                 handleInput(ck, '');
+                                 hi(ck, '');
                                }
                              }
                            }}>
@@ -3162,9 +4219,9 @@ export default function ChecklistEngine() {
                              <Text style={{ fontWeight: '500', color: '#94a3b8' }}>(opcional)</Text>
                            </Text>
                            {isReadOnly ? (
-                             getMediaCaptionAt(field, responses, midx).trim() ? (
+                             getMediaCaptionAtScoped(field, responses, scope, midx).trim() ? (
                                <Text style={{ fontSize: 13, color: '#334155', fontStyle: 'italic', lineHeight: 20 }}>
-                                 {getMediaCaptionAt(field, responses, midx)}
+                                 {getMediaCaptionAtScoped(field, responses, scope, midx)}
                                </Text>
                              ) : (
                                <Text style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Sem comentário por item.</Text>
@@ -3173,12 +4230,18 @@ export default function ChecklistEngine() {
                              <TextInput
                                style={[styles.input, { minHeight: 44, paddingVertical: 8, textAlignVertical: 'top' }]}
                                placeholder="Opcional — notas sobre este item…"
-                               value={getMediaCaptionAt(field, responses, midx)}
+                               value={getMediaCaptionAtScoped(field, responses, scope, midx)}
                                onChangeText={(t) => {
                                  const ck = mediaCaptionStorageKey(field.id);
-                                 const caps = normalizeMediaCaptions(field, responses[ck], mediaUris.length);
+                                 const rowForCap =
+                                   scope && responses[sectionRepeatStorageKey(scope.sectionId)]?.[scope.rowIndex];
+                                 const capRaw =
+                                   scope && rowForCap && typeof rowForCap === 'object'
+                                     ? rowForCap[ck]
+                                     : responses[ck];
+                                 const caps = normalizeMediaCaptions(field, capRaw, mediaUris.length);
                                  caps[midx] = t;
-                                 handleInput(ck, shapeMediaCaptionStored(field, caps));
+                                 hi(ck, shapeMediaCaptionStored(field, caps));
                                }}
                                maxLength={500}
                                multiline
@@ -3205,12 +4268,18 @@ export default function ChecklistEngine() {
                  let isBlocked = false;
                  if (field.type === 'transit_end') {
                      const startField = template?.schemaData?.find((f: any) => f.type === 'transit_start');
-                     if (startField && (!responses[startField.id] || responses[startField.id].trim() === '')) {
+                     const startVal = startField
+                       ? getScopedFieldValue(responses, scope, startField.id)
+                       : undefined;
+                     if (
+                       startField &&
+                       (!startVal || (typeof startVal === 'string' && startVal.trim() === ''))
+                     ) {
                          isBlocked = true;
                      }
                  }
                  
-                 const hasValue = !!responses[field.id];
+                 const hasValue = !!vv(field.id);
                  const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? colors.primary : colors.accent));
                  const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
@@ -3228,7 +4297,8 @@ export default function ChecklistEngine() {
                        await handleTransit(
                          field.id,
                          field.type === 'transit_start' ? 'SAIDA' : 'CHEGADA',
-                         field.type === 'transit_end' ? routeTracker.getTraversedPath() : undefined
+                         field.type === 'transit_end' ? routeTracker.getTraversedPath() : undefined,
+                         scope
                        );
                        const email = await AsyncStorage.getItem('@brspark_email');
                        if (field.type === 'transit_start') {
@@ -3259,8 +4329,8 @@ export default function ChecklistEngine() {
               })()}
               {field.type === 'location_pick' && (
                 <ChecklistLocationPickField
-                  value={responses[field.id]}
-                  onChange={(json) => handleInput(field.id, json || '')}
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json || '')}
                   disabled={isReadOnly}
                   primaryColor={colors.primary}
                   requireOnlineValidation={!!field.requireOnlineValidation}
@@ -3268,9 +4338,9 @@ export default function ChecklistEngine() {
               )}
               {field.type === 'geofence_check' && (
                 <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#e2e8f0', borderColor:'#cbd5e1', borderWidth:1, flexDirection:'row', gap:8}]} onPress={() => ensureOnlineValidation(field, async () => {
-                   await handleTransit(field.id, 'VALIDACAO_CERCA');
+                   await handleTransit(field.id, 'VALIDACAO_CERCA', undefined, scope);
                    // GPS chega na cerca eletrônica — modo IN_SERVICE
-                   const resultStr = responses[field.id];
+                   const resultStr = vv(field.id);
                    let insideZone = false;
                    try { insideZone = JSON.parse(resultStr || '{}').geofence?.insideZone; } catch {}
                    if (insideZone) {
@@ -3291,9 +4361,10 @@ export default function ChecklistEngine() {
                  <TouchableOpacity 
                    onPress={() => ensureOnlineValidation(field, () => {
                        setCurrentSigField(field.id);
+                       setCurrentSigScope(scope);
                        
                        // Try to retrieve previous strokes if they exist
-                       const existingVal = responses[field.id];
+                       const existingVal = vv(field.id);
                        if (existingVal && existingVal.startsWith('SIG_V1|')) {
                           const strokes = existingVal.replace('SIG_V1|', '').split('|').filter((s: string) => !s.startsWith('meta:') && s.trim().length > 0);
                           setCompletedStrokes(strokes);
@@ -3306,21 +4377,21 @@ export default function ChecklistEngine() {
                        setSigModalVisible(true);
                    })}
                    style={{ 
-                     height: responses[field.id] ? 160 : 120, 
+                     height: vv(field.id) ? 160 : 120, 
                      borderWidth: 2, 
-                     borderColor: responses[field.id] ? '#10b981' : '#cbd5e1', 
+                     borderColor: vv(field.id) ? '#10b981' : '#cbd5e1', 
                      borderRadius: 12, 
-                     borderStyle: responses[field.id] ? 'solid' : 'dashed', 
-                     backgroundColor: responses[field.id] ? '#fff' : '#f8fafc', 
+                     borderStyle: vv(field.id) ? 'solid' : 'dashed', 
+                     backgroundColor: vv(field.id) ? '#fff' : '#f8fafc', 
                      justifyContent: 'center', 
                      alignItems: 'center',
                      overflow: 'hidden'
                    }}
                  >
-                   {responses[field.id] && responses[field.id].startsWith('SIG_V1|') ? (
+                   {vv(field.id) && vv(field.id).startsWith('SIG_V1|') ? (
                        <View style={{flex: 1, width: '100%', padding: 8}}>
                          <Svg style={StyleSheet.absoluteFillObject} viewBox="0 0 350 400" preserveAspectRatio="xMidYMid meet">
-                           {responses[field.id].replace('SIG_V1|', '').split('|')
+                           {vv(field.id).replace('SIG_V1|', '').split('|')
                              .filter((path: string) => !path.startsWith('meta:') && path.trim().length > 0)
                              .map((path: string, index: number) => (
                              <Path key={index} d={path} stroke="#0f172a" strokeWidth={5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -3331,7 +4402,7 @@ export default function ChecklistEngine() {
                             <Text style={{color: '#15803d', fontSize: 10, fontWeight: '700', marginLeft: 4}}>Assinado</Text>
                          </View>
                        </View>
-                   ) : responses[field.id] ? (
+                   ) : vv(field.id) ? (
                        <>
                          <Ionicons name="checkmark-circle" size={32} color="#10b981" />
                          <Text style={{color: '#10b981', fontWeight: '700', marginTop: 8}}>Assinado Digitalmente</Text>
@@ -3350,7 +4421,7 @@ export default function ChecklistEngine() {
                     Comentário do técnico <Text style={{ fontWeight: '500', color: '#94a3b8' }}>(opcional)</Text>
                   </Text>
                   {isReadOnly ? (
-                    responses[technicianCommentKey(field.id)] ? (
+                    getScopedTechComment(responses, scope, field.id).trim() ? (
                       <View
                         style={{
                           padding: 12,
@@ -3361,7 +4432,7 @@ export default function ChecklistEngine() {
                         }}
                       >
                         <Text style={{ fontSize: 14, color: '#422006', lineHeight: 20 }}>
-                          {String(responses[technicianCommentKey(field.id)])}
+                          {getScopedTechComment(responses, scope, field.id)}
                         </Text>
                       </View>
                     ) : (
@@ -3373,8 +4444,12 @@ export default function ChecklistEngine() {
                       placeholder="Notas, observações ou contexto adicional…"
                       multiline
                       maxLength={2000}
-                      value={responses[technicianCommentKey(field.id)] || ''}
-                      onChangeText={(t) => handleInput(technicianCommentKey(field.id), t)}
+                      value={getScopedTechComment(responses, scope, field.id)}
+                      onChangeText={(t) =>
+                        scope
+                          ? hi(rowTechnicianCommentKey(field.id), t)
+                          : handleInput(technicianCommentKey(field.id), t)
+                      }
                     />
                   )}
                 </View>
@@ -3382,7 +4457,215 @@ export default function ChecklistEngine() {
               </View>
             </View>
           );
-        })}
+        });
+
+          const emptyNote = (fl: any[]) =>
+            fl.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#64748b', marginVertical: 32 }}>
+                Nenhum campo nesta etapa.
+              </Text>
+            ) : null;
+
+          const draftKLocal = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+
+          if (paginatedSectionRepeatEnabled && openingSectionBreakField) {
+            const sb = openingSectionBreakField;
+            const minR = sectionRepeatMinRows(sb);
+            const maxR = sectionRepeatMaxRows(sb);
+            const rs = getRepeatRows(responses, sb.id);
+            const n = Math.max(rs.length, minR, 1);
+            const idxs = Array.from({ length: n }, (_, i) => i);
+            return (
+              <>
+                {emptyNote(currentFieldsToRender)}
+                {idxs.map((ri) => (
+                  <View
+                    key={`psrep_${sb.id}_${ri}`}
+                    style={{
+                      marginBottom: 14,
+                      padding: 12,
+                      backgroundColor: '#f8fafc',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Text style={{ fontWeight: '800', color: '#4f46e5' }}>
+                        {sb.label || 'Secção'} · {ri + 1}
+                      </Text>
+                      {!isReadOnly && rs.length > minR ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const rkey = sectionRepeatStorageKey(sb.id);
+                            setResponses((prev: any) => {
+                              const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+                              rows.splice(ri, 1);
+                              const nr = { ...prev, [rkey]: rows };
+                              void AsyncStorage.setItem(draftKLocal, JSON.stringify(nr));
+                              return nr;
+                            });
+                          }}
+                        >
+                          <Text style={{ color: '#dc2626', fontWeight: '700' }}>Remover</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
+                  </View>
+                ))}
+                {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const rkey = sectionRepeatStorageKey(sb.id);
+                      setResponses((prev: any) => {
+                        const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+                        rows.push({});
+                        const nr = { ...prev, [rkey]: rows };
+                        void AsyncStorage.setItem(draftKLocal, JSON.stringify(nr));
+                        return nr;
+                      });
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, paddingVertical: 6 }}
+                  >
+                    <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            );
+          }
+
+          if (effectiveFillMode === 'full' && fullRenderChunks && fullRenderChunks.length > 0) {
+            return (
+              <>
+                {fullRenderChunks.map((chunk, ci) => {
+                  if (chunk.kind === 'repeat' && chunk.sectionField) {
+                    const sb = chunk.sectionField;
+                    const minR = sectionRepeatMinRows(sb);
+                    const maxR = sectionRepeatMaxRows(sb);
+                    const rs = getRepeatRows(responses, sb.id);
+                    const n = Math.max(rs.length, minR, 1);
+                    const idxs = Array.from({ length: n }, (_, i) => i);
+                    return (
+                      <View key={`fcrep_${sb.id}_${ci}`} style={{ marginBottom: 20 }}>
+                        {chunk.fields.length > 0 ? (
+                          <Text style={{ fontWeight: '800', fontSize: 15, marginBottom: 10, color: '#0f172a' }}>
+                            {sb.label || 'Secção'}
+                          </Text>
+                        ) : null}
+                        {idxs.map((ri) => (
+                          <View
+                            key={`fcrep_${ci}_${ri}`}
+                            style={{
+                              marginBottom: 14,
+                              padding: 12,
+                              backgroundColor: '#f8fafc',
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: '#e2e8f0',
+                            }}
+                          >
+                            <Text style={{ fontWeight: '800', color: '#4f46e5', marginBottom: 10 }}>
+                              Instância {ri + 1}
+                            </Text>
+                            {renderFieldList(chunk.fields, { sectionId: sb.id, rowIndex: ri })}
+                          </View>
+                        ))}
+                        {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                          <TouchableOpacity
+                            onPress={() => {
+                              const rkey = sectionRepeatStorageKey(sb.id);
+                              setResponses((prev: any) => {
+                                const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+                                rows.push({});
+                                const nr = { ...prev, [rkey]: rows };
+                                void AsyncStorage.setItem(draftKLocal, JSON.stringify(nr));
+                                return nr;
+                              });
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}
+                          >
+                            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                            <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    );
+                  }
+                  return (
+                    <React.Fragment key={`fcflat_${ci}`}>{renderFieldList(chunk.fields, null)}</React.Fragment>
+                  );
+                })}
+              </>
+            );
+          }
+
+          if (wizardStepSectionRepeat && wizardStepSectionRepeat.sectionField) {
+            const sb = wizardStepSectionRepeat.sectionField;
+            const minR = sectionRepeatMinRows(sb);
+            const maxR = sectionRepeatMaxRows(sb);
+            const rs = getRepeatRows(responses, sb.id);
+            const n = Math.max(rs.length, minR, 1);
+            const idxs = Array.from({ length: n }, (_, i) => i);
+            return (
+              <>
+                {emptyNote(currentFieldsToRender)}
+                {idxs.map((ri) => (
+                  <View
+                    key={`wsrep_${ri}`}
+                    style={{
+                      marginBottom: 14,
+                      padding: 12,
+                      backgroundColor: '#f8fafc',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                    }}
+                  >
+                    <Text style={{ fontWeight: '800', color: '#4f46e5', marginBottom: 10 }}>
+                      {sb.label || 'Secção'} · {ri + 1}
+                    </Text>
+                    {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
+                  </View>
+                ))}
+                {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const rkey = sectionRepeatStorageKey(sb.id);
+                      setResponses((prev: any) => {
+                        const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+                        rows.push({});
+                        const nr = { ...prev, [rkey]: rows };
+                        void AsyncStorage.setItem(draftKLocal, JSON.stringify(nr));
+                        return nr;
+                      });
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}
+                  >
+                    <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            );
+          }
+
+          return (
+            <>
+              {emptyNote(currentFieldsToRender)}
+              {renderFieldList(currentFieldsToRender, null)}
+            </>
+          );
+        })()
+          : null}
         </View>
       </ScrollView>
 
@@ -3440,6 +4723,7 @@ export default function ChecklistEngine() {
           </View>
         ) : null}
 
+        {!(useSectionHub && hubPicking) ? (
         <View style={styles.footerNav}>
           {effectiveFillMode === 'wizard' ? (
             <>
@@ -3577,6 +4861,7 @@ export default function ChecklistEngine() {
             </>
           )}
         </View>
+        ) : null}
       </View>
 
       {sigModalVisible && (
@@ -3653,7 +4938,14 @@ export default function ChecklistEngine() {
                     </View>
                     <View style={{ position: 'absolute', bottom: 40, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
                         <View style={{ position: 'absolute', left: 20 }}>
-                            <TouchableOpacity style={{ padding: 16 }} onPress={() => setShowScanner(false)} disabled={isCapturing}>
+                            <TouchableOpacity
+                              style={{ padding: 16 }}
+                              onPress={() => {
+                                setShowScanner(false);
+                                setScannerScope(null);
+                              }}
+                              disabled={isCapturing}
+                            >
                                 <Text style={{ color: isCapturing ? '#94a3b8' : '#FFF', fontSize: 16, fontWeight: '700' }}>CANCELAR</Text>
                             </TouchableOpacity>
                         </View>
@@ -3678,9 +4970,15 @@ export default function ChecklistEngine() {
                                 try {
                                     const snap = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
                                     if (snap?.base64 && scannerFieldId) {
-                                        const ok = await processFacialImage(scannerFieldId, snap.base64, snap.uri);
+                                        const ok = await processFacialImage(
+                                          scannerFieldId,
+                                          snap.base64,
+                                          snap.uri,
+                                          scannerScope
+                                        );
                                         if (ok) {
                                             setShowScanner(false);
+                                            setScannerScope(null);
                                         }
                                     }
                                 } catch (e) {

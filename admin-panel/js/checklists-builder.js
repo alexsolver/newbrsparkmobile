@@ -5,7 +5,12 @@
 
 function brsparkApiBase() {
   if (typeof window !== 'undefined' && window.__BRSPARK_API_BASE__) {
-    return window.__BRSPARK_API_BASE__;
+    let b = String(window.__BRSPARK_API_BASE__).replace(/\/+$/, '');
+    // Evita pedidos a …/api/api/checklists/… (404 «Route not found» no Express)
+    while (/\/api\/api$/i.test(b)) {
+      b = b.replace(/\/api$/i, '');
+    }
+    return b;
   }
   try {
     const ls = localStorage.getItem('brspark_admin_api_origin');
@@ -267,15 +272,30 @@ function fieldHelpImageHandler() {
   }
 }
 
+function refocusCanvasTitleInputIfRequested(field) {
+  const refocusId = window.__brsparkLabelInputRefocusId;
+  if (!field || !refocusId || refocusId !== field.id) return;
+  window.__brsparkLabelInputRefocusId = null;
+  requestAnimationFrame(() => {
+    const row = document.querySelector('.canvas-item[data-id="' + refocusId + '"]');
+    const inp = row && row.querySelector('.canvas-item-title-input');
+    if (inp) inp.focus({ preventScroll: true });
+  });
+}
+
 window.initFieldHelpEditor = function (field) {
   flushQuillToBoundField();
   window.destroyFieldHelpEditor();
   if (typeof Quill === 'undefined') {
     console.warn('[builder] Quill não disponível (CDN).');
+    refocusCanvasTitleInputIfRequested(field);
     return;
   }
   const host = document.getElementById('field-help-editor');
-  if (!host) return;
+  if (!host) {
+    refocusCanvasTitleInputIfRequested(field);
+    return;
+  }
   const quill = new Quill('#field-help-editor', {
     theme: 'snow',
     modules: {
@@ -317,6 +337,7 @@ window.initFieldHelpEditor = function (field) {
       }
     }
   }
+  refocusCanvasTitleInputIfRequested(field);
 };
 
 // 1. Initialize State
@@ -610,6 +631,115 @@ window.confirmIconSelection = function(val, libOverride) {
     document.getElementById('icon-picker-modal').style.display = 'none';
 };
 
+/** Rascunho do modal «Editar etapa» (nome + ícone da secção). */
+window.__sectionStepEditDraft = {
+    sectionId: null,
+    label: '',
+    icon: '',
+    iconLibrary: 'Ionicons',
+    iconColor: '#7c3aed',
+};
+
+function sectionStepIconCanvasHtml(sf) {
+    if (sf && sf.icon) {
+        return window.renderWebIcon(sf.iconLibrary || 'Ionicons', sf.icon, sf.iconColor || '#7c3aed', 18);
+    }
+    return '<ion-icon name="albums-outline" style="vertical-align:-3px;color:#7c3aed;"></ion-icon>';
+}
+
+window.refreshSectionStepEditIconPreview = function () {
+    const el = document.getElementById('section-step-edit-icon-preview');
+    if (!el) return;
+    const d = window.__sectionStepEditDraft;
+    if (d && d.icon) {
+        el.innerHTML = window.renderWebIcon(d.iconLibrary || 'Ionicons', d.icon, d.iconColor || '#1d4ed8', 36);
+    } else {
+        el.innerHTML =
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#94a3b8;font-size:12px;font-weight:600;"><ion-icon name="albums-outline" style="font-size:40px;color:#cbd5e1;"></ion-icon>Predefinição (álbuns)</div>';
+    }
+};
+
+window.openSectionStepEditModal = function (sectionId) {
+    const sf = fields.find((x) => x.id === sectionId && x.type === 'section_break');
+    if (!sf) return;
+    const m = document.getElementById('section-step-edit-modal');
+    const inp = document.getElementById('section-step-edit-title');
+    if (!m || !inp) return;
+    window.selectField(sf.id);
+    window.__sectionStepEditDraft = {
+        sectionId: sf.id,
+        label: sf.label || '',
+        icon: sf.icon || '',
+        iconLibrary: sf.iconLibrary || 'Ionicons',
+        iconColor: sf.iconColor || lastIconPickerColor,
+    };
+    inp.value = window.__sectionStepEditDraft.label;
+    window.refreshSectionStepEditIconPreview();
+    m.style.display = 'flex';
+    setTimeout(() => {
+        inp.focus();
+        try {
+            inp.select();
+        } catch (e) {
+            /* ignore */
+        }
+    }, 50);
+};
+
+window.closeSectionStepEditModal = function () {
+    const modal = document.getElementById('section-step-edit-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.sectionStepEditPickIcon = function () {
+    window.openIconPicker((iconName, iconLib, iconColor) => {
+        const d = window.__sectionStepEditDraft;
+        if (!d || !d.sectionId) return;
+        d.icon = iconName || '';
+        d.iconLibrary = iconLib || 'Ionicons';
+        d.iconColor = iconColor || lastIconPickerColor;
+        window.refreshSectionStepEditIconPreview();
+    });
+};
+
+window.sectionStepEditClearIcon = function () {
+    const d = window.__sectionStepEditDraft;
+    if (!d) return;
+    d.icon = '';
+    d.iconLibrary = 'Ionicons';
+    d.iconColor = '#7c3aed';
+    window.refreshSectionStepEditIconPreview();
+};
+
+window.applySectionStepEditModal = function () {
+    const inp = document.getElementById('section-step-edit-title');
+    const d = window.__sectionStepEditDraft;
+    if (!d || !d.sectionId) {
+        window.closeSectionStepEditModal();
+        return;
+    }
+    const sf = fields.find((x) => x.id === d.sectionId && x.type === 'section_break');
+    if (!sf) {
+        window.closeSectionStepEditModal();
+        return;
+    }
+    sf.label = inp ? String(inp.value || '') : d.label;
+    if (d.icon) {
+        sf.icon = d.icon;
+        sf.iconLibrary = d.iconLibrary || 'Ionicons';
+        sf.iconColor = d.iconColor || '#1d4ed8';
+    } else {
+        sf.icon = '';
+        sf.iconLibrary = '';
+        sf.iconColor = '';
+    }
+    window.closeSectionStepEditModal();
+    flushQuillToBoundField();
+    renderCanvas();
+    if (selectedFieldId === sf.id) renderProperties();
+    if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
+};
+
 const elToolbox = document.getElementById('toolbox');
 const elCanvas = document.getElementById('canvas');
 const elPropsBody = document.getElementById('properties-body');
@@ -702,6 +832,87 @@ function destroyCanvasBodySortables() {
     window._brsparkBodySortables = [];
 }
 
+function destroyCanvasGroupsSortable() {
+    if (window._brsparkCanvasGroupsSortable) {
+        try {
+            window._brsparkCanvasGroupsSortable.destroy();
+        } catch (e) { /* ignore */ }
+        window._brsparkCanvasGroupsSortable = null;
+    }
+}
+
+function makeSectionHeadDragGrip() {
+    const secDrag = document.createElement('span');
+    secDrag.className = 'canvas-section-head__section-drag';
+    secDrag.setAttribute('title', 'Arrastar para reordenar as secções');
+    secDrag.setAttribute('aria-label', 'Arrastar para reordenar as secções');
+    secDrag.innerHTML =
+        '<ion-icon name="reorder-two-outline" style="font-size:20px;vertical-align:-2px;"></ion-icon>';
+    return secDrag;
+}
+
+/**
+ * Reordena `fields` conforme a ordem dos `.canvas-section-group` dentro do stack.
+ */
+function applySectionGroupOrderFromDom(stackEl) {
+    const stack = stackEl || (elCanvas && elCanvas.querySelector('.canvas-section-groups-stack'));
+    if (!stack) return;
+    const wraps = stack.querySelectorAll(':scope > .canvas-section-group');
+    const orderedIds = Array.from(wraps).map((w) => w.dataset.groupId);
+    const beforeSeg = buildCanvasSectionGroups(fields);
+    const beforeOrder = beforeSeg.map((g) => g.id).join('|');
+    if (orderedIds.join('|') === beforeOrder) return;
+
+    const byId = Object.create(null);
+    beforeSeg.forEach((g) => {
+        byId[g.id] = g;
+    });
+    const next = [];
+    orderedIds.forEach((id) => {
+        const g = byId[id];
+        if (!g) return;
+        g.items.forEach((f) => next.push(f));
+        delete byId[id];
+    });
+    Object.keys(byId).forEach((id) => {
+        byId[id].items.forEach((f) => next.push(f));
+    });
+    if (next.length !== fields.length) return;
+    fields.splice(0, fields.length, ...next);
+    normalizeFieldsRequireSections(fields);
+    renderCanvas();
+}
+
+function initCanvasGroupsSortable() {
+    const stack = elCanvas && elCanvas.querySelector('.canvas-section-groups-stack');
+    if (!stack) return;
+    destroyCanvasGroupsSortable();
+    const n = stack.querySelectorAll(':scope > .canvas-section-group').length;
+    if (n < 2) return;
+
+    window._brsparkCanvasGroupsSortable = new Sortable(stack, {
+        animation: 150,
+        handle: '.canvas-section-head__section-drag',
+        draggable: '.canvas-section-group',
+        direction: 'vertical',
+        ghostClass: 'hover-ghost',
+        chosenClass: 'canvas-sortable-chosen',
+        dragClass: 'canvas-sortable-drag',
+        onStart() {
+            window.__brsparkCanvasDragging = true;
+        },
+        onEnd() {
+            setTimeout(() => {
+                try {
+                    applySectionGroupOrderFromDom(stack);
+                } finally {
+                    window.__brsparkCanvasDragging = false;
+                }
+            }, 0);
+        },
+    });
+}
+
 function rebuildFieldsOrderFromCanvas() {
     const next = [];
     elCanvas.querySelectorAll('.canvas-section-body').forEach((b) => {
@@ -722,6 +933,12 @@ function rebuildFieldsOrderFromCanvas() {
     const nextSig = next.map((f) => f.id).join('\0');
     if (prevSig === nextSig) return;
     fields.splice(0, fields.length, ...next);
+    if (fields.length === 0) {
+        fields.push(createDefaultSectionField());
+    } else {
+        normalizeFieldsRequireSections(fields);
+    }
+    renderCanvas();
 }
 
 /** Um único rebuild após o Sortable terminar (evita estados intermédios / double onEnd). */
@@ -902,6 +1119,7 @@ function installNativePaletteDropOnCanvas() {
             }
             clearPaletteDragPayload();
             if (!type) return;
+            if (type === 'section_break') return;
             if (!rawText) rawText = type;
             e.preventDefault();
             e.stopPropagation();
@@ -925,7 +1143,7 @@ function absorbStrayPaletteItemsIntoFields() {
     const node = elCanvas.querySelector('.canvas-section-body > [data-type]:not(.canvas-item)');
     if (!node) return false;
     const t = node.getAttribute('data-type');
-    if (!t) return false;
+    if (!t || t === 'section_break') return false;
     const b = node.parentElement;
     if (!b || !b.classList.contains('canvas-section-body')) return false;
     const rawText = node.textContent.trim();
@@ -966,8 +1184,65 @@ function createNewFieldFromToolboxType(type, rawText) {
         icon: '',
         allowTechnicianComment: false,
         allowMediaDescription: false,
-        ...(type === 'section_break' ? { sectionFillMode: 'inherit' } : {}),
+        ...(type === 'section_break' ? { sectionFillMode: 'list' } : {}),
     };
+}
+
+function createDefaultSectionField() {
+    return createNewFieldFromToolboxType('section_break', 'Etapa 1');
+}
+
+/**
+ * Garante que não existem campos «órfãos» antes da primeira secção e que o schema começa sempre por um section_break.
+ * Corrige também arrastos que colocam o cartão da secção na posição errada.
+ */
+function normalizeFieldsRequireSections(fieldArr) {
+    if (!fieldArr || fieldArr.length === 0) return;
+    let i = 0;
+    while (i < fieldArr.length && fieldArr[i].type !== 'section_break') {
+        i++;
+    }
+    const leading = fieldArr.slice(0, i);
+    const rest = fieldArr.slice(i);
+    if (rest.length === 0) {
+        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(), ...leading);
+        return;
+    }
+    const segments = [];
+    let j = 0;
+    while (j < rest.length) {
+        const s = rest[j];
+        if (s.type !== 'section_break') {
+            j++;
+            continue;
+        }
+        j++;
+        const items = [];
+        while (j < rest.length && rest[j].type !== 'section_break') {
+            items.push(rest[j]);
+            j++;
+        }
+        segments.push({ section: s, items });
+    }
+    if (segments.length === 0) {
+        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(), ...leading, ...rest);
+        return;
+    }
+    const rebuilt = [];
+    if (leading.length > 0) {
+        rebuilt.push(createDefaultSectionField(), ...leading);
+    }
+    segments.forEach((seg) => {
+        rebuilt.push(seg.section, ...seg.items);
+    });
+    fieldArr.splice(0, fieldArr.length, ...rebuilt);
+}
+
+function ensureCanvasSchemaHasSection() {
+    if (fields.length === 0) {
+        fields.push(createDefaultSectionField());
+    }
+    normalizeFieldsRequireSections(fields);
 }
 
 /**
@@ -986,6 +1261,9 @@ function processCanvasSortEnd(evt) {
 }
 
 function buildCanvasFieldElement(f) {
+    if (f.type === 'section_break') {
+        return null;
+    }
     const div = document.createElement('div');
     div.className = `canvas-item ${selectedFieldId === f.id ? 'active' : ''}`;
     div.dataset.id = f.id;
@@ -993,43 +1271,17 @@ function buildCanvasFieldElement(f) {
     const iconHTML = f.icon
         ? window.renderWebIcon(f.iconLibrary || 'Ionicons', f.icon, f.iconColor || '#1d4ed8', 18)
         : iconMap[f.type] || '<ion-icon name="help"></ion-icon>';
-    const reqTag =
-        f.type !== 'section_break'
-            ? `<div onclick="window.toggleInlineRequired(event, '${f.id}')" title="Tornar Resposta Obrigatória?" style="cursor:pointer; display:flex; align-items:center; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:800; transition:0.2s; ${f.required ? 'background:#fee2e2; color:#ef4444; border:1px solid #fca5a5;' : 'background:#f1f5f9; color:#94a3b8; border:1px solid #cbd5e1;'}">
-                 <ion-icon name="${f.required ? 'checkmark-circle' : 'ellipse-outline'}" style="margin-right:2px; font-size:12px;"></ion-icon> REQ
-               </div>`
-            : '';
     const condTag =
         f.rules && f.rules.length > 0
             ? `<div style="display:flex; align-items:center; background:var(--accent-dim); color:var(--accent); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;"><ion-icon name="git-network-outline" style="margin-right:2px; font-size:12px;"></ion-icon> ${f.rules.length} Gatilhos</div>`
             : '';
-    const multiCanvasTypes = ['text', 'number', 'email', 'phone', 'date', 'photo', 'photo_stamped', 'file_upload'];
+    const multiFieldExcluded = new Set(['section_break', 'hidden', 'calculated', 'transit_start', 'transit_end']);
     const multiTag =
-        f.multiple && multiCanvasTypes.includes(f.type)
+        f.multiple && !multiFieldExcluded.has(f.type)
             ? `<div style="display:flex; align-items:center; background:#f3e8ff; color:#6b21a8; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;" title="Várias respostas">M×</div>`
             : '';
 
-    if (f.type === 'section_break') {
-        div.style.background = '#e2e8f0';
-        div.style.border = '2px dashed #94a3b8';
-        div.style.textAlign = 'center';
-        div.style.position = 'relative';
-        div.innerHTML = `
-                <div class="canvas-drag-handle" title="Arrastar para reordenar" aria-label="Arrastar para reordenar"><ion-icon name="reorder-two-outline" style="font-size:22px;"></ion-icon></div>
-                <div style="font-size:14px; color:#475569; font-weight:800; text-transform:uppercase; letter-spacing:1px; display:flex; justify-content:center; align-items:center;">
-                    ${iconHTML} SEÇÃO: 
-                    <input type="text" style="background:transparent; border:none; border-bottom:1px solid transparent; color:#475569; font-weight:800; text-transform:uppercase; font-size:14px; outline:none; text-align:center; margin-left:6px; min-width: 150px;" value="${f.label || 'NOVA ETAPA'}" onfocus="this.style.borderBottomColor='#94a3b8'; window.selectField('${f.id}')" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" />
-                    ${condTag}
-                </div>
-                <div style="font-size:11px; color:#64748b; margin-top:4px;">O aplicativo forçará o avanço de tela e agrupará as perguntas seguintes sob este nome de Seção.</div>
-                <div class="canvas-item-toolbar" style="right:16px;" onclick="event.stopPropagation();">
-                    <div title="Lógica e Regras" style="color:var(--accent); cursor:pointer; font-size:18px; display:flex; align-items:center;" onclick="window.openLogicModal(event, '${f.id}')"><ion-icon name="options-outline"></ion-icon></div>
-                    <div title="Duplicar secção" style="color:#64748b; cursor:pointer; font-size:18px; display:flex; align-items:center;" onclick="window.cloneField('${f.id}')"><ion-icon name="copy-outline"></ion-icon></div>
-                    <div title="Excluir" class="canvas-item-delete" style="color:var(--red); cursor:pointer; font-size:20px; display:flex; align-items:center;" onclick="window.deleteField('${f.id}')">&times;</div>
-                </div>
-            `;
-    } else {
-        div.innerHTML = `
+    div.innerHTML = `
                 <div class="canvas-drag-handle" title="Arrastar para reordenar" aria-label="Arrastar para reordenar"><ion-icon name="reorder-two-outline" style="font-size:22px;"></ion-icon></div>
                 <div class="canvas-item-main">
                     <div title="Trocar Ícone deste Campo" onclick="window.triggerIconPickerForField(event, '${f.id}')" style="width:44px; height:44px; flex-shrink:0; background:${f.icon ? '#eff6ff' : '#f8fafc'}; border:1px ${f.icon ? 'solid #3b82f6' : 'dashed #cbd5e1'}; border-radius:10px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:22px; color:${f.icon ? '#1d4ed8' : '#64748b'}; transition:0.2s;" onmouseover="this.style.borderColor='#3b82f6'; this.style.color='#3b82f6'" onmouseout="this.style.borderColor='${f.icon ? '#3b82f6' : '#cbd5e1'}'; this.style.color='${f.icon ? '#1d4ed8' : '#64748b'}'">
@@ -1037,23 +1289,24 @@ function buildCanvasFieldElement(f) {
                     </div>
                     <div style="flex:1; min-width:0;">
                         <div style="font-size:14.5px; color:var(--text1); display:flex; align-items:center; min-width:0;">
-                            <input type="text" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%;" value="${f.label}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}')" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" />
+                            <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(f.label)}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}', { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" />
                         </div>
-                        <div class="canvas-item-tags">${reqTag}${multiTag}${condTag}</div>
+                        <div class="canvas-item-tags">${multiTag}${condTag}</div>
                         <div class="canvas-item-meta" style="font-size:11px; color:var(--text3); margin-top:6px; letter-spacing:0.5px;">ID: ${f.id} | TYPE: ${f.type.toUpperCase()}</div>
                     </div>
                 </div>
                 <div class="canvas-item-toolbar" onclick="event.stopPropagation();">
-                    <div title="Lógica e Regras" style="color:var(--accent); cursor:pointer; font-size:18px; display:flex; align-items:center;" onclick="window.openLogicModal(event, '${f.id}')"><ion-icon name="options-outline"></ion-icon></div>
-                    <div title="Duplicar" style="color:#64748b; cursor:pointer; font-size:18px; display:flex; align-items:center;" onclick="window.cloneField('${f.id}')"><ion-icon name="copy-outline"></ion-icon></div>
-                    <div title="Excluir" class="canvas-item-delete" style="color:var(--red); cursor:pointer; font-size:20px; display:flex; align-items:center;" onclick="window.deleteField('${f.id}')">&times;</div>
+                    <button type="button" title="Propriedades do campo" onclick="window.selectField('${f.id}')"><ion-icon name="settings-outline"></ion-icon></button>
+                    <button type="button" class="${f.required ? 'is-req-active' : ''}" title="${f.required ? 'Obrigatório — clique para opcional' : 'Opcional — clique para obrigatório'}" onclick="window.toggleInlineRequired(event, '${f.id}')"><ion-icon name="${f.required ? 'checkmark-circle-outline' : 'ellipse-outline'}"></ion-icon></button>
+                    <button type="button" title="Lógica e regras" onclick="window.openLogicModal(event, '${f.id}')"><ion-icon name="options-outline"></ion-icon></button>
+                    <button type="button" title="Duplicar" onclick="window.cloneField('${f.id}')"><ion-icon name="copy-outline"></ion-icon></button>
+                    <button type="button" title="Excluir" class="danger canvas-item-delete" onclick="window.deleteField('${f.id}')"><ion-icon name="trash-outline"></ion-icon></button>
                 </div>
             `;
-    }
 
     div.onclick = (e) => {
         if (window.__brsparkCanvasDragging) return;
-        if (e.target.className === 'canvas-item-delete') return;
+        if (e.target.closest('.canvas-item-delete')) return;
         selectField(f.id);
     };
 
@@ -1127,30 +1380,19 @@ bindToolboxNativeDragSources();
 
 // 3. Funções de Renderização Interativa (Declarative-style in Vanilla JS)
 function renderCanvas() {
+    destroyCanvasGroupsSortable();
     destroyCanvasBodySortables();
     while (absorbStrayPaletteItemsIntoFields()) {
         /* múltiplos clones órfãos */
     }
 
-    if (fields.length === 0) {
-        elCanvas.innerHTML = `
-            <div class="canvas-section-group canvas-section-group--preamble" data-group-id="__empty__">
-                <div class="canvas-section-head" style="cursor:default;text-transform:none;letter-spacing:0;color:#334155;">
-                    <span class="canvas-section-head__title" style="font-weight:800;font-size:12px;"><ion-icon name="layers-outline" style="vertical-align:-3px;margin-right:6px;"></ion-icon> Canvas do formulário</span>
-                    <span class="canvas-section-head__badge">vazio</span>
-                </div>
-                <div class="canvas-section-body canvas-section-body--empty-hint"><span class="canvas-empty-hint-text">Arraste blocos da esquerda para aqui</span></div>
-            </div>`;
-        initCanvasSectionSortables();
-        normalizeCanvasItemLayoutForSortable();
-        if (typeof renderMobilePreview === 'function') {
-            renderMobilePreview();
-        }
-        return;
-    }
+    ensureCanvasSchemaHasSection();
 
     elCanvas.innerHTML = '';
+    const groupsStack = document.createElement('div');
+    groupsStack.className = 'canvas-section-groups-stack';
     const groups = buildCanvasSectionGroups(fields);
+    const canReorderSections = groups.length >= 2;
 
     groups.forEach((group) => {
         const wrap = document.createElement('div');
@@ -1160,6 +1402,8 @@ function renderCanvas() {
         const isPreamble = group.kind === 'preamble';
         if (isPreamble) {
             wrap.classList.add('canvas-section-group--preamble');
+        } else if (group.sectionField && selectedFieldId === group.sectionField.id) {
+            wrap.classList.add('canvas-section-group--selected');
         }
 
         const collapsed = !!window.__brsparkSectionCollapsed[group.id];
@@ -1169,13 +1413,26 @@ function renderCanvas() {
 
         const head = document.createElement('div');
         head.className = 'canvas-section-head';
-        head.setAttribute('role', 'button');
-        head.setAttribute('tabindex', '0');
         head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
 
         const chev = document.createElement('span');
         chev.className = 'canvas-section-head__chev';
         chev.innerHTML = '<ion-icon name="chevron-down-outline"></ion-icon>';
+        chev.setAttribute('role', 'button');
+        chev.setAttribute('tabindex', '0');
+        chev.setAttribute('aria-label', 'Colapsar ou expandir');
+        chev.style.cursor = 'pointer';
+        chev.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.toggleCanvasSectionCollapse(group.id);
+        });
+        chev.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                window.toggleCanvasSectionCollapse(group.id);
+            }
+        });
 
         const titleEl = document.createElement('div');
         titleEl.className = 'canvas-section-head__title';
@@ -1189,43 +1446,148 @@ function renderCanvas() {
             titleEl.innerHTML =
                 '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:#64748b;"></ion-icon> Antes da primeira secção';
             badge.textContent = answerableCount + (answerableCount === 1 ? ' campo' : ' campos');
+            if (canReorderSections) head.appendChild(makeSectionHeadDragGrip());
+            head.appendChild(chev);
+            head.appendChild(titleEl);
+            head.appendChild(badge);
         } else {
-            const secLabel = escapeHtml(group.sectionField.label || 'NOVA ETAPA');
-            titleEl.innerHTML =
-                '<ion-icon name="albums-outline" style="vertical-align:-3px;margin-right:6px;color:#7c3aed;"></ion-icon> Secção · ' +
-                secLabel;
+            const sf = group.sectionField;
+            const stepTarget = document.createElement('div');
+            stepTarget.className = 'canvas-section-head__step-edit-target';
+            stepTarget.title = 'Clique para editar o nome e o ícone desta etapa';
+            stepTarget.style.display = 'flex';
+            stepTarget.style.alignItems = 'center';
+            stepTarget.style.gap = '8px';
+            stepTarget.style.flex = '1';
+            stepTarget.style.minWidth = '0';
+            stepTarget.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.openSectionStepEditModal(sf.id);
+            });
+            const iconBox = document.createElement('span');
+            iconBox.className = 'canvas-section-head__step-icon';
+            iconBox.innerHTML = sectionStepIconCanvasHtml(sf);
+            const labSp = document.createElement('span');
+            labSp.textContent = 'Secção · ';
+            labSp.style.flexShrink = '0';
+            labSp.style.color = '#64748b';
+            labSp.style.fontWeight = '600';
+            labSp.style.fontSize = '12px';
+            const nameSp = document.createElement('span');
+            nameSp.className = 'canvas-section-head__step-name';
+            nameSp.textContent = (sf.label || 'NOVA ETAPA').trim() || 'NOVA ETAPA';
+            nameSp.style.fontWeight = '800';
+            nameSp.style.color = '#4c1d95';
+            nameSp.style.textTransform = 'uppercase';
+            nameSp.style.letterSpacing = '0.4px';
+            nameSp.style.overflow = 'hidden';
+            nameSp.style.textOverflow = 'ellipsis';
+            nameSp.style.whiteSpace = 'nowrap';
+            stepTarget.appendChild(iconBox);
+            stepTarget.appendChild(labSp);
+            stepTarget.appendChild(nameSp);
+            titleEl.style.display = 'flex';
+            titleEl.style.alignItems = 'center';
+            titleEl.style.gap = '4px';
+            titleEl.style.flex = '1';
+            titleEl.style.minWidth = '0';
+            titleEl.appendChild(stepTarget);
+
             const innerCount = Math.max(0, group.items.length - 1);
-            badge.textContent = innerCount + (innerCount === 1 ? ' pergunta' : ' perguntas');
+            let badgeTxt = innerCount + (innerCount === 1 ? ' pergunta' : ' perguntas');
+            if (sf.multiple) badgeTxt += ' · lista';
+            badge.textContent = badgeTxt;
+
+            const toolbar = document.createElement('div');
+            toolbar.className = 'canvas-section-head__toolbar';
+            const mkBtn = (title, iconName, danger, fn) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.title = title;
+                if (danger) b.classList.add('danger');
+                b.innerHTML = '<ion-icon name="' + iconName + '"></ion-icon>';
+                b.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    fn();
+                });
+                return b;
+            };
+            toolbar.appendChild(
+                mkBtn('Propriedades da secção', 'settings-outline', false, () => {
+                    window.selectField(sf.id);
+                })
+            );
+            const reqSec = document.createElement('button');
+            reqSec.type = 'button';
+            reqSec.title = sf.required
+                ? 'Etapa obrigatória — clique para opcional'
+                : 'Etapa opcional — clique para tornar obrigatória';
+            if (sf.required) reqSec.classList.add('is-req-active');
+            reqSec.innerHTML =
+                '<ion-icon name="' + (sf.required ? 'checkmark-circle-outline' : 'ellipse-outline') + '"></ion-icon>';
+            reqSec.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.toggleInlineRequired(e, sf.id);
+            });
+            toolbar.appendChild(reqSec);
+            toolbar.appendChild(
+                mkBtn('Lógica e regras', 'options-outline', false, () => {
+                    window.openLogicModal(null, sf.id);
+                })
+            );
+            toolbar.appendChild(
+                mkBtn('Duplicar secção', 'copy-outline', false, () => {
+                    window.cloneSection(sf.id);
+                })
+            );
+            toolbar.appendChild(
+                mkBtn('Eliminar secção', 'trash-outline', true, () => {
+                    window.deleteSection(sf.id);
+                })
+            );
+
+            if (canReorderSections) head.appendChild(makeSectionHeadDragGrip());
+            head.appendChild(chev);
+            head.appendChild(titleEl);
+            head.appendChild(toolbar);
+            head.appendChild(badge);
+            head.addEventListener('click', (e) => {
+                if (e.target.closest('.canvas-section-head__section-drag')) return;
+                if (e.target.closest('.canvas-section-head__toolbar')) return;
+                if (e.target.closest('.canvas-section-head__step-edit-target')) return;
+                if (e.target.closest('.canvas-section-head__chev')) return;
+                window.selectField(sf.id);
+            });
         }
-
-        head.appendChild(chev);
-        head.appendChild(titleEl);
-        head.appendChild(badge);
-
-        head.addEventListener('click', (e) => {
-            if (e.target.closest('button,a,input,textarea,select')) return;
-            window.toggleCanvasSectionCollapse(group.id);
-        });
-        head.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                window.toggleCanvasSectionCollapse(group.id);
-            }
-        });
 
         const body = document.createElement('div');
         body.className = 'canvas-section-body';
 
         group.items.forEach((f) => {
-            body.appendChild(buildCanvasFieldElement(f));
+            if (f.type === 'section_break') return;
+            const el = buildCanvasFieldElement(f);
+            if (el) body.appendChild(el);
         });
 
         wrap.appendChild(head);
         wrap.appendChild(body);
-        elCanvas.appendChild(wrap);
+        groupsStack.appendChild(wrap);
     });
 
+    elCanvas.appendChild(groupsStack);
+
+    const addSecBar = document.createElement('div');
+    addSecBar.className = 'canvas-add-section-bar';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-outline btn-sm';
+    addBtn.innerHTML = '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Nova secção';
+    addBtn.addEventListener('click', () => window.builderAddSectionAfterLast());
+    addSecBar.appendChild(addBtn);
+    elCanvas.appendChild(addSecBar);
+
     initCanvasSectionSortables();
+    initCanvasGroupsSortable();
     normalizeCanvasItemLayoutForSortable();
 
     if (typeof renderMobilePreview === 'function') {
@@ -1264,15 +1626,32 @@ window.toggleInlineRequired = function(e, id) {
     }
 };
 
-window.selectField = function(id) {
+/**
+ * @param {string} id
+ * @param {{ skipPropertiesIfSame?: boolean; fromCanvasTitleFocus?: boolean }} [opts]
+ * - skipPropertiesIfSame: se true e o campo já estava selecionado, não re-renderiza o painel (evita o Quill a roubar o foco do título).
+ * - fromCanvasTitleFocus: combinado com a troca de campo, pede refoco no input do cartão após o Quill inicializar.
+ */
+window.selectField = function(id, opts) {
+    opts = opts || {};
+    const prevSelected = selectedFieldId;
+    if (opts.fromCanvasTitleFocus && prevSelected !== id) {
+        window.__brsparkLabelInputRefocusId = id;
+    }
     selectedFieldId = id;
-    // Highlight elements visually without remounting the canvas to avoid stealing focus
     document.querySelectorAll('.canvas-item').forEach(el => {
         if(el.dataset.id === id) el.classList.add('active');
         else el.classList.remove('active');
     });
-    renderProperties(); // Renderiza o painel direito
-}
+    const sf = fields.find((x) => x.id === id);
+    if (sf && sf.type === 'section_break') {
+        renderCanvas();
+    }
+    if (opts.skipPropertiesIfSame && prevSelected === id) {
+        return;
+    }
+    renderProperties();
+};
 
 window.triggerIconPickerForField = function(evt, id) {
     if (evt) evt.stopPropagation();
@@ -1289,16 +1668,98 @@ window.triggerIconPickerForField = function(evt, id) {
     });
 };
 
+function remapCloneFieldRefs(cloneArr, idMap) {
+    cloneArr.forEach((f) => {
+        if (f.dependsOnId && idMap[f.dependsOnId]) f.dependsOnId = idMap[f.dependsOnId];
+        if (Array.isArray(f.rules)) {
+            f.rules.forEach((r) => {
+                if (!r || !Array.isArray(r.actions)) return;
+                r.actions.forEach((a) => {
+                    if (a && a.targetId && idMap[a.targetId]) a.targetId = idMap[a.targetId];
+                });
+            });
+        }
+    });
+}
+
+window.cloneSection = function (sectionId) {
+    const i = fields.findIndex((x) => x.id === sectionId && x.type === 'section_break');
+    if (i < 0) return;
+    flushQuillToBoundField();
+    let j = i + 1;
+    while (j < fields.length && fields[j].type !== 'section_break') j++;
+    const slice = fields.slice(i, j);
+    const clone = JSON.parse(JSON.stringify(slice));
+    const idMap = {};
+    clone.forEach((f) => {
+        const newId = 'field_' + Math.floor(Math.random() * 99999);
+        idMap[f.id] = newId;
+        f.id = newId;
+    });
+    remapCloneFieldRefs(clone, idMap);
+    fields.splice(j, 0, ...clone);
+    selectedFieldId = clone[0].id;
+    renderCanvas();
+    renderProperties();
+};
+
+window.deleteSection = function (sectionId) {
+    if (
+        !confirm(
+            'Eliminar esta secção e todas as perguntas dentro dela? O formulário mantém sempre pelo menos uma secção (será criada uma nova vazia se necessário).'
+        )
+    ) {
+        return;
+    }
+    flushQuillToBoundField();
+    const i = fields.findIndex((x) => x.id === sectionId && x.type === 'section_break');
+    if (i < 0) return;
+    let j = i + 1;
+    while (j < fields.length && fields[j].type !== 'section_break') j++;
+    fields.splice(i, j - i);
+    if (!fields.some((f) => f.id === selectedFieldId)) selectedFieldId = null;
+    if (fields.length === 0) {
+        fields.push(createDefaultSectionField());
+    } else {
+        normalizeFieldsRequireSections(fields);
+    }
+    renderCanvas();
+    renderProperties();
+};
+
+window.builderAddSectionAfterLast = function () {
+    flushQuillToBoundField();
+    const n = fields.filter((f) => f.type === 'section_break').length + 1;
+    const nf = createNewFieldFromToolboxType('section_break', 'Etapa ' + n);
+    fields.push(nf);
+    selectedFieldId = nf.id;
+    renderCanvas();
+    renderProperties();
+};
+
 // Ações na Janela / Global Scope
 window.deleteField = function(id) {
+    const fDel = fields.find((x) => x.id === id);
+    if (fDel && fDel.type === 'section_break') {
+        return window.deleteSection(id);
+    }
     flushQuillToBoundField();
     fields = fields.filter(f => f.id !== id);
+    if (fields.length === 0) {
+        fields.push(createDefaultSectionField());
+    } else {
+        normalizeFieldsRequireSections(fields);
+    }
     if(selectedFieldId === id) selectedFieldId = null;
     renderCanvas();
     renderProperties();
 };
 
 window.cloneField = function(id) {
+    const fPre = fields.find((x) => x.id === id);
+    if (fPre && fPre.type === 'section_break') {
+        return window.cloneSection(id);
+    }
     const fIndex = fields.findIndex(f => f.id === id);
     if(fIndex === -1) return;
     flushQuillToBoundField();
@@ -1327,7 +1788,7 @@ function renderProperties() {
     if(!selectedFieldId) {
         flushQuillToBoundField();
         if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em um bloco no Canvas para configurar suas lógicas.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique numa pergunta no canvas ou use o ícone de definições no cabeçalho de uma secção.</div>';
         return;
     }
 
@@ -1338,7 +1799,7 @@ function renderProperties() {
     const f = fields.find(x => x.id === selectedFieldId);
     if (!f) {
         selectedFieldId = null;
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em um bloco no Canvas para configurar suas lógicas.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique numa pergunta no canvas ou use o ícone de definições no cabeçalho de uma secção.</div>';
         return;
     }
     
@@ -1474,16 +1935,45 @@ function renderProperties() {
             <input class="prop-input" type="text" value="${f.id}" disabled style="background:#f1f5f9; cursor:not-allowed;" title="Copie isso para usar em Fórmulas"/>
         </div>
         ${f.type === 'section_break' ? (() => {
-            const sfm = f.sectionFillMode === 'list' || f.sectionFillMode === 'wizard' ? f.sectionFillMode : 'inherit';
+            const rawSfm = f.sectionFillMode === 'wizard' ? 'wizard' : f.sectionFillMode === 'list' ? 'list' : 'inherit';
+            const pick = rawSfm === 'wizard' ? 'wizard' : 'list';
             return `
         <div class="prop-group" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:12px; border-radius:8px; margin-top:4px;">
-            <label class="prop-label">Visualização nesta etapa (app móvel)</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('sectionFillMode', this.value)" style="font-size:13px;">
-                <option value="inherit" ${sfm === 'inherit' ? 'selected' : ''}>Seguir modo global do formulário</option>
-                <option value="list" ${sfm === 'list' ? 'selected' : ''}>Lista com scroll (todos os campos)</option>
-                <option value="wizard" ${sfm === 'wizard' ? 'selected' : ''}>Um campo de cada vez (passo a passo)</option>
-            </select>
-            <div style="font-size:10px; color:#64748b; margin-top:6px; line-height:1.35;">Com <b>Lista completa</b> ou <b>Híbrido</b> no formulário, define como as perguntas <i>desta</i> secção aparecem. Com modo global <b>Assistente</b>, escolher <i>Lista</i> agrupa todos os campos da secção num único passo.</div>
+            <label class="prop-label">Como o técnico vê esta etapa (app)</label>
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
+                    <input type="radio" name="propSectionFillMode" value="list" ${pick === 'list' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'list')" />
+                    <span>
+                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="list-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Lista com scroll</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Todos os campos desta secção visíveis com scroll.</span>
+                    </span>
+                </label>
+                <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
+                    <input type="radio" name="propSectionFillMode" value="wizard" ${pick === 'wizard' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'wizard')" />
+                    <span>
+                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="git-commit-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Um campo de cada vez</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Assistente: Seguinte / Voltar só dentro desta secção.</span>
+                    </span>
+                </label>
+            </div>
+            ${rawSfm === 'inherit' ? '<div style="font-size:10px; color:#b45309; margin-top:8px; line-height:1.35;">Legado: «seguir global» — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.</div>' : ''}
+        </div>
+        <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="checkbox" id="prop-section-repeat" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
+                <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Repetir esta secção (lista)</label>
+            </div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O técnico pode preencher <b>várias instâncias</b> seguidas dos mesmos campos (ex.: vários equipamentos). Cada linha grava um objeto no array <b>__section_repeat_&lt;id&gt;</b> na execução. Use mín./máx. para limitar quantas instâncias.</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:110px;">
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. instâncias (vazio = 0)</label>
+                    <input class="prop-input" type="number" min="0" placeholder="ex.: 1" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                </div>
+                <div style="flex:1; min-width:110px;">
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">Máx. instâncias (vazio = ilimitado)</label>
+                    <input class="prop-input" type="number" min="1" placeholder="ex.: 5" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                </div>
+            </div>
         </div>`;
         })() : ''}
         <div class="prop-group">
@@ -1512,13 +2002,14 @@ function renderProperties() {
             <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">Resposta Obrigatória?</label>
         </div>
 
-        ${['text', 'number', 'email', 'phone', 'date', 'photo', 'photo_stamped', 'file_upload'].includes(f.type) ? `
+        ${f.type !== 'section_break' &&
+        !['hidden', 'calculated', 'transit_start', 'transit_end'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
                 <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Várias respostas (lista)</label>
             </div>
-            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução (várias fotos, ficheiros ou linhas de texto/número). Compatível com checklists antigos (valor único continua a ser uma string).</div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com checklists antigos (valor único continua a ser string ou valor único).</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <div style="flex:1; min-width:110px;">
                     <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. itens (vazio = padrão)</label>
@@ -1599,23 +2090,47 @@ let globalFormSettings = {
     rules: [],
     /** full | wizard | hybrid — experiência no app móvel */
     appFillMode: 'full',
+    /** direct = abre na 1.ª etapa; hub = lista de etapas no ecrã */
+    appSectionStart: 'direct',
+    /** free | sequential — só com appSectionStart hub */
+    appHubSectionOrder: 'free',
 };
 
 function normalizeAppFillMode(v) {
     return v === 'wizard' || v === 'hybrid' ? v : 'full';
 }
 
-window.syncAppFillModeRadios = function () {
-    const val = normalizeAppFillMode(globalFormSettings && globalFormSettings.appFillMode);
-    document.querySelectorAll('input[name="appFillMode"]').forEach((r) => {
-        r.checked = r.value === val;
+function normalizeAppSectionStart(v) {
+    return v === 'hub' ? 'hub' : 'direct';
+}
+
+function normalizeAppHubSectionOrder(v) {
+    return v === 'sequential' ? 'sequential' : 'free';
+}
+
+window.syncAppSectionNavRadios = function () {
+    if (!globalFormSettings) return;
+    const start = normalizeAppSectionStart(globalFormSettings.appSectionStart);
+    const ord = normalizeAppHubSectionOrder(globalFormSettings.appHubSectionOrder);
+    document.querySelectorAll('input[name="appSectionStart"]').forEach((r) => {
+        r.checked = r.value === start;
+    });
+    const wrap = document.getElementById('app-hub-order-wrap');
+    if (wrap) wrap.style.opacity = start === 'hub' ? '1' : '0.45';
+    document.querySelectorAll('input[name="appHubSectionOrder"]').forEach((r) => {
+        r.checked = r.value === ord;
+        r.disabled = start !== 'hub';
     });
 };
 
-window.readAppFillModeFromRadios = function () {
-    const c = document.querySelector('input[name="appFillMode"]:checked');
-    if (c && globalFormSettings) {
-        globalFormSettings.appFillMode = normalizeAppFillMode(c.value);
+window.readAppSectionNavFromRadios = function () {
+    const s = document.querySelector('input[name="appSectionStart"]:checked');
+    if (s && globalFormSettings) {
+        globalFormSettings.appSectionStart = normalizeAppSectionStart(s.value);
+    }
+    const o = document.querySelector('input[name="appHubSectionOrder"]:checked');
+    if (o && globalFormSettings) {
+        globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(o.value);
     }
 };
 
@@ -1630,10 +2145,19 @@ window.setMobilePreviewFillSim = function (mode) {
     if (typeof renderMobilePreview === 'function') renderMobilePreview();
 };
 
+function computeFillModeFromSchemaFields(flds) {
+    const breaks = (flds || []).filter((f) => f.type === 'section_break');
+    const allInherit = breaks.every((f) => !f.sectionFillMode || f.sectionFillMode === 'inherit');
+    if (allInherit) {
+        return normalizeAppFillMode(globalFormSettings && globalFormSettings.appFillMode);
+    }
+    return breaks.some((f) => f.sectionFillMode === 'wizard') ? 'hybrid' : 'full';
+}
+
 function effectivePreviewFillMode() {
     const sim = window.__mobilePreviewFillSim;
     if (sim === 'wizard' || sim === 'hybrid' || sim === 'full') return sim;
-    return normalizeAppFillMode(globalFormSettings && globalFormSettings.appFillMode);
+    return computeFillModeFromSchemaFields(fields);
 }
 
 /** Mesma lógica que o app: páginas por section_break */
@@ -1683,21 +2207,46 @@ window.shiftMobilePreviewWizardIx = function (delta) {
     if (typeof renderMobilePreview === 'function') renderMobilePreview();
 };
 
-window.configureGlobalSettings = function() {
-    const isGlobal = confirm(`O Formulário Inteiro exige Cerca Eletrônica? (Atualmente: ${globalFormSettings.requireGlobalGeofence ? 'SIM' : 'NÃO'})\\n\\nClique OK para SIM, Cancelar para NÃO.`);
-    globalFormSettings.requireGlobalGeofence = isGlobal;
-    if(isGlobal) {
-        const rad = prompt("Digite o raio de segurança em metros:", globalFormSettings.globalGeofenceRadius);
-        if(rad) globalFormSettings.globalGeofenceRadius = parseInt(rad);
-        alert(`Sucesso! O formulário exigirá estar a ${globalFormSettings.globalGeofenceRadius}m do local de manutenção para ser ABERTO no App.`);
-    } else {
-        alert("Geofence Global Desativado. Lembre-se que você ainda pode arrastar o componente 'Validar Cerca' para travar/exigir check-in em passos isolados.");
+window.closeGlobalGeofenceModal = function () {
+    const m = document.getElementById('global-geofence-modal');
+    if (m) m.style.display = 'none';
+};
+
+window.applyGlobalGeofenceModal = function () {
+    const cb = document.getElementById('global-geofence-enabled');
+    const radEl = document.getElementById('global-geofence-radius');
+    globalFormSettings.requireGlobalGeofence = !!(cb && cb.checked);
+    let r = parseInt(radEl && radEl.value, 10);
+    if (!Number.isFinite(r) || r < 10) r = globalFormSettings.globalGeofenceRadius || 200;
+    if (r > 50000) r = 50000;
+    globalFormSettings.globalGeofenceRadius = r;
+    if (radEl) radEl.value = String(r);
+    window.closeGlobalGeofenceModal();
+    if (typeof renderMobilePreview === 'function') renderMobilePreview();
+};
+
+window.configureGlobalSettings = function () {
+    const m = document.getElementById('global-geofence-modal');
+    const cb = document.getElementById('global-geofence-enabled');
+    const radEl = document.getElementById('global-geofence-radius');
+    if (!m || !cb || !radEl) {
+        console.warn('[checklists-builder] Modal Cerca Global em falta no HTML.');
+        return;
     }
+    cb.checked = !!globalFormSettings.requireGlobalGeofence;
+    radEl.value = String(
+        Number.isFinite(Number(globalFormSettings.globalGeofenceRadius))
+            ? globalFormSettings.globalGeofenceRadius
+            : 200
+    );
+    m.style.display = 'flex';
 };
 
 // Global: JSON EXPORTER & IMPORTER
 window.exportJSON = function() {
-    if(fields.length === 0) return alert("Canvas Vazio! Adicione blocos para exportar.");
+    if (!fields.some((f) => f.type !== 'section_break')) {
+        return alert('Adicione pelo menos um campo de pergunta ao canvas (a primeira secção já existe).');
+    }
     const output = {
         settings: globalFormSettings,
         schema: fields
@@ -1726,12 +2275,25 @@ window.importJSON = function() {
                 if(parsed.schema) {
                     flushQuillToBoundField();
                     fields = ensureSchemaInstructionFlags(parsed.schema);
+                    ensureCanvasSchemaHasSection();
                     globalFormSettings = Object.assign(
-                        { requireGlobalGeofence: false, globalGeofenceRadius: 200, rules: [], appFillMode: 'full' },
+                        {
+                            requireGlobalGeofence: false,
+                            globalGeofenceRadius: 200,
+                            rules: [],
+                            appFillMode: 'full',
+                            appSectionStart: 'direct',
+                            appHubSectionOrder: 'free',
+                        },
                         parsed.settings || {}
                     );
                     if (!globalFormSettings.rules) globalFormSettings.rules = [];
                     globalFormSettings.appFillMode = normalizeAppFillMode(globalFormSettings.appFillMode);
+                    globalFormSettings.appSectionStart = normalizeAppSectionStart(globalFormSettings.appSectionStart);
+                    globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(
+                        globalFormSettings.appHubSectionOrder
+                    );
+                    window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
                     selectedFieldId = null;
                     renderCanvas();
                     renderProperties();
@@ -1754,8 +2316,9 @@ window.saveChecklist = async function() {
     btn.disabled = true;
 
     flushQuillToBoundField();
-    window.readAppFillModeFromRadios && window.readAppFillModeFromRadios();
+    window.readAppSectionNavFromRadios && window.readAppSectionNavFromRadios();
     fields = ensureSchemaInstructionFlags(fields);
+    ensureCanvasSchemaHasSection();
 
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
@@ -2539,12 +3102,23 @@ window.loadChecklist = function(id) {
         currentFormIcon = form.metadata?.icon || '';
         currentFormFolderId = form.folderId ?? null;
         globalFormSettings = Object.assign(
-            { requireGlobalGeofence: false, globalGeofenceRadius: 200, rules: [], appFillMode: 'full' },
+            {
+                requireGlobalGeofence: false,
+                globalGeofenceRadius: 200,
+                rules: [],
+                appFillMode: 'full',
+                appSectionStart: 'direct',
+                appHubSectionOrder: 'free',
+            },
             form.settings || {}
         );
         if (!globalFormSettings.rules) globalFormSettings.rules = [];
         globalFormSettings.appFillMode = normalizeAppFillMode(globalFormSettings.appFillMode);
-        window.syncAppFillModeRadios && window.syncAppFillModeRadios();
+        globalFormSettings.appSectionStart = normalizeAppSectionStart(globalFormSettings.appSectionStart);
+        globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(
+            globalFormSettings.appHubSectionOrder
+        );
+        window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
         
         // Fix: Restore inputs correctly
         document.getElementById('tpl-title').value = currentFormTitle;
@@ -2552,6 +3126,7 @@ window.loadChecklist = function(id) {
         document.getElementById('tpl-icon').value = currentFormIcon;
         document.getElementById('tpl-icon-preview').innerHTML = currentFormIcon ? `<ion-icon name="${currentFormIcon}" style="font-size:18px;margin-right:6px;vertical-align:-3px;"></ion-icon> ${currentFormIcon}` : 'Escolher Ícone da Tarefa';
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(form.schema || [])));
+        ensureCanvasSchemaHasSection();
         selectedFieldId = null;
         renderCanvas();
         renderProperties();
@@ -2584,10 +3159,17 @@ window.confirmCreateNewChecklist = function () {
     flushQuillToBoundField();
     currentFormId = null;
     currentFormTitle = title;
-    fields = [];
+    fields = [createDefaultSectionField()];
     selectedFieldId = null;
-    globalFormSettings = { requireGlobalGeofence: false, globalGeofenceRadius: 200, rules: [], appFillMode: 'full' };
-    window.syncAppFillModeRadios && window.syncAppFillModeRadios();
+    globalFormSettings = {
+        requireGlobalGeofence: false,
+        globalGeofenceRadius: 200,
+        rules: [],
+        appFillMode: 'full',
+        appSectionStart: 'direct',
+        appHubSectionOrder: 'free',
+    };
+    window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
     
     // Update the title input so saveChecklist reads the correct name
     document.getElementById('tpl-title').value = title;
@@ -2608,7 +3190,7 @@ window.confirmCreateNewChecklist = function () {
         select.value = 'temp_new';
     }
     
-    alert(`Painel preparado para: "${title}". Comece a arrastar as opções da esquerda!`);
+    alert(`Painel preparado para: "${title}". Já existe uma primeira secção no canvas — arraste perguntas para dentro dela (ou adicione mais secções).`);
 };
 
 // --- MOBILE SIMULATOR RENDER LOGIC --- //
@@ -2647,11 +3229,11 @@ function renderMobilePreview() {
     const mode = effectivePreviewFillMode();
     const hintElToolbar = document.getElementById('mobile-preview-fill-hint');
     if (hintElToolbar) {
-        const saved = normalizeAppFillMode(globalFormSettings.appFillMode);
+        const derived = computeFillModeFromSchemaFields(fields);
         const sim = window.__mobilePreviewFillSim;
         hintElToolbar.textContent = sim
             ? 'Simulação: ' + (sim === 'wizard' ? 'Um-a-um' : sim === 'hybrid' ? 'Híbrido' : 'Lista')
-            : 'Guardado: ' + (saved === 'wizard' ? 'Um-a-um' : saved === 'hybrid' ? 'Híbrido' : 'Lista');
+            : 'Preview: ' + (derived === 'wizard' ? 'Um-a-um (global legado)' : derived === 'hybrid' ? 'Por secção (alguma em modo assistente)' : 'Lista / scroll');
     }
 
     const sectionPages = splitBuilderFieldsIntoSectionPages(fields);
@@ -2754,15 +3336,23 @@ function renderMobilePreview() {
 // Boot Local DB listener
 setTimeout(() => window.loadSavedFormsList(), 100);  // let dom settle
 
-window.bindAppFillModeRadios = function () {
-    if (window.bindAppFillModeRadios.__done) return;
-    const nodes = document.querySelectorAll('input[name="appFillMode"]');
-    if (!nodes.length) return;
-    window.bindAppFillModeRadios.__done = true;
-    nodes.forEach((r) => {
+window.bindAppSectionNavRadios = function () {
+    if (window.bindAppSectionNavRadios.__done) return;
+    const startNodes = document.querySelectorAll('input[name="appSectionStart"]');
+    if (!startNodes.length) return;
+    window.bindAppSectionNavRadios.__done = true;
+    startNodes.forEach((r) => {
         r.addEventListener('change', function () {
             if (this.checked && globalFormSettings) {
-                globalFormSettings.appFillMode = normalizeAppFillMode(this.value);
+                globalFormSettings.appSectionStart = normalizeAppSectionStart(this.value);
+                window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
+            }
+        });
+    });
+    document.querySelectorAll('input[name="appHubSectionOrder"]').forEach((r) => {
+        r.addEventListener('change', function () {
+            if (this.checked && globalFormSettings) {
+                globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(this.value);
             }
         });
     });
@@ -2983,6 +3573,35 @@ function buildLogicActionTargetOptions(actType, selectedTargetId) {
 // --- NEW CONTEXTUAL LOGIC BUILDER ---
 let currentLogicFieldId = null;
 
+window.handleLogicModalLabelInput = function (val) {
+    const field = fields.find((f) => f.id === currentLogicFieldId);
+    if (!field) return;
+    field.label = val;
+    if (selectedFieldId === field.id) {
+        const si = document.getElementById('prop-label-input');
+        if (si) si.value = val;
+    }
+    if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
+};
+
+window.handleLogicModalLabelBlur = function () {
+    renderCanvas();
+};
+
+window.hideLogicModal = function () {
+    const inp = document.getElementById('logic-modal-field-label');
+    const field = currentLogicFieldId && fields.find((f) => f.id === currentLogicFieldId);
+    if (inp && field) field.label = inp.value;
+    if (field && selectedFieldId === field.id) {
+        const si = document.getElementById('prop-label-input');
+        if (si) si.value = field.label;
+    }
+    const m = document.getElementById('logic-modal');
+    if (m) m.style.display = 'none';
+    currentLogicFieldId = null;
+    renderCanvas();
+};
+
 window.openLogicModal = function(evt, fieldId) {
     if(evt) evt.stopPropagation();
     currentLogicFieldId = fieldId;
@@ -2990,13 +3609,62 @@ window.openLogicModal = function(evt, fieldId) {
     const field = fields.find(f => f.id === fieldId);
     if(!field) return;
     
-    document.getElementById('logic-modal-subtitle').innerHTML = `Regras neste bloco: <strong>${escapeHtmlLogic(field.label)} (${escapeHtmlLogic(field.id)})</strong>. Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>.`;
+    const sub = document.getElementById('logic-modal-subtitle');
+    sub.textContent = '';
+    sub.style.display = 'flex';
+    sub.style.flexDirection = 'column';
+    sub.style.alignItems = 'flex-start';
+    sub.style.gap = '8px';
+    sub.style.maxWidth = 'min(560px, 92vw)';
+
+    const row1 = document.createElement('div');
+    row1.style.display = 'flex';
+    row1.style.flexWrap = 'wrap';
+    row1.style.alignItems = 'center';
+    row1.style.gap = '8px';
+    row1.appendChild(document.createTextNode('Regras neste bloco:'));
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'logic-modal-field-label';
+    inp.className = 'prop-input';
+    inp.value = field.label || '';
+    inp.setAttribute('aria-label', 'Nome do campo ou etapa');
+    inp.style.cssText =
+        'flex:1; min-width:200px; max-width:min(380px,65vw); font-weight:700; font-size:13px; padding:8px 10px; margin:0;';
+    inp.addEventListener('input', () => window.handleLogicModalLabelInput(inp.value));
+    inp.addEventListener('blur', () => window.handleLogicModalLabelBlur());
+    inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            inp.blur();
+        }
+    });
+    row1.appendChild(inp);
+    const idStrong = document.createElement('strong');
+    idStrong.style.opacity = '0.95';
+    idStrong.style.fontWeight = '600';
+    idStrong.textContent = ' (' + field.id + ')';
+    row1.appendChild(idStrong);
+    sub.appendChild(row1);
+    const tail = document.createElement('span');
+    tail.style.fontSize = '12px';
+    tail.style.lineHeight = '1.45';
+    tail.style.opacity = '0.92';
+    tail.innerHTML =
+        'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>.';
+    sub.appendChild(tail);
     
     // Initialize rules array if it doesn't exist
     if(!field.rules) field.rules = [];
     
     renderLogicRules();
     document.getElementById('logic-modal').style.display = 'flex';
+    setTimeout(() => {
+        try {
+            inp.focus();
+            inp.select();
+        } catch (e) { /* ignore */ }
+    }, 50);
 };
 
 function renderLogicRules() {
@@ -3195,9 +3863,589 @@ window.updateLogicAction = function(rIndex, aIndex, key, val) {
 };
 
 window.saveFieldLogic = function() {
-    document.getElementById('logic-modal').style.display = 'none';
-    currentLogicFieldId = null;
-    renderCanvas(); // Redesenha parar recriar tags visuais possiveis
+    window.hideLogicModal();
+};
+
+// ─── Assistente IA: Excel .xlsx → analisar → confirmar tipos → schemaData ─────────
+window.__brsparkAiDraft = null;
+/** @type {{ items: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
+window.__brsparkAiSession = null;
+
+function escapeHtmlAi(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
+}
+
+function brsparkAdminBearerToken() {
+    try {
+        return sessionStorage.getItem('brspark_admin_token') || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+/**
+ * @param {boolean} on
+ * @param {'analyze'|'build'|''} [phase]
+ */
+function setAiFormLoading(on, phase) {
+    const el = document.getElementById('ai-form-loading');
+    if (el) {
+        el.classList.toggle('is-visible', !!on);
+        el.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+    const sub = document.getElementById('ai-form-loading-sub');
+    if (sub) {
+        if (phase === 'build') {
+            sub.textContent = 'A montar o formulário com as opções que escolheu.';
+        } else if (phase === 'analyze') {
+            sub.textContent = 'A ler o Excel e a pedir sugestões à IA. Isto pode levar até um minuto.';
+        } else {
+            sub.textContent = 'A ler o Excel e a pedir sugestões à IA. Isto pode levar até um minuto.';
+        }
+    }
+    const titleEl = document.querySelector('#ai-form-loading .ai-form-loading-title');
+    if (titleEl) {
+        titleEl.textContent =
+            phase === 'build' ? 'A gerar o formulário…' : on ? 'A analisar a planilha…' : 'A gerar o formulário…';
+    }
+    [
+        'ai-form-file',
+        'ai-form-hint',
+        'ai-form-generate-btn',
+        'ai-form-back-btn',
+        'ai-form-final-btn',
+        'ai-form-new-btn',
+        'ai-form-replace-btn',
+        'ai-form-append-btn',
+        'ai-form-session-title',
+        'ai-form-session-desc',
+    ].forEach((id) => {
+        const n = document.getElementById(id);
+        if (n) n.disabled = !!on;
+    });
+}
+
+function aiFormSetWizardStep(step) {
+    const upload = document.getElementById('ai-form-upload-section');
+    const validate = document.getElementById('ai-form-validate-section');
+    const panel = document.getElementById('ai-form-modal-panel');
+    const previewWrap = document.getElementById('ai-form-preview-wrap');
+    const postBuild = document.getElementById('ai-form-post-build');
+    if (upload) upload.style.display = step === 'upload' ? 'block' : 'none';
+    if (validate) validate.style.display = step === 'validate' ? 'block' : 'none';
+    if (panel) {
+        panel.classList.toggle('ai-form-panel-wide', step === 'validate');
+    }
+    if (previewWrap) {
+        previewWrap.style.display = step === 'validate' ? 'none' : 'block';
+    }
+    if (postBuild) postBuild.style.display = step === 'done' ? 'block' : 'none';
+}
+
+function clearAiFormHistoryDom() {
+    const hs = document.getElementById('ai-form-history-static');
+    if (hs) hs.innerHTML = '';
+    const hp = document.getElementById('ai-form-history-proposals');
+    if (hp) hp.innerHTML = '';
+    const hl = document.getElementById('ai-form-history-live');
+    if (hl) hl.innerHTML = '';
+    const hist = document.getElementById('ai-form-history');
+    if (hist) hist.open = false;
+}
+
+function renderAiFormHistorySession(sess) {
+    if (!sess) return;
+    const staticEl = document.getElementById('ai-form-history-static');
+    const propEl = document.getElementById('ai-form-history-proposals');
+    if (!staticEl || !propEl) return;
+
+    const when = sess.analyzedAt
+        ? new Date(sess.analyzedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+        : '—';
+    let meta =
+        '<strong>Ficheiro:</strong> ' +
+        escapeHtmlAi(sess.sourceFileName || '(sem nome)') +
+        '<br><strong>Analisado:</strong> ' +
+        escapeHtmlAi(when);
+    if (sess.hint) {
+        meta += '<br><strong>Instruções que enviou:</strong> ' + escapeHtmlAi(sess.hint);
+    }
+    if (sess.truncated) {
+        meta +=
+            '<br><span style="color:#b45309;">Aviso: o conteúdo da planilha foi truncado por tamanho.</span>';
+    }
+    staticEl.innerHTML = meta;
+
+    propEl.innerHTML = '';
+    (sess.items || []).forEach(function (item) {
+        const li = document.createElement('li');
+        const kind =
+            item.kind === 'section_break'
+                ? 'Etapa'
+                : 'Campo';
+        const opts = (item.options || [])
+            .map(function (o) {
+                return (o.shortLabel || o.type || '').trim();
+            })
+            .filter(Boolean)
+            .join(', ');
+        li.innerHTML =
+            '<strong>' +
+            escapeHtmlAi(kind) +
+            ':</strong> ' +
+            escapeHtmlAi(item.label || '') +
+            (item.context ? ' <em style="color:#64748b;">(' + escapeHtmlAi(item.context) + ')</em>' : '') +
+            '<br><span style="color:#64748b;">Opções sugeridas pela IA:</span> ' +
+            escapeHtmlAi(opts || '—');
+        propEl.appendChild(li);
+    });
+
+    const hist = document.getElementById('ai-form-history');
+    if (hist) hist.open = true;
+    updateAiFormHistoryLive();
+}
+
+function updateAiFormHistoryLive() {
+    const liveEl = document.getElementById('ai-form-history-live');
+    if (!liveEl) return;
+    liveEl.innerHTML = '';
+    document.querySelectorAll('#ai-form-items .ai-item-card').forEach(function (card) {
+        const li = document.createElement('li');
+        const kind = (card.querySelector('.ai-item-kind') && card.querySelector('.ai-item-kind').textContent) || '';
+        const label =
+            (card.querySelector('.ai-item-label') && card.querySelector('.ai-item-label').textContent) || '';
+        const active = card.querySelector('.ai-opt-btn.is-active');
+        const choice = active ? active.textContent.trim() : '—';
+        let extra = '';
+        const req = card.querySelector('.ai-required-cb');
+        if (req && kind.indexOf('Campo') !== -1 && req.checked) {
+            extra = ' <span style="color:#b45309;">· obrigatório</span>';
+        }
+        li.innerHTML =
+            '<strong>' +
+            escapeHtmlAi(kind) +
+            ':</strong> ' +
+            escapeHtmlAi(label) +
+            ' → <span style="color:#5b21b6;">' +
+            escapeHtmlAi(choice) +
+            '</span>' +
+            extra;
+        liveEl.appendChild(li);
+    });
+    if (!liveEl.children.length) {
+        const li = document.createElement('li');
+        li.style.color = '#94a3b8';
+        li.textContent = '(ainda sem cartões)';
+        liveEl.appendChild(li);
+    }
+}
+
+function ensureAiHistoryLiveUpdates() {
+    const v = document.getElementById('ai-form-validate-section');
+    if (!v || v._aiHistChangeBound) return;
+    v._aiHistChangeBound = true;
+    v.addEventListener('change', function (ev) {
+        if (ev.target && ev.target.classList && ev.target.classList.contains('ai-required-cb')) {
+            updateAiFormHistoryLive();
+        }
+    });
+}
+
+function updateAiCardOptionsVisibility(card) {
+    if (!card) return;
+    const active = card.querySelector('.ai-opt-btn.is-active');
+    const typ = active ? active.getAttribute('data-option-type') : '';
+    const wrap = card.querySelector('.ai-suggest-options-wrap');
+    if (wrap) {
+        wrap.style.display = typ === 'dropdown' || typ === 'multiselect' ? 'block' : 'none';
+    }
+}
+
+function ensureAiItemsDelegation() {
+    const root = document.getElementById('ai-form-items');
+    if (!root || root._aiDelegBound) return;
+    root._aiDelegBound = true;
+    root.addEventListener('click', function (ev) {
+        const btn = ev.target.closest('.ai-opt-btn');
+        if (!btn || !root.contains(btn)) return;
+        const card = btn.closest('.ai-item-card');
+        if (!card) return;
+        card.querySelectorAll('.ai-opt-btn').forEach(function (b) {
+            b.classList.toggle('is-active', b === btn);
+        });
+        card.dataset.selectedOption = btn.getAttribute('data-option-key') || '';
+        updateAiCardOptionsVisibility(card);
+        updateAiFormHistoryLive();
+    });
+}
+
+function renderAiFormValidateCards(items) {
+    ensureAiItemsDelegation();
+    const root = document.getElementById('ai-form-items');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach(function (item) {
+        const card = document.createElement('div');
+        card.className = 'ai-item-card';
+        card.dataset.itemKey = item.key;
+        card.dataset.selectedOption = item.recommendedOptionKey || '';
+
+        const kindEl = document.createElement('div');
+        kindEl.className = 'ai-item-kind';
+        kindEl.textContent = item.kind === 'section_break' ? 'Etapa / secção' : 'Campo';
+        card.appendChild(kindEl);
+
+        const lab = document.createElement('p');
+        lab.className = 'ai-item-label';
+        lab.textContent = item.label || '';
+        card.appendChild(lab);
+
+        if (item.context) {
+            const ctx = document.createElement('p');
+            ctx.className = 'ai-item-context';
+            ctx.textContent = item.context;
+            card.appendChild(ctx);
+        }
+
+        const row = document.createElement('div');
+        row.className = 'ai-opt-row';
+        let hasActive = false;
+        (item.options || []).forEach(function (opt) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'ai-opt-btn';
+            if (opt.key === item.recommendedOptionKey) {
+                b.classList.add('is-active');
+                hasActive = true;
+            }
+            b.setAttribute('data-item-key', item.key);
+            b.setAttribute('data-option-key', opt.key);
+            b.setAttribute('data-option-type', opt.type || '');
+            let bt = opt.shortLabel || opt.type || '';
+            if (opt.hint) bt += ' — ' + opt.hint;
+            b.textContent = bt;
+            row.appendChild(b);
+        });
+        if (!hasActive && row.firstElementChild) {
+            row.firstElementChild.classList.add('is-active');
+            card.dataset.selectedOption = row.firstElementChild.getAttribute('data-option-key') || '';
+        }
+        card.appendChild(row);
+
+        if (item.kind !== 'section_break') {
+            const reqRow = document.createElement('div');
+            reqRow.className = 'ai-required-row';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'ai-required-cb';
+            cb.id = 'ai-req-' + item.key.replace(/[^a-z0-9_-]/gi, '_');
+            const lbl = document.createElement('label');
+            lbl.setAttribute('for', cb.id);
+            lbl.textContent = 'Obrigatório';
+            reqRow.appendChild(cb);
+            reqRow.appendChild(lbl);
+            card.appendChild(reqRow);
+        }
+
+        const optWrap = document.createElement('div');
+        optWrap.className = 'ai-suggest-options-wrap';
+        optWrap.style.display = 'none';
+        const labOpt = document.createElement('label');
+        labOpt.textContent = 'Opções da lista (vírgulas), se aplicável';
+        const ta = document.createElement('textarea');
+        ta.className = 'ai-suggest-options';
+        ta.placeholder = 'Ex.: Sim, Não, N/A';
+        if (item.suggestedOptions) ta.value = item.suggestedOptions;
+        optWrap.appendChild(labOpt);
+        optWrap.appendChild(ta);
+        card.appendChild(optWrap);
+
+        root.appendChild(card);
+        updateAiCardOptionsVisibility(card);
+    });
+    updateAiFormHistoryLive();
+}
+
+function collectAiFormSelections() {
+    const selections = {};
+    document.querySelectorAll('#ai-form-items .ai-item-card').forEach(function (card) {
+        const key = card.dataset.itemKey;
+        if (!key) return;
+        const optionKey =
+            card.dataset.selectedOption ||
+            (function () {
+                const a = card.querySelector('.ai-opt-btn.is-active');
+                return a ? a.getAttribute('data-option-key') : '';
+            })();
+        const sel = { optionKey: optionKey || '' };
+        const req = card.querySelector('.ai-required-cb');
+        if (req && req.checked) sel.required = true;
+        const ta = card.querySelector('.ai-suggest-options');
+        if (ta && ta.value.trim()) sel.options = ta.value.trim();
+        selections[key] = sel;
+    });
+    return selections;
+}
+
+window.brsparkAiFormWizardReset = function () {
+    window.__brsparkAiSession = null;
+    window.__brsparkAiDraft = null;
+    const itemsRoot = document.getElementById('ai-form-items');
+    if (itemsRoot) itemsRoot.innerHTML = '';
+    const status = document.getElementById('ai-form-status');
+    if (status) status.textContent = '';
+    const preview = document.getElementById('ai-form-preview');
+    if (preview) {
+        preview.innerHTML =
+            '<span class="ai-preview-muted" style="font-size:12px;">Analise primeiro um ficheiro .xlsx e confirme os cartões acima.</span>';
+    }
+    const fi = document.getElementById('ai-form-file');
+    if (fi) fi.value = '';
+    const postBuild = document.getElementById('ai-form-post-build');
+    if (postBuild) postBuild.style.display = 'none';
+    const st = document.getElementById('ai-form-session-title');
+    const sd = document.getElementById('ai-form-session-desc');
+    if (st) st.value = '';
+    if (sd) sd.value = '';
+    clearAiFormHistoryDom();
+    aiFormSetWizardStep('upload');
+};
+
+window.openAiFormModal = function () {
+    const m = document.getElementById('ai-form-modal');
+    if (!m) return;
+    window.brsparkAiFormWizardReset();
+    const hintEl = document.getElementById('ai-form-hint');
+    if (hintEl) hintEl.value = '';
+    const genBtn = document.getElementById('ai-form-generate-btn');
+    if (genBtn) {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Analisar planilha';
+    }
+    setAiFormLoading(false);
+    ensureAiHistoryLiveUpdates();
+    m.style.display = 'flex';
+};
+
+window.closeAiFormModal = function () {
+    setAiFormLoading(false);
+    const m = document.getElementById('ai-form-modal');
+    if (m) m.style.display = 'none';
+};
+
+window.brsparkAiFormAnalyze = async function () {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
+        return;
+    }
+    const fi = document.getElementById('ai-form-file');
+    if (!fi || !fi.files || !fi.files[0]) {
+        alert('Escolha um ficheiro .xlsx.');
+        return;
+    }
+    const file = fi.files[0];
+    const name = (file.name || '').toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xlsm')) {
+        alert('Nesta versão só são aceites ficheiros Excel .xlsx.');
+        return;
+    }
+    const hintEl = document.getElementById('ai-form-hint');
+    const hint = hintEl ? String(hintEl.value || '').trim() : '';
+    const status = document.getElementById('ai-form-status');
+    const preview = document.getElementById('ai-form-preview');
+    const btn = document.getElementById('ai-form-generate-btn');
+    if (status) status.textContent = '';
+    setAiFormLoading(true, 'analyze');
+    if (btn) btn.textContent = 'A analisar…';
+    try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('options', JSON.stringify({ hint }));
+        const res = await fetch(`${brsparkApiBase()}/checklists/ai/analyze-from-file`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token },
+            body: fd,
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (e2) {
+            data = {};
+        }
+        if (!res.ok) {
+            throw new Error(data.error || res.statusText || 'Pedido falhou');
+        }
+        const items = data.items || [];
+        if (!items.length) {
+            throw new Error('A IA não devolveu campos para confirmar. Tente outro ficheiro ou instruções.');
+        }
+        window.__brsparkAiSession = {
+            items: items,
+            title: data.title || '',
+            description: data.description || '',
+            hint: hint,
+            sourceFileName: (data.source && data.source.name) || file.name || '',
+            analyzedAt: new Date().toISOString(),
+            truncated: !!data.truncated,
+        };
+        window.__brsparkAiDraft = null;
+        const stIn = document.getElementById('ai-form-session-title');
+        const sdIn = document.getElementById('ai-form-session-desc');
+        if (stIn) stIn.value = window.__brsparkAiSession.title || '';
+        if (sdIn) sdIn.value = window.__brsparkAiSession.description || '';
+        renderAiFormValidateCards(items);
+        renderAiFormHistorySession(window.__brsparkAiSession);
+        aiFormSetWizardStep('validate');
+        if (status) {
+            const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
+            status.textContent =
+                (data.truncated ? 'Aviso: conteúdo truncado. ' : '') +
+                (w || 'Confirme os tipos abaixo e clique em «Gerar formulário».');
+        }
+        if (preview) {
+            preview.innerHTML =
+                '<span class="ai-preview-muted" style="font-size:12px;">Após gerar, a pré-visualização aparece aqui.</span>';
+        }
+    } catch (e) {
+        console.error(e);
+        if (status) status.textContent = 'Erro: ' + (e.message || e);
+        window.__brsparkAiSession = null;
+        aiFormSetWizardStep('upload');
+    } finally {
+        setAiFormLoading(false);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Analisar planilha';
+        }
+    }
+};
+
+window.brsparkAiFormFinalBuild = async function () {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
+        return;
+    }
+    const sess = window.__brsparkAiSession;
+    if (!sess || !Array.isArray(sess.items) || sess.items.length === 0) {
+        alert('Analise primeiro uma planilha.');
+        return;
+    }
+    const status = document.getElementById('ai-form-status');
+    const preview = document.getElementById('ai-form-preview');
+    const selections = collectAiFormSelections();
+    const titleIn = document.getElementById('ai-form-session-title');
+    const descIn = document.getElementById('ai-form-session-desc');
+    const titleOut = titleIn ? String(titleIn.value || '').trim() : sess.title;
+    const descOut = descIn ? String(descIn.value || '').trim() : sess.description;
+    if (window.__brsparkAiSession) {
+        window.__brsparkAiSession.title = titleOut;
+        window.__brsparkAiSession.description = descOut;
+    }
+    setAiFormLoading(true, 'build');
+    try {
+        const res = await fetch(`${brsparkApiBase()}/checklists/ai/build-form`, {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer ' + token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title: titleOut,
+                description: descOut,
+                items: sess.items,
+                selections: selections,
+            }),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (e2) {
+            data = {};
+        }
+        if (!res.ok) {
+            throw new Error(data.error || res.statusText || 'Pedido falhou');
+        }
+        window.__brsparkAiDraft = data;
+        aiFormSetWizardStep('done');
+        if (status) {
+            const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
+            status.textContent = w || 'Formulário gerado. Pode substituir ou anexar ao canvas.';
+        }
+        if (preview) {
+            const rows = (data.schemaData || []).map(function (f) {
+                const typ = (f.type || '?').replace(/</g, '&lt;');
+                const lab = String(f.label || f.id || '').replace(/</g, '&lt;');
+                return (
+                    '<div style="font-size:12px;padding:6px 0;border-bottom:1px solid #e2e8f0;color:#334155;"><strong style="color:#6d28d9;">' +
+                    typ +
+                    '</strong> — ' +
+                    lab +
+                    '</div>'
+                );
+            });
+            const tit = String(data.title || '').replace(/</g, '&lt;');
+            preview.innerHTML =
+                '<div style="margin-bottom:10px;color:#0f172a;"><strong>Título:</strong> ' +
+                tit +
+                '</div>' +
+                '<div style="margin-bottom:10px;color:#334155;"><strong>Campos:</strong> ' +
+                (data.schemaData || []).length +
+                '</div>' +
+                '<div style="max-height:220px;overflow-y:auto;">' +
+                (rows.join('') || '<em style="color:#64748b;">Vazio</em>') +
+                '</div>';
+        }
+    } catch (e) {
+        console.error(e);
+        if (status) status.textContent = 'Erro: ' + (e.message || e);
+    } finally {
+        setAiFormLoading(false);
+    }
+};
+
+/** @deprecated Use brsparkAiFormAnalyze — mantido por compatibilidade */
+window.brsparkAiFormGenerate = window.brsparkAiFormAnalyze;
+
+function applyAiDraftToCanvas(mode) {
+    const d = window.__brsparkAiDraft;
+    if (!d || !Array.isArray(d.schemaData) || d.schemaData.length === 0) {
+        alert('Gere primeiro um rascunho válido.');
+        return;
+    }
+    const snapshot = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(d.schemaData)));
+    if (mode === 'replace') {
+        if (
+            !confirm(
+                'Substituir todo o canvas pelo rascunho da IA? Guarde o trabalho atual se precisar de o manter.'
+            )
+        ) {
+            return;
+        }
+        fields = snapshot;
+        const ti = document.getElementById('tpl-title');
+        const de = document.getElementById('tpl-desc');
+        if (ti && d.title) ti.value = d.title;
+        if (de && d.description != null) de.value = d.description;
+        selectedFieldId = null;
+    } else {
+        fields = fields.concat(snapshot);
+    }
+    ensureCanvasSchemaHasSection();
+    renderCanvas();
+    window.closeAiFormModal();
+}
+
+window.applyAiFormDraftReplace = function () {
+    applyAiDraftToCanvas('replace');
+};
+
+window.applyAiFormDraftAppend = function () {
+    applyAiDraftToCanvas('append');
 };
 
 /**

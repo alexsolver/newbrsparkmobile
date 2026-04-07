@@ -6,6 +6,7 @@ const morgan  = require('morgan');
 
 const { adminAuth } = require('./middleware/auth');
 const prisma          = require('./db');
+const { runBackfillOsNumbers } = require('./lib/backfillOsNumbersLib');
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('./lib/osrmBaseUrl');
 
 // Routes
@@ -31,6 +32,7 @@ const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
+const checklistsAiRoutes  = require('./routes/checklistsAi');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
 const telemetryRoutes        = require('./routes/telemetry');
@@ -74,6 +76,8 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+// Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
+app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
 app.use('/api/vision',     require('./routes/vision'));     // app: biometria e IA yüz tanıma
 
@@ -349,5 +353,18 @@ app.listen(PORT, () => {
         fs.writeFileSync(flagFile, String(Date.now()));
       });
     }
+  }
+
+  // Garante FT-AAAA-MM-NNNNNNN em execuções antigas (idempotente; desligar com SKIP_OS_NUMBER_BACKFILL_ON_START=1).
+  if (String(process.env.SKIP_OS_NUMBER_BACKFILL_ON_START || '').trim() !== '1') {
+    setImmediate(() => {
+      runBackfillOsNumbers(prisma)
+        .then((r) => {
+          if (!r.skipped) {
+            console.log(`[osNumber] Backfill no arranque: ${r.updated} OS(s) numeradas (FT).`);
+          }
+        })
+        .catch((e) => console.warn('[osNumber] Backfill no arranque falhou (BD indisponível?):', e.message));
+    });
   }
 });
