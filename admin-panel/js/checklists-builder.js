@@ -2309,6 +2309,43 @@ window.importJSON = function() {
     input.click();
 };
 
+/** Alinhado com admin-panel/backend/src/lib/templateTitleUnique.js */
+function normalizeTemplateTitleBuilder(s) {
+    return String(s ?? '')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function templateTitleCompareKeyBuilder(s) {
+    return normalizeTemplateTitleBuilder(s).toLowerCase();
+}
+
+/** @returns {{ id: string, title: string } | null} */
+function templateTitleDuplicateInLocalDb(title, folderId, excludeId) {
+    const key = templateTitleCompareKeyBuilder(title);
+    if (!key) return null;
+    const fid =
+        folderId === null || folderId === undefined || folderId === '' ? null : String(folderId);
+    let db;
+    try {
+        db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+    } catch (e) {
+        return null;
+    }
+    for (const eid of Object.keys(db)) {
+        if (excludeId && eid === excludeId) continue;
+        const entry = db[eid];
+        if (!entry || entry.title == null) continue;
+        const ef =
+            entry.folderId === null || entry.folderId === undefined || entry.folderId === ''
+                ? null
+                : String(entry.folderId);
+        if (ef !== fid) continue;
+        if (templateTitleCompareKeyBuilder(entry.title) === key) return { id: eid, title: entry.title };
+    }
+    return null;
+}
+
 window.saveChecklist = async function() {
     const btn = document.querySelector('.topbar-actions .btn-primary');
     const oldText = btn.innerHTML;
@@ -2330,6 +2367,27 @@ window.saveChecklist = async function() {
                 currentFormTitle = 'FSM ' + new Date().toLocaleString('pt-BR');
             }
             currentFormId = 'chk_' + Date.now().toString(36);
+        }
+
+        if (!normalizeTemplateTitleBuilder(currentFormTitle)) {
+            alert('O título do formulário não pode estar vazio.');
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            return;
+        }
+
+        const dupLocal = templateTitleDuplicateInLocalDb(
+            currentFormTitle,
+            currentFormFolderId ?? null,
+            currentFormId
+        );
+        if (dupLocal) {
+            alert(
+                'Já existe um formulário com este nome nesta pasta (catálogo local). Escolha outro título ou pasta.'
+            );
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            return;
         }
 
         // Snapshot serializável (evita referências partilhadas e garante helpHtml no JSON)
@@ -2407,13 +2465,17 @@ window.saveChecklist = async function() {
                     msg = j.error || raw;
                 } catch (_) {}
                 console.warn('[saveChecklist] API recusou:', res.status, msg);
-                alert(
-                    'Guardado só neste navegador. A API não gravou (' +
-                    res.status +
-                    '): ' +
-                    (msg || 'erro desconhecido') +
-                    '\n\nConfirme que o backend está no ar e a URL da API está certa.'
-                );
+                if (res.status === 409) {
+                    alert(msg || 'Já existe um formulário ativo com este nome nesta pasta.');
+                } else {
+                    alert(
+                        'Guardado só neste navegador. A API não gravou (' +
+                        res.status +
+                        '): ' +
+                        (msg || 'erro desconhecido') +
+                        '\n\nConfirme que o backend está no ar e a URL da API está certa.'
+                    );
+                }
             }
         } catch (apiError) {
             console.warn('Salvamento na API falhou (rede). Rascunho está no navegador.', apiError);
@@ -2806,6 +2868,12 @@ function buildMoveFolderOptionsHtml(currentFolderId) {
 window.onMoveFormFolderChange = async function (formId, selectEl) {
     const v = selectEl.value;
     const folderId = v === '' ? null : v;
+    let prevSelectVal = '';
+    try {
+        const dbPrev = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const pf = dbPrev[formId] ? dbPrev[formId].folderId : null;
+        prevSelectVal = pf === null || pf === undefined || pf === '' ? '' : String(pf);
+    } catch (_) {}
     try {
         const res = await fetch(
             `${brsparkApiBase()}/checklists/templates/${encodeURIComponent(formId)}/folder`,
@@ -2821,8 +2889,9 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
             try {
                 msg = JSON.parse(raw).error || raw;
             } catch (_) {}
-            alert('Não foi possível mover: ' + msg);
-            selectEl.value = folderId === null ? '' : folderId;
+            const prefix = res.status === 409 ? '' : 'Não foi possível mover: ';
+            alert(prefix + msg);
+            selectEl.value = prevSelectVal;
             return;
         }
         const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
@@ -2886,17 +2955,40 @@ window.duplicateChecklist = async function(id) {
             folderId: newForm.folderId ?? null
         };
         const token = sessionStorage.getItem('brspark_admin_token') || '';
-        await fetch(`${brsparkApiBase()}/checklists/templates`, {
+        const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(payload)
         });
+        const raw = await res.text();
+        if (!res.ok) {
+            const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+            delete db2[newForm.id];
+            localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
+            let msg = raw;
+            try {
+                msg = JSON.parse(raw).error || raw;
+            } catch (_) {}
+            alert(
+                res.status === 409
+                    ? msg
+                    : 'Não foi possível clonar na API: ' + (msg || res.status)
+            );
+            window.renderFormsGridFromLocal(db2);
+            return;
+        }
     } catch(e) {
         console.warn('Erro ao clonar checklist na API', e);
+        const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        delete db2[newForm.id];
+        localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
+        alert('Erro de rede ao clonar. A cópia local foi anulada.');
+        window.renderFormsGridFromLocal(db2);
+        return;
     }
     
     alert(`Formulário '${form.title}' clonado com sucesso!`);
-    window.renderFormsGridFromLocal(db); // Re-render local list
+    window.renderFormsGridFromLocal(JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}'));
 };
 
 window.deleteChecklist = function(id) {
@@ -4190,6 +4282,43 @@ function collectAiFormSelections() {
     return selections;
 }
 
+function collectAiFormExcelOptions(hintText) {
+    const g = function (id) {
+        return document.getElementById(id);
+    };
+    const kindEl = g('ai-form-kind');
+    return {
+        hint: hintText || '',
+        objective: g('ai-form-objective') ? String(g('ai-form-objective').value || '').trim() : '',
+        sector: g('ai-form-sector') ? String(g('ai-form-sector').value || '').trim() : '',
+        formKind: kindEl ? String(kindEl.value || 'checklist') : 'checklist',
+        requireStampedPhotos: !!(g('ai-ctx-stamped') && g('ai-ctx-stamped').checked),
+        allowBarcode: !!(g('ai-ctx-barcode') && g('ai-ctx-barcode').checked),
+        requireGps: !!(g('ai-ctx-gps') && g('ai-ctx-gps').checked),
+        allowGeofence: !!(g('ai-ctx-geofence') && g('ai-ctx-geofence').checked),
+        allowTransit: !!(g('ai-ctx-transit') && g('ai-ctx-transit').checked),
+        allowFacial: !!(g('ai-ctx-facial') && g('ai-ctx-facial').checked),
+        allowSignature: !!(g('ai-ctx-signature') && g('ai-ctx-signature').checked),
+        allowCalculated: !!(g('ai-ctx-calc') && g('ai-ctx-calc').checked),
+    };
+}
+
+function collectCopilotFormContext() {
+    const g = function (id) {
+        return document.getElementById(id);
+    };
+    return {
+        objective: g('copilot-ctx-objective') ? String(g('copilot-ctx-objective').value || '').trim().slice(0, 800) : '',
+        sector: '',
+        formKind: 'checklist',
+        requireStampedPhotos: !!(g('copilot-ctx-stamped') && g('copilot-ctx-stamped').checked),
+        allowBarcode: !!(g('copilot-ctx-barcode') && g('copilot-ctx-barcode').checked),
+        requireGps: !!(g('copilot-ctx-gps') && g('copilot-ctx-gps').checked),
+        allowGeofence: !!(g('copilot-ctx-geofence') && g('copilot-ctx-geofence').checked),
+        allowTransit: !!(g('copilot-ctx-transit') && g('copilot-ctx-transit').checked),
+    };
+}
+
 window.brsparkAiFormWizardReset = function () {
     window.__brsparkAiSession = null;
     window.__brsparkAiDraft = null;
@@ -4210,6 +4339,16 @@ window.brsparkAiFormWizardReset = function () {
     const sd = document.getElementById('ai-form-session-desc');
     if (st) st.value = '';
     if (sd) sd.value = '';
+    const obj = document.getElementById('ai-form-objective');
+    if (obj) obj.value = '';
+    const sec = document.getElementById('ai-form-sector');
+    if (sec) sec.value = '';
+    const kind = document.getElementById('ai-form-kind');
+    if (kind) kind.value = 'checklist';
+    ['ai-ctx-stamped', 'ai-ctx-barcode', 'ai-ctx-gps', 'ai-ctx-geofence', 'ai-ctx-transit', 'ai-ctx-facial', 'ai-ctx-signature', 'ai-ctx-calc'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.checked = false;
+    });
     clearAiFormHistoryDom();
     aiFormSetWizardStep('upload');
 };
@@ -4264,7 +4403,7 @@ window.brsparkAiFormAnalyze = async function () {
     try {
         const fd = new FormData();
         fd.append('file', file);
-        fd.append('options', JSON.stringify({ hint }));
+        fd.append('options', JSON.stringify(collectAiFormExcelOptions(hint)));
         const res = await fetch(`${brsparkApiBase()}/checklists/ai/analyze-from-file`, {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token },

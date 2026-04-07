@@ -539,6 +539,113 @@
     #ai-form-modal-panel.ai-form-panel-wide {
       width: min(640px, 100%) !important;
     }
+    #ai-form-modal-panel.ai-form-panel-context {
+      width: min(520px, 100%) !important;
+    }
+    .ai-form-ctx-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 520px) {
+      .ai-form-ctx-grid { grid-template-columns: 1fr; }
+    }
+    .ai-form-ctx-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #334155;
+    }
+    .ai-form-ctx-checks label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #ai-copilot-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(380px, 100vw);
+      height: 100vh;
+      z-index: 999998;
+      background: #f8fafc;
+      border-left: 1px solid #cbd5e1;
+      box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08);
+      display: none;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    #ai-copilot-panel.is-open {
+      display: flex;
+    }
+    .ai-copilot-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .ai-copilot-head h4 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #ai-copilot-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ai-copilot-bubble {
+      max-width: 95%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ai-copilot-bubble.user {
+      align-self: flex-end;
+      background: #7c3aed;
+      color: #fff;
+    }
+    .ai-copilot-bubble.assistant {
+      align-self: flex-start;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+    .ai-copilot-foot {
+      padding: 12px 14px 16px;
+      border-top: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .ai-copilot-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ai-copilot-ctx-mini {
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .ai-copilot-ctx-mini label { display: block; margin-bottom: 4px; font-weight: 700; color: #475569; }
     #ai-form-items {
       display: flex;
       flex-direction: column;
@@ -687,6 +794,9 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
         <button type="button" class="btn btn-outline btn-sm" onclick="window.openAiFormModal()" title="Criar formulário a partir de Excel (.xlsx) com IA" style="border-color:#7c3aed;color:#6d28d9;">
           <ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> IA · Excel
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Copiloto IA: conversar, ajustar campos e sugerir lógica" style="border-color:#6366f1;color:#4f46e5;">
+          <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> Copiloto IA
         </button>
         <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
 
@@ -1047,7 +1157,7 @@
 
 <!-- Assistente IA: Excel → formulário -->
 <div id="ai-form-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.82); z-index:1000000; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:16px; box-sizing:border-box;">
-  <div id="ai-form-modal-panel" class="ai-form-modal-panel" style="width:min(560px,100%); max-height:92vh; overflow:auto; padding:22px; border-radius:16px;">
+  <div id="ai-form-modal-panel" class="ai-form-modal-panel ai-form-panel-context" style="width:min(560px,100%); max-height:92vh; overflow:auto; padding:22px; border-radius:16px;">
     <div id="ai-form-loading" aria-hidden="true">
       <div class="ai-form-spinner" role="status" aria-label="A processar"></div>
       <p class="ai-form-loading-title">A gerar o formulário…</p>
@@ -1065,6 +1175,33 @@
     <div id="ai-form-upload-section">
       <label class="prop-label">Ficheiro Excel</label>
       <input id="ai-form-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="prop-input" style="margin-bottom:12px;" />
+      <label class="prop-label">Objectivo do formulário</label>
+      <textarea id="ai-form-objective" class="prop-input" rows="2" placeholder="Ex.: inspecção de elevadores em obra…" style="resize:vertical; margin-bottom:10px;"></textarea>
+      <div class="ai-form-ctx-grid">
+        <div>
+          <label class="prop-label" for="ai-form-sector">Sector / área</label>
+          <input id="ai-form-sector" type="text" class="prop-input" placeholder="Ex.: manutenção, RH…" />
+        </div>
+        <div>
+          <label class="prop-label" for="ai-form-kind">Tipo</label>
+          <select id="ai-form-kind" class="prop-input">
+            <option value="checklist">Checklist / inspeção</option>
+            <option value="report">Relatório / registo</option>
+            <option value="survey">Questionário</option>
+            <option value="other">Outro</option>
+          </select>
+        </div>
+      </div>
+      <div class="ai-form-ctx-checks">
+        <label><input type="checkbox" id="ai-ctx-stamped" /> Foto carimbada</label>
+        <label><input type="checkbox" id="ai-ctx-barcode" /> Código barras</label>
+        <label><input type="checkbox" id="ai-ctx-gps" /> GPS / mapa</label>
+        <label><input type="checkbox" id="ai-ctx-geofence" /> Cerca geográfica</label>
+        <label><input type="checkbox" id="ai-ctx-transit" /> Deslocamento</label>
+        <label><input type="checkbox" id="ai-ctx-facial" /> Biometria facial</label>
+        <label><input type="checkbox" id="ai-ctx-signature" /> Assinatura</label>
+        <label><input type="checkbox" id="ai-ctx-calc" /> Campos calculados</label>
+      </div>
       <label class="prop-label">Instruções opcionais (ex.: «cada folha é uma etapa»)</label>
       <textarea id="ai-form-hint" class="prop-input" rows="2" placeholder="Opcional…" style="resize:vertical; margin-bottom:12px;"></textarea>
       <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
@@ -1107,6 +1244,46 @@
       <button type="button" id="ai-form-replace-btn" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;" onclick="window.applyAiFormDraftReplace()">Substituir canvas</button>
       <button type="button" id="ai-form-append-btn" class="btn btn-outline btn-sm" onclick="window.applyAiFormDraftAppend()">Anexar ao fim</button>
     </div>
+  </div>
+</div>
+
+<!-- Copiloto IA (painel lateral) -->
+<div id="ai-copilot-panel" aria-hidden="true">
+  <div class="ai-copilot-head">
+    <h4><ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> Copiloto IA</h4>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar copiloto"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
+  </div>
+  <div class="ai-copilot-foot" style="border-top:none; border-bottom:1px solid #e2e8f0;">
+    <div class="ai-copilot-ctx-mini">
+      <label for="copilot-ctx-objective">Contexto (opcional)</label>
+      <textarea id="copilot-ctx-objective" class="prop-input" rows="2" placeholder="Objectivo do formulário…" style="font-size:12px; margin-bottom:8px;"></textarea>
+      <div class="ai-form-ctx-checks" style="margin-bottom:0;">
+        <label><input type="checkbox" id="copilot-ctx-stamped" /> Carimbo</label>
+        <label><input type="checkbox" id="copilot-ctx-barcode" /> Barras</label>
+        <label><input type="checkbox" id="copilot-ctx-gps" /> GPS</label>
+        <label><input type="checkbox" id="copilot-ctx-geofence" /> Cerca</label>
+        <label><input type="checkbox" id="copilot-ctx-transit" /> Desloc.</label>
+      </div>
+    </div>
+  </div>
+  <div id="ai-copilot-messages"></div>
+  <div class="ai-copilot-foot">
+    <label class="prop-label" for="ai-copilot-input">Mensagem</label>
+    <textarea id="ai-copilot-input" class="prop-input" rows="3" placeholder="Ex.: «Troca o campo X para lista com Sim/Não» ou «Para que serve geofence?»" style="font-size:13px; margin-bottom:8px;"></textarea>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+      <button type="button" class="btn btn-primary btn-sm" onclick="window.brsparkCopilotSend()">Enviar</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotClear()">Limpar chat</button>
+    </div>
+    <p id="ai-copilot-patch-hint" style="display:none; font-size:11px; color:#7c3aed; font-weight:700; margin:0 0 8px;">Há alterações ao schema — reveja e aplique.</p>
+    <div class="ai-copilot-actions">
+      <button type="button" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;" id="ai-copilot-apply-btn" onclick="window.brsparkCopilotApplyPatch()" disabled>Aplicar alterações ao canvas</button>
+      <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled>Desfazer</button>
+    </div>
+    <label class="prop-label" for="ai-copilot-logic-goal" style="margin-top:14px;">Sugerir lógica (gatilhos)</label>
+    <textarea id="ai-copilot-logic-goal" class="prop-input" rows="2" placeholder="Ex.: «Se Conforme = Não, mostrar Plano de acção»" style="font-size:12px;"></textarea>
+    <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="window.brsparkCopilotSuggestLogic()">Pedir sugestões de regras</button>
+    <p id="ai-copilot-logic-hint" style="display:none; font-size:11px; color:#0369a1; margin:8px 0 0;">Sugestões prontas — «Aplicar regras sugeridas».</p>
+    <button type="button" class="btn btn-sm" style="margin-top:8px;background:#0ea5e9;color:#fff;border:none;display:none;" id="ai-copilot-apply-logic-btn" onclick="window.brsparkCopilotApplyLogic()" disabled>Aplicar regras sugeridas</button>
   </div>
 </div>
 

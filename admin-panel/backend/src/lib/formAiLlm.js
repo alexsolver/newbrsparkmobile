@@ -9,8 +9,18 @@ const {
 } = require('./formAiNormalize');
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
 const { formatColumnSignalsForLlm } = require('./formAiExtract');
+const {
+  formatAnalyzeFieldTypesForPrompt,
+  formatSchemaTypeDocBlock,
+  buildFormContextBlock,
+} = require('./formAiFieldCatalog');
 
-const ANALYZE_SYSTEM_PROMPT = `És um assistente que analisa planilhas Excel convertidas em texto e prepara um formulário BrSpark (checklist no telemóvel).
+/**
+ * @param {Record<string, unknown>} [formContext]
+ */
+function buildAnalyzeSystemPrompt(formContext) {
+  const typeList = formatAnalyzeFieldTypesForPrompt(formContext || {});
+  return `És um assistente que analisa planilhas Excel convertidas em texto e prepara um formulário BrSpark (checklist no telemóvel).
 
 Devolves APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -23,7 +33,7 @@ Cada elemento de "items" é um objeto com:
 - "label": texto em português — para campos, DEVE coincidir com o cabeçalho da coluna na planilha (mesmo nome), para o sistema alinhar o perfil estatístico.
 - "context": opcional, uma frase (ex.: coluna «Estado» na folha «OS»).
 - "recommendedOptionKey": a "key" da opção que achas mais adequada (deve existir em "options").
-- "options": array com 3 a 5 opções clicáveis (tipos diferentes) para o utilizador confirmar.
+- "options": array com 3 a 6 opções clicáveis (tipos diferentes) para o utilizador confirmar.
 
 Para kind "section_break", cada opção tem:
 - "key": id único neste item
@@ -34,62 +44,52 @@ Para kind "section_break", cada opção tem:
 
 Para kind "field", cada opção tem:
 - "key": id único neste item
-- "type": um destes valores EXATOS: text, number, phone, email, date, checkbox, yes_no, dropdown, multiselect, rating, file_upload, photo, signature, location_pick, hidden
+- "type": um destes valores EXACTOS: ${typeList}
 - "shortLabel": rótulo curto do botão
 - "hint": opcional — porque este tipo encaixa nos dados
 
 REGRAS DE TIPO (prioridade alta — lê também o bloco «Perfil estatístico das colunas» no input do utilizador):
 - Se o perfil indicar signal=dropdown ou dropdown_weak para essa coluna: recommendedOptionKey DEVE ser a opção com type "dropdown"; preenche "suggestedOptions" com os valores listados no perfil (ou inferidos das linhas).
 - Se signal=yes_no: recommendedOptionKey = opção "yes_no".
-- Se signal=multiselect_hint (células com vários valores separados por vírgula ou ;): recommendedOptionKey = opção "multiselect" e suggestedOptions com os valores-atoma únicos.
+- Se signal=multiselect_hint: recommendedOptionKey = opção "multiselect" e suggestedOptions com valores únicos.
 - Se signal=email_hint / phone_hint / date_hint / number_hint: escolhe a opção desse tipo como recomendada.
+- Se signal=barcode_hint: inclui opção "barcode_scan" e recomenda-a quando fizer sentido.
+- Se signal=photo_hint: inclui "photo" ou "photo_stamped" (se o contexto do utilizador pedir fotos carimbadas) como opções.
 - Coluna com os MESMOS textos a repetir-se muitas vezes (poucos distintos) NÃO é "text" — é quase sempre "dropdown" ou "yes_no".
-- Exemplo: cabeçalho «Prioridade» com células só «Alta», «Média», «Baixa» → dropdown com suggestedOptions "Alta, Média, Baixa".
-- Exemplo: «Conforme?» com só «Sim» e «Não» → yes_no.
 
 "suggestedOptions": string com valores separados por vírgula para dropdown/multiselect (obrigatório quando recommended é dropdown ou multiselect).
 
 Regras estruturais:
 - Começa cada folha (## Folha:) com um section_break com label = nome da folha, depois os campos dessa folha.
 - Se a primeira linha de cada folha for cabeçalho, um campo por coluna relevante (ignora colunas vazias ou totais óbvios).
-- NÃO incluas kind field com type transit_start, transit_end, geofence_check, facial_recognition, barcode_scan, calculated.
+- Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o utilizador os pediu explicitamente no contexto.
 `;
+}
 
-const SYSTEM_PROMPT = `És um assistente que gera formulários para a plataforma BrSpark (checklist no telemóvel).
+function buildCanonicalSystemPrompt() {
+  const typeDoc = formatSchemaTypeDocBlock();
+  return `És um assistente que gera formulários para a plataforma BrSpark (checklist no telemóvel).
 Devolves APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData".
 
 schemaData é um array ordenado de objetos. Cada objeto representa um campo OU um separador de etapa.
 
-Tipos permitidos (usa exatamente estes valores em "type"):
-- section_break: separador de etapa/página. Campos "label" = título da etapa. Opcional "multiple": true se a etapa for uma lista repetível (várias instâncias iguais).
-- text: texto livre
-- number: número
-- phone: telefone
-- email: e-mail
-- date: data/hora
-- checkbox: caixa de confirmação
-- yes_no: sim/não toggle
-- dropdown: lista — obrigatório preencher "options" como array de strings OU string "A, B, C"
-- multiselect: várias opções — idem options
-- rating: estrelas
-- file_upload: anexo
-- photo: fotografia
-- signature: assinatura
-- location_pick: GPS + mapa
-- hidden: campo oculto (raramente)
+Tipos permitidos em "type" (usa exactamente estes identificadores):
+${typeDoc}
 
-NÃO uses transit_start, transit_end, geofence_check, facial_recognition, barcode_scan, calculated salvo pedido explícito no texto do utilizador.
+- section_break: "label" = título da etapa; opcional "multiple": true para lista repetível.
+
+O contexto do administrador (se existir) vem no início do conteúdo do utilizador.
 
 Cada campo (exceto section_break) deve ter "label" claro em português (pt-BR), alinhado ao cabeçalho da coluna quando existir. Opcional: "required": true, "description": texto curto.
 
 IDs: podes omitir "id" ou usar placeholders — o servidor corrige. Não repitas labels vazios.
 
-Se o input incluir «Perfil estatístico das colunas», OBRIGA-TE a respeitar os signals: dropdown/yes_no/multiselect_hint têm prioridade sobre "text" para essas colunas; preenche "options" em dropdown/multiselect com os valores sugeridos no perfil quando existirem.
+Se o input incluir «Perfil estatístico das colunas», respeita os signals: dropdown/yes_no/multiselect_hint têm prioridade sobre "text"; barcode_hint → barcode_scan; photo_hint → photo ou photo_stamped.
 
 Se o input tiver várias folhas (## Folha:), começa cada folha com um section_break com label = nome da folha, depois os campos dessa folha.
-Se a primeira linha de dados parecer cabeçalho de colunas, usa cada coluna como um campo.
 Colunas onde os valores se repetem entre poucas etiquetas distintas devem ser "dropdown" ou "yes_no", não texto livre.
 `;
+}
 
 async function openAiJsonObjectChat(systemPrompt, userContent, temperature = 0.25) {
   const { apiKey: key, model, baseUrl } = await resolveOpenAiCredentials();
@@ -143,56 +143,68 @@ async function openAiJsonObjectChat(systemPrompt, userContent, temperature = 0.2
 }
 
 /**
- * Fase 1: analisar planilha e devolver itens com opções por botão (sem schema final).
- * @param {{ markdown: string, userHint?: string }} input
+ * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
  */
-function buildUserContentWithProfile(markdown, userHint, columnSignals) {
-  const profileBlock = formatColumnSignalsForLlm(columnSignals || []);
+function buildUserContentWithProfile(input) {
+  const profileBlock = formatColumnSignalsForLlm(input.columnSignals || []);
+  const ctxBlock = buildFormContextBlock(input.formContext || {});
   return (
+    (ctxBlock ? ctxBlock + '\n\n' : '') +
     `Conteúdo extraído da planilha:\n\n` +
-    String(markdown || '').slice(0, 130_000) +
+    String(input.markdown || '').slice(0, 130_000) +
     `\n\n### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)\n` +
     profileBlock +
-    `\n\n---\nInstruções extra do utilizador: ${String(userHint || '').trim() || '(nenhuma)'}\n`
+    `\n\n---\nInstruções extra do utilizador: ${String(input.userHint || '').trim() || '(nenhuma)'}\n`
   );
 }
 
+/**
+ * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
+ */
 async function analyzeSpreadsheetProposals(input) {
-  const userContent = buildUserContentWithProfile(
-    input.markdown,
-    input.userHint,
-    input.columnSignals
-  );
+  const formContext = input.formContext && typeof input.formContext === 'object' ? input.formContext : {};
+  const systemPrompt = buildAnalyzeSystemPrompt(formContext);
+  const userContent = buildUserContentWithProfile({
+    markdown: input.markdown,
+    userHint: input.userHint,
+    columnSignals: input.columnSignals,
+    formContext,
+  });
 
-  const parsed = await openAiJsonObjectChat(ANALYZE_SYSTEM_PROMPT, userContent, 0.18);
+  const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.18);
   const title = sanitizeTemplateText(parsed.title, 200) || 'Formulário (IA)';
   const description = sanitizeTemplateText(parsed.description, 500);
   const { items, warnings: normWarnings } = normalizeProposalsFromLlm(parsed);
   const { items: itemsAdjusted, warnings: heurWarnings } = applyColumnSignalsToProposals(
     items,
-    input.columnSignals || []
+    input.columnSignals || [],
+    formContext
   );
   return { title, description, items: itemsAdjusted, warnings: [...normWarnings, ...heurWarnings] };
 }
 
 /**
- * @param {{ markdown: string, userHint?: string }} input
+ * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
  * @returns {Promise<{ title: string, description: string, schemaData: object[], warnings: string[] }>}
  */
 async function generateSchemaFromCanonical(input) {
-  const userContent = buildUserContentWithProfile(
-    input.markdown,
-    input.userHint,
-    input.columnSignals
-  );
+  const formContext = input.formContext && typeof input.formContext === 'object' ? input.formContext : {};
+  const systemPrompt = buildCanonicalSystemPrompt();
+  const userContent = buildUserContentWithProfile({
+    markdown: input.markdown,
+    userHint: input.userHint,
+    columnSignals: input.columnSignals,
+    formContext,
+  });
 
-  const parsed = await openAiJsonObjectChat(SYSTEM_PROMPT, userContent, 0.22);
+  const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.22);
   const title = sanitizeTemplateText(parsed.title, 200) || 'Formulário gerado por IA';
   const description = sanitizeTemplateText(parsed.description, 500);
   const { schemaData, warnings } = normalizeSchemaDataFromLlm(parsed.schemaData);
   const { schemaData: schemaPatched, warnings: patchWarn } = applyColumnSignalsToSchemaData(
     schemaData,
-    input.columnSignals || []
+    input.columnSignals || [],
+    formContext
   );
   return { title, description, schemaData: schemaPatched, warnings: [...warnings, ...patchWarn] };
 }
@@ -200,6 +212,8 @@ async function generateSchemaFromCanonical(input) {
 module.exports = {
   generateSchemaFromCanonical,
   analyzeSpreadsheetProposals,
-  SYSTEM_PROMPT,
-  ANALYZE_SYSTEM_PROMPT,
+  buildAnalyzeSystemPrompt,
+  buildCanonicalSystemPrompt,
+  buildUserContentWithProfile,
+  openAiJsonObjectChat,
 };

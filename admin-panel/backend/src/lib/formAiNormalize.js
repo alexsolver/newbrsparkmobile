@@ -1,31 +1,6 @@
 'use strict';
 
-/** Tipos que o Form Builder e a app reconhecem (MVP IA: sem forçar transit/geoface). */
-const ALLOWED_FIELD_TYPES = new Set([
-  'text',
-  'number',
-  'phone',
-  'email',
-  'date',
-  'checkbox',
-  'yes_no',
-  'section_break',
-  'dropdown',
-  'multiselect',
-  'rating',
-  'calculated',
-  'hidden',
-  'transit_start',
-  'transit_end',
-  'geofence_check',
-  'location_pick',
-  'file_upload',
-  'photo',
-  'photo_stamped',
-  'facial_recognition',
-  'barcode_scan',
-  'signature',
-]);
+const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
 
 function randomFieldId(usedIds) {
   let id;
@@ -164,7 +139,19 @@ function findBestColumnSignalForItem(item, columnSignals) {
   for (const p of columnSignals) {
     if (!p || !p.header) continue;
     if (!headerMatchesFieldLabel(p.header, label)) continue;
-    const rank = { yes_no: 5, dropdown: 4, multiselect_hint: 4, dropdown_weak: 3, email_hint: 2, phone_hint: 2, date_hint: 2, number_hint: 2, none: 0 };
+    const rank = {
+      barcode_hint: 6,
+      yes_no: 5,
+      dropdown: 4,
+      multiselect_hint: 4,
+      dropdown_weak: 3,
+      photo_hint: 3,
+      email_hint: 2,
+      phone_hint: 2,
+      date_hint: 2,
+      number_hint: 2,
+      none: 0,
+    };
     const r = rank[p.signal] || 0;
     if (!best || r > (rank[best.signal] || 0)) best = p;
   }
@@ -190,10 +177,12 @@ function ensureProposalOptionType(options, kind, type, shortLabel, hint) {
  * Corrige recomendações da IA com base em estatísticas das colunas (dropdown vs texto, etc.).
  * @param {object[]} items
  * @param {object[]} columnSignals
+ * @param {Record<string, unknown>} [formContext]
  * @returns {{ items: object[], warnings: string[] }}
  */
-function applyColumnSignalsToProposals(items, columnSignals) {
+function applyColumnSignalsToProposals(items, columnSignals, formContext = {}) {
   const warnings = [];
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
   if (!Array.isArray(items) || !items.length) return { items: items || [], warnings };
   if (!Array.isArray(columnSignals) || !columnSignals.length) return { items, warnings };
 
@@ -257,6 +246,23 @@ function applyColumnSignalsToProposals(items, columnSignals) {
       options = ensureProposalOptionType(options, 'field', 'number', 'Número', 'Valores maioritariamente numéricos');
       const k = pickFirstKeyOfType('number');
       if (k) recommendedOptionKey = k;
+    } else if (sig.signal === 'barcode_hint') {
+      options = ensureProposalOptionType(
+        options,
+        'field',
+        'barcode_scan',
+        'Código de barras',
+        'Coluna sugere identificador / EAN / património'
+      );
+      const k = pickFirstKeyOfType('barcode_scan');
+      if (k) recommendedOptionKey = k;
+    } else if (sig.signal === 'photo_hint') {
+      const wantStamped = ctx.requireStampedPhotos === true;
+      const pType = wantStamped ? 'photo_stamped' : 'photo';
+      const pLabel = wantStamped ? 'Foto carimbada' : 'Fotografia';
+      options = ensureProposalOptionType(options, 'field', pType, pLabel, 'Cabeçalho sugere evidência fotográfica');
+      const k = pickFirstKeyOfType(pType);
+      if (k) recommendedOptionKey = k;
     }
 
     const keys = new Set();
@@ -288,8 +294,9 @@ function applyColumnSignalsToProposals(items, columnSignals) {
 /**
  * Ajusta schema já normalizado (fluxo directo LLM → schema) com o mesmo perfil de colunas.
  */
-function applyColumnSignalsToSchemaData(schemaData, columnSignals) {
+function applyColumnSignalsToSchemaData(schemaData, columnSignals, formContext = {}) {
   const warnings = [];
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
   if (!Array.isArray(schemaData) || !columnSignals?.length) return { schemaData, warnings };
   const out = schemaData.map((f) => {
     if (!f || f.type === 'section_break') return f;
@@ -297,7 +304,15 @@ function applyColumnSignalsToSchemaData(schemaData, columnSignals) {
     if (!sig || sig.signal === 'none') return f;
     const next = { ...f };
     const was = next.type;
-    if ((sig.signal === 'dropdown' || sig.signal === 'dropdown_weak') && was === 'text') {
+    if (sig.signal === 'barcode_hint' && (was === 'text' || was === 'number')) {
+      next.type = 'barcode_scan';
+      next.options = null;
+      warnings.push(`«${f.label}»: tipo alterado para leitura de código de barras (perfil da coluna).`);
+    } else if (sig.signal === 'photo_hint' && was === 'text') {
+      next.type = ctx.requireStampedPhotos === true ? 'photo_stamped' : 'photo';
+      next.options = null;
+      warnings.push(`«${f.label}»: tipo alterado para ${next.type} (cabeçalho sugere foto).`);
+    } else if ((sig.signal === 'dropdown' || sig.signal === 'dropdown_weak') && was === 'text') {
       next.type = 'dropdown';
       next.options = sig.suggestedOptionsLine || next.options || 'Opção 1, Opção 2';
       warnings.push(`«${f.label}»: tipo alterado para lista (dropdown) com base nos dados.`);
@@ -327,25 +342,6 @@ function applyColumnSignalsToSchemaData(schemaData, columnSignals) {
   return { schemaData: out, warnings };
 }
 
-/** Tipos que a fase de análise pode propor para campos (sem secções nem integrações avançadas). */
-const PROPOSAL_FIELD_TYPES = new Set([
-  'text',
-  'number',
-  'phone',
-  'email',
-  'date',
-  'checkbox',
-  'yes_no',
-  'dropdown',
-  'multiselect',
-  'rating',
-  'file_upload',
-  'photo',
-  'signature',
-  'location_pick',
-  'hidden',
-]);
-
 function normalizeProposalOption(raw, kind) {
   if (!raw || typeof raw !== 'object') return null;
   const key = typeof raw.key === 'string' && raw.key.trim() ? raw.key.trim() : null;
@@ -364,7 +360,7 @@ function normalizeProposalOption(raw, kind) {
       multiple,
     };
   }
-  if (!PROPOSAL_FIELD_TYPES.has(type)) type = 'text';
+  if (!ALLOWED_FIELD_TYPES.has(type) || type === 'section_break') type = 'text';
   return {
     key: key || `opt_${Math.random().toString(36).slice(2, 9)}`,
     type,
@@ -495,10 +491,11 @@ function buildSchemaFromProposalSelections(items, selections) {
 module.exports = {
   ALLOWED_FIELD_TYPES,
   normalizeSchemaDataFromLlm,
+  normalizeSchemaItem,
   sanitizeTemplateText,
+  normalizeLabelKey,
   normalizeProposalsFromLlm,
   buildSchemaFromProposalSelections,
   applyColumnSignalsToProposals,
   applyColumnSignalsToSchemaData,
-  PROPOSAL_FIELD_TYPES,
 };

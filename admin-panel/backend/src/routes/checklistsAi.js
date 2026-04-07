@@ -11,6 +11,8 @@ const {
   sanitizeTemplateText,
 } = require('../lib/formAiNormalize');
 const { generateSchemaFromCanonical, analyzeSpreadsheetProposals } = require('../lib/formAiLlm');
+const { runFormCopilot, suggestLogicRules } = require('../lib/formAiCopilot');
+const { parseFormContextFromOptions } = require('../lib/formAiContext');
 
 const router = express.Router();
 
@@ -58,12 +60,16 @@ router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (re
       return res.status(400).json({ error: 'A planilha parece vazia.' });
     }
 
+    const formContext = parseFormContextFromOptions(options);
+    const userHint = typeof options.hint === 'string' ? String(options.hint).trim() : '';
+
     let analyzed;
     try {
       analyzed = await analyzeSpreadsheetProposals({
         markdown: snapshot.markdown,
-        userHint: typeof options.hint === 'string' ? options.hint : '',
+        userHint,
         columnSignals: snapshot.columnSignals || [],
+        formContext,
       });
     } catch (e) {
       if (e.code === 'NO_OPENAI_KEY') {
@@ -161,12 +167,16 @@ router.post('/ai/draft-from-file', adminAuth, upload.single('file'), async (req,
       return res.status(400).json({ error: 'A planilha parece vazia.' });
     }
 
+    const formContext = parseFormContextFromOptions(options);
+    const userHint = typeof options.hint === 'string' ? String(options.hint).trim() : '';
+
     let generated;
     try {
       generated = await generateSchemaFromCanonical({
         markdown: snapshot.markdown,
-        userHint: typeof options.hint === 'string' ? options.hint : '',
+        userHint,
         columnSignals: snapshot.columnSignals || [],
+        formContext,
       });
     } catch (e) {
       if (e.code === 'NO_OPENAI_KEY') {
@@ -191,6 +201,64 @@ router.post('/ai/draft-from-file', adminAuth, upload.single('file'), async (req,
   } catch (err) {
     console.error('[checklists/ai] draft-from-file:', err);
     res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
+/**
+ * POST /api/checklists/ai/session/chat
+ * JSON: { messages: [{role, content}], schemaData?: [], formContext?: {}, spreadsheetSummary?: string }
+ */
+router.post('/ai/session/chat', adminAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const messages = body.messages;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'Envie "messages" (array não vazio).' });
+    }
+    const schemaData = Array.isArray(body.schemaData) ? body.schemaData : [];
+    const formContext = parseFormContextFromOptions(body.formContext || {});
+    const spreadsheetSummary =
+      typeof body.spreadsheetSummary === 'string' ? body.spreadsheetSummary : '';
+
+    const out = await runFormCopilot({
+      messages,
+      schemaData,
+      formContext,
+      spreadsheetSummary,
+    });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    if (e.code === 'NO_OPENAI_KEY') {
+      return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });
+    }
+    console.error('[checklists/ai] session/chat:', e);
+    res.status(502).json({ error: e.message || 'Falha no copiloto IA.' });
+  }
+});
+
+/**
+ * POST /api/checklists/ai/suggest-logic
+ * JSON: { schemaData: [], userGoal: string, formContext?: {} }
+ */
+router.post('/ai/suggest-logic', adminAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!Array.isArray(body.schemaData)) {
+      return res.status(400).json({ error: 'Envie "schemaData" (array).' });
+    }
+    const userGoal = typeof body.userGoal === 'string' ? body.userGoal.trim() : '';
+    if (!userGoal) {
+      return res.status(400).json({ error: 'Envie "userGoal" (texto).' });
+    }
+    const formContext = parseFormContextFromOptions(body.formContext || {});
+    const out = await suggestLogicRules(body.schemaData, userGoal, formContext);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    if (e.code === 'NO_OPENAI_KEY') {
+      return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });
+    }
+    console.error('[checklists/ai] suggest-logic:', e);
+    res.status(502).json({ error: e.message || 'Falha ao sugerir lógica.' });
   }
 });
 

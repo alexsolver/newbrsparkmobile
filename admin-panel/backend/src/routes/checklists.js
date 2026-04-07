@@ -9,6 +9,13 @@ const { recordSync } = require('../services/cockpitMetrics');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
 const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionFields');
+const {
+    normalizeTemplateTitle,
+    findActiveDuplicateInFolder,
+} = require('../lib/templateTitleUnique');
+
+const DUPLICATE_TEMPLATE_TITLE_PT =
+    'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
 
 function execMetaReopenRevisionPending(m) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return false;
@@ -161,9 +168,22 @@ router.patch('/templates/:id/folder', async (req, res) => {
         return res.status(400).json({ error: 'Pasta de destino não encontrada.' });
       }
     }
+    const tpl = await prisma.checklistTemplate.findUnique({ where: { id } });
+    if (!tpl) {
+      return res.status(404).json({ error: 'Formulário não encontrado.' });
+    }
+    const destFolderId = folderId === null || folderId === undefined ? null : folderId;
+    const dupMove = await findActiveDuplicateInFolder(prisma, {
+      folderId: destFolderId,
+      title: tpl.title,
+      excludeId: id,
+    });
+    if (dupMove) {
+      return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
+    }
     const updated = await prisma.checklistTemplate.update({
       where: { id },
-      data: { folderId },
+      data: { folderId: destFolderId },
     });
     res.json(updated);
   } catch (err) {
@@ -231,29 +251,68 @@ router.post('/templates', async (req, res) => {
         }
 
         // Upsert logica para editar formulário existente se vier ID
-        if(id && typeof id === 'string') {
-            const existing = await prisma.checklistTemplate.findUnique({ where: { id }});
-            if(existing) {
-                const updateData = { title, description, settings, schemaData, metadata };
+        if (id && typeof id === 'string') {
+            const existing = await prisma.checklistTemplate.findUnique({ where: { id } });
+            if (existing) {
+                const rawTitleUp =
+                    title !== undefined && title !== null ? String(title) : String(existing.title ?? '');
+                const normTitleUp = normalizeTemplateTitle(rawTitleUp);
+                if (!normTitleUp) {
+                    return res.status(400).json({ error: 'O título do formulário não pode estar vazio.' });
+                }
+                const effectiveFolder =
+                    folderIdNorm !== undefined ? folderIdNorm : existing.folderId ?? null;
+                const dupUp = await findActiveDuplicateInFolder(prisma, {
+                    folderId: effectiveFolder,
+                    title: normTitleUp,
+                    excludeId: id,
+                });
+                if (dupUp) {
+                    return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
+                }
+                const updateData = {
+                    title: normTitleUp,
+                    description,
+                    settings,
+                    schemaData,
+                    metadata,
+                };
                 if (folderIdNorm !== undefined) updateData.folderId = folderIdNorm;
                 const updated = await prisma.checklistTemplate.update({
                     where: { id },
-                    data: updateData
+                    data: updateData,
                 });
                 return res.json(updated);
             }
         }
-        
+
+        const titleForCreate =
+            title !== undefined && title !== null ? String(title) : '';
+        const normTitleCr = normalizeTemplateTitle(titleForCreate);
+        if (!normTitleCr) {
+            return res.status(400).json({ error: 'O título do formulário não pode estar vazio.' });
+        }
+
+        const createFolderId = folderIdNorm === undefined ? null : folderIdNorm;
+        const dupCr = await findActiveDuplicateInFolder(prisma, {
+            folderId: createFolderId,
+            title: normTitleCr,
+            excludeId: null,
+        });
+        if (dupCr) {
+            return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
+        }
+
         const created = await prisma.checklistTemplate.create({
-            data: { 
-                id: id && typeof id === 'string' ? id : undefined, 
-                title, 
-                description, 
-                settings: settings || {}, 
+            data: {
+                id: id && typeof id === 'string' ? id : undefined,
+                title: normTitleCr,
+                description,
+                settings: settings || {},
                 schemaData,
                 metadata: metadata || {},
-                folderId: folderIdNorm === undefined ? null : folderIdNorm,
-            }
+                folderId: createFolderId,
+            },
         });
         res.json(created);
     } catch (err) {

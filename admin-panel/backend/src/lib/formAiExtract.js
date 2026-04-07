@@ -131,7 +131,16 @@ function profileColumnsFromMatrix(sheetName, matrix) {
     let signal = 'none';
     let suggestedOptionsLine = '';
 
-    if (distinct === 2 && isBinaryYesNoSet(uniqueNorm)) {
+    const barcodeHeader = /(ean|gtin|sku|c[oó]digo\s*barras|barcode|serial|patrim[oô]nio|n[ºo°]?\s*ser(i[eê])?)/i.test(
+      header
+    );
+    const barcodeLikeHits = normalized.filter((v) => {
+      const x = String(v).replace(/\D/g, '');
+      return x.length >= 8 && x.length <= 14;
+    }).length;
+    if (barcodeHeader && filled >= 3 && barcodeLikeHits / filled >= 0.45) {
+      signal = 'barcode_hint';
+    } else if (distinct === 2 && isBinaryYesNoSet(uniqueNorm)) {
       signal = 'yes_no';
       suggestedOptionsLine = unique.slice(0, 2).join(', ');
     } else if (
@@ -182,6 +191,13 @@ function profileColumnsFromMatrix(sheetName, matrix) {
       signal = 'phone_hint';
     }
 
+    if (
+      signal === 'none' &&
+      /foto|fotografia|evid[eê]ncia|imagem|captura|anexo\s*visual/i.test(header)
+    ) {
+      signal = 'photo_hint';
+    }
+
     if (signal === 'dropdown_weak' && filled < 6) {
       signal = 'none';
       suggestedOptionsLine = '';
@@ -212,6 +228,12 @@ function formatColumnSignalsForLlm(profiles) {
   );
   lines.push(
     'Se «yes_no», usa yes_no. Se «multiselect_hint», células trazem vários valores separados por vírgula/ponto-e-vírgula — prefere multiselect.'
+  );
+  lines.push(
+    'Se «barcode_hint», cabeçalho/valores sugerem identificador numérico (EAN/património) — prefere tipo barcode_scan nas opções.'
+  );
+  lines.push(
+    'Se «photo_hint», o cabeçalho sugere evidência fotográfica — prefere photo ou photo_stamped conforme o contexto do utilizador.'
   );
   lines.push('');
   for (const p of profiles) {
