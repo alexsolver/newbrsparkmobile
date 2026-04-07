@@ -2,12 +2,19 @@ import { StockItem, StockLocation, StockMovement } from '../types/stock';
 import { NotificationService } from './notifications';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { getLocalStockItems, saveStockItemLocal, getLocalStockMovements, saveStockMovementLocal, deleteStockItemLocal } from '../database';
+import {
+  getVenueStockItemsOnly,
+  saveStockItemLocal,
+  getLocalStockMovements,
+  saveStockMovementLocal,
+  deleteStockItemLocal,
+} from '../database';
 import { enqueueMutation } from './syncService';
 
 export const StockService = {
+  /** Stock ligado a bens / locais do portfólio (não inclui estoque do técnico). */
   getItems: async (ownerEmail?: string): Promise<StockItem[]> => {
-    return getLocalStockItems(ownerEmail);
+    return getVenueStockItemsOnly(ownerEmail);
   },
 
   saveItem: async (item: StockItem, ownerEmail?: string) => {
@@ -21,11 +28,12 @@ export const StockService = {
   },
 
   getMovements: async (ownerEmail?: string): Promise<StockMovement[]> => {
-    return getLocalStockMovements(ownerEmail);
+    const venueIds = new Set(getVenueStockItemsOnly(ownerEmail).map((i: { id: string }) => i.id));
+    return getLocalStockMovements(ownerEmail).filter((m) => venueIds.has(m.itemId));
   },
 
   recordMovement: async (mov: Omit<StockMovement, 'id' | 'timestamp'>, ownerEmail?: string) => {
-    const items = getLocalStockItems(ownerEmail);
+    const items = getVenueStockItemsOnly(ownerEmail);
     const itemIdx = items.findIndex(i => i.id === mov.itemId);
     if (itemIdx === -1) throw new Error('Item não encontrado.');
 

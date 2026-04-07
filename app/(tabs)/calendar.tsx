@@ -29,7 +29,7 @@ export default function CalendarScreen() {
       const docs = await AssetDocService.getAllDocuments();
       const stock = await StockService.getItems();
       const movements = await StockService.getMovements();
-      const assets = getLocalAssets();
+      const assets = getLocalAssets(undefined, { includeMobileWarehouse: false });
       const assetMap = new Map(assets.map(a => [a.id, a.title]));
       
       let formatted: any[] = docs

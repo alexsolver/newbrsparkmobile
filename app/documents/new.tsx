@@ -19,7 +19,7 @@ export default function NewDocumentScreen() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const assets = user?.email ? getRootAssets(user.email) : [];
+  const assets = user?.email ? getRootAssets(user.email, { includeMobileWarehouse: false }) : [];
 
   const pickDocument = async () => {
     const result = await DocumentPicker.getDocumentAsync({

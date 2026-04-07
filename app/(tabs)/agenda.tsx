@@ -39,7 +39,7 @@ export default function AgendaScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    setAssets(getLocalAssets() || []);
+      setAssets(getLocalAssets(undefined, { includeMobileWarehouse: false }) || []);
   }, []);
 
   const fetchAgenda = useCallback(async () => {

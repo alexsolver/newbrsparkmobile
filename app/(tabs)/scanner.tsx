@@ -30,7 +30,7 @@ export default function ScannerScreen() {
       setScanned(true);
       
       const cleanData = data ? data.trim() : '';
-      const localAssets = getLocalAssets();
+      const localAssets = getLocalAssets(undefined, { includeMobileWarehouse: false });
       const assetExists = localAssets.find(a => a.id === cleanData);
 
       if (assetExists) {

@@ -61,7 +61,7 @@ export default function CostsScreen() {
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
 
-  const venues = getRootAssets();
+  const venues = getRootAssets(undefined, { includeMobileWarehouse: false });
 
   const loadData = async () => {
     setLoading(true);
@@ -69,7 +69,7 @@ export default function CostsScreen() {
     const [allExp, allRec, allAssets] = await Promise.all([
       CostService.getExpenses(email),
       CostService.getRecurringCosts(email),
-      getRootAssets(email)
+      getRootAssets(email, { includeMobileWarehouse: false })
     ]);
     
     const summs = await Promise.all(allAssets.map(a => 

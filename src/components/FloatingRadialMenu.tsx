@@ -20,10 +20,15 @@ const ADMIN_MENU_ITEMS = [
 
 const PROVIDER_MENU_ITEMS = [
   { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
-  { id: 'new_os', label: 'Nova OS', icon: 'construct', color: '#3B82F6', route: '/' },
+  { id: 'mobile_stock', label: 'Estoque técnico', icon: 'cube-outline', color: '#0369a1', route: '/stock/mobile' },
+  {
+    id: 'tech_finance',
+    label: 'Financeiro técnico',
+    icon: 'cash-outline',
+    color: '#0f766e',
+    route: '/finance/mobile',
+  },
   { id: 'contracts', label: 'Contratos', icon: 'document-text', color: '#EF4444', route: '/' },
-  { id: 'wallet', label: 'Caixa', icon: 'wallet', color: '#10B981', route: '/' },
-  { id: 'reviews', label: 'Avaliações', icon: 'star-half', color: '#A855F7', route: '/' },
   { id: 'rules', label: 'Portaria', icon: 'shield-checkmark', color: '#F97316', route: '/' },
 ];
 

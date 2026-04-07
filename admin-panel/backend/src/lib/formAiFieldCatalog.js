@@ -23,6 +23,18 @@ const FIELD_SPECS = [
   { type: 'file_upload', tier: 'core', proposalsDefault: true, descPt: 'Anexo de ficheiro.' },
   { type: 'photo', tier: 'core', proposalsDefault: true, descPt: 'Fotografia (galeria ou câmara).' },
   { type: 'signature', tier: 'core', proposalsDefault: true, descPt: 'Assinatura no ecrã.' },
+  {
+    type: 'materials_consumption',
+    tier: 'advanced',
+    proposalsDefault: true,
+    descPt: 'Consumo do estoque técnico (separado de bens); baixa ao submeter.',
+  },
+  {
+    type: 'technician_finance',
+    tier: 'advanced',
+    proposalsDefault: true,
+    descPt: 'Despesas/receitas do técnico por atendimento; módulo financeiro técnico (sem bens).',
+  },
   { type: 'location_pick', tier: 'core', proposalsDefault: true, descPt: 'GPS + mapa (alfinete).' },
   { type: 'hidden', tier: 'advanced', proposalsDefault: true, descPt: 'Campo oculto no telemóvel.' },
   {
@@ -162,6 +174,8 @@ const ANALYZE_OPTION_SHORT_PT = {
   transit_end: 'Fim deslocamento',
   geofence_check: 'Cerca (geofence)',
   calculated: 'Calculado',
+  materials_consumption: 'Materiais / consumo',
+  technician_finance: 'Custos do técnico',
 };
 
 /**

@@ -40,7 +40,9 @@ export default function NewCostScreen() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
 
   const assets = React.useMemo(() => {
-    return user?.email ? getLocalAssets(user.email).filter(a => !a.deletedAt) : [];
+    return user?.email
+      ? getLocalAssets(user.email, { includeMobileWarehouse: false }).filter((a) => !a.deletedAt)
+      : [];
   }, [user?.email]);
 
   const handleFinish = async () => {

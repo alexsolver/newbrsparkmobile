@@ -15,7 +15,7 @@ export default function AssetsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setAssets(getLocalAssets());
+      setAssets(getLocalAssets(undefined, { includeMobileWarehouse: false }));
     }, [])
   );
 

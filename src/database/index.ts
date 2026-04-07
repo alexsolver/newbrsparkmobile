@@ -1,5 +1,18 @@
 import * as SQLite from 'expo-sqlite';
 import { Asset, AssetLocation } from '../types/asset';
+import { isMobileWarehouseAsset } from '../utils/mobileWarehouseAsset';
+
+/** Por omissão inclui armazém móvel (necessário para stock). Use false em listagens de bens. */
+export type LocalAssetReadOptions = {
+  includeMobileWarehouse?: boolean;
+};
+
+function filterAssetsForList<T extends Asset>(assets: T[], opts?: LocalAssetReadOptions): T[] {
+  if (opts?.includeMobileWarehouse === false) {
+    return assets.filter((a) => !isMobileWarehouseAsset(a));
+  }
+  return assets;
+}
 
 const db = SQLite.openDatabaseSync('brspark.db');
 
@@ -119,6 +132,46 @@ export function initDatabase() {
       owner_email TEXT DEFAULT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS tech_stock_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      sku TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      currentStock REAL DEFAULT 0,
+      minStock REAL DEFAULT 0,
+      subLocation TEXT,
+      costPrice REAL DEFAULT 0,
+      owner_email TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tech_stock_movements (
+      id TEXT PRIMARY KEY NOT NULL,
+      itemId TEXT NOT NULL,
+      type TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      unitPrice REAL,
+      destinationAssetId TEXT,
+      subLocation TEXT,
+      timestamp TEXT NOT NULL,
+      owner_email TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tech_finance_entries (
+      id TEXT PRIMARY KEY NOT NULL,
+      kind TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT DEFAULT 'BRL',
+      description TEXT,
+      taskId TEXT,
+      templateId TEXT,
+      fieldId TEXT,
+      scopeSuffix TEXT DEFAULT '',
+      source TEXT DEFAULT 'manual',
+      createdAt TEXT NOT NULL,
+      owner_email TEXT DEFAULT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS media_items (
       id TEXT PRIMARY KEY NOT NULL,
       uri TEXT NOT NULL,
@@ -210,6 +263,13 @@ export function initDatabase() {
       db.execSync(`ALTER TABLE ${table} ADD COLUMN owner_email TEXT DEFAULT NULL;`);
     } catch (_) {}
   });
+
+  try {
+    db.execSync(`ALTER TABLE tech_stock_movements ADD COLUMN reason TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE tech_stock_movements ADD COLUMN responsibleId TEXT DEFAULT NULL;`);
+  } catch (_) {}
 }
 
 
@@ -372,7 +432,7 @@ export function deleteAssetLocation(locationId: string, ownerEmail?: string) {
 
 // ── Leitura ───────────────────────────────────────────────────────────────────
 /** Todos os ativos raiz (sem pai) com contagem de filhos */
-export function getRootAssets(ownerEmail?: string): Asset[] {
+export function getRootAssets(ownerEmail?: string, opts?: LocalAssetReadOptions): Asset[] {
   let query = `
     SELECT a.*, 
       (SELECT COUNT(*) FROM assets c WHERE c.parent_id = a.id AND c.deleted_at IS NULL) as childrenCount
@@ -386,11 +446,11 @@ export function getRootAssets(ownerEmail?: string): Asset[] {
   }
   query += ` ORDER BY a.display_order ASC, a.title ASC`;
   const result = db.getAllSync(query, params);
-  return result.map(parseRow);
+  return filterAssetsForList(result.map(parseRow), opts);
 }
 
 /** Filhos diretos de um ativo pai */
-export function getChildAssets(parentId: string, ownerEmail?: string): Asset[] {
+export function getChildAssets(parentId: string, ownerEmail?: string, opts?: LocalAssetReadOptions): Asset[] {
   let query = `
     SELECT a.*,
       (SELECT COUNT(*) FROM assets c WHERE c.parent_id = a.id AND c.deleted_at IS NULL) as childrenCount
@@ -404,11 +464,11 @@ export function getChildAssets(parentId: string, ownerEmail?: string): Asset[] {
   }
   query += ' ORDER BY a.display_order ASC, a.title ASC';
   const result = db.getAllSync(query, params);
-  return result.map(parseRow);
+  return filterAssetsForList(result.map(parseRow), opts);
 }
 
 /** Todos os ativos (para seletores de pai) */
-export function getLocalAssets(ownerEmail?: string): Asset[] {
+export function getLocalAssets(ownerEmail?: string, opts?: LocalAssetReadOptions): Asset[] {
   let query = `
     SELECT a.*,
       p.title as parentTitle,
@@ -424,10 +484,11 @@ export function getLocalAssets(ownerEmail?: string): Asset[] {
   }
   query += ` ORDER BY a.display_order ASC, a.title ASC`;
   const result = db.getAllSync(query, params);
-  return (result as any[]).map(row => ({
+  const mapped = (result as any[]).map((row) => ({
     ...parseRow(row),
-    parentTitle: row.parentTitle || null
+    parentTitle: row.parentTitle || null,
   }));
+  return filterAssetsForList(mapped, opts);
 }
 
 /** Breadcrumb: caminho do ativo até a raiz */
@@ -710,13 +771,219 @@ export function saveAssetTypes(types: any[]) {
   ]));
 }
 
-// ── Stock ─────────────────────────────────────────────────────────────────────
+// ── Stock (bens / locais de ativo) ───────────────────────────────────────────
 
 export function getLocalStockItems(ownerEmail?: string): any[] {
   if (ownerEmail) {
     return db.getAllSync('SELECT * FROM stock_items WHERE owner_email = ?', [ownerEmail]);
   }
   return db.getAllSync('SELECT * FROM stock_items');
+}
+
+/** Itens de stock cuja localização é um bem do portfólio (exclui órfãos do antigo armazém móvel). */
+export function getVenueStockItemsOnly(ownerEmail?: string): any[] {
+  const items = getLocalStockItems(ownerEmail);
+  if (ownerEmail === undefined || ownerEmail === '') {
+    return items;
+  }
+  const allowed = new Set(
+    getLocalAssets(ownerEmail, { includeMobileWarehouse: false }).map((a) => a.id)
+  );
+  return items.filter((i: any) => {
+    const loc = i.locationId != null && String(i.locationId).trim() !== '' ? String(i.locationId).trim() : '';
+    if (!loc) return true;
+    return allowed.has(loc);
+  });
+}
+
+export function getMobileWarehouseAssetIdsFromLocalDb(ownerEmail?: string): string[] {
+  const assets = getLocalAssets(ownerEmail);
+  return assets.filter((a) => isMobileWarehouseAsset(a)).map((a) => a.id);
+}
+
+/** Migra linhas de stock_items apontando ao armazém móvel (legado) para tech_stock_*. */
+export function migrateLegacyMobileWarehouseStockRows(mobileLocationIds: string[]): void {
+  if (!mobileLocationIds.length) return;
+  const seen = new Set<string>();
+  for (const locId of mobileLocationIds) {
+    if (!locId || seen.has(locId)) continue;
+    seen.add(locId);
+    const rows = db.getAllSync<any>('SELECT * FROM stock_items WHERE locationId = ?', [locId]);
+    for (const row of rows) {
+      const oid = row.owner_email || null;
+      const item = {
+        id: row.id,
+        sku: row.sku,
+        name: row.name,
+        category: row.category || 'general',
+        unit: row.unit || 'un',
+        currentStock: row.currentStock ?? 0,
+        minStock: row.minStock ?? 0,
+        subLocation: row.subLocation || null,
+        costPrice: row.costPrice ?? 0,
+        owner_email: oid,
+      };
+      saveTechStockItemLocal(item, oid || undefined);
+      const moves = db.getAllSync<any>('SELECT * FROM stock_movements WHERE itemId = ?', [row.id]);
+      for (const m of moves) {
+        saveTechStockMovementLocal({ ...m }, m.owner_email || oid || undefined);
+        db.runSync('DELETE FROM stock_movements WHERE id = ?', [m.id]);
+      }
+      db.runSync('DELETE FROM stock_items WHERE id = ?', [row.id]);
+    }
+  }
+}
+
+// ── Estoque do técnico (entidade separada; sem locationId / Asset) ──────────
+
+export function getLocalTechStockItems(ownerEmail?: string): any[] {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM tech_stock_items WHERE owner_email = ?', [ownerEmail]);
+  }
+  return db.getAllSync('SELECT * FROM tech_stock_items');
+}
+
+export function getTechStockRowById(itemId: string): any | null {
+  return db.getFirstSync<any>('SELECT * FROM tech_stock_items WHERE id = ?', [itemId]);
+}
+
+export function saveTechStockItemLocal(item: any, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO tech_stock_items (id, sku, name, category, unit, currentStock, minStock, subLocation, costPrice, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      sku = excluded.sku,
+      name = excluded.name,
+      category = excluded.category,
+      unit = excluded.unit,
+      currentStock = excluded.currentStock,
+      minStock = excluded.minStock,
+      subLocation = excluded.subLocation,
+      costPrice = excluded.costPrice,
+      owner_email = COALESCE(excluded.owner_email, tech_stock_items.owner_email)
+  `);
+  stmt.executeSync([
+    item.id,
+    item.sku,
+    item.name,
+    item.category || 'general',
+    item.unit || 'un',
+    item.currentStock ?? 0,
+    item.minStock ?? 0,
+    item.subLocation || null,
+    item.costPrice ?? 0,
+    item.owner_email || ownerEmail || null,
+  ]);
+}
+
+export function deleteTechStockItemLocal(itemId: string) {
+  db.runSync('DELETE FROM tech_stock_movements WHERE itemId = ?', [itemId]);
+  db.runSync('DELETE FROM tech_stock_items WHERE id = ?', [itemId]);
+}
+
+export function getLocalTechStockMovements(ownerEmail?: string): any[] {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM tech_stock_movements WHERE owner_email = ? ORDER BY timestamp DESC', [
+      ownerEmail,
+    ]);
+  }
+  return db.getAllSync('SELECT * FROM tech_stock_movements ORDER BY timestamp DESC');
+}
+
+export function saveTechStockMovementLocal(mov: any, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT OR REPLACE INTO tech_stock_movements (
+      id, itemId, type, quantity, unitPrice, destinationAssetId, subLocation, timestamp, owner_email, reason, responsibleId
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.executeSync([
+    mov.id,
+    mov.itemId,
+    mov.type,
+    mov.quantity,
+    mov.unitPrice || null,
+    mov.destinationAssetId || null,
+    mov.subLocation || null,
+    mov.timestamp,
+    ownerEmail || mov.owner_email || null,
+    mov.reason != null ? String(mov.reason) : null,
+    mov.responsibleId != null ? String(mov.responsibleId) : null,
+  ]);
+}
+
+// ── Financeiro do técnico (sem vínculo a Asset / custos de bens) ─────────────
+
+export function getLocalTechFinanceEntries(ownerEmail?: string): any[] {
+  if (ownerEmail) {
+    return db.getAllSync('SELECT * FROM tech_finance_entries WHERE owner_email = ? ORDER BY createdAt DESC', [
+      ownerEmail,
+    ]);
+  }
+  return db.getAllSync('SELECT * FROM tech_finance_entries ORDER BY createdAt DESC');
+}
+
+export function getTechFinanceRowById(id: string): any | null {
+  return db.getFirstSync<any>('SELECT * FROM tech_finance_entries WHERE id = ?', [id]);
+}
+
+export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO tech_finance_entries (
+      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      kind = excluded.kind,
+      amount = excluded.amount,
+      currency = excluded.currency,
+      description = excluded.description,
+      taskId = excluded.taskId,
+      templateId = excluded.templateId,
+      fieldId = excluded.fieldId,
+      scopeSuffix = excluded.scopeSuffix,
+      source = excluded.source,
+      createdAt = excluded.createdAt,
+      owner_email = COALESCE(excluded.owner_email, tech_finance_entries.owner_email)
+  `);
+  stmt.executeSync([
+    row.id,
+    row.kind,
+    Number(row.amount) || 0,
+    row.currency || 'BRL',
+    row.description != null ? String(row.description) : null,
+    row.taskId != null ? String(row.taskId) : null,
+    row.templateId != null ? String(row.templateId) : null,
+    row.fieldId != null ? String(row.fieldId) : null,
+    row.scopeSuffix != null ? String(row.scopeSuffix) : '',
+    row.source || 'manual',
+    row.createdAt || new Date().toISOString(),
+    row.owner_email || ownerEmail || null,
+  ]);
+}
+
+export function deleteTechFinanceEntryLocal(id: string) {
+  db.runSync('DELETE FROM tech_finance_entries WHERE id = ?', [id]);
+}
+
+/** Remove linhas do mesmo campo/OS que deixaram de existir no JSON (idempotência por revisão). */
+export function deleteTechFinanceEntriesExceptIds(
+  ownerEmail: string,
+  taskId: string,
+  fieldId: string,
+  scopeSuffix: string,
+  keepIds: string[]
+) {
+  if (keepIds.length === 0) {
+    db.runSync(
+      'DELETE FROM tech_finance_entries WHERE owner_email = ? AND taskId = ? AND fieldId = ? AND scopeSuffix = ? AND source = ?',
+      [ownerEmail, taskId, fieldId, scopeSuffix || '', 'checklist']
+    );
+    return;
+  }
+  const placeholders = keepIds.map(() => '?').join(',');
+  db.runSync(
+    `DELETE FROM tech_finance_entries WHERE owner_email = ? AND taskId = ? AND fieldId = ? AND scopeSuffix = ? AND source = ? AND id NOT IN (${placeholders})`,
+    [ownerEmail, taskId, fieldId, scopeSuffix || '', 'checklist', ...keepIds]
+  );
 }
 
 export function saveStockItemLocal(item: any, ownerEmail?: string) {
@@ -791,6 +1058,9 @@ export function clearLocalDatabase() {
   db.execSync('DELETE FROM assets_history;');
   db.execSync('DELETE FROM stock_items;');
   db.execSync('DELETE FROM stock_movements;');
+  db.execSync('DELETE FROM tech_stock_items;');
+  db.execSync('DELETE FROM tech_stock_movements;');
+  db.execSync('DELETE FROM tech_finance_entries;');
   db.execSync('DELETE FROM asset_locations;');
   db.execSync('DELETE FROM providers;');
   db.execSync('DELETE FROM media_items;');

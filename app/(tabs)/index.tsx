@@ -597,7 +597,7 @@ export default function DashboardScreen() {
       const email = user.email || '';
 
       // Auto-sync: se banco local estiver vazio OU sync explícito solicitado
-      const localAssets = getRootAssets(email);
+      const localAssets = getRootAssets(email, { includeMobileWarehouse: false });
       if (triggerSync || localAssets.length === 0) {
         try {
           await ApiService.sync(email);
@@ -754,8 +754,8 @@ export default function DashboardScreen() {
          console.error('ERROR LOADING AGENDA:', e);
       }
 
-      setAssets(getRootAssets(email));
-      setAllAssets(getLocalAssets(email));
+      setAssets(getRootAssets(email, { includeMobileWarehouse: false }));
+      setAllAssets(getLocalAssets(email, { includeMobileWarehouse: false }));
       const items = await StockService.getItems();
       setStockItems(items);
 

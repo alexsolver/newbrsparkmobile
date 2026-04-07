@@ -24,7 +24,7 @@ export default function OcrProcessScreen() {
   const [ocrDesc, setOcrDesc] = useState('');
 
   const { user } = useAuth();
-  const assets = user?.email ? getRootAssets(user.email) : [];
+  const assets = user?.email ? getRootAssets(user.email, { includeMobileWarehouse: false }) : [];
 
   useEffect(() => {
     // Launch camera automatically when entering

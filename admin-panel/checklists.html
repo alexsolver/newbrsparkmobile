@@ -1044,6 +1044,8 @@
            <div class="toolbox-item" data-type="photo_stamped" style="border-left: 3px solid #f59e0b;"><ion-icon name="scan-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Foto Carimbada (Ao Vivo)</div>
             <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
            <div class="toolbox-item" data-type="barcode_scan" style="border-left: 3px solid #f59e0b;"><ion-icon name="barcode-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Escanear Etiqueta / Bem</div>
+           <div class="toolbox-item" data-type="materials_consumption" style="border-left: 3px solid #0369a1;"><ion-icon name="cube-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Materiais / consumo (estoque técnico)</div>
+           <div class="toolbox-item" data-type="technician_finance" style="border-left: 3px solid #0f766e;"><ion-icon name="cash-outline" style="margin-right:6px; font-size:16px; color:#0f766e;"></ion-icon>Custos do técnico (financeiro técnico)</div>
            <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
         </div>
       </div>
@@ -1318,7 +1320,7 @@
         <h3 style="margin:0 0 8px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;">
           <ion-icon name="sparkles" style="color:#7c3aed"></ion-icon> Assistente IA
         </h3>
-        <p class="ai-form-lead"><strong>Três fases:</strong> (1) envia o Excel → (2) confirma <em>um bloco de cada vez</em> (título, tipo, listas…) → (3) só no fim vê a pré-visualização e aplica ao canvas.</p>
+        <p class="ai-form-lead">A IA <strong>só extrai</strong> etapas e cabeçalhos de coluna. O tipo de cada campo escolhe-o na <strong>lista dinâmica</strong> (igual à toolbox). Cada «Adicionar ao canvas» insere <strong>um</strong> bloco no formulário — em tempo real.</p>
       </div>
       <button type="button" id="ai-form-close-btn" class="btn btn-ghost btn-sm" onclick="window.closeAiFormModal()" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
@@ -1364,10 +1366,10 @@
         <button type="button" id="ai-form-generate-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormAnalyze()">Ler Excel com IA →</button>
         <button type="button" id="ai-form-cancel-btn" class="btn btn-outline btn-sm" onclick="window.closeAiFormModal()">Fechar</button>
       </div>
-      <p style="font-size:11px;color:#64748b;margin:0;line-height:1.45;">Depois deste passo abre a <strong>revisão assistida</strong> (um campo ou etapa por ecrã).</p>
+      <p style="font-size:11px;color:#64748b;margin:0;line-height:1.45;">A seguir confirma o título e vai <strong>colocando cada etapa/campo no canvas</strong> — um de cada vez.</p>
     </div>
     <div id="ai-form-validate-section" style="display:none; margin-bottom:14px;">
-      <div class="ai-form-phase-pill">Fase 2 · Revisão assistida (campo a campo)</div>
+      <div class="ai-form-phase-pill">Fase 2 · Colocar no canvas (um bloco de cada vez)</div>
       <details id="ai-form-history" class="ai-form-history">
         <summary>O que a IA leu no Excel</summary>
         <div id="ai-form-history-static" class="ai-history-meta"></div>
@@ -1386,44 +1388,19 @@
         <h4 id="ai-wizard-heading" class="ai-wizard-step-title">Criação assistida</h4>
         <p id="ai-wizard-sub" class="ai-wizard-step-sub"></p>
         <div id="ai-form-wizard-body">
-          <div id="ai-wizard-step-meta" style="display:none;">
-            <div class="ai-wizard-meta-stats" id="ai-wizard-meta-stats"></div>
-            <label class="prop-label" for="ai-form-session-title">Título do formulário</label>
-            <input id="ai-form-session-title" type="text" class="prop-input" style="margin-bottom:10px;" placeholder="Ex.: Inspeção de campo" />
-            <label class="prop-label" for="ai-form-session-desc">Descrição pública (opcional)</label>
-            <textarea id="ai-form-session-desc" class="prop-input" rows="2" placeholder="Visível no app…" style="resize:vertical; margin-bottom:0;"></textarea>
-          </div>
-          <div id="ai-wizard-item-host" class="ai-wizard-item-host" style="display:none;"></div>
+          <div id="ai-structure-host" class="ai-wizard-item-host"></div>
         </div>
         <div id="ai-form-wizard-nav">
           <button type="button" id="ai-form-back-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Recomeçar tudo</button>
           <div class="ai-wizard-nav-right">
-            <button type="button" id="ai-wizard-prev-btn" class="btn btn-ghost btn-sm" onclick="window.brsparkAiWizardPrev()">← Anterior</button>
-            <button type="button" id="ai-wizard-next-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiWizardNext()">Continuar</button>
+            <button type="button" id="ai-structure-skip-btn" class="btn btn-ghost btn-sm" onclick="window.brsparkAiStructureSkipAction()">Saltar</button>
+            <button type="button" id="ai-structure-primary-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiStructurePrimaryAction()">Continuar</button>
           </div>
         </div>
       </div>
-      <div id="ai-form-items" style="display:none;" aria-hidden="true"></div>
-      <button type="button" id="ai-form-final-btn" style="display:none;" onclick="window.brsparkAiFormFinalBuild()"></button>
     </div>
     <div id="ai-form-status" style="font-size:12px; min-height:20px; margin-bottom:10px;"></div>
-    <div id="ai-form-draft-chrome" style="display:none;">
-      <div class="ai-form-phase-pill" style="margin-bottom:10px;">Fase 3 · Rascunho pronto</div>
-      <div id="ai-form-preview-wrap">
-        <div class="prop-label" style="margin-bottom:6px;">Pré-visualização do formulário</div>
-        <div id="ai-form-preview" style="border-radius:10px; padding:12px; margin-bottom:14px; min-height:80px;">
-          <span class="ai-preview-muted" style="font-size:12px;">Gere o formulário na fase 2 para ver aqui o resumo dos campos.</span>
-        </div>
-        <div id="ai-form-post-build" style="display:none; margin-bottom:12px;">
-          <button type="button" id="ai-form-new-btn" class="btn btn-outline btn-sm" onclick="window.brsparkAiFormWizardReset()">Nova análise (outro Excel)</button>
-        </div>
-      </div>
-      <p class="ai-form-footnote">Requer a integração <strong>OpenAI</strong> em Integrações no painel (ou <code>OPENAI_API_KEY</code> no servidor). PDF e Word podem ser suportados mais tarde.</p>
-      <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        <button type="button" id="ai-form-replace-btn" class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none;" onclick="window.applyAiFormDraftReplace()">Substituir canvas</button>
-        <button type="button" id="ai-form-append-btn" class="btn btn-outline btn-sm" onclick="window.applyAiFormDraftAppend()">Anexar ao fim</button>
-      </div>
-    </div>
+    <p class="ai-form-footnote" style="margin:0 0 8px;">Requer a integração <strong>OpenAI</strong> em Integrações (ou <code>OPENAI_API_KEY</code> no servidor).</p>
   </div>
 </div>
 

@@ -382,6 +382,104 @@ function applyColumnSignalsToSchemaData(schemaData, columnSignals, formContext =
   return { schemaData: out, warnings };
 }
 
+/**
+ * Estrutura vinda da IA (só secções + campos, sem opções de tipo).
+ * Aceita "blocks" ou legado "items".
+ * @param {unknown} parsed
+ * @returns {{ blocks: object[], warnings: string[] }}
+ */
+function normalizeStructureBlocksFromLlm(parsed) {
+  const warnings = [];
+  let arr = [];
+  if (parsed && Array.isArray(parsed.blocks)) {
+    arr = parsed.blocks;
+  } else if (parsed && Array.isArray(parsed.items)) {
+    arr = parsed.items.map((it, i) => ({
+      key: it.key,
+      kind: it.kind,
+      label: it.label,
+      context: it.context,
+      suggestedType: it.suggestedType,
+      suggestedListOptions: it.suggestedListOptions,
+    }));
+    if (arr.length) warnings.push('Resposta em formato antigo (items) — tratada como blocos de estrutura.');
+  }
+  if (arr.length === 0) {
+    warnings.push('A IA não devolveu blocos (estrutura vazia).');
+    return { blocks: [], warnings };
+  }
+  const keys = new Set();
+  const blocks = [];
+  arr.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') return;
+    const kRaw = String(raw.kind || '').toLowerCase();
+    const kind = kRaw === 'section_break' || kRaw === 'section' || raw.type === 'section_break' ? 'section_break' : 'field';
+    let key = typeof raw.key === 'string' && raw.key.trim() ? raw.key.trim() : `b${i}`;
+    while (keys.has(key)) key = `${key}_${i}`;
+    keys.add(key);
+    const label =
+      String(raw.label || raw.title || (kind === 'section_break' ? 'Etapa' : 'Campo')).trim() ||
+      (kind === 'section_break' ? 'Etapa' : 'Campo');
+    const context = raw.context != null ? String(raw.context).trim().slice(0, 500) : '';
+    /** @type {Record<string, unknown>} */
+    const block = { key, kind, label, context };
+    if (kind === 'field') {
+      let st =
+        raw.suggestedType != null
+          ? String(raw.suggestedType)
+              .trim()
+              .toLowerCase()
+              .replace(/[\s-]+/g, '_')
+          : '';
+      if (st && !ALLOWED_FIELD_TYPES.has(st)) st = '';
+      if (st) block.suggestedType = st;
+      const slo = raw.suggestedListOptions != null ? String(raw.suggestedListOptions).trim().slice(0, 2000) : '';
+      if (slo) block.suggestedListOptions = slo;
+    }
+    blocks.push(block);
+  });
+  return { blocks, warnings };
+}
+
+/**
+ * @param {object[]} blocks
+ * @param {object[]} columnSignals
+ * @param {Record<string, unknown>} [formContext]
+ * @returns {object[]}
+ */
+function applyColumnSignalsToStructureBlocks(blocks, columnSignals, formContext = {}) {
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
+  if (!Array.isArray(blocks) || !columnSignals?.length) return blocks;
+  return blocks.map((b) => {
+    if (!b || b.kind !== 'field') return b;
+    const sig = findBestColumnSignalForItem({ kind: 'field', label: b.label }, columnSignals);
+    if (!sig || sig.signal === 'none') return b;
+    const out = { ...b };
+    if (sig.signal === 'dropdown' || sig.signal === 'dropdown_weak') {
+      out.suggestedType = 'dropdown';
+      if (sig.suggestedOptionsLine) out.suggestedListOptions = sig.suggestedOptionsLine;
+    } else if (sig.signal === 'yes_no') {
+      out.suggestedType = 'yes_no';
+    } else if (sig.signal === 'multiselect_hint') {
+      out.suggestedType = 'multiselect';
+      if (sig.suggestedOptionsLine) out.suggestedListOptions = sig.suggestedOptionsLine;
+    } else if (sig.signal === 'email_hint') {
+      out.suggestedType = 'email';
+    } else if (sig.signal === 'phone_hint') {
+      out.suggestedType = 'phone';
+    } else if (sig.signal === 'date_hint') {
+      out.suggestedType = 'date';
+    } else if (sig.signal === 'number_hint') {
+      out.suggestedType = 'number';
+    } else if (sig.signal === 'barcode_hint') {
+      out.suggestedType = 'barcode_scan';
+    } else if (sig.signal === 'photo_hint') {
+      out.suggestedType = ctx.requireStampedPhotos === true ? 'photo_stamped' : 'photo';
+    }
+    return out;
+  });
+}
+
 function normalizeProposalOption(raw, kind) {
   if (!raw || typeof raw !== 'object') return null;
   const key = typeof raw.key === 'string' && raw.key.trim() ? raw.key.trim() : null;
@@ -539,6 +637,8 @@ module.exports = {
   sanitizeTemplateText,
   normalizeLabelKey,
   normalizeProposalsFromLlm,
+  normalizeStructureBlocksFromLlm,
+  applyColumnSignalsToStructureBlocks,
   buildSchemaFromProposalSelections,
   applyColumnSignalsToProposals,
   applyColumnSignalsToSchemaData,

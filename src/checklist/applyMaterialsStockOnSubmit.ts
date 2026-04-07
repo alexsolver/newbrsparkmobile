@@ -1,4 +1,4 @@
-import { StockService } from '../services/stockService';
+import { TechnicianStockService } from '../services/technicianStockService';
 
 export type MaterialsLine = {
   itemId: string;
@@ -93,13 +93,32 @@ export async function applyMaterialsStockForSubmission(args: {
   taskId: string;
   templateId: string;
   ownerEmail: string;
+  /** Número da FT (ex. FT-2026-04-0000001), gravado no motivo para o histórico de estoque. */
+  osNumber?: string | null;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { schemaAll, responses, submissionRevision, taskId, templateId, ownerEmail } = args;
+  const { schemaAll, responses, submissionRevision, taskId, templateId, ownerEmail, osNumber } = args;
   const R = submissionRevision;
   const { bySection, sectionHeaders } = buildSections(schemaAll);
 
-  const items = await StockService.getItems(ownerEmail);
-  const stockById = Object.fromEntries(items.map((i) => [i.id, i]));
+  const initialItems = await TechnicianStockService.getItems(ownerEmail);
+  let stockById: Record<string, (typeof initialItems)[number]> = Object.fromEntries(
+    initialItems.map((i) => [i.id, i])
+  );
+
+  const ensureItemInMap = async (itemId: string) => {
+    if (stockById[itemId]) return stockById[itemId];
+    const one = await TechnicianStockService.getItemById(itemId);
+    if (one) {
+      stockById[itemId] = one;
+      return one;
+    }
+    return null;
+  };
+
+  const refreshItemInMap = async (itemId: string) => {
+    const one = await TechnicianStockService.getItemById(itemId);
+    if (one) stockById[itemId] = one;
+  };
 
   const processField = async (
     field: any,
@@ -121,7 +140,7 @@ export async function applyMaterialsStockForSubmission(args: {
       const delta = d - p;
       if (delta === 0) continue;
 
-      const item = stockById[itemId];
+      const item = await ensureItemInMap(itemId);
       if (!item) {
         throw new Error(`Item de stock não encontrado (${itemId}). Sincronize o inventário.`);
       }
@@ -129,35 +148,35 @@ export async function applyMaterialsStockForSubmission(args: {
         throw new Error(`Saldo insuficiente para «${item.name}» (SKU ${item.sku}).`);
       }
 
-      const baseReason = `CHK:${templateId}:TASK:${taskId}:REV:${R}:FLD:${field.id}${rowSuffix}`;
+      const ftRaw = osNumber != null ? String(osNumber).trim() : '';
+      const ftSeg =
+        ftRaw !== '' ? `:FT:${ftRaw.replace(/:/g, '-')}` : '';
+      const baseReason = `CHK:${templateId}:TASK:${taskId}:REV:${R}${ftSeg}:FLD:${field.id}${rowSuffix}`;
 
       if (delta > 0) {
-        await StockService.recordMovement(
+        await TechnicianStockService.recordMovement(
           {
             itemId,
             type: 'OUT',
             quantity: delta,
             responsibleId: ownerEmail,
             reason: baseReason,
-            assetId: item.locationId,
           },
           ownerEmail
         );
-        item.currentStock -= delta;
       } else {
-        await StockService.recordMovement(
+        await TechnicianStockService.recordMovement(
           {
             itemId,
             type: 'IN',
             quantity: -delta,
             responsibleId: ownerEmail,
             reason: `${baseReason}:ADJ`,
-            assetId: item.locationId,
           },
           ownerEmail
         );
-        item.currentStock += -delta;
       }
+      await refreshItemInMap(itemId);
     }
 
     const next = JSON.stringify({
@@ -170,52 +189,66 @@ export async function applyMaterialsStockForSubmission(args: {
   };
 
   try {
-    for (const f of bySection['__root__'] || []) {
-      if (f.type !== 'materials_consumption') continue;
-      await processField(
-        f,
-        () => responses[f.id],
-        (json) => {
-          responses[f.id] = json;
-        },
-        ''
-      );
-    }
+    const processedCompositeKeys = new Set<string>();
 
-    for (const [secKey, fields] of Object.entries(bySection)) {
-      if (secKey === '__root__') continue;
+    const runProcess = async (
+      field: any,
+      read: () => any,
+      write: (json: string) => void,
+      rowSuffix: string
+    ) => {
+      const key = `${field.id}${rowSuffix}`;
+      if (processedCompositeKeys.has(key)) return;
+      processedCompositeKeys.add(key);
+      await processField(field, read, write, rowSuffix);
+    };
+
+    for (const [secKey, fields0] of Object.entries(bySection)) {
+      const fields = Array.isArray(fields0) ? fields0 : [];
       const sh = sectionHeaders[secKey];
-      if (!sh || !sectionAllowsRepeat(sh)) continue;
+      const isRepeat = sh && sectionAllowsRepeat(sh);
+      const isRoot = secKey === '__root__';
 
-      const storageKey = `__section_repeat_${secKey}`;
-      const rows = Array.isArray(responses[storageKey]) ? [...responses[storageKey]] : [];
-      let mutated = false;
-
-      for (let ri = 0; ri < rows.length; ri++) {
-        const row0 = rows[ri];
-        const row = row0 && typeof row0 === 'object' ? { ...row0 } : {};
-        let rowMutated = false;
-
+      if (isRoot) {
         for (const f of fields) {
           if (f.type !== 'materials_consumption') continue;
-          await processField(
-            f,
-            () => row[f.id],
-            (json) => {
-              row[f.id] = json;
-              rowMutated = true;
-            },
-            `:R${ri}`
-          );
+          await runProcess(f, () => responses[f.id], (json) => { responses[f.id] = json; }, '');
         }
-
-        if (rowMutated) {
-          rows[ri] = row;
-          mutated = true;
-        }
+        continue;
       }
 
-      if (mutated) responses[storageKey] = rows;
+      if (isRepeat) {
+        const storageKey = `__section_repeat_${secKey}`;
+        const rows = Array.isArray(responses[storageKey]) ? [...responses[storageKey]] : [];
+        let mutated = false;
+        for (let ri = 0; ri < rows.length; ri++) {
+          const row0 = rows[ri];
+          const row = row0 && typeof row0 === 'object' ? { ...row0 } : {};
+          let rowMutated = false;
+          for (const f of fields) {
+            if (f.type !== 'materials_consumption') continue;
+            await runProcess(
+              f,
+              () => row[f.id],
+              (json) => {
+                row[f.id] = json;
+                rowMutated = true;
+              },
+              `:R${ri}`
+            );
+          }
+          if (rowMutated) {
+            rows[ri] = row;
+            mutated = true;
+          }
+        }
+        if (mutated) responses[storageKey] = rows;
+      } else {
+        for (const f of fields) {
+          if (f.type !== 'materials_consumption') continue;
+          await runProcess(f, () => responses[f.id], (json) => { responses[f.id] = json; }, '');
+        }
+      }
     }
 
     return { ok: true };

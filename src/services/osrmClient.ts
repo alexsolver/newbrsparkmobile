@@ -15,6 +15,14 @@ export function routeDurationSeconds(j: any): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Metros na primeira rota (OSRM `routes[0].distance`). */
+export function routeDistanceMeters(j: any): number | null {
+  const d = j?.routes?.[0]?.distance;
+  if (d == null) return null;
+  const n = Number(d);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export function isOsrmRouteOk(j: any): boolean {
   return routeDurationSeconds(j) != null;
 }
@@ -141,6 +149,57 @@ export async function fetchDrivingLegEtaMinutes(
       const sec = routeDurationSeconds(j);
       if (sec == null) return { ok: false };
       return { ok: true, minutes: Math.max(1, Math.round(sec / 60)) };
+    } catch {
+      return { ok: false };
+    } finally {
+      clearTimeout(to);
+    }
+  };
+
+  const first = await one(dLat, dLng);
+  if (first.ok) return first;
+  return one(dLng, dLat);
+}
+
+/**
+ * Um pedido `overview=false` devolve duração e distância da perna (evita duplicar chamadas).
+ */
+export async function fetchDrivingLegMetrics(
+  oLat: number,
+  oLng: number,
+  dLat: number,
+  dLng: number,
+  options?: { timeoutMs?: number }
+): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> {
+  const timeoutMs = options?.timeoutMs ?? 22000;
+  const base = await getOsrmBaseUrl();
+
+  const one = async (qLat: number, qLng: number): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> => {
+    const url = `${base}/route/v1/driving/${oLng},${oLat};${qLng},${qLat}?overview=false`;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json', 'User-Agent': UA },
+        signal: ctrl.signal,
+      });
+      const text = await r.text();
+      let j: any;
+      try {
+        j = JSON.parse(text);
+      } catch {
+        return { ok: false };
+      }
+      if (!r.ok) return { ok: false };
+      const dur = routeDurationSeconds(j);
+      const dist = routeDistanceMeters(j);
+      if (dur == null) return { ok: false };
+      return {
+        ok: true,
+        durationSeconds: dur,
+        distanceMeters: dist != null ? dist : undefined,
+      };
     } catch {
       return { ok: false };
     } finally {

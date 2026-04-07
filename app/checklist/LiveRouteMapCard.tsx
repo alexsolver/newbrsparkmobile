@@ -42,7 +42,7 @@ interface Props {
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
-function pickDestinationForOsrm(
+export function pickDestinationForOsrm(
   targetLoc: Props['targetLoc'],
   route: number[][]
 ): { lat: number; lng: number } | null {

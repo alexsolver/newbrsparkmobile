@@ -9,6 +9,8 @@
  *   costs/expenses | costs/recurring | costs/budgets
  *   insurance | maintenances | vault | media | asset_docs
  *   stock/items | stock/movements
+ *   tech-stock/items | tech-stock/movements (estoque do técnico — independente de bens)
+ *   tech-finance/entries (livro do técnico — independente de bens)
  */
 
 const router = require('express').Router();
@@ -234,5 +236,17 @@ router.post('/stock/items', pushHandler('stock_items'));
 
 router.get('/stock/movements',  pullHandler('stock_movements'));
 router.post('/stock/movements', pushHandler('stock_movements'));
+
+// ── Estoque do técnico (sem vínculo a Asset / portfólio) ─────────────────────
+router.get('/tech-stock/items', pullHandler('tech_stock_items'));
+router.post('/tech-stock/items', pushHandler('tech_stock_items'));
+
+// GET /tech-stock/movements/search — implementado em routes/sync.js (montado antes deste router).
+
+router.get('/tech-stock/movements', pullHandler('tech_stock_movements'));
+router.post('/tech-stock/movements', pushHandler('tech_stock_movements'));
+
+router.get('/tech-finance/entries', pullHandler('tech_finance_entries'));
+router.post('/tech-finance/entries', pushHandler('tech_finance_entries'));
 
 module.exports = router;

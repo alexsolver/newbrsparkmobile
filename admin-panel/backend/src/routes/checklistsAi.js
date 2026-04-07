@@ -10,7 +10,7 @@ const {
   buildSchemaFromProposalSelections,
   sanitizeTemplateText,
 } = require('../lib/formAiNormalize');
-const { generateSchemaFromCanonical, analyzeSpreadsheetProposals } = require('../lib/formAiLlm');
+const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('../lib/formAiLlm');
 const { runFormCopilot, suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
 
@@ -24,7 +24,7 @@ const upload = multer({
 /**
  * POST /api/checklists/ai/analyze-from-file
  * multipart: file (.xlsx), optional field "options" JSON string { hint?: string }
- * Resposta: title, description, items (propostas com opções por campo), warnings, truncated, source
+ * Resposta: title, description, blocks (estrutura: section_break | field), warnings, truncated, source
  */
 router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (req, res) => {
   try {
@@ -65,7 +65,7 @@ router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (re
 
     let analyzed;
     try {
-      analyzed = await analyzeSpreadsheetProposals({
+      analyzed = await analyzeSpreadsheetStructure({
         markdown: snapshot.markdown,
         userHint,
         columnSignals: snapshot.columnSignals || [],
@@ -87,7 +87,7 @@ router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (re
       ok: true,
       title: analyzed.title,
       description: analyzed.description,
-      items: analyzed.items,
+      blocks: analyzed.blocks,
       warnings: [...(analyzed.warnings || []), ...truncWarn],
       truncated: !!snapshot.truncated,
       source: { format: snapshot.format, name: file.originalname || null },

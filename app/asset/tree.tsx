@@ -68,7 +68,7 @@ export default function AssetTreeScreen() {
   const [flat,      setFlat]      = useState<TreeNode[]>([]);
 
   useFocusEffect(useCallback(() => {
-    const assets = getLocalAssets(user?.email || '');
+    const assets = getLocalAssets(user?.email || '', { includeMobileWarehouse: false });
     const built = buildTree(assets);
     setTree(built);
     setFlat(flattenTree(built, collapsed));
@@ -139,7 +139,7 @@ export default function AssetTreeScreen() {
     );
   };
 
-  const totalAssets = getLocalAssets().length;
+  const totalAssets = getLocalAssets(undefined, { includeMobileWarehouse: false }).length;
 
   return (
     <View style={styles.container}>

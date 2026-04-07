@@ -769,6 +769,8 @@ const iconMap = {
     'photo_stamped': '<ion-icon name="scan-outline"></ion-icon>',
     'facial_recognition': '<ion-icon name="person-outline"></ion-icon>',
     'barcode_scan': '<ion-icon name="barcode-outline"></ion-icon>',
+    'materials_consumption': '<ion-icon name="cube-outline"></ion-icon>',
+    'technician_finance': '<ion-icon name="cash-outline"></ion-icon>',
     'signature': '<ion-icon name="create-outline"></ion-icon>'
 };
 
@@ -1275,7 +1277,7 @@ function buildCanvasFieldElement(f) {
         f.rules && f.rules.length > 0
             ? `<div style="display:flex; align-items:center; background:var(--accent-dim); color:var(--accent); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;"><ion-icon name="git-network-outline" style="margin-right:2px; font-size:12px;"></ion-icon> ${f.rules.length} Gatilhos</div>`
             : '';
-    const multiFieldExcluded = new Set(['section_break', 'hidden', 'calculated', 'transit_start', 'transit_end']);
+    const multiFieldExcluded = new Set(['section_break', 'hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'technician_finance']);
     const multiTag =
         f.multiple && !multiFieldExcluded.has(f.type)
             ? `<div style="display:flex; align-items:center; background:#f3e8ff; color:#6b21a8; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;" title="Várias respostas">M×</div>`
@@ -1990,7 +1992,7 @@ function renderProperties() {
             </div>
         </div>
         
-        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
+        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'materials_consumption' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
         <div class="prop-group">
             <label class="prop-label">Auto-Preenchimento / Valor Padrão (Opcional)</label>
             <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="Use tags como {{user.name}}, {{date}}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
@@ -2003,7 +2005,7 @@ function renderProperties() {
         </div>
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'technician_finance'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
@@ -3410,6 +3412,8 @@ function renderMobilePreview() {
         if(f.type === 'facial_recognition') inputMock = `<div style="background:#fff1f2; border:2px dashed #e11d48; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9f1239; text-align:center; padding:10px;"><ion-icon name="person" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Reconhecimento Facial</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Será comparado com o rosto cadastrado do técnico.</span></div>`;
         
         if(f.type === 'barcode_scan') inputMock = `<div style="background:#f0f9ff; border:2px solid #38bdf8; border-radius:10px; padding:16px; display:flex; align-items:center; justify-content:center; gap:8px; color:#0284c7; font-weight:800; font-size:14px;"><ion-icon name="barcode" style="font-size:24px; color:#0284c7"></ion-icon> ESCANEAR CÓDIGO</div>`;
+        if(f.type === 'materials_consumption') inputMock = `<div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px; font-size:13px; color:#0369a1;"><ion-icon name="cube" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Consumo de materiais</b> — estoque técnico do app (independente de bens); baixa ao concluir.</div>`;
+        if(f.type === 'technician_finance') inputMock = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px; font-size:13px; color:#0f766e;"><ion-icon name="cash" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Custos do técnico</b> — despesas/receitas ligadas ao atendimento; livro separado dos bens.</div>`;
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
         
         if(f.type === 'transit_start') inputMock = `<button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button>`;
@@ -3958,12 +3962,11 @@ window.saveFieldLogic = function() {
     window.hideLogicModal();
 };
 
-// ─── Assistente IA: Excel .xlsx → analisar → wizard passo a passo → schemaData ─────────
-window.__brsparkAiDraft = null;
-/** @type {{ items: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
+// ─── Assistente IA: Excel → extrair estrutura → tipo (toolbox) → append ao canvas ─────────
+/** @type {{ blocks: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
 window.__brsparkAiSession = null;
-/** @type {{ step: number, selections: Record<string, { optionKey?: string, required?: boolean, options?: string }>, labelByKey: Record<string, string> } | null} */
-window.__brsparkAiWizardState = null;
+/** @type {{ phase: 'intro'|'blocks'|'done', blockIndex: number } | null} */
+window.__brsparkAiQueueState = null;
 
 function escapeHtmlAi(s) {
     return String(s ?? '')
@@ -3982,7 +3985,7 @@ function brsparkAdminBearerToken() {
 
 /**
  * @param {boolean} on
- * @param {'analyze'|'build'|''} [phase]
+ * @param {''|'analyze'} [phase]
  */
 function setAiFormLoading(on, phase) {
     const el = document.getElementById('ai-form-loading');
@@ -3992,33 +3995,22 @@ function setAiFormLoading(on, phase) {
     }
     const sub = document.getElementById('ai-form-loading-sub');
     if (sub) {
-        if (phase === 'build') {
-            sub.textContent = 'A montar o formulário com as opções que escolheu.';
-        } else if (phase === 'analyze') {
-            sub.textContent = 'A ler o Excel e a pedir sugestões à IA. Isto pode levar até um minuto.';
-        } else {
-            sub.textContent = 'A ler o Excel e a pedir sugestões à IA. Isto pode levar até um minuto.';
-        }
+        sub.textContent = 'A ler o Excel e a extrair etapas e colunas. Pode levar até um minuto.';
     }
     const titleEl = document.querySelector('#ai-form-loading .ai-form-loading-title');
     if (titleEl) {
-        titleEl.textContent =
-            phase === 'build' ? 'A gerar o formulário…' : on ? 'A analisar a planilha…' : 'A gerar o formulário…';
+        titleEl.textContent = on ? 'A analisar a planilha…' : 'A processar…';
     }
     [
         'ai-form-file',
         'ai-form-hint',
         'ai-form-generate-btn',
         'ai-form-back-btn',
-        'ai-form-final-btn',
-        'ai-form-new-btn',
-        'ai-form-replace-btn',
-        'ai-form-append-btn',
         'ai-form-session-title',
         'ai-form-session-desc',
-        'ai-wizard-prev-btn',
-        'ai-wizard-next-btn',
-    ].forEach((id) => {
+        'ai-structure-skip-btn',
+        'ai-structure-primary-btn',
+    ].forEach(function (id) {
         const n = document.getElementById(id);
         if (n) n.disabled = !!on;
     });
@@ -4028,22 +4020,11 @@ function aiFormSetWizardStep(step) {
     const upload = document.getElementById('ai-form-upload-section');
     const validate = document.getElementById('ai-form-validate-section');
     const panel = document.getElementById('ai-form-modal-panel');
-    const previewWrap = document.getElementById('ai-form-preview-wrap');
-    const postBuild = document.getElementById('ai-form-post-build');
-    const draftChrome = document.getElementById('ai-form-draft-chrome');
     if (upload) upload.style.display = step === 'upload' ? 'block' : 'none';
     if (validate) validate.style.display = step === 'validate' ? 'block' : 'none';
     if (panel) {
-        panel.classList.toggle('ai-form-panel-wide', step === 'validate' || step === 'done');
+        panel.classList.toggle('ai-form-panel-wide', step === 'validate');
     }
-    const showDraftUi = step === 'done';
-    if (previewWrap) {
-        previewWrap.style.display = showDraftUi ? 'block' : 'none';
-    }
-    if (draftChrome) {
-        draftChrome.style.display = showDraftUi ? 'block' : 'none';
-    }
-    if (postBuild) postBuild.style.display = showDraftUi ? 'block' : 'none';
 }
 
 function clearAiFormHistoryDom() {
@@ -4079,26 +4060,16 @@ function renderAiFormHistorySession(sess) {
     staticEl.innerHTML = meta;
 
     propEl.innerHTML = '';
-    (sess.items || []).forEach(function (item) {
+    const blocks = sess.blocks || sess.items || [];
+    blocks.forEach(function (b) {
         const li = document.createElement('li');
-        const kind =
-            item.kind === 'section_break'
-                ? 'Etapa'
-                : 'Campo';
-        const opts = (item.options || [])
-            .map(function (o) {
-                return (o.shortLabel || o.type || '').trim();
-            })
-            .filter(Boolean)
-            .join(', ');
+        const kind = b.kind === 'section_break' ? 'Etapa' : 'Campo';
         li.innerHTML =
             '<strong>' +
             escapeHtmlAi(kind) +
             ':</strong> ' +
-            escapeHtmlAi(item.label || '') +
-            (item.context ? ' <em style="color:#64748b;">(' + escapeHtmlAi(item.context) + ')</em>' : '') +
-            '<br><span style="color:#64748b;">Opções sugeridas pela IA:</span> ' +
-            escapeHtmlAi(opts || '—');
+            escapeHtmlAi(b.label || '') +
+            (b.context ? ' <em style="color:#64748b;">(' + escapeHtmlAi(b.context) + ')</em>' : '');
         propEl.appendChild(li);
     });
 
@@ -4106,334 +4077,383 @@ function renderAiFormHistorySession(sess) {
     if (hist) hist.open = false;
 }
 
-function updateAiCardOptionsVisibility(card) {
-    if (!card) return;
-    const active = card.querySelector('.ai-opt-btn.is-active');
-    const typ = active ? active.getAttribute('data-option-type') : '';
-    const wrap = card.querySelector('.ai-suggest-options-wrap');
-    if (wrap) {
-        wrap.style.display = typ === 'dropdown' || typ === 'multiselect' ? 'block' : 'none';
-    }
+function collectToolboxTypesForAiSelect() {
+    const root = document.getElementById('toolbox');
+    const fallback = [
+        { type: 'text', label: 'Texto livre' },
+        { type: 'number', label: 'Número' },
+        { type: 'email', label: 'E-mail' },
+        { type: 'phone', label: 'Telefone' },
+        { type: 'date', label: 'Data / Hora' },
+        { type: 'yes_no', label: 'Sim / Não' },
+        { type: 'dropdown', label: 'Lista (dropdown)' },
+        { type: 'multiselect', label: 'Múltipla escolha' },
+        { type: 'photo', label: 'Fotografia' },
+        { type: 'signature', label: 'Assinatura' },
+    ];
+    if (!root) return fallback;
+    const fromDom = Array.from(root.querySelectorAll('.toolbox-item[data-type]'))
+        .map(function (el) {
+            const t = el.getAttribute('data-type');
+            if (!t || t === 'section_break') return null;
+            return {
+                type: t,
+                label: el.textContent.replace(/\s+/g, ' ').trim() || t,
+            };
+        })
+        .filter(Boolean);
+    return fromDom.length ? fromDom : fallback;
 }
 
-function ensureAiWizardItemDelegation() {
-    const root = document.getElementById('ai-wizard-item-host');
-    if (!root || root._aiDelegBound) return;
-    root._aiDelegBound = true;
-    root.addEventListener('click', function (ev) {
-        const btn = ev.target.closest('.ai-opt-btn');
-        if (!btn || !root.contains(btn)) return;
-        const card = btn.closest('.ai-item-card');
-        if (!card) return;
-        card.querySelectorAll('.ai-opt-btn').forEach(function (b) {
-            b.classList.toggle('is-active', b === btn);
-        });
-        card.dataset.selectedOption = btn.getAttribute('data-option-key') || '';
-        updateAiCardOptionsVisibility(card);
-    });
+function aiStructureToggleFieldTypeExtras() {
+    const sel = document.getElementById('ai-structure-field-type');
+    const row = document.getElementById('ai-structure-list-options-row');
+    if (!sel || !row) return;
+    const v = sel.value;
+    row.style.display = v === 'dropdown' || v === 'multiselect' ? 'block' : 'none';
 }
 
-/**
- * @param {HTMLElement} host
- * @param {object} item
- * @param {Record<string, { optionKey?: string, required?: boolean, options?: string }>} [savedSel]
- * @param {string} [labelOverride]
- */
-function renderAiWizardItemCard(host, item, savedSel, labelOverride) {
-    if (!host || !item) return;
-    ensureAiWizardItemDelegation();
-    host.innerHTML = '';
-    const card = document.createElement('div');
-    card.className = 'ai-item-card';
-    card.dataset.itemKey = item.key;
-    const prev = savedSel && savedSel[item.key];
-    let selectedKey = (prev && prev.optionKey) || item.recommendedOptionKey || '';
-
-    const identified = document.createElement('div');
-    identified.className = 'ai-wizard-identified';
-    identified.textContent = 'O que a IA extraiu';
-    host.appendChild(identified);
-
-    const kindEl = document.createElement('div');
-    kindEl.className = 'ai-item-kind';
-    kindEl.textContent = item.kind === 'section_break' ? 'Etapa / secção' : 'Campo';
-    card.appendChild(kindEl);
-
-    const labelBlock = document.createElement('div');
-    labelBlock.className = 'ai-wizard-label-block';
-    const ll = document.createElement('label');
-    ll.setAttribute('for', 'ai-wizard-label-input');
-    ll.textContent = item.kind === 'section_break' ? 'Título da etapa no formulário' : 'Rótulo do campo (cabeçalho da coluna)';
-    const labelInp = document.createElement('input');
-    labelInp.type = 'text';
-    labelInp.id = 'ai-wizard-label-input';
-    labelInp.value = (labelOverride != null ? labelOverride : item.label) || '';
-    labelBlock.appendChild(ll);
-    labelBlock.appendChild(labelInp);
-    card.appendChild(labelBlock);
-
-    if (item.context) {
-        const ctx = document.createElement('p');
-        ctx.className = 'ai-item-context';
-        ctx.textContent = item.context;
-        card.appendChild(ctx);
-    }
-
-    const choose = document.createElement('p');
-    choose.style.fontSize = '12px';
-    choose.style.fontWeight = '700';
-    choose.style.color = '#475569';
-    choose.style.margin = '12px 0 8px';
-    choose.textContent =
-        item.kind === 'section_break'
-            ? 'Como deve funcionar esta etapa no app?'
-            : 'Tipo de campo e comportamento';
-    card.appendChild(choose);
-
-    const row = document.createElement('div');
-    row.className = 'ai-opt-row';
-    let hasActive = false;
-    (item.options || []).forEach(function (opt) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'ai-opt-btn';
-        if (opt.key === selectedKey) {
-            b.classList.add('is-active');
-            hasActive = true;
-        }
-        b.setAttribute('data-item-key', item.key);
-        b.setAttribute('data-option-key', opt.key);
-        b.setAttribute('data-option-type', opt.type || '');
-        let bt = opt.shortLabel || opt.type || '';
-        if (opt.hint) bt += ' — ' + opt.hint;
-        b.textContent = bt;
-        row.appendChild(b);
-    });
-    if (!hasActive && row.firstElementChild) {
-        row.firstElementChild.classList.add('is-active');
-        selectedKey = row.firstElementChild.getAttribute('data-option-key') || '';
-    }
-    card.dataset.selectedOption = selectedKey;
-    card.appendChild(row);
-
-    if (item.kind !== 'section_break') {
-        const reqRow = document.createElement('div');
-        reqRow.className = 'ai-required-row';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.className = 'ai-required-cb';
-        cb.id = 'ai-req-' + item.key.replace(/[^a-z0-9_-]/gi, '_');
-        if (prev && prev.required) cb.checked = true;
-        const lbl = document.createElement('label');
-        lbl.setAttribute('for', cb.id);
-        lbl.textContent = 'Preenchimento obrigatório no app';
-        reqRow.appendChild(cb);
-        reqRow.appendChild(lbl);
-        card.appendChild(reqRow);
-    }
-
-    const optWrap = document.createElement('div');
-    optWrap.className = 'ai-suggest-options-wrap';
-    optWrap.style.display = 'none';
-    const labOpt = document.createElement('label');
-    labOpt.textContent = 'Valores da lista (separados por vírgula)';
-    const ta = document.createElement('textarea');
-    ta.className = 'ai-suggest-options';
-    ta.placeholder = 'Ex.: Sim, Não, N/A';
-    const sug =
-        (prev && prev.options != null && String(prev.options).trim()) || item.suggestedOptions || '';
-    if (sug) ta.value = sug;
-    optWrap.appendChild(labOpt);
-    optWrap.appendChild(ta);
-    card.appendChild(optWrap);
-
-    host.appendChild(card);
-    updateAiCardOptionsVisibility(card);
+function aiPushOneFieldToCanvas(fieldObj) {
+    ensureCanvasSchemaHasSection();
+    const out = ensureSchemaInstructionFlags([fieldObj])[0];
+    fields.push(out);
+    normalizeFieldsRequireSections(fields);
+    renderCanvas();
+    window.selectField(out.id);
 }
 
-function aiWizardPersistCurrentItem() {
+function aiStructureAdvanceAfterBlockAction() {
+    const st = window.__brsparkAiQueueState;
     const sess = window.__brsparkAiSession;
-    const st = window.__brsparkAiWizardState;
-    if (!sess || !st || st.step < 1) return;
-    const items = sess.items || [];
-    const idx = st.step - 1;
-    const item = items[idx];
-    if (!item || !item.key) return;
-    const host = document.getElementById('ai-wizard-item-host');
-    const card = host && host.querySelector('.ai-item-card');
-    if (!card) return;
-    const labelInp = document.getElementById('ai-wizard-label-input');
-    if (labelInp) {
-        st.labelByKey[item.key] = String(labelInp.value || '').trim() || item.label;
-    }
-    const optionKey =
-        card.dataset.selectedOption ||
-        (function () {
-            const a = card.querySelector('.ai-opt-btn.is-active');
-            return a ? a.getAttribute('data-option-key') : '';
-        })();
-    const sel = { optionKey: optionKey || '' };
-    const req = card.querySelector('.ai-required-cb');
-    if (req && req.checked) sel.required = true;
-    const ta = card.querySelector('.ai-suggest-options');
-    if (ta && ta.value.trim()) sel.options = ta.value.trim();
-    st.selections[item.key] = sel;
+    if (!st || !sess) return;
+    const blocks = sess.blocks || [];
+    st.blockIndex += 1;
+    if (st.blockIndex >= blocks.length) st.phase = 'done';
+    renderAiStructureStep();
 }
 
-function initAiFormWizardAfterAnalyze() {
+function renderAiStructureStep() {
     const sess = window.__brsparkAiSession;
-    if (!sess || !Array.isArray(sess.items)) return;
-    const labelByKey = {};
-    (sess.items || []).forEach(function (it) {
-        if (it && it.key) labelByKey[it.key] = String(it.label || '').trim() || '';
-    });
-    window.__brsparkAiWizardState = {
-        step: 0,
-        selections: {},
-        labelByKey: labelByKey,
-    };
-    renderAiFormWizardStep();
-}
-
-function aiFormWizardTotalSteps() {
-    const sess = window.__brsparkAiSession;
-    const n = sess && Array.isArray(sess.items) ? sess.items.length : 0;
-    return 1 + n;
-}
-
-function renderAiFormWizardStep() {
-    const sess = window.__brsparkAiSession;
-    const st = window.__brsparkAiWizardState;
-    const metaEl = document.getElementById('ai-wizard-step-meta');
-    const host = document.getElementById('ai-wizard-item-host');
+    const st = window.__brsparkAiQueueState;
+    const host = document.getElementById('ai-structure-host');
     const stepLabel = document.getElementById('ai-wizard-step-label');
     const badge = document.getElementById('ai-wizard-step-kind-badge');
     const fill = document.getElementById('ai-wizard-progress-fill');
     const heading = document.getElementById('ai-wizard-heading');
     const sub = document.getElementById('ai-wizard-sub');
-    const prevBtn = document.getElementById('ai-wizard-prev-btn');
-    const nextBtn = document.getElementById('ai-wizard-next-btn');
-    if (!sess || !st || !metaEl || !host) return;
+    const skipBtn = document.getElementById('ai-structure-skip-btn');
+    const primBtn = document.getElementById('ai-structure-primary-btn');
+    if (!host) return;
+    host.innerHTML = '';
 
-    const total = aiFormWizardTotalSteps();
-    const step = st.step;
-    const pct = total > 0 ? Math.round(((step + 1) / total) * 100) : 0;
+    if (!sess || !st) return;
+
+    const blocks = sess.blocks || [];
+    const nBl = blocks.length;
+
+    if (st.phase === 'intro') {
+        if (stepLabel) stepLabel.textContent = 'Introdução';
+        if (badge) badge.textContent = 'Documento';
+        if (fill) fill.style.width = nBl ? '8%' : '100%';
+        if (heading) heading.textContent = 'Título do formulário';
+        if (sub) {
+            sub.textContent =
+                'A IA extraiu etapas e colunas. Confirme o título; a seguir cada bloco é adicionado ao canvas quando carregar em «Adicionar ao canvas».';
+        }
+        if (skipBtn) skipBtn.style.display = 'none';
+        if (primBtn) primBtn.textContent = 'Começar →';
+
+        let sec = 0;
+        let fld = 0;
+        blocks.forEach(function (b) {
+            if (b.kind === 'section_break') sec++;
+            else fld++;
+        });
+        const stats = document.createElement('div');
+        stats.className = 'ai-wizard-meta-stats';
+        stats.innerHTML =
+            '<span>' +
+            nBl +
+            ' blocos</span><span>' +
+            sec +
+            ' etapas</span><span>' +
+            fld +
+            ' campos</span>';
+        host.appendChild(stats);
+
+        const lt = document.createElement('label');
+        lt.className = 'prop-label';
+        lt.setAttribute('for', 'ai-form-session-title');
+        lt.textContent = 'Título do formulário';
+        host.appendChild(lt);
+        const tit = document.createElement('input');
+        tit.type = 'text';
+        tit.id = 'ai-form-session-title';
+        tit.className = 'prop-input';
+        tit.style.marginBottom = '10px';
+        tit.value = sess.title || '';
+        tit.placeholder = 'Ex.: Inspeção de campo';
+        host.appendChild(tit);
+
+        const ld = document.createElement('label');
+        ld.className = 'prop-label';
+        ld.setAttribute('for', 'ai-form-session-desc');
+        ld.textContent = 'Descrição pública (opcional)';
+        host.appendChild(ld);
+        const td = document.createElement('textarea');
+        td.id = 'ai-form-session-desc';
+        td.className = 'prop-input';
+        td.rows = 2;
+        td.style.resize = 'vertical';
+        td.value = sess.description || '';
+        host.appendChild(td);
+        return;
+    }
+
+    if (st.phase === 'done') {
+        if (stepLabel) stepLabel.textContent = 'Concluído';
+        if (badge) badge.textContent = 'Fim';
+        if (fill) fill.style.width = '100%';
+        if (heading) heading.textContent = 'Assistente concluído';
+        if (sub) {
+            sub.textContent =
+                'Percorreu todos os blocos. O canvas foi atualizado à medida — pode fechar ou analisar outro Excel.';
+        }
+        if (skipBtn) {
+            skipBtn.style.display = 'inline-flex';
+            skipBtn.textContent = 'Nova análise Excel';
+        }
+        if (primBtn) primBtn.textContent = 'Fechar';
+        const p = document.createElement('p');
+        p.style.fontSize = '13px';
+        p.style.color = '#475569';
+        p.style.marginTop = '10px';
+        p.textContent = 'Blocos que saltou não foram adicionados.';
+        host.appendChild(p);
+        return;
+    }
+
+    const idx = st.blockIndex;
+    const b = blocks[idx];
+    if (!b) {
+        st.phase = 'done';
+        renderAiStructureStep();
+        return;
+    }
+
+    const totalSteps = 1 + nBl;
+    const curStep = 1 + idx;
+    const pct = Math.round((curStep / totalSteps) * 100);
+    if (stepLabel) stepLabel.textContent = 'Bloco ' + (idx + 1) + ' de ' + nBl;
     if (fill) fill.style.width = pct + '%';
-    if (stepLabel) stepLabel.textContent = 'Passo ' + (step + 1) + ' de ' + total;
 
-    if (step === 0) {
-        metaEl.style.display = 'block';
-        host.style.display = 'none';
-        if (badge) badge.textContent = 'Introdução';
-        if (heading) heading.textContent = 'Antes de rever cada campo';
-        if (sub) {
-            sub.textContent =
-                'Confirme o título e a descrição do formulário. A seguir, vamos percorrer cada etapa e campo extraídos do Excel — um de cada vez.';
+    if (skipBtn) {
+        skipBtn.style.display = 'inline-flex';
+        skipBtn.textContent = 'Saltar';
+    }
+    if (primBtn) primBtn.textContent = 'Adicionar ao canvas →';
+
+    if (b.kind === 'section_break') {
+        if (badge) badge.textContent = 'Etapa';
+        if (heading) heading.textContent = 'Etapa (secção)';
+        if (sub) sub.textContent = 'Defina o título e o modo da etapa; depois adicione ao canvas.';
+
+        const idf = document.createElement('div');
+        idf.className = 'ai-wizard-identified';
+        idf.textContent = 'A IA identificou uma etapa / folha';
+        host.appendChild(idf);
+
+        const ll = document.createElement('label');
+        ll.className = 'prop-label';
+        ll.setAttribute('for', 'ai-structure-label');
+        ll.textContent = 'Título da etapa';
+        host.appendChild(ll);
+        const li = document.createElement('input');
+        li.type = 'text';
+        li.id = 'ai-structure-label';
+        li.className = 'prop-input';
+        li.value = b.label || '';
+        host.appendChild(li);
+
+        if (b.context) {
+            const cx = document.createElement('p');
+            cx.className = 'ai-item-context';
+            cx.textContent = b.context;
+            host.appendChild(cx);
         }
-        const stats = document.getElementById('ai-wizard-meta-stats');
-        if (stats) {
-            const items = sess.items || [];
-            let sections = 0;
-            let fields = 0;
-            items.forEach(function (it) {
-                if (it.kind === 'section_break') sections++;
-                else fields++;
-            });
-            stats.innerHTML =
-                '<span>' +
-                items.length +
-                ' blocos no total</span><span>' +
-                sections +
-                ' etapas</span><span>' +
-                fields +
-                ' campos</span>';
-        }
-        const stIn = document.getElementById('ai-form-session-title');
-        const sdIn = document.getElementById('ai-form-session-desc');
-        if (stIn && (stIn.value == null || stIn.value === '')) stIn.value = sess.title || '';
-        if (sdIn && (sdIn.value == null || sdIn.value === '')) sdIn.value = sess.description || '';
-        if (prevBtn) prevBtn.disabled = true;
-        if (nextBtn) nextBtn.textContent = 'Começar revisão →';
+
+        const leg = document.createElement('div');
+        leg.style.marginTop = '12px';
+        leg.style.fontSize = '12px';
+        leg.style.fontWeight = '700';
+        leg.style.color = '#475569';
+        leg.textContent = 'Modo no app';
+        host.appendChild(leg);
+        const r0 = document.createElement('label');
+        r0.style.display = 'block';
+        r0.style.marginBottom = '6px';
+        r0.style.fontSize = '12px';
+        r0.innerHTML =
+            '<input type="radio" name="ai-structure-section-multiple" value="0" checked style="margin-right:8px;accent-color:#7c3aed;"/> Etapa única';
+        host.appendChild(r0);
+        const r1 = document.createElement('label');
+        r1.style.display = 'block';
+        r1.style.fontSize = '12px';
+        r1.innerHTML =
+            '<input type="radio" name="ai-structure-section-multiple" value="1" style="margin-right:8px;accent-color:#7c3aed;"/> Lista repetível';
+        host.appendChild(r1);
     } else {
-        metaEl.style.display = 'none';
-        host.style.display = 'block';
-        const items = sess.items || [];
-        const idx = step - 1;
-        const item = items[idx];
-        if (!item) return;
-        if (badge) badge.textContent = item.kind === 'section_break' ? 'Etapa' : 'Campo';
-        if (heading) {
-            heading.textContent =
-                item.kind === 'section_break' ? 'Confirmar esta etapa' : 'Confirmar este campo';
+        if (badge) badge.textContent = 'Campo';
+        if (heading) heading.textContent = 'Campo';
+        if (sub) sub.textContent = 'Escolha o tipo na lista (a mesma da toolbox). Cada clique em «Adicionar» coloca um campo no canvas.';
+
+        const idf = document.createElement('div');
+        idf.className = 'ai-wizard-identified';
+        idf.textContent = 'A IA extraiu este cabeçalho de coluna';
+        host.appendChild(idf);
+
+        const ll = document.createElement('label');
+        ll.className = 'prop-label';
+        ll.setAttribute('for', 'ai-structure-label');
+        ll.textContent = 'Rótulo';
+        host.appendChild(ll);
+        const li = document.createElement('input');
+        li.type = 'text';
+        li.id = 'ai-structure-label';
+        li.className = 'prop-input';
+        li.value = b.label || '';
+        host.appendChild(li);
+
+        if (b.context) {
+            const cx = document.createElement('p');
+            cx.className = 'ai-item-context';
+            cx.textContent = b.context;
+            host.appendChild(cx);
         }
-        if (sub) {
-            sub.textContent =
-                'Ajuste o rótulo, o tipo e as opções se precisar. Quando estiver correto, avance para o seguinte.';
-        }
-        renderAiWizardItemCard(host, item, st.selections, st.labelByKey[item.key]);
-        if (prevBtn) prevBtn.disabled = false;
-        if (nextBtn) {
-            nextBtn.textContent = step >= items.length ? 'Gerar formulário' : 'OK, avançar →';
-        }
+
+        const types = collectToolboxTypesForAiSelect();
+        const tl = document.createElement('label');
+        tl.className = 'prop-label';
+        tl.setAttribute('for', 'ai-structure-field-type');
+        tl.textContent = 'Tipo de campo (dinâmico — toolbox)';
+        host.appendChild(tl);
+        const sel = document.createElement('select');
+        sel.id = 'ai-structure-field-type';
+        sel.className = 'prop-input';
+        const defT =
+            b.suggestedType && types.some(function (x) { return x.type === b.suggestedType; })
+                ? b.suggestedType
+                : 'text';
+        types.forEach(function (opt) {
+            const o = document.createElement('option');
+            o.value = opt.type;
+            o.textContent = opt.label;
+            if (opt.type === defT) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.addEventListener('change', aiStructureToggleFieldTypeExtras);
+        host.appendChild(sel);
+
+        const row = document.createElement('div');
+        row.id = 'ai-structure-list-options-row';
+        row.style.marginTop = '10px';
+        row.style.display = defT === 'dropdown' || defT === 'multiselect' ? 'block' : 'none';
+        const olp = document.createElement('label');
+        olp.className = 'prop-label';
+        olp.setAttribute('for', 'ai-structure-list-options');
+        olp.textContent = 'Opções da lista (vírgulas)';
+        row.appendChild(olp);
+        const ta = document.createElement('textarea');
+        ta.id = 'ai-structure-list-options';
+        ta.className = 'prop-input';
+        ta.rows = 2;
+        ta.style.resize = 'vertical';
+        ta.placeholder = 'Ex.: Sim, Não, N/A';
+        if (b.suggestedListOptions) ta.value = b.suggestedListOptions;
+        row.appendChild(ta);
+        host.appendChild(row);
+
+        const req = document.createElement('label');
+        req.style.display = 'flex';
+        req.style.alignItems = 'center';
+        req.style.gap = '8px';
+        req.style.marginTop = '12px';
+        req.style.fontSize = '12px';
+        req.style.color = '#475569';
+        req.innerHTML =
+            '<input type="checkbox" id="ai-structure-required" style="accent-color:#7c3aed;"/> Obrigatório no app';
+        host.appendChild(req);
     }
 }
 
-window.brsparkAiWizardPrev = function () {
-    const st = window.__brsparkAiWizardState;
-    if (!st || st.step <= 0) return;
-    aiWizardPersistCurrentItem();
-    st.step -= 1;
-    renderAiFormWizardStep();
-};
+function initAiStructureAfterAnalyze() {
+    window.__brsparkAiQueueState = { phase: 'intro', blockIndex: 0 };
+    renderAiStructureStep();
+}
 
-window.brsparkAiWizardNext = function () {
-    const st = window.__brsparkAiWizardState;
+window.brsparkAiStructureIntroContinue = function () {
     const sess = window.__brsparkAiSession;
-    if (!st || !sess) return;
-    const items = sess.items || [];
-    if (st.step === 0) {
-        const stIn = document.getElementById('ai-form-session-title');
-        const sdIn = document.getElementById('ai-form-session-desc');
-        if (stIn) sess.title = String(stIn.value || '').trim();
-        if (sdIn) sess.description = String(sdIn.value || '').trim();
-        st.step = 1;
-        renderAiFormWizardStep();
-        return;
-    }
-    aiWizardPersistCurrentItem();
-    if (st.step >= items.length) {
-        window.brsparkAiFormFinalBuild();
-        return;
-    }
-    st.step += 1;
-    renderAiFormWizardStep();
+    const st = window.__brsparkAiQueueState;
+    if (!sess || !st) return;
+    const stIn = document.getElementById('ai-form-session-title');
+    const sdIn = document.getElementById('ai-form-session-desc');
+    if (stIn) sess.title = String(stIn.value || '').trim();
+    if (sdIn) sess.description = String(sdIn.value || '').trim();
+    const ti = document.getElementById('tpl-title');
+    const de = document.getElementById('tpl-desc');
+    if (ti && sess.title) ti.value = sess.title;
+    if (de && sess.description != null) de.value = sess.description;
+    st.phase = 'blocks';
+    st.blockIndex = 0;
+    renderAiStructureStep();
 };
 
-function collectAiFormSelections() {
-    const st = window.__brsparkAiWizardState;
-    if (st && st.selections) {
-        aiWizardPersistCurrentItem();
-        return Object.assign({}, st.selections);
+window.brsparkAiStructureAddAndNext = function () {
+    const sess = window.__brsparkAiSession;
+    const st = window.__brsparkAiQueueState;
+    if (!sess || !st || st.phase !== 'blocks') return;
+    const blocks = sess.blocks || [];
+    const b = blocks[st.blockIndex];
+    if (!b) return;
+    if (b.kind === 'section_break') {
+        const labelInp = document.getElementById('ai-structure-label');
+        const label = labelInp ? String(labelInp.value || '').trim() : '';
+        const multEl = document.querySelector('input[name="ai-structure-section-multiple"]:checked');
+        const multiple = multEl && multEl.value === '1';
+        const sec = createNewFieldFromToolboxType('section_break', label || b.label || 'Etapa');
+        if (multiple) sec.multiple = true;
+        aiPushOneFieldToCanvas(sec);
+    } else {
+        const labelInp = document.getElementById('ai-structure-label');
+        const label = labelInp ? String(labelInp.value || '').trim() : '';
+        const typeSel = document.getElementById('ai-structure-field-type');
+        const type = typeSel ? String(typeSel.value || 'text').trim() : 'text';
+        const reqCb = document.getElementById('ai-structure-required');
+        const optTa = document.getElementById('ai-structure-list-options');
+        const f = createNewFieldFromToolboxType(type, label || b.label || 'Campo');
+        f.required = !!(reqCb && reqCb.checked);
+        if ((type === 'dropdown' || type === 'multiselect') && optTa && optTa.value.trim()) {
+            f.options = optTa.value.trim();
+        }
+        aiPushOneFieldToCanvas(f);
     }
-    const selections = {};
-    document.querySelectorAll('#ai-form-items .ai-item-card').forEach(function (card) {
-        const key = card.dataset.itemKey;
-        if (!key) return;
-        const optionKey =
-            card.dataset.selectedOption ||
-            (function () {
-                const a = card.querySelector('.ai-opt-btn.is-active');
-                return a ? a.getAttribute('data-option-key') : '';
-            })();
-        const sel = { optionKey: optionKey || '' };
-        const req = card.querySelector('.ai-required-cb');
-        if (req && req.checked) sel.required = true;
-        const ta = card.querySelector('.ai-suggest-options');
-        if (ta && ta.value.trim()) sel.options = ta.value.trim();
-        selections[key] = sel;
-    });
-    return selections;
-}
+    aiStructureAdvanceAfterBlockAction();
+};
+
+window.brsparkAiStructurePrimaryAction = function () {
+    const st = window.__brsparkAiQueueState;
+    if (!st) return;
+    if (st.phase === 'intro') window.brsparkAiStructureIntroContinue();
+    else if (st.phase === 'blocks') window.brsparkAiStructureAddAndNext();
+    else if (st.phase === 'done') window.closeAiFormModal();
+};
+
+window.brsparkAiStructureSkipAction = function () {
+    const st = window.__brsparkAiQueueState;
+    if (!st) return;
+    if (st.phase === 'blocks') aiStructureAdvanceAfterBlockAction();
+    else if (st.phase === 'done') window.brsparkAiFormWizardReset();
+};
 
 function collectAiFormExcelOptions(hintText) {
     const g = function (id) {
@@ -4474,27 +4494,13 @@ function collectCopilotFormContext() {
 
 window.brsparkAiFormWizardReset = function () {
     window.__brsparkAiSession = null;
-    window.__brsparkAiDraft = null;
-    window.__brsparkAiWizardState = null;
-    const itemsRoot = document.getElementById('ai-form-items');
-    if (itemsRoot) itemsRoot.innerHTML = '';
-    const wizHost = document.getElementById('ai-wizard-item-host');
-    if (wizHost) wizHost.innerHTML = '';
+    window.__brsparkAiQueueState = null;
+    const host = document.getElementById('ai-structure-host');
+    if (host) host.innerHTML = '';
     const status = document.getElementById('ai-form-status');
     if (status) status.textContent = '';
-    const preview = document.getElementById('ai-form-preview');
-    if (preview) {
-        preview.innerHTML =
-            '<span class="ai-preview-muted" style="font-size:12px;">Gere o formulário na fase 2 para ver aqui o resumo dos campos.</span>';
-    }
     const fi = document.getElementById('ai-form-file');
     if (fi) fi.value = '';
-    const postBuild = document.getElementById('ai-form-post-build');
-    if (postBuild) postBuild.style.display = 'none';
-    const st = document.getElementById('ai-form-session-title');
-    const sd = document.getElementById('ai-form-session-desc');
-    if (st) st.value = '';
-    if (sd) sd.value = '';
     const obj = document.getElementById('ai-form-objective');
     if (obj) obj.value = '';
     const sec = document.getElementById('ai-form-sector');
@@ -4532,6 +4538,25 @@ window.closeAiFormModal = function () {
     if (m) m.style.display = 'none';
 };
 
+function normalizeBlocksFromApi(data) {
+    if (data.blocks && Array.isArray(data.blocks) && data.blocks.length) return data.blocks;
+    if (data.items && Array.isArray(data.items) && data.items.length) {
+        return data.items.map(function (it, i) {
+            const k = String(it.kind || '').toLowerCase();
+            const kind = k === 'section_break' || k === 'section' ? 'section_break' : 'field';
+            return {
+                key: it.key || 'b' + i,
+                kind: kind,
+                label: it.label || '',
+                context: it.context || '',
+                suggestedType: it.suggestedType,
+                suggestedListOptions: it.suggestedListOptions,
+            };
+        });
+    }
+    return [];
+}
+
 window.brsparkAiFormAnalyze = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
@@ -4552,7 +4577,6 @@ window.brsparkAiFormAnalyze = async function () {
     const hintEl = document.getElementById('ai-form-hint');
     const hint = hintEl ? String(hintEl.value || '').trim() : '';
     const status = document.getElementById('ai-form-status');
-    const preview = document.getElementById('ai-form-preview');
     const btn = document.getElementById('ai-form-generate-btn');
     if (status) status.textContent = '';
     setAiFormLoading(true, 'analyze');
@@ -4575,12 +4599,12 @@ window.brsparkAiFormAnalyze = async function () {
         if (!res.ok) {
             throw new Error(data.error || res.statusText || 'Pedido falhou');
         }
-        const items = data.items || [];
-        if (!items.length) {
-            throw new Error('A IA não devolveu campos para confirmar. Tente outro ficheiro ou instruções.');
+        const blocks = normalizeBlocksFromApi(data);
+        if (!blocks.length) {
+            throw new Error('A IA não devolveu etapas/campos. Tente outro ficheiro ou instruções.');
         }
         window.__brsparkAiSession = {
-            items: items,
+            blocks: blocks,
             title: data.title || '',
             description: data.description || '',
             hint: hint,
@@ -4588,30 +4612,20 @@ window.brsparkAiFormAnalyze = async function () {
             analyzedAt: new Date().toISOString(),
             truncated: !!data.truncated,
         };
-        window.__brsparkAiDraft = null;
-        const stIn = document.getElementById('ai-form-session-title');
-        const sdIn = document.getElementById('ai-form-session-desc');
-        if (stIn) stIn.value = window.__brsparkAiSession.title || '';
-        if (sdIn) sdIn.value = window.__brsparkAiSession.description || '';
-        initAiFormWizardAfterAnalyze();
+        initAiStructureAfterAnalyze();
         renderAiFormHistorySession(window.__brsparkAiSession);
         aiFormSetWizardStep('validate');
         if (status) {
             const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
             status.textContent =
                 (data.truncated ? 'Aviso: conteúdo truncado. ' : '') +
-                (w ||
-                    'Use «Começar revisão» e confirme cada etapa e campo; no último passo clique em «Gerar formulário».');
-        }
-        if (preview) {
-            preview.innerHTML =
-                '<span class="ai-preview-muted" style="font-size:12px;">Após gerar, a pré-visualização aparece aqui.</span>';
+                (w || 'Confirme o título e vá adicionando cada bloco ao canvas.');
         }
     } catch (e) {
         console.error(e);
         if (status) status.textContent = 'Erro: ' + (e.message || e);
         window.__brsparkAiSession = null;
-        window.__brsparkAiWizardState = null;
+        window.__brsparkAiQueueState = null;
         aiFormSetWizardStep('upload');
     } finally {
         setAiFormLoading(false);
@@ -4622,138 +4636,9 @@ window.brsparkAiFormAnalyze = async function () {
     }
 };
 
-window.brsparkAiFormFinalBuild = async function () {
-    const token = brsparkAdminBearerToken();
-    if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
-        return;
-    }
-    const sess = window.__brsparkAiSession;
-    if (!sess || !Array.isArray(sess.items) || sess.items.length === 0) {
-        alert('Analise primeiro uma planilha.');
-        return;
-    }
-    const status = document.getElementById('ai-form-status');
-    const preview = document.getElementById('ai-form-preview');
-    const selections = collectAiFormSelections();
-    const titleIn = document.getElementById('ai-form-session-title');
-    const descIn = document.getElementById('ai-form-session-desc');
-    const titleOut = titleIn ? String(titleIn.value || '').trim() : sess.title;
-    const descOut = descIn ? String(descIn.value || '').trim() : sess.description;
-    if (window.__brsparkAiSession) {
-        window.__brsparkAiSession.title = titleOut;
-        window.__brsparkAiSession.description = descOut;
-    }
-    const wst = window.__brsparkAiWizardState;
-    const itemsForBuild = (sess.items || []).map(function (it) {
-        if (!it || !it.key) return it;
-        const lb = wst && wst.labelByKey ? wst.labelByKey[it.key] : null;
-        if (lb != null && String(lb).trim() !== '') {
-            return Object.assign({}, it, { label: String(lb).trim() });
-        }
-        return it;
-    });
-    setAiFormLoading(true, 'build');
-    try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/ai/build-form`, {
-            method: 'POST',
-            headers: {
-                Authorization: 'Bearer ' + token,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                title: titleOut,
-                description: descOut,
-                items: itemsForBuild,
-                selections: selections,
-            }),
-        });
-        let data = {};
-        try {
-            data = await res.json();
-        } catch (e2) {
-            data = {};
-        }
-        if (!res.ok) {
-            throw new Error(data.error || res.statusText || 'Pedido falhou');
-        }
-        window.__brsparkAiDraft = data;
-        aiFormSetWizardStep('done');
-        if (status) {
-            const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
-            status.textContent = w || 'Formulário gerado. Pode substituir ou anexar ao canvas.';
-        }
-        if (preview) {
-            const rows = (data.schemaData || []).map(function (f) {
-                const typ = (f.type || '?').replace(/</g, '&lt;');
-                const lab = String(f.label || f.id || '').replace(/</g, '&lt;');
-                return (
-                    '<div style="font-size:12px;padding:6px 0;border-bottom:1px solid #e2e8f0;color:#334155;"><strong style="color:#6d28d9;">' +
-                    typ +
-                    '</strong> — ' +
-                    lab +
-                    '</div>'
-                );
-            });
-            const tit = String(data.title || '').replace(/</g, '&lt;');
-            preview.innerHTML =
-                '<div style="margin-bottom:10px;color:#0f172a;"><strong>Título:</strong> ' +
-                tit +
-                '</div>' +
-                '<div style="margin-bottom:10px;color:#334155;"><strong>Campos:</strong> ' +
-                (data.schemaData || []).length +
-                '</div>' +
-                '<div style="max-height:220px;overflow-y:auto;">' +
-                (rows.join('') || '<em style="color:#64748b;">Vazio</em>') +
-                '</div>';
-        }
-    } catch (e) {
-        console.error(e);
-        if (status) status.textContent = 'Erro: ' + (e.message || e);
-    } finally {
-        setAiFormLoading(false);
-    }
-};
-
-/** @deprecated Use brsparkAiFormAnalyze — mantido por compatibilidade */
+/** @deprecated */
 window.brsparkAiFormGenerate = window.brsparkAiFormAnalyze;
 
-function applyAiDraftToCanvas(mode) {
-    const d = window.__brsparkAiDraft;
-    if (!d || !Array.isArray(d.schemaData) || d.schemaData.length === 0) {
-        alert('Gere primeiro um rascunho válido.');
-        return;
-    }
-    const snapshot = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(d.schemaData)));
-    if (mode === 'replace') {
-        if (
-            !confirm(
-                'Substituir todo o canvas pelo rascunho da IA? Guarde o trabalho atual se precisar de o manter.'
-            )
-        ) {
-            return;
-        }
-        fields = snapshot;
-        const ti = document.getElementById('tpl-title');
-        const de = document.getElementById('tpl-desc');
-        if (ti && d.title) ti.value = d.title;
-        if (de && d.description != null) de.value = d.description;
-        selectedFieldId = null;
-    } else {
-        fields = fields.concat(snapshot);
-    }
-    ensureCanvasSchemaHasSection();
-    renderCanvas();
-    window.closeAiFormModal();
-}
-
-window.applyAiFormDraftReplace = function () {
-    applyAiDraftToCanvas('replace');
-};
-
-window.applyAiFormDraftAppend = function () {
-    applyAiDraftToCanvas('append');
-};
 
 /* ---------- Copiloto IA (chat + patch + lógica) ---------- */
 if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];

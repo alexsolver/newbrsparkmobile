@@ -32,7 +32,7 @@ export default function AssetNotesListScreen() {
 
   const loadData = useCallback(() => {
     if (!assetId) return;
-    const allAsets = getLocalAssets(user?.email || '');
+    const allAsets = getLocalAssets(user?.email || '', { includeMobileWarehouse: false });
     const currentAsset = allAsets.find(a => a.id === assetId);
     if (currentAsset) {
       setAsset(currentAsset);

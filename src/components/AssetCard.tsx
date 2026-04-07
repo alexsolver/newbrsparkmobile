@@ -57,7 +57,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (!childrenExpanded) {
       // Load children on first expand
-      setChildren(getChildAssets(asset.id));
+      setChildren(getChildAssets(asset.id, undefined, { includeMobileWarehouse: false }));
     }
     setChildrenExpanded(prev => !prev);
   };
@@ -65,7 +65,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
   React.useEffect(() => {
     if (forceExpand === true && !childrenExpanded && hasChildren) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setChildren(getChildAssets(asset.id));
+      setChildren(getChildAssets(asset.id, undefined, { includeMobileWarehouse: false }));
       setChildrenExpanded(true);
     } else if (forceExpand === false && childrenExpanded) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

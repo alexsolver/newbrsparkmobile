@@ -14,10 +14,19 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { apiFetch, getToken } from './auth';
 import { 
   addToSyncQueue, getSyncQueue, clearSyncQueueItem, 
-  saveStockItemLocal, saveStockMovementLocal,
-  getLocalStockItems, getLocalStockMovements
+  saveStockItemLocal,
+  saveStockMovementLocal,
+  saveTechStockItemLocal,
+  saveTechStockMovementLocal,
+  getLocalStockItems,
+  getLocalStockMovements,
+  getLocalTechStockItems,
+  getLocalTechStockMovements,
+  getLocalTechFinanceEntries,
+  saveTechFinanceEntryLocal,
 } from '../database';
 import { AuthService } from './auth';
+import { ensureTechnicianStockLegacyMigration } from './technicianStockMigration';
 import { uploadFile } from './storageService';
 import { pushTrackingSyncQueue } from './trackingSyncQueue';
 
@@ -455,7 +464,78 @@ export async function pullStock(ownerEmail?: string): Promise<void> {
       const moves = await resMoves.json();
       moves.forEach((m: any) => saveStockMovementLocal(m, ownerEmail));
     }
-  } catch (e) { console.warn('[SYNC] Falha ao sincronizar estoque:', e); }
+  } catch (e) {
+    console.warn('[SYNC] Falha ao sincronizar estoque:', e);
+  }
+}
+
+export async function pullTechStock(ownerEmail?: string): Promise<void> {
+  const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
+  try {
+    const localItems = getLocalTechStockItems(ownerEmail);
+    if (localItems.length > 0) {
+      await apiFetch(`/api/sync/tech-stock/items${q}`, {
+        method: 'POST',
+        body: JSON.stringify(localItems),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const localMoves = getLocalTechStockMovements(ownerEmail);
+    if (localMoves.length > 0) {
+      await apiFetch(`/api/sync/tech-stock/movements${q}`, {
+        method: 'POST',
+        body: JSON.stringify(localMoves),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const resItems = await apiFetch(`/api/sync/tech-stock/items${q}`);
+    if (resItems.ok) {
+      const items = await resItems.json();
+      items.forEach((it: any) => saveTechStockItemLocal(it, ownerEmail));
+    }
+    const resMoves = await apiFetch(`/api/sync/tech-stock/movements${q}`);
+    if (resMoves.ok) {
+      const moves = await resMoves.json();
+      moves.forEach((m: any) => saveTechStockMovementLocal(m, ownerEmail));
+    }
+  } catch (e) {
+    console.warn('[SYNC] Falha ao sincronizar estoque do técnico:', e);
+  }
+}
+
+export async function pullTechFinance(ownerEmail?: string): Promise<void> {
+  const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
+  try {
+    const localRows = getLocalTechFinanceEntries(ownerEmail);
+    if (localRows.length > 0) {
+      await apiFetch(`/api/sync/tech-finance/entries${q}`, {
+        method: 'POST',
+        body: JSON.stringify(localRows),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const res = await apiFetch(`/api/sync/tech-finance/entries${q}`);
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows)) {
+        rows.forEach((it: any) => {
+          if (!it || !it.id) return;
+          saveTechFinanceEntryLocal(
+            {
+              ...it,
+              owner_email: it.owner_email || ownerEmail || null,
+            },
+            ownerEmail
+          );
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] Falha ao sincronizar financeiro do técnico:', e);
+  }
 }
 
 export async function pullMaintenances(ownerEmail?: string): Promise<void> {
@@ -918,6 +998,7 @@ export async function pollStaleGpsReminders(): Promise<void> {
 
 export async function fullSync(ownerEmail?: string): Promise<void> {
   if (!ownerEmail) return;
+  await ensureTechnicianStockLegacyMigration(ownerEmail);
   await pushSyncQueue(ownerEmail); // já inclui pushTelemetryBatch
   await Promise.all([
     pullTasks(ownerEmail),
@@ -925,6 +1006,8 @@ export async function fullSync(ownerEmail?: string): Promise<void> {
     pullCosts(ownerEmail),
     pullInsurance(ownerEmail),
     pullStock(ownerEmail),
+    pullTechStock(ownerEmail),
+    pullTechFinance(ownerEmail),
     pullMaintenances(ownerEmail),
     pullVault(ownerEmail),
     pullMediaMetadata(ownerEmail),

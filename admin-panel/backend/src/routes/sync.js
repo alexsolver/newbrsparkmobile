@@ -4,6 +4,7 @@ const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
 const { recordSync } = require('../services/cockpitMetrics');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
+const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -384,7 +385,9 @@ router.get('/tasks', async (req, res) => {
   }
 });
 
-
+// ─── GET /api/sync/tech-stock/movements/search ───────────────────────────────
+// Histórico pesquisável (também em sync.js porque este router é montado antes de sync-modules).
+router.get('/tech-stock/movements/search', techStockMovementsSearchHandler);
 
 module.exports = router;
 

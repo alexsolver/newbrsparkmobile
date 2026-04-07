@@ -2473,7 +2473,7 @@ export default function AssetDetailScreen() {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {(() => {
                   const ancestorIds = new Set(ancestors.map(anc => anc.id));
-                  const available = getLocalAssets(user?.email || '').filter(a => {
+                  const available = getLocalAssets(user?.email || '', { includeMobileWarehouse: false }).filter((a) => {
                     // Exclui o próprio ativo
                     if (a.id === asset.id) return false;
                     // Exclui quem já é filho direto

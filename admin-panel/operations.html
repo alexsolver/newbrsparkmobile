@@ -1750,7 +1750,15 @@ function extractTransitEndpointsForReport(responses) {
         const j = typeof val === 'object' ? val : JSON.parse(val);
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
-        if (lat !== undefined) startGPS = { lat, lng, addr: j.address || '', time: j.timestamp };
+        if (lat !== undefined) {
+          startGPS = {
+            lat,
+            lng,
+            addr: j.address || '',
+            time: j.timestamp,
+            plannedMetrics: j.plannedMetrics && typeof j.plannedMetrics === 'object' ? j.plannedMetrics : null,
+          };
+        }
       } catch (e) { /* ignore */ }
     } else if (vStr.includes('"action":"CHEGADA"')) {
       try {
@@ -1758,7 +1766,14 @@ function extractTransitEndpointsForReport(responses) {
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
         if (lat !== undefined) {
-          endGPS = { lat, lng, addr: j.address || '', time: j.timestamp, traversedPath: j.traversedPath };
+          endGPS = {
+            lat,
+            lng,
+            addr: j.address || '',
+            time: j.timestamp,
+            traversedPath: j.traversedPath,
+            actualMetrics: j.actualMetrics && typeof j.actualMetrics === 'object' ? j.actualMetrics : null,
+          };
         }
       } catch (e) { /* ignore */ }
     }
@@ -1771,6 +1786,111 @@ function computeTransitSecondsFromEndpoints(startGPS, endGPS) {
   const dt = Math.floor((new Date(endGPS.time).getTime() - new Date(startGPS.time).getTime()) / 1000);
   if (!Number.isFinite(dt) || dt <= 0) return 1;
   return dt;
+}
+
+function haversineMetersOps(lat1, lng1, lat2, lng2) {
+  const a1 = Number(lat1);
+  const o1 = Number(lng1);
+  const a2 = Number(lat2);
+  const o2 = Number(lng2);
+  if (![a1, o1, a2, o2].every((x) => Number.isFinite(x))) return null;
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(a2 - a1);
+  const dLng = toRad(o2 - o1);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a1)) * Math.cos(toRad(a2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+/** Soma haversine entre vértices [[lat,lng], ...] — igual à app. */
+function polylineLengthMetersOps(points) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  let sum = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+    const d = haversineMetersOps(Number(a[0]), Number(a[1]), Number(b[0]), Number(b[1]));
+    if (d != null && Number.isFinite(d)) sum += d;
+  }
+  return sum > 0 ? sum : null;
+}
+
+/**
+ * Métricas previstas (payload SAÍDA) e realizadas (CHEGADA), com fallbacks para execuções antigas.
+ * `task` — objeto OS (etaMinutes, locationLat/Lng).
+ */
+function buildTransitDisplayMetrics(startGPS, endGPS, task) {
+  const etaMin =
+    task && task.etaMinutes != null && Number.isFinite(Number(task.etaMinutes))
+      ? Number(task.etaMinutes)
+      : null;
+  const pm =
+    startGPS && startGPS.plannedMetrics && typeof startGPS.plannedMetrics === 'object'
+      ? startGPS.plannedMetrics
+      : null;
+  let plannedDurationSec =
+    pm && pm.durationSeconds != null && Number.isFinite(Number(pm.durationSeconds))
+      ? Math.floor(Number(pm.durationSeconds))
+      : null;
+  if (plannedDurationSec == null && etaMin != null && etaMin > 0) {
+    plannedDurationSec = Math.round(etaMin * 60);
+  }
+  let plannedDistanceM =
+    pm && pm.distanceMeters != null && Number.isFinite(Number(pm.distanceMeters))
+      ? Math.round(Number(pm.distanceMeters))
+      : null;
+  let plannedSourceKey = '';
+  if (pm && pm.source) plannedSourceKey = String(pm.source);
+  else if (pm == null && etaMin != null && etaMin > 0) plannedSourceKey = 'task_eta_legacy';
+
+  const am =
+    endGPS && endGPS.actualMetrics && typeof endGPS.actualMetrics === 'object'
+      ? endGPS.actualMetrics
+      : null;
+  let actualDurationSec =
+    am && am.durationSeconds != null && Number.isFinite(Number(am.durationSeconds))
+      ? Math.floor(Number(am.durationSeconds))
+      : null;
+  if (actualDurationSec == null) {
+    actualDurationSec = computeTransitSecondsFromEndpoints(startGPS, endGPS);
+  }
+  let actualDistanceM =
+    am && am.distanceMeters != null && Number.isFinite(Number(am.distanceMeters))
+      ? Math.round(Number(am.distanceMeters))
+      : null;
+  let actualDistFromPolyline = false;
+  if (actualDistanceM == null && endGPS && Array.isArray(endGPS.traversedPath) && endGPS.traversedPath.length >= 2) {
+    const pl = polylineLengthMetersOps(endGPS.traversedPath);
+    if (pl != null && pl > 0) {
+      actualDistanceM = Math.round(pl);
+      actualDistFromPolyline = true;
+    }
+  }
+  if (
+    actualDistanceM == null &&
+    startGPS &&
+    endGPS &&
+    [startGPS.lat, startGPS.lng, endGPS.lat, endGPS.lng].every((x) => x != null && Number.isFinite(parseFloat(x)))
+  ) {
+    const hm = haversineMetersOps(
+      parseFloat(startGPS.lat),
+      parseFloat(startGPS.lng),
+      parseFloat(endGPS.lat),
+      parseFloat(endGPS.lng),
+    );
+    if (hm != null && hm > 0) actualDistanceM = Math.round(hm);
+  }
+  return {
+    plannedDurationSec,
+    plannedDistanceM,
+    plannedSourceKey,
+    actualDurationSec,
+    actualDistanceM,
+    actualDistFromPolyline,
+  };
 }
 
 /** Alinhado ao backend `operations.js` — tipos e rótulos de section_break em schemas antigos/importados. */
@@ -2098,6 +2218,21 @@ function buildInfoTab(t) {
       })
       .join(' · ') || '<span style="color:var(--text3)">Sem registros de etapa</span>';
 
+  const tmI = buildTransitDisplayMetrics(stI, enI, t);
+  const fmtKmI = (m) =>
+    m != null && Number.isFinite(Number(m)) ? `${(Number(m) / 1000).toFixed(2)} km` : '—';
+  const plannedSrcI =
+    tmI.plannedSourceKey === 'osrm'
+      ? 'OSRM'
+      : tmI.plannedSourceKey === 'task_eta'
+        ? 'ETA da OS'
+        : tmI.plannedSourceKey === 'straight_line'
+          ? 'Reta'
+          : tmI.plannedSourceKey === 'task_eta_legacy'
+            ? 'ETA (legado)'
+            : '';
+  const distHintI = tmI.actualDistFromPolyline ? 'polilinha GPS' : 'aproximação';
+
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div class="report-field">
@@ -2198,6 +2333,10 @@ function buildInfoTab(t) {
           <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">Formulário / app em foco</span><br><strong>${fmtDurationPtBr(fillI)}</strong> · <strong>${fmtDurationPtBr(actI)}</strong></div>
         </div>
         <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--text)">
+          <div style="line-height:1.45;margin-bottom:8px">
+            <div><span style="font-weight:800;color:var(--text2)">Previsto na saída:</span> ${fmtDurationPtBr(tmI.plannedDurationSec)} · ${fmtKmI(tmI.plannedDistanceM)}${plannedSrcI ? ` <span style="color:var(--text3);font-size:10px">(${plannedSrcI})</span>` : ''}</div>
+            <div style="margin-top:4px"><span style="font-weight:800;color:var(--text2)">Realizado na chegada:</span> ${fmtDurationPtBr(tmI.actualDurationSec)} · ${fmtKmI(tmI.actualDistanceM)} <span style="color:var(--text3);font-size:10px">(${distHintI})</span></div>
+          </div>
           <span style="font-weight:800;color:var(--text2)">Tempo por etapa:</span> ${secLineI}
         </div>
         ${buildPauseProductivityBlockHtml(t)}
@@ -2315,6 +2454,89 @@ function buildReportTab(t) {
         return html;
       }
       return '<em style="color:var(--text3)">(dados de localização inválidos)</em>';
+    }
+    if (fieldType === 'materials_consumption') {
+      let o = null;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) o = val;
+      else {
+        try { o = JSON.parse(String(val)); } catch (e) { o = null; }
+      }
+      const lines = o && Array.isArray(o.lines) ? o.lines : [];
+      if (lines.length === 0) {
+        return '<em style="color:var(--text3)">(sem consumo registado)</em>';
+      }
+      const rows = lines
+        .map((ln) => {
+          const name = escHtml(ln && ln.name != null ? String(ln.name) : '—');
+          const sku = escHtml(ln && ln.sku != null ? String(ln.sku) : '—');
+          const unit = ln && ln.unit != null ? String(ln.unit) : '';
+          const qty = Math.max(0, Math.floor(Number(ln && ln.qty) || 0));
+          const qtyStr = escHtml(unit ? `${qty} ${unit}` : String(qty));
+          return (
+            '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--border)">' +
+            name +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border);font-family:ui-monospace,monospace;font-size:11px">' +
+            sku +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">' +
+            qtyStr +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return (
+        '<div style="overflow-x:auto;margin-top:4px">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+        '<thead><tr style="background:var(--surface2)">' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">Produto</th>' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">SKU</th>' +
+        '<th style="text-align:right;padding:8px 10px;font-weight:700">Quantidade</th>' +
+        '</tr></thead><tbody>' +
+        rows +
+        '</tbody></table></div>'
+      );
+    }
+    if (fieldType === 'technician_finance') {
+      let fo = null;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) fo = val;
+      else {
+        try { fo = JSON.parse(String(val)); } catch (e) { fo = null; }
+      }
+      const flines = fo && Array.isArray(fo.lines) ? fo.lines : [];
+      const rowsFin = flines
+        .map((ln) => {
+          const amt = Math.max(0, Number(ln && ln.amount) || 0);
+          if (amt <= 0) return '';
+          const kind = ln && ln.kind === 'revenue' ? 'Receita' : 'Despesa';
+          const desc = escHtml(ln && ln.description != null ? String(ln.description) : '—');
+          const amtStr = escHtml(
+            amt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
+          );
+          const kindEsc = escHtml(kind);
+          return (
+            '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:700">' +
+            kindEsc +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">' +
+            amtStr +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border)">' +
+            desc +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      if (!rowsFin) {
+        return '<em style="color:var(--text3)">(sem lançamentos)</em>';
+      }
+      return (
+        '<div style="overflow-x:auto;margin-top:4px">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+        '<thead><tr style="background:var(--surface2)">' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">Tipo</th>' +
+        '<th style="text-align:right;padding:8px 10px;font-weight:700">Valor</th>' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">Descrição</th>' +
+        '</tr></thead><tbody>' +
+        rowsFin +
+        '</tbody></table></div>'
+      );
     }
     const str = String(val);
     if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
@@ -2500,6 +2722,20 @@ function buildReportTab(t) {
   };
 
   const transitSecRep = computeTransitSecondsFromEndpoints(startGPS, endGPS);
+  const tmRep = buildTransitDisplayMetrics(startGPS, endGPS, t);
+  const fmtKmRep = (m) =>
+    m != null && Number.isFinite(Number(m)) ? `${(Number(m) / 1000).toFixed(2)} km` : '—';
+  const plannedSrcRep =
+    tmRep.plannedSourceKey === 'osrm'
+      ? 'OSRM'
+      : tmRep.plannedSourceKey === 'task_eta'
+        ? 'ETA da OS'
+        : tmRep.plannedSourceKey === 'straight_line'
+          ? 'Reta'
+          : tmRep.plannedSourceKey === 'task_eta_legacy'
+            ? 'ETA (legado)'
+            : '';
+  const distHintRep = tmRep.actualDistFromPolyline ? 'polilinha GPS' : 'aproximação';
   const osWallRep =
     t.startedAt && t.completedAt
       ? Math.max(0, Math.floor((new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime()) / 1000))
@@ -2539,6 +2775,8 @@ function buildReportTab(t) {
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Fora do deslocamento (estimativa: OS − desloc.):</strong> ${exTransitRep != null ? fmtHmsRep(exTransitRep) : '—'}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo total no formulário (relógio):</strong> ${fmtHmsRep(fillSecRep)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo com app em foco:</strong> ${fmtHmsRep(activeSecRep)}</div>
+         <div style="font-size:10px;grid-column:1/-1;line-height:1.45;padding-top:4px;margin-top:2px;border-top:1px dashed var(--border)"><strong style="color:var(--text2)">Desloc. previsto (saída):</strong> ${fmtHmsRep(tmRep.plannedDurationSec)} · ${fmtKmRep(tmRep.plannedDistanceM)}${plannedSrcRep ? ` <span style="color:var(--text3)">(${plannedSrcRep})</span>` : ''}</div>
+         <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Desloc. realizado (chegada):</strong> ${fmtHmsRep(tmRep.actualDurationSec)} · ${fmtKmRep(tmRep.actualDistanceM)} <span style="color:var(--text3)">(${distHintRep})</span></div>
          <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Tempo por etapa:</strong> ${secLineRep}</div>
          <div style="font-size:10px;grid-column:1/-1">${buildPauseProductivityBlockHtml(t)}</div>
          ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
@@ -2757,33 +2995,7 @@ window.printReport = async function() {
     );
   };
 
-  // Transit logic extractors
-  let startGPS = null;
-  let endGPS = null;
-
-  const allResponseVals = Object.values(responses);
-
-  allResponseVals.forEach(val => {
-     if (!val) return;
-     const vStr = typeof val === 'string' ? val : JSON.stringify(val);
-     if (vStr.includes('"action":"SAIDA"')) {
-         try {
-             const j = typeof val === 'object' ? val : JSON.parse(val);
-             const lat = j.coordinates?.lat ?? j.lat;
-             const lng = j.coordinates?.lng ?? j.lng;
-             if (lat !== undefined) startGPS = { lat, lng, addr: j.address || '', time: j.timestamp };
-         } catch(e) {}
-     } else if (vStr.includes('"action":"CHEGADA"')) {
-         try {
-             const j = typeof val === 'object' ? val : JSON.parse(val);
-             const lat = j.coordinates?.lat ?? j.lat;
-             const lng = j.coordinates?.lng ?? j.lng;
-             if (lat !== undefined) {
-                 endGPS = { lat, lng, addr: j.address || '', time: j.timestamp, traversedPath: j.traversedPath };
-             }
-         } catch(e) {}
-     }
-  });
+  const { startGPS, endGPS } = extractTransitEndpointsForReport(responses);
 
   const repeatMapPdf = buildRepeatFieldMapFromTemplate(t.template || {});
   const pdfEntries = [];
@@ -2985,6 +3197,84 @@ window.printReport = async function() {
             displayVal = buildLocationPickPdfHtml(loc);
           } else {
             displayVal = '<span style="color:#94a3b8;font-style:italic">Dados de localização inválidos</span>';
+          }
+      } else if (fieldDef && fieldDef.type === 'materials_consumption') {
+          let mo = val;
+          if (typeof val === 'string') {
+            try { mo = JSON.parse(val); } catch (e) { mo = null; }
+          }
+          const mlines = mo && Array.isArray(mo.lines) ? mo.lines : [];
+          if (mlines.length === 0) {
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem consumo registado</span>';
+          } else {
+            const rowCells = mlines
+              .map((ln) => {
+                const name = escPdf(ln && ln.name != null ? String(ln.name) : '—');
+                const sku = escPdf(ln && ln.sku != null ? String(ln.sku) : '—');
+                const unit = ln && ln.unit != null ? String(ln.unit) : '';
+                const qty = Math.max(0, Math.floor(Number(ln && ln.qty) || 0));
+                const qtyStr = escPdf(unit ? qty + ' ' + unit : String(qty));
+                return (
+                  '<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' +
+                  name +
+                  '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-family:ui-monospace,monospace;font-size:11px">' +
+                  sku +
+                  '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right;white-space:nowrap">' +
+                  qtyStr +
+                  '</td></tr>'
+                );
+              })
+              .join('');
+            displayVal =
+              '<div style="overflow-x:auto;margin-top:4px">' +
+              '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">' +
+              '<thead><tr style="background:#f8fafc">' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">Produto</th>' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">SKU</th>' +
+              '<th style="text-align:right;padding:8px 10px;font-weight:800">Quantidade</th>' +
+              '</tr></thead><tbody>' +
+              rowCells +
+              '</tbody></table></div>';
+          }
+      } else if (fieldDef && fieldDef.type === 'technician_finance') {
+          let fmo = val;
+          if (typeof val === 'string') {
+            try { fmo = JSON.parse(val); } catch (e) { fmo = null; }
+          }
+          const flns = fmo && Array.isArray(fmo.lines) ? fmo.lines : [];
+          const rowFin = flns
+            .map((ln) => {
+              const amt = Math.max(0, Number(ln && ln.amount) || 0);
+              if (amt <= 0) return '';
+              const kind = ln && ln.kind === 'revenue' ? 'Receita' : 'Despesa';
+              const desc = escPdf(ln && ln.description != null ? String(ln.description) : '—');
+              const amtStr = escPdf(
+                amt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
+              );
+              return (
+                '<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:800">' +
+                escPdf(kind) +
+                '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right;white-space:nowrap">' +
+                amtStr +
+                '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' +
+                desc +
+                '</td></tr>'
+              );
+            })
+            .join('');
+          if (!rowFin) {
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem lançamentos</span>';
+          } else {
+            displayVal =
+              '<div style="overflow-x:auto;margin-top:4px">' +
+              '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">' +
+              '<thead><tr style="background:#f8fafc">' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">Tipo</th>' +
+              '<th style="text-align:right;padding:8px 10px;font-weight:800">Valor</th>' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">Descrição</th>' +
+              '</tr></thead><tbody>' +
+              rowFin +
+              '</tbody></table></div>';
           }
       } else if (fieldDef && fieldDef.type === 'file_upload') {
           const escAttr = (s) => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
@@ -3223,29 +3513,43 @@ window.printReport = async function() {
 
   let speedBadgeHtml = '';
   if (startGPS && endGPS) {
-      // Distance technician actually traveled (start → stop point)
-      const traveledKm = haversineKm(startGPS.lat, startGPS.lng, endGPS.lat, endGPS.lng);
+      const tm = buildTransitDisplayMetrics(startGPS, endGPS, t);
+      const plannedTimeStr = fmtDurationPtBr(tm.plannedDurationSec);
+      const plannedDistStr =
+        tm.plannedDistanceM != null ? `${(tm.plannedDistanceM / 1000).toFixed(2)} km` : '—';
+      let plannedFoot = '—';
+      if (tm.plannedSourceKey === 'osrm') plannedFoot = 'Mapa rodoviário (OSRM)';
+      else if (tm.plannedSourceKey === 'task_eta') plannedFoot = 'Com base no ETA da OS';
+      else if (tm.plannedSourceKey === 'straight_line') {
+        plannedFoot = 'Distância em linha reta · tempo não estimado';
+      } else if (tm.plannedSourceKey === 'task_eta_legacy') {
+        plannedFoot = 'ETA da OS (sem registo detalhado na saída)';
+      }
 
-      let transitSeconds = Math.floor((new Date(endGPS.time) - new Date(startGPS.time))/1000);
-      if (transitSeconds <= 0) transitSeconds = 1;
-      const speedKmh  = traveledKm / (transitSeconds / 3600);
-      const tmH = Math.floor(transitSeconds / 3600);
-      const tmM = Math.floor((transitSeconds % 3600) / 60);
-      const tmS = transitSeconds % 60;
-      const realStr = `${tmH > 0 ? tmH + 'h ' : ''}${tmM}m ${tmS}s`;
+      let transitSeconds = tm.actualDurationSec;
+      if (transitSeconds == null || !Number.isFinite(transitSeconds) || transitSeconds <= 0) {
+        transitSeconds = 1;
+      }
+      const realStr = fmtDurationPtBr(tm.actualDurationSec);
+
+      const actualKm =
+        tm.actualDistanceM != null && tm.actualDistanceM > 0 ? tm.actualDistanceM / 1000 : null;
+      const speedKmh =
+        actualKm != null && transitSeconds > 0 ? actualKm / (transitSeconds / 3600) : null;
+      const speedStr =
+        speedKmh != null && Number.isFinite(speedKmh) ? speedKmh.toFixed(1) : '—';
 
       // ── Did the technician actually reach the destination? ────────────────
       const destLat = parseFloat(t.locationLat);
       const destLng = parseFloat(t.locationLng);
       const hasDestCoords = !isNaN(destLat) && !isNaN(destLng);
 
-      let reachedDestination = true;  // assume reached if no destination set
+      let reachedDestination = true;
       let distToDestKm = 0;
       let incompleteWarningHtml = '';
 
       if (hasDestCoords) {
         distToDestKm = haversineKm(endGPS.lat, endGPS.lng, destLat, destLng);
-        // Consider "reached" if stopped within 500m of destination
         reachedDestination = distToDestKm <= 0.5;
 
         if (!reachedDestination) {
@@ -3256,88 +3560,96 @@ window.printReport = async function() {
                 <div style="font-size:11px;font-weight:900;color:#DC2626;">DESLOCAMENTO INCOMPLETO</div>
                 <div style="font-size:10px;color:#7F1D1D;margin-top:2px;line-height:1.4;">
                   O técnico encerrou o deslocamento <strong>${distToDestKm.toFixed(2)} km</strong> antes de chegar ao destino.<br>
-                  A comparação com o ETA previsto não se aplica.
+                  A comparação com o plano previsto pode não ser representativa.
                 </div>
               </div>
             </div>`;
         }
       }
 
-      // ── ETA Previsto column ────────────────────────────────────────────────
-      let etaPrevistoHtml = '—';
       let etaDeltaHtml = '';
-      if (t.etaMinutes != null) {
-        const eH = Math.floor(t.etaMinutes / 60);
-        const eM = t.etaMinutes % 60;
-        etaPrevistoHtml = `${eH > 0 ? eH + 'h ' : ''}${eM}m`;
-
-        // Only show delta if technician actually reached the destination
+      const plannedForDeltaSec =
+        tm.plannedDurationSec != null
+          ? tm.plannedDurationSec
+          : t.etaMinutes != null && Number.isFinite(Number(t.etaMinutes))
+            ? Math.round(Number(t.etaMinutes) * 60)
+            : null;
+      if (plannedForDeltaSec != null && tm.actualDurationSec != null && Number.isFinite(tm.actualDurationSec)) {
         if (reachedDestination) {
-          const etaRealMin = Math.round(transitSeconds / 60);
-          const delta = etaRealMin - t.etaMinutes;
+          const etaRealMin = Math.round(tm.actualDurationSec / 60);
+          const plannedMin = Math.round(plannedForDeltaSec / 60);
+          const delta = etaRealMin - plannedMin;
           const absDelta = Math.abs(delta);
-          const dH = Math.floor(absDelta / 60), dM = absDelta % 60;
+          const dH = Math.floor(absDelta / 60);
+          const dM = absDelta % 60;
           const deltaStr = `${dH > 0 ? dH + 'h ' : ''}${dM}m`;
           if (delta > 5) {
-            etaDeltaHtml = `<div style="font-size:8px;color:#dc2626;font-weight:700;margin-top:2px">+${deltaStr} acima do previsto</div>`;
+            etaDeltaHtml = `<div style="font-size:8px;color:#dc2626;font-weight:700;margin-top:2px">+${deltaStr} vs previsto</div>`;
           } else if (delta < -5) {
             etaDeltaHtml = `<div style="font-size:8px;color:#16a34a;font-weight:700;margin-top:2px">${deltaStr} abaixo do previsto ✓</div>`;
           } else {
-            etaDeltaHtml = `<div style="font-size:8px;color:#2563eb;font-weight:700;margin-top:2px">Dentro do previsto ≈</div>`;
+            etaDeltaHtml = `<div style="font-size:8px;color:#2563eb;font-weight:700;margin-top:2px">Próximo do previsto ≈</div>`;
           }
         } else {
-          // Incomplete — show remaining distance instead of misleading delta
           etaDeltaHtml = `<div style="font-size:8px;color:#dc2626;font-weight:700;margin-top:2px">⚠ não concluído</div>`;
         }
       }
 
-      // ── Distance column label changes based on completion ─────────────────
-      const distLabel  = reachedDestination ? 'DISTÂNCIA (LINHA RETA)' : 'DISTÂNCIA PERCORRIDA';
-      const distColor  = reachedDestination ? '#9A3412' : '#B45309';
+      const actualDistHint = tm.actualDistFromPolyline ? 'trajeto GPS' : 'aprox. (reta ou registo)';
       const remainHtml = (!reachedDestination && hasDestCoords)
         ? `<div style="font-size:8px;color:#DC2626;font-weight:700;margin-top:2px">${distToDestKm.toFixed(2)} km p/ destino</div>`
         : '';
 
-      // ── Speeds uses different bg when incomplete ──────────────────────────
       const bgColor     = reachedDestination ? '#FFF7ED' : '#FFFBEB';
       const borderColor = reachedDestination ? '#FFEDD5' : '#FDE68A';
 
+      const actualDistVal =
+        actualKm != null ? `${actualKm.toFixed(2)} <span style="font-size:10px">km</span>` : '—';
+
       speedBadgeHtml = `
-        <div style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:8px; padding:8px; margin-top:8px; display:flex; justify-content:space-around; align-items:flex-start; flex-wrap:wrap; gap:4px;">
-           <div style="text-align:center;min-width:60px;">
-              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">ETA PREVISTO (OSRM)</div>
-              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${etaPrevistoHtml}</div>
-              <div style="font-size:8px;color:#C2410C;margin-top:1px;font-style:italic">antes da viagem</div>
+        <div style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:8px; padding:8px; margin-top:8px; display:flex; justify-content:space-around; align-items:flex-start; flex-wrap:wrap; gap:6px;">
+           <div style="text-align:center;min-width:88px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">PREVISTO (SAÍDA)</div>
+              <div style="font-size:13px;font-weight:900;color:#9A3412;margin-top:2px;line-height:1.25;">${plannedTimeStr}</div>
+              <div style="font-size:12px;font-weight:800;color:#b45309;margin-top:1px;">${plannedDistStr}</div>
+              <div style="font-size:7px;color:#9a3412;margin-top:2px;font-style:italic;line-height:1.2;">${plannedFoot}</div>
            </div>
-           <div style="width:1px;height:40px;background:#FED7AA;"></div>
-           <div style="text-align:center;min-width:80px;">
-              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">TEMPO EM TRÂNSITO</div>
-              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${realStr}</div>
+           <div style="width:1px;height:52px;background:#FED7AA;align-self:center;"></div>
+           <div style="text-align:center;min-width:100px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">REALIZADO (CHEGADA)</div>
+              <div style="font-size:13px;font-weight:900;color:#9A3412;margin-top:2px;line-height:1.25;">${realStr}</div>
+              <div style="font-size:12px;font-weight:800;color:#b45309;margin-top:1px;">${actualDistVal}</div>
+              <div style="font-size:7px;color:#9a3412;margin-top:2px;font-style:italic;">${actualDistHint}</div>
               ${etaDeltaHtml}
-           </div>
-           <div style="width:1px;height:40px;background:#FED7AA;"></div>
-           <div style="text-align:center;min-width:80px;">
-              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">VELOCIDADE MÉDIA</div>
-              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:2px;">${speedKmh.toFixed(1)} <span style="font-size:10px">km/h</span></div>
-           </div>
-           <div style="width:1px;height:40px;background:#FED7AA;"></div>
-           <div style="text-align:center;min-width:80px;">
-              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">${distLabel}</div>
-              <div style="font-size:14px;font-weight:900;color:${distColor};margin-top:2px;">${traveledKm.toFixed(2)} <span style="font-size:10px">km</span></div>
               ${remainHtml}
+           </div>
+           <div style="width:1px;height:52px;background:#FED7AA;align-self:center;"></div>
+           <div style="text-align:center;min-width:88px;">
+              <div style="font-size:8px;color:#C2410C;font-weight:bold;letter-spacing:0.5px">VELOCIDADE MÉDIA</div>
+              <div style="font-size:14px;font-weight:900;color:#9A3412;margin-top:4px;">${speedStr} <span style="font-size:10px">km/h</span></div>
+              <div style="font-size:7px;color:#9a3412;margin-top:3px;font-style:italic;">dist. real ÷ tempo</div>
            </div>
         </div>
         ${incompleteWarningHtml}`;
   } else {
+      const tm0 = buildTransitDisplayMetrics(startGPS, endGPS, t);
+      const pTime = fmtDurationPtBr(tm0.plannedDurationSec);
+      const pDist =
+        tm0.plannedDistanceM != null ? `${(tm0.plannedDistanceM / 1000).toFixed(2)} km` : '—';
+      const aTime = fmtDurationPtBr(tm0.actualDurationSec);
+      const aDist =
+        tm0.actualDistanceM != null ? `${(tm0.actualDistanceM / 1000).toFixed(2)} km` : '—';
       speedBadgeHtml = `
         <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:6px; margin-top:8px; display:flex; justify-content:space-around; align-items:center; flex-wrap:wrap; gap:4px;">
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">ETA PREVISTO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${t.etaMinutes != null ? (Math.floor(t.etaMinutes/60)>0?Math.floor(t.etaMinutes/60)+'h ':'')+(t.etaMinutes%60)+'m' : '—'}</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">PREVISTO (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${pTime}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">TEMPO EM TRÂNSITO</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">PREVISTO (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${pDist}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VELOCIDADE MÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aTime}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">DISTÂNCIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aDist}</div></div>
+           <div style="width:1px;height:24px;background:#e2e8f0;"></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VMÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
         </div>`;
   }
 
@@ -3755,14 +4067,14 @@ window.cancelTask = async function(bypassConfirm = false) {
   
   if (!bypassConfirm) {
      const btn = document.getElementById('detail-cancel-btn');
-     btn.textContent = '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Tem Certeza? (Clique de novo)';
+     btn.innerHTML = '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Tem certeza? (clique de novo)';
      btn.onclick = () => cancelTask(true);
      return;
   }
 
   try {
     document.getElementById('detail-cancel-btn').disabled = true;
-    document.getElementById('detail-cancel-btn').textContent = '⏳ Cancelando...';
+    document.getElementById('detail-cancel-btn').innerHTML = '⏳ Cancelando…';
     
     const res = await CONFIG.del(`/operations/tasks/${currentDetailId}?_t=${Date.now()}`);
     if (res && res.error) { 
@@ -3780,6 +4092,7 @@ window.cancelTask = async function(bypassConfirm = false) {
     if(btn) {
        btn.disabled = false;
        btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
+       btn.onclick = () => window.cancelTask(false);
     }
   }
 };

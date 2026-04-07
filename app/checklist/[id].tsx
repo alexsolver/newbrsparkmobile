@@ -30,12 +30,13 @@ import { PanResponder } from 'react-native';
 import { colors } from '../../src/theme/colors';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/services/auth';
-import { fetchDrivingLegEtaMinutes } from '../../src/services/osrmClient';
+import { fetchDrivingLegEtaMinutes, fetchDrivingLegMetrics } from '../../src/services/osrmClient';
+import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
 import RouteProgressBar from './RouteProgressBar';
-import LiveRouteMapCard from './LiveRouteMapCard';
+import LiveRouteMapCard, { pickDestinationForOsrm } from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
@@ -44,6 +45,14 @@ import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
 import { enqueueExecutionStatusPatch, pushSyncQueue } from '../../src/services/syncService';
+import { applyMaterialsStockForSubmission, parseMaterialsValue } from '../../src/checklist/applyMaterialsStockOnSubmit';
+import {
+  applyTechnicianFinanceForSubmission,
+  parseTechnicianFinanceValue,
+} from '../../src/checklist/applyTechnicianFinanceOnSubmit';
+import { ChecklistMaterialsConsumptionField } from '../../src/components/ChecklistMaterialsConsumptionField';
+import { ChecklistTechnicianFinanceField } from '../../src/components/ChecklistTechnicianFinanceField';
+import { useAuth } from '../../src/hooks/useAuth';
 
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
 const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -292,6 +301,8 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'calculated',
   'transit_start',
   'transit_end',
+  'materials_consumption',
+  'technician_finance',
 ]);
 
 function fieldAllowsMultiple(field: any) {
@@ -478,6 +489,18 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   if (!fieldAllowsMultiple(field)) {
     if (field.type === 'location_pick') return isLocationPickAnswerValid(raw);
+    if (field.type === 'materials_consumption') {
+      const p = parseMaterialsValue(raw);
+      const hasQty = p.lines.some((l) => l.qty > 0);
+      if (field.required) return hasQty;
+      return true;
+    }
+    if (field.type === 'technician_finance') {
+      const p = parseTechnicianFinanceValue(raw);
+      const hasAmt = p.lines.some((l) => l.amount > 0);
+      if (field.required) return hasAmt;
+      return true;
+    }
     if (raw === undefined || raw === null) return false;
     if (typeof raw === 'string') return raw.trim() !== '';
     if (typeof raw === 'number') return Number.isFinite(raw);
@@ -555,6 +578,30 @@ function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
   return { lat: la, lng: ln };
 }
 
+/** Mesma geometria que o mapa ao vivo (`liveRouteCoordsForMap`) — para OSRM na saída. */
+function buildRouteCoordsFromTask(task: any): number[][] {
+  const rawPoly = task?.locationPolygon;
+  const zt = task?.locationZoneType;
+  if ((zt !== 'route' && zt !== 'segment') || !rawPoly) return [];
+  let parsed: any = typeof rawPoly === 'string' ? null : rawPoly;
+  if (!parsed) {
+    try {
+      parsed = JSON.parse(rawPoly as string);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((pt: any) => {
+    if (Array.isArray(pt)) {
+      const a = parseFloat(pt[0]);
+      const b = parseFloat(pt[1]);
+      return normalizePolygonPairToLatLng(a, b);
+    }
+    return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
+  });
+}
+
 /** Modo de visualização dentro da etapa (definido no separador de secção no builder). */
 function normalizeSectionFillMode(v: any): 'inherit' | 'list' | 'wizard' {
   if (v === 'list' || v === 'wizard') return v;
@@ -593,6 +640,7 @@ function computeEffectiveFillModeFromTemplate(
 
 export default function ChecklistEngine() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { id, taskId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
@@ -1045,6 +1093,99 @@ export default function ChecklistEngine() {
       if (traversedPath && traversedPath.length > 0) {
           payload.traversedPath = traversedPath;
       }
+
+      if (label === 'SAIDA' && lat !== 0 && lng !== 0) {
+        try {
+          const routeCoords = buildRouteCoordsFromTask(currentTask);
+          const tl = getDestFromTaskLike(currentTask);
+          const dest = pickDestinationForOsrm(
+            tl ? { lat: tl.lat, lng: tl.lng } : {},
+            routeCoords,
+          );
+          if (dest) {
+            const osrm = await fetchDrivingLegMetrics(lat, lng, dest.lat, dest.lng);
+            const straightDist = Math.round(haversineMeters(lat, lng, dest.lat, dest.lng));
+            if (osrm.ok && osrm.durationSeconds != null) {
+              const dm =
+                osrm.distanceMeters != null && Number.isFinite(osrm.distanceMeters)
+                  ? Math.round(osrm.distanceMeters)
+                  : straightDist;
+              payload.plannedMetrics = {
+                durationSeconds: Math.round(osrm.durationSeconds),
+                distanceMeters: dm,
+                source: 'osrm',
+              };
+            } else {
+              const etaMin = normalizeEtaMinutes(currentTask?.etaMinutes);
+              if (etaMin != null && etaMin > 0) {
+                payload.plannedMetrics = {
+                  durationSeconds: Math.round(etaMin * 60),
+                  distanceMeters: straightDist,
+                  source: 'task_eta',
+                };
+              } else {
+                payload.plannedMetrics = {
+                  durationSeconds: null,
+                  distanceMeters: straightDist,
+                  source: 'straight_line',
+                };
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[transit] plannedMetrics', e);
+        }
+      }
+
+      if (label === 'CHEGADA') {
+        try {
+          const startField = template?.schemaData?.find((f: any) => f.type === 'transit_start');
+          const startRaw =
+            startField != null ? getScopedFieldValue(responses, scope ?? null, startField.id) : undefined;
+          let startObj: any = null;
+          if (startRaw != null && String(startRaw).trim() !== '') {
+            try {
+              startObj = typeof startRaw === 'string' ? JSON.parse(startRaw) : startRaw;
+            } catch {
+              startObj = null;
+            }
+          }
+          const startTs = startObj?.timestamp;
+          const endTs = payload.timestamp;
+          let durationSeconds: number | null = null;
+          if (startTs && endTs) {
+            const a = new Date(startTs).getTime();
+            const b = new Date(endTs).getTime();
+            if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+              durationSeconds = Math.floor((b - a) / 1000);
+            }
+          }
+          const slat = Number(startObj?.coordinates?.lat ?? startObj?.lat);
+          const slng = Number(startObj?.coordinates?.lng ?? startObj?.lng);
+          const path =
+            traversedPath && traversedPath.length > 0 ? traversedPath : undefined;
+          let distanceMeters: number | null = null;
+          if (path && path.length >= 2) {
+            distanceMeters = Math.round(polylineLengthMeters(path));
+          } else if (
+            Number.isFinite(slat) &&
+            Number.isFinite(slng) &&
+            lat !== 0 &&
+            lng !== 0
+          ) {
+            distanceMeters = Math.round(haversineMeters(slat, slng, lat, lng));
+          }
+          if (durationSeconds != null || distanceMeters != null) {
+            payload.actualMetrics = {
+              ...(durationSeconds != null ? { durationSeconds } : {}),
+              ...(distanceMeters != null ? { distanceMeters } : {}),
+              pathPointCount: path?.length ?? 0,
+            };
+          }
+        } catch (e) {
+          console.warn('[transit] actualMetrics', e);
+        }
+      }
       
       handleInput(fieldId, JSON.stringify(payload), scope);
       
@@ -1290,9 +1431,24 @@ export default function ChecklistEngine() {
       let execs = [];
       try { execs = JSON.parse(executedStr); } catch(e){}
       if (!Array.isArray(execs)) execs = [];
-      
-      const isCompleted = taskId && execs.some(e => (typeof e === 'string' ? e : e.id) === String(taskId));
-      /** Só leitura: lista local de concluídas OU estado terminal na API (sem revisão ativa). */
+
+      /** Cache da execução (GET) — inclui `status`; não depender só da lista de concluídas (pode expirar aos 30 dias). */
+      const execStrEarly = taskId ? await AsyncStorage.getItem(`@brspark_execution_${taskId}`) : null;
+      let snapshotIsTerminal = false;
+      if (execStrEarly) {
+        try {
+          const snap = JSON.parse(execStrEarly);
+          if (executionIsViewOnly(snap)) snapshotIsTerminal = true;
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const inExecutedList = Boolean(
+        taskId && execs.some((e) => (typeof e === 'string' ? e : e.id) === String(taskId)),
+      );
+      const isCompleted = Boolean(taskId && (inExecutedList || snapshotIsTerminal));
+      /** Só leitura: lista de concluídas, snapshot local COMPLETED/SYNCED, ou estado terminal na API (sem revisão). */
       let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
       
@@ -1309,60 +1465,91 @@ export default function ChecklistEngine() {
       // PASSO 1: Resolve a Execução PRIMEIRO. Se for um ghost antigo, o ID passado era o taskId e não o templateId. 
       // Ao baixar a execução, extraímos o verdadeiro templateId dela!
       if (isCompleted) {
-         let execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
-         let needFetch = !execStr;
-         
-         if (execStr) {
-             try {
-                const cachedObj = JSON.parse(execStr);
-                if (cachedObj._cacheTime) {
-                   const ageHours = (Date.now() - cachedObj._cacheTime) / (1000 * 60 * 60);
-                   if (ageHours > 4) needFetch = true;
-                }
-             } catch(e) {}
-         }
+        const execStr = execStrEarly;
+        let cacheStale = !execStr;
+        if (execStr) {
+          try {
+            const cachedObj = JSON.parse(execStr);
+            if (cachedObj._cacheTime) {
+              const ageHours = (Date.now() - cachedObj._cacheTime) / (1000 * 60 * 60);
+              cacheStale = ageHours > 4;
+            } else {
+              cacheStale = true;
+            }
+          } catch {
+            cacheStale = true;
+          }
+        }
 
-         if (needFetch) {
-             const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
-             let outbox = [];
-             try { outbox = JSON.parse(outboxStr); } catch(e){}
-             if (!Array.isArray(outbox)) outbox = [];
-             const match = outbox.find((o:any) => o.taskId === taskId);
-             
-             if (match) {
-                 initialRes = match.responses || {};
-                 if (match.templateId) realTemplateId = match.templateId;
-             } else {
-                 try {
-                     const res = await apiFetch(`/api/checklists/executions/${taskId}`);
-                     if (res.ok) {
-                         const remoteExec = await res.json();
-                         initialRes = remoteExec.responses || {};
-                         if (remoteExec.templateId) realTemplateId = remoteExec.templateId;
-                         // Salva cash local incluindo o templateId real
-                         const cachePayload = { ...remoteExec, responses: initialRes, _cacheTime: Date.now() };
-                         await AsyncStorage.setItem(`@brspark_execution_${taskId}`, JSON.stringify(cachePayload));
-                     } else if (res.status === 404) {
-                         // A execução ainda não existe no backend (OS Virgem), segue com form vazio.
-                         initialRes = {};
-                     } else {
-                         Alert.alert('Aviso', 'Servidor retornou erro ou você está offline.');
-                         router.back();
-                         return;
-                     }
-                 } catch (e) {
-                     Alert.alert('Aviso', 'Você esta Offline, para acessar esta Atividade você precisa estar Online');
-                     router.back();
-                     return;
-                 }
-             }
-         } else {
-             try { 
-                 const cachedObj = JSON.parse(execStr || '{}');
-                 initialRes = cachedObj.responses || {}; 
-                 if (cachedObj.templateId) realTemplateId = cachedObj.templateId;
-             } catch(e) {}
-         }
+        const applyLocalExecutionCache = (raw: string) => {
+          try {
+            const cachedObj = JSON.parse(raw || '{}');
+            initialRes =
+              cachedObj.responses && typeof cachedObj.responses === 'object' && !Array.isArray(cachedObj.responses)
+                ? cachedObj.responses
+                : {};
+            if (cachedObj.templateId) realTemplateId = String(cachedObj.templateId);
+          } catch {
+            /* mantém initialRes */
+          }
+        };
+
+        const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
+        let outbox: any[] = [];
+        try {
+          outbox = JSON.parse(outboxStr);
+        } catch {
+          outbox = [];
+        }
+        if (!Array.isArray(outbox)) outbox = [];
+        const outboxMatch = outbox.find((o: any) => String(o.taskId) === String(taskId));
+
+        if (outboxMatch) {
+          initialRes = outboxMatch.responses || {};
+          if (outboxMatch.templateId) realTemplateId = String(outboxMatch.templateId);
+        } else {
+          if (execStr) {
+            applyLocalExecutionCache(execStr);
+          }
+
+          let blockedWithoutCache = false;
+          if (cacheStale) {
+            try {
+              const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+              if (res.ok) {
+                const remoteExec = await res.json();
+                initialRes =
+                  remoteExec.responses &&
+                  typeof remoteExec.responses === 'object' &&
+                  !Array.isArray(remoteExec.responses)
+                    ? remoteExec.responses
+                    : {};
+                if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
+                const cachePayload = { ...remoteExec, responses: initialRes, _cacheTime: Date.now() };
+                await AsyncStorage.setItem(`@brspark_execution_${taskId}`, JSON.stringify(cachePayload));
+              } else if (res.status === 404) {
+                if (!execStr) {
+                  initialRes = {};
+                }
+              } else if (!execStr) {
+                blockedWithoutCache = true;
+              }
+            } catch {
+              if (!execStr) {
+                blockedWithoutCache = true;
+              }
+            }
+          }
+
+          if (blockedWithoutCache) {
+            Alert.alert(
+              'Aviso',
+              'Esta OS não está guardada neste aparelho. Com internet, abra a OS uma vez para ficar disponível offline.',
+            );
+            router.back();
+            return;
+          }
+        }
       } else {
          serverR = {};
          reopenRevisionPending = false;
@@ -2289,7 +2476,10 @@ export default function ChecklistEngine() {
           const u = await AuthSvc.getCurrentUser();
           if (u && u.email) uEmail = u.email;
       } catch(e) {}
-      
+
+      const ownerForStock =
+        user?.email && String(user.email).trim() ? String(user.email).trim() : uEmail;
+
       // Resgatar recebimento ou aceite originais
       let origMeta: any = {};
       let osNumMeta: string | undefined;
@@ -2337,6 +2527,40 @@ export default function ChecklistEngine() {
       finalResponses.__form_completed_at = new Date().toISOString();
       finalResponses.__form_fill_duration_sec = formFillDurationSeconds;
       finalResponses.__form_active_seconds_final = formActiveSeconds;
+
+      if (!isReadOnly) {
+        const ftForStockHistory =
+          (currentTask?.osNumber != null && String(currentTask.osNumber).trim() !== ''
+            ? String(currentTask.osNumber).trim()
+            : undefined) ?? osNumMeta;
+        const matRes = await applyMaterialsStockForSubmission({
+          schemaAll,
+          responses: finalResponses,
+          submissionRevision: nextSubmissionRevisionRef.current,
+          taskId: String(taskId || ''),
+          templateId: String(id),
+          ownerEmail: ownerForStock,
+          osNumber: ftForStockHistory,
+        });
+        if (!matRes.ok) {
+          Alert.alert('Estoque', matRes.message);
+          setSubmitting(false);
+          return;
+        }
+        const finRes = await applyTechnicianFinanceForSubmission({
+          schemaAll,
+          responses: finalResponses,
+          submissionRevision: nextSubmissionRevisionRef.current,
+          taskId: String(taskId || ''),
+          templateId: String(id),
+          ownerEmail: ownerForStock,
+        });
+        if (!finRes.ok) {
+          Alert.alert('Financeiro técnico', finRes.message);
+          setSubmitting(false);
+          return;
+        }
+      }
 
       const payload = {
         templateId: id,
@@ -2935,28 +3159,10 @@ export default function ChecklistEngine() {
   ]);
 
   /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
-  const liveRouteCoordsForMap = useMemo(() => {
-    const rawPoly = currentTask?.locationPolygon;
-    const zt = currentTask?.locationZoneType;
-    if ((zt !== 'route' && zt !== 'segment') || !rawPoly) return [] as number[][];
-    let parsed: any = typeof rawPoly === 'string' ? null : rawPoly;
-    if (!parsed) {
-      try {
-        parsed = JSON.parse(rawPoly as string);
-      } catch {
-        return [];
-      }
-    }
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((pt: any) => {
-      if (Array.isArray(pt)) {
-        const a = parseFloat(pt[0]);
-        const b = parseFloat(pt[1]);
-        return normalizePolygonPairToLatLng(a, b);
-      }
-      return pt.lat !== undefined ? [parseFloat(pt.lat), parseFloat(pt.lng)] : pt;
-    });
-  }, [currentTask?.locationPolygon, currentTask?.locationZoneType]);
+  const liveRouteCoordsForMap = useMemo(
+    () => buildRouteCoordsFromTask(currentTask),
+    [currentTask?.locationPolygon, currentTask?.locationZoneType],
+  );
 
   /** Deve rodar antes de qualquer return antecipado (loading / mapa), senão viola as regras dos hooks. */
   const sessionPauseOpenEvent = useMemo(() => {
@@ -4414,6 +4620,21 @@ export default function ChecklistEngine() {
                        </>
                    )}
                  </TouchableOpacity>
+              )}
+              {field.type === 'materials_consumption' && (
+                <ChecklistMaterialsConsumptionField
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json)}
+                  readOnly={isReadOnly}
+                  userEmail={user?.email}
+                />
+              )}
+              {field.type === 'technician_finance' && (
+                <ChecklistTechnicianFinanceField
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json)}
+                  readOnly={isReadOnly}
+                />
               )}
               {field.type !== 'hidden' && field.allowTechnicianComment ? (
                 <View style={{ marginTop: 14 }}>

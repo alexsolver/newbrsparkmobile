@@ -18,7 +18,7 @@ Notifications.setNotificationHandler({
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
-import { getLocalAssets, getLocalStockItems } from '../database';
+import { getLocalAssets, getVenueStockItemsOnly, getLocalTechStockItems } from '../database';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 export interface AppNotification {
@@ -88,9 +88,9 @@ export const NotificationService = {
       }
     } catch(e) {}
 
-    // 2. Low Stock Alerts
-    const stockItems = getLocalStockItems(userEmail);
-    stockItems.forEach(item => {
+    // 2. Low Stock — bens (locais de ativo)
+    const stockItems = getVenueStockItemsOnly(userEmail);
+    stockItems.forEach((item) => {
       if (item.currentStock <= item.minStock) {
         generated.push({
           id: `stock_${item.id}`,
@@ -98,14 +98,29 @@ export const NotificationService = {
           body: `O item atingiu o nível mínimo (${item.currentStock} ${item.unit}). Reabasteça!`,
           category: 'alert',
           read: false,
-          timestamp: Date.now() - 3600000, 
-          assetId: item.locationId
+          timestamp: Date.now() - 3600000,
+          assetId: item.locationId,
+        });
+      }
+    });
+
+    // 2b. Low Stock — estoque técnico (sem vínculo a bem)
+    const techItems = getLocalTechStockItems(userEmail);
+    techItems.forEach((item) => {
+      if (item.currentStock <= item.minStock) {
+        generated.push({
+          id: `tech_stock_${item.id}`,
+          title: `Estoque técnico: ${item.name}`,
+          body: `Saldo baixo (${item.currentStock} ${item.unit}). SKU ${item.sku}.`,
+          category: 'alert',
+          read: false,
+          timestamp: Date.now() - 3500000,
         });
       }
     });
 
     // 3. Maintenance / Warning Assets
-    const assets = getLocalAssets(userEmail);
+    const assets = getLocalAssets(userEmail, { includeMobileWarehouse: false });
     assets.forEach(asset => {
       // Ignorar caso o status seja resolvido
       if (asset.statusType === 'warning') {

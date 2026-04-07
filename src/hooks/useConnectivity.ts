@@ -1,10 +1,11 @@
 /**
- * useConnectivity — monitors server reachability for the BrSpark offline-first app.
- * 
- * Pings /api/config every 10 seconds (lightweight endpoint, no auth needed).
- * Returns: { isOnline: boolean, lastChecked: Date | null }
+ * useConnectivity — estado «online» coerente para o app offline-first.
+ *
+ * 1) Sem transporte (Wi‑Fi/dados) ou internet explicitamente indisponível → offline.
+ * 2) Caso contrário, ping leve em /api/config (servidor BrSpark acessível).
  */
 import { useState, useEffect, useRef } from 'react';
+import * as Network from 'expo-network';
 import { API_BASE } from '../services/auth';
 
 export function useConnectivity(intervalMs = 10000) {
@@ -14,6 +15,18 @@ export function useConnectivity(intervalMs = 10000) {
 
   const check = async () => {
     try {
+      const net = await Network.getNetworkStateAsync();
+      if (net.isConnected === false) {
+        setIsOnline(false);
+        setLastChecked(new Date());
+        return;
+      }
+      if (net.isInternetReachable === false) {
+        setIsOnline(false);
+        setLastChecked(new Date());
+        return;
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
       const res = await fetch(`${API_BASE}/api/config`, {

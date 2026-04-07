@@ -20,7 +20,7 @@ const CATEGORIES: { label: string; value: EventCategory; color: string; icon: st
 export default function NewAgendaScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const assets = getLocalAssets() || [];
+  const assets = getLocalAssets(undefined, { includeMobileWarehouse: false }) || [];
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

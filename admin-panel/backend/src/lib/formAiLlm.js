@@ -6,6 +6,8 @@ const {
   sanitizeTemplateText,
   applyColumnSignalsToProposals,
   applyColumnSignalsToSchemaData,
+  normalizeStructureBlocksFromLlm,
+  applyColumnSignalsToStructureBlocks,
 } = require('./formAiNormalize');
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
 const { formatColumnSignalsForLlm } = require('./formAiExtract');
@@ -63,6 +65,33 @@ Regras estruturais:
 - Começa cada folha (## Folha:) com um section_break com label = nome da folha, depois os campos dessa folha.
 - Se a primeira linha de cada folha for cabeçalho, um campo por coluna relevante (ignora colunas vazias ou totais óbvios).
 - Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o utilizador os pediu explicitamente no contexto.
+`;
+}
+
+/**
+ * IA só extrai estrutura (etapas + rótulos de colunas). Tipos de campo escolhe o utilizador no painel.
+ * @param {Record<string, unknown>} [_formContext] reservado (contexto já vai no user content)
+ */
+function buildStructureExtractSystemPrompt(_formContext) {
+  return `És um assistente que lê planilhas Excel convertidas em texto e extrai apenas a ESTRUTURA lógica de um formulário BrSpark (checklist no telemóvel).
+
+NÃO escolhas tipos de campo (dropdown, número, foto, etc.) — isso será feito pelo utilizador no painel. Não uses "options", "recommendedOptionKey" nem "suggestedOptions".
+
+Devolves APENAS JSON válido (sem markdown), com as chaves:
+- "title": título provisório do formulário (pt-BR, curto).
+- "description": descrição curta ou string vazia.
+- "blocks": array ORDENADO na mesma ordem do documento (folhas, depois colunas relevantes).
+
+Cada elemento de "blocks" tem:
+- "key": identificador estável único no array (ex.: "b0", "b1"…).
+- "kind": "section_break" OU "field".
+- "label": texto em português — para field, usa o texto do cabeçalho da coluna na planilha (alinhado ao Excel).
+- "context": opcional, uma frase curta (ex.: coluna «X» na folha «Y»).
+
+Regras estruturais:
+- Quando o conteúdo tiver folhas marcadas (## Folha:), começa cada folha com um block kind=section_break e label = nome da folha; a seguir, um field por coluna útil dessa folha.
+- Se houver cabeçalho na primeira linha, um field por coluna com dados (ignora colunas vazias, totais óbvios ou índices sem significado).
+- Mantém a ordem de leitura natural (cima → baixo, esquerda → direita nas colunas).
 `;
 }
 
@@ -184,6 +213,27 @@ async function analyzeSpreadsheetProposals(input) {
 }
 
 /**
+ * Análise só de estrutura: secções + campos (rótulos). Tipos escolhidos no builder.
+ * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
+ */
+async function analyzeSpreadsheetStructure(input) {
+  const formContext = input.formContext && typeof input.formContext === 'object' ? input.formContext : {};
+  const systemPrompt = buildStructureExtractSystemPrompt(formContext);
+  const userContent = buildUserContentWithProfile({
+    markdown: input.markdown,
+    userHint: input.userHint,
+    columnSignals: input.columnSignals,
+    formContext,
+  });
+  const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.15);
+  const title = sanitizeTemplateText(parsed.title, 200) || 'Formulário (IA)';
+  const description = sanitizeTemplateText(parsed.description, 500);
+  const { blocks, warnings: normWarnings } = normalizeStructureBlocksFromLlm(parsed);
+  const blocksHinted = applyColumnSignalsToStructureBlocks(blocks, input.columnSignals || [], formContext);
+  return { title, description, blocks: blocksHinted, warnings: normWarnings };
+}
+
+/**
  * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
  * @returns {Promise<{ title: string, description: string, schemaData: object[], warnings: string[] }>}
  */
@@ -212,7 +262,9 @@ async function generateSchemaFromCanonical(input) {
 module.exports = {
   generateSchemaFromCanonical,
   analyzeSpreadsheetProposals,
+  analyzeSpreadsheetStructure,
   buildAnalyzeSystemPrompt,
+  buildStructureExtractSystemPrompt,
   buildCanonicalSystemPrompt,
   buildUserContentWithProfile,
   openAiJsonObjectChat,

@@ -244,7 +244,7 @@ export default function NewAssetScreen() {
     }
 
     // Verificar duplicatas de nome
-    const existing = getLocalAssets(user?.email || '');
+    const existing = getLocalAssets(user?.email || '', { includeMobileWarehouse: false });
     const duplicate = existing.find(a => a.title.toLowerCase().trim() === title.toLowerCase().trim());
     if (duplicate) {
       Alert.alert(t('newAsset.duplicate'), t('newAsset.duplicateMsg', { title: duplicate.title }));

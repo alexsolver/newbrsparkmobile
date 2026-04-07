@@ -18,7 +18,7 @@ export default function NewMediaScreen() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const assets = user?.email ? getRootAssets(user.email) : [];
+  const assets = user?.email ? getRootAssets(user.email, { includeMobileWarehouse: false }) : [];
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
