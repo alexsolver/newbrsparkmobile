@@ -203,6 +203,27 @@ function parsePauseHistory(responses: Record<string, any>): any[] {
   return [];
 }
 
+/** Lista local usada no dashboard (`effectiveProviderTaskStatus`) para a aba «Em andamento». */
+async function ensureTaskMarkedInProgressLocally(executionId: string): Promise<void> {
+  const id = String(executionId || '').trim();
+  if (!id) return;
+  try {
+    const raw = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+    let arr: string[] = [];
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      arr = [];
+    }
+    if (!Array.isArray(arr)) arr = [];
+    if (arr.includes(id)) return;
+    arr.push(id);
+    await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(arr));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Resumo do motivo da pausa ainda aberta (sem fechar o intervalo). */
 function getOpenPauseSummaryFromResponses(prev: Record<string, any>): string {
   const hist = parsePauseHistory(prev);
@@ -1844,6 +1865,44 @@ export default function ChecklistEngine() {
         console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'readOnlyMode=', readOnlyMode);
       }
 
+      // Dashboard: aba «Em andamento» usa @brspark_inprogress_tasks. Só gravávamos no 1.º handleInput
+      // (assíncrono) — offline com rascunho já carregado ou saída rápida deixava a OS em «Pendentes».
+      // Revisão ainda não «Aceite» (PENDING/RECEIVED sem id em accepted_tasks): não marcar até o fluxo do modal.
+      if (resolvedTaskId && !readOnlyMode) {
+        let skipAutoInProgress = false;
+        if (reopenRevisionPending) {
+          try {
+            const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+            let cloudTasks: any[] = [];
+            try {
+              const p = JSON.parse(cloudTasksStr);
+              cloudTasks = Array.isArray(p) ? p : [];
+            } catch {
+              cloudTasks = [];
+            }
+            const ct = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
+            const st = String(ct?.status || '').toUpperCase();
+            const accRaw = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+            let acc: string[] = [];
+            try {
+              acc = JSON.parse(accRaw);
+            } catch {
+              acc = [];
+            }
+            if (!Array.isArray(acc)) acc = [];
+            const accepted = acc.includes(String(resolvedTaskId));
+            if ((st === 'PENDING' || st === 'RECEIVED') && !accepted) {
+              skipAutoInProgress = true;
+            }
+          } catch {
+            /* se não der para avaliar, marcar em andamento — comportamento legado */
+          }
+        }
+        if (!skipAutoInProgress) {
+          await ensureTaskMarkedInProgressLocally(resolvedTaskId);
+        }
+      }
+
       // Only mark loading done after geo state is set — prevents form flash
       setLoading(false);
 
@@ -2179,19 +2238,8 @@ export default function ChecklistEngine() {
       return newRes;
     });
 
-    if (taskId) {
-      AsyncStorage.getItem('@brspark_inprogress_tasks').then((str) => {
-        let inprogs = [];
-        try {
-          inprogs = JSON.parse(str || '[]');
-        } catch (e) {}
-        if (!Array.isArray(inprogs)) inprogs = [];
-
-        if (!inprogs.includes(String(taskId))) {
-          inprogs.push(String(taskId));
-          AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(inprogs));
-        }
-      });
+    if (resolvedTaskId) {
+      void ensureTaskMarkedInProgressLocally(resolvedTaskId);
     }
   };
 

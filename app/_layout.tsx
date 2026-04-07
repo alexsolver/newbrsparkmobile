@@ -1,3 +1,4 @@
+import '../src/tasks/routeTrackingTask';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';

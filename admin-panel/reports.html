@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BrSpark Admin — Construtor de relatório PDF</title>
   <link rel="stylesheet" href="css/main.css" />
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
   <style>
     .report-builder-page {
       display: flex;
@@ -440,16 +442,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="preview-productivity-modal" style="display:none;opacity:1;pointer-events:all;z-index:10040;">
-  <div class="modal" style="max-width:520px;width:92vw;">
-    <div class="modal-header">
-      <span class="modal-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="stats-chart-outline" style="font-size:20px;color:var(--accent);flex-shrink:0"></ion-icon> Produtividade e deslocamento</span>
-      <button type="button" class="modal-close" id="preview-productivity-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
-    </div>
-    <div class="modal-body" id="preview-productivity-body" style="max-height:70vh;overflow-y:auto"></div>
-  </div>
-</div>
-
 <script type="module">
 import { initPage } from './js/sidebar.js';
 import { CONFIG } from './js/config.js';
@@ -457,7 +449,6 @@ import { mergePresetConfig, MODULE_KEYS, normalizeModuleOrder } from './js/repor
 import { mergeTheme } from './js/report/reportThemeBrowser.js';
 import {
   buildReportPreviewHtml,
-  buildProductivityModalHtml,
   MOCK_PREVIEW_TASK,
   MOCK_PREVIEW_SCHEMA,
 } from './js/report/reportPdfPreview.js';
@@ -468,7 +459,7 @@ const MODULE_LABELS = {
   topbar: 'Barra + logo + data',
   headerBanner: 'Faixa azul (título / técnico)',
   technicalBlock: 'Bloco técnico (3 colunas)',
-  productivity: 'Faixa produtividade',
+  productivity: 'Produtividade (bloco PDF)',
   timeline: 'Linha do tempo',
   transit: 'Deslocamento',
   formResponses: 'Respostas numeradas',
@@ -481,6 +472,39 @@ let previewTask = structuredClone(MOCK_PREVIEW_TASK);
 let previewSchema = [...MOCK_PREVIEW_SCHEMA];
 let previewDebounce = null;
 let moduleOrderState = normalizeModuleOrder([]);
+
+/** Schema do canvas: todos os campos do template + chaves em `responses` que não estão no schema (ex.: versões antigas do form). */
+function buildPreviewSchemaFromLoadedTask(found) {
+  const resp =
+    found.responses && typeof found.responses === 'object' && !Array.isArray(found.responses)
+      ? found.responses
+      : {};
+  const fromTpl = Array.isArray(found.template?.fields)
+    ? found.template.fields.map((f) => ({
+        id: f.id,
+        label: (f.label && String(f.label).trim()) || f.id,
+        type: f.type || f.fieldType || 'text',
+        allowTechnicianComment: !!f.allowTechnicianComment,
+      }))
+    : [];
+  const seen = new Set(fromTpl.map((x) => x.id));
+  const orphans = [];
+  for (const k of Object.keys(resp)) {
+    if (k.startsWith('__')) continue;
+    if (seen.has(k)) continue;
+    orphans.push({ id: k, label: k, type: 'text' });
+  }
+  orphans.sort((a, b) => a.id.localeCompare(b.id));
+  return fromTpl.length || orphans.length ? [...fromTpl, ...orphans] : [...MOCK_PREVIEW_SCHEMA];
+}
+
+function waitForIonIcons(maxMs = 3000) {
+  if (customElements.get('ion-icon')) return Promise.resolve();
+  return Promise.race([
+    customElements.whenDefined('ion-icon'),
+    new Promise((r) => setTimeout(r, maxMs)),
+  ]).catch(() => {});
+}
 
 function hexForPicker(hex) {
   const s = String(hex || '#000000').trim();
@@ -661,37 +685,19 @@ function getEditorConfig() {
   });
 }
 
-function openPreviewProductivityModal() {
-  const cfg = getEditorConfig();
-  document.getElementById('preview-productivity-body').innerHTML = buildProductivityModalHtml(cfg, previewTask);
-  document.getElementById('preview-productivity-modal').style.display = 'flex';
-}
-
-function closePreviewProductivityModal() {
-  document.getElementById('preview-productivity-modal').style.display = 'none';
-}
-
-function runPreview() {
+async function runPreview() {
+  await waitForIonIcons();
   const cfg = getEditorConfig();
   const root = document.getElementById('preview-root');
   root.classList.add('pdf-theme-root');
   root.innerHTML = buildReportPreviewHtml(cfg, previewTask, previewSchema);
-  root.querySelectorAll('[data-brspark-preview-prod]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openPreviewProductivityModal();
-    });
-  });
 }
-
-document.getElementById('preview-productivity-close')?.addEventListener('click', closePreviewProductivityModal);
-document.getElementById('preview-productivity-modal')?.addEventListener('click', (e) => {
-  if (e.target && e.target.id === 'preview-productivity-modal') closePreviewProductivityModal();
-});
 
 function schedulePreview() {
   clearTimeout(previewDebounce);
-  previewDebounce = setTimeout(runPreview, 60);
+  previewDebounce = setTimeout(() => {
+    runPreview();
+  }, 60);
 }
 
 function applyZoom() {
@@ -871,15 +877,7 @@ document.getElementById('preview-load-exec').addEventListener('click', async () 
       : null;
     if (!found) throw new Error('Execução não encontrada.');
     previewTask = found;
-    if (found.template && Array.isArray(found.template.fields) && found.template.fields.length) {
-      previewSchema = found.template.fields.slice(0, 40).map((f) => ({
-        id: f.id,
-        label: f.label || f.id,
-        type: f.type || 'text',
-      }));
-    } else {
-      previewSchema = [...MOCK_PREVIEW_SCHEMA];
-    }
+    previewSchema = buildPreviewSchemaFromLoadedTask(found);
     const seed = {};
     for (const f of previewSchema) {
       if (prevFieldCfg[f.id]) seed[f.id] = prevFieldCfg[f.id];

@@ -121,6 +121,49 @@
       pointer-events: none;
     }
 
+    /* Autocompletar técnico — Despachar OS */
+    .dispatch-tech-suggest-wrap { position: relative; }
+    .dispatch-tech-suggest-list {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      margin: 4px 0 0;
+      padding: 4px 0;
+      list-style: none;
+      z-index: 80;
+      max-height: 220px;
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    }
+    .dispatch-tech-suggest-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.35;
+      border-bottom: 1px solid var(--border);
+    }
+    .dispatch-tech-suggest-item:last-child { border-bottom: none; }
+    .dispatch-tech-suggest-item:hover,
+    .dispatch-tech-suggest-item.is-active {
+      background: var(--surface2);
+    }
+    .dispatch-tech-suggest-item .dts-name {
+      display: block;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .dispatch-tech-suggest-item .dts-email {
+      display: block;
+      font-size: 10px;
+      color: var(--text3);
+      font-family: ui-monospace, monospace;
+    }
+
     /* ── Column Colors ───────────────────────────────────────── */
     .col-pending   { --col-hdr-bg: #FEF3C7; --col-hdr-color: #92400E; --card-accent: var(--amber); }
     .col-progress  { --col-hdr-bg: #DBEAFE; --col-hdr-color: #1E40AF; --card-accent: var(--blue); }
@@ -575,6 +618,26 @@
   </div>
 </div>
 
+<!-- ── Escolher submissão antes de abrir detalhe (várias revisões) ── -->
+<div class="modal-overlay" id="revision-picker-modal" style="display:none;opacity:1;pointer-events:all;z-index:10055;">
+  <div class="modal" style="max-width:480px;width:95%;">
+    <div class="modal-header">
+      <span class="modal-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Qual submissão abrir?</span>
+      <button type="button" class="modal-close" onclick="closeRevisionPickerModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+      <p id="revision-picker-hint" style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 14px;">
+        Esta FT tem mais do que uma submissão concluída indexada. Escolha qual snapshot deseja ver no relatório e nas informações.
+      </p>
+      <div id="revision-picker-options" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeRevisionPickerModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="revision-picker-confirm-btn" onclick="void window.confirmRevisionPicker()">Abrir</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Snapshot de revisão (histórico) ───────────────────────── -->
 <div class="modal-overlay" id="revision-snapshot-modal" style="display:none;opacity:1;pointer-events:all;z-index:10050;">
   <div class="modal modal-lg" style="max-width:760px;width:96vw;">
@@ -644,7 +707,10 @@
       <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Designação</div>
       <div class="form-group">
         <label class="form-label" for="d-email">E-mail do Técnico *</label>
-        <input class="form-control" id="d-email" type="email" placeholder="tecnico@empresa.com" />
+        <div class="dispatch-tech-suggest-wrap">
+          <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" />
+          <ul id="d-email-suggestions" class="dispatch-tech-suggest-list" role="listbox" aria-label="Técnicos sugeridos"></ul>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="d-template">Formulário / Template *</label>
@@ -973,6 +1039,141 @@ function statusColClass(status) {
 // ── Reabrir para revisão (modal + técnico) ───────────────────
 let reopenRevisionTaskId = null;
 let _reopenUsersCache = null;
+let _dispatchSuggestIndex = -1;
+
+/** Utilizadores activos para reabertura e despacho (partilha cache). */
+async function ensureOpsActiveUsersCache() {
+  if (_reopenUsersCache) return _reopenUsersCache;
+  try {
+    const res = await CONFIG.get('/users?limit=500');
+    _reopenUsersCache = (res && Array.isArray(res.data) ? res.data : []).filter((u) => u.isActive !== false);
+  } catch (e) {
+    console.error('[OPS] users cache', e);
+    _reopenUsersCache = [];
+  }
+  return _reopenUsersCache;
+}
+
+function escDispatchSuggest(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
+function hideDispatchTechSuggestions() {
+  const ul = document.getElementById('d-email-suggestions');
+  if (ul) {
+    ul.style.display = 'none';
+    ul.innerHTML = '';
+  }
+  _dispatchSuggestIndex = -1;
+}
+
+function filterDispatchTechCandidates(q) {
+  const query = String(q || '').trim().toLowerCase();
+  if (!_reopenUsersCache || !_reopenUsersCache.length) return [];
+  if (!query) {
+    const sorted = [..._reopenUsersCache].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' })
+    );
+    return sorted.slice(0, 12);
+  }
+  const list = _reopenUsersCache.filter((u) => {
+    const name = String(u.name || '').toLowerCase();
+    const em = String(u.email || '').toLowerCase();
+    return name.includes(query) || em.includes(query);
+  });
+  list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' }));
+  return list.slice(0, 14);
+}
+
+function renderDispatchTechSuggestions(users) {
+  const ul = document.getElementById('d-email-suggestions');
+  if (!ul) return;
+  if (!users.length) {
+    hideDispatchTechSuggestions();
+    return;
+  }
+  ul.innerHTML = users
+    .map((u, i) => {
+      const em = String(u.email || '');
+      const nm = String(u.name || '—');
+      const active = i === _dispatchSuggestIndex ? ' is-active' : '';
+      return `<li role="option" data-email="${escDispatchSuggest(em)}" class="dispatch-tech-suggest-item${active}"><span class="dts-name">${escDispatchSuggest(nm)}</span><span class="dts-email">${escDispatchSuggest(em)}</span></li>`;
+    })
+    .join('');
+  ul.style.display = 'block';
+}
+
+window.selectDispatchTechEmail = function (email) {
+  const input = document.getElementById('d-email');
+  if (input) input.value = email;
+  hideDispatchTechSuggestions();
+};
+
+async function refreshDispatchTechSuggestionsFromInput() {
+  await ensureOpsActiveUsersCache();
+  const input = document.getElementById('d-email');
+  const v = input ? input.value : '';
+  const users = filterDispatchTechCandidates(v);
+  _dispatchSuggestIndex = users.length ? 0 : -1;
+  renderDispatchTechSuggestions(users);
+}
+
+function initDispatchTechAutocomplete() {
+  const input = document.getElementById('d-email');
+  const ul = document.getElementById('d-email-suggestions');
+  if (!input || !ul || input.dataset.dispatchSuggestBound) return;
+  input.dataset.dispatchSuggestBound = '1';
+
+  input.addEventListener('input', () => {
+    refreshDispatchTechSuggestionsFromInput().catch(() => {});
+  });
+  input.addEventListener('focus', () => {
+    refreshDispatchTechSuggestionsFromInput().catch(() => {});
+  });
+  input.addEventListener('keydown', (e) => {
+    if (ul.style.display === 'none' || !ul.querySelector('li')) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        refreshDispatchTechSuggestionsFromInput().catch(() => {});
+      }
+      return;
+    }
+    const items = ul.querySelectorAll('.dispatch-tech-suggest-item');
+    const n = items.length;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _dispatchSuggestIndex = Math.min(n - 1, _dispatchSuggestIndex + 1);
+      if (_dispatchSuggestIndex < 0) _dispatchSuggestIndex = 0;
+      items.forEach((li, i) => li.classList.toggle('is-active', i === _dispatchSuggestIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _dispatchSuggestIndex = Math.max(0, _dispatchSuggestIndex - 1);
+      items.forEach((li, i) => li.classList.toggle('is-active', i === _dispatchSuggestIndex));
+    } else if (e.key === 'Enter') {
+      const active = ul.querySelector('.dispatch-tech-suggest-item.is-active');
+      const email = active ? active.getAttribute('data-email') : items[0]?.getAttribute('data-email');
+      if (email) {
+        e.preventDefault();
+        window.selectDispatchTechEmail(email);
+      }
+    } else if (e.key === 'Escape') {
+      hideDispatchTechSuggestions();
+    }
+  });
+  input.addEventListener('blur', () => {
+    setTimeout(() => hideDispatchTechSuggestions(), 180);
+  });
+  ul.addEventListener('mousedown', (e) => {
+    const li = e.target.closest('.dispatch-tech-suggest-item');
+    if (!li) return;
+    e.preventDefault();
+    const email = li.getAttribute('data-email');
+    if (email) window.selectDispatchTechEmail(email);
+  });
+}
 
 window.toggleReopenRevisionTechUi = function () {
   const other = document.getElementById('reopen-revision-other')?.checked;
@@ -1022,10 +1223,7 @@ window.openReopenRevisionModal = async function (taskId) {
       .replace(/</g, '&lt;');
 
   try {
-    if (!_reopenUsersCache) {
-      const res = await CONFIG.get('/users?limit=500');
-      _reopenUsersCache = (res && Array.isArray(res.data) ? res.data : []).filter((u) => u.isActive !== false);
-    }
+    await ensureOpsActiveUsersCache();
     const cur = String(task.ownerEmail || '').toLowerCase();
     const sorted = [..._reopenUsersCache].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' })
@@ -1434,15 +1632,15 @@ function buildTransitTechMapIcons(task) {
     L.divIcon({
       className: 'pdf-transit-tech-marker',
       html:
-        '<div class="pdf-transit-tech-avatar" style="width:32px;height:32px;border:3px solid ' +
+        '<div class="pdf-transit-tech-avatar" style="width:64px;height:64px;border:3px solid ' +
         borderColor +
-        ';box-shadow:0 2px 8px rgba(0,0,0,0.25);">' +
+        ';box-shadow:0 2px 10px rgba(0,0,0,0.28);">' +
         '<img src="' +
         safe +
         '" alt="" loading="lazy"/>' +
         '</div>',
-      iconSize: [38, 38],
-      iconAnchor: [19, 19],
+      iconSize: [64, 64],
+      iconAnchor: [32, 32],
     });
   return { startIcon: makeIcon('#3b82f6'), endIcon: makeIcon('#ef4444') };
 }
@@ -2284,7 +2482,16 @@ function buildInfoTab(t) {
             : '';
   const distHintI = tmI.actualDistFromPolyline ? 'polilinha GPS' : 'aproximação';
 
+  const snapBanner =
+    t._viewingRevision != null && Number.isFinite(Number(t._viewingRevision))
+      ? `<div style="grid-column:1/-1;padding:10px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;margin-bottom:10px;font-size:12px;line-height:1.45;color:#312e81">
+          A visualizar o <strong>snapshot</strong> da <strong>submissão n.º ${Number(t._viewingRevision)}</strong>.
+          Relatório e JSON abaixo reflectem esse envio; dados de execução (técnico, FT, estado) são os actuais no servidor.
+        </div>`
+      : '';
+
   return `
+    ${snapBanner}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div class="report-field">
         <div class="report-field-label">ID da Execução</div>
@@ -2924,77 +3131,212 @@ function buildRawTab(t) {
     </div>`;
 }
 
-window.openDetail = function(id) {
-  const t = allTasks.find(x => x.id === id);
+/** Merge GET /tasks/:id/revisions/:rev no objeto da execução (só UI / PDF). */
+function mergeSnapshotIntoTask(found, snap) {
+  const baseMeta =
+    typeof found.metadata === 'object' && found.metadata && !Array.isArray(found.metadata)
+      ? { ...found.metadata }
+      : {};
+  const snapMeta = snap.metadataSnapshot;
+  if (snapMeta && typeof snapMeta === 'object' && !Array.isArray(snapMeta)) {
+    Object.assign(baseMeta, snapMeta);
+  }
+  const responses =
+    snap.responses && typeof snap.responses === 'object' && !Array.isArray(snap.responses) ? snap.responses : {};
+  return {
+    ...found,
+    responses,
+    metadata: baseMeta,
+    _viewingRevision: snap.revision != null ? Number(snap.revision) : null,
+    _snapshotCompletedAt: snap.completedAt || null,
+    _snapshotSubmissionId: snap.submissionId || null,
+    _snapshotBusinessMetrics: snap.businessMetrics ?? null,
+  };
+}
+
+function applyDetailModalHeader(t) {
+  let title = t.title || t.metadata?.title || `OS ${displayOsLabel(t)}`;
+  if (t._viewingRevision != null && Number.isFinite(Number(t._viewingRevision))) {
+    title = `${title} · Submissão n.º ${Number(t._viewingRevision)}`;
+  }
+  document.getElementById('detail-modal-title').textContent = title;
+  const statusBadgeMap = {
+    PENDING: 'badge-amber',
+    RECEIVED: 'badge-blue',
+    ACCEPTED: 'badge-blue',
+    IN_PROGRESS: 'badge-blue',
+    PAUSED: 'badge-red',
+    COMPLETED: 'badge-green',
+    SYNCED: 'badge-green',
+    CANCELLED: 'badge-red',
+    REJECTED: 'badge-red',
+  };
+  document.getElementById('detail-modal-badge').innerHTML = `<span class="badge ${statusBadgeMap[t.status] || 'badge-red'}">${t.status || '?'}</span>`;
+  const canCancel = !['COMPLETED', 'SYNCED', 'CANCELLED', 'REJECTED'].includes(t.status);
+  const cancelBtn = document.getElementById('detail-cancel-btn');
+  cancelBtn.style.display = canCancel ? '' : 'none';
+  cancelBtn.onclick = () => window.cancelTask();
+  cancelBtn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
+  cancelBtn.disabled = false;
+  const hasReport = t.status === 'COMPLETED' || t.status === 'SYNCED';
+  document.getElementById('detail-pdf-btn').style.display = hasReport ? '' : 'none';
+  const presetWrap = document.getElementById('detail-report-preset-wrap');
+  if (presetWrap) presetWrap.style.display = hasReport ? 'flex' : 'none';
+  if (hasReport) void refreshReportPresetsDropdown();
+}
+
+function closeRevisionPickerModal() {
+  const el = document.getElementById('revision-picker-modal');
+  if (el) el.style.display = 'none';
+  window._revisionPickerTaskId = null;
+}
+
+function openRevisionPickerModal(id, revs, t) {
+  window._revisionPickerTaskId = id;
+  const wrap = document.getElementById('revision-picker-options');
+  if (!wrap) return;
+  const st = String(t.status || '').toUpperCase();
+  const showLive = !['COMPLETED', 'SYNCED'].includes(st);
+  const fd = (d) => (d ? new Date(d).toLocaleString('pt-BR') : '—');
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let maxRev = 0;
+  revs.forEach((r) => {
+    maxRev = Math.max(maxRev, Number(r.revision) || 0);
+  });
+  const parts = [];
+  if (showLive) {
+    parts.push(
+      `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+        <input type="radio" name="rev-pick-choice" value="live" checked />
+        <span style="font-size:13px;line-height:1.4"><strong>Estado actual</strong><br><span style="color:var(--text3);font-size:12px">Respostas e metadata actuais da execução no servidor (rascunho, em curso ou última sincronização).</span></span>
+      </label>`
+    );
+  }
+  revs.forEach((r) => {
+    const revn = Number(r.revision) || 0;
+    const checked = !showLive && revn === maxRev ? ' checked' : '';
+    const sid = r.submissionId ? String(r.submissionId) : '';
+    const cid = sid ? esc(sid.length > 36 ? sid.slice(0, 36) + '…' : sid) : '—';
+    parts.push(
+      `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+        <input type="radio" name="rev-pick-choice" value="${revn}"${checked} />
+        <span style="font-size:13px;line-height:1.4"><strong>Submissão n.º ${revn}</strong><br><span style="color:var(--text3);font-size:12px">Concluída: ${fd(r.completedAt)} · Submission: ${cid}</span></span>
+      </label>`
+    );
+  });
+  wrap.innerHTML = parts.join('');
+  const modal = document.getElementById('revision-picker-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+window.confirmRevisionPicker = async function () {
+  const id = window._revisionPickerTaskId;
+  if (!id) return;
+  const sel = document.querySelector('#revision-picker-options input[name="rev-pick-choice"]:checked');
+  if (!sel) return;
+  const v = sel.value;
+  closeRevisionPickerModal();
+  const rev = v === 'live' ? null : parseInt(v, 10);
+  if (v !== 'live' && !Number.isFinite(rev)) return;
+  await openDetailInternal(id, rev);
+};
+
+async function openDetailInternal(id, viewRevisionNumOrNull) {
+  const t = allTasks.find((x) => x.id === id);
   if (!t) return;
   currentDetailId = id;
   _currentTask = t;
   _currentTab = t.status === 'COMPLETED' || t.status === 'SYNCED' ? 'report' : 'info';
 
-  const title = t.title || t.metadata?.title || `OS ${displayOsLabel(t)}`;
-  const statusBadgeMap = { PENDING: 'badge-amber', RECEIVED: 'badge-blue', ACCEPTED: 'badge-blue', IN_PROGRESS: 'badge-blue', PAUSED: 'badge-red', COMPLETED: 'badge-green', SYNCED: 'badge-green', CANCELLED: 'badge-red', REJECTED: 'badge-red' };
-  const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'?'}</span>`;
-
-  document.getElementById('detail-modal-title').textContent = title;
-  document.getElementById('detail-modal-badge').innerHTML = statusBadge;
-  const canCancel = !['COMPLETED','SYNCED','CANCELLED', 'REJECTED'].includes(t.status);
-  const cancelBtn = document.getElementById('detail-cancel-btn');
-  cancelBtn.style.display = canCancel ? '' : 'none';
-  // Reseta estado customizado caso tenha sido alterado pela confirmação
-  cancelBtn.onclick = () => window.cancelTask();
-  cancelBtn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
-  cancelBtn.disabled = false;
-
-  const hasReport = (t.status === 'COMPLETED' || t.status === 'SYNCED');
-  document.getElementById('detail-pdf-btn').style.display = hasReport ? '' : 'none';
-  const presetWrap = document.getElementById('detail-report-preset-wrap');
-  if (presetWrap) presetWrap.style.display = hasReport ? 'flex' : 'none';
-  if (hasReport) void refreshReportPresetsDropdown();
-
-  // Activate correct tab
-  ['info','report','raw'].forEach(tab => {
+  applyDetailModalHeader(t);
+  ['info', 'report', 'raw'].forEach((tab) => {
     document.getElementById(`tab-${tab}`)?.classList.toggle('active', tab === _currentTab);
   });
 
   renderModalBody(t);
   document.getElementById('detail-modal').style.display = 'flex';
 
-  void (async () => {
-    try {
-      const [taskOutcome, revOutcome] = await Promise.allSettled([
-        fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, { headers: CONFIG.headers() }),
-        fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(id)}/revisions`, { headers: CONFIG.headers() }),
-      ]);
+  try {
+    const [taskOutcome, revOutcome] = await Promise.allSettled([
+      fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, { headers: CONFIG.headers() }),
+      fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(id)}/revisions`, { headers: CONFIG.headers() }),
+    ]);
 
-      if (taskOutcome.status !== 'fulfilled') return;
-      const rTask = taskOutcome.value;
-      if (!rTask.ok) return;
-      const arr = await rTask.json();
-      const found = Array.isArray(arr) ? arr.find((x) => x.id === id) : null;
-      if (!found) return;
+    if (taskOutcome.status !== 'fulfilled') return;
+    const rTask = taskOutcome.value;
+    if (!rTask.ok) return;
+    const arr = await rTask.json();
+    const found = Array.isArray(arr) ? arr.find((x) => x.id === id) : null;
+    if (!found) return;
 
-      let revisionHistory = [];
-      const revOk = revOutcome.status === 'fulfilled' && revOutcome.value.ok;
-      if (revOk) {
-        try {
-          const j = await revOutcome.value.json();
-          revisionHistory = Array.isArray(j) ? j : [];
-        } catch {
-          revisionHistory = [];
-        }
+    let revisionHistory = [];
+    const revOk = revOutcome.status === 'fulfilled' && revOutcome.value.ok;
+    if (revOk) {
+      try {
+        const j = await revOutcome.value.json();
+        revisionHistory = Array.isArray(j) ? j : [];
+      } catch {
+        revisionHistory = [];
       }
-      found.revisionHistory = revisionHistory;
-      found._revisionHistoryLoaded = true;
-      found._revisionHistoryFetchFailed = !revOk;
-
-      const idx = allTasks.findIndex((x) => x.id === id);
-      if (idx >= 0) allTasks[idx] = found;
-      if (currentDetailId !== id) return;
-      _currentTask = found;
-      renderModalBody(found);
-    } catch (e) {
-      console.warn('[openDetail] refresh', e);
     }
+    found.revisionHistory = revisionHistory;
+    found._revisionHistoryLoaded = true;
+    found._revisionHistoryFetchFailed = !revOk;
+
+    const idx = allTasks.findIndex((x) => x.id === id);
+    if (idx >= 0) allTasks[idx] = found;
+
+    if (currentDetailId !== id) return;
+
+    let displayTask = found;
+    if (viewRevisionNumOrNull != null && Number.isFinite(Number(viewRevisionNumOrNull))) {
+      const vr = Number(viewRevisionNumOrNull);
+      try {
+        const snapRes = await fetch(
+          `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(id)}/revisions/${vr}`,
+          { headers: CONFIG.headers() }
+        );
+        if (snapRes.ok) {
+          const snap = await snapRes.json();
+          displayTask = mergeSnapshotIntoTask(found, snap);
+        } else {
+          alert('Não foi possível carregar o snapshot desta submissão.');
+        }
+      } catch (e) {
+        console.warn('[openDetailInternal] snapshot', e);
+        alert('Erro de rede ao carregar o snapshot desta submissão.');
+      }
+    }
+
+    _currentTask = displayTask;
+    applyDetailModalHeader(displayTask);
+    renderModalBody(displayTask);
+  } catch (e) {
+    console.warn('[openDetailInternal] refresh', e);
+  }
+}
+
+window.openDetail = function (id) {
+  void (async () => {
+    const t = allTasks.find((x) => x.id === id);
+    if (!t) return;
+    let revs = [];
+    try {
+      const r = await fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(id)}/revisions`, {
+        headers: CONFIG.headers(),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        revs = Array.isArray(j) ? j : [];
+      }
+    } catch (e) {
+      console.warn('[openDetail] prefetch revisions', e);
+    }
+    if (revs.length > 1) {
+      openRevisionPickerModal(id, revs, t);
+      return;
+    }
+    await openDetailInternal(id, null);
   })();
 };
 
@@ -3006,6 +3348,11 @@ window.printReport = async function() {
   const pdfBtn = document.getElementById('detail-pdf-btn');
   const prevPdfLabel = pdfBtn ? pdfBtn.innerHTML : '';
 
+  const viewingRev =
+    _currentTask._viewingRevision != null && Number.isFinite(Number(_currentTask._viewingRevision))
+      ? Number(_currentTask._viewingRevision)
+      : null;
+
   // Always fetch fresh data so responses (GPS) are never stale from initial load
   let t = _currentTask;
   try {
@@ -3015,7 +3362,23 @@ window.printReport = async function() {
       const found = all.find(x => x.id === t.id) || all[0];
       if (found) {
         t = found;
-        _currentTask = found; // update cached ref too
+        if (viewingRev != null) {
+          try {
+            const snapRes = await fetch(
+              `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(t.id)}/revisions/${viewingRev}`,
+              { headers: CONFIG.headers() }
+            );
+            if (snapRes.ok) {
+              const snap = await snapRes.json();
+              t = mergeSnapshotIntoTask(found, snap);
+            } else {
+              console.warn('[PDF] Snapshot da submissão', viewingRev, 'indisponível; a usar estado actual.');
+            }
+          } catch (e) {
+            console.warn('[PDF] Falha ao recarregar snapshot para PDF:', e);
+          }
+        }
+        _currentTask = t;
       }
     }
   } catch(e) { console.warn('[PDF] Could not refresh task data, using cached.', e); }
@@ -3965,18 +4328,31 @@ window.printReport = async function() {
 
   const pdfLogoSrc = safeLogoSrcForAttr(cfg.logoUrl);
   const pdfBannerTitle = escPdf(cfg.reportTitle || 'RELATÓRIO DA ATIVIDADE');
+  const pdfSnapNote =
+    t._viewingRevision != null && Number.isFinite(Number(t._viewingRevision))
+      ? ` · Conteúdo: submissão n.º ${Number(t._viewingRevision)}`
+      : '';
   const pdfBannerSub = escPdf(
-    cfg.reportSubtitle || `${displayOsLabel(t)}${revisionContextSubtitle(t)}`
+    cfg.reportSubtitle || `${displayOsLabel(t)}${revisionContextSubtitle(t)}${pdfSnapNote}`
   );
 
-  const htmlTechnicalCard = (includeProductivity) => `<!-- Cabeçalho Técnico — 3 colunas -->
+  const htmlTechnicalCard = (includeProductivity) => `<!-- Cabeçalho Técnico — 4 colunas: Sistema | Identificação | Despacho | Execução -->
     <div style="margin-top:10px; border:1px solid ${th.colorBorder}; border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
       <div style="background:linear-gradient(135deg,${th.techHeaderStart} 0%,${th.techHeaderEnd} 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
         <ion-icon name="document-text-outline" style="font-size:16px; color:${th.colorMutedLight}"></ion-icon>
         <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
         <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', PAUSED:'#fee2e2', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', PAUSED:'#991b1b', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', PAUSED:'Pausada', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
       </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0">
+      <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0">
+        <div style="padding:10px; border-right:1px solid ${th.colorBorder}; background:${th.colorSurface}">
+          <div style="font-size:8px; font-weight:900; color:${th.colorMuted}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
+            <ion-icon name="hardware-chip-outline" style="font-size:12px"></ion-icon> Sistema
+          </div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.refId||t.metadata?.refId||'—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
+        </div>
         <div style="padding:10px; border-right:1px solid ${th.colorBorder}">
           <div style="font-size:8px; font-weight:900; color:${th.colorMuted}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
             <ion-icon name="information-circle-outline" style="font-size:12px"></ion-icon> Identificação
@@ -3984,13 +4360,9 @@ window.printReport = async function() {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${displayOsLabel(t)}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px">${(() => { const _lr = displayLastConcludedRevisionNumber(t); if (_lr <= 0) return '—'; if (_lr === 1) return '1 (inicial)'; return String(_lr); })()}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.title||'—'}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.description||'Não preenchido'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
-          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
           ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed ${th.colorBorder}"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
         </div>
         <div style="padding:10px; border-right:1px solid ${th.colorBorder}; background:${th.colDispatchBg}">
@@ -4381,6 +4753,7 @@ window.cancelTask = async function(bypassConfirm = false) {
 
 // ── Dispatch Modal ────────────────────────────────────────────
 window.openDispatchModal = async function() {
+  ensureOpsActiveUsersCache().catch(() => {});
   const templates = await CONFIG.get('/checklists/templates');
   const sel = document.getElementById('d-template');
   sel.innerHTML = '<option value="">Selecionar formulário...</option>';
@@ -4407,6 +4780,7 @@ window.openDispatchModal = async function() {
   window._geoMode = 'radius';
   switchGeoTab('radius');
   document.getElementById('dispatch-modal').style.display = 'flex';
+  hideDispatchTechSuggestions();
   // Init map after display
   setTimeout(() => window.initDispatchMap(), 200);
 };
@@ -4812,6 +5186,7 @@ window.renderPolygonPreview = function() {
 
 // ── confirmDispatch (Updated) ───────────────────────────────────
 window.closeDispatchModal = () => {
+  hideDispatchTechSuggestions();
   document.getElementById('dispatch-modal').style.display = 'none';
 };
 
@@ -4920,6 +5295,7 @@ window.confirmDispatch = async function() {
 };
 
 // ── Auto-refresh (30s) ─────────────────────────────────────────
+initDispatchTechAutocomplete();
 loadBoard();
 refreshInterval = setInterval(loadBoard, 30000);
 window.addEventListener('beforeunload', () => clearInterval(refreshInterval));

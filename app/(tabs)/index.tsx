@@ -68,6 +68,80 @@ function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
   return { lat, lng };
 }
 
+/** Distância em metros (aprox.) entre dois pontos WGS84. */
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/**
+ * Pins com o mesmo endereço (ou < ~50 m) sobrepõem-se no MapKit; o 1 cobre o 2 com zIndex alto.
+ * Desloca só a posição **do marcador** (a polilinha continua nas coords reais).
+ */
+function spreadOverlappingRouteMarkerCoords(
+  coords: { lat: number; lng: number }[],
+  minSeparationM = 52
+): { latitude: number; longitude: number }[] {
+  const n = coords.length;
+  const out = coords.map((c) => ({ latitude: c.lat, longitude: c.lng }));
+  if (n < 2) return out;
+
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const union = (a: number, b: number) => {
+    const pa = find(a);
+    const pb = find(b);
+    if (pa !== pb) parent[pb] = pa;
+  };
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (haversineMeters(coords[i], coords[j]) < minSeparationM) union(i, j);
+    }
+  }
+
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r)!.push(i);
+  }
+
+  const stepM = 38;
+  for (const idxs of groups.values()) {
+    if (idxs.length < 2) continue;
+    idxs.sort((a, b) => a - b);
+    let sumLat = 0;
+    let sumLng = 0;
+    for (const i of idxs) {
+      sumLat += coords[i].lat;
+      sumLng += coords[i].lng;
+    }
+    const cLat = sumLat / idxs.length;
+    const cLng = sumLng / idxs.length;
+    const cosLat = Math.cos((cLat * Math.PI) / 180) || 0.35;
+    const metersToLat = stepM / 111_320;
+    const metersToLng = stepM / (111_320 * cosLat);
+
+    idxs.forEach((idx, slot) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * slot) / idxs.length;
+      out[idx] = {
+        latitude: cLat + Math.sin(angle) * metersToLat,
+        longitude: cLng + Math.cos(angle) * metersToLng,
+      };
+    });
+  }
+
+  return out;
+}
+
 /** Mesma ordenação da lista “Rota do dia” (para polilinha bater com os números 1,2,3…). */
 function sortTasksForOsrmRoute(
   tasks: any[],
@@ -131,12 +205,24 @@ function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown
   return Number.isFinite(rc) && rc > 0;
 }
 
-/** OS em visita de revisão (cor índigo / badge) enquanto não concluída no servidor. */
+/** OS em visita de revisão (cor índigo) enquanto activa — cartão concluído usa verde; ver badge abaixo. */
 function isProviderRevisionTask(t: any): boolean {
   const st = String(t?.status || '').toUpperCase();
   if (['COMPLETED', 'SYNCED', 'CANCELLED', 'DONE', 'CLOSED', 'ARCHIVED'].includes(st)) return false;
   const meta = taskMetadataRecord(t);
   return taskMetadataIndicatesRevisionVisit(t, meta);
+}
+
+/**
+ * Badge «Revisão» em qualquer aba: visita aberta OU OS que já teve ciclo de reabertura
+ * (`reopenCount` no metadata mantém-se após concluir) ou mais de uma submissão (`lastSubmittedRevision`).
+ */
+function providerTaskShowsRevisionBadge(t: any): boolean {
+  const meta = taskMetadataRecord(t);
+  if (taskMetadataIndicatesRevisionVisit(t, meta)) return true;
+  const lsr = Number(t?.lastSubmittedRevision);
+  if (Number.isFinite(lsr) && lsr > 1) return true;
+  return false;
 }
 
 const SERVER_COMPLETED_STATUSES = new Set([
@@ -256,6 +342,8 @@ export default function DashboardScreen() {
   const TAB_BAR_HEIGHT = 49 + insets.bottom;
   const pagerRef = useRef<ScrollView>(null);
   const mapRef = useRef<MapView>(null);
+  /** Mapa modal "Rota do Dia" — ref para encaixar todas as paradas (evita zoom agressivo que some marcadores). */
+  const routeDayMapRef = useRef<MapView>(null);
   const isInternalScroll = useRef(false);
   const [pagerWidth, setPagerWidth] = useState(SCREEN_W);
 
@@ -323,6 +411,14 @@ export default function DashboardScreen() {
     return sortTasksForOsrmRoute(base, 'NEWEST', {});
   }, [providerTasks, completedIds, inprogressIds, providerTab, providerSortMode, osrmDurations]);
 
+  /** Coordenadas só para o pin (polilinha usa coords reais). Separa pins < ~50 m para não esconder 2 atrás do 1. */
+  const routeMapMarkerCoords = useMemo(() => {
+    const pts = routeMapTasksOrdered
+      .map((t) => parseCoordLatLng(t))
+      .filter((c): c is { lat: number; lng: number } => c != null);
+    return spreadOverlappingRouteMarkerCoords(pts);
+  }, [routeMapTasksOrdered]);
+
   const providerStageCounts = useMemo(() => {
     let pending = 0;
     let inProgress = 0;
@@ -385,6 +481,47 @@ export default function DashboardScreen() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [showRouteMap, providerSortMode, routeMapTasksOrdered]);
+
+  /** Mostra todas as paradas com número (evita initialRegion 0.02 ao focar um pin — no iOS some vista/intermediários). */
+  useEffect(() => {
+    if (!showRouteMap) return;
+    const coords = routeMapTasksOrdered
+      .map((t) => {
+        const c = parseCoordLatLng(t);
+        return c ? { latitude: c.lat, longitude: c.lng } : null;
+      })
+      .filter((x): x is { latitude: number; longitude: number } => x != null);
+    if (coords.length === 0) return;
+
+    const run = () => {
+      const m = routeDayMapRef.current;
+      if (!m) return;
+      if (coords.length === 1) {
+        m.animateToRegion(
+          { ...coords[0], latitudeDelta: 0.08, longitudeDelta: 0.08 },
+          320
+        );
+        return;
+      }
+      try {
+        m.fitToCoordinates(coords, {
+          edgePadding: { top: 112, right: 48, bottom: 88, left: 48 },
+          animated: true,
+        });
+      } catch {
+        /* MapView ainda a montar */
+      }
+    };
+
+    let tid: ReturnType<typeof setTimeout> | null = null;
+    const raf = requestAnimationFrame(() => {
+      tid = setTimeout(run, 200);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      if (tid) clearTimeout(tid);
+    };
+  }, [showRouteMap, routeMapTasksOrdered]);
 
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
     const pendentesAll = providerTasks.filter((t) => {
@@ -1841,7 +1978,7 @@ export default function DashboardScreen() {
                                 <Text style={{ fontSize: 8, fontWeight: '900', color: '#B91C1C' }}>{t('pause.listBadge')}</Text>
                               </View>
                             )}
-                            {isProviderRevisionTask(order) && (
+                            {providerTaskShowsRevisionBadge(order) && (
                               <View
                                 style={{
                                   backgroundColor: '#EEF2FF',
@@ -1929,9 +2066,6 @@ export default function DashboardScreen() {
                             const coords = order.locationLat && order.locationLng ? { latitude: Number(order.locationLat), longitude: Number(order.locationLng) } : null;
                             if (coords) setRouteMapCenterObj({ lat: coords.latitude, lng: coords.longitude });
                             else setRouteMapCenterObj(null);
-                            if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
-                              setOsrmRouteCoords([]);
-                            }
                             setShowRouteMap(true);
                          }}
                          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#FEF2F2' : '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? '#EF4444' : '#D97706' }}>
@@ -2387,21 +2521,36 @@ export default function DashboardScreen() {
       </Modal>
 
       {/* Rota Map Modal Modal */}
-      <Modal visible={showRouteMap} transparent animationType="slide" onRequestClose={() => setShowRouteMap(false)}>
+      <Modal
+        visible={showRouteMap}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowRouteMap(false);
+          setRouteMapCenterObj(null);
+        }}
+      >
         <View style={{ flex: 1, backgroundColor: '#fff' }}>
            <View style={{ height: 110, backgroundColor: '#1E293B', paddingTop: 50, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
               <View>
                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Rota do Dia</Text>
                  <Text style={{ color: '#94A3B8', fontSize: 13, marginTop: 2 }}>Ordem OSRM para execução</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowRouteMap(false)} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowRouteMap(false);
+                  setRouteMapCenterObj(null);
+                }}
+                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}
+              >
                  <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
            </View>
 
             {showRouteMap && (
              <MapView
-               key={`map-${showRouteMap ? 'on' : 'off'}-${routeMapCenterObj?.lat || 'default'}`}
+               ref={routeDayMapRef}
+               key="route-day-map"
                provider={PROVIDER_DEFAULT}
                style={{ flex: 1 }}
                initialRegion={{
@@ -2413,16 +2562,17 @@ export default function DashboardScreen() {
                      if (t.status !== 'PENDING' && t.status !== 'RECEIVED') return false;
                      return !!(t.locationLat && t.locationLng);
                  }) ? Number(providerTasks.find(t => (t.status === 'PENDING' || t.status === 'RECEIVED') && t.locationLat && t.locationLng)?.locationLng) || -46.6333 : -46.6333),
-                 latitudeDelta: routeMapCenterObj ? 0.02 : 0.1,
-                 longitudeDelta: routeMapCenterObj ? 0.02 : 0.1
+                 latitudeDelta: 0.12,
+                 longitudeDelta: 0.12
                }}
              showsUserLocation
            >
              {routeMapTasksOrdered.map((task, index) => {
                 const c = parseCoordLatLng(task)!;
-                const coords = { latitude: c.lat, longitude: c.lng };
+                const pin =
+                  routeMapMarkerCoords[index] ?? { latitude: c.lat, longitude: c.lng };
                 return (
-                   <Marker key={`rm-${task.id}`} coordinate={coords} zIndex={100 - index}>
+                   <Marker key={`rm-${task.id}`} coordinate={pin} zIndex={100 + index} tracksViewChanges={false}>
                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 }}>
                        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{index + 1}</Text>
                      </View>

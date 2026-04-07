@@ -1,19 +1,31 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
-  Animated, StyleSheet, Text, TouchableOpacity, View, Easing, Modal, Dimensions, Image, ScrollView,
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Easing,
+  Modal,
+  Dimensions,
+  ScrollView,
+  Image,
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { useAuth } from '../../src/hooks/useAuth';
-import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src/services/osrmClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
+
+const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
 
 /**
  * Android: `react-native-maps` usa Google Maps e precisa de API key no manifest.
@@ -66,6 +78,50 @@ export function pickDestinationForOsrm(
   }
   return null;
 }
+
+/** Rumo em graus (0 = N, horário) de (lat1,lng1) → (lat2,lng2). */
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+  const brng = (Math.atan2(y, x) * 180) / Math.PI;
+  return (brng + 360) % 360;
+}
+
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const a =
+    Math.sin(toRad(lat2 - lat1) / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(toRad(lng2 - lng1) / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Inclinação 3D semelhante a Apple / Google Maps em modo condução. */
+const NAVIGATION_MAP_PITCH = 52;
+
+/**
+ * Azimute do mapa em modo «rumo em cima»: deslocamento entre leituras ou, quase parado, rumo ao destino.
+ */
+function computeDrivingMapHeading(
+  prev: { lat: number; lng: number } | null,
+  cur: { lat: number; lng: number },
+  dest: { lat: number; lng: number } | null,
+  fallbackHeading: number
+): number {
+  if (prev && haversineM(prev.lat, prev.lng, cur.lat, cur.lng) > 2.5) {
+    return bearingDeg(prev.lat, prev.lng, cur.lat, cur.lng);
+  }
+  if (dest && haversineM(cur.lat, cur.lng, dest.lat, dest.lng) > 8) {
+    return bearingDeg(cur.lat, cur.lng, dest.lat, dest.lng);
+  }
+  return fallbackHeading;
+}
+
+const FOLLOW_CAMERA_MIN_MS = 2800;
+const FOLLOW_MOVE_THRESHOLD_M = 42;
 
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
 function EtaBadge({
@@ -216,24 +272,40 @@ const { width, height } = Dimensions.get('window');
 
 export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit, taskId }: Props) {
   const embedNativeMap = useMemo(() => shouldEmbedNativeTransitMap(), []);
+  const { user } = useAuth();
+  const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
-  const { user } = useAuth();
-  const avatarUri = useResolvedAvatarUri(user);
 
   const [isPaused, setIsPaused] = useState(false);
   const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
   const [etaHint, setEtaHint] = useState<string | null>(null);
+  /** Só recentraliza com GPS quando ligado (evita mapa “a saltar”). */
+  const [followUser, setFollowUser] = useState(false);
+  /** Painel de dicas na primeira vez (mapa nativo). */
+  const [showTransitHints, setShowTransitHints] = useState(false);
 
   /** Refs: o efeito do ETA não pode depender de myPos/update — cada GPS reiniciava o efeito e abortava o fetch OSRM. */
   const myPosRef = useRef(myPos);
   const updateRef = useRef(update);
   myPosRef.current = myPos;
   updateRef.current = update;
+
+  const prevPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastFollowCameraAtRef = useRef(0);
+  const lastFollowAnchorRef = useRef<{ lat: number; lng: number } | null>(null);
+  const followUserRef = useRef(followUser);
+  followUserRef.current = followUser;
+  const prevFollowUserRef = useRef(false);
+
+  /** Encaixe automático só quando a polilinha exibida muda (template → OSRM), não a cada GPS. */
+  const lastAutoFitSigRef = useRef('');
+  /** Último rumo aplicado à câmara (modo navegação); mantém-se ao parar no semáforo. */
+  const lastMapHeadingRef = useRef(0);
 
   // Subscribe to route tracker updates
   useEffect(() => {
@@ -245,13 +317,71 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
 
     const handler = (u: RouteUpdate) => {
       setUpdate(u);
+      const prev = myPosRef.current;
+      prevPosRef.current = prev;
       setMyPos({ lat: u.currentLat, lng: u.currentLng });
-      if (embedNativeMap) {
-        mapRef.current?.animateCamera(
-          { center: { latitude: u.currentLat, longitude: u.currentLng }, zoom: 16 },
-          { duration: 800 }
+      if (!embedNativeMap || !followUserRef.current) return;
+
+      const dest = pickDestinationForOsrm(targetLoc, route);
+      const prevPos =
+        prev && Number.isFinite(prev.lat) && Number.isFinite(prev.lng)
+          ? { lat: prev.lat, lng: prev.lng }
+          : null;
+      const heading = computeDrivingMapHeading(
+        prevPos,
+        { lat: u.currentLat, lng: u.currentLng },
+        dest,
+        lastMapHeadingRef.current
+      );
+      lastMapHeadingRef.current = heading;
+
+      const now = Date.now();
+      const anchor = lastFollowAnchorRef.current;
+      const moved =
+        anchor == null
+          ? Infinity
+          : haversineM(anchor.lat, anchor.lng, u.currentLat, u.currentLng);
+      const due = now - lastFollowCameraAtRef.current >= FOLLOW_CAMERA_MIN_MS;
+      if (!due && moved < FOLLOW_MOVE_THRESHOLD_M) return;
+
+      lastFollowCameraAtRef.current = now;
+      lastFollowAnchorRef.current = { lat: u.currentLat, lng: u.currentLng };
+
+      const map = mapRef.current;
+      if (!map?.getCamera) {
+        map?.animateCamera(
+          {
+            center: { latitude: u.currentLat, longitude: u.currentLng },
+            zoom: 16,
+            heading,
+            pitch: NAVIGATION_MAP_PITCH,
+          },
+          { duration: 550 }
         );
+        return;
       }
+      void map.getCamera().then((cam) => {
+        map.animateCamera(
+          {
+            center: { latitude: u.currentLat, longitude: u.currentLng },
+            zoom: cam.zoom ?? 16,
+            pitch: NAVIGATION_MAP_PITCH,
+            heading,
+            altitude: cam.altitude,
+          },
+          { duration: 550 }
+        );
+      }).catch(() => {
+        map?.animateCamera(
+          {
+            center: { latitude: u.currentLat, longitude: u.currentLng },
+            zoom: 16,
+            heading,
+            pitch: NAVIGATION_MAP_PITCH,
+          },
+          { duration: 550 }
+        );
+      });
     };
 
     const statusHandler = ({ status }: any) => {
@@ -280,7 +410,41 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       routeTracker.off('status_changed', statusHandler);
       routeTracker.off('traversed_update', traversedHandler);
     };
-  }, [visible, route, embedNativeMap]);
+  }, [visible, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng]);
+
+  useEffect(() => {
+    if (!visible) {
+      lastAutoFitSigRef.current = '';
+      lastFollowAnchorRef.current = null;
+      lastFollowCameraAtRef.current = 0;
+      prevPosRef.current = null;
+      prevFollowUserRef.current = false;
+      lastMapHeadingRef.current = 0;
+      setFollowUser(false);
+      setShowTransitHints(false);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !expanded || !embedNativeMap) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const v = await AsyncStorage.getItem(TRANSIT_MAP_HINTS_KEY);
+        if (!cancelled && v == null) setShowTransitHints(true);
+      } catch {
+        if (!cancelled) setShowTransitHints(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, expanded, embedNativeMap]);
+
+  const dismissTransitHints = useCallback(() => {
+    setShowTransitHints(false);
+    void AsyncStorage.setItem(TRANSIT_MAP_HINTS_KEY, '1');
+  }, []);
 
   // Linha no mapa: polilinha do template (≥2 pontos) OU reta OSRM + upgrade para geometria real.
   // Destino = mesmo critério do ETA (pickDestinationForOsrm), não só targetLoc — senão falha quando o pai manda lat/lng indefinidos mas há pontos na rota.
@@ -354,9 +518,39 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     };
   }, [visible, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng]);
 
-  // Encaixa rota + utilizador no ecrã (initialRegion sozinho cortava linhas longas).
+  // Encaixe quando a polilinha principal muda (ex.: chega geometria OSRM), nunca por causa de myPos.
   useEffect(() => {
-    if (!embedNativeMap || !expanded) return;
+    if (!embedNativeMap || !expanded || !visible) return;
+    const line =
+      dynamicRoute && dynamicRoute.length >= 2
+        ? dynamicRoute
+        : route && route.length >= 2
+          ? route
+          : null;
+    if (!line) return;
+    const sig = `${line.length}:${line[0][0]}:${line[0][1]}:${line[line.length - 1][0]}:${line[line.length - 1][1]}`;
+    if (sig === lastAutoFitSigRef.current) return;
+    lastAutoFitSigRef.current = sig;
+
+    const pts: { latitude: number; longitude: number }[] = [];
+    for (const c of line) {
+      if (c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+        pts.push({ latitude: c[0], longitude: c[1] });
+      }
+    }
+    if (pts.length < 2) return;
+
+    const t = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(pts, {
+        edgePadding: { top: 130, right: 52, bottom: 260, left: 52 },
+        animated: true,
+      });
+    }, 480);
+    return () => clearTimeout(t);
+  }, [embedNativeMap, expanded, visible, dynamicRoute, route]);
+
+  const fitFullRoute = () => {
+    if (!embedNativeMap) return;
     const pts: { latitude: number; longitude: number }[] = [];
     const pushRing = (ring: number[][]) => {
       for (const c of ring) {
@@ -369,15 +563,11 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     else if (route && route.length >= 2) pushRing(route);
     if (myPos) pts.push({ latitude: myPos.lat, longitude: myPos.lng });
     if (pts.length < 2) return;
-
-    const t = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(pts, {
-        edgePadding: { top: 130, right: 36, bottom: 240, left: 36 },
-        animated: true,
-      });
-    }, 450);
-    return () => clearTimeout(t);
-  }, [embedNativeMap, expanded, dynamicRoute, route, myPos?.lat, myPos?.lng]);
+    mapRef.current?.fitToCoordinates(pts, {
+      edgePadding: { top: 130, right: 52, bottom: 260, left: 52 },
+      animated: true,
+    });
+  };
 
   const osrmDest = useMemo(
     () => pickDestinationForOsrm(targetLoc, route),
@@ -468,13 +658,66 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       (route.length === 2 || dynamicRoute.length > 2)
     );
 
+  const focusOnLatLng = useCallback((lat: number, lng: number, zoom = 17) => {
+    mapRef.current?.animateCamera(
+      { center: { latitude: lat, longitude: lng }, zoom },
+      { duration: 450 }
+    );
+  }, []);
+
+  const adjustZoom = useCallback(async (delta: number) => {
+    const map = mapRef.current;
+    if (!map?.getCamera) return;
+    try {
+      const cam = await map.getCamera();
+      const z = (cam.zoom ?? 15) + delta;
+      map.animateCamera(
+        { ...cam, zoom: Math.min(20, Math.max(10, z)) },
+        { duration: 220 }
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    const wasFollowing = prevFollowUserRef.current;
+    const map = mapRef.current;
+
+    if (followUser && !wasFollowing && myPos && embedNativeMap) {
+      lastFollowAnchorRef.current = { lat: myPos.lat, lng: myPos.lng };
+      lastFollowCameraAtRef.current = Date.now();
+      const dest = pickDestinationForOsrm(targetLoc, route);
+      const h = computeDrivingMapHeading(null, myPos, dest, lastMapHeadingRef.current);
+      lastMapHeadingRef.current = h;
+      map?.animateCamera(
+        {
+          center: { latitude: myPos.lat, longitude: myPos.lng },
+          zoom: 17,
+          heading: h,
+          pitch: NAVIGATION_MAP_PITCH,
+        },
+        { duration: 500 }
+      );
+    } else if (!followUser && wasFollowing && embedNativeMap && map?.getCamera) {
+      void map.getCamera().then((cam) => {
+        map.animateCamera(
+          { ...cam, heading: 0, pitch: 0 },
+          { duration: 450 }
+        );
+      });
+    }
+
+    prevFollowUserRef.current = followUser;
+  }, [followUser, myPos?.lat, myPos?.lng, embedNativeMap, targetLoc?.lat, targetLoc?.lng, routeDestKey]);
+
   if (!visible) return null;
 
   const isDeviation = update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
   const displayEtaMinutes = parentHasFiniteEta ? etaMinutes : clientEtaMinutes;
-  
+
   let statusColor = '#f97316';
   if (isComplete) statusColor = '#16a34a';
   else if (isPaused) statusColor = '#94a3b8';
@@ -532,16 +775,53 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       }
       return;
     }
+    const map = mapRef.current;
+    const centerOnce = async (lat: number, lng: number) => {
+      const nav = followUserRef.current;
+      if (map?.getCamera) {
+        try {
+          const cam = await map.getCamera();
+          map.animateCamera(
+            {
+              center: { latitude: lat, longitude: lng },
+              zoom: cam.zoom ?? 16,
+              pitch: nav ? NAVIGATION_MAP_PITCH : cam.pitch,
+              heading: nav ? lastMapHeadingRef.current : cam.heading,
+              altitude: cam.altitude,
+            },
+            { duration: 400 }
+          );
+        } catch {
+          map?.animateCamera(
+            {
+              center: { latitude: lat, longitude: lng },
+              zoom: 16,
+              ...(nav ? { heading: lastMapHeadingRef.current, pitch: NAVIGATION_MAP_PITCH } : {}),
+            },
+            { duration: 400 }
+          );
+        }
+      } else {
+        map?.animateCamera(
+          {
+            center: { latitude: lat, longitude: lng },
+            zoom: 16,
+            ...(nav ? { heading: lastMapHeadingRef.current, pitch: NAVIGATION_MAP_PITCH } : {}),
+          },
+          { duration: 400 }
+        );
+      }
+    };
     if (myPos) {
-       mapRef.current?.animateCamera({ center: { latitude: myPos.lat, longitude: myPos.lng }, zoom: 16 }, { duration: 400 });
+      await centerOnce(myPos.lat, myPos.lng);
     } else {
-       try {
-         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-         setMyPos({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-         mapRef.current?.animateCamera({ center: { latitude: loc.coords.latitude, longitude: loc.coords.longitude }, zoom: 16 }, { duration: 400 });
-       } catch (e) {
-         // ignore
-       }
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setMyPos({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+        await centerOnce(loc.coords.latitude, loc.coords.longitude);
+      } catch {
+        /* ignore */
+      }
     }
   };
 
@@ -620,6 +900,44 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
            </TouchableOpacity>
         </View>
 
+        {showTransitHints && embedNativeMap && (
+          <View style={styles.hintPanel} accessibilityViewIsModal>
+            <View style={styles.hintHeaderRow}>
+              <Ionicons name="information-circle" size={20} color="#2563eb" />
+              <Text style={styles.hintTitle}>Dicas do mapa</Text>
+              <TouchableOpacity
+                onPress={dismissTransitHints}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Fechar dicas"
+              >
+                <Ionicons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.hintScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.hintBody}>
+                <Text style={styles.hintStrong}>Centrar</Text> (ícone do alfinete): coloca-o no centro uma vez e{' '}
+                <Text style={styles.hintEm}>mantém o zoom</Text> atual. O mapa não segue o GPS sozinho.
+                {'\n\n'}
+                <Text style={styles.hintStrong}>Seguir GPS</Text> (círculo com navegação): o mapa acompanha a sua
+                posição, <Text style={styles.hintStrong}>roda no sentido da marcha</Text> (como Apple / Google Maps)
+                e inclina em 3D. Desligue para voltar ao norte em cima e arrastar o mapa livremente.
+                {'\n\n'}
+                <Text style={styles.hintStrong}>+</Text> e <Text style={styles.hintStrong}>−</Text>: zoom. O ícone{' '}
+                <Text style={styles.hintStrong}>expandir</Text> volta a mostrar a rota completa.
+                {'\n\n'}
+                Toque no <Text style={styles.hintStrong}>marcador do destino</Text> (ou nos pontos A/B) para aproximar e ver melhor a rua.
+                {'\n\n'}
+                <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização «sempre» ou «em segundo plano»
+                quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
+                «Deslocamento em andamento» — é normal enquanto o deslocamento estiver activo.
+              </Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.hintBtn} onPress={dismissTransitHints} activeOpacity={0.85}>
+              <Text style={styles.hintBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
@@ -627,10 +945,19 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             latitude: centerLat, longitude: centerLng,
             latitudeDelta: 0.01, longitudeDelta: 0.01,
           }}
+          mapPadding={
+            followUser
+              ? { top: 100, right: 52, bottom: 248, left: 52 }
+              : { top: 0, right: 0, bottom: 0, left: 0 }
+          }
           showsUserLocation={false}
           showsMyLocationButton={false}
           followsUserLocation={false}
-          showsCompass={false}
+          showsCompass={followUser}
+          zoomEnabled
+          scrollEnabled
+          pitchEnabled
+          rotateEnabled
         >
           {route && route.length >= 2 && !suppressTemplatePolyline && (
             <Polyline
@@ -655,7 +982,14 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           {zoneType !== 'segment' && route && route.length > 0 && (
             <>
               <Marker coordinate={{ latitude: route[0][0], longitude: route[0][1] }} title="Início" pinColor="#16a34a" />
-              <Marker coordinate={{ latitude: route[route.length - 1][0], longitude: route[route.length - 1][1] }} title="Destino">
+              <Marker
+                coordinate={{ latitude: route[route.length - 1][0], longitude: route[route.length - 1][1] }}
+                title="Destino"
+                description="Toque para aproximar"
+                onPress={() =>
+                  focusOnLatLng(route[route.length - 1][0], route[route.length - 1][1], 17)
+                }
+              >
                  <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
                    <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
                  </View>
@@ -676,8 +1010,16 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
                 zIndex={750}
                 geodesic
               />
-              <Marker coordinate={{ latitude: route[0][0], longitude: route[0][1] }} title="Ponto A" pinColor="#2563eb" />
-              <Marker coordinate={{ latitude: route[1][0], longitude: route[1][1] }} title="Ponto B" pinColor="#d946ef" />
+              <Marker
+                coordinate={{ latitude: route[0][0], longitude: route[0][1] }}
+                title="Ponto A"
+                onPress={() => focusOnLatLng(route[0][0], route[0][1], 17)}
+              />
+              <Marker
+                coordinate={{ latitude: route[1][0], longitude: route[1][1] }}
+                title="Ponto B"
+                onPress={() => focusOnLatLng(route[1][0], route[1][1], 17)}
+              />
             </>
           )}
           
@@ -692,7 +1034,21 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
                  zIndex={1000}
                  geodesic={false}
                />
-               <Marker coordinate={{ latitude: dynamicRoute[dynamicRoute.length - 1][0], longitude: dynamicRoute[dynamicRoute.length - 1][1] }} title="Destino">
+               <Marker
+                 coordinate={{
+                   latitude: dynamicRoute[dynamicRoute.length - 1][0],
+                   longitude: dynamicRoute[dynamicRoute.length - 1][1],
+                 }}
+                 title="Destino"
+                 description="Toque para aproximar"
+                 onPress={() =>
+                   focusOnLatLng(
+                     dynamicRoute[dynamicRoute.length - 1][0],
+                     dynamicRoute[dynamicRoute.length - 1][1],
+                     17
+                   )
+                 }
+               >
                  <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
                    <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
                  </View>
@@ -701,13 +1057,29 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           )}
           
           {myPos && (
-            <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={100}>
-              <View style={styles.userMarkerContainer}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.userMarkerImage} />
-                ) : (
-                  <Ionicons name="person" size={20} color="#3b82f6" />
-                )}
+            <Marker
+              coordinate={{ latitude: myPos.lat, longitude: myPos.lng }}
+              title="Sua posição"
+              description={
+                followUser
+                  ? 'Modo navegação: o mapa alinha-se ao rumo; a foto mantém-se vertical.'
+                  : 'A sua posição no mapa (foto sempre vertical).'
+              }
+              anchor={{ x: 0.5, y: 0.5 }}
+              zIndex={2000}
+              rotation={0}
+              flat={false}
+            >
+              <View style={styles.navTechnicianWrap} pointerEvents="none">
+                <View style={styles.navAvatarRing}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.navAvatarImage} />
+                  ) : (
+                    <View style={styles.navAvatarFallback}>
+                      <Ionicons name="person" size={21} color="#64748b" />
+                    </View>
+                  )}
+                </View>
               </View>
             </Marker>
           )}
@@ -719,8 +1091,32 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
                <Ionicons name="navigate" size={24} color="#fff" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.recenterBtn} onPress={handleRecenter}>
-            <Ionicons name="location" size={24} color="#475569" />
+          {embedNativeMap && (
+            <>
+              <TouchableOpacity style={styles.recenterBtn} onPress={() => void adjustZoom(1)} accessibilityLabel="Aumentar zoom">
+                <Ionicons name="add" size={26} color="#475569" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.recenterBtn} onPress={() => void adjustZoom(-1)} accessibilityLabel="Diminuir zoom">
+                <Ionicons name="remove" size={26} color="#475569" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.recenterBtn} onPress={fitFullRoute} accessibilityLabel="Ver rota completa">
+                <Ionicons name="expand-outline" size={22} color="#475569" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.recenterBtn, followUser && styles.followActiveBtn]}
+                onPress={() => setFollowUser((v) => !v)}
+                accessibilityLabel={followUser ? 'Desligar seguir GPS' : 'Seguir GPS'}
+              >
+                <Ionicons
+                  name={followUser ? 'navigate-circle' : 'navigate-circle-outline'}
+                  size={22}
+                  color={followUser ? '#fff' : '#475569'}
+                />
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity style={styles.recenterBtn} onPress={() => void handleRecenter()} accessibilityLabel="Centrar na minha posição">
+            <Ionicons name="locate" size={24} color="#475569" />
           </TouchableOpacity>
         </View>
 
@@ -786,6 +1182,96 @@ const styles = StyleSheet.create({
   deviationBanner: { position: 'absolute', top: 120, left: 16, right: 16, backgroundColor: '#dc2626', borderRadius: 8, flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, alignItems: 'center', shadowColor: '#dc2626', shadowOpacity: 0.4, shadowRadius: 6, elevation: 5 },
   deviationText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
-  userMarkerContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderWidth: 3, borderColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, elevation: 5, overflow: 'hidden' },
-  userMarkerImage: { width: '100%', height: '100%', resizeMode: 'cover' }
+  /** ~30% menor que 64px; centrado no anchor do Marker. */
+  navTechnicianWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+  },
+  navAvatarRing: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    borderWidth: 3,
+    borderColor: '#fff',
+    backgroundColor: '#e2e8f0',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.24,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 5,
+  },
+  navAvatarImage: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+  },
+  navAvatarFallback: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  followActiveBtn: { backgroundColor: '#ea580c', borderWidth: 0 },
+
+  hintPanel: {
+    position: 'absolute',
+    top: 118,
+    left: 14,
+    right: 14,
+    zIndex: 25,
+    maxHeight: height * 0.38,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  hintHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  hintTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  hintScroll: {
+    maxHeight: height * 0.26,
+  },
+  hintBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#475569',
+  },
+  hintStrong: { fontWeight: '800', color: '#1e293b' },
+  hintEm: { fontStyle: 'italic', color: '#64748b' },
+  hintBtn: {
+    marginTop: 12,
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  hintBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
 });

@@ -13,13 +13,13 @@ import {
   computeTransitSecondsFromEndpoints,
   buildTransitDisplayMetrics,
   fmtDurationPtBr,
-  resolveProductivityFromTask,
   transitPctDeltaVsPlanned,
 } from './previewExecutionMetrics.js';
 import {
   collectSectionTimingRowsForPreview,
   buildPauseProductivityPdfFragment,
 } from './pdfStandardBlocks.js';
+import { buildPreviewPdfEntries } from './pdfPreviewFormEntries.js';
 
 const esc = (s) =>
   String(s ?? '')
@@ -255,14 +255,90 @@ function formatSignaturePdfHtml(str, th) {
   </div>`;
 }
 
+/** Comentários por anexo/foto (`__media_cap_<fieldId>`) — raiz ou linha repetível. */
+function pdfMediaCapPreview(fieldId, index, responses, row) {
+  if (!fieldId || !responses || typeof responses !== 'object') return '';
+  const raw =
+    row && typeof row === 'object'
+      ? row['__media_cap_' + fieldId]
+      : responses['__media_cap_' + fieldId];
+  let cap = '';
+  if (Array.isArray(raw) && raw[index] != null) cap = String(raw[index]).trim();
+  else if (typeof raw === 'string' && index === 0) cap = raw.trim();
+  if (!cap) return '';
+  return (
+    '<div style="font-size:10px;color:#422006;margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;line-height:1.45">' +
+    '<strong style="color:#713f12">Comentários:</strong> ' +
+    esc(cap) +
+    '</div>'
+  );
+}
+
+/**
+ * Anexos múltiplos — espelha operations.html (file_upload).
+ * @param {any} val
+ * @param {{ id: string }} f
+ * @param {Record<string, unknown>} responses
+ */
+function formatFileUploadPdfHtml(val, f, responses, row) {
+  const id = f && f.id;
+  if (!id) return null;
+  const attachList = Array.isArray(val)
+    ? val.filter((v) => typeof v === 'string' && (v.startsWith('http') || v.startsWith('file://')))
+    : typeof val === 'string' && (val.startsWith('http') || val.startsWith('file://'))
+      ? [val]
+      : [];
+  if (attachList.length === 0) {
+    return '<span style="color:#94a3b8;font-style:italic">Sem anexo enviado</span>';
+  }
+  return attachList
+    .map((u, i) => {
+      if (u.startsWith('file://')) {
+        return (
+          `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` +
+          pdfMediaCapPreview(id, i, responses, row)
+        );
+      }
+      const base = u.split('?')[0];
+      let name = base.split('/').pop() || 'anexo';
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        /* keep */
+      }
+      const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
+      return (
+        `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${esc(idx)}${esc(name)}</a></div>` +
+        pdfMediaCapPreview(id, i, responses, row)
+      );
+    })
+    .join('');
+}
+
+function techCommentBlockHtml(f, responses, row) {
+  if (!f || !f.id || !f.allowTechnicianComment) return '';
+  const key = '__comment_' + f.id;
+  const raw = String(
+    (row && typeof row === 'object' ? row[key] : null) || responses[key] || '',
+  ).trim();
+  if (!raw) return '';
+  return `<div style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:10px;color:#713f12;line-height:1.45"><strong>Comentário do técnico:</strong> ${esc(raw)}</div>`;
+}
+
 /**
  * HTML rico para tipos especiais; `null` → usar ramo genérico.
  * @param {any} val
- * @param {{ id: string, label?: string, type?: string }} f
+ * @param {{ id: string, label?: string, type?: string, allowTechnicianComment?: boolean }} f
  * @param {ReturnType<mergeTheme>} th
+ * @param {Record<string, unknown>} responses
+ * @param {object|null|undefined} row — linha de secção repetível
  */
-function formatSpecialFieldHtml(val, f, th) {
+function formatSpecialFieldHtml(val, f, th, responses, row) {
   if (val === undefined || val === null || val === '') return null;
+
+  if (f.type === 'file_upload') {
+    return formatFileUploadPdfHtml(val, f, responses, row);
+  }
 
   if (typeof val === 'string' && val.startsWith('SIG_V1|')) {
     return formatSignaturePdfHtml(val, th);
@@ -276,20 +352,6 @@ function formatSpecialFieldHtml(val, f, th) {
   if (asObj && typeof asObj === 'object' && !Array.isArray(asObj) && !isTransitPayload(asObj)) {
     const loc = formatLocationPickHtml(asObj, th);
     if (loc) return loc;
-  }
-
-  if (f.type === 'file_upload' && typeof val === 'string') {
-    const s = val.trim();
-    if (s.startsWith('http://') || s.startsWith('https://')) {
-      const base = s.split('?')[0];
-      let name = base.split('/').pop() || 'anexo';
-      try {
-        name = decodeURIComponent(name);
-      } catch {
-        /* keep */
-      }
-      return `<a href="${escAttr(s)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700;font-size:12px;word-break:break-all">Download — ${esc(name)}</a>`;
-    }
   }
 
   return null;
@@ -618,6 +680,53 @@ function buildPdfProdBlockForPreview(th, t, responses) {
       </div>`;
 }
 
+/** Todas as fotos do campo + legenda `__media_cap_` por índice (como no PDF da Central). */
+function renderPhotoPdfBlock(val, f, th, t, responses, row) {
+  const id = f.id;
+  const urls = Array.isArray(val) ? val : val != null ? [val] : [];
+  const stampTypes = f.type === 'photo_stamped' || f.type === 'facial_recognition';
+  const timestamp = t.completedAt
+    ? new Date(t.completedAt).toLocaleString('pt-BR')
+    : fd(t.createdAt);
+  return urls
+    .map((rawU, i) => {
+      const singleVal = String(rawU);
+      let block;
+      if (
+        singleVal.startsWith('http://') ||
+        singleVal.startsWith('https://') ||
+        singleVal.startsWith('data:image')
+      ) {
+        const baseSrc = esc(singleVal.split('?')[0]);
+        const showFooter = !!(stampTypes || singleVal.includes('live'));
+        const idxLine = urls.length > 1 ? ` · Foto ${i + 1}` : '';
+        block = `
+          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+            <img src="${baseSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />
+            ${
+              showFooter
+                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(timestamp)}${esc(idxLine)}</div>`
+                : ''
+            }
+          </div>`;
+      } else if (singleVal.startsWith('file://')) {
+        block = `<div style="margin-top:8px;padding:20px;max-width:350px;background:#f8fafc;text-align:center;border:2px dashed #cbd5e1;border-radius:8px;">
+          <ion-icon name="cloud-offline-outline" style="font-size:32px;color:#94a3b8;margin-bottom:8px;"></ion-icon>
+          <div style="font-size:12px;color:#475569;font-weight:800;">MÍDIA PENDENTE${urls.length > 1 ? ' (' + (i + 1) + ')' : ''}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Aguardando sincronização para pré-visualizar a foto.</div>
+        </div>`;
+      } else if (singleVal) {
+        block = `<div style="padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;font-size:10px;color:${th.colorMuted}">Pré-visualização indisponível para este ficheiro</div>`;
+      } else {
+        block = `<div class="pdf-photo-card" style="margin-top:8px;max-width:350px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+          <img class="pdf-photo-img" style="min-height:180px;border-radius:0" src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" alt="" />
+        </div>`;
+      }
+      return block + pdfMediaCapPreview(id, i, responses, row);
+    })
+    .join('');
+}
+
 /**
  * @param {object} cfg — mergePresetConfig(...)
  * @param {object} task — task painel (MOCK_PREVIEW_TASK ou carregada da API)
@@ -633,19 +742,41 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
   let qNum = 1;
   let formHtml = '';
 
-  for (const f of schemaFields || []) {
-    if (!f || !f.id) continue;
-    if (!isFieldVisible(cfg, f.id)) continue;
+  const formEntries = buildPreviewPdfEntries(t, schemaFields || []);
+
+  for (const entry of formEntries) {
+    if (entry.kind === '__repeat_hdr') {
+      formHtml += `<div style="margin:20px 0 8px;padding:10px 14px;background:#eef2ff;border-left:4px solid #6366f1;border-radius:0 10px 10px 0;font-size:12px;font-weight:800;color:#3730a3">${esc(entry.sectionLabel)} · Instância ${entry.instanceNum}</div>`;
+      continue;
+    }
+
+    const f = entry.fieldDef;
+    const id = entry.id;
+    if (!f || !id) continue;
+    if (!isFieldVisible(cfg, id)) continue;
     if (f.type === 'transit_start' || f.type === 'transit_end') continue;
     const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
     if (pTypes.includes(f.type) && !m.photoGallery) continue;
 
-    const val = responses[f.id];
+    const row = entry.row;
+    const rowIdx = entry.rowIdx;
+    const repeatSid = entry.repeatSid;
+
+    const val = row && typeof row === 'object' ? row[id] : responses[id];
     if (cfg.hideEmptyFields && f.type !== 'section_break' && pdfValueIsEmpty(val)) continue;
 
-    const lab = fieldLabelOverride(cfg, f.id) || f.label || f.id;
+    const labelOv = fieldLabelOverride(cfg, id);
+    const labelBase = labelOv || f.label || id;
+    const lab =
+      row != null && repeatSid != null && !entry.omitInstanceInLabel
+        ? `${labelBase} · Instância ${rowIdx + 1}`
+        : labelBase;
 
-    const tIso = responses[`__time_${f.id}`];
+    let tIso = null;
+    if (repeatSid != null && rowIdx != null) {
+      tIso = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
+    }
+    if (!tIso) tIso = responses[`__time_${id}`];
     let timeHtml = '';
     if (tIso) {
       const humanTime = new Date(tIso).toLocaleTimeString('pt-BR', {
@@ -655,43 +786,53 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
       timeHtml = `<span style="font-size:9px; color:#94a3b8; margin-left:8px; font-weight:600; text-transform:none;"><ion-icon name="time-outline" style="vertical-align:-2px; margin-right:2px;"></ion-icon>${esc(humanTime)}</span>`;
     }
 
-    if (f.type === 'photo' || f.type === 'photo_stamped' || f.type === 'facial_recognition') {
-      const urls = Array.isArray(val) ? val : val != null ? [val] : [];
-      const first = urls[0] != null ? String(urls[0]) : '';
-      const stampTypes = f.type === 'photo_stamped' || f.type === 'facial_recognition';
-      const timestamp = t.completedAt
-        ? new Date(t.completedAt).toLocaleString('pt-BR')
-        : fd(t.createdAt);
-      let inner;
-      if (
-        first.startsWith('http://') ||
-        first.startsWith('https://') ||
-        first.startsWith('data:image')
-      ) {
-        const baseSrc = esc(first.split('?')[0]);
-        const showFooter = !!(stampTypes || first.includes('live'));
-        inner = `
-          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
-            <img src="${baseSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />
-            ${
-              showFooter
-                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(timestamp)}</div>`
-                : ''
-            }
-          </div>`;
-      } else if (first.startsWith('file://')) {
-        inner = `<div style="margin-top:8px;padding:20px;max-width:350px;background:#f8fafc;text-align:center;border:2px dashed #cbd5e1;border-radius:8px;">
-          <ion-icon name="cloud-offline-outline" style="font-size:32px;color:#94a3b8;margin-bottom:8px;"></ion-icon>
-          <div style="font-size:12px;color:#475569;font-weight:800;">MÍDIA PENDENTE</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Aguardando sincronização para pré-visualizar a foto.</div>
-        </div>`;
-      } else if (first) {
-        inner = `<div style="padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;font-size:10px;color:${th.colorMuted}">Pré-visualização indisponível para este ficheiro</div>`;
-      } else {
-        inner = `<div class="pdf-photo-card" style="margin-top:8px;max-width:350px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-          <img class="pdf-photo-img" style="min-height:180px;border-radius:0" src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" alt="" />
-        </div>`;
+    if (f.type === 'section_break') {
+      const startIso = responses[`__section_start_${id}`];
+      const endIso = responses[`__section_end_${id}`];
+      const formatTime = (iso) =>
+        iso
+          ? new Date(iso).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })
+          : '--:--';
+      let durationStr = '';
+      if (startIso && endIso) {
+        const diffSecs = Math.floor(
+          (new Date(endIso).getTime() - new Date(startIso).getTime()) / 1000,
+        );
+        const m = Math.floor(diffSecs / 60);
+        const s = diffSecs % 60;
+        durationStr = `${m}m ${s}s`;
       }
+      const fmtIsoShort = (iso) =>
+        iso
+          ? new Date(iso).toLocaleString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '—';
+      formHtml += `
+            <div style="background: linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%); border-left: 4px solid #8b5cf6; padding: 12px 16px; margin: 25px 0 10px -20px; border-radius: 0 8px 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; z-index: 5;">
+               <div style="font-size:13px; font-weight:900; color:#0f172a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center;">
+                  <ion-icon name="albums" style="color:#8b5cf6; margin-right:8px; font-size:16px;"></ion-icon>${esc(lab)}
+               </div>
+               <div style="font-size:9px;color:#94a3b8;margin-bottom:6px;font-weight:600">Contador de etapa (início/fim automáticos no app)</div>
+               <div style="font-size:10px; color:#64748b; font-weight:600; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${formatTime(startIso)} <span style="opacity:0.85">(${fmtIsoShort(startIso)})</span></span>
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${formatTime(endIso)} <span style="opacity:0.85">(${fmtIsoShort(endIso)})</span></span>
+                  ${durationStr ? `<span style="color:#8b5cf6; font-weight:800;"><ion-icon name="time-outline"></ion-icon> Duração: ${esc(durationStr)}</span>` : startIso && !endIso ? `<span style="color:#94a3b8;font-weight:700">Em curso ou não concluída no envio</span>` : ''}
+               </div>
+            </div>
+          `;
+      continue;
+    }
+
+    if (f.type === 'photo' || f.type === 'photo_stamped' || f.type === 'facial_recognition') {
+      const inner = renderPhotoPdfBlock(val, f, th, t, responses, row);
       formHtml += `
         <div class="pdf-form-item" style="position:relative;">
            <div class="pdf-form-num" style="background:${th.formNumBg}">${qNum++}</div>
@@ -700,11 +841,12 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
              ${timeHtml}
            </div>
            <div class="pdf-a">${inner}</div>
+           ${techCommentBlockHtml(f, responses, row)}
         </div>`;
       continue;
     }
 
-    const special = formatSpecialFieldHtml(val, f, th);
+    const special = formatSpecialFieldHtml(val, f, th, responses, row);
     let display;
     if (special != null) {
       display = special;
@@ -716,6 +858,10 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
         : `<span class="pdf-pill" style="background:${th.pillNoBg}">Não</span>`;
     } else if (f.type === 'dropdown') {
       display = `<span class="pdf-pill" style="background:${th.pillYesBg}">${esc(val)}</span>`;
+    } else if (Array.isArray(val)) {
+      display = val
+        .map((v) => `<span class="pdf-pill" style="background:${th.pillYesBg}">${esc(v)}</span>`)
+        .join(' ');
     } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
       display = `<pre style="margin:0;font-size:9px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:${th.colorMuted};line-height:1.4">${esc(JSON.stringify(val, null, 2))}</pre>`;
     } else {
@@ -730,6 +876,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
              ${timeHtml}
            </div>
            <div class="pdf-a">${display}</div>
+           ${techCommentBlockHtml(f, responses, row)}
         </div>`;
   }
 
@@ -773,7 +920,16 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
         <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
         <span style="margin-left:auto; background:${st.bg}; color:${st.fg}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${esc(st.lab)}</span>
       </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0">
+      <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0">
+        <div style="padding:10px; border-right:1px solid ${th.colorBorder}; background:${th.colorSurface}">
+          <div style="font-size:8px; font-weight:900; color:${th.colorMuted}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
+            <ion-icon name="hardware-chip-outline" style="font-size:12px"></ion-icon> Sistema
+          </div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${esc(t.id || '')}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${esc(t.refId || t.metadata?.refId || '—')}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.template?.title || 'N/A')}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.metadata?.devicePlatform || 'Painel Admin')}</div></div>
+        </div>
         <div style="padding:10px; border-right:1px solid ${th.colorBorder}">
           <div style="font-size:8px; font-weight:900; color:${th.colorMuted}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
             <ion-icon name="information-circle-outline" style="font-size:12px"></ion-icon> Identificação
@@ -781,13 +937,9 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${esc(displayOsLabel(t))}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px">${esc(displayLastRevPreview(t))}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? esc(String(t.metadata.reopenCount)) : '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${esc(t.id || '')}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace">${esc(t.refId || t.metadata?.refId || '—')}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.title || '—')}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.description || 'Não preenchido')}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.template?.title || 'N/A')}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.metadata?.priority || 'Normal')}</div></div>
-          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.metadata?.devicePlatform || 'Painel Admin')}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.metadata?.priority || 'Normal')}</div></div>
           ${obsBlockPdf}
         </div>
         <div style="padding:10px; border-right:1px solid ${th.colorBorder}; background:${th.colDispatchBg}">
