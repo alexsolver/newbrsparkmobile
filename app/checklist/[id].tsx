@@ -46,11 +46,13 @@ import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
 import { enqueueExecutionStatusPatch, pushSyncQueue } from '../../src/services/syncService';
 import { applyMaterialsStockForSubmission, parseMaterialsValue } from '../../src/checklist/applyMaterialsStockOnSubmit';
+import { applyMaterialsReceiptForSubmission } from '../../src/checklist/applyMaterialsReceiptOnSubmit';
 import {
   applyTechnicianFinanceForSubmission,
   parseTechnicianFinanceValue,
 } from '../../src/checklist/applyTechnicianFinanceOnSubmit';
 import { ChecklistMaterialsConsumptionField } from '../../src/components/ChecklistMaterialsConsumptionField';
+import { ChecklistMaterialsReceiptField } from '../../src/components/ChecklistMaterialsReceiptField';
 import { ChecklistTechnicianFinanceField } from '../../src/components/ChecklistTechnicianFinanceField';
 import { useAuth } from '../../src/hooks/useAuth';
 
@@ -106,17 +108,28 @@ function metaRevisionVisitContext(m: unknown): boolean {
   return Number.isFinite(rc) && rc > 0;
 }
 
-/** OS terminal na API: só visualização, salvo contexto de revisão (reaberta pelo admin). */
-const EXEC_VIEW_ONLY_STATUSES = new Set(['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED']);
+/** Estados terminais na API / sync (alinhar com `SERVER_COMPLETED_STATUSES` no ecrã inicial). */
+const EXEC_VIEW_ONLY_STATUSES = new Set([
+  'COMPLETED',
+  'SYNCED',
+  'CANCELLED',
+  'CANCELED',
+  'DONE',
+  'CLOSED',
+  'FINISHED',
+  'COMPLETE',
+  'ARCHIVED',
+]);
 
+/**
+ * OS já fechada: sempre só leitura. Revisão válida reabre com PENDING/IN_PROGRESS no servidor;
+ * `reopenCount` pode permanecer no metadata após conclusão e não deve desbloquear edição.
+ */
 function executionIsViewOnly(exec: unknown): boolean {
   if (!exec || typeof exec !== 'object') return false;
   const e = exec as Record<string, unknown>;
   const st = String(e.status || '').toUpperCase();
-  if (!EXEC_VIEW_ONLY_STATUSES.has(st)) return false;
-  const m = e.metadata;
-  if (metaRevisionVisitContext(m)) return false;
-  return true;
+  return EXEC_VIEW_ONLY_STATUSES.has(st);
 }
 
 const REVISION_SESSION_FIELD_TYPES = new Set([
@@ -302,6 +315,7 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'transit_start',
   'transit_end',
   'materials_consumption',
+  'materials_receipt',
   'technician_finance',
 ]);
 
@@ -489,7 +503,7 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   if (!fieldAllowsMultiple(field)) {
     if (field.type === 'location_pick') return isLocationPickAnswerValid(raw);
-    if (field.type === 'materials_consumption') {
+    if (field.type === 'materials_consumption' || field.type === 'materials_receipt') {
       const p = parseMaterialsValue(raw);
       const hasQty = p.lines.some((l) => l.qty > 0);
       if (field.required) return hasQty;
@@ -1632,13 +1646,8 @@ export default function ChecklistEngine() {
              initialRes = draftRes;
            }
 
-           // Offline / GET falhou: cache local diz COMPLETED → manter só leitura como no servidor
-           if (!readOnlyMode && ctEarly) {
-             const stCloud = String(ctEarly.status || '').toUpperCase();
-             if (
-               EXEC_VIEW_ONLY_STATUSES.has(stCloud) &&
-               !metaRevisionVisitContext(ctEarly.metadata)
-             ) {
+           // Offline / GET falhou: cache local diz terminal → manter só leitura como no servidor
+           if (!readOnlyMode && ctEarly && executionIsViewOnly(ctEarly)) {
                readOnlyMode = true;
                reopenRevisionPending = false;
                try {
@@ -1653,7 +1662,6 @@ export default function ChecklistEngine() {
                } catch {
                  /* mantém initialRes */
                }
-             }
            }
 
            if (lastSubmittedRevForNext === 0 && taskId) {
@@ -2544,6 +2552,20 @@ export default function ChecklistEngine() {
         });
         if (!matRes.ok) {
           Alert.alert('Estoque', matRes.message);
+          setSubmitting(false);
+          return;
+        }
+        const recRes = await applyMaterialsReceiptForSubmission({
+          schemaAll,
+          responses: finalResponses,
+          submissionRevision: nextSubmissionRevisionRef.current,
+          taskId: String(taskId || ''),
+          templateId: String(id),
+          ownerEmail: ownerForStock,
+          osNumber: ftForStockHistory,
+        });
+        if (!recRes.ok) {
+          Alert.alert('Estoque', recRes.message);
           setSubmitting(false);
           return;
         }
@@ -4384,8 +4406,21 @@ export default function ChecklistEngine() {
                       {mediaUris.map((oneUri: any, midx: number) => (
                     <View key={midx} style={{padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
                        {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') && (
-                          <View style={{ width: '100%', height: 200, borderRadius: 6, overflow: 'hidden', marginBottom: 10, backgroundColor: '#cbd5e1' }}>
-                             <Image source={{ uri: String(oneUri).split('?')[0] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                          <View
+                            style={{
+                              width: '100%',
+                              height: field.type === 'photo_stamped' ? 280 : 240,
+                              borderRadius: 6,
+                              overflow: 'hidden',
+                              marginBottom: 10,
+                              backgroundColor: '#e2e8f0',
+                            }}
+                          >
+                            <Image
+                              source={{ uri: String(oneUri).split('?')[0] }}
+                              style={{ width: '100%', height: '100%' }}
+                              resizeMode="contain"
+                            />
                           </View>
                        )}
                        <View style={{flexDirection:'row', alignItems:'center'}}>
@@ -4623,6 +4658,14 @@ export default function ChecklistEngine() {
               )}
               {field.type === 'materials_consumption' && (
                 <ChecklistMaterialsConsumptionField
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json)}
+                  readOnly={isReadOnly}
+                  userEmail={user?.email}
+                />
+              )}
+              {field.type === 'materials_receipt' && (
+                <ChecklistMaterialsReceiptField
                   value={vv(field.id)}
                   onChange={(json) => hi(field.id, json)}
                   readOnly={isReadOnly}

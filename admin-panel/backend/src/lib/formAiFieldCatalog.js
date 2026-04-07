@@ -30,6 +30,12 @@ const FIELD_SPECS = [
     descPt: 'Consumo do estoque técnico (separado de bens); baixa ao submeter.',
   },
   {
+    type: 'materials_receipt',
+    tier: 'advanced',
+    proposalsDefault: true,
+    descPt: 'Entrada no estoque técnico (separado de bens); aumenta saldo ao submeter.',
+  },
+  {
     type: 'technician_finance',
     tier: 'advanced',
     proposalsDefault: true,
@@ -175,6 +181,7 @@ const ANALYZE_OPTION_SHORT_PT = {
   geofence_check: 'Cerca (geofence)',
   calculated: 'Calculado',
   materials_consumption: 'Materiais / consumo',
+  materials_receipt: 'Materiais / entrada',
   technician_finance: 'Custos do técnico',
 };
 

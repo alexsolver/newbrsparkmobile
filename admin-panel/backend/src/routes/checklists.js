@@ -13,6 +13,7 @@ const {
     normalizeTemplateTitle,
     findActiveDuplicateInFolder,
 } = require('../lib/templateTitleUnique');
+const { computeExecutionBusinessMetrics } = require('../lib/executionBusinessMetrics');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -481,6 +482,33 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
         updateData.metadata = mergedMeta;
 
+        if (
+            statusNorm &&
+            ['COMPLETED', 'SYNCED'].includes(statusNorm) &&
+            (updateData.responses || existing.responses)
+        ) {
+            const finalResp =
+                updateData.responses &&
+                typeof updateData.responses === 'object' &&
+                !Array.isArray(updateData.responses)
+                    ? updateData.responses
+                    : existing.responses && typeof existing.responses === 'object' && !Array.isArray(existing.responses)
+                      ? existing.responses
+                      : {};
+            updateData.businessMetrics = computeExecutionBusinessMetrics({
+                responses: finalResp,
+                metadata: mergedMeta,
+                execution: {
+                    etaMinutes: existing.etaMinutes,
+                    locationLat: existing.locationLat,
+                    locationLng: existing.locationLng,
+                    startedAt: updateData.startedAt ?? existing.startedAt,
+                    completedAt: existing.completedAt,
+                },
+                revision: existing.lastSubmittedRevision,
+            });
+        }
+
         const execution = await prisma.checklistExecution.update({
             where: { id: taskId },
             data: updateData
@@ -571,6 +599,26 @@ router.post('/executions', authUser, async (req, res) => {
                         ? { ...existing.metadata }
                         : {};
 
+                const mergedExecutionMeta = (() => {
+                    const nm = { ...existingMeta, ...metaIn };
+                    delete nm.revisionVisitActive;
+                    delete nm.reopenForRevisionPending;
+                    return nm;
+                })();
+                const finalStartedAt = startedAt ? new Date(startedAt) : existing.startedAt;
+                const businessSnap = computeExecutionBusinessMetrics({
+                    responses: responses || {},
+                    metadata: mergedExecutionMeta,
+                    execution: {
+                        etaMinutes: existing.etaMinutes,
+                        locationLat: existing.locationLat,
+                        locationLng: existing.locationLng,
+                        startedAt: finalStartedAt,
+                        completedAt: completedAtD,
+                    },
+                    revision: clientRev,
+                });
+
                 execution = await prisma.$transaction(async (tx) => {
                     await tx.checklistExecutionRevision.create({
                         data: {
@@ -580,6 +628,7 @@ router.post('/executions', authUser, async (req, res) => {
                             metadataSnapshot: metaIn,
                             completedAt: completedAtD,
                             submissionId: submissionId || null,
+                            businessMetrics: businessSnap,
                         },
                     });
                     return tx.checklistExecution.update({
@@ -588,16 +637,12 @@ router.post('/executions', authUser, async (req, res) => {
                             status: 'COMPLETED',
                             lastSubmittedRevision: clientRev,
                             responses: responses || {},
-                            metadata: (() => {
-                                const nm = { ...existingMeta, ...metaIn };
-                                delete nm.revisionVisitActive;
-                                delete nm.reopenForRevisionPending;
-                                return nm;
-                            })(),
+                            metadata: mergedExecutionMeta,
                             gpsLocation: gpsLocation || null,
-                            startedAt: startedAt ? new Date(startedAt) : existing.startedAt,
+                            startedAt: finalStartedAt,
                             completedAt: completedAtD,
                             syncedAt: new Date(),
+                            businessMetrics: businessSnap,
                         },
                     });
                 });
@@ -622,6 +667,18 @@ router.post('/executions', authUser, async (req, res) => {
             const resolvedOwner =
               ownerEmail && sameOwnerEmail(ownerEmail, authEmail) ? ownerEmail : authEmail;
             const osNumber = await allocateNextFtOsNumber(prisma);
+            const businessSnapAdHoc = computeExecutionBusinessMetrics({
+                responses: responses || {},
+                metadata: metaIn,
+                execution: {
+                    etaMinutes: null,
+                    locationLat: null,
+                    locationLng: null,
+                    startedAt: startedAt ? new Date(startedAt) : null,
+                    completedAt: completedAtD,
+                },
+                revision: 1,
+            });
             execution = await prisma.$transaction(async (tx) => {
                 const ex = await tx.checklistExecution.create({
                     data: {
@@ -637,6 +694,7 @@ router.post('/executions', authUser, async (req, res) => {
                         startedAt: startedAt ? new Date(startedAt) : null,
                         completedAt: completedAtD,
                         syncedAt: new Date(),
+                        businessMetrics: businessSnapAdHoc,
                     },
                 });
                 await tx.checklistExecutionRevision.create({
@@ -647,6 +705,7 @@ router.post('/executions', authUser, async (req, res) => {
                         metadataSnapshot: metaIn,
                         completedAt: completedAtD,
                         submissionId: submissionId || null,
+                        businessMetrics: businessSnapAdHoc,
                     },
                 });
                 return ex;

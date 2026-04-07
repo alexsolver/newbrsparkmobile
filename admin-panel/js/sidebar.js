@@ -4,6 +4,28 @@
 
 import { ensureAdminApiDetected } from './config.js';
 
+const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
+
+export function isSidebarCollapsed() {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+}
+
+export function setSidebarCollapsed(collapsed) {
+  if (collapsed) {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1');
+    document.body.classList.add('sidebar-collapsed');
+  } else {
+    localStorage.removeItem(SIDEBAR_COLLAPSED_KEY);
+    document.body.classList.remove('sidebar-collapsed');
+  }
+  const btn = document.getElementById('sidebar-toggle');
+  if (btn) {
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.setAttribute('aria-label', collapsed ? 'Expandir menu' : 'Recolher menu');
+    btn.title = collapsed ? 'Expandir menu' : 'Recolher menu';
+  }
+}
+
 export const NAV_ITEMS = [
   { page: 'dashboard.html',     icon: 'grid-outline',       label: 'Dashboard',           section: null },
   { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
@@ -11,6 +33,7 @@ export const NAV_ITEMS = [
   { page: 'subscriptions.html', icon: 'card-outline',       label: 'Assinaturas',          section: null },
   { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
+  { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
   { page: 'cockpit.html',       icon: 'pulse-outline',      label: 'Sync Cockpit',         section: null },
   { page: 'locations.html',     icon: 'location-outline',   label: 'Multi-Location',        section: 'Multi-Location' },
   { page: 'i18n.html',          icon: 'globe-outline',      label: 'Config. Regionais',     section: null },
@@ -49,17 +72,26 @@ export function renderSidebar(alertCount = 3) {
     const active = pageKey === itemKey ? 'active' : '';
     const badge = item.page === 'audit.html' ? `<span class="nav-badge">${alertCount}</span>` : '';
     return `${sectionHtml}
-      <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}">
+      <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${item.label.replace(/"/g, '&quot;')}">
         <ion-icon name="${item.icon}" class="nav-icon" style="font-size:18px"></ion-icon>
         <span>${item.label}</span>
         ${badge}
       </a>`;
   }).join('');
 
+  const collapsed = isSidebarCollapsed();
   return `
     <aside class="sidebar">
-      <div class="sidebar-logo">
-        <img src="img/logo.png" alt="BrSpark Logo">
+      <div class="sidebar-header">
+        <a href="dashboard.html" class="sidebar-brand" title="BrSpark — Dashboard">
+          <img src="img/logo.png" alt="BrSpark">
+        </a>
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle"
+          aria-label="${collapsed ? 'Expandir menu' : 'Recolher menu'}"
+          aria-expanded="${collapsed ? 'false' : 'true'}"
+          title="${collapsed ? 'Expandir menu' : 'Recolher menu'}">
+          <ion-icon name="chevron-back-outline"></ion-icon>
+        </button>
       </div>
       <nav class="sidebar-nav">${navHtml}</nav>
       <div class="sidebar-footer">
@@ -97,5 +129,23 @@ export async function initPage() {
   }
 
   document.body.insertAdjacentHTML('afterbegin', renderSidebar());
+  if (isSidebarCollapsed() && window.matchMedia('(min-width: 769px)').matches) {
+    document.body.classList.add('sidebar-collapsed');
+  }
   document.getElementById('logout-btn').addEventListener('click', logout);
+
+  const toggle = document.getElementById('sidebar-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+    });
+  }
+
+  window.matchMedia('(min-width: 769px)').addEventListener('change', (e) => {
+    if (!e.matches) {
+      document.body.classList.remove('sidebar-collapsed');
+    } else if (isSidebarCollapsed()) {
+      document.body.classList.add('sidebar-collapsed');
+    }
+  });
 }

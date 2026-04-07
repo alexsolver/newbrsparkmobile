@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Construtor de relatório PDF</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .report-builder-page {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - 24px);
+      /* Sem margem negativa à esquerda — empurra conteúdo por baixo do menu fixo */
+      margin: -8px -12px 0 0;
+    }
+    .report-builder-topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .report-builder-topbar .topbar-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .report-builder-topbar h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+    .report-builder-topbar .hint {
+      font-size: 11px;
+      color: var(--text3);
+      max-width: 520px;
+      line-height: 1.35;
+    }
+    .report-builder-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .report-builder-sidebar {
+      width: 380px;
+      min-width: 300px;
+      max-width: 42vw;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      background: var(--surface2);
+      display: flex;
+      flex-direction: column;
+    }
+    .report-inspector-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .report-inspector-section h3 {
+      margin: 0 0 10px;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text3);
+    }
+    .report-module-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .report-module-row:last-child { border-bottom: none; }
+    .report-module-label {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.3;
+    }
+    .report-module-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .report-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .report-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .report-switch span {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--border);
+      border-radius: 22px;
+      transition: 0.2s;
+    }
+    .report-switch span:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .report-switch input:checked + span { background: var(--accent); }
+    .report-switch input:checked + span:before { transform: translateX(18px); }
+
+    .report-field-row {
+      display: grid;
+      grid-template-columns: 1fr 36px;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 0;
+      border-bottom: 1px dashed var(--border);
+      font-size: 11px;
+    }
+    .report-field-row:last-child { border-bottom: none; }
+    .report-field-row input[type="text"] {
+      width: 100%;
+      padding: 6px 8px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+    .report-field-row .eye {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 4px;
+    }
+
+    .report-builder-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #e2e8f0;
+    }
+    .report-canvas-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .report-canvas-toolbar label { font-size: 11px; color: var(--text3); }
+    .report-canvas-scroll {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .report-canvas-sheet {
+      transform-origin: top center;
+      transition: transform 0.15s ease;
+    }
+    .report-canvas-sheet-inner {
+      width: 794px;
+      min-height: 1123px;
+      background: #fff;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.06);
+      border-radius: 2px;
+    }
+    .report-wysiwyg-frame {
+      width: 100%;
+      padding: 28px 36px 40px;
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: #0f172a;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    /* PDF look — espelho do operations.html */
+    .report-wysiwyg-frame .pdf-topbar {
+      display: flex; justify-content: space-between; font-size: 10px; color: #1e293b;
+      padding-bottom: 5px; font-weight: 600;
+    }
+    .report-wysiwyg-frame .pdf-header-banner {
+      background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 30%, #e2e8f0 100%);
+      height: 70px; border-radius: 8px; position: relative; margin-top: 5px; margin-bottom: 22px;
+    }
+    .report-wysiwyg-frame .pdf-summary-plate {
+      position: absolute; left: 50%; transform: translateX(-50%); top: 15px;
+      background: rgba(255,255,255,0.95); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      border-radius: 20px; padding: 8px 30px; text-align: center; border: 1px solid #cbd5e1;
+    }
+    .report-wysiwyg-frame .pdf-summary-plate h2 { margin: 0; font-size: 16px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+    .report-wysiwyg-frame .pdf-summary-plate span { font-size: 9px; color: #0f172a; font-weight: 500; }
+    .report-wysiwyg-frame .pdf-tech-info {
+      position: absolute; right: 20px; top: 15px; display: flex; align-items: center; gap: 10px;
+    }
+    .report-wysiwyg-frame .pdf-tech-avatar {
+      width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+      border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .report-wysiwyg-frame .pdf-tech-name { font-size: 12px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px; }
+    .report-wysiwyg-frame .pdf-tech-mail { font-size: 10px; color: #334155; }
+    .report-wysiwyg-frame .pdf-tech-texts { display: flex; flex-direction: column; text-align: right; }
+    .report-wysiwyg-frame .pdf-box {
+      border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
+      padding: 10px 15px; margin-bottom: 12px; position: relative;
+    }
+    .report-wysiwyg-frame .pdf-box-title {
+      text-align: center; font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 12px; letter-spacing: -0.3px;
+    }
+    .report-wysiwyg-frame .pdf-timeline-rev-hint {
+      font-size: 7px; color: #64748b; font-weight: 600; margin-top: 3px; line-height: 1.25;
+      max-width: 104px; text-align: center;
+    }
+    .report-wysiwyg-frame .pdf-timeline {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      position: relative; padding: 0 40px; margin-bottom: 8px;
+    }
+    .report-wysiwyg-frame .pdf-timeline::before {
+      content: ''; position: absolute; top: 12px; left: 70px; right: 70px;
+      height: 3px; background: linear-gradient(90deg, #3b82f6 0%, #22c55e 100%); z-index: 0;
+    }
+    .report-wysiwyg-frame .pdf-timeline-node {
+      display: flex; flex-direction: column; align-items: center; z-index: 1; width: 100px; text-align: center; background: #f8fafc;
+    }
+    .report-wysiwyg-frame .pdf-timeline-icon {
+      width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 12px; margin-bottom: 4px; border: 3px solid #f8fafc;
+    }
+    .report-wysiwyg-frame .pdf-timeline-icon ion-icon { font-size: 14px; }
+    .report-wysiwyg-frame .bg-blue { background: #3b82f6; }
+    .report-wysiwyg-frame .bg-green { background: #22c55e; }
+    .report-wysiwyg-frame .bg-orange { background: #EA580C; }
+    .report-wysiwyg-frame .pdf-timeline-label { font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
+    .report-wysiwyg-frame .pdf-timeline-date { font-size: 9px; color: #475569; }
+    .report-wysiwyg-frame .pdf-section-title {
+      font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 28px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px; letter-spacing: -0.2px;
+    }
+    .report-wysiwyg-frame .pdf-section-title ion-icon { flex-shrink: 0; color: #64748b; }
+    .report-wysiwyg-frame .pdf-form-grid {
+      display: flex; flex-direction: column; gap: 20px; position: relative; padding-left: 45px; margin-top: 10px;
+    }
+    .report-wysiwyg-frame .pdf-form-line {
+      position: absolute; left: 13.5px; top: 5px; height: 100%; width: 2px; background: #e2e8f0;
+    }
+    .report-wysiwyg-frame .pdf-form-item {
+      position: relative; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 14px 18px; break-inside: avoid; page-break-inside: avoid;
+    }
+    .report-wysiwyg-frame .pdf-form-num {
+      position: absolute; left: -44px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
+      background: #F97316; color: white; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid white;
+      box-shadow: 0 2px 6px rgba(249,115,22,0.3);
+    }
+    .report-wysiwyg-frame .pdf-q {
+      font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;
+    }
+    .report-wysiwyg-frame .pdf-a { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.45; }
+    .report-wysiwyg-frame .pdf-pill { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    .report-wysiwyg-frame .pdf-photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .report-wysiwyg-frame .pdf-photo-card {
+      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; position: relative;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .report-wysiwyg-frame .pdf-photo-title { font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 10px; background: white; }
+    .report-wysiwyg-frame .pdf-photo-img { width: 100%; height: 180px; background: #e2e8f0; object-fit: cover; display: block; }
+    .report-wysiwyg-frame .pdf-footer { text-align: center; border-top: 1px solid #cbd5e1; margin-top: 48px; padding-top: 15px; font-size: 10px; font-weight: 600; color: #64748b; }
+    .report-badge-live {
+      font-size: 10px; font-weight: 800; color: #059669; background: #d1fae5; padding: 2px 8px; border-radius: 99px;
+    }
+    .report-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .report-order-actions button { min-width: 30px; padding: 2px 6px; font-size: 12px; }
+    .report-theme-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
+      align-items: center;
+    }
+    .report-theme-grid label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text3);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .report-theme-grid input[type="color"] {
+      width: 100%;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="report-builder-page">
+      <div class="report-builder-topbar">
+        <div class="topbar-title-wrap">
+          <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Construtor PDF <span class="report-badge-live">WYSIWYG</span></h1>
+          <p class="hint">O painel à direita simula a folha A4. Alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração. API: <code style="font-size:10px">GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></p>
+        </div>
+        <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <select id="preset-select" class="form-control" style="min-width:200px;font-size:12px;padding:6px 10px"></select>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-new-preset">+ Novo</button>
+          <button type="button" class="btn btn-primary btn-sm" id="ed-save">Guardar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="ed-delete" style="display:none;color:var(--red)">Eliminar</button>
+        </div>
+      </div>
+
+      <div class="report-builder-body">
+        <aside class="report-builder-sidebar">
+          <input type="hidden" id="ed-id" />
+
+          <div class="report-inspector-section">
+            <h3>Preset</h3>
+            <div class="form-group" style="margin-bottom:8px">
+              <label class="form-label">Nome *</label>
+              <input class="form-control" id="ed-name" placeholder="Ex.: Cliente final" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Slug</label>
+              <input class="form-control" id="ed-slug" placeholder="opcional" style="font-size:12px" />
+            </div>
+            <div id="ed-link-wrap" style="display:none;margin-top:10px">
+              <label class="form-label">Link direto</label>
+              <div style="display:flex;gap:6px">
+                <input class="form-control" id="ed-deeplink" readonly style="font-size:10px;padding:6px 8px" />
+                <button type="button" class="btn btn-ghost btn-sm" id="ed-copy-link">Copiar</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-inspector-section">
+            <h3>Dados na pré-visualização</h3>
+            <p style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.4">Por defeito usa um exemplo. Carregue uma execução real para ver respostas verdadeiras (só no canvas). Pode usar o <strong>ID interno</strong> da execução ou o número <strong>FT-…</strong> da OS.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input class="form-control" id="preview-exec-id" placeholder="ID interno ou FT-AAAA-MM-…" style="flex:1;min-width:120px;font-size:11px;padding:6px 8px" />
+              <button type="button" class="btn btn-ghost btn-sm" id="preview-load-exec">Carregar</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="preview-reset-mock">Exemplo</button>
+            </div>
+            <p id="preview-load-msg" style="font-size:10px;margin:6px 0 0;color:var(--text3)"></p>
+          </div>
+
+          <div class="report-inspector-section">
+            <h3>Aparência (banner)</h3>
+            <div class="form-group" style="margin-bottom:8px">
+              <label class="form-label">URL do logo</label>
+              <input class="form-control" id="ed-logo" placeholder="https://… ou /uploads/…" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="margin-bottom:8px">
+              <label class="form-label">Título (H2)</label>
+              <input class="form-control" id="ed-report-title" placeholder="Vazio = RELATÓRIO DA ATIVIDADE" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Subtítulo</label>
+              <input class="form-control" id="ed-report-subtitle" placeholder="Vazio = número OS" style="font-size:12px" />
+            </div>
+          </div>
+
+          <div class="report-inspector-section">
+            <h3>Módulos na folha</h3>
+            <p style="font-size:10px;color:var(--text3);margin:0 0 10px;line-height:1.35">Use o interruptor para mostrar ou ocultar; as setas definem a ordem no PDF. Se «Produtividade» vier logo a seguir a «Bloco técnico», a faixa fica dentro do mesmo cartão.</p>
+            <div id="ed-modules"></div>
+          </div>
+
+          <div class="report-inspector-section">
+            <h3>Tipo e cores</h3>
+            <div class="form-group" style="margin-bottom:8px">
+              <label class="form-label">Fonte (família CSS)</label>
+              <input class="form-control" id="th-font" style="font-size:11px" placeholder="Inter, system-ui, sans-serif" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label class="form-label">Escala do texto <span id="th-scale-label" style="font-weight:600;color:var(--text2)">100%</span></label>
+              <input type="range" id="th-scale" min="75" max="135" value="100" style="width:100%" />
+            </div>
+            <div class="report-theme-grid">
+              <label>Banner (início)<input type="color" id="th-color-banner-start" value="#1e3a8a" /></label>
+              <label>Banner (fim)<input type="color" id="th-color-banner-end" value="#1e40af" /></label>
+              <label>Cabeçalho técnico (início)<input type="color" id="th-color-tech-start" value="#1e293b" /></label>
+              <label>Cabeçalho técnico (fim)<input type="color" id="th-color-tech-end" value="#334155" /></label>
+              <label>Destaque (links, formulário)<input type="color" id="th-color-accent" value="#3b82f6" /></label>
+              <label>Nº pergunta<input type="color" id="th-color-form-num" value="#f97316" /></label>
+              <label>Pill «sim»<input type="color" id="th-color-pill-yes" value="#3b82f6" /></label>
+              <label>Pill «não»<input type="color" id="th-color-pill-no" value="#ef4444" /></label>
+              <label>Linha do tempo (azul)<input type="color" id="th-color-tl-blue" value="#3b82f6" /></label>
+              <label>Linha do tempo (verde)<input type="color" id="th-color-tl-green" value="#22c55e" /></label>
+              <label>Fotos / galeria<input type="color" id="th-color-photo" value="#10b981" /></label>
+              <label>Deslocamento<input type="color" id="th-color-transit" value="#ea580c" /></label>
+            </div>
+          </div>
+
+          <div class="report-inspector-section" style="flex:1;padding-bottom:24px">
+            <h3>Campos do formulário</h3>
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">
+              <input type="checkbox" id="ed-hide-empty" /> Ocultar vazios no PDF
+            </label>
+            <p style="font-size:10px;color:var(--text3);margin:-4px 0 8px">Mostrar/ocultar e renomear rótulos. Com OS carregada, a lista segue o formulário dessa OS.</p>
+            <div id="field-rows"></div>
+          </div>
+        </aside>
+
+        <main class="report-builder-stage">
+          <div class="report-canvas-toolbar">
+            <span style="font-size:12px;font-weight:800;color:var(--text2)">Pré-visualização A4</span>
+            <label><input type="range" id="canvas-zoom" min="40" max="100" value="72" style="width:120px;vertical-align:middle" /> <span id="canvas-zoom-label">72%</span></label>
+            <span class="report-badge-live" style="background:#eff6ff;color:#1d4ed8">Atualização em tempo real</span>
+          </div>
+          <div class="report-canvas-scroll">
+            <div class="report-canvas-sheet" id="canvas-sheet">
+              <div class="report-canvas-sheet-inner">
+                <div id="preview-root" class="report-wysiwyg-frame"></div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="preview-productivity-modal" style="display:none;opacity:1;pointer-events:all;z-index:10040;">
+  <div class="modal" style="max-width:520px;width:92vw;">
+    <div class="modal-header">
+      <span class="modal-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="stats-chart-outline" style="font-size:20px;color:var(--accent);flex-shrink:0"></ion-icon> Produtividade e deslocamento</span>
+      <button type="button" class="modal-close" id="preview-productivity-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" id="preview-productivity-body" style="max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initPage } from './js/sidebar.js';
+import { CONFIG } from './js/config.js';
+import { mergePresetConfig, MODULE_KEYS, normalizeModuleOrder } from './js/report/reportPresetBrowser.js';
+import { mergeTheme } from './js/report/reportThemeBrowser.js';
+import {
+  buildReportPreviewHtml,
+  buildProductivityModalHtml,
+  MOCK_PREVIEW_TASK,
+  MOCK_PREVIEW_SCHEMA,
+} from './js/report/reportPdfPreview.js';
+
+await initPage();
+
+const MODULE_LABELS = {
+  topbar: 'Barra + logo + data',
+  headerBanner: 'Faixa azul (título / técnico)',
+  technicalBlock: 'Bloco técnico (3 colunas)',
+  productivity: 'Faixa produtividade',
+  timeline: 'Linha do tempo',
+  transit: 'Deslocamento',
+  formResponses: 'Respostas numeradas',
+  photoGallery: 'Galeria de fotos',
+  footer: 'Rodapé',
+};
+
+let cacheList = [];
+let previewTask = structuredClone(MOCK_PREVIEW_TASK);
+let previewSchema = [...MOCK_PREVIEW_SCHEMA];
+let previewDebounce = null;
+let moduleOrderState = normalizeModuleOrder([]);
+
+function hexForPicker(hex) {
+  const s = String(hex || '#000000').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(0, 7);
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    const r = s[1],
+      g = s[2],
+      b = s[3];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return '#000000';
+}
+
+function applyThemeToDom(theme) {
+  const th = mergeTheme(theme);
+  document.getElementById('th-font').value = th.fontFamily;
+  const sc = Math.round(th.fontScale * 100);
+  document.getElementById('th-scale').value = String(sc);
+  document.getElementById('th-scale-label').textContent = `${sc}%`;
+  document.getElementById('th-color-banner-start').value = hexForPicker(th.bannerGradientStart);
+  document.getElementById('th-color-banner-end').value = hexForPicker(th.bannerGradientEnd);
+  document.getElementById('th-color-tech-start').value = hexForPicker(th.techHeaderStart);
+  document.getElementById('th-color-tech-end').value = hexForPicker(th.techHeaderEnd);
+  document.getElementById('th-color-accent').value = hexForPicker(th.colorAccent);
+  document.getElementById('th-color-form-num').value = hexForPicker(th.formNumBg);
+  document.getElementById('th-color-pill-yes').value = hexForPicker(th.pillYesBg);
+  document.getElementById('th-color-pill-no').value = hexForPicker(th.pillNoBg);
+  document.getElementById('th-color-tl-blue').value = hexForPicker(th.timelineBlue);
+  document.getElementById('th-color-tl-green').value = hexForPicker(th.timelineGreen);
+  document.getElementById('th-color-photo').value = hexForPicker(th.photoAccent);
+  document.getElementById('th-color-transit').value = hexForPicker(th.transitAccent);
+}
+
+function readThemeFromDom() {
+  const font = document.getElementById('th-font').value.trim();
+  const scale = Number(document.getElementById('th-scale').value);
+  const o = {};
+  if (font) o.fontFamily = font;
+  if (Number.isFinite(scale)) o.fontScale = scale / 100;
+  const pairs = [
+    ['th-color-banner-start', 'bannerGradientStart'],
+    ['th-color-banner-end', 'bannerGradientEnd'],
+    ['th-color-tech-start', 'techHeaderStart'],
+    ['th-color-tech-end', 'techHeaderEnd'],
+    ['th-color-accent', 'colorAccent'],
+    ['th-color-form-num', 'formNumBg'],
+    ['th-color-pill-yes', 'pillYesBg'],
+    ['th-color-pill-no', 'pillNoBg'],
+    ['th-color-tl-blue', 'timelineBlue'],
+    ['th-color-tl-green', 'timelineGreen'],
+    ['th-color-photo', 'photoAccent'],
+    ['th-color-transit', 'transitAccent'],
+  ];
+  for (const [id, key] of pairs) {
+    const el = document.getElementById(id);
+    if (el && el.value) o[key] = el.value;
+  }
+  return o;
+}
+
+/**
+ * @param {{ preserveFromDom?: boolean, modules?: Record<string, boolean> }} [opts]
+ *   preserveFromDom — ao reordenar, manter interruptores atuais; modules — estado vindo do preset
+ */
+function renderModuleRows(opts = {}) {
+  const { preserveFromDom, modules: modulesSeed } = opts;
+  let checked;
+  if (preserveFromDom) {
+    checked = readModulesFromDom();
+  } else {
+    checked = mergePresetConfig({ modules: modulesSeed }).modules;
+  }
+  const wrap = document.getElementById('ed-modules');
+  wrap.innerHTML = moduleOrderState
+    .map((k, i) => {
+      const id = `ed-mod-${k}`;
+      const isOn = !!checked[k];
+      return `<div class="report-module-row" data-key="${k}">
+        <span class="report-module-label">${MODULE_LABELS[k] || k}</span>
+        <div class="report-module-meta">
+          <div class="report-order-actions">
+            <button type="button" class="btn btn-ghost btn-sm order-up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="btn btn-ghost btn-sm order-down" data-i="${i}" ${
+        i === moduleOrderState.length - 1 ? 'disabled' : ''
+      }>↓</button>
+          </div>
+          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="${id}" data-mod="${k}" ${isOn ? 'checked' : ''} /><span></span></label>
+        </div>
+      </div>`;
+    })
+    .join('');
+  wrap.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+    el.addEventListener('change', () => schedulePreview());
+  });
+}
+
+function moveModuleOrder(index, delta) {
+  const j = index + delta;
+  if (j < 0 || j >= moduleOrderState.length) return;
+  const a = moduleOrderState[index];
+  moduleOrderState[index] = moduleOrderState[j];
+  moduleOrderState[j] = a;
+  renderModuleRows({ preserveFromDom: true });
+  schedulePreview();
+}
+
+document.getElementById('ed-modules').addEventListener('click', (e) => {
+  const up = e.target.closest('.order-up');
+  const dn = e.target.closest('.order-down');
+  if (up && !up.disabled) moveModuleOrder(Number(up.dataset.i), -1);
+  if (dn && !dn.disabled) moveModuleOrder(Number(dn.dataset.i), 1);
+});
+
+document.getElementById('th-scale').addEventListener('input', () => {
+  document.getElementById('th-scale-label').textContent = `${document.getElementById('th-scale').value}%`;
+  schedulePreview();
+});
+
+function readModulesFromDom() {
+  const m = {};
+  for (const k of MODULE_KEYS) {
+    const el = document.getElementById(`ed-mod-${k}`);
+    m[k] = !!(el && el.checked);
+  }
+  return m;
+}
+
+function readFieldsFromDom() {
+  const out = {};
+  for (const f of previewSchema) {
+    const vis = document.getElementById(`fld-vis-${f.id}`);
+    const lab = document.getElementById(`fld-lab-${f.id}`);
+    const visible = vis ? vis.checked : true;
+    const label = lab && lab.value.trim() ? lab.value.trim() : undefined;
+    if (!visible) out[f.id] = { visible: false };
+    else if (label) out[f.id] = { visible: true, label };
+  }
+  return out;
+}
+
+/** @param {Record<string,{visible?:boolean,label?:string}>} [seed] — valores do preset ao abrir */
+function renderFieldRows(seed) {
+  const host = document.getElementById('field-rows');
+  const seedFields = seed && typeof seed === 'object' ? seed : {};
+  host.innerHTML = previewSchema
+    .map((f) => {
+      const fc = seedFields[f.id];
+      const vis = fc && Object.prototype.hasOwnProperty.call(fc, 'visible') ? !!fc.visible : true;
+      const lab = fc && fc.label ? String(fc.label) : '';
+      return `<div class="report-field-row" data-fid="${f.id}">
+        <div>
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px">${f.label.replace(/</g, '')} <span style="font-weight:600;color:var(--text3);font-size:10px">${f.type}</span></div>
+          <input type="text" id="fld-lab-${f.id}" placeholder="Rótulo no PDF (opcional)" value="${lab.replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="eye">
+          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="fld-vis-${f.id}" ${vis ? 'checked' : ''} /><span></span></label>
+        </div>
+      </div>`;
+    })
+    .join('');
+  host.querySelectorAll('input').forEach((el) => {
+    el.addEventListener('input', () => schedulePreview());
+    el.addEventListener('change', () => schedulePreview());
+  });
+}
+
+function getEditorConfig() {
+  return mergePresetConfig({
+    modules: readModulesFromDom(),
+    moduleOrder: [...moduleOrderState],
+    theme: readThemeFromDom(),
+    logoUrl: document.getElementById('ed-logo').value.trim() || null,
+    reportTitle: document.getElementById('ed-report-title').value.trim() || null,
+    reportSubtitle: document.getElementById('ed-report-subtitle').value.trim() || null,
+    hideEmptyFields: document.getElementById('ed-hide-empty').checked,
+    fields: readFieldsFromDom(),
+  });
+}
+
+function openPreviewProductivityModal() {
+  const cfg = getEditorConfig();
+  document.getElementById('preview-productivity-body').innerHTML = buildProductivityModalHtml(cfg, previewTask);
+  document.getElementById('preview-productivity-modal').style.display = 'flex';
+}
+
+function closePreviewProductivityModal() {
+  document.getElementById('preview-productivity-modal').style.display = 'none';
+}
+
+function runPreview() {
+  const cfg = getEditorConfig();
+  const root = document.getElementById('preview-root');
+  root.classList.add('pdf-theme-root');
+  root.innerHTML = buildReportPreviewHtml(cfg, previewTask, previewSchema);
+  root.querySelectorAll('[data-brspark-preview-prod]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openPreviewProductivityModal();
+    });
+  });
+}
+
+document.getElementById('preview-productivity-close')?.addEventListener('click', closePreviewProductivityModal);
+document.getElementById('preview-productivity-modal')?.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'preview-productivity-modal') closePreviewProductivityModal();
+});
+
+function schedulePreview() {
+  clearTimeout(previewDebounce);
+  previewDebounce = setTimeout(runPreview, 60);
+}
+
+function applyZoom() {
+  const z = Number(document.getElementById('canvas-zoom').value) / 100;
+  document.getElementById('canvas-sheet').style.transform = `scale(${z})`;
+  document.getElementById('canvas-zoom-label').textContent = `${Math.round(z * 100)}%`;
+}
+
+document.getElementById('canvas-zoom').addEventListener('input', applyZoom);
+
+['ed-logo', 'ed-report-title', 'ed-report-subtitle', 'ed-hide-empty', 'ed-name', 'ed-slug', 'th-font'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', () => schedulePreview());
+  if (el) el.addEventListener('change', () => schedulePreview());
+});
+document.querySelectorAll('.report-theme-grid input[type="color"]').forEach((el) => {
+  el.addEventListener('input', () => schedulePreview());
+  el.addEventListener('change', () => schedulePreview());
+});
+
+async function loadPresets() {
+  const r = await fetch(`${CONFIG.API_BASE}/reports/presets`, { headers: CONFIG.headers() });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function fillPresetSelect() {
+  const sel = document.getElementById('preset-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Novo preset —</option>';
+  for (const p of cacheList) {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name || p.id;
+    sel.appendChild(o);
+  }
+  if (cur && cacheList.some((x) => x.id === cur)) sel.value = cur;
+}
+
+async function refresh() {
+  try {
+    cacheList = await loadPresets();
+    fillPresetSelect();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function openEditor(id) {
+  const p = id ? cacheList.find((x) => x.id === id) : null;
+  const c = mergePresetConfig(p ? p.config : null);
+  document.getElementById('ed-id').value = p ? p.id : '';
+  document.getElementById('ed-name').value = p ? p.name : '';
+  document.getElementById('ed-slug').value = p ? p.slug || '' : '';
+  document.getElementById('ed-report-title').value = c.reportTitle || '';
+  document.getElementById('ed-report-subtitle').value = c.reportSubtitle || '';
+  document.getElementById('ed-logo').value = c.logoUrl || '';
+  document.getElementById('ed-hide-empty').checked = !!c.hideEmptyFields;
+  moduleOrderState = [...normalizeModuleOrder(c.moduleOrder)];
+  renderModuleRows({ modules: c.modules });
+  applyThemeToDom(c.theme);
+  previewTask = structuredClone(MOCK_PREVIEW_TASK);
+  previewSchema = [...MOCK_PREVIEW_SCHEMA];
+  document.getElementById('preview-exec-id').value = '';
+  document.getElementById('preview-load-msg').textContent = '';
+
+  const mergedFields = c.fields && typeof c.fields === 'object' ? c.fields : {};
+  renderFieldRows(mergedFields);
+
+  document.getElementById('preset-select').value = p ? p.id : '';
+  document.getElementById('ed-delete').style.display = p ? '' : 'none';
+  const linkWrap = document.getElementById('ed-link-wrap');
+  if (p) {
+    const u = new URL(window.location.href);
+    u.searchParams.set('preset', p.id);
+    document.getElementById('ed-deeplink').value = u.toString();
+    linkWrap.style.display = '';
+  } else {
+    linkWrap.style.display = 'none';
+  }
+  schedulePreview();
+}
+
+document.getElementById('preset-select').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v) openEditor(v);
+  else openEditor(null);
+});
+
+document.getElementById('btn-new-preset').addEventListener('click', () => {
+  document.getElementById('preset-select').value = '';
+  openEditor(null);
+});
+
+document.getElementById('ed-save').addEventListener('click', async () => {
+  const id = document.getElementById('ed-id').value.trim();
+  const name = document.getElementById('ed-name').value.trim();
+  if (!name) {
+    alert('Indique o nome do preset.');
+    return;
+  }
+  const body = {
+    name,
+    slug: document.getElementById('ed-slug').value.trim() || null,
+    config: {
+      modules: readModulesFromDom(),
+      moduleOrder: [...moduleOrderState],
+      theme: readThemeFromDom(),
+      logoUrl: document.getElementById('ed-logo').value.trim() || null,
+      reportTitle: document.getElementById('ed-report-title').value.trim() || null,
+      reportSubtitle: document.getElementById('ed-report-subtitle').value.trim() || null,
+      hideEmptyFields: document.getElementById('ed-hide-empty').checked,
+      fields: readFieldsFromDom(),
+    },
+  };
+  try {
+    const url = id
+      ? `${CONFIG.API_BASE}/reports/presets/${encodeURIComponent(id)}`
+      : `${CONFIG.API_BASE}/reports/presets`;
+    const r = await fetch(url, {
+      method: id ? 'PATCH' : 'POST',
+      headers: { ...CONFIG.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await refresh();
+    const saved = await r.json();
+    openEditor(saved.id);
+  } catch (e) {
+    alert('Erro: ' + (e.message || e));
+  }
+});
+
+document.getElementById('ed-delete').addEventListener('click', async () => {
+  const id = document.getElementById('ed-id').value.trim();
+  if (!id || !confirm('Eliminar este preset?')) return;
+  try {
+    const r = await fetch(`${CONFIG.API_BASE}/reports/presets/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: CONFIG.headers(),
+    });
+    if (!r.ok && r.status !== 204) throw new Error(await r.text());
+    await refresh();
+    openEditor(null);
+  } catch (e) {
+    alert('Erro: ' + (e.message || e));
+  }
+});
+
+document.getElementById('ed-copy-link').addEventListener('click', async () => {
+  const v = document.getElementById('ed-deeplink').value;
+  try {
+    await navigator.clipboard.writeText(v);
+  } catch {
+    document.getElementById('ed-deeplink').select();
+    document.execCommand('copy');
+  }
+});
+
+document.getElementById('preview-load-exec').addEventListener('click', async () => {
+  const id = document.getElementById('preview-exec-id').value.trim();
+  const msg = document.getElementById('preview-load-msg');
+  if (!id) {
+    msg.textContent = 'Indique o ID da execução.';
+    return;
+  }
+  const prevFieldCfg = readFieldsFromDom();
+  msg.textContent = 'A carregar…';
+  try {
+    const r = await fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, {
+      headers: CONFIG.headers(),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const arr = await r.json();
+    const found = Array.isArray(arr)
+      ? arr.find((x) => x && (x.id === id || (x.osNumber && String(x.osNumber) === id)))
+      : null;
+    if (!found) throw new Error('Execução não encontrada.');
+    previewTask = found;
+    if (found.template && Array.isArray(found.template.fields) && found.template.fields.length) {
+      previewSchema = found.template.fields.slice(0, 40).map((f) => ({
+        id: f.id,
+        label: f.label || f.id,
+        type: f.type || 'text',
+      }));
+    } else {
+      previewSchema = [...MOCK_PREVIEW_SCHEMA];
+    }
+    const seed = {};
+    for (const f of previewSchema) {
+      if (prevFieldCfg[f.id]) seed[f.id] = prevFieldCfg[f.id];
+    }
+    renderFieldRows(seed);
+    msg.textContent = 'Dados reais carregados no canvas.';
+    schedulePreview();
+  } catch (e) {
+    msg.textContent = String(e.message || e);
+  }
+});
+
+document.getElementById('preview-reset-mock').addEventListener('click', () => {
+  const prevFieldCfg = readFieldsFromDom();
+  previewTask = structuredClone(MOCK_PREVIEW_TASK);
+  previewSchema = [...MOCK_PREVIEW_SCHEMA];
+  document.getElementById('preview-exec-id').value = '';
+  document.getElementById('preview-load-msg').textContent = 'Exemplo padrão.';
+  const seed = {};
+  for (const f of previewSchema) {
+    if (prevFieldCfg[f.id]) seed[f.id] = prevFieldCfg[f.id];
+  }
+  renderFieldRows(seed);
+  schedulePreview();
+});
+
+applyThemeToDom(null);
+applyZoom();
+await refresh();
+const qp = new URLSearchParams(window.location.search).get('preset');
+if (qp && cacheList.some((x) => x.id === qp)) openEditor(qp);
+else openEditor(null);
+</script>
+</body>
+</html>

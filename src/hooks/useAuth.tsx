@@ -100,6 +100,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
     runAvatarWarm(u);
+    const defaultRole = u.technicianProfile ? 'TECHNICIAN' : 'CLIENT';
+    _setUserRole(defaultRole);
+    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-2fa failed:', err));
   };
 
@@ -107,6 +111,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.register(data);
     setUser(u);
     runAvatarWarm(u);
+    _setUserRole('CLIENT');
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, false);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-register failed:', err));
   };
 

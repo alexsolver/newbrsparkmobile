@@ -37,6 +37,7 @@ const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
 const telemetryRoutes        = require('./routes/telemetry');
 const metricsRoutes          = require('./routes/metrics');
+const reportsRoutes          = require('./routes/reports');
 const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
 const osrmProxyRoutes        = require('./routes/osrm-proxy'); // app: geometria OSRM via backend
 
@@ -76,6 +77,7 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
@@ -311,6 +313,7 @@ app.use('/api/cockpit',            adminAuth, cockpitRoutes);
 app.use('/api/collection-policy',  adminAuth, collectionPolicyRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app
 app.use('/api/metrics',            adminAuth, metricsRoutes);
+app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
 

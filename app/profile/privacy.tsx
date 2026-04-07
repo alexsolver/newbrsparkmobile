@@ -4,7 +4,7 @@
  * Tela "Minha Privacidade" acessível pelo perfil do técnico.
  * Permite visualizar e revogar aceites de consentimento a qualquer momento.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Switch, Platform, ActivityIndicator, Alert,
@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/services/auth';
+import { useAuth } from '../../src/hooks/useAuth';
 
 interface ConsentRecord {
   id: string;
@@ -30,7 +31,7 @@ const CONSENT_LABELS: Record<string, { title: string; desc: string; icon: string
   },
   LOCATION_FOREGROUND: {
     title: 'Localização com app aberto',
-    desc: 'GPS ativo somente enquanto você usa o app.',
+    desc: 'GPS somente enquanto o app está aberto.',
     icon: 'locate-outline',
   },
   DEVICE_TELEMETRY: {
@@ -45,7 +46,32 @@ const CONSENT_LABELS: Record<string, { title: string; desc: string; icon: string
   },
 };
 
+function consentLabelForRole(
+  consentType: string,
+  isTechnician: boolean
+): { title: string; desc: string; icon: string } {
+  const base = CONSENT_LABELS[consentType];
+  if (!base) return { title: consentType, desc: '', icon: 'ellipse-outline' };
+  if (consentType === 'LOCATION_FOREGROUND' && !isTechnician) {
+    return {
+      ...base,
+      desc: 'Mapa de ativos e GPS ao cadastrar bens — só com o app aberto.',
+    };
+  }
+  return base;
+}
+
 export default function PrivacySettings() {
+  const { user, userRole } = useAuth();
+  const isTechnician = !!(user?.technicianProfile || userRole === 'TECHNICIAN');
+  const visibleConsentTypes = useMemo(
+    () =>
+      isTechnician
+        ? (Object.keys(CONSENT_LABELS) as string[])
+        : (Object.keys(CONSENT_LABELS) as string[]).filter(t => t !== 'LOCATION_BACKGROUND'),
+    [isTechnician]
+  );
+
   const [records, setRecords] = useState<ConsentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -96,7 +122,7 @@ export default function PrivacySettings() {
     if (!newValue) {
       Alert.alert(
         'Revogar permissão',
-        `Tem certeza que deseja revogar "${CONSENT_LABELS[consentType]?.title}"? Isso pode limitar algumas funcionalidades.`,
+        `Tem certeza que deseja revogar "${consentLabelForRole(consentType, isTechnician).title}"? Isso pode limitar algumas funcionalidades.`,
         [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Revogar', style: 'destructive', onPress: () => doToggle(consentType, false, record?.id) },
@@ -105,7 +131,7 @@ export default function PrivacySettings() {
       return;
     }
     await doToggle(consentType, true, record?.id);
-  }, [ownerEmail, policy]);
+  }, [ownerEmail, policy, isTechnician]);
 
   const doToggle = async (consentType: string, accepted: boolean, oldId?: string) => {
     setSaving(consentType);
@@ -177,9 +203,9 @@ export default function PrivacySettings() {
             {/* Consent toggles */}
             <Text style={s.sectionLabel}>Permissões ativas</Text>
             <View style={s.section}>
-              {Object.keys(CONSENT_LABELS).map(consentType => {
+              {visibleConsentTypes.map(consentType => {
                 const { record, value } = getConsent(consentType);
-                const info = CONSENT_LABELS[consentType];
+                const info = consentLabelForRole(consentType, isTechnician);
                 const isSaving = saving === consentType;
 
                 return (
@@ -215,11 +241,18 @@ export default function PrivacySettings() {
             {/* Retention info */}
             <Text style={s.sectionLabel}>Retenção de dados</Text>
             <View style={s.section}>
-              {[
-                ['GPS em tempo real', `${policy?.retentionGpsRawDays || 15} dias`, '#f59e0b'],
-                ['Registros operacionais', `${policy?.retentionAuditDays || 180} dias`, '#3b82f6'],
-                ['Check-in/out e formulários', `${policy?.retentionEventsYears || 5} anos`, '#10b981'],
-              ].map(([label, period, color]) => (
+              {(isTechnician
+                ? [
+                    ['GPS em tempo real', `${policy?.retentionGpsRawDays || 15} dias`, '#f59e0b'],
+                    ['Registros operacionais', `${policy?.retentionAuditDays || 180} dias`, '#3b82f6'],
+                    ['Check-in/out e formulários', `${policy?.retentionEventsYears || 5} anos`, '#10b981'],
+                  ]
+                : [
+                    ['Dados de uso e suporte', `${policy?.retentionAuditDays || 180} dias`, '#3b82f6'],
+                    ['Conteúdo da sua conta', `${policy?.retentionEventsYears || 5} anos`, '#10b981'],
+                    ['Localização (se permitida)', `${policy?.retentionGpsRawDays || 15} dias`, '#f59e0b'],
+                  ]
+              ).map(([label, period, color]) => (
                 <View style={s.retRow} key={label}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.retLabel}>{label}</Text>

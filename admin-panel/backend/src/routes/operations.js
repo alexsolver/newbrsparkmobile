@@ -6,10 +6,9 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const {
-  parseTemplateSchemaArray,
-  effectiveFormFieldType,
   stripRevisionSessionEvidenceInPlace,
 } = require('../lib/revisionSessionFields');
+const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -44,57 +43,6 @@ function stripResponsesForRevision(raw, templateSchemaData) {
   return out;
 }
 
-/** Nome da etapa no builder pode estar em várias chaves conforme versão/import do schema. */
-function resolveSectionBreakLabel(field) {
-  if (!field || typeof field !== 'object') return '';
-  const meta = field.metadata && typeof field.metadata === 'object' ? field.metadata : null;
-  const props = field.properties && typeof field.properties === 'object' ? field.properties : null;
-  const cfg = field.config && typeof field.config === 'object' ? field.config : null;
-  const candidates = [
-    field.label,
-    field.title,
-    field.name,
-    field.text,
-    field.sectionTitle,
-    field.question,
-    field.placeholder,
-    field.caption,
-    field.displayName,
-    field.rotulo,
-    field.nome,
-    meta && meta.label,
-    meta && meta.title,
-    meta && meta.name,
-    meta && meta.sectionTitle,
-    props && props.label,
-    props && props.title,
-    cfg && cfg.label,
-    cfg && cfg.title,
-  ];
-  for (const c of candidates) {
-    if (c != null && String(c).trim() !== '') return String(c).trim();
-  }
-  return '';
-}
-
-/** Campos sob `section_break` com `multiple` → valores em `responses.__section_repeat_<sectionId>[].<fieldId>`. */
-function buildRepeatFieldMap(schemaArray) {
-  const out = Object.create(null);
-  if (!Array.isArray(schemaArray)) return out;
-  let repeatSid = null;
-  for (const f of schemaArray) {
-    if (!f || !f.id) continue;
-    const nt = effectiveFormFieldType(f);
-    if (nt === 'section_break') {
-      repeatSid = f.multiple ? String(f.id) : null;
-      continue;
-    }
-    if (nt === 'hidden') continue;
-    if (repeatSid) out[String(f.id)] = repeatSid;
-  }
-  return out;
-}
-
 // ─── GET /api/operations/tasks ─────────────────────────────────
 // Returns ALL ChecklistExecutions (all statuses) for Kanban monitoring
 // No ownerEmail filter — shows ALL operations to admin for troubleshooting
@@ -103,10 +51,13 @@ router.get('/tasks', async (req, res) => {
     const { email, status, id, limit = 200 } = req.query;
     const includeSchemaRaw = Boolean(id);
 
-    const where = {};
-    if (email)  where.ownerEmail = email;
-    if (status) where.status     = status.toUpperCase();
-    if (id)     where.id         = id;
+    /** ID técnico (cuid) ou número de OS visível (ex.: FT-2026-04-0000061). */
+    const clauses = [];
+    if (email) clauses.push({ ownerEmail: email });
+    if (status) clauses.push({ status: status.toUpperCase() });
+    if (id) clauses.push({ OR: [{ id: String(id) }, { osNumber: String(id) }] });
+    const where =
+      clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { AND: clauses };
 
     const executions = await prisma.checklistExecution.findMany({
       where,
@@ -144,13 +95,15 @@ router.get('/tasks', async (req, res) => {
       .map((ex) => ex.id);
     const gpsAgeByExec = await latestGpsAgeSecondsByExecutionIds(activeTrackingIds);
 
-    const tasks = executions.map(ex => {
+    const tasks = executions.map((ex) => {
       let meta = ex.metadata || {};
-      if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch(e){} }
-
-      // Build a field-label map from schemaData so the panel can show
-      // human-readable question labels instead of raw field IDs.
-      const schemaArray = parseTemplateSchemaArray(ex.template?.schemaData);
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch (e) {
+          meta = {};
+        }
+      }
 
       const trackingLive =
         !!(meta && meta.trackingStartedAt && !meta.trackingEndedAt && !meta.trackingPaused);
@@ -159,64 +112,16 @@ router.get('/tasks', async (req, res) => {
         trackingLive &&
         (gAge == null || !Number.isFinite(gAge) || gAge > OPS_GPS_STALE_SEC);
 
-      return {
-        id:          ex.id,
-        osNumber:    ex.osNumber || null,
+      return mapExecutionToPanelTask(ex, {
+        ownerAvatar: userMap[ex.ownerEmail]?.avatarUrl || null,
+        includeSchemaRaw,
         lastSubmittedRevision: effectiveLastSubmittedRevision(
           ex.lastSubmittedRevision,
           ex.revisions?.[0]?.revision
         ),
-        refId:       meta.refId || ex.templateId || null,
-        ownerEmail:  ex.ownerEmail,
-        ownerAvatar: userMap[ex.ownerEmail]?.avatarUrl || null,
-        status:      ex.status,
-        title:       meta.title       || (ex.template?.title)       || 'OS sem título',
-        description: meta.description || (ex.template?.description) || '',
-        metadata:    meta,
-        responses:   ex.responses,
-        gpsLocation: ex.gpsLocation,
-        // Geofencing location data
-        locationLat:      ex.locationLat,
-        locationLng:      ex.locationLng,
-        locationRadius:   ex.locationRadius,
-        locationAddress:  ex.locationAddress,
-        locationZoneType: ex.locationZoneType,
-        locationPolygon:  ex.locationPolygon,
-        createdAt:   ex.createdAt,
-        startedAt:   ex.startedAt,
-        completedAt: ex.completedAt,
-        syncedAt:    ex.syncedAt,
-        etaMinutes:  ex.etaMinutes,
         trackingGpsAgeSeconds: gAge ?? null,
         trackingSignalLost,
-        // Template fields with labels — used by panel report view
-        template: ex.template ? {
-          id:     ex.template.id,
-          title:  ex.template.title,
-          fields: schemaArray
-                    .filter((f) => {
-                      const nt = effectiveFormFieldType(f);
-                      return f && f.id && nt !== 'section_break' && nt !== 'hidden';
-                    })
-                    .map((f) => ({ id: f.id, label: f.label || f.id, type: f.type })),
-          /** Separadores de etapa (ids usados em __section_start_* / __section_end_* no app) — não entram em `fields` para não duplicar o relatório de respostas. */
-          sectionBreaks: schemaArray
-                    .filter((f) => f && f.id && effectiveFormFieldType(f) === 'section_break')
-                    .map((f) => {
-                      const human = resolveSectionBreakLabel(f);
-                      const rawLab = f.label != null ? String(f.label).trim() : '';
-                      return {
-                        id: f.id,
-                        label: human || rawLab || f.id,
-                        type: 'section_break',
-                        multiple: !!f.multiple,
-                      };
-                    }),
-          repeatFieldMap: buildRepeatFieldMap(schemaArray),
-          /** Só em GET ?id=… — permite ao painel resolver títulos de etapa se sectionBreaks vier com fallback igual ao id. */
-          ...(includeSchemaRaw ? { schemaData: ex.template.schemaData } : {}),
-        } : null,
-      };
+      });
     });
 
     res.set('Cache-Control', 'no-store');
@@ -339,6 +244,7 @@ router.get('/tasks/:id/revisions/:revision', async (req, res) => {
       createdAt: row.createdAt,
       responses: row.responses,
       metadataSnapshot: row.metadataSnapshot,
+      businessMetrics: row.businessMetrics ?? null,
     });
   } catch (err) {
     console.error('[operations/tasks/:id/revisions/:revision GET]', err);
@@ -512,27 +418,44 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);
 
-    const execution = await prisma.checklistExecution.update({
-      where: { id },
-      data: {
-        ownerEmail: resolvedOwner,
-        status: 'PENDING',
-        responses: stripped,
-        metadata: mergedMeta,
-        completedAt: null,
-        syncedAt: null,
-        startedAt: null,
-        etaMinutes: null,
-        gpsLocation: null,
-      },
-      select: {
-        id: true,
-        status: true,
-        ownerEmail: true,
-        osNumber: true,
-        lastSubmittedRevision: true,
-      },
-    });
+    const updateData = {
+      ownerEmail: resolvedOwner,
+      status: 'PENDING',
+      responses: stripped,
+      metadata: mergedMeta,
+      completedAt: null,
+      syncedAt: null,
+      startedAt: null,
+      etaMinutes: null,
+      gpsLocation: null,
+    };
+    const selectOut = {
+      id: true,
+      status: true,
+      ownerEmail: true,
+      osNumber: true,
+      lastSubmittedRevision: true,
+    };
+
+    let execution;
+    try {
+      execution = await prisma.checklistExecution.update({
+        where: { id },
+        data: { ...updateData, businessMetrics: null },
+        select: selectOut,
+      });
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (/businessMetrics/i.test(msg)) {
+        execution = await prisma.checklistExecution.update({
+          where: { id },
+          data: updateData,
+          select: selectOut,
+        });
+      } else {
+        throw err;
+      }
+    }
 
     await prisma.auditLog
       .create({

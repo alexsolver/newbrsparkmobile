@@ -70,6 +70,7 @@ model Tenant {
   translationOverrides TranslationOverride[]
   collectionPolicies   CollectionPolicy[]
   complianceDocs       ComplianceDoc[]       @relation("TenantComplianceDocs")
+  materialsReceiptInputs MaterialsReceiptInput[]
 }
 
 // ─────────────────────────────────────────────────────────
@@ -193,6 +194,7 @@ model User {
   technicianProfile TechnicianProfile?
   currentSessionId String?
   currentDeviceId  String?
+  materialsReceiptInputs MaterialsReceiptInput[] @relation("MaterialsReceiptConductor")
 
   @@unique([email, tenantId])
 }
@@ -658,6 +660,28 @@ model OsSerialCounter {
   lastSeq   Int    @default(0)
 }
 
+/// Pré-carga de linhas para o campo «materiais / entrada» (integrações ERP → técnico).
+/// Colunas físicas em snake_case na tabela `materials_receipt_inputs`.
+model MaterialsReceiptInput {
+  id             String   @id @default(cuid())
+  conductorId    String   @map("conductor_id")
+  tenantId       String   @map("tenant_id")
+  nome           String
+  codigoInterno  String   @default("") @map("codigo_interno")
+  sku            String   @default("")
+  precoUn        Decimal? @map("preco_un") @db.Decimal(14, 4)
+  qtd            Int      @default(0)
+  meta           Json?    @map("meta") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conductor User   @relation("MaterialsReceiptConductor", fields: [conductorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conductorId])
+  @@map("materials_receipt_inputs")
+}
+
 model ChecklistExecution {
   id          String   @id @default(cuid())
   /// Número convencional ex.: FT-2026-04-0000001. Único entre valores não nulos (índice parcial SQL; ver migration).
@@ -669,6 +693,8 @@ model ChecklistExecution {
   status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SYNCED
   responses   Json?    // Respostas nativas das perguntas (null enquanto PENDING)
   metadata    Json?    // Metadata do smartphone
+  /// Snapshot derivado (deslocamento, % vs previsto, produtividade) — alinhado ao PDF; atualizado a cada submissão concluída
+  businessMetrics Json?
   /// Última revisão concluída e sincronizada (0 = nunca; próximo submit = +1)
   lastSubmittedRevision Int @default(0)
 
@@ -703,6 +729,8 @@ model ChecklistExecutionRevision {
   revision         Int
   responses        Json
   metadataSnapshot Json?
+  /// Métricas derivadas congeladas para esta revisão (igual à lógica do PDF na data da submissão)
+  businessMetrics  Json?
   completedAt      DateTime?
   /// Idempotência CRM / retries do outbox (único quando preenchido)
   submissionId     String?  @unique
@@ -710,6 +738,20 @@ model ChecklistExecutionRevision {
 
   @@unique([executionId, revision])
   @@index([executionId])
+}
+
+/// Preset de layout para relatório PDF (painel) e export JSON por API — escolha manual do gestor/integração.
+model PdfReportPreset {
+  id        String   @id @default(cuid())
+  tenantId  String?  // null = presets globais do admin
+  name      String
+  slug      String?
+  config    Json     // módulos, logoUrl, hideEmptyFields, fields.{id}.visible, etc.
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 // ─────────────────────────────────────────────────────────

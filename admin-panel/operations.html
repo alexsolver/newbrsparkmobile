@@ -343,6 +343,10 @@
     .bg-orange { background: #EA580C; }
     .pdf-timeline-label { font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
     .pdf-timeline-date { font-size: 9px; color: #475569; }
+    .pdf-timeline-rev-hint {
+      font-size: 7px; color: #64748b; font-weight: 600; margin-top: 3px; line-height: 1.25;
+      max-width: 104px; text-align: center;
+    }
 
     .pdf-total-time {
        position: absolute; left: 50%; transform: translateX(-50%); bottom: -25px;
@@ -545,7 +549,11 @@
     <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
       <span class="modal-title" id="detail-modal-title">Detalhes da OS</span>
       <span id="detail-modal-badge" style="margin-left:4px"></span>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <div id="detail-report-preset-wrap" style="display:none;align-items:center;gap:6px;">
+          <label for="detail-report-preset" style="font-size:10px;color:var(--text3);white-space:nowrap">Layout PDF</label>
+          <select id="detail-report-preset" class="form-control" style="min-width:140px;max-width:220px;padding:4px 8px;font-size:11px"></select>
+        </div>
         <button class="btn btn-ghost btn-sm" id="detail-pdf-btn" onclick="printReport()" title="Exportar PDF / Imprimir"
           style="display:none;gap:5px;">
           <ion-icon name="print-outline" style="vertical-align:-2px"></ion-icon> PDF
@@ -614,7 +622,7 @@
     </div>
     <div class="modal-footer" style="gap:8px;">
       <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeReopenRevisionModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="reopen-revision-confirm-btn">Reabrir OS</button>
+      <button type="button" class="btn btn-primary btn-sm" id="reopen-revision-confirm-btn" onclick="event.preventDefault(); void window.submitReopenRevision();">Reabrir OS</button>
     </div>
   </div>
 </div>
@@ -834,6 +842,14 @@
 <script type="module">
 import { initPage } from './js/sidebar.js';
 import { CONFIG }   from './js/config.js';
+import {
+  mergePresetConfig,
+  isFieldVisible,
+  fieldLabelOverride,
+  safeLogoSrcForAttr,
+  normalizeModuleOrder,
+} from './js/report/reportPresetBrowser.js';
+import { mergeTheme } from './js/report/reportThemeBrowser.js';
 await initPage();
 
 // ── State ─────────────────────────────────────────────────────
@@ -902,6 +918,44 @@ function displayOsLabel(task) {
   const on = task && task.osNumber && String(task.osNumber).trim();
   if (on) return on;
   return shortId(task && task.id);
+}
+
+let _reportPresetListCache = [];
+
+async function refreshReportPresetsDropdown() {
+  const sel = document.getElementById('detail-report-preset');
+  const wrap = document.getElementById('detail-report-preset-wrap');
+  if (!sel || !wrap) return;
+  try {
+    const r = await fetch(`${CONFIG.API_BASE}/reports/presets`, { headers: CONFIG.headers() });
+    if (!r.ok) return;
+    _reportPresetListCache = await r.json();
+    const saved = localStorage.getItem('brspark_report_preset_id');
+    sel.innerHTML = '';
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = 'Padrão (todos os blocos)';
+    sel.appendChild(opt0);
+    for (const p of _reportPresetListCache) {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name || p.id;
+      sel.appendChild(o);
+    }
+    if (saved && _reportPresetListCache.some((x) => x.id === saved)) sel.value = saved;
+    else sel.value = '';
+    const apply = () => {
+      const id = sel.value;
+      const row = _reportPresetListCache.find((x) => x.id === id);
+      window.__reportActivePresetConfig = row ? mergePresetConfig(row.config) : mergePresetConfig(null);
+      if (id) localStorage.setItem('brspark_report_preset_id', id);
+      else localStorage.removeItem('brspark_report_preset_id');
+    };
+    sel.onchange = apply;
+    apply();
+  } catch (e) {
+    console.warn('[report presets]', e);
+  }
 }
 
 function statusColClass(status) {
@@ -1081,41 +1135,6 @@ window.submitReopenRevision = async function () {
     }
   }
 };
-
-function elFromComposedPath(e, matcher) {
-  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-  for (const n of path) {
-    if (!n || n.nodeType !== 1) continue;
-    if (typeof matcher === 'string') {
-      if (n.matches && n.matches(matcher)) return n;
-    } else if (typeof matcher === 'function' && matcher(n)) return n;
-  }
-  return null;
-}
-
-document.addEventListener(
-  'click',
-  (e) => {
-    let reopenCardBtn =
-      elFromComposedPath(e, '.btn-reopen-revision') ||
-      (e.target && e.target.closest && e.target.closest('.btn-reopen-revision'));
-    if (reopenCardBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = reopenCardBtn.getAttribute('data-reopen-task-id');
-      void window.openReopenRevisionModal(id);
-      return;
-    }
-    let confirmBtn =
-      elFromComposedPath(e, '#reopen-revision-confirm-btn') ||
-      (e.target && e.target.closest && e.target.closest('#reopen-revision-confirm-btn'));
-    if (!confirmBtn || confirmBtn.id !== 'reopen-revision-confirm-btn' || confirmBtn.disabled) return;
-    e.preventDefault();
-    e.stopPropagation();
-    void window.submitReopenRevision();
-  },
-  true
-);
 
 // ── Load Board ────────────────────────────────────────────────
 window.loadBoard = async function() {
@@ -1350,7 +1369,7 @@ function buildCard(task, colClass) {
 
   const reopenForRevisionBtn =
     colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(String(task.status || '').toUpperCase())
-      ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
+      ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
       : '';
 
   return `
@@ -1696,43 +1715,45 @@ function buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf) {
   const metaBits = [];
   if (metadata.lastPauseReasonSummary) {
     metaBits.push(
-      `<div style="font-size:6px;line-height:1.2;margin-bottom:2px"><span style="color:#64748b;font-weight:700">Último resumo:</span> ${escPdf(String(metadata.lastPauseReasonSummary))}</div>`
+      `<div style="font-size:7px;line-height:1.3;margin-bottom:4px"><span style="color:#78350f;font-weight:800">Último resumo:</span> ${escPdf(String(metadata.lastPauseReasonSummary))}</div>`
     );
   }
   if (responses.__form_paused_since) {
     const d = new Date(responses.__form_paused_since);
     if (!isNaN(d.getTime())) {
       metaBits.push(
-        `<div style="font-size:6px;line-height:1.2;margin-bottom:2px"><span style="color:#64748b;font-weight:700">Pausa no formulário:</span> ${d.toLocaleString('pt-BR')}</div>`
+        `<div style="font-size:7px;line-height:1.3;margin-bottom:4px"><span style="color:#78350f;font-weight:800">Pausa no formulário:</span> ${d.toLocaleString('pt-BR')}</div>`
       );
     }
   }
-  const tdPdf = 'padding:4px 6px;border-bottom:1px solid #fde68a;vertical-align:top;font-size:8px';
+  const tdPdf = 'padding:5px 7px;border-bottom:1px solid #fde68a;vertical-align:top;font-size:8px';
   const rows = buildPauseHistoryTableRowsHtml(pauseHist, escPdf, fmtDurPdf, tdPdf);
   if (!rows && metaBits.length === 0) {
-    return `<div style="margin-top:4px;padding-top:3px;border-top:1px dashed #e2e8f0">
-      <div style="font-size:6px;font-weight:900;color:#92400e;letter-spacing:.3px;text-transform:uppercase;margin-bottom:2px">Pausas</div>
-      <div style="font-size:6px;color:#94a3b8">Sem registo de pausas.</div>
+    return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fde68a">
+      <div style="font-size:7px;font-weight:900;color:#92400e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Pausas no atendimento</div>
+      <div style="font-size:7px;color:#94a3b8;font-style:italic">Sem registo de pausas.</div>
     </div>`;
   }
   let inner = metaBits.join('');
   if (rows) {
-    inner += `<div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:6px;margin:4px 0 2px;color:#475569">
-      <span><span style="color:#94a3b8;font-weight:700">Tempo em pausa:</span> <strong style="color:#0f172a">${totalSec > 0 ? fmtDurPdf(totalSec) : '—'}</strong></span>
-      <span><span style="color:#94a3b8;font-weight:700">Registos:</span> <strong style="color:#0f172a">${pauseHist.length}</strong></span>
+    inner += `<div style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:7px;margin:6px 0 4px;color:#475569">
+      <span><span style="color:#92400e;font-weight:800">Tempo em pausa:</span> <strong style="color:#0f172a">${totalSec > 0 ? fmtDurPdf(totalSec) : '—'}</strong></span>
+      <span><span style="color:#92400e;font-weight:800">Registos:</span> <strong style="color:#0f172a">${pauseHist.length}</strong></span>
     </div>`;
-    inner += `<table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:4px;overflow:hidden;margin-top:2px">
+    inner += `<table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:6px;overflow:hidden;margin-top:4px">
       <thead><tr style="background:#fef3c7">
-        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">#</th>
-        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Motivo</th>
-        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Início → Fim</th>
-        <th style="text-align:left;padding:3px 5px;font-size:6px;color:#78350f">Duração</th>
+        <th style="text-align:left;padding:4px 6px;font-size:7px;color:#78350f;font-weight:900">#</th>
+        <th style="text-align:left;padding:4px 6px;font-size:7px;color:#78350f;font-weight:900">Motivo</th>
+        <th style="text-align:left;padding:4px 6px;font-size:7px;color:#78350f;font-weight:900">Início → Fim</th>
+        <th style="text-align:left;padding:4px 6px;font-size:7px;color:#78350f;font-weight:900">Duração</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   }
-  return `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #e2e8f0;background:linear-gradient(180deg,#fffbeb 0%,#fff 55%);border-radius:4px;padding-left:4px;padding-right:4px;padding-bottom:4px;box-sizing:border-box">
-    <div style="font-size:6px;font-weight:900;color:#92400e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px">Pausas no atendimento</div>
+  return `<div style="margin-top:6px;padding:8px 10px 10px;background:linear-gradient(180deg,#fffbeb 0%,#fff 70%);border:1px solid #fde68a;border-radius:8px;box-sizing:border-box">
+    <div style="font-size:7px;font-weight:900;color:#92400e;letter-spacing:.45px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b"></span> Pausas no atendimento
+    </div>
     ${inner}
   </div>`;
 }
@@ -1891,6 +1912,36 @@ function buildTransitDisplayMetrics(startGPS, endGPS, task) {
     actualDistanceM,
     actualDistFromPolyline,
   };
+}
+
+/** (real − prev) / prev × 100; mesma unidade para tempo (s) ou distância (m). */
+function transitPctDeltaVsPlanned(planned, actual) {
+  const p = Number(planned);
+  const a = Number(actual);
+  if (!Number.isFinite(p) || p <= 0) return null;
+  if (!Number.isFinite(a)) return null;
+  return ((a - p) / p) * 100;
+}
+
+/**
+ * Uma linha “Tempo: +X% acima do previsto” (PDF ou painel).
+ * @param {boolean} compact — true = tipografia menor (PDF)
+ */
+function fmtTransitPctVsPlannedLine(planned, actual, label, compact) {
+  const pct = transitPctDeltaVsPlanned(planned, actual);
+  if (pct == null || !Number.isFinite(pct)) return '';
+  const r = Math.round(pct * 10) / 10;
+  const absStr = Math.abs(r).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+  const baseStyle = compact
+    ? 'font-size:7px;margin-top:2px;font-weight:700;line-height:1.25'
+    : 'font-size:10px;margin-top:4px;font-weight:700;line-height:1.3';
+  if (Math.abs(r) < 0.05) {
+    return `<div style="${baseStyle};color:#64748b">${label}: ≈ igual ao previsto</div>`;
+  }
+  if (r > 0) {
+    return `<div style="${baseStyle};color:#dc2626">${label}: +${absStr}% acima do previsto</div>`;
+  }
+  return `<div style="${baseStyle};color:#16a34a">${label}: ${absStr}% abaixo do previsto</div>`;
 }
 
 /** Alinhado ao backend `operations.js` — tipos e rótulos de section_break em schemas antigos/importados. */
@@ -2336,6 +2387,8 @@ function buildInfoTab(t) {
           <div style="line-height:1.45;margin-bottom:8px">
             <div><span style="font-weight:800;color:var(--text2)">Previsto na saída:</span> ${fmtDurationPtBr(tmI.plannedDurationSec)} · ${fmtKmI(tmI.plannedDistanceM)}${plannedSrcI ? ` <span style="color:var(--text3);font-size:10px">(${plannedSrcI})</span>` : ''}</div>
             <div style="margin-top:4px"><span style="font-weight:800;color:var(--text2)">Realizado na chegada:</span> ${fmtDurationPtBr(tmI.actualDurationSec)} · ${fmtKmI(tmI.actualDistanceM)} <span style="color:var(--text3);font-size:10px">(${distHintI})</span></div>
+            ${fmtTransitPctVsPlannedLine(tmI.plannedDurationSec, tmI.actualDurationSec, 'Tempo', false)}
+            ${fmtTransitPctVsPlannedLine(tmI.plannedDistanceM, tmI.actualDistanceM, 'Distância', false)}
           </div>
           <span style="font-weight:800;color:var(--text2)">Tempo por etapa:</span> ${secLineI}
         </div>
@@ -2490,6 +2543,46 @@ function buildReportTab(t) {
         '<th style="text-align:left;padding:8px 10px;font-weight:700">Produto</th>' +
         '<th style="text-align:left;padding:8px 10px;font-weight:700">SKU</th>' +
         '<th style="text-align:right;padding:8px 10px;font-weight:700">Quantidade</th>' +
+        '</tr></thead><tbody>' +
+        rows +
+        '</tbody></table></div>'
+      );
+    }
+    if (fieldType === 'materials_receipt') {
+      let o = null;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) o = val;
+      else {
+        try { o = JSON.parse(String(val)); } catch (e) { o = null; }
+      }
+      const lines = o && Array.isArray(o.lines) ? o.lines : [];
+      if (lines.length === 0) {
+        return '<em style="color:var(--text3)">(sem entrada registada)</em>';
+      }
+      const rows = lines
+        .map((ln) => {
+          const name = escHtml(ln && ln.name != null ? String(ln.name) : '—');
+          const sku = escHtml(ln && ln.sku != null ? String(ln.sku) : '—');
+          const unit = ln && ln.unit != null ? String(ln.unit) : '';
+          const qty = Math.max(0, Math.floor(Number(ln && ln.qty) || 0));
+          const qtyStr = escHtml(unit ? `${qty} ${unit}` : String(qty));
+          return (
+            '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--border)">' +
+            name +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border);font-family:ui-monospace,monospace;font-size:11px">' +
+            sku +
+            '</td><td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">' +
+            qtyStr +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return (
+        '<div style="overflow-x:auto;margin-top:4px">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+        '<thead><tr style="background:var(--surface2)">' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">Produto</th>' +
+        '<th style="text-align:left;padding:8px 10px;font-weight:700">SKU</th>' +
+        '<th style="text-align:right;padding:8px 10px;font-weight:700">Qtd. (entrada)</th>' +
         '</tr></thead><tbody>' +
         rows +
         '</tbody></table></div>'
@@ -2751,6 +2844,21 @@ function buildReportTab(t) {
       })
       .join(' · ') || '<span style="color:var(--text3)">Sem registros de etapa</span>';
 
+  const lastSubRep = displayLastConcludedRevisionNumber(t);
+  const revsRep = Array.isArray(t.revisionHistory) ? t.revisionHistory : [];
+  const latestRevRep = revsRep.find((r) => Number(r.revision) === lastSubRep);
+  const reopenMetaRep = t.metadata?.reopenedByAdminAt || t.metadata?.reopenedAt;
+  let repResubLines = '';
+  if (lastSubRep > 1) {
+    if (reopenMetaRep) {
+      repResubLines += `<div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Reabertura p/ revisão (painel):</strong> ${fDate(reopenMetaRep)}</div>`;
+    }
+    const resubAt = latestRevRep && latestRevRep.completedAt ? latestRevRep.completedAt : t.completedAt;
+    if (resubAt) {
+      repResubLines += `<div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Resubmissão concluída (submissão n.º ${lastSubRep}):</strong> ${fDate(resubAt)}</div>`;
+    }
+  }
+
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
@@ -2769,6 +2877,7 @@ function buildReportTab(t) {
          <div style="font-size:10px;"><strong style="color:var(--text2)">Início:</strong> ${fDate(t.startedAt)}</div>
          <div style="font-size:10px;"><strong style="color:var(--text2)">Conclusão:</strong> ${fDate(t.completedAt)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Sincronização / Envio Nuvem:</strong> ${fDate(t.syncedAt)}</div>
+         ${repResubLines}
          <div style="font-size:10px;grid-column:1/-1;padding-top:6px;margin-top:4px;border-top:1px dashed var(--border);font-weight:800;color:var(--text)">Produtividade</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Duração da OS (início da execução → conclusão):</strong> ${fmtHmsRep(osWallRep)}</div>
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo de deslocamento (saída → chegada):</strong> ${transitSecRep != null ? fmtHmsRep(transitSecRep) : '—'}</div>
@@ -2777,6 +2886,7 @@ function buildReportTab(t) {
          <div style="font-size:10px;grid-column:1/-1;"><strong style="color:var(--text2)">Tempo com app em foco:</strong> ${fmtHmsRep(activeSecRep)}</div>
          <div style="font-size:10px;grid-column:1/-1;line-height:1.45;padding-top:4px;margin-top:2px;border-top:1px dashed var(--border)"><strong style="color:var(--text2)">Desloc. previsto (saída):</strong> ${fmtHmsRep(tmRep.plannedDurationSec)} · ${fmtKmRep(tmRep.plannedDistanceM)}${plannedSrcRep ? ` <span style="color:var(--text3)">(${plannedSrcRep})</span>` : ''}</div>
          <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Desloc. realizado (chegada):</strong> ${fmtHmsRep(tmRep.actualDurationSec)} · ${fmtKmRep(tmRep.actualDistanceM)} <span style="color:var(--text3)">(${distHintRep})</span></div>
+         <div style="grid-column:1/-1">${fmtTransitPctVsPlannedLine(tmRep.plannedDurationSec, tmRep.actualDurationSec, 'Tempo', false)}${fmtTransitPctVsPlannedLine(tmRep.plannedDistanceM, tmRep.actualDistanceM, 'Distância', false)}</div>
          <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Tempo por etapa:</strong> ${secLineRep}</div>
          <div style="font-size:10px;grid-column:1/-1">${buildPauseProductivityBlockHtml(t)}</div>
          ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
@@ -2837,6 +2947,9 @@ window.openDetail = function(id) {
 
   const hasReport = (t.status === 'COMPLETED' || t.status === 'SYNCED');
   document.getElementById('detail-pdf-btn').style.display = hasReport ? '' : 'none';
+  const presetWrap = document.getElementById('detail-report-preset-wrap');
+  if (presetWrap) presetWrap.style.display = hasReport ? 'flex' : 'none';
+  if (hasReport) void refreshReportPresetsDropdown();
 
   // Activate correct tab
   ['info','report','raw'].forEach(tab => {
@@ -2907,6 +3020,20 @@ window.printReport = async function() {
     }
   } catch(e) { console.warn('[PDF] Could not refresh task data, using cached.', e); }
 
+  let pdfRevisionList = [];
+  try {
+    const revRes = await fetch(
+      `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(t.id)}/revisions`,
+      { headers: CONFIG.headers() }
+    );
+    if (revRes.ok) {
+      const j = await revRes.json();
+      pdfRevisionList = Array.isArray(j) ? j : [];
+    }
+  } catch (e) {
+    console.warn('[PDF] Não foi possível carregar revisões para a linha do tempo.', e);
+  }
+
   const finishPdfBtn = () => {
     if (pdfBtn) {
       pdfBtn.disabled = false;
@@ -2953,6 +3080,24 @@ window.printReport = async function() {
   let qNum = 1;
 
   const escPdf = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const cfg = window.__reportActivePresetConfig || mergePresetConfig(null);
+  const mod = cfg.modules;
+  const th = mergeTheme(cfg.theme);
+  const moduleOrder = normalizeModuleOrder(cfg.moduleOrder);
+  const escAttr = (s) => String(s ?? '').replace(/"/g, '&quot;');
+
+  const pdfValueIsEmpty = (val) => {
+    if (val === undefined || val === null || val === '') return true;
+    if (Array.isArray(val))
+      return (
+        val.length === 0 ||
+        val.every((x) => x === undefined || x === null || String(x).trim() === '')
+      );
+    if (typeof val === 'object') return Object.keys(val).length === 0;
+    return false;
+  };
+
   const locationPickStaticMapUrl = (lat, lng, w, h) => {
     const W = w || 560;
     const H = h || 220;
@@ -3126,6 +3271,7 @@ window.printReport = async function() {
   };
 
   pdfEntries.forEach((entry) => {
+      if (!mod.formResponses) return;
       if (entry.kind === '__repeat_hdr') {
         responseHtml +=
           '<div style="margin:20px 0 8px;padding:10px 14px;background:#eef2ff;border-left:4px solid #6366f1;border-radius:0 10px 10px 0;font-size:12px;font-weight:800;color:#3730a3">' +
@@ -3136,7 +3282,19 @@ window.printReport = async function() {
         return;
       }
       const { id, fieldDef, row, rowIdx, repeatSid } = entry;
-      const labelBase = fieldDef ? (fieldDef.label || fieldDef.id) : id;
+      if (fieldDef && fieldDef.id && !isFieldVisible(cfg, fieldDef.id)) return;
+      const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
+      if (fieldDef && pTypes.includes(fieldDef.type) && !mod.photoGallery) return;
+      const rawEmptyCheck = row && typeof row === 'object' ? row[id] : responses[id];
+      if (
+        cfg.hideEmptyFields &&
+        fieldDef &&
+        fieldDef.type !== 'section_break' &&
+        pdfValueIsEmpty(rawEmptyCheck)
+      )
+        return;
+      const labelOv = fieldDef && fieldDef.id ? fieldLabelOverride(cfg, fieldDef.id) : null;
+      const labelBase = labelOv || (fieldDef ? (fieldDef.label || fieldDef.id) : id);
       const label =
         row != null && repeatSid != null && !entry.omitInstanceInLabel
           ? `${labelBase} · Instância ${rowIdx + 1}`
@@ -3232,6 +3390,44 @@ window.printReport = async function() {
               '<th style="text-align:left;padding:8px 10px;font-weight:800">Produto</th>' +
               '<th style="text-align:left;padding:8px 10px;font-weight:800">SKU</th>' +
               '<th style="text-align:right;padding:8px 10px;font-weight:800">Quantidade</th>' +
+              '</tr></thead><tbody>' +
+              rowCells +
+              '</tbody></table></div>';
+          }
+      } else if (fieldDef && fieldDef.type === 'materials_receipt') {
+          let mo = val;
+          if (typeof val === 'string') {
+            try { mo = JSON.parse(val); } catch (e) { mo = null; }
+          }
+          const mlines = mo && Array.isArray(mo.lines) ? mo.lines : [];
+          if (mlines.length === 0) {
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem entrada registada</span>';
+          } else {
+            const rowCells = mlines
+              .map((ln) => {
+                const name = escPdf(ln && ln.name != null ? String(ln.name) : '—');
+                const sku = escPdf(ln && ln.sku != null ? String(ln.sku) : '—');
+                const unit = ln && ln.unit != null ? String(ln.unit) : '';
+                const qty = Math.max(0, Math.floor(Number(ln && ln.qty) || 0));
+                const qtyStr = escPdf(unit ? qty + ' ' + unit : String(qty));
+                return (
+                  '<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">' +
+                  name +
+                  '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-family:ui-monospace,monospace;font-size:11px">' +
+                  sku +
+                  '</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right;white-space:nowrap">' +
+                  qtyStr +
+                  '</td></tr>'
+                );
+              })
+              .join('');
+            displayVal =
+              '<div style="overflow-x:auto;margin-top:4px">' +
+              '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">' +
+              '<thead><tr style="background:#f0fdf4">' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">Produto</th>' +
+              '<th style="text-align:left;padding:8px 10px;font-weight:800">SKU</th>' +
+              '<th style="text-align:right;padding:8px 10px;font-weight:800">Qtd. (entrada)</th>' +
               '</tr></thead><tbody>' +
               rowCells +
               '</tbody></table></div>';
@@ -3382,9 +3578,11 @@ window.printReport = async function() {
               };
               displayVal = photoUris.map((u, i) => onePhotoCard(u, String(i + 1), i)).join('');
           } else if (typeof val === 'boolean') {
-              displayVal = val ? '<span class="pdf-pill">Sim</span>' : '<span class="pdf-pill" style="background:#ef4444">Não</span>';
+              displayVal = val
+                ? `<span class="pdf-pill" style="background:${th.pillYesBg}">Sim</span>`
+                : `<span class="pdf-pill" style="background:${th.pillNoBg}">Não</span>`;
           } else if (Array.isArray(val)) {
-              displayVal = val.map(v => `<span class="pdf-pill">${v}</span>`).join(' ');
+              displayVal = val.map(v => `<span class="pdf-pill" style="background:${th.pillYesBg}">${escPdf(v)}</span>`).join(' ');
           } else if (isSig) {
               let paths = String(val).replace('SIG_V1|', '').split('|').filter(Boolean);
               let metaHtml = '';
@@ -3432,7 +3630,7 @@ window.printReport = async function() {
                 </div>
               `;
           } else if (fieldDef && (fieldDef.type === 'dropdown' || fieldDef.type === 'radio')) {
-              displayVal = `<span class="pdf-pill">${val}</span>`;
+              displayVal = `<span class="pdf-pill" style="background:${th.pillYesBg}">${escPdf(val)}</span>`;
           } else if (typeof val === 'object' && val !== null) {
               displayVal = `<pre style="font-family:monospace;font-size:10px;white-space:pre-wrap">${JSON.stringify(val)}</pre>`;
           }
@@ -3460,7 +3658,7 @@ window.printReport = async function() {
       
       responseHtml += `
         <div class="pdf-form-item" style="position:relative;">
-           <div class="pdf-form-num">${qNum++}</div>
+           <div class="pdf-form-num" style="background:${th.formNumBg}">${qNum++}</div>
            <div class="pdf-q" style="display:flex; justify-content:space-between; align-items:center;">
              <span>${label}</span>
              ${timeHtml}
@@ -3622,6 +3820,8 @@ window.printReport = async function() {
               <div style="font-size:7px;color:#9a3412;margin-top:2px;font-style:italic;">${actualDistHint}</div>
               ${etaDeltaHtml}
               ${remainHtml}
+              ${fmtTransitPctVsPlannedLine(tm.plannedDurationSec, tm.actualDurationSec, 'Tempo', true)}
+              ${fmtTransitPctVsPlannedLine(tm.plannedDistanceM, tm.actualDistanceM, 'Distância', true)}
            </div>
            <div style="width:1px;height:52px;background:#FED7AA;align-self:center;"></div>
            <div style="text-align:center;min-width:88px;">
@@ -3639,35 +3839,36 @@ window.printReport = async function() {
       const aTime = fmtDurationPtBr(tm0.actualDurationSec);
       const aDist =
         tm0.actualDistanceM != null ? `${(tm0.actualDistanceM / 1000).toFixed(2)} km` : '—';
+      const pctTime0 = fmtTransitPctVsPlannedLine(tm0.plannedDurationSec, tm0.actualDurationSec, 'Tempo', true);
+      const pctDist0 = fmtTransitPctVsPlannedLine(tm0.plannedDistanceM, tm0.actualDistanceM, 'Distância', true);
       speedBadgeHtml = `
         <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:6px; margin-top:8px; display:flex; justify-content:space-around; align-items:center; flex-wrap:wrap; gap:4px;">
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">PREVISTO (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${pTime}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">PREVISTO (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${pDist}</div></div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aTime}</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aTime}</div>${pctTime0}</div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
-           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aDist}</div></div>
+           <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aDist}</div>${pctDist0}</div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VMÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
         </div>`;
   }
 
 
-  const transitHtml = `
-    <div class="pdf-section-title" style="margin-top:12px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
-       <ion-icon name="car-sport-outline" style="font-size:16px; color:#EA580C"></ion-icon>
+  const transitHtml = mod.transit
+    ? `
+    <div class="pdf-section-title" style="margin-top:12px; border-bottom:1px solid ${th.colorBorder}; padding-bottom:4px;">
+       <ion-icon name="car-sport-outline" style="font-size:16px; color:${th.transitAccent}"></ion-icon>
        RESUMO DE DESLOCAMENTO
     </div>
     <div style="display:flex; gap:15px; margin-top:12px;">
-       ${makeTransitCard(startGPS, "INÍCIO DO DESLOCAMENTO", "#3b82f6", "play")}
-       ${makeTransitCard(endGPS, "FIM DO DESLOCAMENTO", "#ef4444", "stop")}
+       ${makeTransitCard(startGPS, "INÍCIO DO DESLOCAMENTO", th.timelineBlue, "play")}
+       ${makeTransitCard(endGPS, "FIM DO DESLOCAMENTO", th.pillNoBg, "stop")}
     </div>
     ${speedBadgeHtml}
-    ${endGPS ? `
-    <div id="pdf-transit-map" style="width: 100%; height: 140px; border-radius: 8px; margin-top: 8px; border: 1px solid #cbd5e1; z-index: 1; box-sizing: border-box;"></div>
-    ` : ''}
-  `;
+  `
+    : '';
 
   // Use server avatar only if it's an http/https URL (local file:// URLs can't be loaded in the browser)
   const rawAvatar = t.ownerAvatar || '';
@@ -3698,39 +3899,138 @@ window.printReport = async function() {
 
   const pdfPauseInProdHtml = buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf);
 
+  let pdfLastRevN = displayLastConcludedRevisionNumber(t);
+  for (const r of pdfRevisionList) pdfLastRevN = Math.max(pdfLastRevN, Number(r.revision) || 0);
+  const pdfLatestRevRow = pdfRevisionList.find((r) => Number(r.revision) === pdfLastRevN);
+  const pdfResubAt =
+    pdfLastRevN > 1 && pdfLatestRevRow && pdfLatestRevRow.completedAt
+      ? pdfLatestRevRow.completedAt
+      : pdfLastRevN > 1 && t.completedAt
+        ? t.completedAt
+        : null;
+  const fmtPdfRevHint = (d) => {
+    if (!d) return '';
+    const x = new Date(d);
+    if (isNaN(x.getTime())) return '';
+    return x.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+  const pdfRevHintTs =
+    pdfLastRevN > 1
+      ? t.metadata?.reopenedByAdminAt || t.metadata?.reopenedAt || pdfResubAt || null
+      : null;
+  const pdfCreationRevHint =
+    pdfLastRevN > 1 && pdfRevHintTs
+      ? `<div class="pdf-timeline-rev-hint">rev ${fmtPdfRevHint(pdfRevHintTs)}</div>`
+      : '';
+
+  const pdfProdMetricCell = (label, valueInner, isLast) => `
+        <div style="text-align:center;padding:10px 6px;${isLast ? '' : `border-right:1px solid ${th.colorBorder};`}min-width:0">
+          <div style="font-size:7px;color:#64748b;font-weight:800;letter-spacing:0.35px;text-transform:uppercase;line-height:1.2">${label}</div>
+          <div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:5px;line-height:1.15;word-break:break-word">${valueInner}</div>
+        </div>`;
+
   const pdfProdBlock = `
-      <div style="border-top:1px solid #e2e8f0; padding:3px 8px 5px; background:linear-gradient(180deg,#f8fafc 0%,#fff 100%); box-sizing:border-box;">
-        <div style="font-size:6px;font-weight:900;color:#64748b;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px">Produtividade do técnico</div>
-        <div style="display:flex;flex-wrap:wrap;gap:2px 8px;font-size:6px;line-height:1.12;color:#475569;align-items:flex-start">
-          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">OS (ini→fim)</span><br><strong style="font-size:8px;color:#0f172a">${durationStr}</strong></div>
-          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">Desloc.</span><br><strong style="font-size:8px;color:#0f172a">${transitSecProd != null ? fmtDurPdf(transitSecProd) : '—'}</strong></div>
-          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">Fora desl. (est.)</span><br><strong style="font-size:8px;color:#0f172a">${exTransitSecProd != null ? fmtDurPdf(exTransitSecProd) : '—'}</strong></div>
-          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">No form.</span><br><strong style="font-size:8px;color:#0f172a">${formFillStrPdf}</strong></div>
-          <div style="min-width:58px"><span style="color:#94a3b8;font-weight:700">App foco</span><br><strong style="font-size:8px;color:#0f172a">${formActiveStrPdf}</strong></div>
+      <div style="margin:10px 10px 12px;box-sizing:border-box;">
+        <div class="pdf-section-title" style="margin-top:4px;border-bottom:1px solid ${th.colorBorder};padding-bottom:5px;">
+          <ion-icon name="stats-chart-outline" style="font-size:17px;color:${th.transitAccent};vertical-align:-3px"></ion-icon>
+          PRODUTIVIDADE DO TÉCNICO
         </div>
-        <div style="font-size:6px;color:#475569;line-height:1.15;margin-top:3px;padding-top:2px;border-top:1px dashed #e2e8f0">
-          <span style="font-weight:800;color:#334155">Etapas:</span> ${sectionLineProd || '<span style="color:#94a3b8">—</span>'}
+        <div style="margin-top:11px;border:1px solid ${th.colorBorder};border-radius:10px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,0.07);overflow:hidden;">
+          <div style="padding:0;background:linear-gradient(180deg,#f8fafc 0%,#ffffff 100%);border-bottom:1px solid ${th.colorBorder};">
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch">
+              ${pdfProdMetricCell('OS (ini→fim)', durationStr, false)}
+              ${pdfProdMetricCell('Desloc.', transitSecProd != null ? fmtDurPdf(transitSecProd) : '—', false)}
+              ${pdfProdMetricCell('Fora desl. (est.)', exTransitSecProd != null ? fmtDurPdf(exTransitSecProd) : '—', false)}
+              ${pdfProdMetricCell('No form.', formFillStrPdf, false)}
+              ${pdfProdMetricCell('App foco', formActiveStrPdf, true)}
+            </div>
+          </div>
+          <div style="padding:10px 12px 12px;background:#fff;">
+            <div style="padding:10px 12px;background:#FFF7ED;border:1px solid #FFEDD5;border-radius:8px;box-sizing:border-box">
+              <div style="font-size:8px;font-weight:900;color:#9A3412;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:5px">
+                <ion-icon name="git-branch-outline" style="font-size:14px;color:${th.transitAccent}"></ion-icon> Etapas no formulário
+              </div>
+              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registados.</span>'}</div>
+            </div>
+            ${pdfPauseInProdHtml}
+          </div>
         </div>
-        ${pdfPauseInProdHtml}
       </div>`;
 
-  document.getElementById('print-report').innerHTML = `
-    <div class="pdf-topbar" style="border-bottom:none">
+  const pdfLogoSrc = safeLogoSrcForAttr(cfg.logoUrl);
+  const pdfBannerTitle = escPdf(cfg.reportTitle || 'RELATÓRIO DA ATIVIDADE');
+  const pdfBannerSub = escPdf(
+    cfg.reportSubtitle || `${displayOsLabel(t)}${revisionContextSubtitle(t)}`
+  );
+
+  const htmlTechnicalCard = (includeProductivity) => `<!-- Cabeçalho Técnico — 3 colunas -->
+    <div style="margin-top:10px; border:1px solid ${th.colorBorder}; border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div style="background:linear-gradient(135deg,${th.techHeaderStart} 0%,${th.techHeaderEnd} 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
+        <ion-icon name="document-text-outline" style="font-size:16px; color:${th.colorMutedLight}"></ion-icon>
+        <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
+        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', PAUSED:'#fee2e2', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', PAUSED:'#991b1b', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', PAUSED:'Pausada', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0">
+        <div style="padding:10px; border-right:1px solid ${th.colorBorder}">
+          <div style="font-size:8px; font-weight:900; color:${th.colorMuted}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
+            <ion-icon name="information-circle-outline" style="font-size:12px"></ion-icon> Identificação
+          </div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${displayOsLabel(t)}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px">${(() => { const _lr = displayLastConcludedRevisionNumber(t); if (_lr <= 0) return '—'; if (_lr === 1) return '1 (inicial)'; return String(_lr); })()}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:${th.colorText};font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.title||'—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.description||'Não preenchido'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
+          ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed ${th.colorBorder}"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
+        </div>
+        <div style="padding:10px; border-right:1px solid ${th.colorBorder}; background:${th.colDispatchBg}">
+          <div style="font-size:8px; font-weight:900; color:${th.colDispatch}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
+            <ion-icon name="calendar-outline" style="font-size:12px; color:${th.colDispatch}"></ion-icon> Despacho
+          </div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Data/Hora (Criação)</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${fd(t.createdAt)}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Sincronização ao Aparelho</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${fd(t.metadata?.receivedAt||t.syncedAt)||'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Aceite pelo Técnico</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${fd(t.metadata?.acceptedAt)||'—'}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Zona de Atuação</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${{'point':'Ponto (Raio)','route':'Rota (Polilinha)','segment':'Trecho (A→B)','polygon':'Polígono'}[t.locationZoneType]||t.locationZoneType||'—'}</div></div>
+        </div>
+        <div style="padding:10px; background:${th.colExecBg}">
+          <div style="font-size:8px; font-weight:900; color:${th.colExec}; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid ${th.colorBorder}; display:flex; align-items:center; gap:4px">
+            <ion-icon name="checkmark-done-outline" style="font-size:12px; color:${th.colExec}"></ion-icon> Execução
+          </div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Início da Execução</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${fd(t.startedAt)||'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Saída (Início Deslocamento)</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${startGPS?new Date(startGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
+          <div style="margin-bottom:6px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Chegada (Fim Deslocamento)</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${endGPS?new Date(endGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
+          <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Conclusão da OS</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${fd(t.completedAt)||'—'}</div></div>
+        </div>
+      </div>
+      ${includeProductivity ? pdfProdBlock : ''}
+    </div>`;
+
+  const pieceTopbar = mod.topbar
+    ? `<div class="pdf-topbar" style="border-bottom:none">
        <div style="display:flex; align-items:center; gap:8px;">
-           <img src="img/logo.png" style="height:24px; width:auto; border-radius:4px;">
-           <span style="font-size:12px; color:#94a3b8; margin-left:8px; padding-left:8px; border-left:1px solid #e2e8f0">${fd(new Date())}</span>
+           <img src="${pdfLogoSrc}" style="height:24px; width:auto; border-radius:4px;">
+           <span style="font-size:12px; color:${th.colorMutedLight}; margin-left:8px; padding-left:8px; border-left:1px solid ${th.colorBorder}">${fd(new Date())}</span>
        </div>
-       <div style="font-size:11px; font-weight:600; color:#64748b; background:#f1f5f9; padding:4px 8px; border-radius:4px">
-          Relatório de atividade de campo
-       </div>
-    </div>
-    
-    <div class="pdf-header-banner" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); position:relative; overflow:hidden">
-       <!-- Elementos Graficos -->
+       <div style="font-size:11px; font-weight:600; color:${th.colorMuted}; background:${th.topbarBadgeBg}; padding:4px 8px; border-radius:4px">Relatório de atividade de campo</div>
+    </div>`
+    : '';
+
+  const pieceHeaderBanner = mod.headerBanner
+    ? `<div class="pdf-header-banner" style="background: linear-gradient(135deg, ${th.bannerGradientStart} 0%, ${th.bannerGradientEnd} 100%); position:relative; overflow:hidden">
        <div style="position:absolute; top:-20px; right:-20px; width:150px; height:150px; background:#ffffff10; border-radius:50%"></div>
        <div class="pdf-summary-plate">
-          <h2>RELATÓRIO DA ATIVIDADE</h2>
-          <span>${displayOsLabel(t)}${revisionContextSubtitle(t)}</span>
+          <h2>${pdfBannerTitle}</h2>
+          <span>${pdfBannerSub}</span>
        </div>
        <div class="pdf-tech-info">
           <div class="pdf-tech-texts">
@@ -3741,72 +4041,18 @@ window.printReport = async function() {
              <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=&quot;font-size:14px; font-weight:900;&quot;>${(t.ownerEmail||'T')[0].toUpperCase()}</span>'">
           </div>
        </div>
-    </div>
-    
-    <!-- Cabeçalho Técnico — 3 colunas: Identidade | Previsto | Realizado -->
-    <div style="margin-top:10px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+    </div>`
+    : '';
 
-      <!-- Header banner with status pill -->
-      <div style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%); padding:10px 14px; display:flex; align-items:center; gap:8px">
-        <ion-icon name="document-text-outline" style="font-size:16px; color:#94a3b8"></ion-icon>
-        <span style="font-size:11px; font-weight:900; color:#fff; letter-spacing:0.8px; text-transform:uppercase">Dados Técnicos da Atividade</span>
-        <span style="margin-left:auto; background:${{ PENDING:'#fef9c3', RECEIVED:'#bfdbfe', ACCEPTED:'#bfdbfe', IN_PROGRESS:'#fef3c7', PAUSED:'#fee2e2', COMPLETED:'#bbf7d0', SYNCED:'#bbf7d0', CANCELLED:'#fecaca', REJECTED:'#fecaca' }[t.status]||'#e2e8f0'}; color:${{ PENDING:'#854d0e', RECEIVED:'#1e40af', ACCEPTED:'#1e3a8a', IN_PROGRESS:'#92400e', PAUSED:'#991b1b', COMPLETED:'#14532d', SYNCED:'#14532d', CANCELLED:'#991b1b', REJECTED:'#991b1b' }[t.status]||'#475569'}; padding:3px 10px; border-radius:99px; font-size:9px; font-weight:800; letter-spacing:0.5px">${{ PENDING:'Pendente', RECEIVED:'Aparelho Recebeu', ACCEPTED:'Técnico Aceitou', IN_PROGRESS:'Em Execução', PAUSED:'Pausada', COMPLETED:'Concluída', SYNCED:'Sincronizada', CANCELLED:'Cancelada', REJECTED:'Rejeitada' }[t.status]||t.status||'—'}</span>
-      </div>
-
-      <!-- 3-column cards -->
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0">
-
-        <!-- COL 1: Identidade -->
-        <div style="padding:10px; border-right:1px solid #f1f5f9">
-          <div style="font-size:8px; font-weight:900; color:#64748b; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #f1f5f9; display:flex; align-items:center; gap:4px">
-            <ion-icon name="information-circle-outline" style="font-size:12px"></ion-icon> Identificação
-          </div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.title||'—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.description||'Não preenchido'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Formulário</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.template?.title||'N/A'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Origem</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.devicePlatform||'Painel Admin'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${displayOsLabel(t)}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:#0f172a;font-weight:800;margin-top:1px">${(() => { const _lr = displayLastConcludedRevisionNumber(t); if (_lr <= 0) return '—'; if (_lr === 1) return '1 (inicial)'; return String(_lr); })()}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">ID técnico</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace;word-break:break-all">${t.id}</div></div>
-          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Ref. Integração</div><div style="font-size:9px;color:#0f172a;font-weight:600;margin-top:1px;font-family:monospace">${t.refId||t.metadata?.refId||'—'}</div></div>
-          ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #f1f5f9"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
-        </div>
-
-        <!-- COL 2: Previsto -> Despacho -->
-        <div style="padding:10px; border-right:1px solid #f1f5f9; background:#f8faff">
-          <div style="font-size:8px; font-weight:900; color:#2563eb; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #dbeafe; display:flex; align-items:center; gap:4px">
-            <ion-icon name="calendar-outline" style="font-size:12px; color:#2563eb"></ion-icon> Despacho
-          </div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Data/Hora (Criação)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.createdAt)}</div></div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Sincronização ao Aparelho</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.metadata?.receivedAt||t.syncedAt)||'—'}</div></div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Aceite pelo Técnico</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.metadata?.acceptedAt)||'—'}</div></div>
-          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Zona de Atuação</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${{'point':'Ponto (Raio)','route':'Rota (Polilinha)','segment':'Trecho (A→B)','polygon':'Polígono'}[t.locationZoneType]||t.locationZoneType||'—'}</div></div>
-        </div>
-
-        <!-- COL 3: Realizado -> Execução -->
-        <div style="padding:10px; background:#f0fdf4">
-          <div style="font-size:8px; font-weight:900; color:#16a34a; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:2px solid #bbf7d0; display:flex; align-items:center; gap:4px">
-            <ion-icon name="checkmark-done-outline" style="font-size:12px; color:#16a34a"></ion-icon> Execução
-          </div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Início da Execução</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.startedAt)||'—'}</div></div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Saída (Início Deslocamento)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${startGPS?new Date(startGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
-          <div style="margin-bottom:6px"><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Chegada (Fim Deslocamento)</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${endGPS?new Date(endGPS.time).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</div></div>
-          <div><div style="font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Conclusão da OS</div><div style="font-size:10px;color:#0f172a;font-weight:600;margin-top:1px">${fd(t.completedAt)||'—'}</div></div>
-        </div>
-
-      </div>
-      ${pdfProdBlock}
-    </div>
-
-    <div class="pdf-box" style="margin-top: 6px; margin-bottom: 6px; padding-bottom: 8px;">
-       <div class="pdf-box-title" style="margin-bottom:8px">LINHA DO TEMPO OPERACIONAL</div>
+  const pieceTimeline = mod.timeline
+    ? `<div class="pdf-box" style="margin-top:6px;margin-bottom:6px;padding-bottom:8px;border-color:${th.colorBorder};background:${th.colorSurface}">
+       <div class="pdf-box-title" style="margin-bottom:8px;color:${th.colorText}">LINHA DO TEMPO OPERACIONAL</div>
        <div class="pdf-timeline">
           <div class="pdf-timeline-node">
              <div class="pdf-timeline-icon bg-blue"><ion-icon name="create-outline"></ion-icon></div>
              <div class="pdf-timeline-label">Criação</div>
              <div class="pdf-timeline-date">${fd(t.createdAt)}</div>
+             ${pdfCreationRevHint}
           </div>
           <div class="pdf-timeline-node">
              <div class="pdf-timeline-icon bg-blue"><ion-icon name="sync-outline"></ion-icon></div>
@@ -3829,75 +4075,111 @@ window.printReport = async function() {
              <div class="pdf-timeline-date">${fd(t.completedAt)}</div>
           </div>
        </div>
-    </div>
-    
-    ${transitHtml}
-    
-    <div class="pdf-section-title" style="${transitHtml ? 'margin-top:35px;' : ''} border-bottom:1px solid #e2e8f0; padding-bottom:8px; page-break-before: always;">
-       <ion-icon name="document-text-outline" style="font-size:20px; color:#3b82f6"></ion-icon>
+    </div>`
+    : '';
+
+  const pieceForm = mod.formResponses
+    ? `<div class="pdf-section-title" style="border-bottom:1px solid ${th.colorBorder}; padding-bottom:8px; page-break-before: always;">
+       <ion-icon name="document-text-outline" style="font-size:20px; color:${th.colorAccent}"></ion-icon>
        RESPOSTAS DO FORMULÁRIO
     </div>
-    
     <div style="padding-left:15px; margin-top:12px">
       <div class="pdf-form-grid">
          <div class="pdf-form-line"></div>
-         ${responseHtml || '<div class="pdf-form-item"><div class="pdf-q" style="color:#94a3b8">Sem respostas cadastradas</div></div>'}
+         ${responseHtml || '<div class="pdf-form-item"><div class="pdf-q" style="color:' + th.colorMutedLight + '">Sem respostas cadastradas</div></div>'}
       </div>
-    </div>
-    
-    ${photoHtml ? `
-      <div class="pdf-section-title" style="margin-top:35px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
-         <ion-icon name="camera-outline" style="font-size:20px; color:#10b981"></ion-icon>
+    </div>`
+    : '';
+
+  const piecePhoto =
+    photoHtml && mod.photoGallery
+      ? `<div class="pdf-section-title" style="margin-top:35px; border-bottom:1px solid ${th.colorBorder}; padding-bottom:8px;">
+         <ion-icon name="camera-outline" style="font-size:20px; color:${th.photoAccent}"></ion-icon>
          EVIDÊNCIAS FOTOGRÁFICAS
       </div>
-      <div class="pdf-photo-grid" style="margin-top:12px">${photoHtml}</div>
-    ` : ''}
+      <div class="pdf-photo-grid" style="margin-top:12px">${photoHtml}</div>`
+      : '';
 
-    <div class="pdf-footer" style="margin-top:50px; border-top:1px solid #e2e8f0; padding-top:15px; display:flex; justify-content:space-between; color:#64748b; font-size:10px;">
+  const pieceFooter = mod.footer
+    ? `<div class="pdf-footer" style="margin-top:50px; border-top:1px solid ${th.colorBorder}; padding-top:15px; display:flex; justify-content:space-between; color:${th.colorMuted}; font-size:10px;">
        <div>Gerado pela <strong>BrSpark Admin Central de Operações</strong></div>
        <div>www.brspark.com</div>
-    </div>
-  `;
-  
-  if (endGPS) {
-      setTimeout(() => {
-          const mapEl = document.getElementById('pdf-transit-map');
-          if (mapEl) {
-              if (window._pdfTransitMap) { window._pdfTransitMap.remove(); window._pdfTransitMap = null; }
-              const map = L.map('pdf-transit-map', { zoomControl: false, attributionControl: false, fadeAnimation: false, zoomAnimation: false }).setView([endGPS.lat, endGPS.lng], 15);
-              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-              
-              const { startIcon, endIcon } = buildTransitTechMapIcons(t);
-              
-              const latlngs = (endGPS.traversedPath || []).map(c => [c[0], c[1]]);
-              const polyline = L.polyline(latlngs, { color: '#EA580C', weight: 5 }).addTo(map);
-              
-              const fallbackStart = latlngs.length > 0 ? latlngs[0] : null;
-              const finalStartLat = startGPS?.lat ?? (fallbackStart ? fallbackStart[0] : undefined);
-              const finalStartLng = startGPS?.lng ?? (fallbackStart ? fallbackStart[1] : undefined);
-              
-              const fallbackEnd = latlngs.length > 0 ? latlngs[latlngs.length - 1] : null;
-              const finalEndLat = endGPS?.lat ?? (fallbackEnd ? fallbackEnd[0] : undefined);
-              const finalEndLng = endGPS?.lng ?? (fallbackEnd ? fallbackEnd[1] : undefined);
-              
-              if (finalStartLat !== undefined && finalStartLat !== null) {
-                  L.marker([finalStartLat, finalStartLng], { icon: startIcon }).addTo(map);
-              }
-              if (finalEndLat !== undefined && finalEndLat !== null) {
-                  L.marker([finalEndLat, finalEndLng], { icon: endIcon }).addTo(map);
-              }
-              
-              window._pdfTransitMap = map;
-              if (latlngs.length > 1) {
-                  map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false });
-                  map.invalidateSize(false);
-              }
-          }
-          setTimeout(() => window.print(), 800); // give tiles a moment to load
-      }, 100);
-  } else {
-      setTimeout(() => window.print(), 100);
+    </div>`
+    : '';
+
+  const themeStyle = `<style>
+#print-report.pdf-theme-root .pdf-theme-scope .bg-blue{background:${th.timelineBlue}!important}
+#print-report.pdf-theme-root .pdf-theme-scope .bg-green{background:${th.timelineGreen}!important}
+#print-report.pdf-theme-root .pdf-theme-scope .bg-orange{background:${th.timelineOrange}!important}
+#print-report.pdf-theme-root .pdf-theme-scope .pdf-form-num{background:${th.formNumBg}!important}
+#print-report.pdf-theme-root .pdf-theme-scope .pdf-timeline::before{background:linear-gradient(90deg,${th.timelineBlue} 0%,${th.timelineGreen} 100%)!important}
+</style>`;
+
+  const orderedParts = [];
+  let oi = 0;
+  while (oi < moduleOrder.length) {
+    const k = moduleOrder[oi];
+    if (!mod[k]) {
+      oi++;
+      continue;
+    }
+    if (k === 'technicalBlock') {
+      const mergeProd =
+        mod.productivity && moduleOrder[oi + 1] === 'productivity' && mod.productivity;
+      orderedParts.push(htmlTechnicalCard(mergeProd));
+      oi += mergeProd ? 2 : 1;
+      continue;
+    }
+    if (k === 'productivity') {
+      orderedParts.push(`<div style="margin-top:10px">${pdfProdBlock}</div>`);
+      oi++;
+      continue;
+    }
+    if (k === 'topbar') {
+      orderedParts.push(pieceTopbar);
+      oi++;
+      continue;
+    }
+    if (k === 'headerBanner') {
+      orderedParts.push(pieceHeaderBanner);
+      oi++;
+      continue;
+    }
+    if (k === 'timeline') {
+      orderedParts.push(pieceTimeline);
+      oi++;
+      continue;
+    }
+    if (k === 'transit') {
+      orderedParts.push(transitHtml);
+      oi++;
+      continue;
+    }
+    if (k === 'formResponses') {
+      orderedParts.push(pieceForm);
+      oi++;
+      continue;
+    }
+    if (k === 'photoGallery') {
+      orderedParts.push(piecePhoto);
+      oi++;
+      continue;
+    }
+    if (k === 'footer') {
+      orderedParts.push(pieceFooter);
+      oi++;
+      continue;
+    }
+    oi++;
   }
+
+  const printEl = document.getElementById('print-report');
+  printEl.classList.add('pdf-theme-root');
+  printEl.innerHTML =
+    themeStyle +
+    `<div class="pdf-theme-scope" style="font-family:${escAttr(th.fontFamily)};color:${escAttr(th.colorText)};font-size:${12 * th.fontScale}px;line-height:1.45">${orderedParts.join('')}</div>`;
+  
+  setTimeout(() => window.print(), 100);
   } catch (pdfErr) {
     console.error('[PDF] Falha ao montar relatório:', pdfErr);
     alert('Não foi possível gerar o PDF.\n\n' + (pdfErr && pdfErr.message ? pdfErr.message : String(pdfErr)));
