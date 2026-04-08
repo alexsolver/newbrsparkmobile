@@ -13,7 +13,7 @@ import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system/legacy';
 import { apiFetch, getToken } from './auth';
 import { 
-  addToSyncQueue, getSyncQueue, clearSyncQueueItem, 
+  getSyncQueue, clearSyncQueueItem, 
   saveStockItemLocal,
   saveStockMovementLocal,
   saveTechStockItemLocal,
@@ -24,10 +24,13 @@ import {
   getLocalTechStockMovements,
   getLocalTechFinanceEntries,
   saveTechFinanceEntryLocal,
+  getLocalAssetNotesForSync,
+  upsertAssetNoteFromSync,
 } from '../database';
 import { AuthService } from './auth';
 import { ensureTechnicianStockLegacyMigration } from './technicianStockMigration';
 import { uploadFile } from './storageService';
+import { ensureTechFinanceAttachmentsUploaded } from './technicianFinanceAttachmentSync';
 import { pushTrackingSyncQueue } from './trackingSyncQueue';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
@@ -592,7 +595,14 @@ export async function pullTechStock(ownerEmail?: string): Promise<void> {
 export async function pullTechFinance(ownerEmail?: string): Promise<void> {
   const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
   try {
-    const localRows = getLocalTechFinanceEntries(ownerEmail);
+    let localRows = getLocalTechFinanceEntries(ownerEmail);
+    if (ownerEmail && localRows.length > 0) {
+      const prepared: any[] = [];
+      for (const row of localRows) {
+        prepared.push(await ensureTechFinanceAttachmentsUploaded(row, ownerEmail));
+      }
+      localRows = prepared;
+    }
     if (localRows.length > 0) {
       await apiFetch(`/api/sync/tech-finance/entries${q}`, {
         method: 'POST',
@@ -627,6 +637,50 @@ export async function pullMaintenances(ownerEmail?: string): Promise<void> {
   const key = ownerEmail ? AuthService.getUserKey('maintenances', ownerEmail) : 'maintenances';
   await pushModule(`/api/sync/maintenances${q}`, key);
   await pullModule(`/api/sync/maintenances${q}`, key);
+}
+
+export async function pullAgenda(ownerEmail: string): Promise<void> {
+  const q = `?owner_email=${encodeURIComponent(ownerEmail)}`;
+  await pushModule(`/api/sync/agenda/events${q}`, AuthService.getUserKey('agenda_events', ownerEmail));
+  await pullModule(`/api/sync/agenda/events${q}`, AuthService.getUserKey('agenda_events', ownerEmail));
+}
+
+export async function pullAssetNotes(ownerEmail?: string): Promise<void> {
+  const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
+  try {
+    const localRows = getLocalAssetNotesForSync(ownerEmail);
+    if (ownerEmail && localRows.length > 0) {
+      await apiFetch(`/api/sync/asset-notes${q}`, {
+        method: 'POST',
+        body: JSON.stringify(localRows),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const res = await apiFetch(`/api/sync/asset-notes${q}`);
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows) && ownerEmail) {
+        for (const it of rows) {
+          if (!it?.id || !it?.assetId || it._isShared) continue;
+          upsertAssetNoteFromSync(
+            {
+              id: String(it.id),
+              assetId: String(it.assetId),
+              title: String(it.title ?? ''),
+              content: String(it.content ?? ''),
+              createdBy: String(it.createdBy ?? ''),
+              createdAt: Number(it.createdAt) || Date.now(),
+              updatedAt: Number(it.updatedAt) || Date.now(),
+              synced: 1,
+            },
+            ownerEmail
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] Falha ao sincronizar notas de ativos:', e);
+  }
 }
 
 /** metadata vindo como objeto ou string JSON (legado / cópias) */
@@ -691,6 +745,76 @@ function remoteHasRevisionVisitActive(rMeta: Record<string, unknown>): boolean {
     rMeta.revisionVisitActive === 'true' ||
     String(rMeta.revisionVisitActive || '').toLowerCase() === 'true'
   );
+}
+
+function taskMetadataIndicatesAdminRevisionCycle(m: Record<string, unknown>): boolean {
+  if (remoteHasReopenRevisionPending(m) || remoteHasRevisionVisitActive(m)) return true;
+  const rc = Number(m.reopenCount);
+  return Number.isFinite(rc) && rc > 0;
+}
+
+/**
+ * O servidor em PENDING (nova despacho ou reabertura) é a verdade — não deixar PATCH antigo
+ * IN_PROGRESS/PAUSED na outbox sobrepor o estado ao fazer pull (senão o cartão some da aba Pendentes).
+ */
+async function stripExecutionStatusOutboxForPendingServerTasks(remoteTasks: any[]): Promise<void> {
+  const pendingIds = new Set<string>();
+  for (const t of remoteTasks) {
+    if (String(t?.status || '').toUpperCase() !== 'PENDING') continue;
+    if (t?.id != null) pendingIds.add(String(t.id));
+  }
+  if (pendingIds.size === 0) return;
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    if (!raw) return;
+    let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    const next = arr.filter((item) => item?.taskId == null || !pendingIds.has(String(item.taskId)));
+    if (next.length === arr.length) return;
+    if (next.length === 0) await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
+    else await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(next));
+    console.log(
+      `[pullTasks] Outbox de estado da execução limpa para ${arr.length - next.length} OS(s) em PENDING no servidor`
+    );
+  } catch (e) {
+    console.warn('[pullTasks] stripExecutionStatusOutboxForPendingServerTasks:', e);
+  }
+}
+
+/** Revisão reaberta pelo admin: tirar id de inprogress local para voltar a Pendentes até novo aceite/início. */
+async function stripInProgressLocalForRevisionPendingTasks(remoteTasks: any[]): Promise<void> {
+  const ids = new Set<string>();
+  for (const t of remoteTasks) {
+    const st = String(t?.status || '').toUpperCase();
+    if (st !== 'PENDING' && st !== 'RECEIVED') continue;
+    const m = parseTaskMetadata(t?.metadata);
+    if (!taskMetadataIndicatesAdminRevisionCycle(m)) continue;
+    if (t?.id != null) ids.add(String(t.id));
+  }
+  if (ids.size === 0) return;
+  try {
+    const raw = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+    let arr: string[] = [];
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      arr = [];
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    const next = arr.filter((id) => !ids.has(String(id)));
+    if (next.length === arr.length) return;
+    await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(next));
+    console.log(
+      `[pullTasks] @brspark_inprogress_tasks: removidos ${arr.length - next.length} id(s) de ciclo de revisão`
+    );
+  } catch (e) {
+    console.warn('[pullTasks] stripInProgressLocalForRevisionPendingTasks:', e);
+  }
 }
 
 /** Não reintroduzir metadados de revisão que o servidor já limpou (após sync / nova conclusão). */
@@ -921,6 +1045,8 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         }
 
         await removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks);
+        await stripExecutionStatusOutboxForPendingServerTasks(remoteTasks);
+        await stripInProgressLocalForRevisionPendingTasks(remoteTasks);
 
         let existingList: any[] = [];
         try {
@@ -976,9 +1102,18 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
             return st === 'PENDING' || st === 'RECEIVED';
           });
           if (newTasks.length === 1) {
-            const ttl = String(newTasks[0].title || 'Nova OS').slice(0, 120);
+            const t0 = newTasks[0];
+            const osTitle = String(t0.title || 'Nova OS').slice(0, 120);
+            const m0 = parseTaskMetadata(t0.metadata);
+            const formName = String(t0.templateTitle ?? m0.templateTitle ?? '')
+              .trim()
+              .slice(0, 200);
             Notifications.scheduleNotificationAsync({
-              content: { title: 'Nova OS designada', body: ttl, sound: 'default' },
+              content: {
+                title: osTitle,
+                body: formName || 'Nova atividade na sua lista.',
+                sound: 'default',
+              },
               trigger: null,
             }).catch(() => {});
           } else if (newTasks.length > 1) {
@@ -1005,12 +1140,6 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
       console.warn('[pullTasks] ❌ Servidor inalcançável (modo offline):', e);
       // Offline-first: silent fail — data already exists locally
   }
-}
-
-// ── Enqueue mutations ─────────────────────────────────────────────────────────
-
-export function enqueueMutation(module: string, action: string, payload: object, ownerEmail?: string): void {
-  addToSyncQueue(module, action, payload, ownerEmail);
 }
 
 // ── Telemetria offline-first ───────────────────────────────────────────────────────
@@ -1128,6 +1257,8 @@ export async function fullSync(ownerEmail?: string): Promise<void> {
     pullVault(ownerEmail),
     pullMediaMetadata(ownerEmail),
     pullAssetDocs(ownerEmail),
+    pullAgenda(ownerEmail),
+    pullAssetNotes(ownerEmail),
   ]);
   await pollStaleGpsReminders();
 }

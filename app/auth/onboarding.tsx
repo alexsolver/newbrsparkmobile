@@ -10,7 +10,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Animated, Switch, ActivityIndicator, Platform,
+  Animated, ActivityIndicator, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useTheme } from '../../src/theme/ThemeContext';
+import { ThemedSwitch } from '../../src/components/ThemedSwitch';
 
 interface ConsentState {
   LOCATION_BACKGROUND: boolean;
@@ -42,6 +44,39 @@ function defaultConsents(isTechnician: boolean): ConsentState {
   };
 }
 
+function ConsentToggleRow({
+  consentKey,
+  title,
+  description,
+  icon,
+  consents,
+  setConsents,
+}: {
+  consentKey: keyof ConsentState;
+  title: string;
+  description: string;
+  icon: string;
+  consents: ConsentState;
+  setConsents: React.Dispatch<React.SetStateAction<ConsentState>>;
+}) {
+  const { colors: C } = useTheme();
+  return (
+    <View style={[s.toggleRow, { backgroundColor: C.cardWhite, borderColor: C.border }]}>
+      <View style={[s.toggleIcon, { backgroundColor: C.surfaceLow }]}>
+        <Ionicons name={icon as any} size={22} color={C.accent} />
+      </View>
+      <View style={s.toggleContent}>
+        <Text style={[s.toggleTitle, { color: C.slate }]}>{title}</Text>
+        <Text style={[s.toggleDesc, { color: C.textSecondary }]}>{description}</Text>
+      </View>
+      <ThemedSwitch
+        value={consents[consentKey]}
+        onValueChange={(val) => setConsents((c) => ({ ...c, [consentKey]: val }))}
+      />
+    </View>
+  );
+}
+
 async function requestOsLocationPermissions(isTechnician: boolean, consents: ConsentState): Promise<void> {
   try {
     if (consents.LOCATION_FOREGROUND) {
@@ -57,6 +92,7 @@ async function requestOsLocationPermissions(isTechnician: boolean, consents: Con
 
 export default function OnboardingScreen() {
   const { user, userRole, loading: authLoading } = useAuth();
+  const { colors: C } = useTheme();
   const isTechnician = useMemo(
     () => !!(user?.technicianProfile || userRole === 'TECHNICIAN'),
     [user?.technicianProfile, userRole]
@@ -154,35 +190,6 @@ export default function OnboardingScreen() {
   }, []);
 
   const legalBasis = policy?.legalBasis || 'LGPD';
-
-  const ToggleRow = ({
-    consentKey,
-    title,
-    description,
-    icon,
-  }: {
-    consentKey: keyof ConsentState;
-    title: string;
-    description: string;
-    icon: string;
-  }) => (
-    <View style={s.toggleRow}>
-      <View style={s.toggleIcon}>
-        <Ionicons name={icon as any} size={22} color="#EA580C" />
-      </View>
-      <View style={s.toggleContent}>
-        <Text style={s.toggleTitle}>{title}</Text>
-        <Text style={s.toggleDesc}>{description}</Text>
-      </View>
-      <Switch
-        value={consents[consentKey]}
-        onValueChange={val => setConsents(c => ({ ...c, [consentKey]: val }))}
-        trackColor={{ false: '#e2e8f0', true: '#fdba74' }}
-        thumbColor={consents[consentKey] ? '#EA580C' : '#94a3b8'}
-        ios_backgroundColor="#e2e8f0"
-      />
-    </View>
-  );
 
   const summaryRows: [keyof ConsentState, string, string][] = useMemo(() => {
     if (isTechnician) {
@@ -287,13 +294,13 @@ export default function OnboardingScreen() {
                   GPS para confirmar chegada, calcular rotas e registar a sua presença no local de atendimento.
                 </Text>
               </View>
-              <ToggleRow
+              <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="LOCATION_BACKGROUND"
                 icon="navigate-outline"
                 title="Localização em segundo plano"
                 description={`GPS durante atendimentos, mesmo com o app minimizado. Amostras conforme deslocamento (~${policy?.locationDistanceFilterMeters || 200} m) e política do tenant.`}
               />
-              <ToggleRow
+              <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="LOCATION_FOREGROUND"
                 icon="locate-outline"
                 title="Localização apenas com app aberto"
@@ -320,7 +327,7 @@ export default function OnboardingScreen() {
                 conta de cliente.
               </Text>
             </View>
-            <ToggleRow
+            <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="LOCATION_FOREGROUND"
               icon="locate-outline"
               title="Permitir localização com app aberto"
@@ -346,7 +353,7 @@ export default function OnboardingScreen() {
                   Informações do aparelho para fiabilidade dos dados e deteção de anomalias em contexto de campo.
                 </Text>
               </View>
-              <ToggleRow
+              <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DEVICE_TELEMETRY"
                 icon="hardware-chip-outline"
                 title="Status do dispositivo"
@@ -372,7 +379,7 @@ export default function OnboardingScreen() {
                 Informações técnicas opcionais ajudam-nos a melhorar a estabilidade da app (sincronização, erros de rede).
               </Text>
             </View>
-            <ToggleRow
+            <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DEVICE_TELEMETRY"
               icon="hardware-chip-outline"
               title="Partilhar estado do dispositivo"
@@ -414,7 +421,7 @@ export default function OnboardingScreen() {
                   <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
                 </View>
               ))}
-              <ToggleRow
+              <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DATA_RETENTION"
                 icon="checkmark-circle-outline"
                 title={`Li e entendi a política de retenção (${legalBasis})`}
@@ -449,7 +456,7 @@ export default function OnboardingScreen() {
                 <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
               </View>
             ))}
-            <ToggleRow
+            <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DATA_RETENTION"
               icon="checkmark-circle-outline"
               title={`Li e entendi a política de retenção (${legalBasis})`}
@@ -495,22 +502,30 @@ export default function OnboardingScreen() {
 
   if (authLoading) {
     return (
-      <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#EA580C" />
+      <View style={[s.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: C.background }]}>
+        <ActivityIndicator size="large" color={C.accent} />
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: C.background }]}>
       <View style={s.progressBar}>
         {slides.map((_, i) => (
-          <View key={i} style={[s.dot, i === slideIndex && s.dotActive]} />
+          <View
+            key={i}
+            style={[
+              s.dot,
+              i === slideIndex
+                ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
+                : { backgroundColor: C.border },
+            ]}
+          />
         ))}
       </View>
 
       <TouchableOpacity style={s.skipBtn} onPress={skipAll}>
-        <Text style={s.skipText}>Pular</Text>
+        <Text style={[s.skipText, { color: C.textLight }]}>Pular</Text>
       </TouchableOpacity>
 
       <Animated.View style={[s.slide, { opacity: fadeAnim }]}>
@@ -519,28 +534,34 @@ export default function OnboardingScreen() {
         </ScrollView>
       </Animated.View>
 
-      <View style={s.navRow}>
+      <View style={[s.navRow, { backgroundColor: C.cardWhite, borderTopColor: C.border }]}>
         {slideIndex > 0 ? (
-          <TouchableOpacity style={s.btnBack} onPress={goBack}>
-            <Ionicons name="arrow-back" size={18} color="#64748b" />
-            <Text style={s.btnBackText}>Voltar</Text>
+          <TouchableOpacity style={[s.btnBack, { backgroundColor: C.surfaceLow }]} onPress={goBack}>
+            <Ionicons name="arrow-back" size={18} color={C.textSecondary} />
+            <Text style={[s.btnBackText, { color: C.textSecondary }]}>Voltar</Text>
           </TouchableOpacity>
         ) : (
           <View style={{ flex: 1 }} />
         )}
 
         <TouchableOpacity
-          style={[s.btnNext, isLastSlide && s.btnConfirm]}
+          style={[
+            s.btnNext,
+            { backgroundColor: C.accent },
+            isLastSlide && { backgroundColor: C.connectivity.online },
+          ]}
           onPress={isLastSlide ? confirm : goNext}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={C.cardWhite} />
           ) : (
             <>
-              <Text style={s.btnNextText}>{isLastSlide ? 'Confirmar e entrar' : 'Continuar'}</Text>
-              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color="#fff" />}
-              {isLastSlide && <Ionicons name="checkmark" size={18} color="#fff" />}
+              <Text style={[s.btnNextText, { color: C.cardWhite }]}>
+                {isLastSlide ? 'Confirmar e entrar' : 'Continuar'}
+              </Text>
+              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
+              {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
             </>
           )}
         </TouchableOpacity>

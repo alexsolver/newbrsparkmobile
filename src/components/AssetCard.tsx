@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, LayoutAnimation, UIManager, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Asset } from '../types/asset';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { getChildAssets } from '../database';
@@ -28,6 +28,7 @@ const { width } = Dimensions.get('window');
 export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, forceExpand, isReordering, onMoveUp, onMoveDown }: AssetCardProps) {
   const { t } = useTranslation();
   const { colors: C } = useTheme();
+  const S = useMemo(() => createAssetCardStyles(C), [C]);
   const router = useRouter();
   const [childrenExpanded, setChildrenExpanded] = useState(false);
   const [children, setChildren] = useState<Asset[]>([]);
@@ -121,7 +122,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
 
             {hasStock && (
               <View style={[S.stockPill, hasLowStock && S.stockPillAlert]}>
-                <Ionicons name="cube" size={11} color={hasLowStock ? '#EF4444' : colors.accent} />
+                <Ionicons name="cube" size={11} color={hasLowStock ? '#EF4444' : C.accent} />
                 <Text style={[S.stockPillT, hasLowStock && { color: '#EF4444' }]}>
                   {hasLowStock ? t('asset.stockLow') : t('asset.stockOk')}
                 </Text>
@@ -191,7 +192,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
               </TouchableOpacity>
             </View>
           ) : (
-            <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+            <Ionicons name="chevron-forward" size={18} color={C.textLight} />
           )}
         </View>
       </TouchableOpacity>
@@ -225,11 +226,12 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
   );
 }
 
-const S = StyleSheet.create({
+function createAssetCardStyles(C: ColorPalette) {
+  return StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.cardWhite,
+    backgroundColor: C.cardWhite,
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -280,7 +282,7 @@ const S = StyleSheet.create({
     borderWidth: 0.5, borderColor: '#cad3d8'
   },
   typePillT: { fontSize: 8.5, fontWeight: '800', textTransform: 'uppercase' },
-  invId: { fontSize: 8.5, color: colors.textSecondary, fontWeight: '800', textTransform: 'uppercase' },
+  invId: { fontSize: 8.5, color: C.textSecondary, fontWeight: '800', textTransform: 'uppercase' },
 
   bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' },
   statusPill: {
@@ -293,10 +295,10 @@ const S = StyleSheet.create({
   stockPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-    borderWidth: 0.5, borderColor: colors.accent + '30'
+    borderWidth: 0.5, borderColor: C.accent + '30'
   },
   stockPillAlert: { backgroundColor: '#FEF2F2', borderColor: '#EF4444' },
-  stockPillT: { fontSize: 8.5, fontWeight: '800', color: colors.accent, textTransform: 'uppercase' },
+  stockPillT: { fontSize: 8.5, fontWeight: '800', color: C.accent, textTransform: 'uppercase' },
 
   // Badge PAI — verde
   linkPillParent: {
@@ -333,10 +335,10 @@ const S = StyleSheet.create({
     backgroundColor: '#F1F5F9', borderWidth: 0.5, borderColor: '#cad3d8'
   },
   linkPillActive: {
-    backgroundColor: colors.slate,
-    borderColor: colors.slate,
+    backgroundColor: C.filledButtonBg,
+    borderColor: C.filledButtonBg,
   },
-  linkPillT: { fontSize: 8.5, fontWeight: '800', color: colors.slate },
+  linkPillT: { fontSize: 8.5, fontWeight: '800', color: C.slate },
 
   // Child "Vinculado" badge
   childBadge: {
@@ -375,4 +377,5 @@ const S = StyleSheet.create({
   },
   childName: { fontSize: 12, fontWeight: '800', color: '#191C1D' },
   childType: { fontSize: 10, color: '#70797C', fontWeight: '600', marginTop: 1 },
-});
+  });
+}

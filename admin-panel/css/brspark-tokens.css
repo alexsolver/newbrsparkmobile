@@ -1,0 +1,35 @@
+/* Gerado por npm run theme:export-css — não editar à mão */
+:root {
+  --color-brand-primary: #F97316;
+  --color-brand-accent: #EA580C;
+  --color-slate: #0F172A;
+  --color-bg: #F8F9FA;
+  --color-surface-low: #F3F4F5;
+  --color-surface: #FFFFFF;
+  --color-text-secondary: #475569;
+  --color-text-light: #64748B;
+  --color-border: #E2E8F0;
+  --color-divider: #F1F5F9;
+  --color-status-success-fg: #059669;
+  --color-status-success-bg: #D1FAE5;
+  --color-status-success-border: #A7F3D0;
+  --color-status-warning-fg: #C2410C;
+  --color-status-warning-bg: #FFEDD5;
+  --color-status-warning-border: #FDBA74;
+  --color-status-danger-fg: #B91C1C;
+  --color-status-danger-bg: #FEE2E2;
+  --color-status-danger-border: #FECACA;
+  --color-status-info-fg: #1D4ED8;
+  --color-status-info-bg: #DBEAFE;
+  --color-status-info-border: #93C5FD;
+  --color-connectivity-checking: #64748B;
+  --color-connectivity-online: #10B981;
+  --color-connectivity-offline: #EF4444;
+  --color-destructive: #DC2626;
+  --color-media-before: #3B82F6;
+  --color-media-during: #F59E0B;
+  --color-media-after: #10B981;
+  --color-media-damage: #EF4444;
+  --color-media-warranty: #8B5CF6;
+  --color-media-other: #6B7280;
+}

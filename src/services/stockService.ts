@@ -9,8 +9,6 @@ import {
   saveStockMovementLocal,
   deleteStockItemLocal,
 } from '../database';
-import { enqueueMutation } from './syncService';
-
 export const StockService = {
   /** Stock ligado a bens / locais do portfólio (não inclui estoque do técnico). */
   getItems: async (ownerEmail?: string): Promise<StockItem[]> => {
@@ -19,12 +17,10 @@ export const StockService = {
 
   saveItem: async (item: StockItem, ownerEmail?: string) => {
     saveStockItemLocal(item, ownerEmail);
-    enqueueMutation('stock', 'stock:CREATE_ITEM', item, ownerEmail);
   },
 
   deleteItem: async (itemId: string, ownerEmail?: string) => {
     deleteStockItemLocal(itemId);
-    enqueueMutation('stock', 'stock:DELETE_ITEM', { id: itemId }, ownerEmail);
   },
 
   getMovements: async (ownerEmail?: string): Promise<StockMovement[]> => {
@@ -84,7 +80,6 @@ export const StockService = {
 
     saveStockItemLocal(item, ownerEmail);
     saveStockMovementLocal(newMovement, ownerEmail);
-    enqueueMutation('stock', 'stock:RECORD_MOVEMENT', newMovement, ownerEmail);
   },
 
   getLocations: async (): Promise<StockLocation[]> => {

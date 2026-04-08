@@ -11,6 +11,8 @@
  *   stock/items | stock/movements
  *   tech-stock/items | tech-stock/movements (estoque do técnico — independente de bens)
  *   tech-finance/entries (livro do técnico — independente de bens)
+ *   agenda/events (compromissos locais AsyncStorage)
+ *   asset-notes (notas por ativo — espelho JSON; app persiste em SQLite)
  */
 
 const router = require('express').Router();
@@ -248,5 +250,11 @@ router.post('/tech-stock/movements', pushHandler('tech_stock_movements'));
 
 router.get('/tech-finance/entries', pullHandler('tech_finance_entries'));
 router.post('/tech-finance/entries', pushHandler('tech_finance_entries'));
+
+router.get('/agenda/events', pullHandler('agenda_events'));
+router.post('/agenda/events', pushHandler('agenda_events'));
+
+router.get('/asset-notes', pullHandler('asset_notes'));
+router.post('/asset-notes', pushHandler('asset_notes'));
 
 module.exports = router;

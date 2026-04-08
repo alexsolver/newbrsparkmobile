@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { AssetLocation } from '../types/asset';
 
 type GroupItem = {
@@ -34,6 +34,7 @@ const TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string }> = {
 };
 
 export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLocation, onUnlinkItem }: Props) {
+  const { colors: C } = useTheme();
   const [expanded, setExpanded] = useState(true);
   const noLoc = group.location === null;
   const icon  = group.location?.icon  || 'help-circle-outline';
@@ -47,12 +48,12 @@ export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLoca
 
         {/* Row 1: icon + name */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: noLoc ? '#E2E8F0' : (colors.primary + '18'), justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
-            <Ionicons name={icon as any} size={18} color={noLoc ? '#A8B5BB' : colors.primary} />
+          <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: noLoc ? '#E2E8F0' : (C.primary + '18'), justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+            <Ionicons name={icon as any} size={18} color={noLoc ? '#A8B5BB' : C.primary} />
           </View>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
             <Text style={{ fontSize: 14, fontWeight: '900', color: noLoc ? '#A8B5BB' : '#191C1D', lineHeight: 18 }}>{room}</Text>
-            {floor ? <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '700', marginTop: 1 }}>{floor}</Text> : null}
+            {floor ? <Text style={{ fontSize: 10, color: C.primary, fontWeight: '700', marginTop: 1 }}>{floor}</Text> : null}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setExpanded(e => !e)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#A8B5BB" />
@@ -62,8 +63,8 @@ export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLoca
         {/* Row 2: badges + actions */}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           {/* Count */}
-          <View style={{ backgroundColor: noLoc ? '#E2E8F0' : (colors.primary + '18'), borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6 }}>
-            <Text style={{ fontSize: 11, fontWeight: '900', color: noLoc ? '#A8B5BB' : colors.primary }}>{group.items.length} {group.items.length === 1 ? 'item' : 'itens'}</Text>
+          <View style={{ backgroundColor: noLoc ? '#E2E8F0' : (C.primary + '18'), borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '900', color: noLoc ? '#A8B5BB' : C.primary }}>{group.items.length} {group.items.length === 1 ? 'item' : 'itens'}</Text>
           </View>
           {/* Stock badge */}
           {group.location?.isStock && (
@@ -82,7 +83,7 @@ export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLoca
           )}
           {/* Add child */}
           {!noLoc && (
-            <TouchableOpacity style={{ width: 30, height: 30, borderRadius: 9, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' }} onPress={onAddChild} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity style={{ width: 30, height: 30, borderRadius: 9, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' }} onPress={onAddChild} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="add" size={17} color="#fff" />
             </TouchableOpacity>
           )}

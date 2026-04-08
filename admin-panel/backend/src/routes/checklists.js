@@ -748,9 +748,11 @@ router.post('/dispatch', async (req, res) => {
             return res.status(400).json({ error: "ownerEmail and refId are required" });
         }
         
-        // Try to find the real template to get title/description (+ tenantId para push)
-        let templateTitle = payload.title || 'Nova OS Designada';
+        // Título da OS (painel) ≠ nome do formulário — guardar ambos em metadata.
+        const osTitle =
+            (payload.title != null && String(payload.title).trim()) || 'Nova OS Designada';
         let templateDesc = payload.description || 'Tarefa de rotina despachada.';
+        let formTemplateTitle = null;
         let realTemplateId = null;
         let loadedTemplate = null;
 
@@ -758,7 +760,7 @@ router.post('/dispatch', async (req, res) => {
             loadedTemplate = await prisma.checklistTemplate.findUnique({ where: { id: payload.refId } });
             if (loadedTemplate) {
                 realTemplateId = loadedTemplate.id;
-                templateTitle = loadedTemplate.title;
+                formTemplateTitle = loadedTemplate.title || null;
                 templateDesc = loadedTemplate.description || templateDesc;
             }
         } catch (e) {
@@ -786,10 +788,11 @@ router.post('/dispatch', async (req, res) => {
                 locationPolygon:  payload.locationPolygon  || null,
                 metadata: {
                     ...(payload.metadata || {}),
-                    refId: payload.refId,      // keep original for mobile to load schema
-                    title: templateTitle,
-                    description: templateDesc
-                }
+                    refId: payload.refId, // keep original for mobile to load schema
+                    title: osTitle,
+                    ...(formTemplateTitle ? { templateTitle: formTemplateTitle } : {}),
+                    description: templateDesc,
+                },
             }
         });
         
@@ -839,9 +842,13 @@ router.post('/dispatch', async (req, res) => {
                         userIds.join(',')
                     );
                 } else {
+                    const pushTitle = String(osTitle).slice(0, 120);
+                    const pushBody = formTemplateTitle
+                        ? String(formTemplateTitle).slice(0, 180)
+                        : 'Nova atividade na sua lista.';
                     const pushRes = await sendExpoPushToMany(pushTokens, {
-                        title: 'Nova OS designada',
-                        body: templateTitle || 'Você recebeu uma nova atividade',
+                        title: pushTitle,
+                        body: pushBody,
                         data: { taskId: execution.id, type: 'os_dispatched' },
                     });
                     if (pushRes && pushRes.ok === false) {

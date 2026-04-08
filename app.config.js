@@ -1,6 +1,7 @@
 /**
  * Expo config — inclui Google Maps Android (obrigatório para react-native-maps).
  * Defina: EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY no .env; o Android injeta a mesma chave no manifest em compile-time (android/app/build.gradle).
+ * API móvel em release: EXPO_PUBLIC_API_BASE (origem sem /api), ou fallback em src/services/auth.ts.
  */
 const path = require('path');
 try {
@@ -17,12 +18,15 @@ const mapsKey =
   process.env.GOOGLE_MAPS_ANDROID_KEY?.trim() ||
   '';
 
-/** Obrigatório para getExpoPushTokenAsync (iOS/Android). Ver: https://docs.expo.dev/push-notifications/push-notifications-setup/ */
+/** EAS: @alexsolver/BrsparkMobile — https://expo.dev/accounts/alexsolver/projects/BrsparkMobile */
+const EAS_PROJECT_ID_FALLBACK = '8afa6988-8e45-42e8-afd5-67728288f086';
+
+/** Obrigatório para EAS Build/Submit e getExpoPushTokenAsync. */
 const easProjectId =
   process.env.EAS_PROJECT_ID?.trim() ||
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ||
   appJson.expo.extra?.eas?.projectId?.trim() ||
-  undefined;
+  EAS_PROJECT_ID_FALLBACK;
 
 module.exports = {
   expo: {
@@ -31,7 +35,7 @@ module.exports = {
       ...(appJson.expo.extra || {}),
       eas: {
         ...((appJson.expo.extra && appJson.expo.extra.eas) || {}),
-        ...(easProjectId ? { projectId: easProjectId } : {}),
+        projectId: easProjectId,
       },
     },
     android: {

@@ -1822,6 +1822,18 @@ function renderProperties() {
     extraProps += `
     `;
 
+    if (f.type === 'technician_finance') {
+        extraProps += `
+        <div class="prop-group" style="background:#fffbeb; border:1px solid #fde68a; padding:12px; border-radius:8px; margin-top:12px;">
+            <div style="font-size:12px; font-weight:800; color:#92400e; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                <ion-icon name="document-text-outline"></ion-icon> PDF e partilha com o cliente
+            </div>
+            <div style="font-size:10px; color:#78350f; line-height:1.45;">
+                Por defeito, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se activar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de partilhar.
+            </div>
+        </div>`;
+    }
+
     if(f.type === 'text' || f.type === 'number' || f.type === 'phone') {
         extraProps += `
         <div class="prop-group" style="background:#f0fdf4; border:1px solid #22c55e; padding:12px; border-radius:8px; margin-top:16px;">

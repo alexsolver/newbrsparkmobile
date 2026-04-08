@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Dimensions,
   Animated, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { AssetAIService, AssetDataSnapshot, AssetInsight } from '../services/assetAIService';
 import { LLMService, ChatMessage } from '../services/llmService';
 import { formatCurrency } from '../i18n/formatters';
@@ -99,6 +100,8 @@ const IP = StyleSheet.create({
 });
 
 export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
+  const { colors: C } = useTheme();
+  const S = useMemo(() => createAIConsultantStyles(C), [C]);
   const { t } = useTranslation();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('basic');
@@ -185,10 +188,10 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
   if (loading) {
     return (
       <View style={S.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <ActivityIndicator size="large" color={C.accent} />
         <Text style={S.loadingText}>{t('ai.analyzingData')}</Text>
         <View style={S.loadingProgressWrap}>
-          <IndeterminateProgressBar active={loading} barColor={colors.accent} trackColor="#E2E8F0" />
+          <IndeterminateProgressBar active={loading} barColor={C.accent} trackColor="#E2E8F0" />
         </View>
       </View>
     );
@@ -197,7 +200,7 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
   if (!data) {
     return (
       <View style={S.center}>
-        <Ionicons name="alert-circle-outline" size={48} color={colors.textLight} />
+        <Ionicons name="alert-circle-outline" size={48} color={C.textLight} />
         <Text style={S.loadingText}>{t('ai.loadError')}</Text>
       </View>
     );
@@ -230,7 +233,7 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
                     style={[S.tabBtn, tab === 'basic' && S.tabBtnActive]}
                     onPress={() => setTab('basic')}
                   >
-                    <Ionicons name="analytics" size={16} color={tab === 'basic' ? '#fff' : colors.textSecondary} />
+                    <Ionicons name="analytics" size={16} color={tab === 'basic' ? '#fff' : C.textSecondary} />
                     <Text style={[S.tabBtnT, tab === 'basic' && S.tabBtnTA]}>{t('ai.analysis')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -406,34 +409,35 @@ export function AIConsultantModule({ assetId, assetType, onClose }: Props) {
   );
 }
 
-const S = StyleSheet.create({
+function createAIConsultantStyles(C: ColorPalette) {
+  return StyleSheet.create({
   container: { flex: 1, padding: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 11, color: colors.textSecondary, marginTop: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  loadingText: { fontSize: 11, color: C.textSecondary, marginTop: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   loadingProgressWrap: { width: '72%', maxWidth: 280, marginTop: 4 },
 
   // Tabs
   tabRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 14, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  tabBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  tabBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
   tabBtnActivePremium: { backgroundColor: '#A855F7', borderColor: '#A855F7' },
-  tabBtnT: { fontSize: 11, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  tabBtnT: { fontSize: 11, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   tabBtnTA: { color: '#fff' },
 
   // Score
-  scoreCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  scoreCircle: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: colors.border, justifyContent: 'center', alignItems: 'center', marginRight: 20 },
+  scoreCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  scoreCircle: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: C.border, justifyContent: 'center', alignItems: 'center', marginRight: 20 },
   scoreValue: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
-  scoreLabel: { fontSize: 7, fontWeight: '900', color: colors.textLight, letterSpacing: 1, textTransform: 'uppercase' },
+  scoreLabel: { fontSize: 7, fontWeight: '900', color: C.textLight, letterSpacing: 1, textTransform: 'uppercase' },
   scoreBreakdown: { flex: 1, justifyContent: 'center', gap: 8 },
   scoreItem: {},
   scoreItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  scoreItemLabel: { fontSize: 9, fontWeight: '800', color: colors.textSecondary, flex: 1, textTransform: 'uppercase' },
+  scoreItemLabel: { fontSize: 9, fontWeight: '800', color: C.textSecondary, flex: 1, textTransform: 'uppercase' },
   scoreItemVal: { fontSize: 11, fontWeight: '900' },
   miniBar: { height: 2, borderRadius: 2, marginBottom: 4 },
 
   // Insights
-  sectionTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, marginBottom: 12, marginTop: 4, textTransform: 'uppercase' },
+  sectionTitle: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, marginBottom: 12, marginTop: 4, textTransform: 'uppercase' },
   insightCard: { flexDirection: 'row', padding: 14, borderRadius: 14, marginBottom: 8, alignItems: 'flex-start', gap: 12 },
   insightContent: { flex: 1 },
   insightTitle: { fontSize: 12, fontWeight: '900', marginBottom: 3, letterSpacing: -0.2 },
@@ -441,21 +445,21 @@ const S = StyleSheet.create({
 
   // Stats
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  statCard: { flex: 1, backgroundColor: '#fff', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
-  statLabel: { fontSize: 7, fontWeight: '900', color: colors.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
-  statValue: { fontSize: 14, fontWeight: '900', color: colors.primary, marginTop: 4, letterSpacing: -0.3 },
+  statCard: { flex: 1, backgroundColor: '#fff', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: C.border },
+  statLabel: { fontSize: 7, fontWeight: '900', color: C.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
+  statValue: { fontSize: 14, fontWeight: '900', color: C.primary, marginTop: 4, letterSpacing: -0.3 },
 
   // Chat
   chatArea: { flex: 1, paddingBottom: 10 },
   chatWelcome: { alignItems: 'center', paddingTop: 30, paddingHorizontal: 20 },
-  chatWelcomeT: { fontSize: 14, fontWeight: '900', color: colors.primary, marginTop: 12, letterSpacing: -0.3 },
-  chatWelcomeS: { fontSize: 11, color: colors.textSecondary, marginTop: 4, marginBottom: 20, fontWeight: '500' },
+  chatWelcomeT: { fontSize: 14, fontWeight: '900', color: C.primary, marginTop: 12, letterSpacing: -0.3 },
+  chatWelcomeS: { fontSize: 11, color: C.textSecondary, marginTop: 4, marginBottom: 20, fontWeight: '500' },
   suggestionsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   suggestion: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: '#F3E8FF', borderWidth: 1, borderColor: '#E9D5FF' },
   suggestionT: { fontSize: 9, fontWeight: '900', color: '#7C3AED', textTransform: 'uppercase' },
 
   bubble: { maxWidth: '85%', padding: 14, borderRadius: 18, marginBottom: 8, flexDirection: 'row' },
-  bubbleUser: { backgroundColor: colors.accent, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
+  bubbleUser: { backgroundColor: C.accent, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   bubbleAI: { backgroundColor: '#F3E8FF', alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
   thinkingBubble: { flexDirection: 'column', alignItems: 'stretch' },
   thinkingRow: { flexDirection: 'row', alignItems: 'center' },
@@ -463,7 +467,8 @@ const S = StyleSheet.create({
   bubbleText: { fontSize: 13, fontWeight: '600', color: '#1E1B4B', lineHeight: 18, flex: 1 },
   bubbleTextUser: { color: '#fff' },
 
-  inputBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
-  chatInput: { flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 14, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: colors.border },
+  inputBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
+  chatInput: { flex: 1, backgroundColor: C.background, padding: 12, borderRadius: 14, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: C.border },
   sendBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#A855F7', justifyContent: 'center', alignItems: 'center' },
-});
+  });
+}

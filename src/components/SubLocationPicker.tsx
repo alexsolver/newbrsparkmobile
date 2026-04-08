@@ -5,7 +5,8 @@ import {
   KeyboardAvoidingView, Platform} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SubLocation } from '../types/asset';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 
 const { height: H, width: W } = Dimensions.get('window');
 
@@ -185,6 +186,8 @@ interface SubLocationPickerProps {
 export function SubLocationPicker({
   visible, parentType, childTitle, initialValue, maxStep = 3, confirmLabel, onConfirm, onClose,
 }: SubLocationPickerProps) {
+  const { colors: C } = useTheme();
+  const S = useMemo(() => createSubLocationStyles(C), [C]);
   const presets = ROOMS_BY_TYPE[parentType] || ROOMS_BY_TYPE.OTHER;
 
   const [step,         setStep]         = useState<1 | 2 | 3>(1);
@@ -231,7 +234,7 @@ export function SubLocationPicker({
       style={[S.iconCell, customIcon === item.name && S.iconCellActive]}
       onPress={() => setCustomIcon(item.name)}
     >
-      <Ionicons name={item.name as any} size={22} color={customIcon === item.name ? '#fff' : colors.slate} />
+      <Ionicons name={item.name as any} size={22} color={customIcon === item.name ? '#fff' : C.slate} />
       <Text style={[S.iconCellLabel, customIcon === item.name && { color: '#fff' }]} numberOfLines={1}>{item.label}</Text>
     </TouchableOpacity>
   );
@@ -282,7 +285,7 @@ export function SubLocationPicker({
                       onPress={() => { setFloor(f); if (f !== 'Outro...') setCustomFloor(''); }}
                     >
                       {f === 'Outro...' && (
-                        <Ionicons name="pencil-outline" size={13} color={floor === 'Outro...' ? colors.primary : '#A8B5BB'} style={{ marginRight: 4 }} />
+                        <Ionicons name="pencil-outline" size={13} color={floor === 'Outro...' ? C.primary : '#A8B5BB'} style={{ marginRight: 4 }} />
                       )}
                       <Text style={[S.pillT, floor === f && (f === 'Outro...' ? S.pillTCustom : S.pillTActive)]}>{f}</Text>
                     </TouchableOpacity>
@@ -316,7 +319,7 @@ export function SubLocationPicker({
                       onPress={() => { setRoom(r.label); if (!r.isCustom) setCustomRoom(''); }}
                     >
                       <Ionicons name={r.icon as any} size={24}
-                        color={room === r.label ? (r.isCustom ? colors.primary : '#fff') : (r.isCustom ? '#A8B5BB' : colors.slate)} />
+                        color={room === r.label ? (r.isCustom ? C.primary : '#fff') : (r.isCustom ? '#A8B5BB' : C.slate)} />
                       <Text style={[S.roomLabel, room === r.label && (r.isCustom ? S.roomLabelCustom : S.roomLabelActive), r.isCustom && { color: '#A8B5BB' }]} numberOfLines={2}>
                         {r.isCustom ? 'Nome livre' : r.label}
                       </Text>
@@ -338,7 +341,7 @@ export function SubLocationPicker({
 
                     {/* Icon picker header */}
                     <View style={S.iconLibHeader}>
-                      <Ionicons name={customIcon as any} size={20} color={colors.primary} />
+                      <Ionicons name={customIcon as any} size={20} color={C.primary} />
                       <Text style={S.iconLibTitle}>Escolha um ícone</Text>
                     </View>
 
@@ -401,7 +404,7 @@ export function SubLocationPicker({
                  returnKeyType="done"/>
                 {/* Summary */}
                 <View style={S.summaryCard}>
-                  <Ionicons name={finalIcon as any} size={22} color={colors.primary} />
+                  <Ionicons name={finalIcon as any} size={22} color={C.primary} />
                   <View style={{ marginLeft: 10 }}>
                     <Text style={S.summaryFloor}>{finalFloor || '—'}</Text>
                     <Text style={S.summaryRoom}>{finalRoom || '—'}</Text>
@@ -417,7 +420,7 @@ export function SubLocationPicker({
           <View style={S.footer}>
             {step > 1 ? (
               <TouchableOpacity style={S.backBtn} onPress={() => setStep((s) => (s - 1) as 1)}>
-                <Ionicons name="arrow-back" size={18} color={colors.slate} />
+                <Ionicons name="arrow-back" size={18} color={C.slate} />
                 <Text style={S.backBtnT}>Voltar</Text>
               </TouchableOpacity>
             ) : <View style={{ flex: 1 }} />}
@@ -452,7 +455,8 @@ export function SubLocationPicker({
 // ── Styles ───────────────────────────────────────────────────────────────────
 const ICON_CELL_SIZE = (W - 40 - 32) / 4;
 
-const S = StyleSheet.create({
+function createSubLocationStyles(C: ColorPalette) {
+  return StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#fff',
@@ -470,33 +474,33 @@ const S = StyleSheet.create({
   stepRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
   stepWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   stepDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0' },
-  stepDotActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  stepDotActive: { backgroundColor: C.primary, borderColor: C.primary },
   stepNum: { fontSize: 11, fontWeight: '900', color: '#A8B5BB' },
   stepNumActive: { color: '#fff' },
   stepLabel: { fontSize: 10, fontWeight: '700', color: '#A8B5BB', marginLeft: 6, textTransform: 'uppercase' },
-  stepLabelActive: { color: colors.primary },
+  stepLabelActive: { color: C.primary },
   stepLine: { flex: 1, height: 1.5, backgroundColor: '#E2E8F0', marginHorizontal: 6 },
-  stepLineActive: { backgroundColor: colors.primary },
+  stepLineActive: { backgroundColor: C.primary },
 
   section: { paddingHorizontal: 20, paddingVertical: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '800', color: '#191C1D', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
-  pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  pillCustom: { borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: '#F0F9FF' },
+  pillActive: { backgroundColor: C.primary, borderColor: C.primary },
+  pillCustom: { borderStyle: 'dashed', borderColor: C.primary, backgroundColor: '#F0F9FF' },
   pillT: { fontSize: 13, fontWeight: '700', color: '#565E61' },
   pillTActive: { color: '#fff' },
-  pillTCustom: { color: colors.primary },
+  pillTCustom: { color: C.primary },
 
   roomGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   roomCard: { width: '30%', paddingVertical: 14, paddingHorizontal: 8, borderRadius: 16, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', gap: 6 },
-  roomCardActive: { backgroundColor: colors.slate, borderColor: colors.slate },
-  roomCardCustom: { backgroundColor: '#F0F9FF', borderColor: colors.primary },
+  roomCardActive: { backgroundColor: C.filledButtonBg, borderColor: C.filledButtonBg },
+  roomCardCustom: { backgroundColor: '#F0F9FF', borderColor: C.primary },
   roomCardDashed: { borderStyle: 'dashed' },
   roomLabel: { fontSize: 10, fontWeight: '700', color: '#565E61', textAlign: 'center' },
   roomLabelActive: { color: '#fff' },
-  roomLabelCustom: { color: colors.primary },
+  roomLabelCustom: { color: C.primary },
 
   input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#191C1D', fontWeight: '600', backgroundColor: '#F8FAFC' },
 
@@ -506,12 +510,12 @@ const S = StyleSheet.create({
   iconSearchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   iconSearchInput: { flex: 1, fontSize: 13, color: '#191C1D', fontWeight: '600' },
   catTab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', marginRight: 8 },
-  catTabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  catTabActive: { backgroundColor: C.primary, borderColor: C.primary },
   catTabT: { fontSize: 11, fontWeight: '700', color: '#70797C' },
   catTabTActive: { color: '#fff' },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   iconCell: { width: ICON_CELL_SIZE, height: ICON_CELL_SIZE, borderRadius: 12, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', gap: 4 },
-  iconCellActive: { backgroundColor: colors.slate, borderColor: colors.slate },
+  iconCellActive: { backgroundColor: C.filledButtonBg, borderColor: C.filledButtonBg },
   iconCellLabel: { fontSize: 8, fontWeight: '700', color: '#70797C', textAlign: 'center' },
 
   summaryCard: { marginTop: 20, flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BBF7D0' },
@@ -521,8 +525,9 @@ const S = StyleSheet.create({
 
   footer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, gap: 10 },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 14, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
-  backBtnT: { fontSize: 14, fontWeight: '700', color: colors.slate },
-  nextBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 14 },
+  backBtnT: { fontSize: 14, fontWeight: '700', color: C.slate },
+  nextBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14 },
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnT: { fontSize: 14, fontWeight: '900', color: '#fff' },
-});
+  });
+}

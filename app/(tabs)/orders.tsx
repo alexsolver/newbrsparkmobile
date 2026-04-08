@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from '../../src/theme/colors';
+import {
+  ColorPalette,
+  MEDIA_TAG_COLORS,
+  SERVICE_CATEGORY_COLORS,
+} from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,21 +38,28 @@ function orderUiStatus(e: any, executedIds: Set<string>): 'em_andamento' | 'agen
   return 'em_andamento';
 }
 
-const MOCK_ORDERS = (t: any) => [
-  { id: 'o1', service: t('orders.mock.airSplit'),             status: 'em_andamento', date: '18/03/2026', provider: t('home.mock.coolTech'), color: '#3B82F6' },
-  { id: 'o2', service: t('orders.mock.inspection'),           status: 'agendado',     date: '25/03/2026', provider: t('home.mock.engVist'),  color: '#7C3AED' },
-  { id: 'o3', service: t('orders.mock.cleaning'),             status: 'concluido',    date: '10/03/2026', provider: t('home.mock.limpClean'),color: '#059669' },
-];
+function buildMockOrders(t: (k: string) => string, C: ColorPalette) {
+  return [
+    { id: 'o1', service: t('orders.mock.airSplit'), status: 'em_andamento' as const, date: '18/03/2026', provider: t('home.mock.coolTech'), color: MEDIA_TAG_COLORS.BEFORE },
+    { id: 'o2', service: t('orders.mock.inspection'), status: 'agendado' as const, date: '25/03/2026', provider: t('home.mock.engVist'), color: SERVICE_CATEGORY_COLORS.Reformas },
+    { id: 'o3', service: t('orders.mock.cleaning'), status: 'concluido' as const, date: '10/03/2026', provider: t('home.mock.limpClean'), color: C.success.text },
+  ];
+}
 
-const STATUS_MAP: Record<string, { labelKey: string; color: string; bg: string; icon: string }> = {
-  em_andamento: { labelKey: 'orders.inProgress', color: '#1D4ED8', bg: '#EFF6FF', icon: 'time' },
-  agendado:     { labelKey: 'orders.scheduled',   color: '#7C3AED', bg: '#F5F3FF', icon: 'calendar' },
-  concluido:    { labelKey: 'orders.completed',   color: '#059669', bg: '#ECFDF5', icon: 'checkmark-circle' },
-  cancelado:    { labelKey: 'orders.cancelled',   color: '#DC2626', bg: '#FEF2F2', icon: 'close-circle' },
-};
+function buildStatusMap(C: ColorPalette): Record<string, { labelKey: string; color: string; bg: string; icon: string }> {
+  const purple = SERVICE_CATEGORY_COLORS.Reformas;
+  return {
+    em_andamento: { labelKey: 'orders.inProgress', color: C.status.info.fg, bg: C.status.info.bg, icon: 'time' },
+    agendado: { labelKey: 'orders.scheduled', color: purple, bg: `${purple}22`, icon: 'calendar' },
+    concluido: { labelKey: 'orders.completed', color: C.status.success.fg, bg: C.status.success.bg, icon: 'checkmark-circle' },
+    cancelado: { labelKey: 'orders.cancelled', color: C.destructive, bg: C.status.danger.bg, icon: 'close-circle' },
+  };
+}
 
 export default function OrdersScreen() {
   const { colors: C } = useTheme();
+  const styles = useMemo(() => createOrdersStyles(C), [C]);
+  const statusMap = useMemo(() => buildStatusMap(C), [C]);
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -86,7 +97,7 @@ export default function OrdersScreen() {
                 status: orderUiStatus(t, executedIds),
                 date: `${day}/${month}/${year}`,
                 provider: t.ownerEmail || 'BrSpark Cloud',
-                color: t.color || '#EAB308',
+                color: t.color || MEDIA_TAG_COLORS.DURING,
                 refId: t.refId
              };
           });
@@ -97,7 +108,7 @@ export default function OrdersScreen() {
     }, [user])
   );
 
-  const orders = React.useMemo(() => [...realTasks, ...MOCK_ORDERS(t)], [t, realTasks]);
+  const orders = React.useMemo(() => [...realTasks, ...buildMockOrders(t, C)], [t, realTasks, C]);
   const orderFilterCounts = React.useMemo(
     () => ({
       all: orders.length,
@@ -115,11 +126,11 @@ export default function OrdersScreen() {
     return (
       <View style={[styles.container, { backgroundColor: C.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }}>
-          <Ionicons name="receipt-outline" size={56} color={colors.textLight} />
-          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.primary, marginTop: 20 }}>{t('orders.title')}</Text>
-          <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>{t('orders.createAccountHint')}</Text>
-          <TouchableOpacity style={{ backgroundColor: colors.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
-            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>{t('orders.createOrLogin')}</Text>
+          <Ionicons name="receipt-outline" size={56} color={C.textLight} />
+          <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>{t('orders.title')}</Text>
+          <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>{t('orders.createAccountHint')}</Text>
+          <TouchableOpacity style={{ backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
+            <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>{t('orders.createOrLogin')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -161,13 +172,13 @@ export default function OrdersScreen() {
         <View style={{ paddingHorizontal: 16 }}>
           {filteredOrders.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="receipt-outline" size={48} color={colors.textLight} />
+              <Ionicons name="receipt-outline" size={48} color={C.textLight} />
               <Text style={styles.emptyText}>{t('orders.noOrders')}</Text>
               <Text style={styles.emptySub}>{t('orders.noOrdersSub')}</Text>
             </View>
           ) : (
             filteredOrders.map(order => {
-              const st = STATUS_MAP[order.status] || STATUS_MAP.em_andamento;
+              const st = statusMap[order.status] || statusMap.em_andamento;
               return (
                 <TouchableOpacity 
                   key={order.id} 
@@ -191,8 +202,8 @@ export default function OrdersScreen() {
                         style={[
                           styles.orderOsBadge,
                           {
-                            backgroundColor: `${order.color || '#6366F1'}26`,
-                            borderColor: `${order.color || '#6366F1'}55`,
+                            backgroundColor: `${order.color || SERVICE_CATEGORY_COLORS.Tecnologia}26`,
+                            borderColor: `${order.color || SERVICE_CATEGORY_COLORS.Tecnologia}55`,
                           },
                         ]}
                       >
@@ -212,7 +223,7 @@ export default function OrdersScreen() {
                       <Text style={styles.orderDate}>{order.date}</Text>
                     </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                  <Ionicons name="chevron-forward" size={18} color={C.textLight} />
                 </TouchableOpacity>
               );
             })
@@ -225,34 +236,54 @@ export default function OrdersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginTop: 2 },
+function createOrdersStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1 },
+    header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+    title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+    subtitle: { fontSize: 13, fontWeight: '700', color: C.textSecondary, marginTop: 2 },
 
-  filterRow: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
-  filterChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  filterTextActive: { color: '#fff', fontWeight: '800' },
+    filterRow: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+    filterChip: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 20,
+      backgroundColor: C.divider,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterText: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
+    filterTextActive: { color: C.cardWhite, fontWeight: '800' },
 
-  orderCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
-  orderIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  orderOsBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  orderOsBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.35, color: '#0F172A' },
-  orderService: { fontSize: 15, fontWeight: '900', color: colors.primary },
-  orderProvider: { fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginTop: 2 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  statusText: { fontSize: 10, fontWeight: '900' },
-  orderDate: { fontSize: 11, fontWeight: '700', color: colors.textLight },
+    orderCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: C.cardWhite,
+      padding: 16,
+      borderRadius: 16,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    orderIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+    orderOsBadge: {
+      flexShrink: 0,
+      maxWidth: '100%',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    orderOsBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.35, color: C.slate },
+    orderService: { fontSize: 15, fontWeight: '900', color: C.primary },
+    orderProvider: { fontSize: 12, fontWeight: '600', color: C.textSecondary, marginTop: 2 },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    statusText: { fontSize: 10, fontWeight: '900' },
+    orderDate: { fontSize: 11, fontWeight: '700', color: C.textLight },
 
-  emptyState: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 16, fontWeight: '800', color: colors.primary, marginTop: 16 },
-  emptySub: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginTop: 4 },
-});
+    emptyState: { alignItems: 'center', paddingTop: 60 },
+    emptyText: { fontSize: 16, fontWeight: '800', color: C.primary, marginTop: 16 },
+    emptySub: { fontSize: 13, fontWeight: '600', color: C.textSecondary, marginTop: 4 },
+  });
+}

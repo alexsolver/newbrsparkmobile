@@ -15,6 +15,8 @@ import { AgendaService } from '../../src/services/agendaService';
 import { AgendaEvent } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database/index';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
+import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 
 // Configura idioma do calendário para Português
 LocaleConfig.locales['pt-br'] = {
@@ -32,6 +34,8 @@ const getTodayString = () => toDateString(new Date());
 export default function AgendaScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createAgendaStyles(C), [C]);
   
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +73,7 @@ export default function AgendaScreen() {
     events.forEach(ev => {
       const start = new Date(ev.startDate);
       const end = new Date(ev.endDate);
-      const col = ev.color || '#3b82f6';
+      const col = ev.color || MEDIA_TAG_COLORS.BEFORE;
       
       const days = [];
       let current = new Date(start);
@@ -96,10 +100,15 @@ export default function AgendaScreen() {
     });
 
     if (!marks[selectedDate]) marks[selectedDate] = {};
-    marks[selectedDate] = { ...marks[selectedDate], selected: true, selectedColor: '#e2e8f0', selectedTextColor: '#0f172a' };
+    marks[selectedDate] = {
+      ...marks[selectedDate],
+      selected: true,
+      selectedColor: C.divider,
+      selectedTextColor: C.slate,
+    };
 
     return marks;
-  }, [events, selectedDate]);
+  }, [events, selectedDate, C]);
 
   const listData = useMemo(() => {
     const map: Record<string, AgendaEvent[]> = {};
@@ -132,7 +141,7 @@ export default function AgendaScreen() {
     
     return (
       <TouchableOpacity 
-        style={[styles.itemCard, { borderLeftColor: ev.color || '#ccc' }]}
+        style={[styles.itemCard, { borderLeftColor: ev.color || C.border }]}
         activeOpacity={0.7}
         onPress={() => {
            // Se a fonte for CHECKLIST, abre o motor dinâmico
@@ -158,7 +167,7 @@ export default function AgendaScreen() {
         {ev.description && <Text style={styles.itemDesc}>{ev.description}</Text>}
         {asset && (
           <View style={styles.itemMeta}>
-            <Ionicons name="home-outline" size={12} color="#64748b" />
+            <Ionicons name="home-outline" size={12} color={C.textLight} />
             <Text style={styles.itemMetaText}>{asset.title}</Text>
           </View>
         )}
@@ -189,6 +198,30 @@ export default function AgendaScreen() {
 
   const [zoomLevel, setZoomLevel] = useState<1 | 2 | 3 | 4>(2);
 
+  const ganttModel = useMemo(() => {
+    const TODAY = new Date();
+    TODAY.setHours(0, 0, 0, 0);
+    const DAYS_TO_SHOW = 365;
+    const daysArr = Array.from({ length: DAYS_TO_SHOW }).map((_, i) => {
+      const d = new Date(TODAY);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+    const rws = assets.map((a) => ({ id: a.id, title: a.title, events: [] as AgendaEvent[] }));
+    const others = { id: 'other', title: 'Geral', events: [] as AgendaEvent[] };
+    events.forEach((ev) => {
+      const eEnd = new Date(ev.endDate);
+      eEnd.setHours(23, 59, 59, 999);
+      if (eEnd.getTime() < TODAY.getTime()) return;
+      const r = rws.find((x) => x.id === ev.assetId);
+      if (r) r.events.push(ev);
+      else others.events.push(ev);
+    });
+    const active = [...rws];
+    if (others.events.length > 0) active.push(others);
+    return { daysArray: daysArr, activeRows: active, TODAY, MathZoomWidth: DAYS_TO_SHOW };
+  }, [assets, events]);
+
   const toggleExpand = () => {
     LayoutAnimation.configureNext({
       duration: 250,
@@ -200,37 +233,8 @@ export default function AgendaScreen() {
   };
 
   const renderGantt = () => {
-    const { daysArray, activeRows, TODAY, MathZoomWidth } = useMemo(() => {
-      const TODAY = new Date();
-      TODAY.setHours(0,0,0,0);
-      
-      const DAYS_TO_SHOW = 365;
-      
-      const daysArr = Array.from({length: DAYS_TO_SHOW}).map((_, i) => {
-        const d = new Date(TODAY);
-        d.setDate(d.getDate() + i);
-        return d;
-      });
+    const { daysArray, activeRows, TODAY, MathZoomWidth } = ganttModel;
 
-      const rws = assets.map(a => ({ id: a.id, title: a.title, events: [] as AgendaEvent[] }));
-      const others = { id: 'other', title: 'Geral', events: [] as AgendaEvent[] };
-
-      events.forEach(ev => {
-        const eEnd = new Date(ev.endDate);
-        eEnd.setHours(23,59,59,999);
-        if (eEnd.getTime() < TODAY.getTime()) return; 
-        
-        const r = rws.find(x => x.id === ev.assetId);
-        if (r) r.events.push(ev);
-        else others.events.push(ev);
-      });
-
-      const active = rws;
-      if (others.events.length > 0) active.push(others);
-
-      return { daysArray: daysArr, activeRows: active, TODAY, MathZoomWidth: DAYS_TO_SHOW };
-    }, [assets, events]);
-    
     let COL_WIDTH = 48;
     
     if (zoomLevel === 1) {
@@ -248,15 +252,14 @@ export default function AgendaScreen() {
     const DAYS_TO_SHOW = MathZoomWidth;
 
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        {/* Barra de Controles do Gantt */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderColor: '#f1f5f9', backgroundColor: '#fff' }}>
+      <View style={{ flex: 1, backgroundColor: C.cardWhite }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderColor: C.divider, backgroundColor: C.cardWhite }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity onPress={() => scrollViewRef.current?.scrollTo({ x: 0, animated: true })} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#e2e8f0' }}>
-              <Text style={{ fontSize: 10, fontWeight: '800', color: '#0f172a' }}>HOJE</Text>
+            <TouchableOpacity onPress={() => scrollViewRef.current?.scrollTo({ x: 0, animated: true })} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: C.border }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: C.slate }}>HOJE</Text>
             </TouchableOpacity>
 
-            <View style={{ flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 8, padding: 4 }}>
+            <View style={{ flexDirection: 'row', backgroundColor: C.divider, borderRadius: 8, padding: 4 }}>
               <TouchableOpacity onPress={() => setZoomLevel(1)} style={[styles.zoomBtn, zoomLevel === 1 && styles.zoomBtnActive]}>
                 <Text style={[styles.zoomText, zoomLevel === 1 && styles.zoomTextActive]}>1S</Text>
               </TouchableOpacity>
@@ -273,21 +276,20 @@ export default function AgendaScreen() {
           </View>
         </View>
 
-        <ScrollView bounces={false} style={{ flex: 1, backgroundColor: '#fff' }} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView bounces={false} style={{ flex: 1, backgroundColor: C.cardWhite }} contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={{ flexDirection: 'row' }}>
           
-          {/* Eixo Y Fixo (Esquerda) */}
-          <View style={{ width: LEFT_COL_WIDTH, backgroundColor: '#fff', borderRightWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: {width: 2, height: 0}, shadowOpacity: 0.05, shadowRadius: 4, zIndex: 10 }}>
-            <View style={{ height: 46, borderBottomWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
-              <Text style={{ fontSize: 9, color: '#94a3b8', fontWeight: '900', letterSpacing: 0.5 }}>BEM/VEÍCULO</Text>
+          <View style={{ width: LEFT_COL_WIDTH, backgroundColor: C.cardWhite, borderRightWidth: 1, borderColor: C.divider, shadowColor: '#000', shadowOffset: { width: 2, height: 0 }, shadowOpacity: 0.05, shadowRadius: 4, zIndex: 10 }}>
+            <View style={{ height: 46, borderBottomWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceLow }}>
+              <Text style={{ fontSize: 9, color: C.textLight, fontWeight: '900', letterSpacing: 0.5 }}>BEM/VEÍCULO</Text>
             </View>
 
             {activeRows.map(r => (
-              <View key={r.id} style={{ height: ROW_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
+              <View key={r.id} style={{ height: ROW_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderColor: C.divider }}>
                  {r.id !== 'other' ? (
-                   <Text style={{ fontSize: 11, fontWeight: '800', color: '#0f172a' }} numberOfLines={2}>{r.title}</Text>
+                   <Text style={{ fontSize: 11, fontWeight: '800', color: C.slate }} numberOfLines={2}>{r.title}</Text>
                  ) : (
-                   <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b' }}>Geral</Text>
+                   <Text style={{ fontSize: 11, fontWeight: '800', color: C.textLight }}>Geral</Text>
                  )}
               </View>
             ))}
@@ -297,23 +299,23 @@ export default function AgendaScreen() {
           <ScrollView ref={scrollViewRef} horizontal bounces={false} showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
             <View style={{ flexDirection: 'column' }}>
               
-              <View style={{ flexDirection: 'row', height: 46, borderBottomWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }}>
+              <View style={{ flexDirection: 'row', height: 46, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceLow }}>
                 {daysArray.map((d, i) => {
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const isFirstOfMonth = d.getDate() === 1;
                   return (
-                    <View key={i} style={{ width: COL_WIDTH, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: '#e2e8f0', backgroundColor: isWeekend ? '#f1f5f9' : 'transparent', overflow: 'visible', zIndex: isFirstOfMonth ? 20 : 1 }}>
+                    <View key={i} style={{ width: COL_WIDTH, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, backgroundColor: isWeekend ? C.divider : 'transparent', overflow: 'visible', zIndex: isFirstOfMonth ? 20 : 1 }}>
                       {(zoomLevel === 1 || zoomLevel === 2) && (
                         <>
-                          <Text style={{ fontSize: zoomLevel === 1 ? 10 : 9, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{d.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0,3)}</Text>
-                          <Text style={{ fontSize: zoomLevel === 1 ? 15 : 13, fontWeight: '900', color: i === 0 ? '#3b82f6' : '#0f172a' }}>{d.getDate()}</Text>
+                          <Text style={{ fontSize: zoomLevel === 1 ? 10 : 9, fontWeight: '700', color: C.textLight, textTransform: 'uppercase' }}>{d.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0,3)}</Text>
+                          <Text style={{ fontSize: zoomLevel === 1 ? 15 : 13, fontWeight: '900', color: i === 0 ? C.accent : C.slate }}>{d.getDate()}</Text>
                         </>
                       )}
                       {zoomLevel === 3 && (
-                        <Text style={{ fontSize: 10, fontWeight: '900', color: i === 0 || isFirstOfMonth ? '#3b82f6' : '#64748b' }}>{d.getDate()}</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: i === 0 || isFirstOfMonth ? C.accent : C.textLight }}>{d.getDate()}</Text>
                       )}
                       {zoomLevel === 4 && isFirstOfMonth && (
-                        <Text style={{ position: 'absolute', left: 4, fontSize: 9, fontWeight: '900', color: '#0f172a', zIndex: 100, width: 40, textTransform: 'uppercase' }}>
+                        <Text style={{ position: 'absolute', left: 4, fontSize: 9, fontWeight: '900', color: C.slate, zIndex: 100, width: 40, textTransform: 'uppercase' }}>
                           {d.toLocaleDateString('pt-BR', { month: 'short' })}
                         </Text>
                       )}
@@ -323,9 +325,9 @@ export default function AgendaScreen() {
               </View>
 
               {activeRows.map(r => (
-                <View key={r.id} style={{ height: ROW_HEIGHT, flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
+                <View key={r.id} style={{ height: ROW_HEIGHT, flexDirection: 'row', borderBottomWidth: 1, borderColor: C.divider }}>
                   {daysArray.map((d, i) => (
-                    <View key={i} style={{ width: COL_WIDTH, height: ROW_HEIGHT, borderRightWidth: 1, borderColor: '#f1f5f9', backgroundColor: d.getDay() === 0 || d.getDay() === 6 ? '#f8fafc' : '#fff' }} />
+                    <View key={i} style={{ width: COL_WIDTH, height: ROW_HEIGHT, borderRightWidth: 1, borderColor: C.divider, backgroundColor: d.getDay() === 0 || d.getDay() === 6 ? C.surfaceLow : C.cardWhite }} />
                   ))}
 
                   {r.events.map((ev, evIndex) => {
@@ -361,9 +363,9 @@ export default function AgendaScreen() {
                         }}
                         style={{
                           position: 'absolute', left: leftPx + 4, top: topPos, width: Math.max(10, w - 8), height: 22,
-                          backgroundColor: ev.color || '#3b82f6', borderRadius: 6,
+                          backgroundColor: ev.color || MEDIA_TAG_COLORS.BEFORE, borderRadius: 6,
                           justifyContent: 'center', paddingHorizontal: 6,
-                          shadowColor: ev.color || '#3b82f6', shadowOffset: { width:0, height:2 }, shadowOpacity: 0.2, shadowRadius: 3
+                          shadowColor: ev.color || MEDIA_TAG_COLORS.BEFORE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3,
                         }}
                       >
                          <Text style={{ fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }} numberOfLines={1}>{ev.title}</Text>
@@ -385,13 +387,13 @@ export default function AgendaScreen() {
       <View style={styles.header}>
         <View style={{flexDirection: 'row', alignItems: 'center'}}>
           <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)')} style={{ marginRight: 12, padding: 4 }}>
-            <Ionicons name="arrow-back" size={22} color="#0f172a" />
+            <Ionicons name="arrow-back" size={22} color={C.slate} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Agenda</Text>
         </View>
         <View style={{flexDirection: 'row', gap: 12}}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => setIsGantt(!isGantt)}>
-            <Ionicons name={isGantt ? 'calendar' : 'bar-chart'} size={24} color={isGantt ? "#3b82f6" : "#0f172a"} />
+            <Ionicons name={isGantt ? 'calendar' : 'bar-chart'} size={24} color={isGantt ? C.accent : C.slate} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.fab} onPress={() => router.push('/agenda/new')}>
             <Ionicons name="add" size={20} color="#fff" />
@@ -413,12 +415,12 @@ export default function AgendaScreen() {
                 markingType={'multi-period'}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: '#ffffff', calendarBackground: '#ffffff',
-                  textSectionTitleColor: '#64748b', selectedDayBackgroundColor: '#3b82f6',
-                  selectedDayTextColor: '#ffffff', todayTextColor: '#3b82f6',
-                  dayTextColor: '#0f172a', textDisabledColor: '#cbd5e1',
-                  arrowColor: '#3b82f6', monthTextColor: '#0f172a',
-                  textDayFontWeight: '500', textMonthFontWeight: '800', textDayHeaderFontWeight: '600'
+                  backgroundColor: C.cardWhite, calendarBackground: C.cardWhite,
+                  textSectionTitleColor: C.textLight, selectedDayBackgroundColor: C.accent,
+                  selectedDayTextColor: '#ffffff', todayTextColor: C.accent,
+                  dayTextColor: C.slate, textDisabledColor: C.border,
+                  arrowColor: C.accent, monthTextColor: C.slate,
+                  textDayFontWeight: '500', textMonthFontWeight: '800', textDayHeaderFontWeight: '600',
                 }}
               />
             ) : (
@@ -428,12 +430,12 @@ export default function AgendaScreen() {
                   markingType={'multi-period'}
                   markedDates={markedDates}
                   theme={{
-                    selectedDayBackgroundColor: '#3b82f6',
+                    selectedDayBackgroundColor: C.accent,
                     selectedDayTextColor: '#ffffff',
-                    todayTextColor: '#3b82f6',
-                    dayTextColor: '#0f172a',
-                    textDisabledColor: '#cbd5e1',
-                    arrowColor: '#3b82f6',
+                    todayTextColor: C.accent,
+                    dayTextColor: C.slate,
+                    textDisabledColor: C.border,
+                    arrowColor: C.accent,
                   }}
                 />
               </View>
@@ -441,16 +443,16 @@ export default function AgendaScreen() {
 
             <TouchableOpacity style={styles.retouchHandle} onPress={toggleExpand} activeOpacity={0.8}>
               <View style={styles.handleBar} />
-              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '700', marginTop: 4 }}>
+              <Text style={{ fontSize: 10, color: C.textLight, fontWeight: '700', marginTop: 4 }}>
                 {isExpanded ? 'Recolher para Semana' : 'Expandir Calendário'}
               </Text>
-              <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={14} color="#94a3b8" />
+              <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={C.textLight} />
             </TouchableOpacity>
           </View>
 
           {loading ? (
             <View style={styles.loaderWrap}>
-              <ActivityIndicator size="large" color="#3b82f6" />
+              <ActivityIndicator size="large" color={C.accent} />
             </View>
           ) : (
             <SectionList
@@ -462,7 +464,7 @@ export default function AgendaScreen() {
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <View style={styles.emptyData}>
-                  <Ionicons name="calendar-clear-outline" size={48} color="#cbd5e1" />
+                  <Ionicons name="calendar-clear-outline" size={48} color={C.border} />
                   <Text style={styles.emptyDataTitle}>Agenda Livre</Text>
                   <Text style={styles.emptyDataDesc}>Você não possui compromissos futuros no momento.</Text>
                 </View>
@@ -475,60 +477,62 @@ export default function AgendaScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    zIndex: 10
-  },
-  headerTitle: { fontSize: 26, fontWeight: '900', color: '#0f172a', letterSpacing: -0.5 },
-  fab: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#3b82f6',
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4
-  },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  zoomBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
-  zoomBtnActive: { backgroundColor: '#3b82f6', shadowColor: '#3b82f6', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.2, shadowRadius: 3, elevation: 2 },
-  zoomText: { fontSize: 10, fontWeight: '800', color: '#64748b' },
-  zoomTextActive: { color: '#fff' },
-  calendarBox: { backgroundColor: '#fff', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  retouchHandle: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
-  handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
-  toggleContainer: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 20, padding: 3 },
-  toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 18 },
-  toggleActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  toggleText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  toggleTextActive: { color: '#0f172a' },
-  loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
-  sectionHeader: { backgroundColor: '#f8fafc', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  sectionHeaderText: { color: '#64748b', fontWeight: '800', textTransform: 'uppercase', fontSize: 11 },
-  itemCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 16,
-    borderLeftWidth: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2
-  },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 4 },
-  itemTitle: { fontSize: 15, fontWeight: '800', color: '#1e293b', flex: 1, marginRight: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 9, fontWeight: '900' },
-  itemDesc: { fontSize: 13, color: '#475569', lineHeight: 18, marginBottom: 12 },
-  itemMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f1f5f9', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  itemMetaText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
-  
-  emptyData: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  emptyDataTitle: { fontSize: 16, fontWeight: '800', color: '#64748b', marginTop: 12 },
-  emptyDataDesc: { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center', paddingHorizontal: 40 }
-});
+function createAgendaStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: C.background },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      backgroundColor: C.cardWhite,
+      borderBottomWidth: 1,
+      borderBottomColor: C.divider,
+      zIndex: 10,
+    },
+    headerTitle: { fontSize: 26, fontWeight: '900', color: C.slate, letterSpacing: -0.5 },
+    fab: {
+      width: 36, height: 36, borderRadius: 18, backgroundColor: C.accent,
+      justifyContent: 'center', alignItems: 'center',
+      shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+    },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surfaceLow, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+    zoomBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
+    zoomBtnActive: { backgroundColor: C.accent, shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 2 },
+    zoomText: { fontSize: 10, fontWeight: '800', color: C.textLight },
+    zoomTextActive: { color: '#fff' },
+    calendarBox: { backgroundColor: C.cardWhite, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: C.divider },
+    retouchHandle: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
+    handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border },
+    toggleContainer: { flexDirection: 'row', backgroundColor: C.divider, borderRadius: 20, padding: 3 },
+    toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 18 },
+    toggleActive: { backgroundColor: C.cardWhite, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+    toggleText: { fontSize: 13, fontWeight: '700', color: C.textLight },
+    toggleTextActive: { color: C.slate },
+    loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+    sectionHeader: { backgroundColor: C.surfaceLow, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+    sectionHeaderText: { color: C.textLight, fontWeight: '800', textTransform: 'uppercase', fontSize: 11 },
+    itemCard: {
+      backgroundColor: C.cardWhite,
+      marginHorizontal: 20,
+      marginBottom: 12,
+      borderRadius: 16,
+      padding: 16,
+      borderLeftWidth: 6,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
+    },
+    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 4 },
+    itemTitle: { fontSize: 15, fontWeight: '800', color: C.slate, flex: 1, marginRight: 10 },
+    badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    badgeText: { fontSize: 9, fontWeight: '900' },
+    itemDesc: { fontSize: 13, color: C.textSecondary, lineHeight: 18, marginBottom: 12 },
+    itemMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.divider, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    itemMetaText: { fontSize: 11, fontWeight: '700', color: C.textLight },
+
+    emptyData: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+    emptyDataTitle: { fontSize: 16, fontWeight: '800', color: C.textLight, marginTop: 12 },
+    emptyDataDesc: { fontSize: 13, color: C.textLight, marginTop: 4, textAlign: 'center', paddingHorizontal: 40 },
+  });
+}

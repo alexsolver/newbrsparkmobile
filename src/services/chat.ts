@@ -35,6 +35,12 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+/** Sala técnico–cliente: envio só permitido com OS em andamento ou em conclusão (servidor). */
+export interface ChatMessagingState {
+  technicianClientGated: boolean;
+  messagingActive: boolean;
+}
+
 export const ChatService = {
 
   // ---- CONTATOS ----
@@ -102,6 +108,16 @@ export const ChatService = {
   async getRoomInfo(roomId: string): Promise<ChatRoom | null> {
     const rooms = await this.getRooms();
     return rooms.find(r => r.id === roomId) || null;
+  },
+
+  async getMessagingState(roomId: string): Promise<ChatMessagingState | null> {
+    try {
+      const res = await apiFetch(`/api/chat/rooms/${roomId}/messaging-state`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
   },
 
   // ---- MENSAGENS ----

@@ -115,7 +115,7 @@
       width: 16px;
       left: 3px;
       bottom: 3px;
-      background: white;
+      background: var(--surface);
       border-radius: 50%;
       transition: 0.2s;
     }
@@ -152,7 +152,7 @@
       display: flex;
       flex-direction: column;
       min-width: 0;
-      background: #e2e8f0;
+      background: var(--surface3);
     }
     .report-canvas-toolbar {
       display: flex;
@@ -179,8 +179,10 @@
     .report-canvas-sheet-inner {
       width: 794px;
       min-height: 1123px;
-      background: #fff;
-      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.06);
+      background: var(--surface);
+      box-shadow:
+        0 12px 40px color-mix(in srgb, var(--color-slate) 12%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--color-slate) 6%, transparent);
       border-radius: 2px;
     }
     .report-wysiwyg-frame {
@@ -188,45 +190,47 @@
       padding: 28px 36px 40px;
       box-sizing: border-box;
       font-family: 'Inter', -apple-system, sans-serif;
-      color: #0f172a;
+      color: var(--color-slate);
       font-size: 12px;
       line-height: 1.4;
     }
     /* PDF look — espelho do operations.html */
     .report-wysiwyg-frame .pdf-topbar {
-      display: flex; justify-content: space-between; font-size: 10px; color: #1e293b;
+      display: flex; justify-content: space-between; font-size: 10px; color: var(--text2);
       padding-bottom: 5px; font-weight: 600;
     }
     .report-wysiwyg-frame .pdf-header-banner {
-      background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 30%, #e2e8f0 100%);
+      background: linear-gradient(90deg, var(--color-status-info-fg) 0%, var(--blue) 30%, var(--surface3) 100%);
       height: 70px; border-radius: 8px; position: relative; margin-top: 5px; margin-bottom: 22px;
     }
     .report-wysiwyg-frame .pdf-summary-plate {
       position: absolute; left: 50%; transform: translateX(-50%); top: 15px;
-      background: rgba(255,255,255,0.95); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      border-radius: 20px; padding: 8px 30px; text-align: center; border: 1px solid #cbd5e1;
+      background: color-mix(in srgb, var(--surface) 95%, transparent);
+      box-shadow: 0 4px 10px color-mix(in srgb, black 10%, transparent);
+      border-radius: 20px; padding: 8px 30px; text-align: center; border: 1px solid var(--border2);
     }
-    .report-wysiwyg-frame .pdf-summary-plate h2 { margin: 0; font-size: 16px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
-    .report-wysiwyg-frame .pdf-summary-plate span { font-size: 9px; color: #0f172a; font-weight: 500; }
+    .report-wysiwyg-frame .pdf-summary-plate h2 { margin: 0; font-size: 16px; font-weight: 900; color: var(--color-slate); letter-spacing: -0.5px; }
+    .report-wysiwyg-frame .pdf-summary-plate span { font-size: 9px; color: var(--color-slate); font-weight: 500; }
     .report-wysiwyg-frame .pdf-tech-info {
       position: absolute; right: 20px; top: 15px; display: flex; align-items: center; gap: 10px;
     }
     .report-wysiwyg-frame .pdf-tech-avatar {
       width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
-      border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border: 2px solid var(--surface);
+      box-shadow: 0 2px 4px color-mix(in srgb, black 10%, transparent);
     }
-    .report-wysiwyg-frame .pdf-tech-name { font-size: 12px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.2px; }
-    .report-wysiwyg-frame .pdf-tech-mail { font-size: 10px; color: #334155; }
+    .report-wysiwyg-frame .pdf-tech-name { font-size: 12px; font-weight: 900; color: var(--color-slate); text-transform: uppercase; letter-spacing: -0.2px; }
+    .report-wysiwyg-frame .pdf-tech-mail { font-size: 10px; color: var(--text3); }
     .report-wysiwyg-frame .pdf-tech-texts { display: flex; flex-direction: column; text-align: right; }
     .report-wysiwyg-frame .pdf-box {
-      border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
       padding: 10px 15px; margin-bottom: 12px; position: relative;
     }
     .report-wysiwyg-frame .pdf-box-title {
-      text-align: center; font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 12px; letter-spacing: -0.3px;
+      text-align: center; font-size: 13px; font-weight: 900; color: var(--color-slate); margin-bottom: 12px; letter-spacing: -0.3px;
     }
     .report-wysiwyg-frame .pdf-timeline-rev-hint {
-      font-size: 7px; color: #64748b; font-weight: 600; margin-top: 3px; line-height: 1.25;
+      font-size: 7px; color: var(--color-text-light); font-weight: 600; margin-top: 3px; line-height: 1.25;
       max-width: 104px; text-align: center;
     }
     .report-wysiwyg-frame .pdf-timeline {
@@ -235,65 +239,71 @@
     }
     .report-wysiwyg-frame .pdf-timeline::before {
       content: ''; position: absolute; top: 12px; left: 70px; right: 70px;
-      height: 3px; background: linear-gradient(90deg, #3b82f6 0%, #22c55e 100%); z-index: 0;
+      height: 3px; background: linear-gradient(90deg, var(--blue) 0%, var(--green) 100%); z-index: 0;
     }
     .report-wysiwyg-frame .pdf-timeline-node {
-      display: flex; flex-direction: column; align-items: center; z-index: 1; width: 100px; text-align: center; background: #f8fafc;
+      display: flex; flex-direction: column; align-items: center; z-index: 1; width: 100px; text-align: center; background: var(--bg);
     }
     .report-wysiwyg-frame .pdf-timeline-icon {
       width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      color: white; font-size: 12px; margin-bottom: 4px; border: 3px solid #f8fafc;
+      color: var(--surface); font-size: 12px; margin-bottom: 4px; border: 3px solid var(--bg);
     }
     .report-wysiwyg-frame .pdf-timeline-icon ion-icon { font-size: 14px; }
-    .report-wysiwyg-frame .bg-blue { background: #3b82f6; }
-    .report-wysiwyg-frame .bg-green { background: #22c55e; }
-    .report-wysiwyg-frame .bg-orange { background: #EA580C; }
-    .report-wysiwyg-frame .pdf-timeline-label { font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
-    .report-wysiwyg-frame .pdf-timeline-date { font-size: 9px; color: #475569; }
+    .report-wysiwyg-frame .bg-blue { background: var(--blue); }
+    .report-wysiwyg-frame .bg-green { background: var(--green); }
+    .report-wysiwyg-frame .bg-orange { background: var(--color-brand-accent); }
+    .report-wysiwyg-frame .pdf-timeline-label { font-size: 11px; font-weight: 800; color: var(--color-slate); margin-bottom: 2px; }
+    .report-wysiwyg-frame .pdf-timeline-date { font-size: 9px; color: var(--text3); }
     .report-wysiwyg-frame .pdf-section-title {
-      font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 28px; margin-bottom: 16px;
+      font-size: 16px; font-weight: 900; color: var(--color-slate); margin-top: 28px; margin-bottom: 16px;
       display: flex; align-items: center; gap: 8px; letter-spacing: -0.2px;
     }
-    .report-wysiwyg-frame .pdf-section-title ion-icon { flex-shrink: 0; color: #64748b; }
+    .report-wysiwyg-frame .pdf-section-title ion-icon { flex-shrink: 0; color: var(--color-text-light); }
     .report-wysiwyg-frame .pdf-form-grid {
       display: flex; flex-direction: column; gap: 20px; position: relative; padding-left: 45px; margin-top: 10px;
     }
     .report-wysiwyg-frame .pdf-form-line {
-      position: absolute; left: 13.5px; top: 5px; height: 100%; width: 2px; background: #e2e8f0;
+      position: absolute; left: 13.5px; top: 5px; height: 100%; width: 2px; background: var(--border);
     }
     .report-wysiwyg-frame .pdf-form-item {
-      position: relative; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
       padding: 14px 18px; break-inside: avoid; page-break-inside: avoid;
     }
     .report-wysiwyg-frame .pdf-form-num {
       position: absolute; left: -44px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
-      background: #F97316; color: white; display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid white;
+      background: var(--accent); color: var(--surface); display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid var(--surface);
       box-shadow: none;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     @media screen {
       .report-wysiwyg-frame .pdf-form-num {
-        box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.45);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand-accent) 45%, transparent);
       }
     }
     .report-wysiwyg-frame .pdf-q {
-      font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;
-      margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;
+      font-size: 10px; font-weight: 800; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 6px; border-bottom: 1px solid var(--surface2); padding-bottom: 6px;
     }
-    .report-wysiwyg-frame .pdf-a { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.45; }
-    .report-wysiwyg-frame .pdf-pill { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    .report-wysiwyg-frame .pdf-a { font-size: 14px; font-weight: 600; color: var(--color-slate); line-height: 1.45; }
+    .report-wysiwyg-frame .pdf-pill { display: inline-block; padding: 4px 12px; background: var(--blue); color: var(--surface); border-radius: 12px; font-size: 11px; font-weight: 700; }
     .report-wysiwyg-frame .pdf-photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .report-wysiwyg-frame .pdf-photo-card {
-      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; position: relative;
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: relative;
       break-inside: avoid; page-break-inside: avoid;
     }
-    .report-wysiwyg-frame .pdf-photo-title { font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 10px; background: white; }
-    .report-wysiwyg-frame .pdf-photo-img { width: 100%; height: 180px; background: #e2e8f0; object-fit: cover; display: block; }
-    .report-wysiwyg-frame .pdf-footer { text-align: center; border-top: 1px solid #cbd5e1; margin-top: 48px; padding-top: 15px; font-size: 10px; font-weight: 600; color: #64748b; }
+    .report-wysiwyg-frame .pdf-photo-title { font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 10px; background: var(--surface); }
+    .report-wysiwyg-frame .pdf-photo-img { width: 100%; height: 180px; background: var(--surface3); object-fit: cover; display: block; }
+    .report-wysiwyg-frame .pdf-footer { text-align: center; border-top: 1px solid var(--border2); margin-top: 48px; padding-top: 15px; font-size: 10px; font-weight: 600; color: var(--color-text-light); }
     .report-badge-live {
-      font-size: 10px; font-weight: 800; color: #059669; background: #d1fae5; padding: 2px 8px; border-radius: 99px;
+      font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 99px;
+      color: var(--color-status-success-fg);
+      background: var(--color-status-success-bg);
+    }
+    .report-badge-live--info {
+      color: var(--color-status-info-fg);
+      background: var(--color-status-info-bg);
     }
     .report-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
     .report-order-actions button { min-width: 30px; padding: 2px 6px; font-size: 12px; }
@@ -434,7 +444,7 @@
           <div class="report-canvas-toolbar">
             <span style="font-size:12px;font-weight:800;color:var(--text2)">Pré-visualização A4</span>
             <label><input type="range" id="canvas-zoom" min="40" max="100" value="72" style="width:120px;vertical-align:middle" /> <span id="canvas-zoom-label">72%</span></label>
-            <span class="report-badge-live" style="background:#eff6ff;color:#1d4ed8">Atualização em tempo real</span>
+            <span class="report-badge-live report-badge-live--info">Atualização em tempo real</span>
           </div>
           <div class="report-canvas-scroll">
             <div class="report-canvas-sheet" id="canvas-sheet">
@@ -645,8 +655,14 @@ function readFieldsFromDom() {
   for (const f of previewSchema) {
     const vis = document.getElementById(`fld-vis-${f.id}`);
     const lab = document.getElementById(`fld-lab-${f.id}`);
-    const visible = vis ? vis.checked : true;
+    const isTechFin = f.type === 'technician_finance';
+    const visible = vis ? vis.checked : isTechFin ? false : true;
     const label = lab && lab.value.trim() ? lab.value.trim() : undefined;
+    if (isTechFin) {
+      if (!visible) out[f.id] = { visible: false };
+      else out[f.id] = label ? { visible: true, label } : { visible: true };
+      continue;
+    }
     if (!visible) out[f.id] = { visible: false };
     else if (label) out[f.id] = { visible: true, label };
   }
@@ -654,21 +670,34 @@ function readFieldsFromDom() {
 }
 
 /** @param {Record<string,{visible?:boolean,label?:string}>} [seed] — valores do preset ao abrir */
+const TECH_FIN_PDF_WARNING =
+  'Ao incluir «Custos do técnico» no PDF, informações que podem corresponder a custos operacionais internos passam a poder ser vistas pelo cliente ou por quem receber o relatório. Confirme que pretende expor estes dados.';
+
 function renderFieldRows(seed) {
   const host = document.getElementById('field-rows');
   const seedFields = seed && typeof seed === 'object' ? seed : {};
   host.innerHTML = previewSchema
     .map((f) => {
       const fc = seedFields[f.id];
-      const vis = fc && Object.prototype.hasOwnProperty.call(fc, 'visible') ? !!fc.visible : true;
+      const isTechFin = f.type === 'technician_finance';
+      const defaultVis = isTechFin ? false : true;
+      const vis =
+        fc && Object.prototype.hasOwnProperty.call(fc, 'visible') ? !!fc.visible : defaultVis;
       const lab = fc && fc.label ? String(fc.label) : '';
-      return `<div class="report-field-row" data-fid="${f.id}">
+      const warnBox = isTechFin
+        ? `<div class="report-techfin-pdf-warn" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:10px;line-height:1.45;color:#92400e;font-weight:600">
+          <ion-icon name="warning-outline" style="vertical-align:-3px"></ion-icon>
+          Por defeito este campo não entra no PDF. Se activar a visibilidade, dados de custos internos do técnico podem ficar disponíveis ao cliente.
+        </div>`
+        : '';
+      return `<div class="report-field-row" data-fid="${f.id}" data-ftype="${f.type || ''}">
         <div>
           <div style="font-weight:700;color:var(--text);margin-bottom:4px">${f.label.replace(/</g, '')} <span style="font-weight:600;color:var(--text3);font-size:10px">${f.type}</span></div>
           <input type="text" id="fld-lab-${f.id}" placeholder="Rótulo no PDF (opcional)" value="${lab.replace(/"/g, '&quot;')}" />
+          ${warnBox}
         </div>
         <div class="eye">
-          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="fld-vis-${f.id}" ${vis ? 'checked' : ''} /><span></span></label>
+          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="fld-vis-${f.id}" data-techfin-warn="${isTechFin ? '1' : ''}" ${vis ? 'checked' : ''} /><span></span></label>
         </div>
       </div>`;
     })
@@ -676,6 +705,11 @@ function renderFieldRows(seed) {
   host.querySelectorAll('input').forEach((el) => {
     el.addEventListener('input', () => schedulePreview());
     el.addEventListener('change', () => schedulePreview());
+  });
+  host.querySelectorAll('input[type="checkbox"][data-techfin-warn="1"]').forEach((el) => {
+    el.addEventListener('change', () => {
+      if (el.checked) window.alert(TECH_FIN_PDF_WARNING);
+    });
   });
 }
 

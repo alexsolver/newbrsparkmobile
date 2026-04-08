@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView, Alert, TextInput, Dimensions } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/colors';
+import {
+  ColorPalette,
+  MEDIA_TAG_COLORS,
+  SERVICE_CATEGORY_COLORS,
+} from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import { useTranslation } from 'react-i18next';
-import { enqueueMutation } from '../../src/services/syncService';
 import { CostService } from '../../src/services/costService';
 import { getRootAssets, getLocalAssets } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -21,6 +24,7 @@ const revenueCategories = ['VENDA', 'ALUGUEL', 'SERVIÇO', 'RENDIMENTO', 'OUTROS
 export default function NewCostScreen() {
   const router = useRouter();
   const { colors: C } = useTheme();
+  const styles = useMemo(() => createNewCostStyles(C), [C]);
   const { t } = useTranslation();
   const { user } = useAuth();
   
@@ -122,9 +126,14 @@ export default function NewCostScreen() {
     else if (step === 4) setStep(3);
   };
 
-  const currentThemeColor = transactionType === 'budget' ? '#F59E0B' : 
-    (step > 2 && newRecord.type === 'REVENUE' && newRec.type === 'REVENUE') ? '#10B981' : 
-    (step > 2 && newRecord.type === 'EXPENSE' && newRec.type === 'EXPENSE') ? '#EF4444' : C.primary;
+  const currentThemeColor =
+    transactionType === 'budget'
+      ? MEDIA_TAG_COLORS.DURING
+      : step > 2 && newRecord.type === 'REVENUE' && newRec.type === 'REVENUE'
+        ? C.success.text
+        : step > 2 && newRecord.type === 'EXPENSE' && newRec.type === 'EXPENSE'
+          ? C.destructive
+          : C.primary;
 
   return (
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: C.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -134,7 +143,7 @@ export default function NewCostScreen() {
       {/* ProgressBar */}
       <View style={styles.progressRow}>
          {[1, 2, 3, 4].map(s => (
-            <View key={s} style={{ flex: 1, height: 4, backgroundColor: step >= s ? currentThemeColor : '#E2E8F0', marginHorizontal: 2, borderRadius: 2 }} />
+            <View key={s} style={{ flex: 1, height: 4, backgroundColor: step >= s ? currentThemeColor : C.border, marginHorizontal: 2, borderRadius: 2 }} />
          ))}
       </View>
 
@@ -145,19 +154,19 @@ export default function NewCostScreen() {
           <View style={{ paddingTop: 20 }}>
             {assets.length === 0 ? (
                <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 }}>
-                 <Ionicons name="cube-outline" size={64} color="#CBD5E1" />
-                 <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginTop: 24, textAlign: 'center' }}>
+                 <Ionicons name="cube-outline" size={64} color={C.border} />
+                 <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>
                    Nenhum Bem cadastrado
                  </Text>
-                 <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
+                 <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
                    Para organizar suas finanças, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
                  </Text>
                  <TouchableOpacity 
-                   style={{ backgroundColor: '#1E293B', paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
+                   style={{ backgroundColor: C.filledButtonBg, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
                    onPress={() => router.back()}
                    activeOpacity={0.8}
                  >
-                   <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+                   <Text style={{ color: C.cardWhite, fontSize: 15, fontWeight: '800' }}>Voltar</Text>
                  </TouchableOpacity>
                </View>
             ) : (
@@ -165,30 +174,30 @@ export default function NewCostScreen() {
                 <Text style={styles.sectionTitle}>Que tipo de lançamento você deseja criar?</Text>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => { setTransactionType('single'); setStep(2); }}>
-              <View style={[styles.menuIcon, { backgroundColor: '#ECFDF5' }]}><Ionicons name="receipt-outline" size={24} color="#10B981" /></View>
+              <View style={[styles.menuIcon, { backgroundColor: C.status.success.bg }]}><Ionicons name="receipt-outline" size={24} color={C.success.text} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.menuItemT}>{t('assetDetail.singleRecord') || 'Registro Único'}</Text>
                 <Text style={styles.menuItemS}>{t('assetDetail.singleRecordSub') || 'Gastos isolados ou entrada de dinheiro'}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              <Ionicons name="chevron-forward" size={18} color={C.border} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => { setTransactionType('recurring'); setStep(2); }}>
-              <View style={[styles.menuIcon, { backgroundColor: '#EEF2FF' }]}><Ionicons name="calendar-outline" size={24} color="#6366F1" /></View>
+              <View style={[styles.menuIcon, { backgroundColor: C.status.info.bg }]}><Ionicons name="calendar-outline" size={24} color={SERVICE_CATEGORY_COLORS.Tecnologia} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.menuItemT}>{t('assetDetail.recurringBill') || 'Conta Recorrente'}</Text>
                 <Text style={styles.menuItemS}>{t('assetDetail.recurringBillSub') || 'Fixos, Aluguéis, Assinaturas'}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              <Ionicons name="chevron-forward" size={18} color={C.border} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => { setTransactionType('budget'); setStep(3); }}>
-              <View style={[styles.menuIcon, { backgroundColor: '#FFF7ED' }]}><Ionicons name="pie-chart-outline" size={24} color="#F59E0B" /></View>
+              <View style={[styles.menuIcon, { backgroundColor: C.status.warning.bg }]}><Ionicons name="pie-chart-outline" size={24} color={MEDIA_TAG_COLORS.DURING} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.menuItemT}>{t('assetDetail.setBudget') || 'Definir Budget'}</Text>
                 <Text style={styles.menuItemS}>{t('assetDetail.setBudgetSub') || 'Teto mensal por ativo'}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              <Ionicons name="chevron-forward" size={18} color={C.border} />
             </TouchableOpacity>
               </>
             )}
@@ -199,7 +208,7 @@ export default function NewCostScreen() {
         {step === 2 && (
           <View style={{ paddingTop: 20 }}>
             <Text style={styles.sectionTitle}>É uma receita ou despesa?</Text>
-            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24, textAlign: 'center' }}>
+            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 24, textAlign: 'center' }}>
               {transactionType === 'single' ? 'Para um lançamento único' : 'Para uma cobrança recorrente'}
             </Text>
 
@@ -211,14 +220,14 @@ export default function NewCostScreen() {
               }}
               style={styles.cardRev}
             >
-              <View style={[styles.cardIconBox, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="trending-up" size={24} color="#fff" />
+              <View style={[styles.cardIconBox, { backgroundColor: C.success.text }]}>
+                <Ionicons name="trending-up" size={24} color={C.cardWhite} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: '#065F46' }]}>Receita</Text>
-                <Text style={[styles.cardSub, { color: '#10B981' }]}>Entrada de dinheiro</Text>
+                <Text style={[styles.cardTitle, { color: C.status.success.fg }]}>Receita</Text>
+                <Text style={[styles.cardSub, { color: C.success.text }]}>Entrada de dinheiro</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#10B981" />
+              <Ionicons name="chevron-forward" size={20} color={C.success.text} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -229,14 +238,14 @@ export default function NewCostScreen() {
               }}
               style={styles.cardExp}
             >
-              <View style={[styles.cardIconBox, { backgroundColor: '#EF4444' }]}>
-                <Ionicons name="trending-down" size={24} color="#fff" />
+              <View style={[styles.cardIconBox, { backgroundColor: C.destructive }]}>
+                <Ionicons name="trending-down" size={24} color={C.cardWhite} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: '#7F1D1D' }]}>Despesa</Text>
-                <Text style={[styles.cardSub, { color: '#EF4444' }]}>Saída de dinheiro</Text>
+                <Text style={[styles.cardTitle, { color: C.status.danger.fg }]}>Despesa</Text>
+                <Text style={[styles.cardSub, { color: C.destructive }]}>Saída de dinheiro</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+              <Ionicons name="chevron-forward" size={20} color={C.destructive} />
             </TouchableOpacity>
           </View>
         )}
@@ -249,9 +258,9 @@ export default function NewCostScreen() {
             {transactionType === 'single' && (
               <>
                 <View style={styles.badgeWrap}>
-                  <View style={[styles.badge, { backgroundColor: newRecord.type === 'REVENUE' ? '#ECFDF5' : '#FEF2F2', borderColor: newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444' }]}>
-                    <Ionicons name={newRecord.type === 'REVENUE' ? 'trending-up' : 'trending-down'} size={14} color={newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444'} />
-                    <Text style={[styles.badgeText, { color: newRecord.type === 'REVENUE' ? '#065F46' : '#7F1D1D' }]}>{newRecord.type === 'REVENUE' ? 'Receita' : 'Despesa'}</Text>
+                  <View style={[styles.badge, { backgroundColor: newRecord.type === 'REVENUE' ? C.status.success.bg : C.status.danger.bg, borderColor: newRecord.type === 'REVENUE' ? C.status.success.border : C.status.danger.border }]}>
+                    <Ionicons name={newRecord.type === 'REVENUE' ? 'trending-up' : 'trending-down'} size={14} color={newRecord.type === 'REVENUE' ? C.success.text : C.destructive} />
+                    <Text style={[styles.badgeText, { color: newRecord.type === 'REVENUE' ? C.status.success.fg : C.status.danger.fg }]}>{newRecord.type === 'REVENUE' ? 'Receita' : 'Despesa'}</Text>
                   </View>
                 </View>
 
@@ -274,7 +283,7 @@ export default function NewCostScreen() {
                 </View>
 
                 <View style={styles.inputG}>
-                  <DatePickerButton label={t('assetDetail.date') || 'DATA'} value={newRecord.date} onChange={(d) => setNewRecord({ ...newRecord, date: d })} accentColor={newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444'} />
+                  <DatePickerButton label={t('assetDetail.date') || 'DATA'} value={newRecord.date} onChange={(d) => setNewRecord({ ...newRecord, date: d })} accentColor={newRecord.type === 'REVENUE' ? C.success.text : C.destructive} />
                 </View>
 
                 <View style={styles.inputG}>
@@ -282,9 +291,9 @@ export default function NewCostScreen() {
                   <ValueInput style={styles.input} value={String(newRecord.amount || '')} onChangeText={v => setNewRecord({...newRecord, amount: parseFloat(v) || 0})} placeholder="0,00" currency />
                 </View>
 
-                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444'}]} onPress={() => setStep(4)}>
+                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: newRecord.type === 'REVENUE' ? C.success.text : C.destructive}]} onPress={() => setStep(4)}>
                   <Text style={styles.nextBtnText}>Próximo Passo</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />
                 </TouchableOpacity>
               </>
             )}
@@ -293,9 +302,9 @@ export default function NewCostScreen() {
             {transactionType === 'recurring' && (
               <>
                 <View style={styles.badgeWrap}>
-                  <View style={[styles.badge, { backgroundColor: newRec.type === 'REVENUE' ? '#ECFDF5' : '#FEF2F2', borderColor: newRec.type === 'REVENUE' ? '#10B981' : '#EF4444' }]}>
-                    <Ionicons name={newRec.type === 'REVENUE' ? 'trending-up' : 'trending-down'} size={14} color={newRec.type === 'REVENUE' ? '#10B981' : '#EF4444'} />
-                    <Text style={[styles.badgeText, { color: newRec.type === 'REVENUE' ? '#065F46' : '#7F1D1D' }]}>{newRec.type === 'REVENUE' ? 'Receita' : 'Despesa'}</Text>
+                  <View style={[styles.badge, { backgroundColor: newRec.type === 'REVENUE' ? C.status.success.bg : C.status.danger.bg, borderColor: newRec.type === 'REVENUE' ? C.status.success.border : C.status.danger.border }]}>
+                    <Ionicons name={newRec.type === 'REVENUE' ? 'trending-up' : 'trending-down'} size={14} color={newRec.type === 'REVENUE' ? C.success.text : C.destructive} />
+                    <Text style={[styles.badgeText, { color: newRec.type === 'REVENUE' ? C.status.success.fg : C.status.danger.fg }]}>{newRec.type === 'REVENUE' ? 'Receita' : 'Despesa'}</Text>
                   </View>
                 </View>
 
@@ -305,7 +314,7 @@ export default function NewCostScreen() {
                 </View>
 
                 <View style={styles.inputG}>
-                  <DatePickerButton label={t("assetDetail.dueDay") || 'DIA DO VENCIMENTO'} value={newRec.nextDueDate} onChange={(d) => setNewRec({ ...newRec, nextDueDate: d })} accentColor={newRec.type === 'REVENUE' ? '#10B981' : '#EF4444'} />
+                  <DatePickerButton label={t("assetDetail.dueDay") || 'DIA DO VENCIMENTO'} value={newRec.nextDueDate} onChange={(d) => setNewRec({ ...newRec, nextDueDate: d })} accentColor={newRec.type === 'REVENUE' ? C.success.text : C.destructive} />
                 </View>
 
                 <View style={styles.inputG}>
@@ -347,9 +356,9 @@ export default function NewCostScreen() {
                   <TextInput style={styles.input} keyboardType="numeric" value={newRec.totalInstallments ? String(newRec.totalInstallments) : ''} onChangeText={t => { const val = parseInt(t) || undefined; setNewRec({...newRec, totalInstallments: val, remainingInstallments: val}); }} placeholder={t('assetDetail.installmentsPlaceholder') || 'Ex: 12 (deixe vazio para infra)'} returnKeyType="done" />
                 </View>
 
-                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: newRec.type === 'REVENUE' ? '#10B981' : '#EF4444'}]} onPress={() => setStep(4)}>
+                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: newRec.type === 'REVENUE' ? C.success.text : C.destructive}]} onPress={() => setStep(4)}>
                   <Text style={styles.nextBtnText}>Próximo Passo</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />
                 </TouchableOpacity>
               </>
             )}
@@ -358,12 +367,12 @@ export default function NewCostScreen() {
             {transactionType === 'budget' && (
               <>
                 <View style={styles.inputG}>
-                   <Text style={[styles.inputL, { color: '#F59E0B' }]}>{t('assetDetail.spendingLimit') || 'LIMITE MENSAL PERMITIDO'}</Text>
-                   <ValueInput style={[styles.input, { borderColor: '#F59E0B' }]} value={budgetLimit} onChangeText={setBudgetLimit} placeholder="5000" currency />
+                   <Text style={[styles.inputL, { color: MEDIA_TAG_COLORS.DURING }]}>{t('assetDetail.spendingLimit') || 'LIMITE MENSAL PERMITIDO'}</Text>
+                   <ValueInput style={[styles.input, { borderColor: MEDIA_TAG_COLORS.DURING }]} value={budgetLimit} onChangeText={setBudgetLimit} placeholder="5000" currency />
                 </View>
-                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: '#F59E0B'}]} onPress={() => setStep(4)}>
+                <TouchableOpacity style={[styles.nextBtn, {backgroundColor: MEDIA_TAG_COLORS.DURING}]} onPress={() => setStep(4)}>
                   <Text style={styles.nextBtnText}>Próximo Passo</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />
                 </TouchableOpacity>
               </>
             )}
@@ -375,7 +384,7 @@ export default function NewCostScreen() {
         {step === 4 && (
           <View style={{ paddingTop: 20 }}>
             <Text style={styles.sectionTitle}>A qual Bem este lançamento pertence?</Text>
-            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24 }}>Escolha um ativo para vincular este registro.</Text>
+            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 24 }}>Escolha um ativo para vincular este registro.</Text>
 
             {assets.map(a => (
               <TouchableOpacity 
@@ -384,7 +393,7 @@ export default function NewCostScreen() {
                 onPress={() => setSelectedAsset(a.id)}
               >
                 <View style={[styles.assetIcon, selectedAsset === a.id && { backgroundColor: currentThemeColor }]}>
-                  <Ionicons name="business" size={24} color={selectedAsset === a.id ? '#fff' : colors.slate} />
+                  <Ionicons name="business" size={24} color={selectedAsset === a.id ? C.cardWhite : C.slate} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.assetTitle, selectedAsset === a.id && { color: currentThemeColor }]}>{a.title}</Text>
@@ -399,7 +408,7 @@ export default function NewCostScreen() {
             ))}
 
             <TouchableOpacity style={[styles.nextBtn, {backgroundColor: currentThemeColor, marginTop: 40, marginBottom: 60 }]} onPress={handleFinish}>
-              <Ionicons name="checkmark-done" size={24} color="#fff" />
+              <Ionicons name="checkmark-done" size={24} color={C.cardWhite} />
               <Text style={styles.nextBtnText}>Finalizar Lançamento</Text>
             </TouchableOpacity>
 
@@ -411,48 +420,146 @@ export default function NewCostScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  progressRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  scroll: { padding: 20, paddingBottom: 60 },
-  
-  sectionTitle: { fontSize: 20, fontWeight: '900', color: colors.slate, marginBottom: 8, letterSpacing: -0.5 },
-  
-  // Menu Single/Recurring/Budget
-  menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 20, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  menuIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  menuItemT: { fontSize: 16, fontWeight: '900', color: colors.slate },
-  menuItemS: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+function createNewCostStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1 },
+    progressRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: C.cardWhite,
+      borderBottomWidth: 1,
+      borderBottomColor: C.divider,
+    },
+    scroll: { padding: 20, paddingBottom: 60 },
 
-  // Cards Rev/Exp
-  cardRev: { backgroundColor: '#ECFDF5', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 12, borderWidth: 2, borderColor: '#10B981' },
-  cardExp: { backgroundColor: '#FEF2F2', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20, borderWidth: 2, borderColor: '#EF4444' },
-  cardIconBox: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '900' },
-  cardSub: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+    sectionTitle: { fontSize: 20, fontWeight: '900', color: C.slate, marginBottom: 8, letterSpacing: -0.5 },
 
-  // Forms
-  formContainer: { backgroundColor: '#fff', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, marginTop: 10 },
-  badgeWrap: { marginBottom: 24, alignSelf: 'flex-start' },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1 },
-  badgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: C.cardWhite,
+      padding: 20,
+      borderRadius: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: C.border,
+      shadowColor: C.slate,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    menuIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    menuItemT: { fontSize: 16, fontWeight: '900', color: C.slate },
+    menuItemS: { fontSize: 12, color: C.textSecondary, marginTop: 2 },
 
-  inputG: { marginBottom: 20 },
-  inputL: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase' },
-  input: { backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, fontSize: 15, fontWeight: '700', borderWidth: 1, borderColor: colors.border, color: colors.slate },
-  
-  pChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
-  pChipA: { backgroundColor: colors.slate, borderColor: colors.slate },
-  pChipT: { fontSize: 11, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: '#fff' },
+    cardRev: {
+      backgroundColor: C.status.success.bg,
+      borderRadius: 16,
+      padding: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      marginBottom: 12,
+      borderWidth: 2,
+      borderColor: C.status.success.border,
+    },
+    cardExp: {
+      backgroundColor: C.status.danger.bg,
+      borderRadius: 16,
+      padding: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: C.status.danger.border,
+    },
+    cardIconBox: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+    cardTitle: { fontSize: 16, fontWeight: '900' },
+    cardSub: { fontSize: 12, fontWeight: '600', marginTop: 2 },
 
-  nextBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 16, marginTop: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4, gap: 10 },
-  nextBtnText: { color: '#fff', fontSize: 16, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+    formContainer: {
+      backgroundColor: C.cardWhite,
+      borderRadius: 24,
+      padding: 24,
+      shadowColor: C.slate,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 3,
+      marginTop: 10,
+    },
+    badgeWrap: { marginBottom: 24, alignSelf: 'flex-start' },
+    badge: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1 },
+    badgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Assets list
-  assetRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 10, borderWidth: 2, borderColor: '#E2E8F0' },
-  assetRowActive: { backgroundColor: '#F8FAFC' },
-  assetIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  assetTitle: { fontSize: 15, fontWeight: '900', color: colors.slate },
-  assetSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 }
-});
+    inputG: { marginBottom: 20 },
+    inputL: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase' },
+    input: {
+      backgroundColor: C.surfaceLow,
+      padding: 16,
+      borderRadius: 12,
+      fontSize: 15,
+      fontWeight: '700',
+      borderWidth: 1,
+      borderColor: C.border,
+      color: C.slate,
+    },
+
+    pChip: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: C.divider,
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: C.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pChipA: { backgroundColor: C.filledButtonBg, borderColor: C.filledButtonBg },
+    pChipT: { fontSize: 11, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
+    pChipTA: { color: C.filledButtonFg },
+
+    nextBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 18,
+      borderRadius: 16,
+      marginTop: 20,
+      shadowColor: C.slate,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 4,
+      gap: 10,
+    },
+    nextBtnText: { color: C.cardWhite, fontSize: 16, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+
+    assetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: C.cardWhite,
+      padding: 16,
+      borderRadius: 16,
+      marginBottom: 10,
+      borderWidth: 2,
+      borderColor: C.border,
+    },
+    assetRowActive: { backgroundColor: C.background },
+    assetIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: C.divider,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 16,
+    },
+    assetTitle: { fontSize: 15, fontWeight: '900', color: C.slate },
+    assetSub: { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  });
+}

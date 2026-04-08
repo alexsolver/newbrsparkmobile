@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, Modal, Image, KeyboardAvoidingView, Platform, Keyboard, InputAccessoryView } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { apiFetch } from '../../src/services/auth';
@@ -15,6 +16,8 @@ export default function AssetShareScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createAssetShareStyles(C), [C]);
   
   const [loading, setLoading] = useState(false);
   const [assetName, setAssetName] = useState('');
@@ -199,21 +202,21 @@ export default function AssetShareScreen() {
   };
 
   return (
-    <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: C.background }}>
       {/* FIXED ASSET HEADER */}
       {asset && (
-        <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
-          <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: colors.accent + '18', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, alignItems: 'center', backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.divider }}>
+          <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: C.accent + '18', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
             {asset.imageUrl
               ? <Image source={{ uri: asset.imageUrl }} style={{ width: 72, height: 72 }} />
-              : <Ionicons name="cube-outline" size={34} color={colors.accent} />
+              : <Ionicons name="cube-outline" size={34} color={C.accent} />
             }
           </View>
           <View style={{ marginLeft: 16, flex: 1 }}>
-            <Text style={{ fontSize: 20, fontWeight: '900', color: '#191C1D', letterSpacing: -0.5 }}>{asset.title}</Text>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: C.slate, letterSpacing: -0.5 }}>{asset.title}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-              <Ionicons name="people-outline" size={11} color={colors.accent} style={{ marginRight: 4 }} />
-              <Text style={{ fontSize: 11, fontWeight: '900', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <Ionicons name="people-outline" size={11} color={C.accent} style={{ marginRight: 4 }} />
+              <Text style={{ fontSize: 11, fontWeight: '900', color: C.accent, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Compartilhamento
               </Text>
             </View>
@@ -226,19 +229,19 @@ export default function AssetShareScreen() {
         {!isAdding ? (
           <>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <Text style={{ fontSize: 13, color: colors.slate, fontWeight: '700' }}>
+              <Text style={{ fontSize: 13, color: C.slate, fontWeight: '700' }}>
                 Pessoas com acesso ao ativo
               </Text>
               <TouchableOpacity onPress={() => setIsAdding(true)} style={styles.stdAddBtn}>
-                <Ionicons name="add" size={20} color="#fff" />
+                <Ionicons name="add" size={20} color={C.cardWhite} />
               </TouchableOpacity>
             </View>
 
             {shares.length === 0 ? (
-              <View style={{ alignItems: 'center', padding: 40, backgroundColor: '#F8FAFC', borderRadius: 20, borderWidth: 1, borderColor: colors.border }}>
-                <Ionicons name="people-outline" size={48} color={colors.slate} style={{ marginBottom: 16, opacity: 0.5 }} />
-                <Text style={{ fontSize: 14, color: colors.slate, fontWeight: '800', textAlign: 'center' }}>Ninguém tem acesso</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginTop: 8 }}>Convide membros para visualizar ou editar este bem.</Text>
+              <View style={{ alignItems: 'center', padding: 40, backgroundColor: C.surfaceLow, borderRadius: 20, borderWidth: 1, borderColor: C.border }}>
+                <Ionicons name="people-outline" size={48} color={C.slate} style={{ marginBottom: 16, opacity: 0.5 }} />
+                <Text style={{ fontSize: 14, color: C.slate, fontWeight: '800', textAlign: 'center' }}>Ninguém tem acesso</Text>
+                <Text style={{ fontSize: 12, color: C.textSecondary, textAlign: 'center', marginTop: 8 }}>Convide membros para visualizar ou editar este bem.</Text>
               </View>
             ) : (
               shares.map(s => (
@@ -246,25 +249,25 @@ export default function AssetShareScreen() {
                   key={s.id} 
                   onPress={() => openEdit(s)}
                   activeOpacity={0.8}
-                  style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.border }}
+                  style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: C.cardWhite, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border }}
                 >
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent + '20', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-                    <Ionicons name="person-outline" size={20} color={colors.accent} />
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.accent + '20', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                    <Ionicons name="person-outline" size={20} color={C.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.slate }}>{s.sharedWithEmail}</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: C.slate }}>{s.sharedWithEmail}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
-                      <View style={{ backgroundColor: s.permission === 'WRITE' ? '#FEF2F2' : '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                         <Text style={{ fontSize: 9, fontWeight: '800', color: s.permission === 'WRITE' ? '#EF4444' : '#3B82F6' }}>{s.permission === 'WRITE' ? 'EDIÇÃO' : 'LEITURA'}</Text>
+                      <View style={{ backgroundColor: s.permission === 'WRITE' ? C.status.danger.bg : C.status.info.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                         <Text style={{ fontSize: 9, fontWeight: '800', color: s.permission === 'WRITE' ? C.status.danger.fg : C.status.info.fg }}>{s.permission === 'WRITE' ? 'EDIÇÃO' : 'LEITURA'}</Text>
                       </View>
-                      <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600' }}>
+                      <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: '600' }}>
                         {s.status === 'PENDING' ? '⏳ Pendente' : 'Ativo'}
                         {s.expiresAt && ` • ${new Date(s.expiresAt) < new Date() ? 'Expirado' : `Até ${new Date(s.expiresAt).toLocaleDateString()} ${new Date(s.expiresAt).getHours()}:${String(new Date(s.expiresAt).getMinutes()).padStart(2, '0')}`}`}
                       </Text>
                     </View>
                   </View>
                   <TouchableOpacity onPress={() => handleRevoke(s.sharedWithEmail)} style={{ padding: 8 }}>
-                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={20} color={C.destructive} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               ))
@@ -273,11 +276,11 @@ export default function AssetShareScreen() {
         ) : (
           <>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
-              <Text style={{ fontSize: 13, color: colors.slate, fontWeight: '700' }}>
+              <Text style={{ fontSize: 13, color: C.slate, fontWeight: '700' }}>
                 {editingShare ? `Editando: ${editingShare.sharedWithEmail}` : 'Novo Compartilhamento'}
               </Text>
               <TouchableOpacity onPress={() => { setIsAdding(false); setEditingShare(null); }}>
-                <Text style={{ fontSize: 13, color: '#EF4444', fontWeight: '800' }}>Cancelar</Text>
+                <Text style={{ fontSize: 13, color: C.destructive, fontWeight: '800' }}>Cancelar</Text>
               </TouchableOpacity>
             </View>
 
@@ -288,10 +291,10 @@ export default function AssetShareScreen() {
               
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: emails.length > 0 ? 12 : 0 }}>
                 {emails.map(em => (
-                  <View key={em} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent + '15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 }}>
-                     <Text style={{ fontSize: 13, color: colors.accent, fontWeight: '700', marginRight: 6 }}>{em}</Text>
+                  <View key={em} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.accent + '15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 }}>
+                     <Text style={{ fontSize: 13, color: C.accent, fontWeight: '700', marginRight: 6 }}>{em}</Text>
                      <TouchableOpacity onPress={() => removeEmail(em)}>
-                       <Ionicons name="close-circle" size={16} color={colors.accent} />
+                       <Ionicons name="close-circle" size={16} color={C.accent} />
                      </TouchableOpacity>
                   </View>
                 ))}
@@ -333,60 +336,60 @@ export default function AssetShareScreen() {
               style={[styles.permBtn, permission === 'READ' && styles.permBtnActive]} 
               onPress={() => setPermission('READ')}
             >
-              <Ionicons name="eye-outline" size={18} color={permission === 'READ' ? colors.primary : colors.textSecondary} />
-              <Text style={[styles.permBtnText, permission === 'READ' && { color: colors.primary }]}>Leitura</Text>
+              <Ionicons name="eye-outline" size={18} color={permission === 'READ' ? C.primary : C.textSecondary} />
+              <Text style={[styles.permBtnText, permission === 'READ' && { color: C.primary }]}>Leitura</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.permBtn, permission === 'WRITE' && styles.permBtnActive]} 
               onPress={() => setPermission('WRITE')}
             >
-              <Ionicons name="create-outline" size={18} color={permission === 'WRITE' ? colors.primary : colors.textSecondary} />
-              <Text style={[styles.permBtnText, permission === 'WRITE' && { color: colors.primary }]}>Edição</Text>
+              <Ionicons name="create-outline" size={18} color={permission === 'WRITE' ? C.primary : C.textSecondary} />
+              <Text style={[styles.permBtnText, permission === 'WRITE' && { color: C.primary }]}>Edição</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.label}>Módulos Permitidos ({selectedModules.includes('*') ? 'Todos' : selectedModules.length})</Text>
           <TouchableOpacity 
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: colors.border, padding: 16, borderRadius: 12, marginBottom: 20 }}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surfaceLow, borderWidth: 1, borderColor: C.border, padding: 16, borderRadius: 12, marginBottom: 20 }}
             onPress={() => setModalModVisible(true)}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-               <Ionicons name="grid-outline" size={20} color={colors.primary} />
-               <Text style={{ fontSize: 13, fontWeight: '800', color: colors.slate }}>
+               <Ionicons name="grid-outline" size={20} color={C.primary} />
+               <Text style={{ fontSize: 13, fontWeight: '800', color: C.slate }}>
                  {selectedModules.includes('*') ? 'Acesso Total' : `${selectedModules.length} módulos customizados selecionados`}
                </Text>
             </View>
-            <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            <Ionicons name="chevron-down" size={20} color={C.textSecondary} />
           </TouchableOpacity>
 
           <Text style={styles.label}>Validade do Acesso</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: expiresType === 'CUSTOM' ? 12 : 24 }}>
             <TouchableOpacity style={[styles.timeBtn, expiresType === 'NEVER' && styles.timeBtnActive]} onPress={() => setExpiresType('NEVER')}>
-               <Ionicons name="infinite-outline" size={14} color={expiresType === 'NEVER' ? '#fff' : colors.textSecondary} />
-               <Text style={[styles.timeBtnText, expiresType === 'NEVER' && { color: '#fff' }]}>Permanente</Text>
+               <Ionicons name="infinite-outline" size={14} color={expiresType === 'NEVER' ? C.cardWhite : C.textSecondary} />
+               <Text style={[styles.timeBtnText, expiresType === 'NEVER' && { color: C.cardWhite }]}>Permanente</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.timeBtn, expiresType === '8H' && styles.timeBtnActive]} onPress={() => setExpiresType('8H')}>
-               <Ionicons name="time-outline" size={14} color={expiresType === '8H' ? '#fff' : colors.textSecondary} />
-               <Text style={[styles.timeBtnText, expiresType === '8H' && { color: '#fff' }]}>8 Horas</Text>
+               <Ionicons name="time-outline" size={14} color={expiresType === '8H' ? C.cardWhite : C.textSecondary} />
+               <Text style={[styles.timeBtnText, expiresType === '8H' && { color: C.cardWhite }]}>8 Horas</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.timeBtn, expiresType === '24H' && styles.timeBtnActive]} onPress={() => setExpiresType('24H')}>
-               <Ionicons name="time-outline" size={14} color={expiresType === '24H' ? '#fff' : colors.textSecondary} />
-               <Text style={[styles.timeBtnText, expiresType === '24H' && { color: '#fff' }]}>24 Horas</Text>
+               <Ionicons name="time-outline" size={14} color={expiresType === '24H' ? C.cardWhite : C.textSecondary} />
+               <Text style={[styles.timeBtnText, expiresType === '24H' && { color: C.cardWhite }]}>24 Horas</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.timeBtn, expiresType === 'CUSTOM' && styles.timeBtnActive]} onPress={() => setExpiresType('CUSTOM')}>
-               <Ionicons name="calendar-outline" size={14} color={expiresType === 'CUSTOM' ? '#fff' : colors.textSecondary} />
-               <Text style={[styles.timeBtnText, expiresType === 'CUSTOM' && { color: '#fff' }]}>Data Limite</Text>
+               <Ionicons name="calendar-outline" size={14} color={expiresType === 'CUSTOM' ? C.cardWhite : C.textSecondary} />
+               <Text style={[styles.timeBtnText, expiresType === 'CUSTOM' && { color: C.cardWhite }]}>Data Limite</Text>
             </TouchableOpacity>
           </View>
 
           {expiresType === 'CUSTOM' && (
-             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 24 }}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surfaceLow, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginBottom: 24 }}>
                 <View>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', marginBottom: 4 }}>Expira em</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate }}>{customExpiresAt.toLocaleString()}</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase', marginBottom: 4 }}>Expira em</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: C.slate }}>{customExpiresAt.toLocaleString()}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>Alterar</Text>
+                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ backgroundColor: C.cardWhite, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: C.border }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: C.primary }}>Alterar</Text>
                 </TouchableOpacity>
              </View>
           )}
@@ -405,15 +408,15 @@ export default function AssetShareScreen() {
           )}
 
           <TouchableOpacity 
-            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24, padding: 12, backgroundColor: shareChildren ? colors.primary + '10' : '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: shareChildren ? colors.primary + '40' : colors.border }}
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24, padding: 12, backgroundColor: shareChildren ? C.primary + '10' : C.surfaceLow, borderRadius: 12, borderWidth: 1, borderColor: shareChildren ? C.primary + '40' : C.border }}
             onPress={() => setShareChildren(!shareChildren)}
           >
-            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: shareChildren ? colors.primary : colors.textSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12, backgroundColor: shareChildren ? colors.primary : 'transparent' }}>
-              {shareChildren && <Ionicons name="checkmark" size={16} color="#fff" />}
+            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: shareChildren ? C.primary : C.textSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12, backgroundColor: shareChildren ? C.primary : 'transparent' }}>
+              {shareChildren && <Ionicons name="checkmark" size={16} color={C.cardWhite} />}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.slate }}>Aplicar aos filhos (Recomendado)</Text>
-              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Motos, botes ou acessórios vinculados também herdarão essa permissão automática.</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: C.slate }}>Aplicar aos filhos (Recomendado)</Text>
+              <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: 2 }}>Motos, botes ou acessórios vinculados também herdarão essa permissão automática.</Text>
             </View>
           </TouchableOpacity>
 
@@ -422,7 +425,7 @@ export default function AssetShareScreen() {
             onPress={editingShare ? handleEditShare : handleInvite}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{editingShare ? 'Salvar Alterações' : 'Enviar Convite'}</Text>}
+            {loading ? <ActivityIndicator color={C.cardWhite} /> : <Text style={styles.primaryBtnText}>{editingShare ? 'Salvar Alterações' : 'Enviar Convite'}</Text>}
           </TouchableOpacity>
         </View>
         </>
@@ -434,41 +437,41 @@ export default function AssetShareScreen() {
       {/* MODAL DE SELEÇÃO DE MÓDULOS */}
       <Modal visible={modalModVisible} animationType="slide" transparent onRequestClose={() => setModalModVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' }}>
+          <View style={{ backgroundColor: C.cardWhite, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: colors.slate }}>Permissões de Módulo</Text>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: C.slate }}>Permissões de Módulo</Text>
               <TouchableOpacity onPress={() => setModalModVisible(false)}>
-                <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+                <Ionicons name="close-circle" size={28} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12, backgroundColor: selectedModules.includes('*') ? colors.primary + '15' : '#F8FAFC', borderWidth: 1, borderColor: selectedModules.includes('*') ? colors.primary : colors.border, marginBottom: 16 }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12, backgroundColor: selectedModules.includes('*') ? C.primary + '15' : C.surfaceLow, borderWidth: 1, borderColor: selectedModules.includes('*') ? C.primary : C.border, marginBottom: 16 }}
               onPress={() => setSelectedModules(['*'])}
             >
-              <Ionicons name="star" size={20} color={selectedModules.includes('*') ? colors.primary : colors.textSecondary} style={{ marginRight: 12 }} />
+              <Ionicons name="star" size={20} color={selectedModules.includes('*') ? C.primary : C.textSecondary} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: selectedModules.includes('*') ? colors.primary : colors.slate }}>Acesso Total</Text>
-                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Permite visualizar todos os módulos atuais e futuros.</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: selectedModules.includes('*') ? C.primary : C.slate }}>Acesso Total</Text>
+                <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: 2 }}>Permite visualizar todos os módulos atuais e futuros.</Text>
               </View>
-              {selectedModules.includes('*') && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+              {selectedModules.includes('*') && <Ionicons name="checkmark-circle" size={20} color={C.primary} />}
             </TouchableOpacity>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={{ fontSize: 11, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8 }}>Acesso Customizado</Text>
+              <Text style={{ fontSize: 11, fontWeight: '900', color: C.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8 }}>Acesso Customizado</Text>
               {MODULES_ARR.map(m => (
                 <TouchableOpacity 
                   key={m.id}
-                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.divider }}
                   onPress={() => toggleModule(m.id)}
                 >
-                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.surfaceLow, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-                    <Ionicons name={m.icon as any} size={18} color={colors.slate} />
+                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: C.surfaceLow, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                    <Ionicons name={m.icon as any} size={18} color={C.slate} />
                   </View>
-                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: colors.slate }}>{m.title}</Text>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: C.slate }}>{m.title}</Text>
                   
-                  <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: (selectedModules.includes(m.id) && !selectedModules.includes('*')) ? colors.primary : colors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: (selectedModules.includes(m.id) && !selectedModules.includes('*')) ? colors.primary : 'transparent' }}>
-                    {(selectedModules.includes(m.id) && !selectedModules.includes('*')) && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: (selectedModules.includes(m.id) && !selectedModules.includes('*')) ? C.primary : C.border, justifyContent: 'center', alignItems: 'center', backgroundColor: (selectedModules.includes(m.id) && !selectedModules.includes('*')) ? C.primary : 'transparent' }}>
+                    {(selectedModules.includes(m.id) && !selectedModules.includes('*')) && <Ionicons name="checkmark" size={14} color={C.cardWhite} />}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -487,132 +490,134 @@ export default function AssetShareScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8
-  },
-  input: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.slate,
-    marginBottom: 20
-  },
-  permBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#F8FAFC',
-    gap: 8
-  },
-  permBtnActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + '10'
-  },
-  permBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.textSecondary
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textSecondary
-  },
-  chipTextActive: {
-    color: '#fff'
-  },
-  timeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#F8FAFC',
-    gap: 6
-  },
-  timeBtnActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary
-  },
-  timeBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textSecondary
-  },
-  primaryBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center'
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase'
-  },
-  stdAddBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  accessoryContainer: {
-    backgroundColor: '#F1F5F9',
-    borderTopWidth: 1,
-    borderTopColor: '#CBD5E1',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  accessoryBtn: {
-    backgroundColor: '#191C1D',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  accessoryBtnText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 13,
-  }
-});
+function createAssetShareStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: C.cardWhite,
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: C.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      elevation: 2,
+    },
+    label: {
+      fontSize: 10,
+      fontWeight: '900',
+      color: C.textLight,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 8
+    },
+    input: {
+      backgroundColor: C.surfaceLow,
+      borderWidth: 1,
+      borderColor: C.border,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 14,
+      fontWeight: '600',
+      color: C.slate,
+      marginBottom: 20
+    },
+    permBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.surfaceLow,
+      gap: 8
+    },
+    permBtnActive: {
+      borderColor: C.primary,
+      backgroundColor: C.primary + '10'
+    },
+    permBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: C.textSecondary
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: C.surfaceLow,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    chipActive: {
+      backgroundColor: C.primary,
+      borderColor: C.primary,
+    },
+    chipText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: C.textSecondary
+    },
+    chipTextActive: {
+      color: C.cardWhite
+    },
+    timeBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.surfaceLow,
+      gap: 6
+    },
+    timeBtnActive: {
+      borderColor: C.primary,
+      backgroundColor: C.primary
+    },
+    timeBtnText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: C.textSecondary
+    },
+    primaryBtn: {
+      backgroundColor: C.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center'
+    },
+    primaryBtnText: {
+      color: C.cardWhite,
+      fontSize: 14,
+      fontWeight: '900',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase'
+    },
+    stdAddBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+    accessoryContainer: {
+      backgroundColor: C.divider,
+      borderTopWidth: 1,
+      borderTopColor: C.border,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    accessoryBtn: {
+      backgroundColor: C.filledButtonBg,
+      paddingHorizontal: 20,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    accessoryBtnText: {
+      color: C.filledButtonFg,
+      fontWeight: '900',
+      fontSize: 13,
+    }
+  });
+}

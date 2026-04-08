@@ -2,7 +2,7 @@ import '../src/tasks/routeTrackingTask';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { colors } from '../src/theme/colors';
+import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
 import { ApiService } from '../src/services/api';
@@ -32,6 +32,7 @@ Notifications.setNotificationHandler({
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { colors: C } = useTheme();
   const router = useRouter();
   const segments = useSegments();
 
@@ -64,8 +65,8 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.cardWhite }}>
+        <ActivityIndicator size="large" color={C.accent} />
       </View>
     );
   }

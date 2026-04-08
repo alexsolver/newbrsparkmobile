@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView,
   Alert, Image, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, DeviceEventEmitter
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ValueInput } from './ValueInput';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { InsuranceService } from '../services/insuranceService';
 import { CostService } from '../services/costService';
 import { RecurringCost } from '../types/costs';
@@ -31,6 +32,8 @@ interface Props {
 
 export function InsuranceModule({ assetId, assetType }: Props) {
   const { t } = useTranslation();
+  const { colors: C } = useTheme();
+  const S = useMemo(() => createInsuranceModuleStyles(C), [C]);
   const { user } = useAuth();
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -270,8 +273,8 @@ export function InsuranceModule({ assetId, assetType }: Props) {
             <Text style={[S.summaryLbl, { color: '#DC2626' }]}>{t('insurance.summaryExpired')}</Text>
           </View>
           <View style={[S.summaryItem, { backgroundColor: '#EFF6FF' }]}>
-            <Text style={[S.summaryVal, { color: colors.accent }]}>{fmt(totalPremium)}</Text>
-            <Text style={[S.summaryLbl, { color: colors.accent }]}>{t('insurance.summaryTotal')}</Text>
+            <Text style={[S.summaryVal, { color: C.accent }]}>{fmt(totalPremium)}</Text>
+            <Text style={[S.summaryLbl, { color: C.accent }]}>{t('insurance.summaryTotal')}</Text>
           </View>
         </View>
       )}
@@ -279,7 +282,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
       {/* Policies list */}
       {policies.length === 0 ? (
         <View style={S.empty}>
-          <Ionicons name="umbrella-outline" size={48} color={colors.textLight} />
+          <Ionicons name="umbrella-outline" size={48} color={C.textLight} />
           <Text style={S.emptyTitle}>{t('insurance.noPolicy')}</Text>
           <Text style={S.emptySub}>{t('insurance.noPolicySub')}</Text>
         </View>
@@ -297,7 +300,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
               <View style={S.modalHeader}>
                 <Text style={S.modalHeaderT}>{t('insurance.policyDetails')}</Text>
                 <TouchableOpacity onPress={() => setDetailPolicy(null)}>
-                  <Ionicons name="close" size={24} color={colors.primary} />
+                  <Ionicons name="close" size={24} color={C.primary} />
                 </TouchableOpacity>
               </View>
 
@@ -312,8 +315,8 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                         <Ionicons name={cfg.icon as any} size={32} color={cfg.color} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{detailPolicy.insurer}</Text>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginTop: 2 }}>{POLICY_TYPE_LABELS[detailPolicy.type]}</Text>
+                        <Text style={{ fontSize: 20, fontWeight: '900', color: C.primary }}>{detailPolicy.insurer}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.textSecondary, marginTop: 2 }}>{POLICY_TYPE_LABELS[detailPolicy.type]}</Text>
                         <View style={[S.statusBadge, { backgroundColor: cfg.bg, marginTop: 6 }]}>
                           <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
                           <Text style={[S.statusBadgeT, { color: cfg.color }]}>{cfg.label} — {days < 0 ? `vencida há ${Math.abs(days)}d` : `${days}d restantes`}</Text>
@@ -341,16 +344,16 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                     {detailPolicy.coverageDetails ? (
                       <View style={{ marginBottom: 16 }}>
                         <Text style={S.detailLabel}>{t('insurance.coverageDetailsTitle')}</Text>
-                        <Text style={{ fontSize: 13, color: colors.primary, marginTop: 4, lineHeight: 20 }}>{detailPolicy.coverageDetails}</Text>
+                        <Text style={{ fontSize: 13, color: C.primary, marginTop: 4, lineHeight: 20 }}>{detailPolicy.coverageDetails}</Text>
                       </View>
                     ) : null}
 
                     {(detailPolicy.brokerName || detailPolicy.brokerPhone) && (
                       <View style={S.brokerCard}>
-                        <Ionicons name="person-circle-outline" size={24} color={colors.accent} />
+                        <Ionicons name="person-circle-outline" size={24} color={C.accent} />
                         <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.primary }}>{detailPolicy.brokerName || '—'}</Text>
-                          <Text style={{ fontSize: 12, color: colors.textSecondary }}>{detailPolicy.brokerPhone || t('insurance.noPhone')}</Text>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: C.primary }}>{detailPolicy.brokerName || '—'}</Text>
+                          <Text style={{ fontSize: 12, color: C.textSecondary }}>{detailPolicy.brokerPhone || t('insurance.noPhone')}</Text>
                         </View>
                       </View>
                     )}
@@ -364,7 +367,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
 
                     {/* Action buttons */}
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                      <TouchableOpacity style={[S.actionBtn, { flex: 1, backgroundColor: colors.accent }]} onPress={() => openEditModal(detailPolicy)}>
+                      <TouchableOpacity style={[S.actionBtn, { flex: 1, backgroundColor: C.accent }]} onPress={() => openEditModal(detailPolicy)}>
                         <Ionicons name="create-outline" size={18} color="#fff" />
                         <Text style={S.actionBtnT}>{t('common.edit')}</Text>
                       </TouchableOpacity>
@@ -389,7 +392,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                 <View style={S.modalHeader}>
                   <Text style={S.modalHeaderT}>{editingPolicy ? t('insurance.editPolicy') : t('insurance.newPolicy')}</Text>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <Ionicons name="close" size={24} color={colors.primary} />
+                    <Ionicons name="close" size={24} color={C.primary} />
                   </TouchableOpacity>
                 </View>
 
@@ -546,7 +549,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                       )
                     ) : (
                       <View style={S.docPlaceholder}>
-                        <Ionicons name="cloud-upload" size={28} color={colors.textLight} />
+                        <Ionicons name="cloud-upload" size={28} color={C.textLight} />
                         <Text style={S.docPlaceholderT}>{t('insurance.documentHint')}</Text>
                       </View>
                     )}
@@ -566,7 +569,8 @@ export function InsuranceModule({ assetId, assetType }: Props) {
   );
 }
 
-const S = StyleSheet.create({
+function createInsuranceModuleStyles(C: ColorPalette) {
+  return StyleSheet.create({
   container: { flex: 1, padding: 16 },
 
   // Summary
@@ -577,56 +581,57 @@ const S = StyleSheet.create({
 
   // Empty
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  emptyTitle: { fontSize: 16, fontWeight: '900', color: colors.primary, marginTop: 16, letterSpacing: -0.4 },
-  emptySub: { fontSize: 11, color: colors.textSecondary, marginTop: 8, textAlign: 'center', lineHeight: 18, paddingHorizontal: 20, fontWeight: '500' },
+  emptyTitle: { fontSize: 16, fontWeight: '900', color: C.primary, marginTop: 16, letterSpacing: -0.4 },
+  emptySub: { fontSize: 11, color: C.textSecondary, marginTop: 8, textAlign: 'center', lineHeight: 18, paddingHorizontal: 20, fontWeight: '500' },
 
   // Policy Card
-  policyCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  policyCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   statusBar: { width: 5 },
   cardBody: { flex: 1, padding: 16 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  cardInsurer: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
-  cardType: { fontSize: 10, fontWeight: '800', color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase' },
+  cardInsurer: { fontSize: 14, fontWeight: '900', color: C.primary, letterSpacing: -0.2 },
+  cardType: { fontSize: 10, fontWeight: '800', color: C.textSecondary, marginTop: 2, textTransform: 'uppercase' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
   statusBadgeT: { fontSize: 9, fontWeight: '900' },
   cardMeta: { flexDirection: 'row', gap: 6, marginBottom: 10 },
   metaItem: { flex: 1 },
-  metaLabel: { fontSize: 7, fontWeight: '900', color: colors.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
-  metaValue: { fontSize: 11, fontWeight: '800', color: colors.primary, marginTop: 2 },
-  daysRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border },
+  metaLabel: { fontSize: 7, fontWeight: '900', color: C.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
+  metaValue: { fontSize: 11, fontWeight: '800', color: C.primary, marginTop: 2 },
+  daysRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border },
   daysText: { fontSize: 10, fontWeight: '900' },
 
   // FAB
-  stdAddBtn: { position: 'absolute', bottom: 30, right: 20, zIndex: 10, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', shadowColor: colors.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
+  stdAddBtn: { position: 'absolute', bottom: 30, right: 20, zIndex: 10, width: 60, height: 60, borderRadius: 30, backgroundColor: C.accent, justifyContent: 'center', alignItems: 'center', shadowColor: C.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end', alignItems: 'center' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 25, paddingBottom: 40, width: '100%', maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalHeaderT: { fontSize: 9, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1.2 },
+  modalHeaderT: { fontSize: 9, fontWeight: '900', color: C.textLight, textTransform: 'uppercase', letterSpacing: 1.2 },
 
   // Detail
   detailIcon: { width: 64, height: 64, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   detailGrid: { marginBottom: 16 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  detailLabel: { fontSize: 8, fontWeight: '900', color: colors.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
-  detailValue: { fontSize: 11, fontWeight: '800', color: colors.primary },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  detailLabel: { fontSize: 8, fontWeight: '900', color: C.textLight, letterSpacing: 0.6, textTransform: 'uppercase' },
+  detailValue: { fontSize: 11, fontWeight: '800', color: C.primary },
   brokerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 14, borderRadius: 14, marginBottom: 20 },
   docPreview: { width: '100%', height: 180, borderRadius: 14, marginTop: 8 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 14, borderRadius: 14, justifyContent: 'center' },
   actionBtnT: { color: '#fff', fontWeight: '900', fontSize: 14 },
 
   // Form
-  fieldLabel: { fontSize: 9, fontWeight: '900', color: colors.textLight, marginBottom: 6, letterSpacing: 0.6, textTransform: 'uppercase' },
-  input: { backgroundColor: colors.background, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', marginBottom: 14, borderWidth: 1, borderColor: colors.border },
+  fieldLabel: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 6, letterSpacing: 0.6, textTransform: 'uppercase' },
+  input: { backgroundColor: C.background, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', marginBottom: 14, borderWidth: 1, borderColor: C.border },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipT: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
+  chipActive: { backgroundColor: C.accent, borderColor: C.accent },
+  chipT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
   chipTA: { color: '#fff' },
   docUpload: { marginBottom: 20 },
   docThumb: { width: '100%', height: 140, borderRadius: 14 },
-  docPlaceholder: { width: '100%', height: 100, borderRadius: 14, backgroundColor: '#F1F5F9', borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-  docPlaceholderT: { fontSize: 11, fontWeight: '800', color: colors.textLight, marginTop: 6 },
-  saveBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, marginBottom: 20 },
+  docPlaceholder: { width: '100%', height: 100, borderRadius: 14, backgroundColor: '#F1F5F9', borderWidth: 2, borderColor: C.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  docPlaceholderT: { fontSize: 11, fontWeight: '800', color: C.textLight, marginTop: 6 },
+  saveBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, marginBottom: 20 },
   saveBtnT: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
-});
+  });
+}

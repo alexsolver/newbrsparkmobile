@@ -63,7 +63,11 @@
       ],
       "package": "com.anonymous.BrsparkMobile"
     },
-    "extra": {},
+    "extra": {
+      "eas": {
+        "projectId": "8afa6988-8e45-42e8-afd5-67728288f086"
+      }
+    },
     "web": {
       "favicon": "./assets/favicon.png"
     },

@@ -14,10 +14,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
-import { TechnicianFinanceService } from '../../src/services/technicianFinanceService';
+import {
+  TechnicianFinanceService,
+  isManualFinanceEntryEditableInMemory,
+  isManualSplitRateioEditableInMemory,
+} from '../../src/services/technicianFinanceService';
+import { buildProviderTaskStatusSets } from '../../src/utils/technicianFinanceLinkableTasks';
 import type { TechnicianFinanceEntry } from '../../src/types/technicianFinance';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useManualSync } from '../../src/hooks/useManualSync';
+import {
+  type CloudTaskFinanceInfo,
+  cloudTaskToFinanceInfo,
+  formatOsHeadline,
+} from '../../src/utils/cloudTaskFinanceContext';
 
 type FilterKey = 'all' | 'expense' | 'revenue';
 
@@ -39,6 +49,123 @@ function formatWhen(iso: string) {
   }
 }
 
+function linkedTaskIdsForEntry(item: TechnicianFinanceEntry): string[] {
+  if (item.linkedTaskIds && item.linkedTaskIds.length > 0) {
+    return [...new Set(item.linkedTaskIds.map((id) => String(id).trim()).filter(Boolean))];
+  }
+  if (item.taskId) return [String(item.taskId)];
+  return [];
+}
+
+function OsLinkedDetailsBlock({
+  taskId,
+  taskById,
+  amountRight,
+}: {
+  taskId: string;
+  taskById: Map<string, CloudTaskFinanceInfo>;
+  amountRight?: string;
+}) {
+  const inf = taskById.get(String(taskId));
+  const head = formatOsHeadline(taskId, inf);
+  return (
+    <View style={styles.osDetailCard}>
+      <View style={styles.osDetailHeadRow}>
+        <Text style={styles.osDetailHead} numberOfLines={2}>
+          {head}
+        </Text>
+        {amountRight != null ? <Text style={styles.osDetailAmt}>{amountRight}</Text> : null}
+      </View>
+      {inf ? (
+        <>
+          {inf.requester ? (
+            <Text style={styles.osDetailLine} numberOfLines={2}>
+              <Text style={styles.osDetailLbl}>Solicitante: </Text>
+              {inf.requester}
+            </Text>
+          ) : null}
+          {inf.location ? (
+            <Text style={styles.osDetailLine} numberOfLines={2}>
+              <Text style={styles.osDetailLbl}>Local: </Text>
+              {inf.location}
+            </Text>
+          ) : null}
+          {inf.activityTitle ? (
+            <Text style={styles.osDetailLine} numberOfLines={2}>
+              <Text style={styles.osDetailLbl}>Atividade: </Text>
+              {inf.activityTitle}
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <Text style={styles.osDetailMissing}>Abra ou sincronize a OS para carregar detalhes.</Text>
+      )}
+    </View>
+  );
+}
+
+/** Id de lote: `tech_fin_<ms>_<índice>_<random>` (createManual com várias OS). */
+function manualExpenseSplitBatchKey(id: string): string | null {
+  const parts = String(id).split('_');
+  if (parts.length < 5) return null;
+  if (parts[0] !== 'tech' || parts[1] !== 'fin') return null;
+  const t0 = parts[2];
+  const ix = parts[3];
+  if (!/^\d+$/.test(t0) || !/^\d+$/.test(ix)) return null;
+  return `batch:${t0}`;
+}
+
+function baseDescriptionWithoutRateio(desc?: string): string {
+  if (!desc) return '';
+  return desc.replace(/\s*\(rateio\s+\d+\s*\/\s*\d+\)\s*$/i, '').trim();
+}
+
+type FinanceListRow =
+  | { kind: 'single'; entry: TechnicianFinanceEntry }
+  | { kind: 'split'; groupId: string; parts: TechnicianFinanceEntry[] };
+
+function buildFinanceListRows(entries: TechnicianFinanceEntry[]): FinanceListRow[] {
+  const splitMap = new Map<string, TechnicianFinanceEntry[]>();
+  const consumed = new Set<string>();
+
+  for (const e of entries) {
+    if (e.source !== 'manual' || e.kind !== 'expense') continue;
+    const k = manualExpenseSplitBatchKey(e.id);
+    if (!k) continue;
+    const arr = splitMap.get(k) || [];
+    arr.push(e);
+    splitMap.set(k, arr);
+    consumed.add(e.id);
+  }
+
+  const rows: FinanceListRow[] = [];
+
+  for (const e of entries) {
+    if (consumed.has(e.id)) continue;
+    rows.push({ kind: 'single', entry: e });
+  }
+
+  for (const [k, arr] of splitMap) {
+    arr.sort((a, b) => {
+      const pa = String(a.id).split('_');
+      const pb = String(b.id).split('_');
+      return (Number(pa[3]) || 0) - (Number(pb[3]) || 0);
+    });
+    if (arr.length > 1) {
+      rows.push({ kind: 'split', groupId: k, parts: arr });
+    } else if (arr.length === 1) {
+      rows.push({ kind: 'single', entry: arr[0] });
+    }
+  }
+
+  rows.sort((a, b) => {
+    const t = (r: FinanceListRow) =>
+      r.kind === 'single' ? r.entry.createdAt : r.parts[0]?.createdAt || '';
+    return new Date(t(b)).getTime() - new Date(t(a)).getTime();
+  });
+  return rows;
+}
+
 export default function TechnicianFinanceScreen() {
   const router = useRouter();
   const { colors: C } = useTheme();
@@ -46,9 +173,13 @@ export default function TechnicianFinanceScreen() {
   const [items, setItems] = useState<TechnicianFinanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
-  const [taskById, setTaskById] = useState<Map<string, { title?: string; osNumber?: string | null }>>(
-    () => new Map()
-  );
+  const [taskById, setTaskById] = useState<Map<string, CloudTaskFinanceInfo>>(() => new Map());
+  const [cloudTasksRaw, setCloudTasksRaw] = useState<any[]>([]);
+  const [statusSets, setStatusSets] = useState<{
+    completedIds: Set<string>;
+    inprogressIds: Set<string>;
+    acceptedIds: Set<string>;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,20 +195,20 @@ export default function TechnicianFinanceScreen() {
     try {
       const raw = await AsyncStorage.getItem('@brspark_cloud_tasks');
       const arr = raw ? JSON.parse(raw) : [];
-      const m = new Map<string, { title?: string; osNumber?: string | null }>();
-      if (Array.isArray(arr)) {
-        for (const t of arr) {
-          if (t?.id) {
-            m.set(String(t.id), {
-              title: t.title,
-              osNumber: t.osNumber ?? t.os_number ?? null,
-            });
-          }
+      const list = Array.isArray(arr) ? arr : [];
+      setCloudTasksRaw(list);
+      const m = new Map<string, CloudTaskFinanceInfo>();
+      for (const t of list) {
+        if (t?.id) {
+          m.set(String(t.id), cloudTaskToFinanceInfo(t));
         }
       }
       setTaskById(m);
+      setStatusSets(await buildProviderTaskStatusSets());
     } catch {
       setTaskById(new Map());
+      setCloudTasksRaw([]);
+      setStatusSets(null);
     }
   }, []);
 
@@ -92,9 +223,9 @@ export default function TechnicianFinanceScreen() {
     }, [load, loadTaskMap])
   );
 
-  const filtered = useMemo(() => {
-    if (filter === 'all') return items;
-    return items.filter((x) => x.kind === filter);
+  const listRows = useMemo(() => {
+    const base = filter === 'all' ? items : items.filter((x) => x.kind === filter);
+    return buildFinanceListRows(base);
   }, [items, filter]);
 
   const totals = useMemo(() => {
@@ -107,18 +238,107 @@ export default function TechnicianFinanceScreen() {
     return { exp, rev, net: rev - exp };
   }, [items]);
 
-  const renderItem = ({ item }: { item: TechnicianFinanceEntry }) => {
-    const task = item.taskId ? taskById.get(String(item.taskId)) : undefined;
-    const osHint =
-      task?.osNumber != null && String(task.osNumber).trim() !== ''
-        ? `OS ${String(task.osNumber).trim()}`
-        : task?.title
-          ? String(task.title).slice(0, 48)
-          : item.taskId
-            ? `Execução ${String(item.taskId).slice(0, 8)}…`
-            : null;
-    return (
-      <View style={[styles.card, { borderLeftColor: item.kind === 'revenue' ? '#10b981' : '#ef4444' }]}>
+  const renderRow = ({ item: row }: { item: FinanceListRow }) => {
+    if (row.kind === 'split') {
+      const { parts } = row;
+      const total = parts.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      let title = '';
+      for (const p of parts) {
+        const b = baseDescriptionWithoutRateio(p.description);
+        if (b && (!title || b.length > title.length)) title = b;
+      }
+      if (!title) title = 'Despesa';
+      const seenUri = new Set<string>();
+      const attachCount = parts.reduce((n, p) => {
+        for (const a of p.attachments || []) {
+          const u = String(a.uri || '');
+          if (u && !seenUri.has(u)) {
+            seenUri.add(u);
+            n += 1;
+          }
+        }
+        return n;
+      }, 0);
+      const createdAt = parts[0]?.createdAt || '';
+      const splitEditable =
+        statusSets != null && isManualSplitRateioEditableInMemory(parts, cloudTasksRaw, statusSets);
+      const splitIds = parts.map((p) => encodeURIComponent(p.id)).join(',');
+      const splitInner = (
+        <>
+          <View style={styles.cardTop}>
+            <View style={[styles.badge, { backgroundColor: '#fee2e2' }]}>
+              <Text style={styles.badgeTxt}>Despesa</Text>
+            </View>
+            <Text style={styles.amt}>{formatBrl(total)}</Text>
+          </View>
+          <Text style={styles.desc} numberOfLines={2}>
+            {title}
+          </Text>
+          <View style={styles.splitBox}>
+            <Text style={styles.splitBoxTitle}>Rateio entre {parts.length} OS</Text>
+            {parts.map((p, si) => {
+              const tid = p.taskId ? String(p.taskId) : '';
+              if (!tid) {
+                return (
+                  <View key={p.id} style={[si === parts.length - 1 && { marginBottom: 0 }]}>
+                    <Text style={styles.splitLineAmt}>{formatBrl(p.amount)}</Text>
+                  </View>
+                );
+              }
+              return (
+                <View key={p.id} style={{ marginBottom: si === parts.length - 1 ? 0 : 12 }}>
+                  <OsLinkedDetailsBlock taskId={tid} taskById={taskById} amountRight={formatBrl(p.amount)} />
+                </View>
+              );
+            })}
+          </View>
+          {attachCount > 0 ? (
+            <View style={styles.attachRow}>
+              <Ionicons name="attach-outline" size={14} color="#64748b" />
+              <Text style={styles.attachMeta}>
+                {attachCount} anexo{attachCount === 1 ? '' : 's'}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.metaRow}>
+            <Text style={styles.meta}>{formatWhen(createdAt)}</Text>
+            <Text style={styles.metaOs} numberOfLines={1}>
+              · {parts.length} OS · Manual (rateio)
+            </Text>
+          </View>
+          {splitEditable ? (
+            <View style={styles.editHintRow}>
+              <Ionicons name="create-outline" size={15} color="#0f766e" />
+              <Text style={styles.editHint}>Toque para editar</Text>
+            </View>
+          ) : (
+            <Text style={styles.editHintMuted}>
+              Rateio: todas as OS têm de estar no telemóvel, em pendentes ou em atendimento. Se alguma faltar ou estiver
+              concluída, não é possível editar aqui.
+            </Text>
+          )}
+        </>
+      );
+      return splitEditable ? (
+        <TouchableOpacity
+          activeOpacity={0.88}
+          style={[styles.card, { borderLeftColor: '#ef4444' }]}
+          onPress={() => router.push(`/finance/mobile/edit?ids=${splitIds}` as any)}
+        >
+          {splitInner}
+        </TouchableOpacity>
+      ) : (
+        <View style={[styles.card, { borderLeftColor: '#ef4444' }]}>{splitInner}</View>
+      );
+    }
+
+    const item = row.entry;
+    const osIds = linkedTaskIdsForEntry(item);
+    const hasOs = osIds.length > 0;
+    const singleEditable =
+      statusSets != null && isManualFinanceEntryEditableInMemory(item, cloudTasksRaw, statusSets);
+    const singleInner = (
+      <>
         <View style={styles.cardTop}>
           <View
             style={[
@@ -135,16 +355,62 @@ export default function TechnicianFinanceScreen() {
             {item.description}
           </Text>
         ) : null}
+        {hasOs ? (
+          <View style={styles.osDetailsWrap}>
+            {osIds.map((tid, oi) => (
+              <View key={tid} style={{ marginBottom: oi === osIds.length - 1 ? 0 : 10 }}>
+                <OsLinkedDetailsBlock taskId={tid} taskById={taskById} />
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {item.attachments && item.attachments.length > 0 ? (
+          <View style={styles.attachRow}>
+            <Ionicons name="attach-outline" size={14} color="#64748b" />
+            <Text style={styles.attachMeta}>
+              {item.attachments.length} anexo{item.attachments.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.metaRow}>
           <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
-          {item.source === 'checklist' && osHint ? (
+          {item.source === 'checklist' && hasOs ? (
             <Text style={styles.metaOs} numberOfLines={1}>
-              · {osHint}
+              · {osIds.length} OS · Checklist
+            </Text>
+          ) : item.source === 'manual' && hasOs ? (
+            <Text style={styles.metaOs} numberOfLines={1}>
+              · {osIds.length} OS · Manual
             </Text>
           ) : item.source === 'manual' ? (
             <Text style={styles.metaOs}> · Manual</Text>
+          ) : item.source === 'checklist' ? (
+            <Text style={styles.metaOs}> · Checklist</Text>
           ) : null}
         </View>
+        {item.source === 'checklist' ? (
+          <Text style={styles.editHintMuted}>Altere no formulário da OS.</Text>
+        ) : singleEditable ? (
+          <View style={styles.editHintRow}>
+            <Ionicons name="create-outline" size={15} color="#0f766e" />
+            <Text style={styles.editHint}>Toque para editar</Text>
+          </View>
+        ) : item.source === 'manual' && hasOs ? (
+          <Text style={styles.editHintMuted}>OS concluída — não é possível editar aqui.</Text>
+        ) : null}
+      </>
+    );
+    return singleEditable && item.source === 'manual' ? (
+      <TouchableOpacity
+        activeOpacity={0.88}
+        style={[styles.card, { borderLeftColor: item.kind === 'revenue' ? '#10b981' : '#ef4444' }]}
+        onPress={() => router.push(`/finance/mobile/edit?ids=${encodeURIComponent(item.id)}` as any)}
+      >
+        {singleInner}
+      </TouchableOpacity>
+    ) : (
+      <View style={[styles.card, { borderLeftColor: item.kind === 'revenue' ? '#10b981' : '#ef4444' }]}>
+        {singleInner}
       </View>
     );
   };
@@ -152,7 +418,7 @@ export default function TechnicianFinanceScreen() {
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Financeiro técnico" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <Header title="Financeiro" leftIcon="arrow-back" onLeftPress={() => router.back()} />
 
       <View style={styles.summary}>
         <View style={styles.sumCol}>
@@ -195,8 +461,8 @@ export default function TechnicianFinanceScreen() {
         </View>
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={(it) => it.id}
+          data={listRows}
+          keyExtractor={(row) => (row.kind === 'single' ? row.entry.id : `split-${row.groupId}`)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh()} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
@@ -206,7 +472,7 @@ export default function TechnicianFinanceScreen() {
               <Text style={styles.emptySub}>Use + para registar ou preencha o campo no formulário da OS.</Text>
             </View>
           }
-          renderItem={renderItem}
+          renderItem={renderRow}
         />
       )}
 
@@ -267,9 +533,59 @@ const styles = StyleSheet.create({
   badgeTxt: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
   amt: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   desc: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 20 },
+  osDetailsWrap: { marginTop: 10 },
+  osDetailCard: {
+    padding: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  osDetailHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 4,
+  },
+  osDetailHead: { flex: 1, fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  osDetailAmt: { fontSize: 13, fontWeight: '900', color: '#0f172a' },
+  osDetailLine: { fontSize: 12, color: '#475569', lineHeight: 17, marginTop: 4 },
+  osDetailLbl: { fontWeight: '700', color: '#64748b' },
+  osDetailMissing: { fontSize: 11, color: '#94a3b8', fontStyle: 'italic', marginTop: 4 },
+  splitBox: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  splitBoxTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  splitLineAmt: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  attachRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  attachMeta: { fontSize: 12, color: '#64748b', fontWeight: '700' },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, flexWrap: 'wrap' },
   meta: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
   metaOs: { fontSize: 11, color: '#64748b', fontWeight: '700', flex: 1, minWidth: 120 },
+  editHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  editHint: { fontSize: 12, fontWeight: '800', color: '#0f766e' },
+  editHintMuted: { fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 8, lineHeight: 15 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { alignItems: 'center', paddingVertical: 48 },
   emptyTxt: { marginTop: 12, fontSize: 16, fontWeight: '800', color: '#64748b' },

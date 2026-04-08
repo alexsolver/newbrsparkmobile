@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
-import { colors } from '../../src/theme/colors';
+import { Tabs } from 'expo-router';
+import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { NotificationService } from '../../src/services/notifications';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -19,9 +19,10 @@ import { useAppContext } from '../../src/context/AppContext';
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { t } = useTranslation();
   const { mode } = useAppContext();
+  const { colors: C } = useTheme();
+  const navStyles = useMemo(() => createNavStyles(C), [C]);
 
   // Strictly show only these 4 screens before the "+" button
   const ALLOWED_TABS = ['index', 'agenda', 'chat', 'notifications'];
@@ -59,13 +60,13 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
               >
                 {options.tabBarIcon && options.tabBarIcon({ 
                   focused: isFocused, 
-                  color: isFocused ? colors.accent : colors.textSecondary, 
+                  color: isFocused ? C.accent : C.textSecondary, 
                   size: 22 
                 })}
                 <Text style={{ 
                   fontSize: 10, 
                   fontWeight: '800', 
-                  color: isFocused ? colors.accent : colors.textSecondary, 
+                  color: isFocused ? C.accent : C.textSecondary, 
                   marginTop: 2 
                 }}>{label}</Text>
               </TouchableOpacity>
@@ -78,30 +79,33 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   );
 }
 
-const navStyles = StyleSheet.create({
-  container: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', zIndex: 1000 },
-  inner: { flexDirection: 'row', alignItems: 'center', width: '92%', justifyContent: 'center' },
-  pill: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    backgroundColor: '#fff', 
-    borderRadius: 40, 
-    padding: 6, 
-    marginRight: 10, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 8 }, 
-    shadowOpacity: 0.15, 
-    shadowRadius: 12, 
-    elevation: 8, 
-    borderWidth: 1, 
-    borderColor: '#f1f5f9' 
-  },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 32 },
-  tabFocused: { backgroundColor: '#f8fafc' }
-});
+function createNavStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', zIndex: 1000 },
+    inner: { flexDirection: 'row', alignItems: 'center', width: '92%', justifyContent: 'center' },
+    pill: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: C.cardWhite,
+      borderRadius: 40,
+      padding: 6,
+      marginRight: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: C.divider,
+    },
+    tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 32 },
+    tabFocused: { backgroundColor: C.surfaceLow },
+  });
+}
 
 export default function TabLayout() {
   const { t } = useTranslation();
+  const { colors: C } = useTheme();
   const [unread, setUnread] = useState(NotificationService.getUnreadCount());
   const [unreadChat, setUnreadChat] = useState(0);
   // Tracks previous unread counts per room to detect new messages
@@ -187,11 +191,11 @@ export default function TabLayout() {
               {unreadChat > 0 && (
                 <View style={{
                   position: 'absolute', top: -4, right: -6,
-                  backgroundColor: '#EF4444',
+                  backgroundColor: C.destructive,
                   minWidth: 16, height: 16, borderRadius: 8,
                   justifyContent: 'center', alignItems: 'center',
                   paddingHorizontal: 3,
-                  borderWidth: 1.5, borderColor: '#fff',
+                  borderWidth: 1.5, borderColor: C.cardWhite,
                 }}>
                   <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{unreadChat > 9 ? '9+' : unreadChat}</Text>
                 </View>
@@ -211,11 +215,11 @@ export default function TabLayout() {
               {unread > 0 && (
                 <View style={{
                   position: 'absolute', top: -4, right: -6,
-                  backgroundColor: '#EF4444',
+                  backgroundColor: C.destructive,
                   minWidth: 16, height: 16, borderRadius: 8,
                   justifyContent: 'center', alignItems: 'center',
                   paddingHorizontal: 3,
-                  borderWidth: 1.5, borderColor: '#fff',
+                  borderWidth: 1.5, borderColor: C.cardWhite,
                 }}>
                   <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{unread > 9 ? '9+' : unread}</Text>
                 </View>

@@ -125,6 +125,11 @@ router.post('/push', async (req, res) => {
       try {
         const p = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;
 
+        /** Só incrementa processed / processedIds quando a fila foi realmente tratada aqui.
+         * Ações como costs:*, agenda:*, CREATE_NOTE são redundantes com POST /api/sync/* em massa
+         * ou ainda sem handler — não podem ser removidas da fila sem persistência. */
+        let handled = false;
+
         switch (item.action) {
           case 'CREATE_ASSET':
           case 'UPDATE_ASSET': {
@@ -151,6 +156,7 @@ router.post('/push', async (req, res) => {
                 metadata: p.details || {},
               },
             });
+            handled = true;
             break;
           }
           case 'DELETE_ASSET': {
@@ -158,16 +164,26 @@ router.post('/push', async (req, res) => {
               where: { id: p.id, tenantId },
               data: { deletedAt: new Date() },
             });
+            handled = true;
+            break;
+          }
+          case 'SCHEDULE_MAINTENANCE': {
+            // Cliente apenas confirma UX; manutenção segue outros fluxos / sync de dados
+            handled = true;
             break;
           }
           default:
-            console.log(`[sync/push] Ação desconhecida: ${item.action}`);
+            console.log(
+              `[sync/push] Ação ignorada neste endpoint (mantida na fila): ${item.action}`
+            );
         }
 
-        processed++;
-        processedIds.push(item.id || p.id); // Guardar info para o frontend limpar
-        const payloadSize = item.payload ? JSON.stringify(item.payload).length : 0;
-        recordSync(userId, true, payloadSize);
+        if (handled) {
+          processed++;
+          if (item.id != null) processedIds.push(item.id);
+          const payloadSize = item.payload ? JSON.stringify(item.payload).length : 0;
+          recordSync(userId, true, payloadSize);
+        }
       } catch (itemErr) {
         console.error(`[sync/push] Erro ao processar item ${item.action} (Payload ID: ${item.id}):`, itemErr);
         recordSync(userId, false, 0, itemErr.message);
@@ -301,6 +317,10 @@ function mapChecklistExecutionToSyncTask(ex) {
 
   const refId = meta.refId || ex.templateId || null;
   const title = meta.title || ex.template?.title || 'Nova OS Designada';
+  const templateTitle =
+    (meta.templateTitle != null && String(meta.templateTitle).trim()) ||
+    ex.template?.title ||
+    null;
   const description = meta.description || ex.template?.description || 'Tarefa de rotina despachada.';
 
   const isDone = ['COMPLETED', 'SYNCED'].includes(String(ex.status || '').toUpperCase());
@@ -322,6 +342,7 @@ function mapChecklistExecutionToSyncTask(ex) {
     source: 'CHECKLIST',
     metadata: meta,
     title,
+    templateTitle,
     description,
     status: ex.status,
     locationLat: ex.locationLat || null,

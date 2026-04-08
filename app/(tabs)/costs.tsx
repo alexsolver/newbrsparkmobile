@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
   Modal, TextInput, Alert, ActivityIndicator, FlatList,
@@ -12,7 +12,8 @@ import { ValueInput } from '../../src/components/ValueInput';
 import { CostService } from '../../src/services/costService';
 import { getRootAssets } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { Asset } from '../../src/types/asset';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -28,6 +29,8 @@ const REVENUE_CATEGORIES = ['VENDA', 'SERVIÇO', 'LOCAÇÃO', 'OUTROS'];
 
 export default function CostsScreen() {
   const { t } = useTranslation();
+  const { colors: C } = useTheme();
+  const S = useMemo(() => createCostsStyles(C), [C]);
   const { user } = useAuth();
   const [summaries, setSummaries] = useState<CostSummary[]>([]);
   const [expenses, setExpenses] = useState<DirectExpense[]>([]);
@@ -208,17 +211,17 @@ export default function CostsScreen() {
         <View style={S.headerRow}>
           <View><Text style={S.pTitle}>{t('costs.title')}</Text><Text style={S.pSub}>{formatMonthYear(new Date()).toUpperCase()}</Text></View>
           <TouchableOpacity style={S.addBtn} onPress={() => setAddMenuVisible(true)}>
-             <Ionicons name="add" size={28} color="#fff" />
+             <Ionicons name="add" size={28} color={C.cardWhite} />
           </TouchableOpacity>
         </View>
 
 
         <View style={S.cardMain}>
           <View style={S.cardRow}>
-             <View><Text style={S.cardL}>{t('costs.monthlyBalance')}</Text><Text style={[S.cardV, balance < 0 && {color: colors.warning.text}]}>{formatCurrency(balance)}</Text></View>
+             <View><Text style={S.cardL}>{t('costs.monthlyBalance')}</Text><Text style={[S.cardV, balance < 0 && {color: C.warning.text}]}>{formatCurrency(balance)}</Text></View>
              <View style={{alignItems:'flex-end'}}><Text style={S.cardL}>{t('costs.totalRevenue')}</Text><Text style={S.cardBudget}>{formatCurrency(totalRev)}</Text></View>
           </View>
-          <View style={S.progressC}><View style={[S.progressB, { width: `${Math.min(budgetProgress, 100)}%`, backgroundColor: budgetProgress > 90 ? colors.warning.text : colors.accent } as any]} /></View>
+          <View style={S.progressC}><View style={[S.progressB, { width: `${Math.min(budgetProgress, 100)}%`, backgroundColor: budgetProgress > 90 ? C.warning.text : C.accent } as any]} /></View>
           <View style={{flexDirection:'row', justifyContent:'space-between'}}><Text style={S.progressT}>{t('asset.expenses')}: {formatCurrency(totalExp)}</Text><Text style={S.progressT}>{t('costs.budget')}: {budgetProgress.toFixed(0)}%</Text></View>
         </View>
 
@@ -245,7 +248,7 @@ export default function CostsScreen() {
         >
           {upcomingBills.length > 0 && (
             <View style={S.alertBox}>
-              <View style={S.alertH}><Ionicons name="notifications" size={16} color="#B45309" /><Text style={S.alertHT}>{t('costs.upcomingBills').toUpperCase()}</Text></View>
+              <View style={S.alertH}><Ionicons name="notifications" size={16} color={C.status.warning.fg} /><Text style={S.alertHT}>{t('costs.upcomingBills').toUpperCase()}</Text></View>
               {upcomingBills.slice(0,3).map(b => (
                 <TouchableOpacity key={b.id} style={S.alertItem} onPress={() => handleMarkPaid(b.id)}>
                    <Text style={S.alertDesc}>{b.description}</Text>
@@ -253,7 +256,7 @@ export default function CostsScreen() {
                        <Text style={S.alertVal}>{formatCurrency(b.amount)}</Text>
                        <Text style={S.alertDate}>{t('costs.dueDate')} {formatDateShort(b.nextDueDate)}</Text>
                    </View>
-                   <Ionicons name="checkmark-circle-outline" size={20} color="#B45309" style={{marginLeft: 10}} />
+                   <Ionicons name="checkmark-circle-outline" size={20} color={C.status.warning.fg} style={{marginLeft: 10}} />
                 </TouchableOpacity>
               ))}
 
@@ -269,10 +272,10 @@ export default function CostsScreen() {
               <TouchableOpacity key={s.assetId} style={S.assetCard} onPress={() => { setSelectedBudgetAsset(s.assetId); setBudgetLimit(String(s.totalBudget)); setBudgetModalVisible(true); }}>
                 <View style={S.assetInfo}>
                   <Text style={S.assetName}>{venue?.title}</Text>
-                  <View style={S.costRow}><Text style={[S.costItem, {color: '#10B981'}]}>{formatCurrencyShort(s.totalRevenues)}</Text><Text style={S.costDivider}>•</Text><Text style={[S.costItem, {color: '#EF4444'}]}>{formatCurrencyShort(s.totalExpenses)}</Text></View>
-                  <View style={S.minProgress}><View style={[S.minBar, { width: `${Math.min(p, 100)}%`, backgroundColor: p > 100 ? colors.warning.text : colors.accent } as any]} /></View>
+                  <View style={S.costRow}><Text style={[S.costItem, { color: C.success.text }]}>{formatCurrencyShort(s.totalRevenues)}</Text><Text style={S.costDivider}>•</Text><Text style={[S.costItem, { color: C.destructive }]}>{formatCurrencyShort(s.totalExpenses)}</Text></View>
+                  <View style={S.minProgress}><View style={[S.minBar, { width: `${Math.min(p, 100)}%`, backgroundColor: p > 100 ? C.warning.text : C.accent } as any]} /></View>
                 </View>
-                <View style={S.assetVal}><Text style={[S.assetTotal, net < 0 && {color: colors.warning.text}]}>{formatCurrencyShort(net)}</Text><Text style={S.assetPerc}>{p.toFixed(0)}% {t('costs.budget').toLowerCase()}</Text></View>
+                <View style={S.assetVal}><Text style={[S.assetTotal, net < 0 && {color: C.warning.text}]}>{formatCurrencyShort(net)}</Text><Text style={S.assetPerc}>{p.toFixed(0)}% {t('costs.budget').toLowerCase()}</Text></View>
               </TouchableOpacity>
 
             )
@@ -286,12 +289,12 @@ export default function CostsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item }) => (
             <View style={S.expenseItem}>
-              <View style={[S.expIcon, { backgroundColor: item.type === 'REVENUE' ? '#ECFDF5' : item.category === 'MANUTENÇÃO' ? '#FEF2F2' : '#F8FAFC' }]}><Ionicons name={item.type === 'REVENUE' ? 'trending-up' : item.category === 'MANUTENÇÃO' ? 'build' : 'receipt'} size={20} color={item.type === 'REVENUE' ? '#10B981' : item.category === 'MANUTENÇÃO' ? '#EF4444' : colors.primary} /></View>
+              <View style={[S.expIcon, { backgroundColor: item.type === 'REVENUE' ? C.status.success.bg : item.category === 'MANUTENÇÃO' ? C.status.danger.bg : C.surfaceLow }]}><Ionicons name={item.type === 'REVENUE' ? 'trending-up' : item.category === 'MANUTENÇÃO' ? 'build' : 'receipt'} size={20} color={item.type === 'REVENUE' ? C.success.text : item.category === 'MANUTENÇÃO' ? C.destructive : C.primary} /></View>
               <View style={{flex:1}}>
                 <Text style={S.expTitle}>{item.description}</Text>
                 <Text style={S.expMeta}>{venues.find(v=>v.id===item.assetId)?.title} • {item.category}</Text>
               </View>
-              <Text style={[S.expAmount, { color: item.type === 'REVENUE' ? '#10B981' : colors.primary }]}>{(item.type === 'REVENUE' ? '+ ' : '- ')}{formatCurrency(item.amount)}</Text>
+              <Text style={[S.expAmount, { color: item.type === 'REVENUE' ? C.success.text : C.primary }]}>{(item.type === 'REVENUE' ? '+ ' : '- ')}{formatCurrency(item.amount)}</Text>
             </View>
           )}
         />
@@ -303,7 +306,7 @@ export default function CostsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item: r }) => (
             <View style={S.expenseItem}>
-               <View style={[S.expIcon, { backgroundColor: '#F5F3FF' }]}><Ionicons name="refresh" size={20} color="#6366F1" /></View>
+               <View style={[S.expIcon, { backgroundColor: `${SERVICE_CATEGORY_COLORS.Reformas}22` }]}><Ionicons name="refresh" size={20} color={SERVICE_CATEGORY_COLORS.Tecnologia} /></View>
                <View style={{flex:1}}>
                   <Text style={S.expTitle}>{r.description}</Text>
                   <Text style={S.expMeta}>{venues.find(v=>v.id===r.assetId)?.title} • {r.frequency}</Text>
@@ -313,14 +316,14 @@ export default function CostsScreen() {
                      <Text style={S.expAmount}>{formatCurrency(r.amount)}</Text>
                      <Text style={S.alertDate}>{t('costs.dueDate')}: {formatDate(r.nextDueDate)}</Text>
                      {r.totalInstallments ? (
-                       <Text style={[S.alertDate, {color: colors.textSecondary}]}>{t('costs.installment') || 'Parcela'}: {(r.totalInstallments - (r.remainingInstallments || 0)) + 1} de {r.totalInstallments}</Text>
+                       <Text style={[S.alertDate, {color: C.textSecondary}]}>{t('costs.installment') || 'Parcela'}: {(r.totalInstallments - (r.remainingInstallments || 0)) + 1} de {r.totalInstallments}</Text>
                      ) : (
-                       <Text style={[S.alertDate, {color: colors.textSecondary}]}>{t('costs.installment') || 'Parcela'}: Contínuo (∞)</Text>
+                       <Text style={[S.alertDate, {color: C.textSecondary}]}>{t('costs.installment') || 'Parcela'}: Contínuo (∞)</Text>
                      )}
                   </View>
 
-                  <TouchableOpacity onPress={() => handleMarkPaid(r.id)} style={{backgroundColor: '#10B981', padding: 8, borderRadius: 8}}>
-                     <Ionicons name="card-outline" size={20} color="#fff" />
+                  <TouchableOpacity onPress={() => handleMarkPaid(r.id)} style={{ backgroundColor: C.success.text, padding: 8, borderRadius: 8 }}>
+                     <Ionicons name="card-outline" size={20} color={C.cardWhite} />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => {
                     Alert.alert(t('common.delete') + '?', t('costs.removeRecurringBill'), [
@@ -332,8 +335,8 @@ export default function CostsScreen() {
                         }
                       }}
                     ]);
-                  }} style={{backgroundColor: '#FEE2E2', padding: 8, borderRadius: 8}}>
-                     <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  }} style={{ backgroundColor: C.status.danger.bg, padding: 8, borderRadius: 8 }}>
+                     <Ionicons name="trash-outline" size={20} color={C.destructive} />
                   </TouchableOpacity>
                </View>
             </View>
@@ -350,17 +353,17 @@ export default function CostsScreen() {
                   <Text style={S.menuTitle}>O QUE DESEJA LANÇAR?</Text>
                   
                   <TouchableOpacity style={S.menuItem} onPress={() => { setAddMenuVisible(false); setReceiptImage(null); setNewRecord({ category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PENDING', description: '', type: 'EXPENSE' }); setRecordModalVisible(true); }}>
-                     <View style={[S.menuIcon, {backgroundColor: '#ECFDF5'}]}><Ionicons name="receipt-outline" size={24} color="#10B981"/></View>
+                     <View style={[S.menuIcon, { backgroundColor: C.status.success.bg }]}><Ionicons name="receipt-outline" size={24} color={C.success.text} /></View>
                      <View><Text style={S.menuItemT}>Registro Único</Text><Text style={S.menuItemS}>Despesa ou Receita pontual</Text></View>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={S.menuItem} onPress={() => { setAddMenuVisible(false); setNewRec({ frequency: 'MONTHLY', status: 'ACTIVE', type: 'EXPENSE', amount: 0, description: '', nextDueDate: new Date().toISOString().split('T')[0], alertDaysBefore: 1 }); setRecurringModalVisible(true); }}>
-                     <View style={[S.menuIcon, {backgroundColor: '#EEF2FF'}]}><Ionicons name="calendar-outline" size={24} color="#6366F1"/></View>
+                     <View style={[S.menuIcon, { backgroundColor: C.status.info.bg }]}><Ionicons name="calendar-outline" size={24} color={SERVICE_CATEGORY_COLORS.Tecnologia} /></View>
                      <View><Text style={S.menuItemT}>Conta Recorrente</Text><Text style={S.menuItemS}>Fixos, Aluguéis, Assinaturas</Text></View>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={S.menuItem} onPress={() => { setAddMenuVisible(false); setBudgetModalVisible(true); }}>
-                     <View style={[S.menuIcon, {backgroundColor: '#FFF7ED'}]}><Ionicons name="pie-chart-outline" size={24} color="#F59E0B"/></View>
+                     <View style={[S.menuIcon, { backgroundColor: C.status.warning.bg }]}><Ionicons name="pie-chart-outline" size={24} color={MEDIA_TAG_COLORS.DURING} /></View>
                      <View><Text style={S.menuItemT}>Definir Budget</Text><Text style={S.menuItemS}>Teto mensal por ativo</Text></View>
                   </TouchableOpacity>
                   
@@ -376,41 +379,41 @@ export default function CostsScreen() {
       <Modal visible={recordModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}><View style={S.modalO}><View style={S.modalC}>
-              <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.newFinancialRecord')}</Text><TouchableOpacity onPress={() => setRecordModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+              <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.newFinancialRecord')}</Text><TouchableOpacity onPress={() => setRecordModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={S.typeToggle}>
-                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRecord({...newRecord, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRecord.type === 'EXPENSE' && {color:'#fff'}]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
-                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRecord({...newRecord, type:'REVENUE'})}><Text style={[S.typeBtnT, newRecord.type === 'REVENUE' && {color:'#fff'}]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
+                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'EXPENSE' && { backgroundColor: C.destructive }]} onPress={()=>setNewRecord({...newRecord, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRecord.type === 'EXPENSE' && { color: C.cardWhite }]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
+                   <TouchableOpacity style={[S.typeBtn, newRecord.type === 'REVENUE' && { backgroundColor: C.success.text }]} onPress={()=>setNewRecord({...newRecord, type:'REVENUE'})}><Text style={[S.typeBtnT, newRecord.type === 'REVENUE' && { color: C.cardWhite }]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
                 </View>
 
                 {/* Fonte do Comprovante - Estilo DocumentModule */}
-                <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
-                  <Text style={{ fontSize: 10, fontWeight: '900', color: colors.textLight, marginBottom: 10, letterSpacing: 1 }}>{t('costs.receiptSource')}</Text>
+                <View style={{ backgroundColor: C.cardWhite, borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: C.textLight, marginBottom: 10, letterSpacing: 1 }}>{t('costs.receiptSource')}</Text>
                   {ocrProcessing ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 10 }}>
-                      <ActivityIndicator size="small" color={colors.accent} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>{t('costs.processingOcr')}</Text>
+                      <ActivityIndicator size="small" color={C.accent} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: C.accent }}>{t('costs.processingOcr')}</Text>
                     </View>
                   ) : (
                     <View style={{ flexDirection: 'row', gap: 10 }}>
-                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickFile}>
-                        <Ionicons name="document-attach" size={24} color={colors.accent} />
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.file')}</Text>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: C.border }} onPress={handlePickFile}>
+                        <Ionicons name="document-attach" size={24} color={C.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: C.textLight }}>{t('costs.file')}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickGallery}>
-                        <Ionicons name="images" size={24} color={colors.accent} />
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.gallery')}</Text>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: C.border }} onPress={handlePickGallery}>
+                        <Ionicons name="images" size={24} color={C.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: C.textLight }}>{t('costs.gallery')}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: colors.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={handlePickCamera}>
-                        <Ionicons name="camera" size={24} color={colors.accent} />
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textLight }}>{t('costs.camera')}</Text>
+                      <TouchableOpacity style={{ flex: 1, paddingVertical: 15, borderRadius: 12, backgroundColor: C.background, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: C.border }} onPress={handlePickCamera}>
+                        <Ionicons name="camera" size={24} color={C.accent} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: C.textLight }}>{t('costs.camera')}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
                   {receiptImage && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#F0FDF4', padding: 8, borderRadius: 8 }}>
-                      <Ionicons name="checkmark-circle" size={16} color="#166534" />
-                      <Text style={{ fontSize: 11, color: '#166534', fontWeight: '700', flex: 1 }} numberOfLines={1}>{t('costs.receiptAttached')}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: C.status.success.bg, padding: 8, borderRadius: 8 }}>
+                      <Ionicons name="checkmark-circle" size={16} color={C.status.success.fg} />
+                      <Text style={{ fontSize: 11, color: C.status.success.fg, fontWeight: '700', flex: 1 }} numberOfLines={1}>{t('costs.receiptAttached')}</Text>
                       <Image source={{ uri: receiptImage }} style={{ width: 40, height: 40, borderRadius: 6 }} resizeMode="cover" />
                     </View>
                   )}
@@ -425,11 +428,11 @@ export default function CostsScreen() {
                     label={t('assetDetail.date')}
                     value={newRecord.date}
                     onChange={(d) => setNewRecord({ ...newRecord, date: d })}
-                    accentColor={newRecord.type === 'REVENUE' ? '#10B981' : '#EF4444'}
+                    accentColor={newRecord.type === 'REVENUE' ? C.success.text : C.destructive}
                   />
                 </View>
                 <View style={[S.inputG, {flex:1}]}><Text style={S.inputL}>{t('assetDetail.valueAmount')}</Text><ValueInput style={S.input} value={String(newRecord.amount || "")} onChangeText={v => setNewRecord({...newRecord, amount: parseFloat(v) || 0})} placeholder="0,00" currency /></View>
-                <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRecord.type === 'REVENUE' ? '#10B981' : colors.accent}]} onPress={handleSaveRecord}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.saveRecord')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[S.confirmBtn, { backgroundColor: newRecord.type === 'REVENUE' ? C.success.text : C.accent }]} onPress={handleSaveRecord}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.saveRecord')}</Text></TouchableOpacity>
 
               </ScrollView>
         </View></View></TouchableWithoutFeedback>
@@ -439,11 +442,11 @@ export default function CostsScreen() {
       <Modal visible={recurringModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}><View style={S.modalO}><View style={S.modalC}>
-            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.scheduleRecurring')}</Text><TouchableOpacity onPress={() => setRecurringModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.scheduleRecurring')}</Text><TouchableOpacity onPress={() => setRecurringModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                <View style={S.typeToggle}>
-                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'EXPENSE' && {backgroundColor: '#EF4444'}]} onPress={()=>setNewRec({...newRec, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRec.type === 'EXPENSE' && {color:'#fff'}]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
-                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'REVENUE' && {backgroundColor: '#10B981'}]} onPress={()=>setNewRec({...newRec, type:'REVENUE'})}><Text style={[S.typeBtnT, newRec.type === 'REVENUE' && {color:'#fff'}]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
+                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'EXPENSE' && { backgroundColor: C.destructive }]} onPress={()=>setNewRec({...newRec, type:'EXPENSE'})}><Text style={[S.typeBtnT, newRec.type === 'EXPENSE' && { color: C.cardWhite }]}>{t('assetDetail.expense')}</Text></TouchableOpacity>
+                  <TouchableOpacity style={[S.typeBtn, newRec.type === 'REVENUE' && { backgroundColor: C.success.text }]} onPress={()=>setNewRec({...newRec, type:'REVENUE'})}><Text style={[S.typeBtnT, newRec.type === 'REVENUE' && { color: C.cardWhite }]}>{t('assetDetail.revenue')}</Text></TouchableOpacity>
                </View>
 
                <View style={S.inputG}><Text style={S.inputL}>{t('assetDetail.billDescription')}</Text><TextInput style={S.input} value={newRec.description} onChangeText={t=>setNewRec({...newRec, description:t})} placeholder={t('assetDetail.billPlaceholder')} returnKeyType="done"
@@ -492,7 +495,7 @@ export default function CostsScreen() {
                    returnKeyType="done"
                       />
                 </View>
-               <TouchableOpacity style={[S.confirmBtn, {backgroundColor: newRec.type === 'REVENUE' ? '#10B981' : colors.accent}]} onPress={handleSaveRecurring}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.schedule')} {newRec.type === 'REVENUE' ? t('assetDetail.revenue') : t('assetDetail.payment')}</Text></TouchableOpacity>
+               <TouchableOpacity style={[S.confirmBtn, { backgroundColor: newRec.type === 'REVENUE' ? C.success.text : C.accent }]} onPress={handleSaveRecurring}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.schedule')} {newRec.type === 'REVENUE' ? t('assetDetail.revenue') : t('assetDetail.payment')}</Text></TouchableOpacity>
 
 
             </ScrollView>
@@ -503,8 +506,8 @@ export default function CostsScreen() {
       {/* MODAL DEFINIR BUDGET */}
       <Modal visible={budgetModalVisible} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 24 }}>
-            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.monthlyBudget')}</Text><TouchableOpacity onPress={() => setBudgetModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+          <View style={{ backgroundColor: C.cardWhite, borderRadius: 24, padding: 24 }}>
+            <View style={S.modalH}><Text style={S.modalT}>{t('assetDetail.monthlyBudget')}</Text><TouchableOpacity onPress={() => setBudgetModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
             <Text style={S.assetName}>{venues.find(v=>v.id===selectedBudgetAsset)?.title}</Text>
             <View style={[S.inputG, {marginTop:15}]}><Text style={S.inputL}>{t('assetDetail.spendingLimit')}</Text><ValueInput style={S.input} value={budgetLimit} onChangeText={setBudgetLimit} placeholder="5000" currency /></View>
             <TouchableOpacity style={S.confirmBtn} onPress={handleSaveBudget}><Text style={S.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.defineBudget')}</Text></TouchableOpacity>
@@ -515,86 +518,88 @@ export default function CostsScreen() {
   );
 }
 
-const S = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  pHeader: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 25, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.border },
+function createCostsStyles(C: ColorPalette) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.background },
+  pHeader: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 25, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  pTitle: { color: colors.primary, fontSize: 24, fontWeight: '900', letterSpacing: -0.6 },
-  pSub: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
-  addBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
+  pTitle: { color: C.primary, fontSize: 24, fontWeight: '900', letterSpacing: -0.6 },
+  pSub: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
+  addBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.accent, justifyContent: 'center', alignItems: 'center' },
 
-  cardMain: { backgroundColor: '#fff', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  cardMain: { backgroundColor: C.cardWhite, padding: 20, borderRadius: 24, borderWidth: 1, borderColor: C.border, shadowColor: C.slate, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   cardRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  cardL: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
-  cardV: { fontSize: 24, fontWeight: '900', color: colors.primary, marginTop: 4, letterSpacing: -0.4 },
-  cardBudget: { fontSize: 16, fontWeight: '900', color: colors.accent, marginTop: 4 },
-  progressC: { height: 10, backgroundColor: colors.divider, borderRadius: 5, marginVertical: 12, overflow:'hidden' },
+  cardL: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardV: { fontSize: 24, fontWeight: '900', color: C.primary, marginTop: 4, letterSpacing: -0.4 },
+  cardBudget: { fontSize: 16, fontWeight: '900', color: C.accent, marginTop: 4 },
+  progressC: { height: 10, backgroundColor: C.divider, borderRadius: 5, marginVertical: 12, overflow:'hidden' },
   progressB: { height: '100%', borderRadius: 5 },
-  progressT: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
+  progressT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
 
   tabBar: { flexDirection: 'row', gap: 20, paddingHorizontal: 25, marginTop: 25 },
   tab: { paddingBottom: 8 },
-  tabA: { borderBottomWidth: 3, borderBottomColor: colors.accent },
-  tabT: { fontSize: 11, fontWeight: '900', color: colors.textLight, letterSpacing: 0.5 },
-  tabTA: { color: colors.accent },
+  tabA: { borderBottomWidth: 3, borderBottomColor: C.accent },
+  tabT: { fontSize: 11, fontWeight: '900', color: C.textLight, letterSpacing: 0.5 },
+  tabTA: { color: C.accent },
 
   locBar: { marginTop: 15 },
   filterScroll: { paddingHorizontal: 20, paddingBottom: 15 },
-  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, marginRight: 8 },
-  filterChipA: { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterChipT: { fontSize: 11, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase' },
-  filterChipTA: { color: '#fff' },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, marginRight: 8 },
+  filterChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  filterChipT: { fontSize: 11, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase' },
+  filterChipTA: { color: C.cardWhite },
 
   content: { padding: 20 },
-  secTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, marginBottom: 15, textTransform: 'uppercase' },
-  assetCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  secTitle: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, marginBottom: 15, textTransform: 'uppercase' },
+  assetCard: { flexDirection: 'row', backgroundColor: C.cardWhite, padding: 18, borderRadius: 20, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border },
   assetInfo: { flex: 1 },
-  assetName: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
+  assetName: { fontSize: 14, fontWeight: '900', color: C.primary, letterSpacing: -0.2 },
   costRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   costItem: { fontSize: 9, fontWeight: '900' },
-  costDivider: { color: colors.border },
-  minProgress: { height: 3, backgroundColor: '#F1F5F9', borderRadius: 2, marginTop: 10, width: '80%' },
+  costDivider: { color: C.border },
+  minProgress: { height: 3, backgroundColor: C.divider, borderRadius: 2, marginTop: 10, width: '80%' },
   minBar: { height: '100%', borderRadius: 2 },
   assetVal: { alignItems: 'flex-end', marginRight: 15 },
-  assetTotal: { fontSize: 14, fontWeight: '900', color: colors.primary },
-  assetPerc: { fontSize: 8, fontWeight: '900', color: colors.textLight, marginTop: 2, textTransform: 'uppercase' },
-  expenseItem: { flexDirection: 'row', backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  assetTotal: { fontSize: 14, fontWeight: '900', color: C.primary },
+  assetPerc: { fontSize: 8, fontWeight: '900', color: C.textLight, marginTop: 2, textTransform: 'uppercase' },
+  expenseItem: { flexDirection: 'row', backgroundColor: C.cardWhite, padding: 16, borderRadius: 16, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: C.border },
   expIcon: { width: 44, height: 44, borderRadius: 12, justifyContent:'center', alignItems:'center', marginRight: 15 },
-  expTitle: { fontSize: 12, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
-  expMeta: { fontSize: 9, color: colors.textSecondary, marginTop: 2, fontWeight: '700', textTransform: 'uppercase' },
-  expAmount: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.3 },
+  expTitle: { fontSize: 12, fontWeight: '900', color: C.primary, letterSpacing: -0.2 },
+  expMeta: { fontSize: 9, color: C.textSecondary, marginTop: 2, fontWeight: '700', textTransform: 'uppercase' },
+  expAmount: { fontSize: 14, fontWeight: '900', color: C.primary, letterSpacing: -0.3 },
   modalO: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalC: { backgroundColor: '#fff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 25, paddingBottom: 60, maxHeight: '90%' },
+  modalC: { backgroundColor: C.cardWhite, borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 25, paddingBottom: 60, maxHeight: '90%' },
   modalH: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  modalT: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
+  modalT: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, textTransform: 'uppercase' },
   inputG: { marginBottom: 20 },
-  inputL: { fontSize: 9, fontWeight: '900', color: colors.textLight, marginBottom: 8, textTransform: 'uppercase' },
-  input: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: colors.border },
-  pChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  pChipA: { backgroundColor: colors.accent, borderColor: colors.accent },
-  pChipT: { fontSize: 10, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: '#fff' },
-  confirmBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  confirmText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' },
+  inputL: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 8, textTransform: 'uppercase' },
+  input: { backgroundColor: C.surfaceLow, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: C.border },
+  pChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: C.divider, marginRight: 8, borderWidth: 1, borderColor: C.border },
+  pChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  pChipT: { fontSize: 10, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
+  pChipTA: { color: C.cardWhite },
+  confirmBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
+  confirmText: { color: C.cardWhite, fontWeight: '900', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' },
 
   typeToggle: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  typeBtn: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  typeBtnT: { fontSize: 9, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase' },
-  alertBox: { backgroundColor: '#FFF7ED', padding: 16, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: '#FED7AA' },
+  typeBtn: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  typeBtnT: { fontSize: 9, fontWeight: '900', color: C.textLight, textTransform: 'uppercase' },
+  alertBox: { backgroundColor: C.status.warning.bg, padding: 16, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: C.status.warning.border },
   alertH: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  alertHT: { fontSize: 9, fontWeight: '900', color: '#B45309', letterSpacing: 1.2, textTransform: 'uppercase' },
+  alertHT: { fontSize: 9, fontWeight: '900', color: C.status.warning.fg, letterSpacing: 1.2, textTransform: 'uppercase' },
   alertItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  alertDesc: { fontSize: 11, fontWeight: '800', color: colors.primary, flex: 1 },
-  alertDate: { fontSize: 9, fontWeight: '800', color: '#B45309', marginRight: 15, textTransform: 'uppercase' },
-  alertVal: { fontSize: 11, fontWeight: '900', color: colors.primary },
+  alertDesc: { fontSize: 11, fontWeight: '800', color: C.primary, flex: 1 },
+  alertDate: { fontSize: 9, fontWeight: '800', color: C.status.warning.fg, marginRight: 15, textTransform: 'uppercase' },
+  alertVal: { fontSize: 11, fontWeight: '900', color: C.primary },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  menuContent: { backgroundColor: '#fff', borderRadius: 32, padding: 24, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 },
-  menuTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.5, textAlign: 'center', marginBottom: 25, textTransform: 'uppercase' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', gap: 16 },
+  menuContent: { backgroundColor: C.cardWhite, borderRadius: 32, padding: 24, width: '100%', shadowColor: C.slate, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 },
+  menuTitle: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.5, textAlign: 'center', marginBottom: 25, textTransform: 'uppercase' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: C.divider, gap: 16 },
   menuIcon: { width: 44, height: 44, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  menuItemT: { fontSize: 14, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
-  menuItemS: { fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
+  menuItemT: { fontSize: 14, fontWeight: '900', color: C.primary, letterSpacing: -0.2 },
+  menuItemS: { fontSize: 10, color: C.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
   menuClose: { marginTop: 20, alignItems: 'center', padding: 10 },
-  menuCloseT: { fontSize: 11, fontWeight: '900', color: '#EF4444', letterSpacing: 1, textTransform: 'uppercase' },
+  menuCloseT: { fontSize: 11, fontWeight: '900', color: C.destructive, letterSpacing: 1, textTransform: 'uppercase' },
 });
+}
 

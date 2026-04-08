@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Text, Animated, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Text, Animated, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useSegments, useLocalSearchParams, Href } from 'expo-router';
+import { useRouter, useSegments, useLocalSearchParams } from 'expo-router';
 import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
 import { getLocalAssets } from '../database';
 import { Asset } from '../types/asset';
@@ -11,15 +11,12 @@ import { useAuth } from '../hooks/useAuth';
 import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
-
-/** Aura amarela (anél exterior) quando GPS indisponível ou sem fix. */
-const GPS_AURA_COLOR = '#FACC15';
-const GPS_AURA_SHADOW = '#CA8A04';
+import { MODE_SEGMENT_COLORS } from '../theme/colors';
+import { fontSize, fontWeight, radius } from '../theme/layout';
 
 function AvatarConnectivityStack({
   ringSize,
   touchSize,
-  imageSize,
   placeholderIconSize,
   dotColor,
   gpsIssue,
@@ -27,10 +24,12 @@ function AvatarConnectivityStack({
   avatarUri,
   onPress,
   textSecondary,
+  cardSurface,
+  gpsRing,
+  gpsShadow,
 }: {
   ringSize: number;
   touchSize: number;
-  imageSize: number;
   placeholderIconSize: number;
   dotColor: string;
   gpsIssue: boolean;
@@ -38,6 +37,9 @@ function AvatarConnectivityStack({
   avatarUri: string | null | undefined;
   onPress: () => void;
   textSecondary: string;
+  cardSurface: string;
+  gpsRing: string;
+  gpsShadow: string;
 }) {
   return (
     <View style={{ width: ringSize, height: ringSize, justifyContent: 'center', alignItems: 'center' }}>
@@ -50,8 +52,8 @@ function AvatarConnectivityStack({
             height: gpsAuraDiameter,
             borderRadius: gpsAuraDiameter / 2,
             borderWidth: 3,
-            borderColor: GPS_AURA_COLOR,
-            shadowColor: GPS_AURA_SHADOW,
+            borderColor: gpsRing,
+            shadowColor: gpsShadow,
             shadowOpacity: Platform.OS === 'ios' ? 0.45 : 0.38,
             shadowRadius: 9,
             shadowOffset: { width: 0, height: 0 },
@@ -75,7 +77,7 @@ function AvatarConnectivityStack({
             width: touchSize,
             height: touchSize,
             borderRadius: touchSize / 2,
-            backgroundColor: '#fff',
+            backgroundColor: cardSurface,
             overflow: 'hidden',
             justifyContent: 'center',
             alignItems: 'center',
@@ -84,7 +86,11 @@ function AvatarConnectivityStack({
           activeOpacity={0.7}
         >
           {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={{ width: imageSize, height: imageSize }} />
+            <Image
+              source={{ uri: avatarUri }}
+              style={{ width: touchSize, height: touchSize, borderRadius: touchSize / 2 }}
+              resizeMode="cover"
+            />
           ) : (
             <Ionicons name="person-outline" size={placeholderIconSize} color={textSecondary} />
           )}
@@ -106,6 +112,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const segments = useSegments() as string[];
   const params = useLocalSearchParams();
   const { colors: C } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const { mode, setMode, guardRef } = useAppContext();
   const { user, userRole } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
@@ -128,8 +135,8 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   }, [isOnline]);
 
   // Dot color: grey while first check, green online, red offline
-  const dotColor = isOnline === null ? '#94A3B8' : isOnline ? '#22C55E' : '#EF4444';
-  const dotLabel = isOnline === null ? 'Verificando...' : isOnline ? 'Online' : 'Offline';
+  const dotColor =
+    isOnline === null ? C.connectivity.checking : isOnline ? C.connectivity.online : C.connectivity.offline;
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
@@ -143,91 +150,154 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const asset = isAssetDetail && params.id ? getLocalAssets().find(a => a.id === params.id) : null;
 
-  const toggleMode = () => {
-    const newMode = mode === 'SERVICES' ? 'ASSETS' : 'SERVICES';
-    setMode(newMode);
-    // If not in main screen, redirect to it to show the correct content
-    if (segments[0] !== '(tabs)') {
-      router.push('/(tabs)');
-    }
+  const showBensInBadge = mode !== 'PROVIDER';
+  const badgeSegmentCount =
+    (userRole === 'CLIENT' ? 1 : 0) + (showBensInBadge ? 1 : 0) + (userRole === 'TECHNICIAN' ? 1 : 0);
+
+  const segmentHitSlop = { top: 10, bottom: 10, left: 4, right: 4 } as const;
+  const segBase = {
+    flex: 1,
+    minHeight: 32,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   };
 
-  const renderBadge = (isLarge = false) => (
-    <View style={{
-      flexDirection: 'row',
-      backgroundColor: '#F1F5F9',
-      borderRadius: 18,
-      padding: 3,
-      width: 140, // Back to 2 options width
-    }}>
+  const segLabelStyle = {
+    fontSize: fontSize.xs,
+    lineHeight: fontSize.xs + 2,
+    letterSpacing: 0.2,
+    textAlign: 'center' as const,
+    /** Não usar adjustsFontSizeToFit: com flex igual por segmento, «PRESTADOR» ficava microscópico vs «BENS». */
+  };
+
+  /** Largura um pouco maior com 2 segmentos para «PRESTADOR» + «BENS» sem apertar o texto. */
+  const idealBadgeWidth = badgeSegmentCount <= 1 ? 122 : badgeSegmentCount === 2 ? 186 : 228;
+  /** Espaço entre logo (≈100) + margem, avatar (≈54) e padding do header — evita sobrepor o logo com absolute center. */
+  const headerSideReserve = 32 + 108 + 54;
+  const maxBadgeByScreen = Math.max(104, windowWidth - headerSideReserve);
+  const badgeWidth = Math.min(idealBadgeWidth, maxBadgeByScreen);
+
+  const renderBadge = () => (
+    <View
+      style={{
+        flexDirection: 'row',
+        backgroundColor: C.surfaceLow,
+        borderRadius: radius.md,
+        paddingHorizontal: 3,
+        paddingVertical: 2,
+        width: badgeWidth,
+        maxWidth: '100%',
+        alignItems: 'center',
+      }}
+    >
       {userRole === 'CLIENT' && (
-        <TouchableOpacity 
+        <TouchableOpacity
+          hitSlop={segmentHitSlop}
           onPress={() => {
             setMode('SERVICES');
             if (segments[0] !== '(tabs)') router.push('/(tabs)');
           }}
           activeOpacity={0.8}
-          style={{
-            flex: 1,
-            paddingVertical: 4,
-            borderRadius: 16,
-            alignItems: 'center',
-            backgroundColor: mode === 'SERVICES' ? '#fff' : 'transparent',
-            shadowColor: mode === 'SERVICES' ? '#000' : 'transparent',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: mode === 'SERVICES' ? 0.05 : 0,
-            shadowRadius: 2,
-            elevation: mode === 'SERVICES' ? 1 : 0,
-          }}
+          style={[
+            segBase,
+            {
+              backgroundColor: mode === 'SERVICES' ? C.cardWhite : 'transparent',
+              shadowColor: mode === 'SERVICES' ? C.slate : 'transparent',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: mode === 'SERVICES' ? 0.06 : 0,
+              shadowRadius: 2,
+              elevation: mode === 'SERVICES' ? 1 : 0,
+            },
+          ]}
         >
-          <Text style={{ fontSize: 9, fontWeight: mode === 'SERVICES' ? '900' : '700', color: mode === 'SERVICES' ? '#10B981' : '#94A3B8', letterSpacing: 0.2 }}>SERVIÇOS</Text>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="clip"
+            style={[
+              segLabelStyle,
+              {
+                fontWeight: mode === 'SERVICES' ? fontWeight.black : fontWeight.bold,
+                color: mode === 'SERVICES' ? MODE_SEGMENT_COLORS.SERVICES : C.textLight,
+              },
+            ]}
+          >
+            SERVIÇOS
+          </Text>
         </TouchableOpacity>
       )}
-      
-      {/* Bens is always visible */}
-      <TouchableOpacity 
-        onPress={() => {
-          setMode('ASSETS');
-          if (segments[0] !== '(tabs)') router.push('/(tabs)');
-        }}
-        activeOpacity={0.8}
-        style={{
-          flex: 1,
-          paddingVertical: 4,
-          borderRadius: 16,
-          alignItems: 'center',
-          backgroundColor: mode === 'ASSETS' ? '#fff' : 'transparent',
-          shadowColor: mode === 'ASSETS' ? '#000' : 'transparent',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: mode === 'ASSETS' ? 0.05 : 0,
-          shadowRadius: 2,
-          elevation: mode === 'ASSETS' ? 1 : 0,
-        }}
-      >
-        <Text style={{ fontSize: 9, fontWeight: mode === 'ASSETS' ? '900' : '700', color: mode === 'ASSETS' ? '#3B82F6' : '#94A3B8', letterSpacing: 0.2 }}>BENS</Text>
-      </TouchableOpacity>
+
+      {showBensInBadge && (
+        <TouchableOpacity
+          hitSlop={segmentHitSlop}
+          onPress={() => {
+            setMode('ASSETS');
+            if (segments[0] !== '(tabs)') router.push('/(tabs)');
+          }}
+          activeOpacity={0.8}
+          style={[
+            segBase,
+            {
+              backgroundColor: mode === 'ASSETS' ? C.cardWhite : 'transparent',
+              shadowColor: mode === 'ASSETS' ? C.slate : 'transparent',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: mode === 'ASSETS' ? 0.06 : 0,
+              shadowRadius: 2,
+              elevation: mode === 'ASSETS' ? 1 : 0,
+            },
+          ]}
+        >
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="clip"
+            style={[
+              segLabelStyle,
+              {
+                fontWeight: mode === 'ASSETS' ? fontWeight.black : fontWeight.bold,
+                color: mode === 'ASSETS' ? MODE_SEGMENT_COLORS.ASSETS : C.textLight,
+              },
+            ]}
+          >
+            BENS
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {userRole === 'TECHNICIAN' && (
-        <TouchableOpacity 
+        <TouchableOpacity
+          hitSlop={segmentHitSlop}
           onPress={() => {
             setMode('PROVIDER');
             if (segments[0] !== '(tabs)') router.push('/(tabs)');
           }}
           activeOpacity={0.8}
-          style={{
-            flex: 1,
-            paddingVertical: 4,
-            borderRadius: 16,
-            alignItems: 'center',
-            backgroundColor: mode === 'PROVIDER' ? '#fff' : 'transparent',
-            shadowColor: mode === 'PROVIDER' ? '#000' : 'transparent',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: mode === 'PROVIDER' ? 0.05 : 0,
-            shadowRadius: 2,
-            elevation: mode === 'PROVIDER' ? 1 : 0,
-          }}
+          style={[
+            segBase,
+            {
+              backgroundColor: mode === 'PROVIDER' ? C.cardWhite : 'transparent',
+              shadowColor: mode === 'PROVIDER' ? C.slate : 'transparent',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: mode === 'PROVIDER' ? 0.06 : 0,
+              shadowRadius: 2,
+              elevation: mode === 'PROVIDER' ? 1 : 0,
+            },
+          ]}
         >
-          <Text style={{ fontSize: 9, fontWeight: mode === 'PROVIDER' ? '900' : '700', color: mode === 'PROVIDER' ? '#D97706' : '#94A3B8', letterSpacing: 0.2 }}>PRESTADOR</Text>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="clip"
+            style={[
+              segLabelStyle,
+              {
+                fontWeight: mode === 'PROVIDER' ? fontWeight.black : fontWeight.bold,
+                color: mode === 'PROVIDER' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight,
+              },
+            ]}
+          >
+            PRESTADOR
+          </Text>
         </TouchableOpacity>
       )}
     </View>
@@ -235,12 +305,25 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   if (title || isAssetDetail || isProfile) {
     return (
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+      <SafeAreaView
+        edges={['top']}
+        style={{ backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}
+      >
         <View style={{ height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
           {/* Left: Back + Title */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={onLeftPress || (() => checkGuardBeforeBack(guardRef, () => router.back()))} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
-              <Ionicons name={(leftIcon as any) || "arrow-back"} size={20} color="#191C1D" />
+            <TouchableOpacity
+              onPress={onLeftPress || (() => checkGuardBeforeBack(guardRef, () => router.back()))}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                borderRadius: 22,
+                backgroundColor: C.surfaceLow,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name={(leftIcon as any) || 'arrow-back'} size={22} color={C.slate} />
             </TouchableOpacity>
 
             <Image 
@@ -250,21 +333,21 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
             />
 
             {title ? (
-              <Text style={{ fontSize: 18, fontWeight: '900', color: '#191C1D', letterSpacing: -0.5 }}>
+              <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}>
                 {title}
               </Text>
             ) : isAssetDetail && asset ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Image
                   source={{ uri: asset.imageUrl || 'https://via.placeholder.com/150' }}
-                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#E2E8F0' }}
+                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.border }}
                 />
-                <Text style={{ fontSize: 13, fontWeight: '900', color: '#191C1D', maxWidth: 160 }} numberOfLines={1}>
+                <Text style={{ fontSize: fontSize.sm, fontWeight: fontWeight.black, color: C.slate, maxWidth: 160 }} numberOfLines={1}>
                   {asset.title}
                 </Text>
               </View>
             ) : isProfile ? (
-              <Text style={{ fontSize: 18, fontWeight: '900', color: '#191C1D', letterSpacing: -0.5 }}>
+              <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}>
                 Configurações
               </Text>
             ) : null}
@@ -276,15 +359,17 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <AvatarConnectivityStack
                   ringSize={48}
-                  touchSize={38}
-                  imageSize={38}
-                  placeholderIconSize={20}
+                  touchSize={40}
+                  placeholderIconSize={22}
                   dotColor={dotColor}
                   gpsIssue={gpsIssue}
                   gpsAuraDiameter={56}
                   avatarUri={avatarUri}
                   onPress={() => router.push('/profile')}
                   textSecondary={C.textSecondary}
+                  cardSurface={C.cardWhite}
+                  gpsRing={C.gpsAura.ring}
+                  gpsShadow={C.gpsAura.shadow}
                 />
               </View>
             ) : (
@@ -299,26 +384,33 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   return (
     <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: C.cardWhite }]}>
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
-        {/* Left: Logo */}
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Image 
-            source={require('../../assets/logo.png')} 
-            style={{ width: 100, height: 32 }} 
-            resizeMode="contain" 
+        {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}
+        <View style={{ flexShrink: 0, marginRight: 8 }}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={{ width: 100, height: 32 }}
+            resizeMode="contain"
           />
         </View>
-        
-        {/* Middle: Centered Badge */}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', pointerEvents: 'box-none' }}>
+
+        {/* Centro: só o espaço entre logo e avatar (o seletor já não invade o logo) */}
+        <View
+          style={{
+            flex: 1,
+            minWidth: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          pointerEvents="box-none"
+        >
           {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
         </View>
-        
-        {/* Right: QR + Profile (with Aura) */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+
+        {/* Direita: avatar */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
           <AvatarConnectivityStack
             ringSize={50}
-            touchSize={40}
-            imageSize={40}
+            touchSize={44}
             placeholderIconSize={22}
             dotColor={dotColor}
             gpsIssue={gpsIssue}
@@ -326,6 +418,9 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
             avatarUri={avatarUri}
             onPress={() => router.push('/profile')}
             textSecondary={C.textSecondary}
+            cardSurface={C.cardWhite}
+            gpsRing={C.gpsAura.ring}
+            gpsShadow={C.gpsAura.shadow}
           />
         </View>
       </View>

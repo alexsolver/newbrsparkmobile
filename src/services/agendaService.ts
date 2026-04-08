@@ -3,7 +3,7 @@ import { AuthService } from './auth';
 import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
-import { enqueueMutation, overlayExecutionStatusOutboxOnTasks } from './syncService';
+import { overlayExecutionStatusOutboxOnTasks } from './syncService';
 
 const KEY = (email: string) => AuthService.getUserKey('agenda_events', email);
 
@@ -40,13 +40,11 @@ export const AgendaService = {
     else all.push(updated);
     
     await AsyncStorage.setItem(KEY(ownerEmail), JSON.stringify(all));
-    enqueueMutation('agenda', idx >= 0 ? 'UPDATE' : 'CREATE', updated, ownerEmail);
   },
 
   async deleteEvent(id: string, ownerEmail: string): Promise<void> {
     const all = await this.getLocalEvents(ownerEmail);
     await AsyncStorage.setItem(KEY(ownerEmail), JSON.stringify(all.filter(e => e.id !== id)));
-    enqueueMutation('agenda', 'DELETE', { id }, ownerEmail);
   },
 
   // ─── 2. Unified Aggregator (Passivo + Ativo) ───

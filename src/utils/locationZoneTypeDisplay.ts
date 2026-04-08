@@ -18,7 +18,7 @@ export function getLocationZoneTypeVisual(zoneType: string | null | undefined): 
   switch (z) {
     case 'radius':
     case 'point':
-      return { icon: 'radio-button-on', label: 'Tipo de local: ponto' };
+      return { icon: 'location', label: 'Tipo de local: ponto' };
     case 'segment':
       return { icon: 'swap-horizontal-outline', label: 'Tipo de local: trecho' };
     case 'route':

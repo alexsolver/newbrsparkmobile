@@ -19,14 +19,27 @@ async function getDeviceId(): Promise<string> {
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-// Altere MAC_IP para o IP da sua máquina na rede Wi-Fi local quando testar no celular.
+// Altere MAC_IP para o IP da sua máquina na rede Wi‑Fi local quando testar no celular.
 // Em simulador use 'localhost'. Em Expo Go no device, use seu IP da rede (ex: 192.168.1.10).
 const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessário
 /** Porta da API (admin-panel/backend + PostgreSQL). */
 const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
+
+/** Origem da API em release: só esquema+host (+porta se preciso). Sem `/api` no fim (o app acrescenta `/api/...`). */
+function normalizeProductionApiBase(raw: string | undefined): string | undefined {
+  if (raw == null || typeof raw !== 'string') return undefined;
+  let u = raw.trim().replace(/\/+$/, '');
+  if (u.toLowerCase().endsWith('/api')) {
+    u = u.slice(0, -4).replace(/\/+$/, '');
+  }
+  return u.length > 0 ? u : undefined;
+}
+
+const PRODUCTION_API_DEFAULT = 'https://brsparks.wstrategy.com.br';
+
 export const API_BASE = __DEV__
   ? `http://${MAC_IP}:${DEV_API_PORT}`
-  : 'https://api.brspark.com';           // produção (ajuste quando deployar)
+  : normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE) || PRODUCTION_API_DEFAULT;
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface User {

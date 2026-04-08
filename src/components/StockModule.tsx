@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert, ScrollView, Image, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import { ValueInput } from './ValueInput';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { StockService } from '../services/stockService';
 import { StockItem, StockMovement } from '../types/stock';
 import { CostSummary } from '../types/costs';
@@ -135,6 +136,8 @@ function StockLocationGroup({ loc, locItems, onItemPress, onMovePress, onAddItem
 
 export function StockModule({ assetId }: { assetId?: string }) {
   const { t } = useTranslation();
+  const { colors: C } = useTheme();
+  const S = useMemo(() => createStockModuleStyles(C), [C]);
   const { user } = useAuth();
   const [items, setItems] = useState<StockItem[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -373,7 +376,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
 
       {activeTab === 'ITEMS' ? (
         <>
-          <View style={S.searchRow}><View style={S.searchBox}><Ionicons name="search" size={16} color={colors.textLight} /><TextInput placeholder={t('stock.searchPlaceholder')} style={S.searchInput} value={searchText} onChangeText={setSearchText} returnKeyType="done"
+          <View style={S.searchRow}><View style={S.searchBox}><Ionicons name="search" size={16} color={C.textLight} /><TextInput placeholder={t('stock.searchPlaceholder')} style={S.searchInput} value={searchText} onChangeText={setSearchText} returnKeyType="done"
                       /></View><TouchableOpacity style={S.barcodeBtn} onPress={() => startScanner()}><Ionicons name="barcode" size={20} color="#fff" /></TouchableOpacity></View>
 
           {searchText.trim() ? (
@@ -382,10 +385,10 @@ export function StockModule({ assetId }: { assetId?: string }) {
               data={filteredItems}
               renderItem={({ item }) => (
                 <TouchableOpacity style={S.itemCard} onPress={() => { setViewingItem(item); setDetailModalVisible(true); }}>
-                  {item.photoUri ? <Image source={{uri: item.photoUri}} style={S.itemThumb} /> : <View style={S.itemThumbPH}><Ionicons name="cube-outline" size={16} color={colors.textLight} /></View>}
+                  {item.photoUri ? <Image source={{uri: item.photoUri}} style={S.itemThumb} /> : <View style={S.itemThumbPH}><Ionicons name="cube-outline" size={16} color={C.textLight} /></View>}
                   <View style={S.itemInfo}><Text style={S.itemName}>{item.name}</Text><Text style={S.itemSku}>{item.sku} · {item.category}</Text></View>
-                  <View style={S.stockB}><Text style={[S.stockV, item.currentStock <= item.minStock && { color: colors.warning.text }]}>{item.currentStock}</Text><Text style={S.stockU}>{t(`stock.units.${item.unit}`)}</Text></View>
-                  <TouchableOpacity style={S.moveBtn} onPress={() => { setSelectedItem(item); setSubLocation(item.subLocation || ''); setQuantity(''); setReason(''); setModalVisible(true); }}><Ionicons name="swap-vertical" size={18} color={colors.primary} /></TouchableOpacity>
+                  <View style={S.stockB}><Text style={[S.stockV, item.currentStock <= item.minStock && { color: C.warning.text }]}>{item.currentStock}</Text><Text style={S.stockU}>{t(`stock.units.${item.unit}`)}</Text></View>
+                  <TouchableOpacity style={S.moveBtn} onPress={() => { setSelectedItem(item); setSubLocation(item.subLocation || ''); setQuantity(''); setReason(''); setModalVisible(true); }}><Ionicons name="swap-vertical" size={18} color={C.primary} /></TouchableOpacity>
                 </TouchableOpacity>
               )}
               keyExtractor={i => i.id} scrollEnabled={false}
@@ -440,10 +443,10 @@ export function StockModule({ assetId }: { assetId?: string }) {
                   const isLow = item.currentStock <= item.minStock;
                   return (
                     <TouchableOpacity key={item.id} style={S.itemCard} onPress={() => { setViewingItem(item); setDetailModalVisible(true); }}>
-                      {item.photoUri ? <Image source={{uri: item.photoUri}} style={S.itemThumb} /> : <View style={S.itemThumbPH}><Ionicons name="cube-outline" size={16} color={colors.textLight} /></View>}
+                      {item.photoUri ? <Image source={{uri: item.photoUri}} style={S.itemThumb} /> : <View style={S.itemThumbPH}><Ionicons name="cube-outline" size={16} color={C.textLight} /></View>}
                       <View style={S.itemInfo}><Text style={S.itemName}>{item.name}</Text><Text style={S.itemSku}>{item.sku} · {item.category}</Text></View>
-                      <View style={S.stockB}><Text style={[S.stockV, isLow && { color: colors.warning.text }]}>{item.currentStock}</Text><Text style={S.stockU}>{t(`stock.units.${item.unit}`)}</Text></View>
-                      <TouchableOpacity style={S.moveBtn} onPress={() => { setSelectedItem(item); setSubLocation(item.subLocation || ''); setQuantity(''); setReason(''); setModalVisible(true); }}><Ionicons name="swap-vertical" size={18} color={colors.primary} /></TouchableOpacity>
+                      <View style={S.stockB}><Text style={[S.stockV, isLow && { color: C.warning.text }]}>{item.currentStock}</Text><Text style={S.stockU}>{t(`stock.units.${item.unit}`)}</Text></View>
+                      <TouchableOpacity style={S.moveBtn} onPress={() => { setSelectedItem(item); setSubLocation(item.subLocation || ''); setQuantity(''); setReason(''); setModalVisible(true); }}><Ionicons name="swap-vertical" size={18} color={C.primary} /></TouchableOpacity>
                     </TouchableOpacity>
                   );
                 });
@@ -459,7 +462,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
                   <Text style={S.modalT}>{t('stock.createStock')}</Text>
                   <Text style={{ fontSize: 16, fontWeight: '900', color: '#15803D' }}>Selecionar Local</Text>
                 </View>
-                <TouchableOpacity onPress={() => setCreateStockModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setCreateStockModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {allLocations.filter(l => !l.isStock).length > 0 ? (
@@ -521,7 +524,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
         <View style={S.historyList}>
            {movements.map(m => (
               <View key={m.id} style={S.moveRow}>
-                <View style={[S.moveDot, {backgroundColor: m.type === 'IN' ? '#10B981' : m.type === 'TRANSFER' ? '#6366F1' : colors.warning.text}]} />
+                <View style={[S.moveDot, {backgroundColor: m.type === 'IN' ? '#10B981' : m.type === 'TRANSFER' ? '#6366F1' : C.warning.text}]} />
                 <View style={{flex:1}}><Text style={S.moveTitle}>{items.find(i=>i.id===m.itemId)?.name || t('common.removed')}</Text><Text style={S.moveSub}>{formatDate(m.timestamp)} • {m.reason}</Text></View>
                 <Text style={S.moveQty}>{(m.type === 'OUT' ? '-' : m.type === 'TRANSFER' ? '⇄' : '+') + m.quantity}</Text>
               </View>
@@ -533,7 +536,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
       <Modal visible={modalVisible} transparent animationType="slide">
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}><View style={S.modalO}><View style={S.modalC}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-             <View style={S.modalH}><Text style={S.modalT}>{t('stock.logisticActivity')}</Text><TouchableOpacity onPress={() => setModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+             <View style={S.modalH}><Text style={S.modalT}>{t('stock.logisticActivity')}</Text><TouchableOpacity onPress={() => setModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
              <Text style={S.itemL}>{selectedItem?.name}</Text>
              <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 6 }}>
                 {/* ORIGIN BADGE */}
@@ -716,7 +719,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
                 )}
               </View>
               <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.primary} />
+                <Ionicons name="close" size={24} color={C.primary} />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -735,13 +738,13 @@ export function StockModule({ assetId }: { assetId?: string }) {
                       style={[{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }, !modalUseImperial && { backgroundColor: '#fff' }]}
                       onPress={() => { setModalUseImperial(false); setNewItem({ ...newItem, unit: 'un' }); }}
                     >
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: !modalUseImperial ? colors.primary : '#94A3B8' }}>MÉTRICO</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: !modalUseImperial ? C.primary : '#94A3B8' }}>MÉTRICO</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }, modalUseImperial && { backgroundColor: '#fff' }]}
                       onPress={() => { setModalUseImperial(true); setNewItem({ ...newItem, unit: 'un' }); }}
                     >
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: modalUseImperial ? colors.primary : '#94A3B8' }}>IMPERIAL</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: modalUseImperial ? C.primary : '#94A3B8' }}>IMPERIAL</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -770,25 +773,25 @@ export function StockModule({ assetId }: { assetId?: string }) {
       {/* Modal Detalhes do Item */}
       <Modal visible={detailModalVisible} transparent animationType="fade">
         <View style={S.modalO}><View style={[S.modalC, { maxHeight: '80%' }]}>
-           <View style={S.modalH}><Text style={S.modalT}>{t('stock.materialDetails')}</Text><TouchableOpacity onPress={() => setDetailModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+           <View style={S.modalH}><Text style={S.modalT}>{t('stock.materialDetails')}</Text><TouchableOpacity onPress={() => setDetailModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
            {viewingItem && (
              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                <View style={{alignItems:'center', marginBottom:20}}>
-                 {viewingItem.photoUri ? <Image source={{uri: viewingItem.photoUri}} style={{width: 120, height: 120, borderRadius: 24}} /> : <View style={{width: 120, height: 120, borderRadius: 24, backgroundColor: colors.background, justifyContent:'center', alignItems:'center'}}><Ionicons name="cube-outline" size={60} color={colors.textLight} /></View>}
-                 <Text style={{fontSize: 24, fontWeight: '900', color: colors.primary, marginTop: 15}}>{viewingItem.name}</Text>
-                 <Text style={{fontSize: 14, color: colors.textSecondary, fontWeight: '700'}}>{viewingItem.sku} • {viewingItem.category}</Text>
+                 {viewingItem.photoUri ? <Image source={{uri: viewingItem.photoUri}} style={{width: 120, height: 120, borderRadius: 24}} /> : <View style={{width: 120, height: 120, borderRadius: 24, backgroundColor: C.background, justifyContent:'center', alignItems:'center'}}><Ionicons name="cube-outline" size={60} color={C.textLight} /></View>}
+                 <Text style={{fontSize: 24, fontWeight: '900', color: C.primary, marginTop: 15}}>{viewingItem.name}</Text>
+                 <Text style={{fontSize: 14, color: C.textSecondary, fontWeight: '700'}}>{viewingItem.sku} • {viewingItem.category}</Text>
                </View>
 
                <View style={{flexDirection:'row', gap:10, marginBottom:20}}>
-                  <View style={{flex:1, backgroundColor: colors.background, padding: 15, borderRadius: 20, alignItems:'center'}}><Text style={{fontSize: 10, fontWeight:'900', color: colors.textLight}}>{t('stock.currentBalance')}</Text><Text style={{fontSize: 24, fontWeight:'900', color: colors.primary}}>{viewingItem.currentStock} {viewingItem.unit}</Text></View>
-                  <View style={{flex:1, backgroundColor: colors.background, padding: 15, borderRadius: 20, alignItems:'center'}}><Text style={{fontSize: 10, fontWeight:'900', color: colors.textLight}}>{t('stock.minLevel')}</Text><Text style={{fontSize: 24, fontWeight:'900', color: viewingItem.currentStock <= viewingItem.minStock ? colors.warning.text : colors.primary}}>{viewingItem.minStock}</Text></View>
+                  <View style={{flex:1, backgroundColor: C.background, padding: 15, borderRadius: 20, alignItems:'center'}}><Text style={{fontSize: 10, fontWeight:'900', color: C.textLight}}>{t('stock.currentBalance')}</Text><Text style={{fontSize: 24, fontWeight:'900', color: C.primary}}>{viewingItem.currentStock} {viewingItem.unit}</Text></View>
+                  <View style={{flex:1, backgroundColor: C.background, padding: 15, borderRadius: 20, alignItems:'center'}}><Text style={{fontSize: 10, fontWeight:'900', color: C.textLight}}>{t('stock.minLevel')}</Text><Text style={{fontSize: 24, fontWeight:'900', color: viewingItem.currentStock <= viewingItem.minStock ? C.warning.text : C.primary}}>{viewingItem.minStock}</Text></View>
                </View>
 
                <Text style={S.modalT}>{t('stock.lastMovements')}</Text>
                <View style={{marginTop: 15}}>
                  {movements.filter(m => m.itemId === viewingItem.id).slice(0,5).map(m => (
-                   <View key={m.id} style={[S.moveRow, {borderBottomColor: colors.border}]}>
-                     <View style={[S.moveDot, {backgroundColor: m.type === 'IN' ? '#10B981' : m.type === 'TRANSFER' ? '#6366F1' : colors.warning.text}]} />
+                   <View key={m.id} style={[S.moveRow, {borderBottomColor: C.border}]}>
+                     <View style={[S.moveDot, {backgroundColor: m.type === 'IN' ? '#10B981' : m.type === 'TRANSFER' ? '#6366F1' : C.warning.text}]} />
                      <View style={{flex:1}}><Text style={S.moveTitle}>{m.reason}</Text><Text style={S.moveSub}>{formatDate(m.timestamp)}</Text></View>
                      <Text style={S.moveQty}>{(m.type === 'OUT' ? '-' : m.type === 'TRANSFER' ? '⇄' : '+') + m.quantity}</Text>
                    </View>
@@ -805,7 +808,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
       <Modal visible={scanModalVisible} animationType="slide" transparent>
         <View style={S.scanOverlay}>
           <View style={S.scanContainer}>
-             <View style={S.modalH}><Text style={S.modalT}>{t('stock.scannerTitle')}</Text><TouchableOpacity onPress={() => setScanModalVisible(false)}><Ionicons name="close" size={24} color={colors.primary} /></TouchableOpacity></View>
+             <View style={S.modalH}><Text style={S.modalT}>{t('stock.scannerTitle')}</Text><TouchableOpacity onPress={() => setScanModalVisible(false)}><Ionicons name="close" size={24} color={C.primary} /></TouchableOpacity></View>
              <Text style={S.scanSub}>{t('stock.scanLocalSub')}</Text>
              <View style={S.cameraWrapper}>
                 <CameraView
@@ -815,7 +818,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
                 />
                 <View style={S.cameraOverlay}><View style={S.scannerFrame} /></View>
              </View>
-             <TouchableOpacity style={[S.confirmBtn, {marginTop: 20, backgroundColor: '#F1F5F9'}]} onPress={() => setScanModalVisible(false)}><Text style={[S.confirmText, {color: colors.primary}]}>{t('common.cancel').toUpperCase()}</Text></TouchableOpacity>
+             <TouchableOpacity style={[S.confirmBtn, {marginTop: 20, backgroundColor: '#F1F5F9'}]} onPress={() => setScanModalVisible(false)}><Text style={[S.confirmText, {color: C.primary}]}>{t('common.cancel').toUpperCase()}</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -824,95 +827,97 @@ export function StockModule({ assetId }: { assetId?: string }) {
   );
 }
 
-const S = StyleSheet.create({
-  container: { marginTop: 15, paddingHorizontal: 0, backgroundColor: '#fff', borderRadius: 24, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
+function createStockModuleStyles(C: ColorPalette) {
+  return StyleSheet.create({
+  container: { marginTop: 15, paddingHorizontal: 0, backgroundColor: '#fff', borderRadius: 24, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border },
   modHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingHorizontal: 20 },
-  modTitle: { fontSize: 9, fontWeight: '900', color: colors.textLight, letterSpacing: 1.5, textTransform: 'uppercase' },
-  modSub: { fontSize: 18, fontWeight: '900', color: colors.primary, marginTop: 4, letterSpacing: -0.4 },
-  stdAddBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  fab: { position: 'absolute', bottom: 30, right: 20, zIndex: 10, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', shadowColor: colors.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
-  modTabBar: { flexDirection: 'row', gap: 15, marginBottom: 20, borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: 20 },
-  modTabActive: { borderBottomWidth: 3, borderBottomColor: colors.accent, paddingBottom: 8 },
-  modTabTextActive: { color: colors.accent, fontWeight: '800' },
+  modTitle: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase' },
+  modSub: { fontSize: 18, fontWeight: '900', color: C.primary, marginTop: 4, letterSpacing: -0.4 },
+  stdAddBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  fab: { position: 'absolute', bottom: 30, right: 20, zIndex: 10, width: 60, height: 60, borderRadius: 30, backgroundColor: C.accent, justifyContent: 'center', alignItems: 'center', shadowColor: C.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
+  modTabBar: { flexDirection: 'row', gap: 15, marginBottom: 20, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 20 },
+  modTabActive: { borderBottomWidth: 3, borderBottomColor: C.accent, paddingBottom: 8 },
+  modTabTextActive: { color: C.accent, fontWeight: '800' },
   modTab: { paddingBottom: 8 },
-  modTabText: { fontSize: 11, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modTabText: { fontSize: 11, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   
   searchRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 15 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.background, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, borderColor: C.border },
   searchInput: { paddingVertical: 10, flex: 1, marginLeft: 10, fontSize: 13, fontWeight: '700' },
-  barcodeBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
+  barcodeBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.accent, justifyContent: 'center', alignItems: 'center' },
 
 
   
-  itemCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 18, borderRadius: 24, marginBottom: 12, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  itemCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 18, borderRadius: 24, marginBottom: 12, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.border },
   itemThumb: { width: 44, height: 44, borderRadius: 10, marginRight: 12 },
-  itemThumbPH: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  itemThumbPH: { width: 44, height: 44, borderRadius: 10, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   itemInfo: { flex: 1 },
-  itemName: { fontSize: 13, fontWeight: '900', color: colors.primary, letterSpacing: -0.2 },
-  itemSku: { fontSize: 9, color: colors.textSecondary, fontWeight: '800', textTransform: 'uppercase' },
+  itemName: { fontSize: 13, fontWeight: '900', color: C.primary, letterSpacing: -0.2 },
+  itemSku: { fontSize: 9, color: C.textSecondary, fontWeight: '800', textTransform: 'uppercase' },
   locBadgeInline: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  subLocText: { fontSize: 9, color: colors.textLight, fontWeight: '700' },
+  subLocText: { fontSize: 9, color: C.textLight, fontWeight: '700' },
   stockB: { alignItems: 'flex-end', marginRight: 15 },
-  stockV: { fontSize: 16, fontWeight: '900', color: colors.primary },
-  stockU: { fontSize: 8, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase' },
-  moveBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  stockV: { fontSize: 16, fontWeight: '900', color: C.primary },
+  stockU: { fontSize: 8, fontWeight: '900', color: C.textLight, textTransform: 'uppercase' },
+  moveBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
   
   historyList: { paddingHorizontal: 20 },
-  moveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  moveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   moveDot: { width: 8, height: 8, borderRadius: 4, marginRight: 12 },
-  moveTitle: { fontSize: 11, fontWeight: '800', color: colors.primary },
-  moveSub: { fontSize: 9, color: colors.textLight, fontWeight: '600' },
-  moveQty: { fontSize: 12, fontWeight: '900', color: colors.primary },
+  moveTitle: { fontSize: 11, fontWeight: '800', color: C.primary },
+  moveSub: { fontSize: 9, color: C.textLight, fontWeight: '600' },
+  moveQty: { fontSize: 12, fontWeight: '900', color: C.primary },
   
   modalO: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalC: { backgroundColor: '#fff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 25, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '95%' },
   modalH: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  modalT: { fontSize: 9, fontWeight: '900', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1.5 },
-  itemL: { fontSize: 18, fontWeight: '900', color: colors.primary, marginBottom: 12, letterSpacing: -0.4 },
+  modalT: { fontSize: 9, fontWeight: '900', color: C.textLight, textTransform: 'uppercase', letterSpacing: 1.5 },
+  itemL: { fontSize: 18, fontWeight: '900', color: C.primary, marginBottom: 12, letterSpacing: -0.4 },
   hierRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 25 },
-  pBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accent, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  pBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.accent, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   pBadgeT: { fontSize: 9, fontWeight: '900', color: '#fff' },
-  sBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.background, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  sBadgeT: { fontSize: 9, fontWeight: '800', color: colors.primary },
+  sBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.background, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  sBadgeT: { fontSize: 9, fontWeight: '800', color: C.primary },
   
   inputG2: { marginBottom: 15 },
-  inputL2: { fontSize: 9, fontWeight: '900', color: colors.textLight, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' },
-  input: { backgroundColor: colors.background, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', marginBottom: 10, borderWidth: 1, borderColor: colors.border },
-  skuScanBtn: { backgroundColor: colors.accent, width: 44, height: 48, borderRadius: 12, justifyContent:'center', alignItems:'center' },
+  inputL2: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' },
+  input: { backgroundColor: C.background, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  skuScanBtn: { backgroundColor: C.accent, width: 44, height: 48, borderRadius: 12, justifyContent:'center', alignItems:'center' },
 
   
-  confirmBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 16, alignItems: 'center' },
+  confirmBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center' },
 
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' },
   
   typeR: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  typeB: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  typeB: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   typeBA: { backgroundColor: '#10B981', borderColor: '#10B981' },
-  typeBAO: { backgroundColor: colors.warning.text, borderColor: colors.warning.text },
+  typeBAO: { backgroundColor: C.warning.text, borderColor: C.warning.text },
   typeBAT: { backgroundColor: '#6366F1', borderColor: '#6366F1' },
-  typeT: { fontSize: 10, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', textAlign: 'center' },
+  typeT: { fontSize: 10, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', textAlign: 'center' },
   
   scanOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
   scanContainer: { backgroundColor: '#fff', borderRadius: 32, padding: 24, alignItems: 'center' },
-  scanSub: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 20, fontWeight: '600' },
+  scanSub: { fontSize: 13, color: C.textSecondary, textAlign: 'center', marginBottom: 20, fontWeight: '600' },
   cameraWrapper: { width: '100%', height: 300, borderRadius: 20, overflow: 'hidden' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
-  scannerFrame: { width: 220, height: 220, borderWidth: 2, borderColor: colors.accent, borderRadius: 20, borderStyle: 'dashed' },
+  scannerFrame: { width: 220, height: 220, borderWidth: 2, borderColor: C.accent, borderRadius: 20, borderStyle: 'dashed' },
   
-  toast: { position: 'absolute', top: 20, left: 20, right: 20, backgroundColor: colors.primary, padding: 16, borderRadius: 15, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 9999 },
+  toast: { position: 'absolute', top: 20, left: 20, right: 20, backgroundColor: C.primary, padding: 16, borderRadius: 15, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 9999 },
   toastS: { backgroundColor: '#10B981' },
-  toastE: { backgroundColor: colors.warning.text },
+  toastE: { backgroundColor: C.warning.text },
   toastT: { color: '#fff', fontSize: 13, fontWeight: '800', flex: 1 },
   
-  finSummary: { backgroundColor: colors.background, padding: 20, borderRadius: 24, marginHorizontal: 20, marginBottom: 20 },
+  finSummary: { backgroundColor: C.background, padding: 20, borderRadius: 24, marginHorizontal: 20, marginBottom: 20 },
   finItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  finL: { fontSize: 11, color: colors.textSecondary, fontWeight: '800' },
-  finV: { fontSize: 11, color: colors.primary, fontWeight: '900' },
+  finL: { fontSize: 11, color: C.textSecondary, fontWeight: '800' },
+  finV: { fontSize: 11, color: C.primary, fontWeight: '900' },
   
   catalogItem: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 8, gap: 12 },
-  catalogT: { fontSize: 12, fontWeight: '800', color: colors.primary, flex: 1 },
-  pChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.background, marginRight: 8 },
-  pChipA: { backgroundColor: colors.accent },
-  pChipT: { fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase' },
+  catalogT: { fontSize: 12, fontWeight: '800', color: C.primary, flex: 1 },
+  pChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: C.background, marginRight: 8 },
+  pChipA: { backgroundColor: C.accent },
+  pChipT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
   pChipTA: { color: '#fff' }
-});
+  });
+}

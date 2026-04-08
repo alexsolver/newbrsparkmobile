@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,43 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Header } from '../../../src/components/Header';
 import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
-import type { TechnicianFinanceKind } from '../../../src/types/technicianFinance';
+import type { TechnicianFinanceAttachment, TechnicianFinanceKind } from '../../../src/types/technicianFinance';
+import {
+  loadLinkableTasksForTechnicianExpense,
+  type LinkableExpenseTask,
+} from '../../../src/utils/technicianFinanceLinkableTasks';
+
+const MAX_ATTACHMENTS = 10;
+
+type LocalAttachment = TechnicianFinanceAttachment & { _localId: string };
+
+function guessMime(uri: string, name?: string): string | undefined {
+  const lower = (name || uri).toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.heic')) return 'image/heic';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return undefined;
+}
+
+function isProbablyImage(att: LocalAttachment) {
+  const m = att.mimeType?.toLowerCase() || '';
+  if (m.startsWith('image/')) return true;
+  const n = (att.name || att.uri).toLowerCase();
+  return /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(n);
+}
 
 export default function NewTechnicianFinanceScreen() {
   const router = useRouter();
@@ -25,6 +54,117 @@ export default function NewTechnicianFinanceScreen() {
   const [kind, setKind] = useState<TechnicianFinanceKind>('expense');
   const [amountStr, setAmountStr] = useState('');
   const [description, setDescription] = useState('');
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [linkableOs, setLinkableOs] = useState<LinkableExpenseTask[]>([]);
+  const [linkableLoading, setLinkableLoading] = useState(false);
+  const [selectedOsIds, setSelectedOsIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (kind === 'revenue') setSelectedOsIds([]);
+  }, [kind]);
+
+  const refreshLinkableOs = useCallback(async () => {
+    setLinkableLoading(true);
+    try {
+      const list = await loadLinkableTasksForTechnicianExpense();
+      setLinkableOs(list);
+    } catch {
+      setLinkableOs([]);
+    } finally {
+      setLinkableLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshLinkableOs();
+    }, [refreshLinkableOs])
+  );
+
+  const toggleOs = (id: string) => {
+    setSelectedOsIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const appendAttachments = (items: TechnicianFinanceAttachment[]) => {
+    setAttachments((prev) => {
+      const room = MAX_ATTACHMENTS - prev.length;
+      if (room <= 0) return prev;
+      const slice = items.slice(0, room);
+      const next = slice.map((a) => ({
+        ...a,
+        _localId: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      }));
+      if (items.length > room) {
+        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} ficheiros por lançamento.`);
+      }
+      return [...prev, ...next];
+    });
+  };
+
+  const pickAttachments = () => {
+    if (attachments.length >= MAX_ATTACHMENTS) {
+      Alert.alert('Atenção', `Limite de ${MAX_ATTACHMENTS} anexos atingido.`);
+      return;
+    }
+    Alert.alert('Anexos', 'Como deseja adicionar?', [
+      {
+        text: 'Câmera',
+        onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert('Permissão', 'É necessário permitir o uso da câmera.');
+            return;
+          }
+          const res = await ImagePicker.launchCameraAsync({ quality: 0.75 });
+          if (!res.canceled && res.assets?.[0]?.uri) {
+            const uri = res.assets[0].uri;
+            appendAttachments([{ uri, mimeType: guessMime(uri) }]);
+          }
+        },
+      },
+      {
+        text: 'Galeria',
+        onPress: async () => {
+          const res = await ImagePicker.launchImageLibraryAsync({
+            quality: 0.75,
+            allowsMultipleSelection: true,
+            selectionLimit: MAX_ATTACHMENTS - attachments.length,
+          });
+          if (!res.canceled && res.assets?.length) {
+            appendAttachments(
+              res.assets.map((a) => ({
+                uri: a.uri,
+                mimeType: a.mimeType || guessMime(a.uri),
+              }))
+            );
+          }
+        },
+      },
+      {
+        text: 'Documento / ficheiro',
+        onPress: async () => {
+          const res = await DocumentPicker.getDocumentAsync({
+            type: ['image/*', 'application/pdf', '*/*'],
+            copyToCacheDirectory: true,
+            multiple: true,
+          });
+          if (res.canceled || !res.assets?.length) return;
+          appendAttachments(
+            res.assets.map((a) => ({
+              uri: a.uri,
+              name: a.name,
+              mimeType: a.mimeType || guessMime(a.uri, a.name),
+            }))
+          );
+        },
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((x) => x._localId !== id));
+  };
 
   const handleSave = async () => {
     const amount = Math.max(0, Number(String(amountStr).replace(',', '.')) || 0);
@@ -33,7 +173,22 @@ export default function NewTechnicianFinanceScreen() {
       return;
     }
     const email = user?.email || undefined;
-    await TechnicianFinanceService.createManual({ kind, amount, description: description.trim() || undefined }, email);
+    const payload: TechnicianFinanceAttachment[] = attachments.map(({ uri, name, mimeType }) => ({
+      uri,
+      name,
+      mimeType,
+    }));
+    await TechnicianFinanceService.createManual(
+      {
+        kind,
+        amount,
+        description: description.trim() || undefined,
+        attachments: payload.length > 0 ? payload : undefined,
+        linkedTaskIds:
+          kind === 'expense' && selectedOsIds.length > 0 ? selectedOsIds : undefined,
+      },
+      email
+    );
     Alert.alert('Guardado', 'Lançamento adicionado ao seu financeiro técnico.', [
       { text: 'OK', onPress: () => router.back() },
     ]);
@@ -89,6 +244,84 @@ export default function NewTechnicianFinanceScreen() {
           maxLength={500}
         />
 
+        {kind === 'expense' ? (
+          <>
+            <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
+            <Text style={styles.osHint}>
+              Só aparecem OS em pendentes ou em atendimento cujo formulário tenha o campo «custos do técnico». Se escolher mais de uma OS, o valor é dividido em partes iguais (centavos) e cada parte aparece no campo dessa OS, com a descrição indicando o rateio.
+            </Text>
+            {linkableLoading ? (
+              <View style={styles.osLoading}>
+                <ActivityIndicator color="#0f766e" />
+                <Text style={styles.osLoadingTxt}>A carregar OS elegíveis…</Text>
+              </View>
+            ) : linkableOs.length === 0 ? (
+              <Text style={styles.osEmpty}>Nenhuma OS elegível neste momento.</Text>
+            ) : (
+              <View style={styles.osList}>
+                {linkableOs.map((t) => {
+                  const on = selectedOsIds.includes(t.id);
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.osRow, on && styles.osRowOn]}
+                      onPress={() => toggleOs(t.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons
+                        name={on ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={on ? '#0f766e' : '#94a3b8'}
+                        style={{ marginRight: 10 }}
+                      />
+                      <Text style={styles.osRowTxt} numberOfLines={2}>
+                        {t.displayLine}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : null}
+
+        <Text style={styles.lbl}>Documentos ou fotos (opcional)</Text>
+        <Text style={styles.attachHint}>
+          Comprovativos, recibos ou fotos ficam guardados com o lançamento (até {MAX_ATTACHMENTS}).
+        </Text>
+        <TouchableOpacity style={styles.addAttachBtn} onPress={pickAttachments} activeOpacity={0.88}>
+          <Ionicons name="attach-outline" size={22} color="#0f766e" />
+          <Text style={styles.addAttachBtnTxt}>Adicionar anexo</Text>
+        </TouchableOpacity>
+
+        {attachments.length > 0 ? (
+          <View style={styles.attachList}>
+            {attachments.map((att) => (
+              <View key={att._localId} style={styles.attachRow}>
+                {isProbablyImage(att) ? (
+                  <Image source={{ uri: att.uri }} style={styles.thumb} />
+                ) : (
+                  <View style={styles.docThumb}>
+                    <Ionicons name="document-text-outline" size={28} color="#64748b" />
+                  </View>
+                )}
+                <View style={styles.attachMeta}>
+                  <Text style={styles.attachName} numberOfLines={2}>
+                    {att.name || (isProbablyImage(att) ? 'Imagem' : 'Documento')}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => removeAttachment(att._localId)}
+                  style={styles.removeAttach}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="close-circle" size={24} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
           <Ionicons name="checkmark-circle" size={22} color="#fff" />
           <Text style={styles.saveBtnTxt}>Guardar</Text>
@@ -128,6 +361,72 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   inputMulti: { minHeight: 100, textAlignVertical: 'top' },
+  osHint: {
+    fontSize: 12,
+    color: '#94a3b8',
+    lineHeight: 17,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  osLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 18,
+    paddingVertical: 8,
+  },
+  osLoadingTxt: { fontSize: 13, color: '#64748b' },
+  osEmpty: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', marginBottom: 18 },
+  osList: { gap: 8, marginBottom: 18 },
+  osRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  osRowOn: { borderColor: '#99f6e4', backgroundColor: '#ecfdf5' },
+  osRowTxt: { flex: 1, fontSize: 14, fontWeight: '600', color: '#334155' },
+  attachHint: { fontSize: 12, color: '#94a3b8', marginTop: -4, marginBottom: 10, lineHeight: 17 },
+  addAttachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    backgroundColor: '#ecfdf5',
+    marginBottom: 14,
+  },
+  addAttachBtnTxt: { fontSize: 15, fontWeight: '800', color: '#0f766e' },
+  attachList: { marginBottom: 18, gap: 10 },
+  attachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    paddingRight: 6,
+  },
+  thumb: { width: 52, height: 52, borderRadius: 8, backgroundColor: '#e2e8f0' },
+  docThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachMeta: { flex: 1, marginLeft: 12, marginRight: 8 },
+  attachName: { fontSize: 14, fontWeight: '600', color: '#334155' },
+  removeAttach: { padding: 4 },
   saveBtn: {
     marginTop: 8,
     flexDirection: 'row',

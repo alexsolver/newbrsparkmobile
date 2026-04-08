@@ -1,13 +1,16 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, TextInput, Switch, Alert, Image, ActivityIndicator,
+  Modal, TextInput, Alert, Image, ActivityIndicator,
   ScrollView, Dimensions, StatusBar,
   KeyboardAvoidingView, Platform} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
+import { ThemedSwitch } from '../../src/components/ThemedSwitch';
+import { Button } from '../../src/components/Button';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getMediaItems, saveMediaItem, deleteMediaItem, MediaItem } from '../../src/database';
 import { pickMedia, pickFromGallery, getGeoStamp, GeoStamp } from '../../src/services/mediaService';
@@ -29,25 +32,20 @@ const CARD_SIZE = (width - 48) / 2;
 // ── Tag config ────────────────────────────────────────────────────────────────
 
 const TAG_KEYS = ['BEFORE', 'DURING', 'AFTER', 'DAMAGE', 'WARRANTY', 'OTHER'] as const;
-const TAG_COLORS: Record<string, string> = {
-  BEFORE: '#3B82F6',
-  DURING: '#F59E0B',
-  AFTER: '#10B981',
-  DAMAGE: '#EF4444',
-  WARRANTY: '#8B5CF6',
-  OTHER: '#6B7280',
-};
 
 // ── Media Card ────────────────────────────────────────────────────────────────
 
-const MediaCard = React.memo(({ item, t, colors, onDelete, onPress }: {
+const MediaCard = React.memo(({ item, t, themeColors, cardStyles, onDelete, onPress }: {
   item: MediaItem;
   t: any;
-  colors: any;
+  themeColors: ColorPalette;
+  cardStyles: any;
   onDelete: (id: string) => void;
   onPress: (item: MediaItem) => void;
 }) => {
-  const tagColor = TAG_COLORS[item.tag || ''] ?? TAG_COLORS.OTHER;
+  const C = themeColors;
+  const styles = cardStyles;
+  const tagColor = MEDIA_TAG_COLORS[item.tag || ''] ?? MEDIA_TAG_COLORS.OTHER;
   const tagLabel = item.tag ? t(`media.tags.${item.tag}`) : '';
   const stampLines: string[] = [];
   if (item.stampedDatetime) stampLines.push(new Date(item.createdAt).toLocaleString('pt-BR'));
@@ -59,15 +57,15 @@ const MediaCard = React.memo(({ item, t, colors, onDelete, onPress }: {
       activeOpacity={0.9}
       onPress={() => onPress(item)}
     >
-      <View style={[styles.card, { backgroundColor: colors.cardWhite, shadowColor: colors.slate }]}>
+      <View style={[styles.card, { backgroundColor: C.cardWhite, shadowColor: C.slate }]}>
         {/* Thumbnail */}
         <View style={styles.thumbContainer}>
           {item.type === 'photo' ? (
             <Image source={{ uri: item.uri }} style={styles.thumb} resizeMode="cover" />
           ) : (
-            <View style={[styles.thumb, styles.videoThumb, { backgroundColor: colors.surfaceLow }]}>
-              <Ionicons name="videocam" size={32} color={colors.textSecondary} />
-              <Text style={[styles.videoLabel, { color: colors.textSecondary }]}>{t('media.videoThumb')}</Text>
+            <View style={[styles.thumb, styles.videoThumb, { backgroundColor: C.surfaceLow }]}>
+              <Ionicons name="videocam" size={32} color={C.textSecondary} />
+              <Text style={[styles.videoLabel, { color: C.textSecondary }]}>{t('media.videoThumb')}</Text>
             </View>
           )}
 
@@ -100,30 +98,30 @@ const MediaCard = React.memo(({ item, t, colors, onDelete, onPress }: {
             onPress={(e) => { e.stopPropagation?.(); onDelete(item.id); }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="close-circle" size={20} color="#fff" />
+            <Ionicons name="close-circle" size={20} color={C.cardWhite} />
           </TouchableOpacity>
         </View>
 
         {/* Meta */}
         <View style={styles.cardMeta}>
           {!!item.description && (
-            <Text style={[styles.cardDesc, { color: colors.slate }]} numberOfLines={2}>
+            <Text style={[styles.cardDesc, { color: C.slate }]} numberOfLines={2}>
               {item.description}
             </Text>
           )}
           <View style={styles.cardFooter}>
             {item.stampedGeo && (
               <View style={styles.metaChip}>
-                <Ionicons name="location" size={10} color={colors.textSecondary} />
-                <Text style={[styles.metaChipText, { color: colors.textSecondary }]} numberOfLines={1}>
+                <Ionicons name="location" size={10} color={C.textSecondary} />
+                <Text style={[styles.metaChipText, { color: C.textSecondary }]} numberOfLines={1}>
                   {item.address || `${item.latitude?.toFixed(3)}, ${item.longitude?.toFixed(3)}`}
                 </Text>
               </View>
             )}
             {item.stampedDatetime && (
               <View style={styles.metaChip}>
-                <Ionicons name="time" size={10} color={colors.textSecondary} />
-                <Text style={[styles.metaChipText, { color: colors.textSecondary }]}>
+                <Ionicons name="time" size={10} color={C.textSecondary} />
+                <Text style={[styles.metaChipText, { color: C.textSecondary }]}>
                   {new Date(item.createdAt).toLocaleDateString('pt-BR')}
                 </Text>
               </View>
@@ -137,22 +135,19 @@ const MediaCard = React.memo(({ item, t, colors, onDelete, onPress }: {
 
 // ── Toggle Row ────────────────────────────────────────────────────────────────
 
-function ToggleRow({ label, sub, value, onChange, accent }: {
+function ToggleRow({ label, sub, value, onChange, rowStyles }: {
   label: string; sub: string; value: boolean;
-  onChange: (v: boolean) => void; accent: string;
+  onChange: (v: boolean) => void;
+  rowStyles: any;
 }) {
+  const { colors: C } = useTheme();
   return (
-    <View style={styles.toggleRow}>
+    <View style={rowStyles.toggleRow}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.toggleLabel}>{label}</Text>
-        <Text style={styles.toggleSub}>{sub}</Text>
+        <Text style={[rowStyles.toggleLabel, { color: C.slate }]}>{label}</Text>
+        <Text style={[rowStyles.toggleSub, { color: C.textSecondary }]}>{sub}</Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        thumbColor={value ? accent : '#ccc'}
-        trackColor={{ false: '#e5e7eb', true: accent + '66' }}
-      />
+      <ThemedSwitch value={value} onValueChange={onChange} />
     </View>
   );
 }
@@ -161,7 +156,8 @@ function ToggleRow({ label, sub, value, onChange, accent }: {
 
 export default function MediaScreen() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createMediaStyles(C), [C]);
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -310,44 +306,58 @@ export default function MediaScreen() {
 
   // ── Render card ─────────────────────────────────────────────────────────────
   const renderItem = useCallback(({ item }: { item: MediaItem }) => (
-    <MediaCard item={item} t={t} colors={colors} onDelete={handleDelete} onPress={handleOpenViewer} />
-  ), [t, colors, handleDelete, handleOpenViewer]);
+    <MediaCard item={item} t={t} themeColors={C} cardStyles={styles} onDelete={handleDelete} onPress={handleOpenViewer} />
+  ), [t, C, styles, handleDelete, handleOpenViewer]);
 
   const keyExtractor = useCallback((item: MediaItem) => item.id, []);
 
   // ── Empty state ─────────────────────────────────────────────────────────────
   const ListEmpty = (
     <View style={styles.emptyState}>
-      <Ionicons name="camera-outline" size={64} color={colors.border} />
-      <Text style={[styles.emptyTitle, { color: colors.slate }]}>{t('media.emptyTitle')}</Text>
-      <Text style={[styles.emptySub, { color: colors.textSecondary }]}>{t('media.emptySubtitle')}</Text>
+      <Ionicons name="camera-outline" size={64} color={C.border} />
+      <Text style={[styles.emptyTitle, { color: C.slate }]}>{t('media.emptyTitle')}</Text>
+      <Text style={[styles.emptySub, { color: C.textSecondary }]}>{t('media.emptySubtitle')}</Text>
     </View>
   );
 
-  const accent = colors.accent;
+  const accent = C.accent;
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.screen, { backgroundColor: C.background, paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.divider }]}>
+      <View style={[styles.header, { borderBottomColor: C.divider }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.slate} />
+          <Ionicons name="arrow-back" size={22} color={C.slate} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.slate }]}>{t('media.title')}</Text>
+        <Text style={[styles.headerTitle, { color: C.slate }]}>{t('media.title')}</Text>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: accent }]}
           onPress={() => setShowModal(true)}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={22} color="#fff" />
-          <Text style={styles.addButtonText}>{t('media.addBtn')}</Text>
+          <Ionicons name="add" size={22} color={C.cardWhite} />
+          <Text style={[styles.addButtonText, { color: C.cardWhite }]}>{t('media.addBtn')}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Legenda das tags */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tagLegendRow}
+      >
+        {TAG_KEYS.map((k) => (
+          <View key={k} style={styles.tagLegendItem}>
+            <View style={[styles.tagLegendSwatch, { backgroundColor: MEDIA_TAG_COLORS[k] }]} />
+            <Text style={[styles.tagLegendLabel, { color: C.textSecondary }]}>{t(`media.tags.${k}`)}</Text>
+          </View>
+        ))}
+      </ScrollView>
 
       {/* Grid */}
       <FlatList
@@ -388,7 +398,7 @@ export default function MediaScreen() {
             )}
             {viewItem && (
               <TouchableOpacity onPress={() => handleDeleteFromViewer(viewItem.id)} style={styles.viewerIconBtn} activeOpacity={0.7}>
-                <Ionicons name="trash-outline" size={22} color="#ff6b6b" />
+                <Ionicons name="trash-outline" size={22} color={C.destructive} />
               </TouchableOpacity>
             )}
           </View>
@@ -447,7 +457,7 @@ export default function MediaScreen() {
           {viewItem && (
             <View style={[styles.viewerInfoBar, { paddingBottom: insets.bottom + 12 }]}>
               {viewItem.tag && (
-                <View style={[styles.viewerTagBadge, { backgroundColor: TAG_COLORS[viewItem.tag] ?? TAG_COLORS.OTHER }]}>
+                <View style={[styles.viewerTagBadge, { backgroundColor: MEDIA_TAG_COLORS[viewItem.tag] ?? MEDIA_TAG_COLORS.OTHER }]}>
                   <Text style={styles.viewerTagText}>{t(`media.tags.${viewItem.tag}`)}</Text>
                 </View>
               )}
@@ -466,13 +476,13 @@ export default function MediaScreen() {
         presentationStyle="pageSheet"
         onRequestClose={handleCloseModal}
       >
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.modalContainer, { backgroundColor: C.background }]}>
           {/* Modal Header */}
-          <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: C.divider }]}>
             <TouchableOpacity onPress={handleCloseModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close" size={24} color={colors.slate} />
+              <Ionicons name="close" size={24} color={C.slate} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.slate }]}>{t('media.addMedia')}</Text>
+            <Text style={[styles.modalTitle, { color: C.slate }]}>{t('media.addMedia')}</Text>
             <View style={{ width: 24 }} />
           </View>
 
@@ -485,31 +495,31 @@ export default function MediaScreen() {
             {/* Source picker */}
             {!pendingMedia ? (
               <>
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t('media.chooseSource')}</Text>
+                <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('media.chooseSource')}</Text>
                 <View style={styles.sourceGrid}>
                   <TouchableOpacity
-                    style={[styles.sourceBtn, { backgroundColor: colors.cardWhite, borderColor: colors.border }]}
+                    style={[styles.sourceBtn, { backgroundColor: C.cardWhite, borderColor: C.border }]}
                     onPress={() => handlePickMedia('photo', 'camera')}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="camera" size={24} color={colors.accent} />
-                    <Text style={[styles.sourceBtnText, { color: colors.slate }]}>{t('media.cameraPhoto')}</Text>
+                    <Ionicons name="camera" size={24} color={C.accent} />
+                    <Text style={[styles.sourceBtnText, { color: C.slate }]}>{t('media.cameraPhoto')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.sourceBtn, { backgroundColor: colors.cardWhite, borderColor: colors.border }]}
+                    style={[styles.sourceBtn, { backgroundColor: C.cardWhite, borderColor: C.border }]}
                     onPress={() => handlePickMedia('video', 'camera')}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="videocam" size={24} color={colors.accent} />
-                    <Text style={[styles.sourceBtnText, { color: colors.slate }]}>{t('media.cameraVideo')}</Text>
+                    <Ionicons name="videocam" size={24} color={C.accent} />
+                    <Text style={[styles.sourceBtnText, { color: C.slate }]}>{t('media.cameraVideo')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.sourceBtn, { backgroundColor: colors.cardWhite, borderColor: colors.border }]}
+                    style={[styles.sourceBtn, { backgroundColor: C.cardWhite, borderColor: C.border }]}
                     onPress={handleGallery}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="images" size={24} color={colors.accent} />
-                    <Text style={[styles.sourceBtnText, { color: colors.slate }]}>{t('media.gallery')}</Text>
+                    <Ionicons name="images" size={24} color={C.accent} />
+                    <Text style={[styles.sourceBtnText, { color: C.slate }]}>{t('media.gallery')}</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -542,9 +552,9 @@ export default function MediaScreen() {
                       )}
                     </View>
                   ) : (
-                    <View style={[styles.preview, styles.videoThumb, { backgroundColor: colors.surfaceLow }]}>
-                      <Ionicons name="videocam" size={48} color={colors.textSecondary} />
-                      <Text style={[styles.videoLabel, { color: colors.textSecondary }]}>{t('media.videoThumb')}</Text>
+                    <View style={[styles.preview, styles.videoThumb, { backgroundColor: C.surfaceLow }]}>
+                      <Ionicons name="videocam" size={48} color={C.textSecondary} />
+                      <Text style={[styles.videoLabel, { color: C.textSecondary }]}>{t('media.videoThumb')}</Text>
                     </View>
                   )}
                   <TouchableOpacity
@@ -557,11 +567,11 @@ export default function MediaScreen() {
                 </View>
 
                 {/* Description */}
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t('media.description').toUpperCase()}</Text>
+                <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('media.description').toUpperCase()}</Text>
                 <TextInput
-                  style={[styles.descInput, { backgroundColor: colors.cardWhite, borderColor: colors.border, color: colors.slate }]}
+                  style={[styles.descInput, { backgroundColor: C.cardWhite, borderColor: C.border, color: C.slate }]}
                   placeholder={t('media.descriptionPlaceholder')}
-                  placeholderTextColor={colors.textLight}
+                  placeholderTextColor={C.textLight}
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -570,35 +580,35 @@ export default function MediaScreen() {
                  returnKeyType="done"/>
 
                 {/* Toggles */}
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>OPÇÕES DE STAMP</Text>
-                <View style={[styles.toggleCard, { backgroundColor: colors.cardWhite, borderColor: colors.border }]}>
+                <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>OPÇÕES DE STAMP</Text>
+                <View style={[styles.toggleCard, { backgroundColor: C.cardWhite, borderColor: C.border }]}>
                   <ToggleRow
                     label={t('media.geoStamp')}
                     sub={detectingGeo ? t('media.detectingGeo') : t('media.geoStampSub')}
                     value={stampGeo}
                     onChange={handleGeoToggle}
-                    accent={accent}
+                    rowStyles={styles}
                   />
                   {stampGeo && geoData && (
-                    <View style={[styles.geoPreview, { borderTopColor: colors.divider }]}>
+                    <View style={[styles.geoPreview, { borderTopColor: C.divider }]}>
                       <Ionicons name="location" size={12} color={accent} />
-                      <Text style={[styles.geoText, { color: colors.textSecondary }]}>
+                      <Text style={[styles.geoText, { color: C.textSecondary }]}>
                         {geoData.address} · {geoData.latitude.toFixed(5)}, {geoData.longitude.toFixed(5)}
                       </Text>
                     </View>
                   )}
-                  <View style={[styles.toggleDivider, { backgroundColor: colors.divider }]} />
+                  <View style={[styles.toggleDivider, { backgroundColor: C.divider }]} />
                   <ToggleRow
                     label={t('media.datetimeStamp')}
                     sub={t('media.datetimeStampSub')}
                     value={stampDatetime}
                     onChange={setStampDatetime}
-                    accent={accent}
+                    rowStyles={styles}
                   />
                 </View>
 
                 {/* Tags */}
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t('media.tag').toUpperCase()}</Text>
+                <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('media.tag').toUpperCase()}</Text>
                 <View style={styles.tagRow}>
                   {TAG_KEYS.map((k) => {
                     const selected = selectedTag === k;
@@ -607,13 +617,13 @@ export default function MediaScreen() {
                         key={k}
                         style={[
                           styles.tagChip,
-                          { borderColor: TAG_COLORS[k] },
-                          selected && { backgroundColor: TAG_COLORS[k] },
+                          { borderColor: MEDIA_TAG_COLORS[k] },
+                          selected && { backgroundColor: MEDIA_TAG_COLORS[k] },
                         ]}
                         onPress={() => setSelectedTag(selected ? '' : k)}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.tagChipText, { color: selected ? '#fff' : TAG_COLORS[k] }]}>
+                        <Text style={[styles.tagChipText, { color: selected ? C.cardWhite : MEDIA_TAG_COLORS[k] }]}>
                           {t(`media.tags.${k}`)}
                         </Text>
                       </TouchableOpacity>
@@ -621,22 +631,7 @@ export default function MediaScreen() {
                   })}
                 </View>
 
-                {/* Save */}
-                <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: accent }, saving && { opacity: 0.6 }]}
-                  onPress={handleSave}
-                  disabled={saving}
-                  activeOpacity={0.8}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                      <Text style={styles.saveBtnText}>{t('media.save')}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                <Button title={t('media.save')} onPress={handleSave} loading={saving} disabled={saving} />
               </>
             )}
           </ScrollView>
@@ -648,7 +643,8 @@ export default function MediaScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createMediaStyles(C: ColorPalette) {
+  return StyleSheet.create({
   screen: { flex: 1 },
 
   // Header
@@ -667,7 +663,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10,
     borderRadius: 24,
   },
-  addButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  addButtonText: { fontSize: 14, fontWeight: '700' },
+  tagLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  tagLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tagLegendSwatch: { width: 10, height: 10, borderRadius: 5 },
+  tagLegendLabel: { fontSize: 12, fontWeight: '600' },
 
   // Grid
   grid: { padding: 16 },
@@ -766,8 +772,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: 14,
   },
-  toggleLabel: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
-  toggleSub: { fontSize: 12, color: '#8B9193', marginTop: 2 },
+  toggleLabel: { fontSize: 14, fontWeight: '700', color: C.slate },
+  toggleSub: { fontSize: 12, color: C.textSecondary, marginTop: 2 },
   toggleDivider: { height: 1 },
   geoPreview: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -789,7 +795,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16, borderRadius: 16,
     marginBottom: 20,
   },
-  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
+  saveBtnText: { color: C.cardWhite, fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
 
   // Play icon overlay (video cards)
   playIconOverlay: {
@@ -831,5 +837,6 @@ const styles = StyleSheet.create({
   },
   viewerTagText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   viewerDesc: { color: '#E5E7EB', fontSize: 14, lineHeight: 20 },
-});
+  });
+}
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert,
@@ -9,7 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import { API_BASE, TwoFactorRequired } from '../../src/services/auth';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
@@ -27,6 +28,127 @@ const COUNTRIES = [
 
 type Mode = 'LOGIN' | 'REGISTER';
 
+function createLoginStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.cardWhite },
+    container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
+
+    logoBlock: { alignItems: 'center', paddingTop: 40, paddingBottom: 36 },
+    logoImage: { width: 220, height: 80, marginBottom: 8 },
+    logoSub: {
+      fontSize: 12, color: C.textSecondary, fontWeight: '600',
+      letterSpacing: 0.5,
+    },
+
+
+    tabs: {
+      flexDirection: 'row', backgroundColor: C.divider,
+      borderRadius: 14, padding: 4, marginBottom: 28,
+    },
+    tab: {
+      flex: 1, paddingVertical: 12, borderRadius: 12,
+      alignItems: 'center',
+    },
+    tabActive: { backgroundColor: C.cardWhite, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+    tabT: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
+    tabTActive: { color: C.primary, fontWeight: '900' },
+
+    form: { gap: 4 },
+    fieldG: { marginBottom: 16 },
+    fieldL: { fontSize: 10, fontWeight: '900', color: C.textLight, marginBottom: 8, letterSpacing: 0.5 },
+    fieldRow: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: C.background, borderRadius: 12,
+      borderWidth: 1, borderColor: C.border,
+      paddingHorizontal: 14, paddingVertical: 4,
+    },
+    fieldIcon: { marginRight: 10 },
+    fieldInput: {
+      flex: 1, fontSize: 15, color: C.primary, fontWeight: '600',
+      paddingVertical: 12,
+    },
+
+    consentRow: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+      backgroundColor: C.status.info.bg, borderRadius: 12,
+      borderWidth: 1, borderColor: C.status.info.border,
+      padding: 14, marginBottom: 8,
+    },
+    checkbox: {
+      width: 20, height: 20, borderRadius: 6,
+      borderWidth: 2, borderColor: C.accent,
+      justifyContent: 'center', alignItems: 'center',
+      marginTop: 1, flexShrink: 0,
+    },
+    checkboxActive: { backgroundColor: C.accent, borderColor: C.accent },
+    consentText: {
+      flex: 1, fontSize: 13, color: C.textSecondary,
+      fontWeight: '500', lineHeight: 20,
+    },
+    link: { color: C.accent, fontWeight: '700', textDecorationLine: 'underline' },
+
+    cta: {
+      backgroundColor: C.accent, flexDirection: 'row',
+      alignItems: 'center', justifyContent: 'center',
+      paddingVertical: 18, borderRadius: 18, gap: 10,
+      marginTop: 12,
+      shadowColor: C.accent, shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+    },
+    ctaText: { color: C.cardWhite, fontWeight: '900', fontSize: 16 },
+
+    footerLinks: {
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+      marginTop: 28, gap: 8,
+    },
+    footerLink: { fontSize: 12, color: C.accent, fontWeight: '700' },
+    footerDivider: { color: C.textLight },
+
+    gdprBadge: {
+      textAlign: 'center', fontSize: 10, color: C.textLight,
+      marginTop: 12, fontWeight: '500', lineHeight: 16,
+    },
+
+    demoBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      backgroundColor: C.accent + '12', borderRadius: 10,
+      borderWidth: 1, borderColor: C.accent + '40',
+      paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4,
+    },
+    demoBtnT: { fontSize: 12, color: C.accent, fontWeight: '700', flex: 1 },
+
+    guestLink: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
+    guestLinkText: { fontSize: 14, fontWeight: '700', color: C.textSecondary },
+
+    // Compliance doc modal
+    docModalHeader: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 20, paddingVertical: 16,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    docModalTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: C.primary, marginRight: 12 },
+    docCloseBtn: { padding: 6, borderRadius: 20, backgroundColor: C.divider },
+    docContent: { fontSize: 13, color: C.textSecondary, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+    footerLinkTouch: { padding: 4 },
+
+    // Country selector (register)
+    countryRow: { marginBottom: 12, marginTop: 4 },
+    countryLabel: { fontSize: 10, fontWeight: '900', color: C.textLight, marginBottom: 8, letterSpacing: 0.5 },
+    countryPills: { flexDirection: 'row', gap: 8 },
+    countryPill: {
+      flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12,
+      backgroundColor: C.divider, borderWidth: 1, borderColor: C.border,
+    },
+    countryPillActive: { backgroundColor: C.accent, borderColor: C.accent },
+    countryBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.border, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+    countryBadgeActive: { backgroundColor: C.cardWhite },
+    countryCode: { fontSize: 11, fontWeight: '900', color: C.textSecondary },
+    countryCodeActive: { color: C.cardWhite },
+  });
+}
+
+type LoginStyles = ReturnType<typeof createLoginStyles>;
+
 interface FieldProps {
   label: string;
   value: string;
@@ -37,20 +159,22 @@ interface FieldProps {
   toggle?: () => void;
   keyboardType?: any;
   showPass?: boolean;
+  C: ColorPalette;
+  formStyles: LoginStyles;
 }
 
-function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, keyboardType = 'default', showPass }: FieldProps) {
+function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, keyboardType = 'default', showPass, C, formStyles }: FieldProps) {
   return (
-    <View style={S.fieldG}>
-      <Text style={S.fieldL}>{label}</Text>
-      <View style={S.fieldRow}>
-        <Ionicons name={icon} size={18} color={colors.textLight} style={S.fieldIcon} />
+    <View style={formStyles.fieldG}>
+      <Text style={formStyles.fieldL}>{label}</Text>
+      <View style={formStyles.fieldRow}>
+        <Ionicons name={icon} size={18} color={C.textLight} style={formStyles.fieldIcon} />
         <TextInput
-          style={S.fieldInput}
+          style={formStyles.fieldInput}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={colors.textLight}
+          placeholderTextColor={C.textLight}
           secureTextEntry={secure}
           keyboardType={keyboardType}
           autoCapitalize="none"
@@ -58,7 +182,7 @@ function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, 
                       />
         {toggle && (
           <TouchableOpacity onPress={toggle} style={{ padding: 4 }}>
-            <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color={colors.textLight} />
+            <Ionicons name={showPass ? 'eye-off' : 'eye'} size={18} color={C.textLight} />
           </TouchableOpacity>
         )}
       </View>
@@ -71,6 +195,8 @@ export default function LoginScreen() {
   const router = useRouter();
   const { login, register, logout, completeLoginWithOtp } = useAuth();
   const { t } = useTranslation();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createLoginStyles(C), [C]);
 
   const [mode, setMode] = useState<Mode>('LOGIN');
   const [loading, setLoading] = useState(false);
@@ -174,19 +300,19 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={S.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
       {/* Compliance Doc Modal */}
       <Modal visible={!!docModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
-          <View style={S.docModalHeader}>
-            <Text style={S.docModalTitle} numberOfLines={1}>{docModal?.title}</Text>
-            <TouchableOpacity onPress={() => setDocModal(null)} style={S.docCloseBtn}>
-              <Ionicons name="close" size={22} color={colors.primary} />
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.cardWhite }} edges={['top', 'bottom']}>
+          <View style={styles.docModalHeader}>
+            <Text style={styles.docModalTitle} numberOfLines={1}>{docModal?.title}</Text>
+            <TouchableOpacity onPress={() => setDocModal(null)} style={styles.docCloseBtn}>
+              <Ionicons name="close" size={22} color={C.primary} />
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24 }} keyboardShouldPersistTaps="handled">
-            <Text style={S.docContent}>{docModal?.content}</Text>
+            <Text style={styles.docContent}>{docModal?.content}</Text>
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -194,13 +320,13 @@ export default function LoginScreen() {
       {/* ─── 2FA OTP Modal ─────────────────────────────────────────────────── */}
       <Modal visible={twoFaVisible} animationType="slide" transparent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 48 }}>
+          <View style={{ backgroundColor: C.cardWhite, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 48 }}>
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                <Ionicons name="shield-checkmark" size={28} color={colors.accent} />
+              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.status.info.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                <Ionicons name="shield-checkmark" size={28} color={C.accent} />
               </View>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>Verificação em 2 etapas</Text>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '500', textAlign: 'center', marginTop: 6 }}>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: C.primary }}>Verificação em 2 etapas</Text>
+              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '500', textAlign: 'center', marginTop: 6 }}>
                 {'Insira o código de 6 dígitos\nenviado para o seu e-mail.'}
               </Text>
             </View>
@@ -208,9 +334,9 @@ export default function LoginScreen() {
             <TextInput
               style={{
                 fontSize: 32, fontWeight: '900', letterSpacing: 12,
-                textAlign: 'center', backgroundColor: '#F8FAFC',
-                borderRadius: 16, borderWidth: 1.5, borderColor: colors.accent,
-                paddingVertical: 18, paddingHorizontal: 16, color: colors.primary,
+                textAlign: 'center', backgroundColor: C.background,
+                borderRadius: 16, borderWidth: 1.5, borderColor: C.accent,
+                paddingVertical: 18, paddingHorizontal: 16, color: C.primary,
                 marginBottom: 20,
               }}
               value={otp}
@@ -219,22 +345,22 @@ export default function LoginScreen() {
               maxLength={6}
               autoFocus
               placeholder="------"
-              placeholderTextColor="#CBD5E1"
+              placeholderTextColor={C.border}
             />
 
             <TouchableOpacity
-              style={[{ backgroundColor: colors.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 }, (otp.length < 6 || otpLoading) && { opacity: 0.5 }]}
+              style={[{ backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 }, (otp.length < 6 || otpLoading) && { opacity: 0.5 }]}
               onPress={handleVerifyOtp}
               disabled={otp.length < 6 || otpLoading}
             >
               {otpLoading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>Verificar Código</Text>
+                ? <ActivityIndicator color={C.cardWhite} />
+                : <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 16 }}>Verificar Código</Text>
               }
             </TouchableOpacity>
 
             <TouchableOpacity style={{ alignItems: 'center', padding: 8 }} onPress={() => { setTwoFaVisible(false); setTwoFaChallenge(null); }}>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -245,30 +371,30 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={S.container}
+          contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* Logo */}
-          <View style={S.logoBlock}>
+          <View style={styles.logoBlock}>
             <Image
               source={require('../../assets/logo.png')}
-              style={S.logoImage}
+              style={styles.logoImage}
               resizeMode="contain"
             />
-            <Text style={S.logoSub}>Precisou, resolveu.</Text>
+            <Text style={styles.logoSub}>Precisou, resolveu.</Text>
           </View>
 
 
           {/* Mode Tabs */}
-          <View style={S.tabs}>
+          <View style={styles.tabs}>
             {(['LOGIN', 'REGISTER'] as Mode[]).map(m => (
               <TouchableOpacity
                 key={m}
-                style={[S.tab, mode === m && S.tabActive]}
+                style={[styles.tab, mode === m && styles.tabActive]}
                 onPress={() => setMode(m)}
               >
-                <Text style={[S.tabT, mode === m && S.tabTActive]}>
+                <Text style={[styles.tabT, mode === m && styles.tabTActive]}>
                   {m === 'LOGIN' ? t('auth.login') : t('auth.createAccount')}
                 </Text>
               </TouchableOpacity>
@@ -276,7 +402,7 @@ export default function LoginScreen() {
           </View>
 
           {/* Form */}
-          <View style={S.form}>
+          <View style={styles.form}>
             {mode === 'REGISTER' && (
               <>
                 <Field
@@ -285,6 +411,8 @@ export default function LoginScreen() {
                   onChangeText={setName}
                   placeholder={t('auth.fullNamePlaceholder')}
                   icon="person-outline"
+                  C={C}
+                  formStyles={styles}
                 />
               </>
             )}
@@ -295,6 +423,8 @@ export default function LoginScreen() {
               placeholder={t('auth.emailPlaceholder')}
               icon="mail-outline"
               keyboardType="email-address"
+              C={C}
+              formStyles={styles}
             />
             <Field
               label={t('auth.password').toUpperCase() + ' *'}
@@ -305,6 +435,8 @@ export default function LoginScreen() {
               secure={!showPass}
               toggle={() => setShowPass(p => !p)}
               showPass={showPass}
+              C={C}
+              formStyles={styles}
             />
 
 
@@ -312,25 +444,25 @@ export default function LoginScreen() {
 
             {/* Country selector — shown in REGISTER mode */}
             {mode === 'REGISTER' && (
-              <View style={S.countryRow}>
-                <Text style={S.countryLabel}>{t('auth.country') || 'País / Region'}</Text>
-                <View style={S.countryPills}>
+              <View style={styles.countryRow}>
+                <Text style={styles.countryLabel}>{t('auth.country') || 'País / Region'}</Text>
+                <View style={styles.countryPills}>
                   {COUNTRIES.map(c => {
                     const active = country === c.code;
                     return (
                       <TouchableOpacity
                         key={c.code}
-                        style={[S.countryPill, active && S.countryPillActive]}
+                        style={[styles.countryPill, active && styles.countryPillActive]}
                         onPress={async () => {
                           setCountry(c.code);
                           await AsyncStorage.setItem(REGION_KEY, c.code);
                           await setLanguage(c.lang);
                         }}
                       >
-                        <View style={[S.countryBadge, active && S.countryBadgeActive]}>
-                          <Ionicons name="earth" size={16} color={active ? '#fff' : colors.slate} />
+                        <View style={[styles.countryBadge, active && styles.countryBadgeActive]}>
+                          <Ionicons name="earth" size={16} color={active ? C.accent : C.slate} />
                         </View>
-                        <Text style={[S.countryCode, active && S.countryCodeActive]}>{c.code}</Text>
+                        <Text style={[styles.countryCode, active && styles.countryCodeActive]}>{c.code}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -341,20 +473,20 @@ export default function LoginScreen() {
             {/* LGPD / GDPR Consent */}
             {mode === 'REGISTER' && (
               <TouchableOpacity
-                style={S.consentRow}
+                style={styles.consentRow}
                 onPress={() => setConsent(c => !c)}
                 activeOpacity={0.8}
               >
-                <View style={[S.checkbox, consent && S.checkboxActive]}>
-                  {consent && <Ionicons name="checkmark" size={13} color="#fff" />}
+                <View style={[styles.checkbox, consent && styles.checkboxActive]}>
+                  {consent && <Ionicons name="checkmark" size={13} color={C.cardWhite} />}
                 </View>
-                <Text style={S.consentText}>
+                <Text style={styles.consentText}>
                   {t('auth.consentText')}{' '}
-                  <Text style={S.link} onPress={() => openDoc('TERMS_OF_USE')}>
+                  <Text style={styles.link} onPress={() => openDoc('TERMS_OF_USE')}>
                     {t('auth.termsOfUse')}
                   </Text>
                   {' '}{t('auth.and')}{' '}
-                  <Text style={S.link} onPress={() => openDoc('PRIVACY_POLICY')}>
+                  <Text style={styles.link} onPress={() => openDoc('PRIVACY_POLICY')}>
                     {t('auth.privacyPolicy')}
                   </Text>
                   {' '}({t('auth.consentRequired')})
@@ -363,164 +495,46 @@ export default function LoginScreen() {
             )}
 
             <TouchableOpacity
-              style={[S.cta, loading && { opacity: 0.7 }]}
+              style={[styles.cta, loading && { opacity: 0.7 }]}
               onPress={handleSubmit}
               disabled={loading}
               activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={C.cardWhite} />
               ) : (
                 <>
                   <Ionicons
                     name={mode === 'LOGIN' ? 'log-in-outline' : 'person-add-outline'}
                     size={20}
-                    color="#fff"
+                    color={C.cardWhite}
                   />
-                  <Text style={S.ctaText}>
+                  <Text style={styles.ctaText}>
                     {mode === 'LOGIN' ? t('auth.loginPlatform') : t('auth.createMyAccount')}
                   </Text>
                 </>
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={async () => { await logout(); router.replace('/(tabs)' as any); }} style={S.guestLink}>
-              <Text style={S.guestLinkText}>{t('auth.exploreGuest')}</Text>
+            <TouchableOpacity onPress={async () => { await logout(); router.replace('/(tabs)' as any); }} style={styles.guestLink}>
+              <Text style={styles.guestLinkText}>{t('auth.exploreGuest')}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Footer links */}
-          <View style={S.footerLinks}>
-              <TouchableOpacity onPress={() => openDoc('PRIVACY_POLICY')} style={S.footerLinkTouch}>
-                <Text style={S.footerLink}>🔒 {t('auth.privacyPolicy')}</Text>
+          <View style={styles.footerLinks}>
+              <TouchableOpacity onPress={() => openDoc('PRIVACY_POLICY')} style={styles.footerLinkTouch}>
+                <Text style={styles.footerLink}>🔒 {t('auth.privacyPolicy')}</Text>
               </TouchableOpacity>
-              <Text style={S.footerDivider}>·</Text>
-              <TouchableOpacity onPress={() => openDoc('TERMS_OF_USE')} style={S.footerLinkTouch}>
-                <Text style={S.footerLink}>{t('auth.termsOfUse')}</Text>
+              <Text style={styles.footerDivider}>·</Text>
+              <TouchableOpacity onPress={() => openDoc('TERMS_OF_USE')} style={styles.footerLinkTouch}>
+                <Text style={styles.footerLink}>{t('auth.termsOfUse')}</Text>
               </TouchableOpacity>
           </View>
 
-          <Text style={S.gdprBadge}>{t('auth.lgpdBadge')}</Text>
+          <Text style={styles.gdprBadge}>{t('auth.lgpdBadge')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const S = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-
-  logoBlock: { alignItems: 'center', paddingTop: 40, paddingBottom: 36 },
-  logoImage: { width: 220, height: 80, marginBottom: 8 },
-  logoSub: {
-    fontSize: 12, color: colors.textSecondary, fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-
-
-  tabs: {
-    flexDirection: 'row', backgroundColor: '#F1F5F9',
-    borderRadius: 14, padding: 4, marginBottom: 28,
-  },
-  tab: {
-    flex: 1, paddingVertical: 12, borderRadius: 12,
-    alignItems: 'center',
-  },
-  tabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
-  tabT: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  tabTActive: { color: colors.primary, fontWeight: '900' },
-
-  form: { gap: 4 },
-  fieldG: { marginBottom: 16 },
-  fieldL: { fontSize: 10, fontWeight: '900', color: colors.textLight, marginBottom: 8, letterSpacing: 0.5 },
-  fieldRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F8FAFC', borderRadius: 12,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 14, paddingVertical: 4,
-  },
-  fieldIcon: { marginRight: 10 },
-  fieldInput: {
-    flex: 1, fontSize: 15, color: colors.primary, fontWeight: '600',
-    paddingVertical: 12,
-  },
-
-  consentRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: '#F0F9FF', borderRadius: 12,
-    borderWidth: 1, borderColor: '#BAE6FD',
-    padding: 14, marginBottom: 8,
-  },
-  checkbox: {
-    width: 20, height: 20, borderRadius: 6,
-    borderWidth: 2, borderColor: colors.accent,
-    justifyContent: 'center', alignItems: 'center',
-    marginTop: 1, flexShrink: 0,
-  },
-  checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  consentText: {
-    flex: 1, fontSize: 13, color: colors.textSecondary,
-    fontWeight: '500', lineHeight: 20,
-  },
-  link: { color: colors.accent, fontWeight: '700', textDecorationLine: 'underline' },
-
-  cta: {
-    backgroundColor: colors.accent, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 18, borderRadius: 18, gap: 10,
-    marginTop: 12,
-    shadowColor: colors.accent, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
-  },
-  ctaText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-
-  footerLinks: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    marginTop: 28, gap: 8,
-  },
-  footerLink: { fontSize: 12, color: colors.accent, fontWeight: '700' },
-  footerDivider: { color: colors.textLight },
-
-  gdprBadge: {
-    textAlign: 'center', fontSize: 10, color: colors.textLight,
-    marginTop: 12, fontWeight: '500', lineHeight: 16,
-  },
-
-  demoBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.accent + '12', borderRadius: 10,
-    borderWidth: 1, borderColor: colors.accent + '40',
-    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4,
-  },
-  demoBtnT: { fontSize: 12, color: colors.accent, fontWeight: '700', flex: 1 },
-
-  guestLink: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
-  guestLinkText: { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
-
-  // Compliance doc modal
-  docModalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
-  },
-  docModalTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: colors.primary, marginRight: 12 },
-  docCloseBtn: { padding: 6, borderRadius: 20, backgroundColor: '#F1F5F9' },
-  docContent: { fontSize: 13, color: colors.textSecondary, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  footerLinkTouch: { padding: 4 },
-
-  // Country selector (register)
-  countryRow: { marginBottom: 12, marginTop: 4 },
-  countryLabel: { fontSize: 10, fontWeight: '900', color: colors.textLight, marginBottom: 8, letterSpacing: 0.5 },
-  countryPills: { flexDirection: 'row', gap: 8 },
-  countryPill: {
-    flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12,
-    backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0',
-  },
-  countryPillActive: { backgroundColor: '#191C1D', borderColor: '#191C1D' },
-  countryBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  countryBadgeActive: { backgroundColor: '#334155' },
-  countryCode: { fontSize: 11, fontWeight: '900', color: '#64748B' },
-  countryCodeActive: { color: '#fff' },
-});
-

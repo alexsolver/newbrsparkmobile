@@ -23,7 +23,7 @@ function buildFilteredExportPayload(task, mergedConfig) {
   const formFieldEntries = [];
   for (const f of fields) {
     if (!f || !f.id) continue;
-    if (!isFieldVisible(mergedConfig, f.id)) continue;
+    if (!isFieldVisible(mergedConfig, f.id, f.type)) continue;
     const val = responses[f.id];
     if (hideEmpty && !hasResponseValue(val)) continue;
     formFieldEntries.push({
@@ -39,7 +39,7 @@ function buildFilteredExportPayload(task, mergedConfig) {
     if (!f || !f.id) continue;
     const t = f.type;
     if (t !== 'photo' && t !== 'photo_stamped' && t !== 'facial_recognition') continue;
-    if (!isFieldVisible(mergedConfig, f.id)) continue;
+    if (!isFieldVisible(mergedConfig, f.id, f.type)) continue;
     const val = responses[f.id];
     const urls = Array.isArray(val) ? val : val != null ? [val] : [];
     const httpUrls = urls.filter((u) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image')));
@@ -114,7 +114,7 @@ function buildFilteredExportPayload(task, mergedConfig) {
     for (const f of fields) {
       if (!f || !f.id) continue;
       if (f.type !== 'transit_start' && f.type !== 'transit_end') continue;
-      if (!isFieldVisible(mergedConfig, f.id)) continue;
+      if (!isFieldVisible(mergedConfig, f.id, f.type)) continue;
       transitData[f.id] = responses[f.id] !== undefined ? responses[f.id] : null;
     }
     out.transitFieldData = transitData;

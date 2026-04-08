@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InsurancePolicy } from '../types/insurance';
 import { formatCurrency as i18nFormatCurrency } from '../i18n/formatters';
-import { enqueueMutation } from './syncService';
 import { AuthService } from './auth';
 
 const KEY = (email: string) => AuthService.getUserKey('insurance_policies', email);
@@ -47,13 +46,11 @@ export const InsuranceService = {
     const idx = all.findIndex(p => p.id === updated.id);
     if (idx >= 0) all[idx] = updated; else all.push(updated);
     await savePolicies(all, ownerEmail);
-    enqueueMutation('insurance', idx >= 0 ? 'UPDATE' : 'CREATE', updated, ownerEmail);
   },
 
   async deletePolicy(id: string, ownerEmail: string): Promise<void> {
     const all = await getAllPolicies(ownerEmail);
     await savePolicies(all.filter(p => p.id !== id), ownerEmail);
-    enqueueMutation('insurance', 'DELETE', { id }, ownerEmail);
   },
 
   async getExpiringPolicies(ownerEmail?: string): Promise<InsurancePolicy[]> {

@@ -1,17 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert, InputAccessoryView, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getAssetNotes, saveAssetNote } from '../../src/database';
 import { AssetNote } from '../../src/types/note';
+
+const NOTE_ACCENT = MEDIA_TAG_COLORS.WARRANTY;
 
 export default function AssetNoteEditScreen() {
   const { assetId, noteId } = useLocalSearchParams<{ assetId: string; noteId?: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createNoteEditStyles(C), [C]);
   
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -66,11 +71,11 @@ export default function AssetNoteEditScreen() {
   };
 
   return (
-    <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: C.cardWhite }}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-          <Ionicons name="close" size={28} color="#191C1D" />
+          <Ionicons name="close" size={28} color={C.slate} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{noteId ? 'Editar Anotação' : 'Nova Anotação'}</Text>
         <TouchableOpacity onPress={handleSave} style={styles.saveBtn} disabled={isSaving}>
@@ -84,7 +89,7 @@ export default function AssetNoteEditScreen() {
           <TextInput
             style={styles.titleInput}
             placeholder="Título da anotação"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={C.textLight}
             value={title}
             onChangeText={setTitle}
             maxLength={100}
@@ -95,7 +100,7 @@ export default function AssetNoteEditScreen() {
             ref={inputRef}
             style={styles.contentInput}
             placeholder="Comece a digitar sua anotação aqui..."
-            placeholderTextColor="#CBD5E1"
+            placeholderTextColor={C.border}
             value={content}
             onChangeText={setContent}
             multiline
@@ -111,7 +116,7 @@ export default function AssetNoteEditScreen() {
         <InputAccessoryView nativeID={inputAccessoryViewID}>
           <View style={styles.toolbar}>
             <TouchableOpacity onPress={insertChecklist} style={styles.toolbarBtn}>
-              <Ionicons name="checkbox-outline" size={20} color="#8B5CF6" />
+              <Ionicons name="checkbox-outline" size={20} color={NOTE_ACCENT} />
               <Text style={styles.toolbarBtnText}>Adicionar Checklist</Text>
             </TouchableOpacity>
             
@@ -126,7 +131,7 @@ export default function AssetNoteEditScreen() {
       {Platform.OS === 'android' && (
         <View style={styles.toolbar}>
           <TouchableOpacity onPress={insertChecklist} style={styles.toolbarBtn}>
-            <Ionicons name="checkbox-outline" size={20} color="#8B5CF6" />
+            <Ionicons name="checkbox-outline" size={20} color={NOTE_ACCENT} />
             <Text style={styles.toolbarBtnText}>Adicionar Checklist</Text>
           </TouchableOpacity>
         </View>
@@ -136,76 +141,78 @@ export default function AssetNoteEditScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#1E293B',
-  },
-  saveBtn: {
-    backgroundColor: '#8B5CF615',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveBtnText: {
-    color: '#8B5CF6',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  titleInput: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 16,
-    paddingVertical: 8,
-  },
-  contentInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#334155',
-    lineHeight: 24,
-    minHeight: 300,
-  },
-  toolbar: {
-    backgroundColor: '#F8FAFC',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  toolbarBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#8B5CF615',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
-  },
-  toolbarBtnText: {
-    color: '#8B5CF6',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  doneBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  doneBtnText: {
-    fontWeight: '800',
-    color: '#1E293B',
-    fontSize: 15,
-  }
-});
+function createNoteEditStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: C.divider,
+    },
+    headerTitle: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: C.slate,
+    },
+    saveBtn: {
+      backgroundColor: NOTE_ACCENT + '15',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    saveBtnText: {
+      color: NOTE_ACCENT,
+      fontWeight: '800',
+      fontSize: 14,
+    },
+    titleInput: {
+      fontSize: 24,
+      fontWeight: '900',
+      color: C.slate,
+      marginBottom: 16,
+      paddingVertical: 8,
+    },
+    contentInput: {
+      flex: 1,
+      fontSize: 16,
+      color: C.textSecondary,
+      lineHeight: 24,
+      minHeight: 300,
+    },
+    toolbar: {
+      backgroundColor: C.background,
+      borderTopWidth: 1,
+      borderTopColor: C.border,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    toolbarBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: NOTE_ACCENT + '15',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      gap: 6,
+    },
+    toolbarBtnText: {
+      color: NOTE_ACCENT,
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    doneBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    doneBtnText: {
+      fontWeight: '800',
+      color: C.slate,
+      fontSize: 15,
+    }
+  });
+}

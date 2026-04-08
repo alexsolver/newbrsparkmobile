@@ -4,8 +4,6 @@ import * as Notifications from 'expo-notifications';
 import { DirectExpense, AssetBudget, CostSummary, RecurringCost } from '../types/costs';
 import { StockService } from './stockService';
 import { formatCurrency, formatDate } from '../i18n/formatters';
-import { enqueueMutation } from './syncService';
-
 const GET_KEYS = (email: string) => ({
   EXPENSES: AuthService.getUserKey('costs_expenses', email),
   BUDGETS: AuthService.getUserKey('costs_budgets', email),
@@ -33,7 +31,6 @@ export const CostService = {
     const idx = all.findIndex((e: DirectExpense) => e.id === toSave.id);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);
     await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all));
-    enqueueMutation('costs', idx > -1 ? 'UPDATE_EXPENSE' : 'CREATE_EXPENSE', toSave, ownerEmail);
   },
 
   deleteExpense: async (id: string, ownerEmail: string) => {
@@ -41,7 +38,6 @@ export const CostService = {
     const data = await AsyncStorage.getItem(keys.EXPENSES);
     const all: DirectExpense[] = safeParse(data);
     await AsyncStorage.setItem(keys.EXPENSES, JSON.stringify(all.filter(e => e.id !== id)));
-    enqueueMutation('costs', 'DELETE_EXPENSE', { id }, ownerEmail);
   },
 
   markAsRealized: async (id: string, ownerEmail: string): Promise<void> => {
@@ -69,7 +65,6 @@ export const CostService = {
     const idx = all.findIndex((c: RecurringCost) => c.id === toSave.id);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);
     await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(all));
-    enqueueMutation('costs', idx > -1 ? 'UPDATE_RECURRING' : 'CREATE_RECURRING', toSave, ownerEmail);
     if (toSave.alertDaysBefore !== undefined) {
       await CostService.scheduleRecurringNotification(toSave);
     }
@@ -81,7 +76,6 @@ export const CostService = {
     const all: RecurringCost[] = safeParse(data);
     const filtered = all.filter(c => c.id !== id);
     await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(filtered));
-    enqueueMutation('costs', 'DELETE_RECURRING', { id }, ownerEmail);
     try { await Notifications.cancelScheduledNotificationAsync(id); } catch (_) {}
   },
 
@@ -99,7 +93,6 @@ export const CostService = {
     const idx = all.findIndex((b: AssetBudget) => b.assetId === toSave.assetId && b.category === toSave.category);
     if (idx > -1) all[idx] = toSave; else all.push(toSave);
     await AsyncStorage.setItem(keys.BUDGETS, JSON.stringify(all));
-    enqueueMutation('costs', idx > -1 ? 'UPDATE_BUDGET' : 'CREATE_BUDGET', toSave, ownerEmail);
   },
 
   getAssetCostSummary: async (assetId: string, month: string, ownerEmail?: string): Promise<CostSummary> => {

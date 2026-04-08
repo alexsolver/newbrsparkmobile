@@ -1297,7 +1297,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     const f = entry.fieldDef;
     const id = entry.id;
     if (!f || !id) continue;
-    if (!isFieldVisible(cfg, id)) continue;
+    if (!isFieldVisible(cfg, id, f.type)) continue;
     if (f.type === 'transit_start' || f.type === 'transit_end') continue;
     const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
     if (pTypes.includes(f.type) && !m.photoGallery) continue;

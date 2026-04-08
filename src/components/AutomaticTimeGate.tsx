@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { evaluateDeviceTimeGate, type DeviceTimeBlockReason } from '../services/deviceAutomaticTime';
-import { colors } from '../theme/colors';
+import { type ColorPalette } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 
 export function AutomaticTimeGate({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createAutomaticTimeGateStyles(C), [C]);
   const [phase, setPhase] = useState<'checking' | 'ok' | 'blocked'>('checking');
   const [reason, setReason] = useState<DeviceTimeBlockReason | null>(null);
 
@@ -49,7 +52,7 @@ export function AutomaticTimeGate({ children }: { children: React.ReactNode }) {
   if (phase === 'checking') {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <ActivityIndicator size="large" color={C.accent} />
         <Text style={styles.checkingLabel}>{t('deviceTime.checking')}</Text>
       </View>
     );
@@ -79,7 +82,8 @@ export function AutomaticTimeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const styles = StyleSheet.create({
+function createAutomaticTimeGateStyles(C: ColorPalette) {
+  return StyleSheet.create({
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -126,7 +130,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: C.accent,
     paddingVertical: 14,
     paddingHorizontal: 22,
     borderRadius: 14,
@@ -144,8 +148,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   secondaryBtnText: {
-    color: colors.accent,
+    color: C.accent,
     fontSize: 15,
     fontWeight: '700',
   },
-});
+  });
+}

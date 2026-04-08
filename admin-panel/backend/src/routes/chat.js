@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { getRoomMessagingState } = require('../lib/technicianClientChatGate');
 
 router.use(authUser);
 
@@ -390,6 +391,25 @@ router.get('/rooms', async (req, res) => {
 // MENSAGENS
 // =========================================================================
 
+// Estado do chat técnico–cliente (só envio é bloqueado fora da janela da atividade)
+router.get('/rooms/:roomId/messaging-state', async (req, res) => {
+  try {
+    const { email: rawEmail } = req.user;
+    const email = rawEmail.toLowerCase();
+    const { roomId } = req.params;
+
+    const member = await prisma.chatRoomMember.findUnique({
+      where: { roomId_userId: { roomId, userId: email } },
+    });
+    if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
+
+    const state = await getRoomMessagingState(roomId);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Envia mensagem
 router.post('/rooms/:roomId/messages', async (req, res) => {
   try {
@@ -404,6 +424,15 @@ router.post('/rooms/:roomId/messages', async (req, res) => {
     });
 
     if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
+
+    const { technicianClientGated, messagingActive } = await getRoomMessagingState(roomId);
+    if (technicianClientGated && !messagingActive) {
+      return res.status(403).json({
+        error:
+          'O chat com o cliente só está disponível durante o início e a conclusão da atividade (OS em andamento ou concluída aguardando sincronização).',
+        code: 'CHAT_ACTIVITY_INACTIVE',
+      });
+    }
 
     const msg = await prisma.chatMessage.create({
       data: {

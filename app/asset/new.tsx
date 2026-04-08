@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Switch, ActivityIndicator, Modal, FlatList , KeyboardAvoidingView, Platform} from 'react-native';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { ValueInput } from '../../src/components/ValueInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -88,6 +89,8 @@ export default function NewAssetScreen() {
   const params = useLocalSearchParams<{ parentId?: string; parentTitle?: string }>();
   const parentId    = params.parentId    || null;
   const parentTitle = params.parentTitle ? decodeURIComponent(params.parentTitle) : null;
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createNewAssetStyles(C), [C]);
 
   const [type, setType] = useState<string | null>(null);
   const [step, setStep] = useState(1);
@@ -347,7 +350,7 @@ export default function NewAssetScreen() {
           else if (step === 2) { setStep(1); setType(null); }
           else router.back();
         }} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          <Ionicons name="arrow-back" size={24} color={C.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
           {parentId ? t('newAsset.subAssetOf', { parent: parentTitle || '...' }) : t('newAsset.title')}
@@ -358,7 +361,7 @@ export default function NewAssetScreen() {
       {/* Banner de sub-ativo */}
       {parentId && (
         <View style={styles.parentBanner}>
-          <Ionicons name="git-branch-outline" size={15} color={colors.primary} />
+          <Ionicons name="git-branch-outline" size={15} color={C.primary} />
           <Text style={styles.parentBannerText}>
            {t('newAsset.linkedTo')}: <Text style={{ fontWeight: '800' }}>{parentTitle || parentId}</Text>
           </Text>
@@ -396,14 +399,14 @@ export default function NewAssetScreen() {
         {step === 2 && type && (
           <View style={styles.formContainer}>
             <View style={styles.selectedTypeBadge}>
-               <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={colors.primary} />
-               <Text style={{fontWeight: '900', color: colors.primary, marginLeft: 8, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5}}>
+               <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={C.primary} />
+               <Text style={{fontWeight: '900', color: C.primary, marginLeft: 8, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5}}>
                   {t('newAsset.selectedCategory')}: {t(assetTypes.find(t2=>t2.id===type)?.titleKey || '')}
                </Text>
             </View>
 
             <View style={[styles.formSectionHeader, {marginTop: 0}]}>
-               <Ionicons name="finger-print" size={18} color={colors.primary} />
+               <Ionicons name="finger-print" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>Identificação Principal</Text>
             </View>
 
@@ -411,29 +414,29 @@ export default function NewAssetScreen() {
             <TextInput style={styles.modInput} value={title} onChangeText={setTitle} placeholder={t('newAsset.namePlaceholder')} returnKeyType="done" />
 
             <View style={[styles.formSectionHeader, {marginTop: 20}]}>
-               <Ionicons name="color-palette-outline" size={18} color={colors.primary} />
+               <Ionicons name="color-palette-outline" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>Identidade Visual</Text>
             </View>
-            <Text style={{fontSize: 10, color: colors.textSecondary, marginBottom: 20, marginTop: 4, fontWeight: '700'}}>Escolha um ícone e uma cor que represente este bem.</Text>
+            <Text style={{fontSize: 10, color: C.textSecondary, marginBottom: 20, marginTop: 4, fontWeight: '700'}}>Escolha um ícone e uma cor que represente este bem.</Text>
 
             {/* Icon Picker Button */}
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceLow, borderRadius: 12, padding: 14, marginBottom: 32, gap: 14 }}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceLow, borderRadius: 12, padding: 14, marginBottom: 32, gap: 14 }}
               onPress={() => setIconPickerVisible(true)}
             >
-              <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: (customColor || colors.primary) + '18', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name={customIcon ? customIcon as any : 'apps-outline'} size={26} color={customColor || colors.primary} />
+              <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: (customColor || C.primary) + '18', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={customIcon ? customIcon as any : 'apps-outline'} size={26} color={customColor || C.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>{ customIcon ? 'Ícone selecionado' : 'Escolher ícone'}</Text>
-                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{customIcon ? 'Toque para trocar' : 'Biblioteca de ícones Ionicons'}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: C.primary }}>{ customIcon ? 'Ícone selecionado' : 'Escolher ícone'}</Text>
+                <Text style={{ fontSize: 10, color: C.textSecondary, marginTop: 2 }}>{customIcon ? 'Toque para trocar' : 'Biblioteca de ícones Ionicons'}</Text>
               </View>
               {customIcon && (
                 <TouchableOpacity onPress={() => { setCustomIcon(''); setCustomColor(''); }}>
-                  <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                  <Ionicons name="close-circle" size={20} color={C.border} />
                 </TouchableOpacity>
               )}
-              <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              <Ionicons name="chevron-forward" size={18} color={C.border} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.submitBtn} onPress={() => {
@@ -444,7 +447,7 @@ export default function NewAssetScreen() {
               setStep(3);
             }}>
               <Text style={styles.submitBtnText}>Continuar para a Ficha</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" style={{marginLeft: 8}}/>
+              <Ionicons name="arrow-forward" size={18} color={C.cardWhite} style={{marginLeft: 8}}/>
             </TouchableOpacity>
           </View>
         )}
@@ -453,15 +456,15 @@ export default function NewAssetScreen() {
         {step === 3 && type && (
           <View style={styles.formContainer}>
             <View style={styles.selectedTypeBadge}>
-               <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={colors.primary} />
-               <Text style={{fontWeight: '900', color: colors.primary, marginLeft: 8, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5}}>
+               <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={C.primary} />
+               <Text style={{fontWeight: '900', color: C.primary, marginLeft: 8, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5}}>
                   {t('newAsset.selectedCategory')}: {t(assetTypes.find(t2=>t2.id===type)?.titleKey || '')}
                </Text>
             </View>
 
             {/* HEADER 1: Dados Mestres */}
             <View style={styles.formSectionHeader}>
-               <Ionicons name="barcode-outline" size={18} color={colors.primary} />
+               <Ionicons name="barcode-outline" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>Identificadores</Text>
             </View>
 
@@ -564,7 +567,7 @@ export default function NewAssetScreen() {
 
             {/* HEADER 2: Finanças e Dept */}
             <View style={[styles.formSectionHeader, {marginTop: 16}]}>
-               <Ionicons name="cash-outline" size={18} color={colors.primary} />
+               <Ionicons name="cash-outline" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>{t('newAsset.valueCost')}</Text>
             </View>
 
@@ -595,7 +598,7 @@ export default function NewAssetScreen() {
 
             {/* HEADER 3: Localização Avançada */}
             <View style={[styles.formSectionHeader, {marginTop: 16}]}>
-               <Ionicons name="map-outline" size={18} color={colors.primary} />
+               <Ionicons name="map-outline" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>{t('newAsset.geolocation')}</Text>
             </View>
 
@@ -604,7 +607,7 @@ export default function NewAssetScreen() {
                <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0}]} value={cep} onChangeText={setCep} placeholder={t('newAsset.postalPlaceholder')} keyboardType="numeric" maxLength={9} returnKeyType="done"
                       />
                <TouchableOpacity style={styles.actionBtn} onPress={fetchCepData} disabled={fetchingCep}>
-                  {fetchingCep ? <ActivityIndicator color="#fff" /> : <Text style={{color:'#fff', fontWeight: '700'}}>{t('common.search')}</Text>}
+                  {fetchingCep ? <ActivityIndicator color={C.cardWhite} /> : <Text style={{ color: C.cardWhite, fontWeight: '700' }}>{t('common.search')}</Text>}
                </TouchableOpacity>
             </View>
 
@@ -644,40 +647,40 @@ export default function NewAssetScreen() {
 
             <Text style={styles.modLabel}>{t('newAsset.gpsSignature')}</Text>
             <View style={{flexDirection: 'row', gap: 12, marginBottom: 20}}>
-               <TextInput style={[styles.modInput, {flex: 1, marginBottom: 0, backgroundColor: '#f1f5f9', color: '#64748b'}]} value={gpsCoordinates} editable={false} placeholder={t('newAsset.gpsPlaceholder')} returnKeyType="done"
+               <TextInput style={[styles.modInput, { flex: 1, marginBottom: 0, backgroundColor: C.surfaceLow, color: C.textSecondary }]} value={gpsCoordinates} editable={false} placeholder={t('newAsset.gpsPlaceholder')} returnKeyType="done"
                       />
-               <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#14B8A6'}]} onPress={fetchGps} disabled={fetchingGps}>
-                  {fetchingGps ? <ActivityIndicator color="#fff" /> : <Ionicons name="locate" size={24} color="#fff" />}
+               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.connectivity.online }]} onPress={fetchGps} disabled={fetchingGps}>
+                  {fetchingGps ? <ActivityIndicator color={C.cardWhite} /> : <Ionicons name="locate" size={24} color={C.cardWhite} />}
                </TouchableOpacity>
             </View>
 
             {/* HEADER Custom Fields */}
           <View style={[styles.formSectionHeader, {justifyContent: 'space-between', marginTop: 16, flexWrap: 'wrap', gap: 12}]}>
              <View style={{flexDirection: 'row', alignItems: 'center', flexShrink: 1}}>
-               <Ionicons name="construct-outline" size={18} color={colors.primary} />
+               <Ionicons name="construct-outline" size={18} color={C.primary} />
                <Text style={[styles.formSectionTitle, {flexShrink: 1, fontSize: 15}]} numberOfLines={1}>{t('newAsset.extraAttrs')}</Text>
              </View>
-             <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: colors.primary+'15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12}}>
-               <Text style={{color:colors.primary, fontWeight:'800', fontSize: 11}}>+ {t('newAsset.includeAttr')}</Text>
+             <TouchableOpacity onPress={pickCustomFieldType} style={{backgroundColor: C.primary+'15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12}}>
+               <Text style={{color:C.primary, fontWeight:'800', fontSize: 11}}>+ {t('newAsset.includeAttr')}</Text>
              </TouchableOpacity>
           </View>
             
             {customFields.length === 0 && (
-               <Text style={{color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20, fontStyle: 'italic'}}>{t('newAsset.noCustomFields')}</Text>
+               <Text style={{color: C.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20, fontStyle: 'italic'}}>{t('newAsset.noCustomFields')}</Text>
             )}
 
             {customFields.map((field: any, idx: number) => (
                <View key={idx} style={styles.customFieldPill}>
                   <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8}}>
-                     <Text style={{fontSize: 11, fontWeight: '800', color: colors.primary, textTransform: 'uppercase'}}>
+                     <Text style={{fontSize: 11, fontWeight: '800', color: C.primary, textTransform: 'uppercase'}}>
                         TIPO: {field.type === 'text' ? t('newAsset.textType') : field.type === 'number' ? t('newAsset.numericType') : t('newAsset.logicType')}
                      </Text>
                      <TouchableOpacity onPress={() => { const cf = [...customFields]; cf.splice(idx, 1); setCustomFields(cf); }}>
-                        <Ionicons name="trash" size={16} color="#ef4444" />
+                        <Ionicons name="trash" size={16} color={C.destructive} />
                      </TouchableOpacity>
                   </View>
                   <TextInput 
-                     style={[styles.modInput, {paddingVertical: 10, fontSize: 14, marginBottom: 8, fontWeight:'700', backgroundColor: '#fff', borderColor: '#CBD5E1'}]} 
+                     style={[styles.modInput, { paddingVertical: 10, fontSize: 14, marginBottom: 8, fontWeight: '700', backgroundColor: C.cardWhite, borderColor: C.border }]} 
                      value={field.label} 
                      placeholder={t('newAsset.fieldNamePlaceholder')}
                      onChangeText={(t) => {
@@ -692,15 +695,15 @@ export default function NewAssetScreen() {
                            onValueChange={(v) => {
                               const cf = [...customFields]; cf[idx].value = v; setCustomFields(cf);
                            }} 
-                           trackColor={{ false: "#cbd5e1", true: colors.primary }}
+                           trackColor={{ false: C.border, true: C.primary }}
                         />
-                        <Text style={{fontWeight: '700', color: field.value ? colors.primary : colors.textSecondary}}>
+                        <Text style={{fontWeight: '700', color: field.value ? C.primary : C.textSecondary}}>
                            {field.value ? t('newAsset.boolTrue') : t('newAsset.boolFalse')}
                         </Text>
                      </View>
                   ) : (
                      <TextInput 
-                        style={[styles.modInput, {paddingVertical: 10, fontSize: 14, marginBottom: 0, backgroundColor: '#fff'}]} 
+                        style={[styles.modInput, { paddingVertical: 10, fontSize: 14, marginBottom: 0, backgroundColor: C.cardWhite }]} 
                         value={field.value} 
                         placeholder={field.type === 'number' ? t('assetDetail.numericData') : t('assetDetail.freeTextData')}
                         keyboardType={field.type === 'number' ? 'numeric' : 'default'}
@@ -714,7 +717,7 @@ export default function NewAssetScreen() {
             ))}
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleSave}>
-              <Ionicons name="checkmark-circle" size={24} color="#fff" style={{marginRight: 8}}/>
+              <Ionicons name="checkmark-circle" size={24} color={C.cardWhite} style={{ marginRight: 8 }} />
               <Text style={styles.submitBtnText}>{t('newAsset.saveNewRecord')}</Text>
             </TouchableOpacity>
           </View>
@@ -724,23 +727,23 @@ export default function NewAssetScreen() {
 
       {/* Icon Picker Modal */}
       <Modal visible={iconPickerVisible} animationType="slide" presentationStyle="pageSheet">
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, backgroundColor: C.background }}>
           {/* Header */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.cardWhite }}>
-            <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>ESCOLHER ÍCONE</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.cardWhite }}>
+            <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary }}>ESCOLHER ÍCONE</Text>
             <TouchableOpacity onPress={() => setIconPickerVisible(false)}>
-              <Ionicons name="close" size={24} color={colors.slate} />
+              <Ionicons name="close" size={24} color={C.slate} />
             </TouchableOpacity>
           </View>
 
           {/* Color Picker */}
-          <View style={{ paddingHorizontal: 20, paddingVertical: 16, backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-            <Text style={{ fontSize: 9, fontWeight: '900', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>COR DO ÍCONE</Text>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}>
+            <Text style={{ fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>COR DO ÍCONE</Text>
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-              {COLOR_PRESETS.map(c => (
-                <TouchableOpacity key={c} onPress={() => setCustomColor(c)}
-                  style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: c, justifyContent: 'center', alignItems: 'center', borderWidth: customColor === c ? 2.5 : 0, borderColor: '#fff', shadowColor: c, shadowOpacity: 0.4, shadowRadius: 4, elevation: 2 }}>
-                  {customColor === c && <Ionicons name="checkmark" size={16} color="#fff" />}
+              {COLOR_PRESETS.map((preset) => (
+                <TouchableOpacity key={preset} onPress={() => setCustomColor(preset)}
+                  style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: preset, justifyContent: 'center', alignItems: 'center', borderWidth: customColor === preset ? 2.5 : 0, borderColor: C.cardWhite, shadowColor: preset, shadowOpacity: 0.4, shadowRadius: 4, elevation: 2 }}>
+                  {customColor === preset && <Ionicons name="checkmark" size={16} color={C.cardWhite} />}
                 </TouchableOpacity>
               ))}
             </View>
@@ -748,11 +751,11 @@ export default function NewAssetScreen() {
 
           {/* Preview */}
           {customIcon ? (
-            <View style={{ alignItems: 'center', paddingVertical: 20, backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: (customColor || colors.primary) + '18', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name={customIcon as any} size={36} color={customColor || colors.primary} />
+            <View style={{ alignItems: 'center', paddingVertical: 20, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}>
+              <View style={{ width: 72, height: 72, borderRadius: 18, backgroundColor: (customColor || C.primary) + '18', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={customIcon as any} size={36} color={customColor || C.primary} />
               </View>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: 8 }}>Prévia do ícone</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: C.textSecondary, marginTop: 8 }}>Prévia do ícone</Text>
             </View>
           ) : null}
 
@@ -768,22 +771,22 @@ export default function NewAssetScreen() {
               return (
                 <TouchableOpacity
                   onPress={() => { setCustomIcon(item.icon); }}
-                  style={{ flex: 1, alignItems: 'center', padding: 12, borderRadius: 14, backgroundColor: selected ? (customColor || colors.primary) + '18' : colors.cardWhite, borderWidth: selected ? 1.5 : 1, borderColor: selected ? (customColor || colors.primary) : colors.border }}
+                  style={{ flex: 1, alignItems: 'center', padding: 12, borderRadius: 14, backgroundColor: selected ? (customColor || C.primary) + '18' : C.cardWhite, borderWidth: selected ? 1.5 : 1, borderColor: selected ? (customColor || C.primary) : C.border }}
                 >
-                  <Ionicons name={item.icon as any} size={28} color={selected ? (customColor || colors.primary) : colors.slate} />
-                  <Text style={{ fontSize: 8, fontWeight: '700', color: selected ? (customColor || colors.primary) : colors.textSecondary, marginTop: 6, textAlign: 'center' }} numberOfLines={1}>{item.label}</Text>
+                  <Ionicons name={item.icon as any} size={28} color={selected ? (customColor || C.primary) : C.slate} />
+                  <Text style={{ fontSize: 8, fontWeight: '700', color: selected ? (customColor || C.primary) : C.textSecondary, marginTop: 6, textAlign: 'center' }} numberOfLines={1}>{item.label}</Text>
                 </TouchableOpacity>
               );
             }}
           />
 
           {/* Confirm Button */}
-          <View style={{ padding: 20, backgroundColor: colors.cardWhite, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <View style={{ padding: 20, backgroundColor: C.cardWhite, borderTopWidth: 1, borderTopColor: C.border }}>
             <TouchableOpacity
-              style={{ backgroundColor: customIcon ? (customColor || colors.branding) : '#CBD5E1', borderRadius: 12, paddingVertical: 16, alignItems: 'center' }}
+              style={{ backgroundColor: customIcon ? (customColor || C.branding) : C.border, borderRadius: 12, paddingVertical: 16, alignItems: 'center' }}
               onPress={() => customIcon ? setIconPickerVisible(false) : null}
             >
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 {customIcon ? 'Confirmar ícone' : 'Selecione um ícone'}
               </Text>
             </TouchableOpacity>
@@ -799,42 +802,44 @@ export default function NewAssetScreen() {
 const { width } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 32 - 16) / 2; // 2 items per row in new asset selector
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border },
+function createNewAssetStyles(C: ColorPalette) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.background },
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border },
   backButton: { padding: 4 },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 13, fontWeight: '900', color: colors.primary, marginHorizontal: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 13, fontWeight: '900', color: C.primary, marginHorizontal: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   content: { padding: 16 },
   
   // Categorias (Step 1)
-  sectionTitle: { fontSize: 16, fontWeight: '900', color: colors.primary, marginBottom: 4, marginTop: 12, letterSpacing: -0.4, textTransform: 'uppercase' },
-  sectionDesc: { fontSize: 10, color: colors.textSecondary, marginBottom: 32, lineHeight: 15, fontWeight: '700', textTransform: 'uppercase' },
+  sectionTitle: { fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 4, marginTop: 12, letterSpacing: -0.4, textTransform: 'uppercase' },
+  sectionDesc: { fontSize: 10, color: C.textSecondary, marginBottom: 32, lineHeight: 15, fontWeight: '700', textTransform: 'uppercase' },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  gridItem: { width: ITEM_WIDTH, backgroundColor: colors.cardWhite, paddingVertical: 28, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
+  gridItem: { width: ITEM_WIDTH, backgroundColor: C.cardWhite, paddingVertical: 28, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: C.border, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
   iconBox: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  modTitle: { fontSize: 10, fontWeight: '900', color: colors.primary, textAlign: 'center', marginBottom: 2, letterSpacing: 0.5, textTransform: 'uppercase' },
-  modSubtitle: { fontSize: 8, color: colors.textSecondary, textAlign: 'center', fontWeight: '700', textTransform: 'uppercase' },
+  modTitle: { fontSize: 10, fontWeight: '900', color: C.primary, textAlign: 'center', marginBottom: 2, letterSpacing: 0.5, textTransform: 'uppercase' },
+  modSubtitle: { fontSize: 8, color: C.textSecondary, textAlign: 'center', fontWeight: '700', textTransform: 'uppercase' },
 
   // Formulário Expandido (Step 2)
-  formContainer: { backgroundColor: colors.cardWhite, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: colors.border, marginBottom: 40 },
-  selectedTypeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '10', padding: 14, borderRadius: 12, marginBottom: 32, borderWidth: 1, borderColor: colors.primary + '40' },
-  formSectionHeader: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: colors.surfaceLow, paddingBottom: 8, marginBottom: 16 },
-  formSectionTitle: { fontSize: 11, fontWeight: '900', color: colors.primary, marginLeft: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
+  formContainer: { backgroundColor: C.cardWhite, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: C.border, marginBottom: 40 },
+  selectedTypeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary + '10', padding: 14, borderRadius: 12, marginBottom: 32, borderWidth: 1, borderColor: C.primary + '40' },
+  formSectionHeader: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: C.surfaceLow, paddingBottom: 8, marginBottom: 16 },
+  formSectionTitle: { fontSize: 11, fontWeight: '900', color: C.primary, marginLeft: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
   
-  modLabel: { fontSize: 7, fontWeight: '900', color: colors.textLight, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1.2 },
-  modInput: { borderWidth: 0, borderRadius: 8, padding: 12, fontSize: 11, backgroundColor: colors.surfaceLow, marginBottom: 20, color: colors.primary, fontWeight: '900' },
-  actionBtn: { backgroundColor: colors.branding, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
+  modLabel: { fontSize: 7, fontWeight: '900', color: C.textLight, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1.2 },
+  modInput: { borderWidth: 0, borderRadius: 8, padding: 12, fontSize: 11, backgroundColor: C.surfaceLow, marginBottom: 20, color: C.primary, fontWeight: '900' },
+  actionBtn: { backgroundColor: C.branding, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
 
   
-  customFieldPill: { backgroundColor: colors.surfaceLow, padding: 16, borderRadius: 12, borderWidth: 0, marginBottom: 16 },
+  customFieldPill: { backgroundColor: C.surfaceLow, padding: 16, borderRadius: 12, borderWidth: 0, marginBottom: 16 },
   
-  submitBtn: { backgroundColor: colors.branding, borderRadius: 12, paddingVertical: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: colors.branding, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
-  submitBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  submitBtn: { backgroundColor: C.branding, borderRadius: 12, paddingVertical: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: C.branding, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  submitBtnText: { color: C.cardWhite, fontSize: 13, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
   
   // Fotos Slider da Vistoria
-  photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: colors.surfaceLow },
-  photoAddBtn: { width: 110, height: 110, borderRadius: 12, marginRight: 12, borderWidth: 2, borderColor: colors.branding, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.branding + '0A' },
-  deletePhotoBadge: { position: 'absolute', top: 4, right: 16, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  parentBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.accent + '12', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.accent + '25' },
-  parentBannerText: { fontSize: 9, color: colors.primary, fontWeight: '900', flex: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
-});
+  photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: C.surfaceLow },
+  photoAddBtn: { width: 110, height: 110, borderRadius: 12, marginRight: 12, borderWidth: 2, borderColor: C.branding, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: C.branding + '0A' },
+  deletePhotoBadge: { position: 'absolute', top: 4, right: 16, backgroundColor: C.destructive, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  parentBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.accent + '12', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.accent + '25' },
+  parentBannerText: { fontSize: 9, color: C.primary, fontWeight: '900', flex: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
+  });
+}

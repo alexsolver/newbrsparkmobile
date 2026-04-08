@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-import { colors } from '../src/theme/colors';
+import { ColorPalette } from '../src/theme/colors';
 import { useTheme } from '../src/theme/ThemeContext';
 import { Header } from '../src/components/Header';
 import { ApiService } from '../src/services/api';
@@ -26,6 +26,17 @@ import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumber
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
+const PREF_PUSH_ENABLED_KEY = '@pref_push_enabled';
+
+async function readPushEnabledPreference(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(PREF_PUSH_ENABLED_KEY);
+    if (raw === null) return false;
+    return JSON.parse(raw) === true;
+  } catch {
+    return false;
+  }
+}
 
 // Idiomas do app (interface)
 const LANGUAGES = [
@@ -49,6 +60,7 @@ export default function ProfileScreen() {
   const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode } = useTheme();
+  const styles = useMemo(() => createProfileStyles(C), [C]);
   const { t, i18n } = useTranslation();
   const [queueCount, setQueueCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -107,8 +119,7 @@ export default function ProfileScreen() {
         }
       }
       
-      const push = await AsyncStorage.getItem('@pref_push_enabled');
-      if (push) setPushEnabled(JSON.parse(push));
+      setPushEnabled(await readPushEnabledPreference());
       const region = await AsyncStorage.getItem(REGION_KEY);
       setSelectedRegion(region || getDeviceRegion());
       const lang = await AsyncStorage.getItem(LANGUAGE_KEY);
@@ -125,6 +136,14 @@ export default function ProfileScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setQueueCount(getSyncQueue().length);
+      let cancelled = false;
+      (async () => {
+        const on = await readPushEnabledPreference();
+        if (!cancelled) setPushEnabled(on);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
 
@@ -136,8 +155,8 @@ export default function ProfileScreen() {
         return;
       }
     }
+    await AsyncStorage.setItem(PREF_PUSH_ENABLED_KEY, JSON.stringify(val));
     setPushEnabled(val);
-    await AsyncStorage.setItem('@pref_push_enabled', JSON.stringify(val));
     if (val) Alert.alert(t('profile.alertsEnabled'), t('profile.alertsEnabledMsg'));
   };
 
@@ -344,7 +363,11 @@ export default function ProfileScreen() {
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} style={styles.headerAvatarWrap}>
             {displayAvatarUri ? (
-              <Image source={{ uri: displayAvatarUri }} style={styles.headerAvatar} />
+              <Image
+                source={{ uri: displayAvatarUri }}
+                style={styles.headerAvatar}
+                resizeMode="cover"
+              />
             ) : (
               <View style={[styles.headerAvatarPlaceholder, { backgroundColor: '#F1F5F9' }]}>
                 <Ionicons name="person" size={40} color={C.textLight} />
@@ -356,7 +379,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
-          <Text style={[styles.headerSub, { color: colors.textSecondary }]}>{profile.email}</Text>
+          <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
           
           <TouchableOpacity 
             style={[styles.editInfoBtn, { backgroundColor: '#F1F5F9' }]} 
@@ -583,7 +606,7 @@ export default function ProfileScreen() {
           {/* Toggle 2FA */}
           <View style={[styles.listItem, { paddingVertical: 14 }]}>
             <View style={[styles.listIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={colors.accent} />
+              <Ionicons name="shield-checkmark-outline" size={18} color={C.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.listItemText}>Verificação em 2 etapas</Text>
@@ -593,8 +616,8 @@ export default function ProfileScreen() {
               value={twoFaEnabled}
               onValueChange={handle2FaToggle}
               disabled={twoFaLoading}
-              trackColor={{ false: '#E2E8F0', true: colors.accent + '88' }}
-              thumbColor={twoFaEnabled ? colors.accent : '#CBD5E1'}
+              trackColor={{ false: '#E2E8F0', true: C.accent + '88' }}
+              thumbColor={twoFaEnabled ? C.accent : '#CBD5E1'}
             />
           </View>
         </View>
@@ -603,18 +626,18 @@ export default function ProfileScreen() {
         {show2FaModal && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 }}>
             <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary, marginBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
                 {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
               </Text>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
                 {tfa2Action === 'enable'
                   ? 'Digite o código de 6 dígitos enviado para o seu e-mail.'
                   : 'Para desativar, gere um novo código primeiro (vá em "Ativar" e depois cancele) ou use um código válido.'}
               </Text>
               <TextInput
                 style={[
-                  { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: colors.accent, paddingVertical: 16, paddingHorizontal: 16 },
-                  { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: colors.primary }
+                  { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: C.accent, paddingVertical: 16, paddingHorizontal: 16 },
+                  { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: C.primary }
                 ]}
                 value={tfa2Action === 'enable' ? tfaOtp : tfaDisableOtp}
                 onChangeText={v => tfa2Action === 'enable' ? setTfaOtp(v.replace(/[^0-9]/g,'').slice(0,6)) : setTfaDisableOtp(v.replace(/[^0-9]/g,'').slice(0,6))}
@@ -625,7 +648,7 @@ export default function ProfileScreen() {
                 autoFocus
               />
               <TouchableOpacity
-                style={[{ backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 }, { opacity: twoFaLoading ? 0.6 : 1 }]}
+                style={[{ backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 }, { opacity: twoFaLoading ? 0.6 : 1 }]}
                 onPress={handle2FaConfirm}
                 disabled={twoFaLoading}
               >
@@ -634,7 +657,7 @@ export default function ProfileScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={{ alignItems: 'center', paddingTop: 12 }} onPress={() => setShow2FaModal(false)}>
-                <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+                <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -788,8 +811,22 @@ export default function ProfileScreen() {
                     <Ionicons name="close" size={24} color="#64748B" />
                  </TouchableOpacity>
               </View>
+
+              <View style={styles.avatarModalPreviewWrap}>
+                {displayAvatarUri ? (
+                  <Image
+                    source={{ uri: displayAvatarUri }}
+                    style={styles.avatarModalPreview}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.avatarModalPreview, styles.avatarModalPreviewPlaceholder]}>
+                    <Ionicons name="person" size={48} color={C.textLight} />
+                  </View>
+                )}
+              </View>
               
-              <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
+              <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 20 }}>
                 {t('profile.avatarMsg')}
               </Text>
               
@@ -842,7 +879,8 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createProfileStyles(C: ColorPalette) {
+  return StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16 },
 
@@ -850,12 +888,23 @@ const styles = StyleSheet.create({
   guestIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   guestTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
   guestSub: { fontSize: 12, textAlign: 'center', marginTop: 8, lineHeight: 18, fontWeight: '500' },
-  guestBtn: { backgroundColor: colors.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24, shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
+  guestBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
   guestBtnText: { color: '#fff', fontWeight: '900', fontSize: 14 },
 
   // ─── Profile Header ───
   profileHeaderCard: { alignItems: 'center', paddingVertical: 32, marginBottom: 8 },
-  headerAvatarWrap: { width: 90, height: 90, borderRadius: 45, marginBottom: 16, elevation: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10 },
+  headerAvatarWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    marginBottom: 16,
+    overflow: 'hidden',
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
   headerAvatar: { width: 90, height: 90, borderRadius: 45 },
   headerAvatarPlaceholder: { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center' },
   headerAvatarEdit: { position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: '#191C1D', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
@@ -893,6 +942,18 @@ const styles = StyleSheet.create({
   // ─── Modal ───
   modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 20 },
+  avatarModalPreviewWrap: {
+    alignSelf: 'center',
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  avatarModalPreview: { width: 128, height: 128, borderRadius: 64 },
+  avatarModalPreviewPlaceholder: { justifyContent: 'center', alignItems: 'center' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontWeight: '900', color: '#191C1D' },
-});
+  });
+}

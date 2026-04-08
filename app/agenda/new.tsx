@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { AgendaService, AGENDA_COLORS } from '../../src/services/agendaService';
 import { AgendaEvent, EventCategory } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 
 const CATEGORIES: { label: string; value: EventCategory; color: string; icon: string }[] = [
   { label: 'Reserva / Aluguel', value: 'BOOKING', color: AGENDA_COLORS.BOOKING, icon: 'bed-outline' },
@@ -21,6 +22,8 @@ export default function NewAgendaScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const assets = getLocalAssets(undefined, { includeMobileWarehouse: false }) || [];
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createNewAgendaStyles(C), [C]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -81,7 +84,7 @@ export default function NewAgendaScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Novo Evento</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={handleSave} disabled={saving}>
-          <Text style={[styles.headerBtnText, { color: '#3b82f6', fontWeight: '800' }]}>{saving ? '...' : 'Salvar'}</Text>
+          <Text style={[styles.headerBtnText, { color: C.status.info.fg, fontWeight: '800' }]}>{saving ? '...' : 'Salvar'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -96,8 +99,8 @@ export default function NewAgendaScreen() {
                 style={[styles.categoryPill, category === cat.value && { backgroundColor: cat.color, borderColor: cat.color }]}
                 onPress={() => setCategory(cat.value)}
               >
-                <Ionicons name={cat.icon as any} size={16} color={category === cat.value ? '#fff' : '#64748b'} />
-                <Text style={[styles.categoryText, category === cat.value && { color: '#fff' }]}>{cat.label}</Text>
+                <Ionicons name={cat.icon as any} size={16} color={category === cat.value ? C.cardWhite : C.textSecondary} />
+                <Text style={[styles.categoryText, category === cat.value && { color: C.cardWhite }]}>{cat.label}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -106,12 +109,12 @@ export default function NewAgendaScreen() {
           <Text style={styles.label}>Vincular a um Ativo (Opcional)</Text>
           <TouchableOpacity style={styles.pickerButton} onPress={() => setShowAssetModal(true)}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name={selectedAsset ? "home" : "apps-outline"} size={20} color={selectedAsset ? "#3b82f6" : "#64748b"} style={{ marginRight: 10 }} />
-              <Text style={{ fontSize: 16, color: selectedAsset ? '#0f172a' : '#94a3b8', fontWeight: selectedAsset ? '700' : '500' }}>
+              <Ionicons name={selectedAsset ? "home" : "apps-outline"} size={20} color={selectedAsset ? C.status.info.fg : C.textSecondary} style={{ marginRight: 10 }} />
+              <Text style={{ fontSize: 16, color: selectedAsset ? C.slate : C.textLight, fontWeight: selectedAsset ? '700' : '500' }}>
                 {selectedAsset ? selectedAsset.title : 'Selecione um Bem...'}
               </Text>
             </View>
-            <Ionicons name="chevron-down" size={20} color="#94a3b8" />
+            <Ionicons name="chevron-down" size={20} color={C.textLight} />
           </TouchableOpacity>
 
           {/* BASIC INFO */}
@@ -129,14 +132,14 @@ export default function NewAgendaScreen() {
             <View style={styles.flexHalf}>
               <Text style={styles.label}>Início</Text>
               <TouchableOpacity style={styles.dateBtn} onPress={() => setShowStartPicker(true)}>
-                <Ionicons name="calendar-outline" size={18} color="#64748b" />
+                <Ionicons name="calendar-outline" size={18} color={C.textSecondary} />
                 <Text style={styles.dateBtnText}>{startDate.toLocaleDateString('pt-BR')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.flexHalf}>
               <Text style={styles.label}>Fim</Text>
               <TouchableOpacity style={styles.dateBtn} onPress={() => setShowEndPicker(true)}>
-                <Ionicons name="calendar-outline" size={18} color="#64748b" />
+                <Ionicons name="calendar-outline" size={18} color={C.textSecondary} />
                 <Text style={styles.dateBtnText}>{endDate.toLocaleDateString('pt-BR')}</Text>
               </TouchableOpacity>
             </View>
@@ -190,7 +193,7 @@ export default function NewAgendaScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Selecione o Bem</Text>
               <TouchableOpacity onPress={() => setShowAssetModal(false)}>
-                <Ionicons name="close" size={24} color="#0f172a" />
+                <Ionicons name="close" size={24} color={C.slate} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -198,11 +201,11 @@ export default function NewAgendaScreen() {
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity 
-                  style={[styles.modalItem, assetId === item.id && { backgroundColor: '#eff6ff' }]}
+                  style={[styles.modalItem, assetId === item.id && { backgroundColor: C.status.info.bg }]}
                   onPress={() => { setAssetId(item.id); setShowAssetModal(false); }}
                 >
-                  <Text style={[styles.modalItemText, assetId === item.id && { color: '#3b82f6', fontWeight: '800' }]}>{item.title}</Text>
-                  {assetId === item.id && <Ionicons name="checkmark" size={20} color="#3b82f6" />}
+                  <Text style={[styles.modalItemText, assetId === item.id && { color: C.status.info.fg, fontWeight: '800' }]}>{item.title}</Text>
+                  {assetId === item.id && <Ionicons name="checkmark" size={20} color={C.status.info.fg} />}
                 </TouchableOpacity>
               )}
             />
@@ -214,30 +217,32 @@ export default function NewAgendaScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  headerTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
-  headerBtn: { padding: 8 },
-  headerBtnText: { fontSize: 15, fontWeight: '600', color: '#64748b' },
-  content: { flex: 1, padding: 20 },
-  label: { fontSize: 13, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8, marginTop: 16, letterSpacing: 0.5 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, fontSize: 16, color: '#0f172a', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
-  pickerButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, elevation: 1 },
-  
-  categoryScroll: { flexDirection: 'row', marginBottom: 12, paddingVertical: 4 },
-  categoryPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', marginRight: 12, gap: 6 },
-  categoryText: { fontSize: 13, fontWeight: '800', color: '#64748b' },
+function createNewAgendaStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: C.background },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.divider },
+    headerTitle: { fontSize: 16, fontWeight: '900', color: C.slate },
+    headerBtn: { padding: 8 },
+    headerBtnText: { fontSize: 15, fontWeight: '600', color: C.textSecondary },
+    content: { flex: 1, padding: 20 },
+    label: { fontSize: 13, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase', marginBottom: 8, marginTop: 16, letterSpacing: 0.5 },
+    input: { backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 16, fontSize: 16, color: C.slate, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
+    pickerButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, elevation: 1 },
+    
+    categoryScroll: { flexDirection: 'row', marginBottom: 12, paddingVertical: 4 },
+    categoryPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, marginRight: 12, gap: 6 },
+    categoryText: { fontSize: 13, fontWeight: '800', color: C.textSecondary },
 
-  row: { flexDirection: 'row', gap: 12 },
-  flexHalf: { flex: 1 },
-  dateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, gap: 8 },
-  dateBtnText: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+    row: { flexDirection: 'row', gap: 12 },
+    flexHalf: { flex: 1 },
+    dateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 16, gap: 8 },
+    dateBtnText: { fontSize: 15, fontWeight: '700', color: C.slate },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 400, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
-  modalItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  modalItemText: { fontSize: 16, fontWeight: '600', color: '#475569' },
-});
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: C.cardWhite, borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 400, maxHeight: '80%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: C.divider },
+    modalTitle: { fontSize: 18, fontWeight: '900', color: C.slate },
+    modalItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: C.divider },
+    modalItemText: { fontSize: 16, fontWeight: '600', color: C.textSecondary },
+  });
+}

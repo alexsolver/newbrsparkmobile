@@ -8,7 +8,6 @@ import {
   saveTechStockMovementLocal,
   deleteTechStockItemLocal,
 } from '../database';
-import { enqueueMutation } from './syncService';
 import { ensureTechnicianStockLegacyMigration } from './technicianStockMigration';
 
 function rowToItem(row: any): StockItem {
@@ -47,12 +46,10 @@ export const TechnicianStockService = {
       owner_email: ownerEmail || null,
     };
     saveTechStockItemLocal(row, ownerEmail);
-    enqueueMutation('tech_stock', 'tech_stock:CREATE_ITEM', row, ownerEmail);
   },
 
   deleteItem: async (itemId: string, ownerEmail?: string) => {
     deleteTechStockItemLocal(itemId);
-    enqueueMutation('tech_stock', 'tech_stock:DELETE_ITEM', { id: itemId }, ownerEmail);
   },
 
   getMovements: async (ownerEmail?: string): Promise<StockMovement[]> => {
@@ -102,6 +99,5 @@ export const TechnicianStockService = {
 
     saveTechStockItemLocal({ ...item, owner_email: persistEmail || null }, persistEmail);
     saveTechStockMovementLocal(newMovement, persistEmail);
-    enqueueMutation('tech_stock', 'tech_stock:RECORD_MOVEMENT', newMovement, persistEmail);
   },
 };

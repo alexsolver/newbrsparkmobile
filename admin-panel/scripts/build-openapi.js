@@ -134,6 +134,9 @@ const ROUTES = [
     parameters: [{ name: 'roomId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['get', '/api/chat/rooms', op('Listar salas', ['App — Chat'], bearerApp)],
+  ['get', '/api/chat/rooms/{roomId}/messaging-state', op('Estado do envio (chat técnico–cliente)', ['App — Chat'], bearerApp, {
+    parameters: [{ name: 'roomId', in: 'path', required: true, schema: { type: 'string' } }],
+  })],
   ['post', '/api/chat/rooms/{roomId}/messages', op('Enviar mensagem', ['App — Chat'], bearerApp, {
     parameters: [{ name: 'roomId', in: 'path', required: true, schema: { type: 'string' } }],
   })],

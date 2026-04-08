@@ -4348,7 +4348,7 @@ window.printReport = async function() {
         return;
       }
       const { id, fieldDef, row, rowIdx, repeatSid } = entry;
-      if (fieldDef && fieldDef.id && !isFieldVisible(cfg, fieldDef.id)) return;
+      if (fieldDef && fieldDef.id && !isFieldVisible(cfg, fieldDef.id, fieldDef.type)) return;
       const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
       if (fieldDef && pTypes.includes(fieldDef.type) && !mod.photoGallery) return;
       const rawEmptyCheck = row && typeof row === 'object' ? row[id] : responses[id];

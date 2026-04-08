@@ -4,7 +4,6 @@
  * Em produção: substituir por expo-secure-store ou AES local.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { enqueueMutation } from './syncService';
 import { AuthService } from './auth';
 
 export type VaultCategory =
@@ -65,7 +64,6 @@ export const AssetVaultService = {
       ownerEmail,
     };
     await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify([...entries, newEntry]));
-    enqueueMutation('vault', 'CREATE', { assetId, entry: newEntry }, ownerEmail);
     return newEntry;
   },
 
@@ -74,8 +72,6 @@ export const AssetVaultService = {
     const entries = await this.getEntries(assetId, ownerEmail);
     const updated = entries.map(e => e.id === entryId ? { ...e, ...patch, lastUpdated: Date.now(), ownerEmail: ownerEmail || e.ownerEmail } : e);
     await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify(updated));
-    const entryPatch = updated.find(e => e.id === entryId) || patch;
-    enqueueMutation('vault', 'UPDATE', { assetId, entryId, patch: entryPatch }, ownerEmail);
   },
 
   async deleteEntry(assetId: string, entryId: string, ownerEmail: string): Promise<void> {
@@ -83,6 +79,5 @@ export const AssetVaultService = {
     const entries = await this.getEntries(assetId, ownerEmail);
     const filtered = entries.filter(e => e.id !== entryId);
     await AsyncStorage.setItem(KEY(assetId, ownerEmail), JSON.stringify(filtered));
-    enqueueMutation('vault', 'DELETE', { assetId, entryId }, ownerEmail);
   },
 };

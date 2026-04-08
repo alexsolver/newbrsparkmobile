@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView, Alert } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import { StockService } from '../../src/services/stockService';
@@ -14,8 +14,9 @@ import { getLocalAssets } from '../../src/database';
 export default function NewStockScreen() {
   const router = useRouter();
   const { colors: C } = useTheme();
+  const styles = useMemo(() => createStockNewStyles(C), [C]);
   const { user } = useAuth();
-  
+
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -24,7 +25,7 @@ export default function NewStockScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const assets = React.useMemo(() => {
-    return user?.email ? getLocalAssets(user.email).filter(a => !a.deletedAt) : [];
+    return user?.email ? getLocalAssets(user.email).filter((a) => !a.deletedAt) : [];
   }, [user?.email]);
 
   const handleStartScan = async () => {
@@ -38,8 +39,8 @@ export default function NewStockScreen() {
     setIsScanning(true);
   };
 
-  const onBarcodeScanned = async ({ data, type }: { data: string; type: string }) => {
-    setIsScanning(false); // fecha o scanner
+  const onBarcodeScanned = async ({ data }: { data: string; type: string }) => {
+    setIsScanning(false);
     setSku(data);
     setIsFetching(true);
 
@@ -56,7 +57,7 @@ export default function NewStockScreen() {
   };
 
   const alterQty = (delta: number) => {
-    setQuantity(prev => Math.max(1, prev + delta));
+    setQuantity((prev) => Math.max(1, prev + delta));
   };
 
   const handleSave = async () => {
@@ -64,24 +65,25 @@ export default function NewStockScreen() {
       Alert.alert('Atenção', 'Informe pelo menos um nome e SKU base.');
       return;
     }
-    
-    try {
-      await StockService.saveItem({
-        id: `local_stock_${Date.now()}`,
-        name,
-        sku,
-        category: 'Suprimentos',
-        currentStock: quantity,
-        minStock: 2,
-        targetStock: 5,
-        unit: 'un',
-        costPrice: 0,
-        locationId: ''
-      }, user?.email);
 
-      Alert.alert('Estoque Adicionado', `${quantity} unidade(s) salvas com sucesso.`, [
-         { text: 'OK', onPress: () => router.back() }
-      ]);
+    try {
+      await StockService.saveItem(
+        {
+          id: `local_stock_${Date.now()}`,
+          name,
+          sku,
+          category: 'Suprimentos',
+          currentStock: quantity,
+          minStock: 2,
+          targetStock: 5,
+          unit: 'un',
+          costPrice: 0,
+          locationId: '',
+        },
+        user?.email
+      );
+
+      Alert.alert('Estoque Adicionado', `${quantity} unidade(s) salvas com sucesso.`, [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e) {
       Alert.alert('Erro', 'Houve um problema ao salvar.');
     }
@@ -94,15 +96,13 @@ export default function NewStockScreen() {
 
       {assets.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
-          <Ionicons name="cube-outline" size={64} color="#CBD5E1" />
-          <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginTop: 24, textAlign: 'center' }}>
-            Nenhum Bem cadastrado
-          </Text>
-          <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
+          <Ionicons name="cube-outline" size={64} color={C.border} />
+          <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>Nenhum Bem cadastrado</Text>
+          <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
             Para organizar seu estoque, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
           </Text>
-          <TouchableOpacity 
-            style={{ backgroundColor: '#1E293B', paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
+          <TouchableOpacity
+            style={{ backgroundColor: C.filledButtonBg, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
             onPress={() => router.back()}
             activeOpacity={0.8}
           >
@@ -111,133 +111,157 @@ export default function NewStockScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-
-        {isScanning ? (
-          <View style={styles.cameraContainer}>
-            <CameraView 
-              style={styles.camera} 
-              facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"] }}
-              onBarcodeScanned={onBarcodeScanned}
-            />
-            <TouchableOpacity style={styles.closeCameraBtn} onPress={() => setIsScanning(false)}>
-              <Text style={styles.closeCameraText}>Cancelar Edição</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.barcodeArea}>
-            <TouchableOpacity style={styles.scanBtn} onPress={handleStartScan} activeOpacity={0.8}>
-              <Ionicons name="barcode-outline" size={48} color="#fff" />
-              <Text style={styles.scanText}>Escanear Código</Text>
-              {isFetching && <Text style={{ color: '#fff', marginTop: 4 }}>Buscando dados no Catálogo...</Text>}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Produto / Insumo</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: C.surfaceLow, color: '#1E293B' }]}
-            placeholder="Nome do Item"
-            placeholderTextColor={C.textLight}
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Código (SKU/EAN)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: C.surfaceLow, color: '#1E293B' }]}
-            placeholder="Ex: 78912345"
-            placeholderTextColor={C.textLight}
-            value={sku}
-            onChangeText={setSku}
-          />
-        </View>
-
-        <View style={styles.qtySection}>
-          <Text style={styles.label}>Quantidade Entrante</Text>
-          <View style={styles.qtyRow}>
-            <TouchableOpacity style={styles.qtyBtn} onPress={() => alterQty(-1)}>
-              <Ionicons name="remove" size={32} color={colors.textSecondary} />
-            </TouchableOpacity>
-            
-            <View style={styles.qtyDisplay}>
-              <Text style={styles.qtyVal}>{quantity}</Text>
-              <Text style={styles.qtyUnit}>UN</Text>
+          {isScanning ? (
+            <View style={styles.cameraContainer}>
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
+                onBarcodeScanned={onBarcodeScanned}
+              />
+              <TouchableOpacity style={styles.closeCameraBtn} onPress={() => setIsScanning(false)}>
+                <Text style={styles.closeCameraText}>Cancelar Edição</Text>
+              </TouchableOpacity>
             </View>
+          ) : (
+            <View style={styles.barcodeArea}>
+              <TouchableOpacity style={styles.scanBtn} onPress={handleStartScan} activeOpacity={0.8}>
+                <Ionicons name="barcode-outline" size={48} color="#fff" />
+                <Text style={styles.scanText}>Escanear Código</Text>
+                {isFetching && <Text style={{ color: '#fff', marginTop: 4 }}>Buscando dados no Catálogo...</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
 
-            <TouchableOpacity style={styles.qtyBtn} onPress={() => alterQty(1)}>
-              <Ionicons name="add" size={32} color={colors.textSecondary} />
-            </TouchableOpacity>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Produto / Insumo</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: C.surfaceLow, color: C.slate }]}
+              placeholder="Nome do Item"
+              placeholderTextColor={C.textLight}
+              value={name}
+              onChangeText={setName}
+            />
           </View>
-        </View>
 
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnT}>Salvar Entrada</Text>
-        </TouchableOpacity>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Código (SKU/EAN)</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: C.surfaceLow, color: C.slate }]}
+              placeholder="Ex: 78912345"
+              placeholderTextColor={C.textLight}
+              value={sku}
+              onChangeText={setSku}
+            />
+          </View>
 
-      </ScrollView>
+          <View style={styles.qtySection}>
+            <Text style={styles.label}>Quantidade Entrante</Text>
+            <View style={styles.qtyRow}>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => alterQty(-1)}>
+                <Ionicons name="remove" size={32} color={C.textSecondary} />
+              </TouchableOpacity>
+
+              <View style={styles.qtyDisplay}>
+                <Text style={styles.qtyVal}>{quantity}</Text>
+                <Text style={styles.qtyUnit}>UN</Text>
+              </View>
+
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => alterQty(1)}>
+                <Ionicons name="add" size={32} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <Text style={styles.saveBtnT}>Salvar Entrada</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { padding: 20 },
-  cameraContainer: { width: '100%', height: 300, borderRadius: 24, overflow: 'hidden', marginBottom: 30, position: 'relative' },
-  camera: { flex: 1 },
-  closeCameraBtn: { position: 'absolute', bottom: 20, alignSelf: 'center', backgroundColor: '#EF4444', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },
-  closeCameraText: { color: '#fff', fontWeight: '800' },
-  barcodeArea: { alignItems: 'center', marginBottom: 30 },
-  scanBtn: {
-    backgroundColor: '#3B82F6',
-    width: '100%',
-    padding: 24,
-    borderRadius: 24,
-    alignItems: 'center',
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8
-  },
-  scanText: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 8, letterSpacing: 0.5 },
+function createStockNewStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1 },
+    scroll: { padding: 20 },
+    cameraContainer: { width: '100%', height: 300, borderRadius: 24, overflow: 'hidden', marginBottom: 30, position: 'relative' },
+    camera: { flex: 1 },
+    closeCameraBtn: {
+      position: 'absolute',
+      bottom: 20,
+      alignSelf: 'center',
+      backgroundColor: C.destructive,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 20,
+    },
+    closeCameraText: { color: '#fff', fontWeight: '800' },
+    barcodeArea: { alignItems: 'center', marginBottom: 30 },
+    scanBtn: {
+      backgroundColor: MEDIA_TAG_COLORS.BEFORE,
+      width: '100%',
+      padding: 24,
+      borderRadius: 24,
+      alignItems: 'center',
+      shadowColor: MEDIA_TAG_COLORS.BEFORE,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    scanText: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 8, letterSpacing: 0.5 },
 
-  formGroup: { marginBottom: 20 },
-  label: { fontSize: 13, fontWeight: '800', color: colors.slate, marginBottom: 8, textTransform: 'uppercase' },
-  input: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    fontSize: 16,
-    fontWeight: '700',
-  },
+    formGroup: { marginBottom: 20 },
+    label: { fontSize: 13, fontWeight: '800', color: C.slate, marginBottom: 8, textTransform: 'uppercase' },
+    input: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: 12,
+      fontSize: 16,
+      fontWeight: '700',
+    },
 
-  qtySection: { alignItems: 'center', marginVertical: 20 },
-  qtyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-    marginTop: 10,
-  },
-  qtyBtn: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: '#fff',
-    borderWidth: 1, borderColor: '#E2E8F0',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2
-  },
-  qtyDisplay: { alignItems: 'center', minWidth: 80 },
-  qtyVal: { fontSize: 48, fontWeight: '900', color: '#1E293B', lineHeight: 56 },
-  qtyUnit: { fontSize: 14, fontWeight: '700', color: '#64748B' },
+    qtySection: { alignItems: 'center', marginVertical: 20 },
+    qtyRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 20,
+      marginTop: 10,
+    },
+    qtyBtn: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: C.cardWhite,
+      borderWidth: 1,
+      borderColor: C.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    qtyDisplay: { alignItems: 'center', minWidth: 80 },
+    qtyVal: { fontSize: 48, fontWeight: '900', color: C.slate, lineHeight: 56 },
+    qtyUnit: { fontSize: 14, fontWeight: '700', color: C.textLight },
 
-  saveBtn: {
-    backgroundColor: '#1E293B',
-    padding: 16,
-    borderRadius: 14,
-    alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4,
-    marginTop: 20
-  },
-  saveBtnT: { color: '#fff', fontSize: 16, fontWeight: '800', textTransform: 'uppercase' }
-});
+    saveBtn: {
+      backgroundColor: C.filledButtonBg,
+      padding: 16,
+      borderRadius: 14,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 4,
+      marginTop: 20,
+    },
+    saveBtnT: { color: '#fff', fontSize: 16, fontWeight: '800', textTransform: 'uppercase' },
+  });
+}

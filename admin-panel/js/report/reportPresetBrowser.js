@@ -75,8 +75,16 @@ export function mergePresetConfig(raw) {
   return out;
 }
 
-export function isFieldVisible(config, fieldId) {
+/**
+ * @param {string} [fieldType] — custos do técnico: omitidos do PDF por defeito.
+ */
+export function isFieldVisible(config, fieldId, fieldType) {
   if (!fieldId) return true;
+  if (fieldType === 'technician_finance') {
+    const f = config.fields && config.fields[fieldId];
+    if (!f || typeof f !== 'object') return false;
+    return !!f.visible;
+  }
   const f = config.fields && config.fields[fieldId];
   if (!f || typeof f !== 'object') return true;
   if (Object.prototype.hasOwnProperty.call(f, 'visible')) return !!f.visible;

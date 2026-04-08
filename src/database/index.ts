@@ -169,7 +169,9 @@ export function initDatabase() {
       scopeSuffix TEXT DEFAULT '',
       source TEXT DEFAULT 'manual',
       createdAt TEXT NOT NULL,
-      owner_email TEXT DEFAULT NULL
+      owner_email TEXT DEFAULT NULL,
+      attachments_json TEXT DEFAULT NULL,
+      linked_task_ids_json TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS media_items (
@@ -269,6 +271,12 @@ export function initDatabase() {
   } catch (_) {}
   try {
     db.execSync(`ALTER TABLE tech_stock_movements ADD COLUMN responsibleId TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN attachments_json TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN linked_task_ids_json TEXT DEFAULT NULL;`);
   } catch (_) {}
 }
 
@@ -378,11 +386,49 @@ export function saveAssetNote(note: AssetNote, ownerEmail?: string) {
     note.id, note.assetId, note.title, note.content, note.createdBy, 
     note.createdAt, note.updatedAt, note.synced, ownerEmail || null
   ]);
+}
 
-  // Enfileira ação offline caso necessário
-  if (note.synced === 0) {
-    queueOfflineAction('CREATE_NOTE', note, ownerEmail);
-  }
+/** Merge vindo da nuvem (pullAssetNotes) — não enfileira na sync_queue. */
+export function upsertAssetNoteFromSync(note: AssetNote, ownerEmail?: string) {
+  const stmt = db.prepareSync(`
+    INSERT INTO asset_notes (id, assetId, title, content, createdBy, createdAt, updatedAt, synced, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      assetId = excluded.assetId,
+      title = excluded.title,
+      content = excluded.content,
+      updatedAt = excluded.updatedAt,
+      synced = 1,
+      owner_email = COALESCE(excluded.owner_email, asset_notes.owner_email)
+  `);
+  stmt.executeSync([
+    note.id,
+    note.assetId,
+    note.title,
+    note.content,
+    note.createdBy,
+    note.createdAt,
+    note.updatedAt,
+    1,
+    ownerEmail || null,
+  ]);
+}
+
+/** Todas as notas do utilizador para POST /api/sync/asset-notes */
+export function getLocalAssetNotesForSync(ownerEmail?: string): Record<string, unknown>[] {
+  const rows = ownerEmail
+    ? db.getAllSync<any>('SELECT * FROM asset_notes WHERE owner_email = ?', [ownerEmail])
+    : db.getAllSync<any>('SELECT * FROM asset_notes', []);
+  return rows.map((r) => ({
+    id: r.id,
+    assetId: r.assetId,
+    title: r.title,
+    content: r.content,
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    owner_email: r.owner_email,
+  }));
 }
 
 export function deleteAssetNoteLocal(noteId: string, ownerEmail?: string) {
@@ -391,8 +437,6 @@ export function deleteAssetNoteLocal(noteId: string, ownerEmail?: string) {
   } else {
     db.runSync('DELETE FROM asset_notes WHERE id = ?', [noteId]);
   }
-  // Enfileira exclusão offline
-  queueOfflineAction('DELETE_NOTE', { id: noteId }, ownerEmail);
 }
 
 /** Get all locations for a given asset, ordered by floor then room */
@@ -926,11 +970,48 @@ export function getTechFinanceRowById(id: string): any | null {
   return db.getFirstSync<any>('SELECT * FROM tech_finance_entries WHERE id = ?', [id]);
 }
 
+function serializeTechFinanceAttachmentsJson(row: any): string | null {
+  if (row.attachments_json != null && String(row.attachments_json).trim() !== '') {
+    const s = String(row.attachments_json);
+    try {
+      JSON.parse(s);
+      return s;
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(row.attachments)) {
+    if (row.attachments.length === 0) return '[]';
+    return JSON.stringify(row.attachments);
+  }
+  return null;
+}
+
+function serializeLinkedTaskIdsJson(row: any): string | null {
+  const fromCamel = row.linkedTaskIds;
+  if (Array.isArray(fromCamel) && fromCamel.length > 0) {
+    const ids = [...new Set(fromCamel.map((x: unknown) => String(x).trim()).filter(Boolean))];
+    return ids.length > 0 ? JSON.stringify(ids) : null;
+  }
+  if (row.linked_task_ids_json != null && String(row.linked_task_ids_json).trim() !== '') {
+    const s = String(row.linked_task_ids_json);
+    try {
+      JSON.parse(s);
+      return s;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
+  const attachmentsJson = serializeTechFinanceAttachmentsJson(row);
+  const linkedTaskIdsJson = serializeLinkedTaskIdsJson(row);
   const stmt = db.prepareSync(`
     INSERT INTO tech_finance_entries (
-      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, attachments_json, linked_task_ids_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       kind = excluded.kind,
       amount = excluded.amount,
@@ -942,7 +1023,9 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
       scopeSuffix = excluded.scopeSuffix,
       source = excluded.source,
       createdAt = excluded.createdAt,
-      owner_email = COALESCE(excluded.owner_email, tech_finance_entries.owner_email)
+      owner_email = COALESCE(excluded.owner_email, tech_finance_entries.owner_email),
+      attachments_json = excluded.attachments_json,
+      linked_task_ids_json = COALESCE(excluded.linked_task_ids_json, tech_finance_entries.linked_task_ids_json)
   `);
   stmt.executeSync([
     row.id,
@@ -957,6 +1040,8 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
     row.source || 'manual',
     row.createdAt || new Date().toISOString(),
     row.owner_email || ownerEmail || null,
+    attachmentsJson,
+    linkedTaskIdsJson,
   ]);
 }
 
@@ -1150,9 +1235,6 @@ export function getMediaItems(ownerEmail?: string): MediaItem[] {
 
 export function deleteMediaItem(id: string, ownerEmail?: string) {
   db.runSync('DELETE FROM media_items WHERE id = ?', [id]);
-  
-  // Enfilera para deletar na nuvem
-  addToSyncQueue('media', 'DELETE', { id }, ownerEmail);
 }
 
 export function updateMediaItem(id: string, fields: { description?: string; tag?: string }, ownerEmail?: string) {
@@ -1160,8 +1242,5 @@ export function updateMediaItem(id: string, fields: { description?: string; tag?
     'UPDATE media_items SET description = ?, tag = ? WHERE id = ?',
     [fields.description ?? null, fields.tag ?? null, id]
   );
-  
-  // Enfilera para sync na nuvem
-  addToSyncQueue('media', 'UPDATE', { id, ...fields }, ownerEmail);
 }
 

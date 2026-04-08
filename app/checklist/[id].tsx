@@ -27,7 +27,8 @@ import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PanResponder } from 'react-native';
-import { colors } from '../../src/theme/colors';
+import { type ColorPalette } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/services/auth';
 import { fetchDrivingLegEtaMinutes, fetchDrivingLegMetrics } from '../../src/services/osrmClient';
@@ -58,7 +59,6 @@ import {
 } from '../../src/checklist/applyTechnicianFinanceOnSubmit';
 import { ChecklistMaterialsConsumptionField } from '../../src/components/ChecklistMaterialsConsumptionField';
 import { ChecklistMaterialsReceiptField } from '../../src/components/ChecklistMaterialsReceiptField';
-import { ChecklistTechnicianFinanceField } from '../../src/components/ChecklistTechnicianFinanceField';
 import { useAuth } from '../../src/hooks/useAuth';
 
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
@@ -710,6 +710,8 @@ export default function ChecklistEngine() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createChecklistStyles(C), [C]);
 
   const [template, setTemplate] = useState<any>(null);
   const [responses, setResponses] = useState<any>({});
@@ -1838,6 +1840,7 @@ export default function ChecklistEngine() {
         'transit_start',
         'transit_end',
         'hidden',
+        'technician_finance',
       ]);
       if (!readOnlyMode && tmpl.schemaData) {
         tmpl.schemaData.forEach((f: any) => {
@@ -2527,7 +2530,7 @@ export default function ChecklistEngine() {
         sectionHeaders[curSecKey] = f;
         continue;
       }
-      if (f.type === 'hidden' || !f.id) continue;
+      if (f.type === 'hidden' || f.type === 'technician_finance' || !f.id) continue;
       if (!bySection[curSecKey]) bySection[curSecKey] = [];
       bySection[curSecKey].push(f);
     }
@@ -2951,6 +2954,8 @@ export default function ChecklistEngine() {
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
       if (field.type === 'section_break' && !checkSectionBreak) return false; 
       if (field.type === 'hidden') return false;
+      /** Custos do técnico: só por API/rascunho/sync — nunca no ecrã de execução. */
+      if (field.type === 'technician_finance') return false;
       
       const rules = getAllRules();
       
@@ -3030,7 +3035,7 @@ export default function ChecklistEngine() {
       _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
-    } else {
+    } else if (f.type !== 'technician_finance') {
       _curFields.push({ ...f, _globalIdx: _globalIndex++ });
     }
   });
@@ -3121,7 +3126,7 @@ export default function ChecklistEngine() {
         opening = f;
         return;
       }
-      if (f.type === 'hidden') return;
+      if (f.type === 'hidden' || f.type === 'technician_finance') return;
       buf.push(f);
     });
     flush();
@@ -3173,7 +3178,7 @@ export default function ChecklistEngine() {
       if (f.type === 'section_break') {
         emit();
         sectionHeader = f;
-      } else if (f.type !== 'hidden') {
+      } else if (f.type !== 'hidden' && f.type !== 'technician_finance') {
         pendingFields.push(f);
       }
     }
@@ -3461,7 +3466,7 @@ export default function ChecklistEngine() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>;
 
   // ── Opção B: Tela de Mapa de Confirmação ───────────────────────
   if (showGeoMap && currentTask) {
@@ -3987,8 +3992,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Adicionar linha</Text>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Adicionar linha</Text>
                             </TouchableOpacity>
                           ) : null}
                         </>
@@ -4049,8 +4054,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Adicionar valor</Text>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Adicionar valor</Text>
                             </TouchableOpacity>
                           ) : null}
                         </>
@@ -4100,9 +4105,9 @@ export default function ChecklistEngine() {
                                         style={{
                                           padding: 12,
                                           borderRadius: 8,
-                                          backgroundColor: active ? colors.primary : '#f8fafc',
+                                          backgroundColor: active ? C.primary : '#f8fafc',
                                           borderWidth: 1,
-                                          borderColor: active ? colors.primary : '#cbd5e1',
+                                          borderColor: active ? C.primary : '#cbd5e1',
                                         }}
                                       >
                                         <Text
@@ -4135,8 +4140,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
                                 Adicionar linha
                               </Text>
                             </TouchableOpacity>
@@ -4158,9 +4163,9 @@ export default function ChecklistEngine() {
                           style={{
                             padding: 14,
                             borderRadius: 8,
-                            backgroundColor: active ? colors.primary : '#f8fafc',
+                            backgroundColor: active ? C.primary : '#f8fafc',
                             borderWidth: 1,
-                            borderColor: active ? colors.primary : '#cbd5e1',
+                            borderColor: active ? C.primary : '#cbd5e1',
                           }}
                         >
                           <Text style={{ color: active ? '#FFF' : '#475569', fontWeight: active ? '800' : '600' }}>
@@ -4215,7 +4220,7 @@ export default function ChecklistEngine() {
                                             borderRadius: 8,
                                             backgroundColor: isActive ? '#f0fdf4' : '#f8fafc',
                                             borderWidth: 1,
-                                            borderColor: isActive ? colors.primary : '#cbd5e1',
+                                            borderColor: isActive ? C.primary : '#cbd5e1',
                                             flexDirection: 'row',
                                             alignItems: 'center',
                                           }}
@@ -4223,12 +4228,12 @@ export default function ChecklistEngine() {
                                           <Ionicons
                                             name={isActive ? 'checkbox' : 'square-outline'}
                                             size={22}
-                                            color={isActive ? colors.primary : '#94a3b8'}
+                                            color={isActive ? C.primary : '#94a3b8'}
                                             style={{ marginRight: 10 }}
                                           />
                                           <Text
                                             style={{
-                                              color: isActive ? colors.primary : '#475569',
+                                              color: isActive ? C.primary : '#475569',
                                               fontWeight: isActive ? '800' : '600',
                                             }}
                                           >
@@ -4258,8 +4263,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
                                 Adicionar linha
                               </Text>
                             </TouchableOpacity>
@@ -4294,7 +4299,7 @@ export default function ChecklistEngine() {
                             borderRadius: 8,
                             backgroundColor: isActive ? '#f0fdf4' : '#f8fafc',
                             borderWidth: 1,
-                            borderColor: isActive ? colors.primary : '#cbd5e1',
+                            borderColor: isActive ? C.primary : '#cbd5e1',
                             flexDirection: 'row',
                             alignItems: 'center',
                           }}
@@ -4302,11 +4307,11 @@ export default function ChecklistEngine() {
                           <Ionicons
                             name={isActive ? 'checkbox' : 'square-outline'}
                             size={22}
-                            color={isActive ? colors.primary : '#94a3b8'}
+                            color={isActive ? C.primary : '#94a3b8'}
                             style={{ marginRight: 10 }}
                           />
                           <Text
-                            style={{ color: isActive ? colors.primary : '#475569', fontWeight: isActive ? '800' : '600' }}
+                            style={{ color: isActive ? C.primary : '#475569', fontWeight: isActive ? '800' : '600' }}
                           >
                             {val}
                           </Text>
@@ -4369,8 +4374,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, 0])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
                                 Adicionar avaliação
                               </Text>
                             </TouchableOpacity>
@@ -4471,8 +4476,8 @@ export default function ChecklistEngine() {
                               onPress={() => hi(field.id, [...rows, ''])}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
-                              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+                              <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
                                 Adicionar resposta
                               </Text>
                             </TouchableOpacity>
@@ -4678,7 +4683,7 @@ export default function ChecklistEngine() {
                  }
                  
                  const hasValue = !!vv(field.id);
-                 const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? colors.primary : colors.accent));
+                 const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? C.primary : C.accent));
                  const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
                  
@@ -4758,7 +4763,7 @@ export default function ChecklistEngine() {
                   value={vv(field.id)}
                   onChange={(json) => hi(field.id, json || '')}
                   disabled={isReadOnly}
-                  primaryColor={colors.primary}
+                  primaryColor={C.primary}
                   requireOnlineValidation={!!field.requireOnlineValidation}
                 />
               )}
@@ -4796,11 +4801,11 @@ export default function ChecklistEngine() {
                    }
                 })}>
                    {geoBusyHere ? (
-                     <ActivityIndicator color={colors.primary} size="small" />
+                     <ActivityIndicator color={C.primary} size="small" />
                    ) : (
-                     <Ionicons name="location" size={20} color={colors.primary} />
+                     <Ionicons name="location" size={20} color={C.primary} />
                    )}
-                   <Text style={{color: colors.primary, fontWeight: '700', fontSize:14}}>
+                   <Text style={{color: C.primary, fontWeight: '700', fontSize:14}}>
                      {geoBusyHere ? 'A obter localização…' : 'VALIDAR LOCALIZAÇÃO (GPS)'}
                    </Text>
                 </TouchableOpacity>
@@ -4878,13 +4883,6 @@ export default function ChecklistEngine() {
                   onChange={(json) => hi(field.id, json)}
                   readOnly={isReadOnly}
                   userEmail={user?.email}
-                />
-              )}
-              {field.type === 'technician_finance' && (
-                <ChecklistTechnicianFinanceField
-                  value={vv(field.id)}
-                  onChange={(json) => hi(field.id, json)}
-                  readOnly={isReadOnly}
                 />
               )}
               {field.type !== 'hidden' && field.allowTechnicianComment ? (
@@ -5007,8 +5005,8 @@ export default function ChecklistEngine() {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, paddingVertical: 6 }}
                   >
-                    <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-                    <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                    <Ionicons name="add-circle-outline" size={24} color={C.primary} />
+                    <Text style={{ color: C.primary, fontWeight: '700' }}>Adicionar instância</Text>
                   </TouchableOpacity>
                 ) : null}
               </>
@@ -5065,8 +5063,8 @@ export default function ChecklistEngine() {
                             }}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}
                           >
-                            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                            <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                            <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                            <Text style={{ color: C.primary, fontWeight: '700' }}>Adicionar instância</Text>
                           </TouchableOpacity>
                         ) : null}
                       </View>
@@ -5122,8 +5120,8 @@ export default function ChecklistEngine() {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}
                   >
-                    <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                    <Text style={{ color: colors.primary, fontWeight: '700' }}>Adicionar instância</Text>
+                    <Ionicons name="add-circle-outline" size={22} color={C.primary} />
+                    <Text style={{ color: C.primary, fontWeight: '700' }}>Adicionar instância</Text>
                   </TouchableOpacity>
                 ) : null}
               </>
@@ -5340,9 +5338,10 @@ export default function ChecklistEngine() {
         <View style={StyleSheet.absoluteFillObject}>
           <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.8)', justifyContent:'center', padding:20}}>
             <View style={{backgroundColor:'#FFF', borderRadius:16, overflow:'hidden', minHeight:400}}>
-              <View style={{backgroundColor:colors.primary, padding:16, flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+              {/* C.accent (não C.primary): no dark mode primary é quase branco e anula contraste com texto #FFF */}
+              <View style={{backgroundColor:C.accent, padding:16, flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
                 <Text style={{color:'#FFF', fontWeight:'bold', fontSize:16}}>Assine Abaixo</Text>
-                <TouchableOpacity onPress={() => setCompletedStrokes([])}><Text style={{color:'#FFF', opacity:0.8}}>Limpar Painel</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setCompletedStrokes([])}><Text style={{color:'#FFF', opacity:0.9}}>Limpar Painel</Text></TouchableOpacity>
               </View>
               <View style={{flex:1, backgroundColor:'#f8fafc'}} {...panResponder.panHandlers}>
                 <Svg style={StyleSheet.absoluteFillObject}>
@@ -5356,7 +5355,7 @@ export default function ChecklistEngine() {
                 <TouchableOpacity style={{flex:1, padding:16, marginRight:8, borderRadius:8, backgroundColor:'#e2e8f0', alignItems:'center'}} onPress={() => {setSigModalVisible(false);}}>
                   <Text style={{fontWeight:'700', color:'#475569'}}>CANCELAR</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{flex:1, padding:16, borderRadius:8, backgroundColor:colors.primary, alignItems:'center'}} onPress={saveSignature} disabled={savingSignature}>
+                <TouchableOpacity style={{flex:1, padding:16, borderRadius:8, backgroundColor:C.accent, alignItems:'center'}} onPress={saveSignature} disabled={savingSignature}>
                   {savingSignature ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={{fontWeight:'700', color:'#FFF'}}>SALVAR</Text>}
                 </TouchableOpacity>
               </View>
@@ -5560,7 +5559,7 @@ export default function ChecklistEngine() {
           >
             {pausePickerStep === 'category'
               ? PAUSE_CATEGORIES.map((cat) => {
-                  const c = PAUSE_PICKER_CAT_COLOR[cat.id] || colors.primary;
+                  const c = PAUSE_PICKER_CAT_COLOR[cat.id] || C.primary;
                   const ic = PAUSE_PICKER_CAT_ICON[cat.id] || 'folder-outline';
                   return (
                     <TouchableOpacity
@@ -5627,7 +5626,7 @@ export default function ChecklistEngine() {
                 })
               : pauseSelectedCategory
                 ? (() => {
-                    const subAccent = PAUSE_PICKER_CAT_COLOR[pauseSelectedCategory.id] || colors.primary;
+                    const subAccent = PAUSE_PICKER_CAT_COLOR[pauseSelectedCategory.id] || C.primary;
                     return pauseSelectedCategory.subs.map((sub) => {
                       const selected = pauseHighlightSubId === sub.id;
                       return (
@@ -5968,7 +5967,8 @@ export default function ChecklistEngine() {
   );
 }
 
-const styles = StyleSheet.create({
+function createChecklistStyles(C: ColorPalette) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
@@ -5991,12 +5991,12 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: '#f8fafc' },
   radioGroup: { flexDirection: 'row', gap: 12 },
   radio: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, backgroundColor: '#f1f5f9' },
-  radioActive: { backgroundColor: colors.accent },
+  radioActive: { backgroundColor: C.accent },
   radioText: { fontSize: 14, fontWeight: '600', color: '#475569' },
   cameraBox: { height: 100, borderRadius: 8, borderWidth: 2, borderColor: '#cbd5e1', borderStyle: 'dashed', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', gap: 8 },
   cameraText: { color: '#64748b', fontSize: 12, fontWeight: 'bold' },
   actionBtn: { padding: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
-  submitBtn: { backgroundColor: colors.accent, padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flex: 1, marginLeft: 6, shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  submitBtn: { backgroundColor: C.accent, padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flex: 1, marginLeft: 6, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
   submitText: { color: '#FFF', fontSize: 15, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   progressBarWrapper: {
       height: 24,
@@ -6007,7 +6007,7 @@ const styles = StyleSheet.create({
   progressBarFill: {
       position: 'absolute',
       left: 0, top: 0, bottom: 0,
-      backgroundColor: colors.primary,
+      backgroundColor: C.primary,
       opacity: 0.3
   },
   progressText: {
@@ -6093,11 +6093,11 @@ const styles = StyleSheet.create({
   },
   navBtnNext: {
       padding: 18,
-      backgroundColor: colors.primary,
+      backgroundColor: C.primary,
       borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: colors.primary,
+      shadowColor: C.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 6,
@@ -6113,3 +6113,4 @@ const styles = StyleSheet.create({
       letterSpacing: 1
   }
 });
+}

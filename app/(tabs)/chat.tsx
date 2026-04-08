@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   ActivityIndicator, Modal, ScrollView, TextInput, Alert,
@@ -7,7 +7,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ChatService, ChatRoom, ChatContact } from '../../src/services/chat';
-import { colors } from '../../src/theme/colors';
+import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -38,6 +39,8 @@ const FILTERS: { id: FilterTab; label: string }[] = [
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors: C } = useTheme();
+  const styles = useMemo(() => createChatStyles(C), [C]);
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [pending, setPending] = useState<ChatContact[]>([]);
@@ -176,8 +179,8 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={{ color: colors.textSecondary, marginTop: 12, fontWeight: '600' }}>Conectando ao servidor...</Text>
+        <ActivityIndicator color={C.primary} size="large" />
+        <Text style={{ color: C.textSecondary, marginTop: 12, fontWeight: '600' }}>Conectando ao servidor...</Text>
       </View>
     );
   }
@@ -185,10 +188,10 @@ export default function ChatScreen() {
   if (!user) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
-        <Ionicons name="chatbubbles-outline" size={56} color={colors.textLight} />
-        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.primary, marginTop: 20 }}>Chat Corporativo</Text>
-        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>Crie uma conta para conversar com sua rede e suporte.</Text>
-        <TouchableOpacity style={{ backgroundColor: colors.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
+        <Ionicons name="chatbubbles-outline" size={56} color={C.textLight} />
+        <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>Chat Corporativo</Text>
+        <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>Crie uma conta para conversar com sua rede e suporte.</Text>
+        <TouchableOpacity style={{ backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
           <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Criar Conta ou Entrar</Text>
         </TouchableOpacity>
       </View>
@@ -201,7 +204,7 @@ export default function ChatScreen() {
       {pending.map(p => (
         <View key={p.id} style={styles.pendingCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: '#F59E0B' }]}>
+            <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: MEDIA_TAG_COLORS.DURING }]}>
               {p.user?.avatarUrl ? (
                 <Image source={{ uri: p.user.avatarUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} />
               ) : (
@@ -209,15 +212,15 @@ export default function ChatScreen() {
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '800', color: '#92400E' }}>{p.user?.name || p.requesterId}</Text>
-              <Text style={{ fontSize: 11, color: '#B45309', fontWeight: '600' }}>Solicitação de contato</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: C.status.warning.fg }}>{p.user?.name || p.requesterId}</Text>
+              <Text style={{ fontSize: 11, color: C.warning.text, fontWeight: '600' }}>Solicitação de contato</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <TouchableOpacity style={styles.pendBtnReject} onPress={() => handleAcceptRequest(p.id, false)}>
-                <Ionicons name="close" size={16} color="#DC2626" />
+                <Ionicons name="close" size={16} color={C.destructive} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.pendBtnAccept} onPress={() => handleAcceptRequest(p.id, true)}>
-                <Ionicons name="checkmark" size={16} color="#059669" />
+                <Ionicons name="checkmark" size={16} color={C.success.text} />
               </TouchableOpacity>
             </View>
           </View>
@@ -233,7 +236,7 @@ export default function ChatScreen() {
 
     return (
       <TouchableOpacity
-        style={[styles.roomRow, isLongPressed && { backgroundColor: '#F0F9FF' }]}
+        style={[styles.roomRow, isLongPressed && { backgroundColor: C.status.info.bg }]}
         activeOpacity={0.75}
         onPress={() => {
           if (isLongPressed) { setLongPressedRoom(null); return; }
@@ -257,15 +260,15 @@ export default function ChatScreen() {
         {/* Content */}
         <View style={styles.roomContent}>
           <View style={styles.roomTop}>
-            <Text style={[styles.roomName, unread > 0 && { fontWeight: '900', color: colors.slate }]}>
+            <Text style={[styles.roomName, unread > 0 && { fontWeight: '900', color: C.slate }]}>
               {item.name}
             </Text>
-            <Text style={[styles.roomTime, unread > 0 && { color: colors.accent, fontWeight: '800' }]}>
+            <Text style={[styles.roomTime, unread > 0 && { color: C.accent, fontWeight: '800' }]}>
               {timeAgo(item.lastMessageAt)}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.roomPreview, unread > 0 && { fontWeight: '700', color: colors.slate }]} numberOfLines={1}>
+            <Text style={[styles.roomPreview, unread > 0 && { fontWeight: '700', color: C.slate }]} numberOfLines={1}>
               {item.lastMessage
                 ? `${item.lastSender ? item.lastSender + ': ' : ''}${item.lastMessage}`
                 : (item.isGroup ? `${item.memberCount} membros` : 'Nova conversa iniciada')}
@@ -285,7 +288,7 @@ export default function ChatScreen() {
             style={styles.archiveBtn}
             onPress={() => toggleArchive(item.id)}
           >
-            <Ionicons name={isArchived ? 'arrow-undo' : 'archive'} size={20} color={isArchived ? '#059669' : '#6366F1'} />
+            <Ionicons name={isArchived ? 'arrow-undo' : 'archive'} size={20} color={isArchived ? C.success.text : SERVICE_CATEGORY_COLORS.Tecnologia} />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -293,14 +296,14 @@ export default function ChatScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.cardWhite }]}>
+    <View style={[styles.container, { backgroundColor: C.cardWhite }]}>
       {/* Header Fixo */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Text style={styles.headerTitle}>Conversas</Text>
             {totalUnread > 0 && (
-              <View style={{ backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, minWidth: 20, alignItems: 'center' }}>
+              <View style={{ backgroundColor: C.accent, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, minWidth: 20, alignItems: 'center' }}>
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
               </View>
             )}
@@ -308,7 +311,7 @@ export default function ChatScreen() {
           <Text style={styles.headerSub}>Caixa de entrada corporativa</Text>
         </View>
         <TouchableOpacity style={styles.headerAction} onPress={() => setModalVisible(true)}>
-          <Ionicons name="create-outline" size={24} color={colors.primary} />
+          <Ionicons name="create-outline" size={24} color={C.primary} />
         </TouchableOpacity>
       </View>
 
@@ -331,7 +334,7 @@ export default function ChatScreen() {
                 <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{f.label}</Text>
                 {badge > 0 && (
                   <View style={[styles.filterBadge, isActive && { backgroundColor: '#fff' }]}>
-                    <Text style={[styles.filterBadgeText, isActive && { color: colors.accent }]}>{badge}</Text>
+                    <Text style={[styles.filterBadgeText, isActive && { color: C.accent }]}>{badge}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -341,19 +344,19 @@ export default function ChatScreen() {
       </View>
 
       <FlatList
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: C.background }}
         data={filteredRooms}
         keyExtractor={r => r.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
         contentContainerStyle={styles.list}
         ListHeaderComponent={activeFilter === 'ALL' ? renderHeader : undefined}
-        ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 76 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: C.border, marginLeft: 76 }} />}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons
               name={activeFilter === 'ARCHIVED' ? 'archive-outline' : activeFilter === 'UNREAD' ? 'mail-unread-outline' : 'chatbubbles-outline'}
               size={56}
-              color={colors.textLight}
+              color={C.textLight}
             />
             <Text style={styles.emptyText}>
               {activeFilter === 'ARCHIVED'
@@ -372,8 +375,8 @@ export default function ChatScreen() {
       {/* Long-press hint */}
       {longPressedRoom && (
         <View style={styles.hintBar}>
-          <Ionicons name="information-circle-outline" size={16} color="#6366F1" />
-          <Text style={{ fontSize: 12, color: '#4338CA', fontWeight: '600', marginLeft: 6 }}>
+          <Ionicons name="information-circle-outline" size={16} color={SERVICE_CATEGORY_COLORS.Tecnologia} />
+          <Text style={{ fontSize: 12, color: C.status.info.fg, fontWeight: '600', marginLeft: 6 }}>
             Toque no ícone de arquivo para arquivar/desarquivar
           </Text>
         </View>
@@ -388,7 +391,7 @@ export default function ChatScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Nova Conversa</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                 <Ionicons name="close" size={26} color={colors.textSecondary} />
+                 <Ionicons name="close" size={26} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -415,7 +418,7 @@ export default function ChatScreen() {
                   ) : (
                     contacts.map(c => (
                       <TouchableOpacity key={c.email} style={styles.contactItem} onPress={() => handleStartChat(c.email)}>
-                        <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: '#3B82F6' }]}>
+                        <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: MEDIA_TAG_COLORS.BEFORE }]}>
                           {c.avatarUrl ? (
                             <Image source={{ uri: c.avatarUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} />
                           ) : (
@@ -426,7 +429,7 @@ export default function ChatScreen() {
                           <Text style={styles.contactName}>{c.name || c.email}</Text>
                           <Text style={styles.contactEmail}>{c.email}</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+                        <Ionicons name="chevron-forward" size={16} color={C.textLight} />
                       </TouchableOpacity>
                     ))
                   )}
@@ -504,95 +507,92 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+function createChatStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 12,
-    backgroundColor: colors.cardWhite, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  headerTitle: { fontSize: 26, fontWeight: '900', color: colors.slate, letterSpacing: -0.5 },
-  headerSub:   { fontSize: 12, color: colors.textSecondary, fontWeight: '600', marginTop: 2 },
-  headerAction: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 20, paddingVertical: 12,
+      backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border,
+    },
+    headerTitle: { fontSize: 26, fontWeight: '900', color: C.slate, letterSpacing: -0.5 },
+    headerSub: { fontSize: 12, color: C.textSecondary, fontWeight: '600', marginTop: 2 },
+    headerAction: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' },
 
-  // Filter row
-  filterRow: { backgroundColor: colors.cardWhite, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
-  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  filterChipTextActive: { color: '#fff' },
-  filterBadge: { marginLeft: 5, backgroundColor: colors.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
-  filterBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
+    filterRow: { backgroundColor: C.cardWhite, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+    filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.background, borderWidth: 1, borderColor: C.border },
+    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterChipText: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
+    filterChipTextActive: { color: '#fff' },
+    filterBadge: { marginLeft: 5, backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
+    filterBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
 
-  pendingCard: {
-    marginHorizontal: 16, marginTop: 4,
-    backgroundColor: '#FEF3C7', padding: 14, borderRadius: 16,
-    borderWidth: 1, borderColor: '#FDE68A'
-  },
-  pendBtnReject: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center' },
-  pendBtnAccept: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center' },
+    pendingCard: {
+      marginHorizontal: 16, marginTop: 4,
+      backgroundColor: C.status.warning.bg, padding: 14, borderRadius: 16,
+      borderWidth: 1, borderColor: C.status.warning.border,
+    },
+    pendBtnReject: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.status.danger.bg, justifyContent: 'center', alignItems: 'center' },
+    pendBtnAccept: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.status.success.bg, justifyContent: 'center', alignItems: 'center' },
 
-  list: { paddingBottom: 120 },
-  roomRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.cardWhite },
-  avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  avatarText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  roomContent: { flex: 1 },
-  roomTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  roomName: { fontSize: 15, fontWeight: '700', color: colors.slate, flex: 1, marginRight: 8 },
-  roomTime: { fontSize: 11, color: colors.textLight, fontWeight: '600' },
-  roomPreview: { fontSize: 13, color: colors.textSecondary, fontWeight: '500', flex: 1, marginRight: 8 },
+    list: { paddingBottom: 120 },
+    roomRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: C.cardWhite },
+    avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+    avatarText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+    roomContent: { flex: 1 },
+    roomTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    roomName: { fontSize: 15, fontWeight: '700', color: C.slate, flex: 1, marginRight: 8 },
+    roomTime: { fontSize: 11, color: C.textLight, fontWeight: '600' },
+    roomPreview: { fontSize: 13, color: C.textSecondary, fontWeight: '500', flex: 1, marginRight: 8 },
 
-  // Unread badge
-  unreadBadge: {
-    backgroundColor: colors.accent, borderRadius: 10,
-    minWidth: 20, height: 20, paddingHorizontal: 5,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  unreadBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+    unreadBadge: {
+      backgroundColor: C.accent, borderRadius: 10,
+      minWidth: 20, height: 20, paddingHorizontal: 5,
+      justifyContent: 'center', alignItems: 'center',
+    },
+    unreadBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
 
-  // Archive button (appears on long press)
-  archiveBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center',
-    marginLeft: 8,
-  },
+    archiveBtn: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: C.status.info.bg, justifyContent: 'center', alignItems: 'center',
+      marginLeft: 8,
+    },
 
-  // Hint bar
-  hintBar: {
-    position: 'absolute', bottom: 100, left: 16, right: 16,
-    backgroundColor: '#EEF2FF', borderRadius: 12, padding: 12,
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1, borderColor: '#C7D2FE',
-  },
+    hintBar: {
+      position: 'absolute', bottom: 100, left: 16, right: 16,
+      backgroundColor: C.status.info.bg, borderRadius: 12, padding: 12,
+      flexDirection: 'row', alignItems: 'center',
+      borderWidth: 1, borderColor: C.status.info.border,
+    },
 
-  empty: { alignItems: 'center', paddingTop: 60, gap: 14 },
-  emptyText: { fontSize: 14, color: colors.textSecondary, fontWeight: '600', textAlign: 'center', lineHeight: 22 },
+    empty: { alignItems: 'center', paddingTop: 60, gap: 14 },
+    emptyText: { fontSize: 14, color: C.textSecondary, fontWeight: '600', textAlign: 'center', lineHeight: 22 },
 
-  // MODAL
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: colors.cardWhite, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '900', color: colors.slate, letterSpacing: -0.5 },
-  
-  tabRow: { flexDirection: 'row', backgroundColor: colors.background, borderRadius: 12, padding: 4, marginBottom: 20 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  tabActive: { backgroundColor: colors.cardWhite, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  tabText: { fontSize: 11, fontWeight: '800', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
-  tabTextActive: { color: colors.primary },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalCard: { backgroundColor: C.cardWhite, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    modalTitle: { fontSize: 20, fontWeight: '900', color: C.slate, letterSpacing: -0.5 },
 
-  emptyContacts: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 20, paddingHorizontal: 20, lineHeight: 20 },
-  contactItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.background },
-  contactName: { fontSize: 15, fontWeight: '800', color: colors.slate },
-  contactEmail: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
-  
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, marginRight: 14, justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+    tabRow: { flexDirection: 'row', backgroundColor: C.background, borderRadius: 12, padding: 4, marginBottom: 20 },
+    tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+    tabActive: { backgroundColor: C.cardWhite, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+    tabText: { fontSize: 11, fontWeight: '800', color: C.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
+    tabTextActive: { color: C.primary },
 
-  inputLabel: { fontSize: 11, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
-  textInput: { backgroundColor: colors.background, padding: 14, borderRadius: 12, fontSize: 15, fontWeight: '600', color: colors.slate, borderWidth: 1, borderColor: colors.border },
-  helperText: { fontSize: 12, color: colors.textLight, marginTop: 12, lineHeight: 18 },
+    emptyContacts: { fontSize: 13, color: C.textSecondary, textAlign: 'center', marginTop: 20, paddingHorizontal: 20, lineHeight: 20 },
+    contactItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.background },
+    contactName: { fontSize: 15, fontWeight: '800', color: C.slate },
+    contactEmail: { fontSize: 12, color: C.textSecondary, fontWeight: '500' },
 
-  primaryBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 24 },
-  primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '900' }
-});
+    checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: C.border, marginRight: 14, justifyContent: 'center', alignItems: 'center' },
+    checkboxActive: { backgroundColor: C.accent, borderColor: C.accent },
+
+    inputLabel: { fontSize: 11, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
+    textInput: { backgroundColor: C.background, padding: 14, borderRadius: 12, fontSize: 15, fontWeight: '600', color: C.slate, borderWidth: 1, borderColor: C.border },
+    helperText: { fontSize: 12, color: C.textLight, marginTop: 12, lineHeight: 18 },
+
+    primaryBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 24 },
+    primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  });
+}
