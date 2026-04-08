@@ -22,4 +22,9 @@ export type TechnicianFinanceEntry = {
   source: 'manual' | 'checklist';
   createdAt: string;
   attachments?: TechnicianFinanceAttachment[];
+  /**
+   * Quando true (ex.: devolvido pelo escritório via sync), o técnico pode alterar valor, descrição e anexos
+   * desde que todas as OS do rateio estejam no telemóvel. Após guardar, volta a false.
+   */
+  financeValueUnlocked?: boolean;
 };

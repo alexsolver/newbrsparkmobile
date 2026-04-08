@@ -170,6 +170,7 @@ export function initDatabase() {
       source TEXT DEFAULT 'manual',
       createdAt TEXT NOT NULL,
       owner_email TEXT DEFAULT NULL,
+      finance_value_unlocked INTEGER DEFAULT 0,
       attachments_json TEXT DEFAULT NULL,
       linked_task_ids_json TEXT DEFAULT NULL
     );
@@ -277,6 +278,11 @@ export function initDatabase() {
   } catch (_) {}
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN linked_task_ids_json TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(
+      `ALTER TABLE tech_finance_entries ADD COLUMN finance_value_unlocked INTEGER DEFAULT 0;`
+    );
   } catch (_) {}
 }
 
@@ -1010,8 +1016,8 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
   const linkedTaskIdsJson = serializeLinkedTaskIdsJson(row);
   const stmt = db.prepareSync(`
     INSERT INTO tech_finance_entries (
-      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, attachments_json, linked_task_ids_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, finance_value_unlocked, attachments_json, linked_task_ids_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       kind = excluded.kind,
       amount = excluded.amount,
@@ -1024,9 +1030,16 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
       source = excluded.source,
       createdAt = excluded.createdAt,
       owner_email = COALESCE(excluded.owner_email, tech_finance_entries.owner_email),
+      finance_value_unlocked = excluded.finance_value_unlocked,
       attachments_json = excluded.attachments_json,
       linked_task_ids_json = COALESCE(excluded.linked_task_ids_json, tech_finance_entries.linked_task_ids_json)
   `);
+  const finUnl =
+    row.finance_value_unlocked === 1 ||
+    row.finance_value_unlocked === true ||
+    row.financeValueUnlocked === true
+      ? 1
+      : 0;
   stmt.executeSync([
     row.id,
     row.kind,
@@ -1040,6 +1053,7 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
     row.source || 'manual',
     row.createdAt || new Date().toISOString(),
     row.owner_email || ownerEmail || null,
+    finUnl,
     attachmentsJson,
     linkedTaskIdsJson,
   ]);

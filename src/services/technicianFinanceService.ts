@@ -10,9 +10,8 @@ import {
   splitCurrencyBrl,
 } from './manualExpenseTaskDraftInject';
 import {
-  effectiveProviderTaskStatus,
-  isPendingOrInAttendance,
-  linkedTasksAllowFinanceEdit,
+  areTaskIdsEligibleForExpenseLink,
+  linkedTasksAllowFullEditAfterReview,
 } from '../utils/technicianFinanceLinkableTasks';
 import type {
   TechnicianFinanceAttachment,
@@ -78,44 +77,57 @@ function rowToEntry(row: any): TechnicianFinanceEntry {
     source: row.source === 'checklist' ? 'checklist' : 'manual',
     createdAt: row.createdAt || new Date().toISOString(),
     attachments: parseAttachments(row),
+    financeValueUnlocked:
+      row.finance_value_unlocked === 1 ||
+      row.finance_value_unlocked === true ||
+      row.financeValueUnlocked === true,
   };
 }
 
-/** Para UI: editável sem async (mapa de OS + conjuntos do dashboard). */
-export function isManualFinanceEntryEditableInMemory(
+function baseDescNoRateio(desc?: string): string {
+  if (!desc) return '';
+  return desc.replace(/\s*\(rateio\s+\d+\s*\/\s*\d+\)\s*$/i, '').trim();
+}
+
+function prevBaseDescriptionFromEntries(entries: TechnicianFinanceEntry[]): string {
+  let best = '';
+  for (const e of entries) {
+    const b = baseDescNoRateio(e.description);
+    if (b && (!best || b.length > best.length)) best = b;
+  }
+  return best.trim();
+}
+
+function attachmentsFingerprint(a?: TechnicianFinanceAttachment[]): string {
+  if (!a || a.length === 0) return '';
+  return JSON.stringify(
+    [...a]
+      .map((x) => ({ uri: x.uri, name: x.name, mimeType: x.mimeType }))
+      .sort((u, v) => String(u.uri).localeCompare(String(v.uri)))
+  );
+}
+
+/** Todas as OS ligadas existem em `cloudTasks` (lista sincronizada no aparelho). */
+export function manualFinanceLinkedTasksOnDevice(
   entry: TechnicianFinanceEntry,
-  cloudTasks: any[],
-  sets: { completedIds: Set<string>; inprogressIds: Set<string>; acceptedIds: Set<string> }
+  cloudTasks: any[]
 ): boolean {
   if (entry.source === 'checklist') return false;
   const tids = linkedTaskIdsForEntry(entry);
   if (tids.length === 0) return true;
-  const multiOs = tids.length > 1;
-  const map = new Map<string, any>();
+  const map = new Map<string, unknown>();
   for (const t of cloudTasks) {
     if (t?.id != null) map.set(String(t.id), t);
   }
-  for (const tid of tids) {
-    const t = map.get(tid);
-    if (!t) {
-      if (multiOs) return false;
-      if (sets.completedIds.has(tid)) return false;
-      continue;
-    }
-    const eff = effectiveProviderTaskStatus(t, sets.completedIds, sets.inprogressIds, sets.acceptedIds);
-    if (!isPendingOrInAttendance(eff)) return false;
-  }
-  return true;
+  return tids.every((id) => map.has(id));
 }
 
 /**
- * Despesa rateada (várias linhas e/ou várias OS): todas as OS do rateio têm de estar no cache local
- * e em pendentes ou em atendimento.
+ * Despesa manual com rateio: dá para ajustar OS no aparelho se cada parte tiver `taskId` presente em `cloudTasks`.
  */
 export function isManualSplitRateioEditableInMemory(
   parts: TechnicianFinanceEntry[],
-  cloudTasks: any[],
-  sets: { completedIds: Set<string>; inprogressIds: Set<string>; acceptedIds: Set<string> }
+  cloudTasks: any[]
 ): boolean {
   if (parts.length === 0) return false;
   if (parts.some((p) => p.source === 'checklist')) return false;
@@ -130,7 +142,7 @@ export function isManualSplitRateioEditableInMemory(
   const isRateio = parts.length > 1 || distinct.length > 1;
 
   if (!isRateio) {
-    return isManualFinanceEntryEditableInMemory(parts[0], cloudTasks, sets);
+    return manualFinanceLinkedTasksOnDevice(parts[0], cloudTasks);
   }
 
   if (parts.some((p) => !p.taskId)) return false;
@@ -141,10 +153,7 @@ export function isManualSplitRateioEditableInMemory(
   }
 
   for (const tid of distinct) {
-    const t = map.get(tid);
-    if (!t) return false;
-    const eff = effectiveProviderTaskStatus(t, sets.completedIds, sets.inprogressIds, sets.acceptedIds);
-    if (!isPendingOrInAttendance(eff)) return false;
+    if (!map.has(tid)) return false;
   }
   return true;
 }
@@ -164,6 +173,7 @@ export const TechnicianFinanceService = {
     saveTechFinanceEntryLocal(
       {
         ...entry,
+        finance_value_unlocked: entry.financeValueUnlocked ? 1 : 0,
         owner_email: ownerEmail || null,
       },
       ownerEmail
@@ -179,20 +189,6 @@ export const TechnicianFinanceService = {
   ): Promise<{ ok: boolean; reason?: string }> => {
     if (entry.source === 'checklist') {
       return { ok: false, reason: 'Altere este lançamento no formulário da OS.' };
-    }
-    const tids = linkedTaskIdsForEntry(entry);
-    if (tids.length === 0) return { ok: true };
-    const multiOs = tids.length > 1;
-    const allowed = await linkedTasksAllowFinanceEdit(tids, {
-      requireAllTasksOnDevice: multiOs,
-    });
-    if (!allowed) {
-      return {
-        ok: false,
-        reason: multiOs
-          ? 'No rateio, todas as OS têm de estar neste telemóvel (lista sincronizada), em pendentes ou em atendimento.'
-          : 'Só é possível editar enquanto a OS estiver em pendentes ou em atendimento. Após conclusão, o registo fica bloqueado.',
-      };
     }
     return { ok: true };
   },
@@ -242,30 +238,61 @@ export const TechnicianFinanceService = {
         ? []
         : [...new Set(fields.linkedTaskIds.map((x) => String(x).trim()).filter(Boolean))];
 
-    const oldMultiOs = oldTids.size > 1 || ids.length > 1;
-    const newMultiOs = newLinked.length > 1;
+    const valueUnlocked = entries.length > 0 && entries.every((e) => e.financeValueUnlocked === true);
+    const prevTotal = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const prevDescBase = prevBaseDescriptionFromEntries(entries);
+    const prevAtt = entries[0]?.attachments;
+    const prevFp = attachmentsFingerprint(prevAtt);
 
-    if (oldTids.size > 0) {
-      const ok = await linkedTasksAllowFinanceEdit([...oldTids], {
-        requireAllTasksOnDevice: oldMultiOs,
-      });
-      if (!ok) {
+    const nextAmount = Math.max(0, Number(fields.amount) || 0);
+    const amountChanged = Math.abs(nextAmount - prevTotal) > 0.009;
+    const descChanged = String(fields.description || '').trim() !== prevDescBase;
+    const nextFp = attachmentsFingerprint(fields.attachments);
+    const attChanged = nextFp !== prevFp;
+
+    const hadLinkedOs = oldTids.size > 0;
+    const lockExpenseCore = kind0 === 'expense' && hadLinkedOs && !valueUnlocked;
+
+    if (lockExpenseCore) {
+      if (fields.kind !== 'expense') {
         throw new Error(
-          oldMultiOs
-            ? 'Para editar o rateio, sincronize o telemóvel: todas as OS envolvidas têm de estar na lista local, em pendentes ou em atendimento.'
-            : 'Só é possível editar enquanto a OS estiver em pendentes ou em atendimento. Após conclusão, o registo fica bloqueado.'
+          'Não é possível alterar o tipo deste lançamento com OS vinculadas. Peça revisão ao escritório se necessário.'
+        );
+      }
+      if (amountChanged) {
+        throw new Error(
+          'O valor está fechado. Peça ao escritório que devolva o lançamento para revisão para alterar montante, descrição ou anexos.'
+        );
+      }
+      if (descChanged) {
+        throw new Error(
+          'A descrição está fechada. Peça devolução para revisão ou altere apenas as OS no rateio.'
+        );
+      }
+      if (attChanged) {
+        throw new Error(
+          'Os anexos estão fechados. Peça devolução para revisão ou altere apenas as OS no rateio.'
         );
       }
     }
+
+    if (valueUnlocked && (amountChanged || descChanged || attChanged)) {
+      const checkIds = newLinked.length > 0 ? newLinked : [...oldTids];
+      if (checkIds.length > 0) {
+        const okR = await linkedTasksAllowFullEditAfterReview(checkIds);
+        if (!okR) {
+          throw new Error(
+            'Para corrigir este lançamento devolvido, sincronize o telemóvel: todas as OS do rateio têm de estar na lista local.'
+          );
+        }
+      }
+    }
+
     if (newLinked.length > 0) {
-      const ok2 = await linkedTasksAllowFinanceEdit(newLinked, {
-        requireAllTasksOnDevice: newMultiOs,
-      });
+      const ok2 = await areTaskIdsEligibleForExpenseLink(newLinked);
       if (!ok2) {
         throw new Error(
-          newMultiOs
-            ? 'No rateio, todas as OS escolhidas têm de estar no telemóvel, em pendentes ou em atendimento.'
-            : 'Só pode relacionar a OS em pendentes ou em atendimento (incl. revisões em curso).'
+          'Só pode relacionar OS com campo de despesas no modelo, em aberto ou concluídas há no máximo 30 dias, após sincronizar a lista neste telemóvel.'
         );
       }
     }
@@ -309,6 +336,12 @@ export const TechnicianFinanceService = {
         : [];
 
     if (linked.length > 0) {
+      const eligible = await areTaskIdsEligibleForExpenseLink(linked);
+      if (!eligible) {
+        throw new Error(
+          'Só pode associar OS com campo de despesas no formulário, em aberto neste telemóvel ou concluídas há no máximo 30 dias. Sincronize a lista de OS.'
+        );
+      }
       const amounts = splitCurrencyBrl(total, linked.length);
       const baseDesc = partial.description?.trim() || '';
       const atts =

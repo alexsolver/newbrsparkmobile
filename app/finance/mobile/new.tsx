@@ -248,7 +248,9 @@ export default function NewTechnicianFinanceScreen() {
           <>
             <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
             <Text style={styles.osHint}>
-              Só aparecem OS em pendentes ou em atendimento cujo formulário tenha o campo «custos do técnico». Se escolher mais de uma OS, o valor é dividido em partes iguais (centavos) e cada parte aparece no campo dessa OS, com a descrição indicando o rateio.
+              Aparecem OS cujo modelo tem campo de despesas do técnico: em aberto no telemóvel ou concluídas há até 30
+              dias (sincronize a lista). Várias OS dividem o valor em partes iguais; cada parte fica ligada à OS no
+              rascunho do formulário.
             </Text>
             {linkableLoading ? (
               <View style={styles.osLoading}>

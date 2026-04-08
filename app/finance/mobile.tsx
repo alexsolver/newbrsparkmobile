@@ -16,10 +16,9 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import {
   TechnicianFinanceService,
-  isManualFinanceEntryEditableInMemory,
   isManualSplitRateioEditableInMemory,
+  manualFinanceLinkedTasksOnDevice,
 } from '../../src/services/technicianFinanceService';
-import { buildProviderTaskStatusSets } from '../../src/utils/technicianFinanceLinkableTasks';
 import type { TechnicianFinanceEntry } from '../../src/types/technicianFinance';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useManualSync } from '../../src/hooks/useManualSync';
@@ -175,11 +174,6 @@ export default function TechnicianFinanceScreen() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [taskById, setTaskById] = useState<Map<string, CloudTaskFinanceInfo>>(() => new Map());
   const [cloudTasksRaw, setCloudTasksRaw] = useState<any[]>([]);
-  const [statusSets, setStatusSets] = useState<{
-    completedIds: Set<string>;
-    inprogressIds: Set<string>;
-    acceptedIds: Set<string>;
-  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,11 +198,9 @@ export default function TechnicianFinanceScreen() {
         }
       }
       setTaskById(m);
-      setStatusSets(await buildProviderTaskStatusSets());
     } catch {
       setTaskById(new Map());
       setCloudTasksRaw([]);
-      setStatusSets(null);
     }
   }, []);
 
@@ -260,8 +252,8 @@ export default function TechnicianFinanceScreen() {
         return n;
       }, 0);
       const createdAt = parts[0]?.createdAt || '';
-      const splitEditable =
-        statusSets != null && isManualSplitRateioEditableInMemory(parts, cloudTasksRaw, statusSets);
+      const splitEditable = isManualSplitRateioEditableInMemory(parts, cloudTasksRaw);
+      const splitUnlocked = parts.length > 0 && parts.every((p) => p.financeValueUnlocked === true);
       const splitIds = parts.map((p) => encodeURIComponent(p.id)).join(',');
       const splitInner = (
         <>
@@ -306,20 +298,26 @@ export default function TechnicianFinanceScreen() {
               · {parts.length} OS · Manual (rateio)
             </Text>
           </View>
-          {splitEditable ? (
+          {splitUnlocked ? (
+            <View style={styles.editHintRow}>
+              <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
+              <Text style={[styles.editHint, { color: '#b45309' }]}>
+                Devolvido para revisão: toque para corrigir valor, descrição ou rateio (todas as OS no telemóvel).
+              </Text>
+            </View>
+          ) : splitEditable ? (
             <View style={styles.editHintRow}>
               <Ionicons name="create-outline" size={15} color="#0f766e" />
-              <Text style={styles.editHint}>Toque para editar</Text>
+              <Text style={styles.editHint}>Toque para ajustar o rateio (OS). Valor e anexos estão fechados.</Text>
             </View>
           ) : (
             <Text style={styles.editHintMuted}>
-              Rateio: todas as OS têm de estar no telemóvel, em pendentes ou em atendimento. Se alguma faltar ou estiver
-              concluída, não é possível editar aqui.
+              Sincronize todas as OS deste rateio neste telemóvel para poder incluir ou remover OS.
             </Text>
           )}
         </>
       );
-      return splitEditable ? (
+      return splitEditable || splitUnlocked ? (
         <TouchableOpacity
           activeOpacity={0.88}
           style={[styles.card, { borderLeftColor: '#ef4444' }]}
@@ -335,8 +333,8 @@ export default function TechnicianFinanceScreen() {
     const item = row.entry;
     const osIds = linkedTaskIdsForEntry(item);
     const hasOs = osIds.length > 0;
-    const singleEditable =
-      statusSets != null && isManualFinanceEntryEditableInMemory(item, cloudTasksRaw, statusSets);
+    const onDevice = manualFinanceLinkedTasksOnDevice(item, cloudTasksRaw);
+    const singleUnlocked = item.financeValueUnlocked === true;
     const singleInner = (
       <>
         <View style={styles.cardTop}>
@@ -390,17 +388,34 @@ export default function TechnicianFinanceScreen() {
         </View>
         {item.source === 'checklist' ? (
           <Text style={styles.editHintMuted}>Altere no formulário da OS.</Text>
-        ) : singleEditable ? (
+        ) : item.source === 'manual' && item.kind === 'expense' && hasOs && singleUnlocked ? (
+          <View style={styles.editHintRow}>
+            <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
+            <Text style={[styles.editHint, { color: '#b45309' }]}>
+              Devolvido para revisão: toque para corrigir (todas as OS no telemóvel).
+            </Text>
+          </View>
+        ) : item.source === 'manual' && item.kind === 'expense' && hasOs ? (
+          <View style={styles.editHintRow}>
+            <Ionicons name="create-outline" size={15} color="#0f766e" />
+            <Text style={styles.editHint}>
+              {onDevice
+                ? 'Toque para ajustar a OS (rateio). Valor e anexos estão fechados.'
+                : 'Sincronize a OS neste telemóvel para ajustar o vínculo.'}
+            </Text>
+          </View>
+        ) : item.source === 'manual' ? (
           <View style={styles.editHintRow}>
             <Ionicons name="create-outline" size={15} color="#0f766e" />
             <Text style={styles.editHint}>Toque para editar</Text>
           </View>
-        ) : item.source === 'manual' && hasOs ? (
-          <Text style={styles.editHintMuted}>OS concluída — não é possível editar aqui.</Text>
         ) : null}
       </>
     );
-    return singleEditable && item.source === 'manual' ? (
+    const singleManualTappable =
+      item.source === 'manual' &&
+      (item.kind !== 'expense' || !hasOs || onDevice || singleUnlocked);
+    return singleManualTappable ? (
       <TouchableOpacity
         activeOpacity={0.88}
         style={[styles.card, { borderLeftColor: item.kind === 'revenue' ? '#10b981' : '#ef4444' }]}

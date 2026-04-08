@@ -18,18 +18,13 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Header } from '../../../src/components/Header';
-import {
-  TechnicianFinanceService,
-  isManualSplitRateioEditableInMemory,
-} from '../../../src/services/technicianFinanceService';
+import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
 import type { TechnicianFinanceAttachment, TechnicianFinanceKind } from '../../../src/types/technicianFinance';
 import {
   loadLinkableTasksForTechnicianExpense,
   type LinkableExpenseTask,
-  buildProviderTaskStatusSets,
 } from '../../../src/utils/technicianFinanceLinkableTasks';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MAX_ATTACHMENTS = 10;
 
@@ -82,6 +77,17 @@ export default function EditTechnicianFinanceScreen() {
   const [linkableOs, setLinkableOs] = useState<LinkableExpenseTask[]>([]);
   const [linkableLoading, setLinkableLoading] = useState(false);
   const [selectedOsIds, setSelectedOsIds] = useState<string[]>([]);
+  const [financeValueUnlocked, setFinanceValueUnlocked] = useState(false);
+  /** Despesa com OS guardada: valor/descrição/anexos fechados até revisão. */
+  const [expenseValueLockActive, setExpenseValueLockActive] = useState(false);
+
+  const valueFieldsLocked = expenseValueLockActive && !financeValueUnlocked;
+
+  const screenTitle = useMemo(() => {
+    if (financeValueUnlocked) return 'Corrigir lançamento';
+    if (valueFieldsLocked) return 'Ajustar rateio';
+    return 'Editar lançamento';
+  }, [financeValueUnlocked, valueFieldsLocked]);
 
   const refreshLinkableOs = useCallback(async () => {
     setLinkableLoading(true);
@@ -130,26 +136,6 @@ export default function EditTechnicianFinanceScreen() {
           return;
         }
 
-        const raw = await AsyncStorage.getItem('@brspark_cloud_tasks');
-        const cloudTasks = raw ? JSON.parse(raw) : [];
-        const arr = Array.isArray(cloudTasks) ? cloudTasks : [];
-        const sets = await buildProviderTaskStatusSets();
-        const ok = isManualSplitRateioEditableInMemory(parts, arr, sets);
-        if (!ok) {
-          if (!cancelled) {
-            setBlocked(true);
-            Alert.alert(
-              'Não editável',
-              parts.length > 1 ||
-                [...new Set(parts.map((p) => (p.taskId ? String(p.taskId) : '')).filter(Boolean))].length > 1
-                ? 'No rateio, todas as OS têm de estar sincronizadas neste telemóvel e em pendentes ou em atendimento (incl. revisões em curso).'
-                : 'Só é possível editar enquanto a OS estiver em pendentes ou em atendimento. Após conclusão, o registo fica bloqueado.',
-              [{ text: 'OK', onPress: () => router.back() }]
-            );
-          }
-          return;
-        }
-
         parts.sort((a, b) => {
           const pa = String(a.id).split('_');
           const pb = String(b.id).split('_');
@@ -177,11 +163,14 @@ export default function EditTechnicianFinanceScreen() {
         for (const a of seen) atts.push(a);
 
         if (!cancelled) {
+          const unlocked = parts.length > 0 && parts.every((p) => p.financeValueUnlocked === true);
           setKind(k0);
           setAmountStr(String(total).replace('.', ','));
           setDescription(desc0);
           setSelectedOsIds(osOrder);
           setAttachments(atts);
+          setFinanceValueUnlocked(unlocked);
+          setExpenseValueLockActive(k0 === 'expense' && osOrder.length > 0 && !unlocked);
           setBlocked(false);
         }
       } catch {
@@ -221,6 +210,13 @@ export default function EditTechnicianFinanceScreen() {
   };
 
   const pickAttachments = () => {
+    if (valueFieldsLocked) {
+      Alert.alert(
+        'Anexos fechados',
+        'Só o escritório pode devolver o lançamento para revisão para alterar anexos, valor ou descrição. Aqui pode mudar apenas as OS do rateio.'
+      );
+      return;
+    }
     if (attachments.length >= MAX_ATTACHMENTS) {
       Alert.alert('Atenção', `Limite de ${MAX_ATTACHMENTS} anexos atingido.`);
       return;
@@ -282,6 +278,7 @@ export default function EditTechnicianFinanceScreen() {
   };
 
   const removeAttachment = (id: string) => {
+    if (valueFieldsLocked) return;
     setAttachments((prev) => prev.filter((x) => x._localId !== id));
   };
 
@@ -320,7 +317,7 @@ export default function EditTechnicianFinanceScreen() {
     return (
       <View style={[styles.container, { backgroundColor: C.background, justifyContent: 'center' }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title="Editar lançamento" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+        <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
         <ActivityIndicator color="#0f766e" style={{ marginTop: 24 }} />
       </View>
     );
@@ -330,7 +327,7 @@ export default function EditTechnicianFinanceScreen() {
     return (
       <View style={[styles.container, { backgroundColor: C.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title="Editar lançamento" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+        <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
       </View>
     );
   }
@@ -341,25 +338,30 @@ export default function EditTechnicianFinanceScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Editar lançamento" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.hint}>
-          Despesas sem OS podem ser editadas a qualquer momento. Com OS, só enquanto a ordem estiver pendente ou em
-          atendimento.
+          {financeValueUnlocked
+            ? 'Lançamento devolvido para revisão: pode alterar valor, texto, anexos e OS. Todas as OS do rateio têm de estar sincronizadas neste telemóvel. Ao guardar, o lançamento volta a ficar fechado.'
+            : valueFieldsLocked
+              ? 'Valor, descrição e anexos estão fechados. Pode incluir ou remover OS no rateio (só OS elegíveis: em aberto ou concluídas há até 30 dias, com campo de despesas no modelo). Para corrigir valores, o escritório deve devolver o lançamento para revisão.'
+              : 'Despesas sem OS podem ser editadas livremente. Com OS vinculadas, após guardar o valor fica fechado até revisão.'}
         </Text>
 
         <Text style={styles.lbl}>Tipo</Text>
         <View style={styles.kindRow}>
           <TouchableOpacity
-            style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExp]}
+            style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExp, valueFieldsLocked && { opacity: 0.45 }]}
             onPress={() => setKind('expense')}
+            disabled={valueFieldsLocked}
           >
             <Text style={[styles.kindBtnTxt, kind === 'expense' && styles.kindBtnTxtOn]}>Despesa</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.kindBtn, kind === 'revenue' && styles.kindBtnRev]}
+            style={[styles.kindBtn, kind === 'revenue' && styles.kindBtnRev, valueFieldsLocked && { opacity: 0.45 }]}
             onPress={() => setKind('revenue')}
+            disabled={valueFieldsLocked}
           >
             <Text style={[styles.kindBtnTxt, kind === 'revenue' && styles.kindBtnTxtOn]}>Receita</Text>
           </TouchableOpacity>
@@ -367,31 +369,33 @@ export default function EditTechnicianFinanceScreen() {
 
         <Text style={styles.lbl}>Valor (R$)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, valueFieldsLocked && styles.inputDisabled]}
           keyboardType="decimal-pad"
           placeholder="0,00"
           placeholderTextColor="#94a3b8"
           value={amountStr}
           onChangeText={setAmountStr}
+          editable={!valueFieldsLocked}
         />
 
         <Text style={styles.lbl}>Descrição (opcional)</Text>
         <TextInput
-          style={[styles.input, styles.inputMulti]}
+          style={[styles.input, styles.inputMulti, valueFieldsLocked && styles.inputDisabled]}
           placeholder="Nota ou referência…"
           placeholderTextColor="#94a3b8"
           value={description}
           onChangeText={setDescription}
           multiline
           maxLength={500}
+          editable={!valueFieldsLocked}
         />
 
         {kind === 'expense' ? (
           <>
             <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
             <Text style={styles.osHint}>
-              Só pode associar OS em pendentes ou em atendimento. Se escolher várias, o valor divide-se em partes
-              iguais.
+              Lista: OS com campo de despesas no modelo, em aberto no telemóvel ou concluídas há até 30 dias. Várias OS
+              dividem o valor em partes iguais.
             </Text>
             {linkableLoading ? (
               <View style={styles.osLoading}>
@@ -429,7 +433,12 @@ export default function EditTechnicianFinanceScreen() {
         ) : null}
 
         <Text style={styles.lbl}>Documentos ou fotos (opcional)</Text>
-        <TouchableOpacity style={styles.addAttachBtn} onPress={pickAttachments} activeOpacity={0.88}>
+        <TouchableOpacity
+          style={[styles.addAttachBtn, valueFieldsLocked && { opacity: 0.45 }]}
+          onPress={pickAttachments}
+          activeOpacity={0.88}
+          disabled={valueFieldsLocked}
+        >
           <Ionicons name="attach-outline" size={22} color="#0f766e" />
           <Text style={styles.addAttachBtnTxt}>Adicionar anexo</Text>
         </TouchableOpacity>
@@ -454,8 +463,9 @@ export default function EditTechnicianFinanceScreen() {
                   onPress={() => removeAttachment(att._localId)}
                   style={styles.removeAttach}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  disabled={valueFieldsLocked}
                 >
-                  <Ionicons name="close-circle" size={24} color="#94a3b8" />
+                  <Ionicons name="close-circle" size={24} color={valueFieldsLocked ? '#e2e8f0' : '#94a3b8'} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -464,7 +474,7 @@ export default function EditTechnicianFinanceScreen() {
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
           <Ionicons name="checkmark-circle" size={22} color="#fff" />
-          <Text style={styles.saveBtnTxt}>Guardar alterações</Text>
+          <Text style={styles.saveBtnTxt}>{valueFieldsLocked ? 'Guardar rateio' : 'Guardar alterações'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -502,6 +512,7 @@ function createStyles(C: any) {
       marginBottom: 18,
     },
     inputMulti: { minHeight: 100, textAlignVertical: 'top' },
+    inputDisabled: { backgroundColor: '#f1f5f9', color: '#64748b' },
     osHint: {
       fontSize: 12,
       color: '#94a3b8',

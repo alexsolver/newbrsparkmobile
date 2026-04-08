@@ -88,10 +88,61 @@ export function isPendingOrInAttendance(status: string): boolean {
   return status === 'PENDING' || status === 'IN_PROGRESS' || status === 'PAUSED';
 }
 
+/** Janela para associar despesa a OS já concluídas (desde a data de conclusão conhecida). */
+export const FINANCE_EXPENSE_LINK_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Melhor esforço: instante de conclusão para aplicar a janela de 30 dias.
+ * No pull de `/api/sync/tasks`, OS concluídas usam `startDate` ≈ `completedAt` do servidor.
+ */
+export function completionTimestampMsForFinanceLink(
+  t: any,
+  completedAtById: Map<string, number>
+): number | null {
+  if (t?.id == null) return null;
+  const id = String(t.id);
+  const fromLocal = completedAtById.get(id);
+  if (fromLocal != null && Number.isFinite(fromLocal)) return fromLocal;
+
+  const meta = taskMetadataRecord(t);
+  const m = meta.completedAt ? new Date(String(meta.completedAt)).getTime() : NaN;
+  if (Number.isFinite(m)) return m;
+
+  const raw = String(t.status || 'PENDING').toUpperCase();
+  const done =
+    SERVER_COMPLETED_STATUSES.has(raw) || raw === 'COMPLETED' || raw === 'SYNCED';
+  if (done) {
+    for (const key of ['startDate', 'endDate', 'updatedAt']) {
+      const v = t[key];
+      if (v) {
+        const ts = new Date(v).getTime();
+        if (Number.isFinite(ts)) return ts;
+      }
+    }
+  }
+  return null;
+}
+
+export function isTaskEligibleForManualExpenseLink(
+  t: any,
+  sets: { completedIds: Set<string>; inprogressIds: Set<string>; acceptedIds: Set<string> },
+  completedAtById: Map<string, number>,
+  nowMs: number = Date.now()
+): boolean {
+  const eff = effectiveProviderTaskStatus(t, sets.completedIds, sets.inprogressIds, sets.acceptedIds);
+  if (isPendingOrInAttendance(eff)) return true;
+  if (eff !== 'COMPLETED') return false;
+  const ts = completionTimestampMsForFinanceLink(t, completedAtById);
+  if (ts == null) return false;
+  return nowMs - ts <= FINANCE_EXPENSE_LINK_MAX_AGE_MS;
+}
+
 export async function buildProviderTaskStatusSets(): Promise<{
   completedIds: Set<string>;
   inprogressIds: Set<string>;
   acceptedIds: Set<string>;
+  /** `completedAt` em ms para OS no mapa de concluídas recentes (executadas localmente). */
+  completedAtById: Map<string, number>;
 }> {
   const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
   let executedTasksRaw: any[] = [];
@@ -103,14 +154,17 @@ export async function buildProviderTaskStatusSets(): Promise<{
   if (!Array.isArray(executedTasksRaw)) executedTasksRaw = [];
 
   const executedMap: Record<string, any> = {};
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const completedAtById = new Map<string, number>();
+  const THIRTY_DAYS_MS = FINANCE_EXPENSE_LINK_MAX_AGE_MS;
   const now = Date.now();
   for (const ex of executedTasksRaw) {
     const item = typeof ex === 'string' ? { id: ex, completedAt: new Date().toISOString() } : ex;
+    const id = String(item.id);
     const completedTs = new Date(item.completedAt ?? 0).getTime();
     const age = Number.isFinite(completedTs) ? now - completedTs : 0;
     if (Number.isFinite(completedTs) && age <= THIRTY_DAYS_MS) {
-      executedMap[String(item.id)] = item;
+      executedMap[id] = item;
+      completedAtById.set(id, completedTs);
     }
   }
   const completedIds = new Set(Object.keys(executedMap));
@@ -139,11 +193,12 @@ export async function buildProviderTaskStatusSets(): Promise<{
   if (!Array.isArray(acceptedTasks)) acceptedTasks = [];
   const acceptedIds = new Set(acceptedTasks.map((id: string) => String(id)));
 
-  return { completedIds, inprogressIds, acceptedIds };
+  return { completedIds, inprogressIds, acceptedIds, completedAtById };
 }
 
 /**
- * OS em «Pendentes» ou «Em andamento» (incl. pausa), com modelo que contém campo custos do técnico.
+ * OS com campo de despesas do técnico no formulário: em aberto no telemóvel **ou** concluídas há no máximo 30 dias
+ * (conforme estado efectivo e datas no payload sincronizado).
  */
 export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableExpenseTask[]> {
   const cloudRaw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
@@ -165,17 +220,27 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
   if (!Array.isArray(rejected)) rejected = [];
   const rejectedSet = new Set(rejected.map((id) => String(id)));
 
-  const { completedIds, inprogressIds, acceptedIds } = await buildProviderTaskStatusSets();
+  const { completedIds, inprogressIds, acceptedIds, completedAtById } =
+    await buildProviderTaskStatusSets();
+  const nowMs = Date.now();
 
   const candidates: any[] = [];
   for (const t of tasks) {
     if (t?.id == null) continue;
     const id = String(t.id);
     if (rejectedSet.has(id)) continue;
-    const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-    if (!isPendingOrInAttendance(eff)) continue;
     const refId = t.refId != null ? String(t.refId).trim() : '';
     if (!refId || refId === 'null') continue;
+    if (
+      !isTaskEligibleForManualExpenseLink(
+        t,
+        { completedIds, inprogressIds, acceptedIds },
+        completedAtById,
+        nowMs
+      )
+    ) {
+      continue;
+    }
     candidates.push(t);
   }
 
@@ -205,25 +270,22 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
   return out;
 }
 
-export type LinkedTasksFinanceEditOpts = {
-  /**
-   * Rateio / várias OS: todas têm de existir em `@brspark_cloud_tasks` no aparelho
-   * e estar pendentes ou em atendimento (não basta «não estar em concluídas» sem a OS na lista).
-   */
-  requireAllTasksOnDevice?: boolean;
-};
+/** Cada id existe em `@brspark_cloud_tasks` e obedece às regras de elegibilidade (aberta ou ≤30 dias concluída + campo despesa). */
+export async function areTaskIdsEligibleForExpenseLink(taskIds: string[]): Promise<boolean> {
+  const want = new Set(taskIds.map((x) => String(x).trim()).filter(Boolean));
+  if (want.size === 0) return true;
+  const list = await loadLinkableTasksForTechnicianExpense();
+  const have = new Set(list.map((x) => x.id));
+  for (const id of want) {
+    if (!have.has(id)) return false;
+  }
+  return true;
+}
 
-/**
- * OS ainda em «pendentes» ou «em atendimento» (incl. pausa / revisita) — permite editar despesa manual ligada.
- */
-export async function linkedTasksAllowFinanceEdit(
-  taskIds: string[],
-  opts?: LinkedTasksFinanceEditOpts
-): Promise<boolean> {
+/** Após devolução para revisão: todas as OS envolvidas têm de estar na lista sincronizada neste aparelho. */
+export async function linkedTasksAllowFullEditAfterReview(taskIds: string[]): Promise<boolean> {
   const ids = [...new Set(taskIds.map((x) => String(x).trim()).filter(Boolean))];
   if (ids.length === 0) return true;
-
-  const strict = opts?.requireAllTasksOnDevice === true;
 
   const cloudRaw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
   let tasks: any[] = [];
@@ -238,17 +300,8 @@ export async function linkedTasksAllowFinanceEdit(
     if (t?.id != null) byId.set(String(t.id), t);
   }
 
-  const { completedIds, inprogressIds, acceptedIds } = await buildProviderTaskStatusSets();
-
   for (const id of ids) {
-    const t = byId.get(id);
-    if (!t) {
-      if (strict) return false;
-      if (completedIds.has(id)) return false;
-      continue;
-    }
-    const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-    if (!isPendingOrInAttendance(eff)) return false;
+    if (!byId.has(id)) return false;
   }
   return true;
 }
