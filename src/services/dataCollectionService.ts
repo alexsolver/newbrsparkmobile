@@ -173,16 +173,24 @@ class DataCollectionService {
       let accuracy: number | undefined;
 
       // se n passou loc no opts e for evento importante (ex: TRANSIT_START), força coleta no ato
+      let burstTs: string | undefined;
       if (!lat && !lng && (eventType === 'TRANSIT_START' || eventType === 'GEOFENCE_ENTER' || eventType === 'OS_START' || eventType === 'CHECKIN')) {
         const burst = await this.burstCapture();
         if (burst) {
           lat = burst.lat;
           lng = burst.lng;
           accuracy = burst.accuracy;
+          burstTs = burst.deviceTimestamp;
         }
       }
 
-      await this.recordEvent(eventType, { previousState: prev, lat, lng, accuracy });
+      await this.recordEvent(eventType, {
+        previousState: prev,
+        lat,
+        lng,
+        accuracy,
+        ...(burstTs ? { deviceTimestamp: burstTs } : {}),
+      });
     }
 
     // Start new location strategy for this state
@@ -328,7 +336,12 @@ class DataCollectionService {
    * High-precision burst: waits up to 8 seconds for a reading with accuracy < 20m.
    * Use for CHECKIN, CHECKOUT, OS_START — moments that have judicial relevance.
    */
-  async burstCapture(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
+  async burstCapture(): Promise<{
+    lat: number;
+    lng: number;
+    accuracy: number;
+    deviceTimestamp: string;
+  } | null> {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return null;
@@ -336,11 +349,14 @@ class DataCollectionService {
         accuracy: Location.Accuracy.BestForNavigation,
       });
       return {
-        lat:      loc.coords.latitude,
-        lng:      loc.coords.longitude,
+        lat: loc.coords.latitude,
+        lng: loc.coords.longitude,
         accuracy: loc.coords.accuracy ?? 99,
+        deviceTimestamp: new Date(loc.timestamp).toISOString(),
       };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   // ── Event recording ────────────────────────────────────────────────────────

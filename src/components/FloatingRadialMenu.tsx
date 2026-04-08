@@ -28,8 +28,6 @@ const PROVIDER_MENU_ITEMS = [
     color: '#0f766e',
     route: '/finance/mobile',
   },
-  { id: 'contracts', label: 'Contratos', icon: 'document-text', color: '#EF4444', route: '/' },
-  { id: 'rules', label: 'Portaria', icon: 'shield-checkmark', color: '#F97316', route: '/' },
 ];
 
 export function FloatingRadialMenu() {

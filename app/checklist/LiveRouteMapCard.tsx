@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   StyleSheet,
   Text,
@@ -49,8 +50,12 @@ interface Props {
   /** Destino explícito; pode omitir se `route` tiver pontos (o mapa usa o último vértice). */
   targetLoc?: { lat?: number | null; lng?: number | null };
   etaMinutes?: number | null;
-  onEndTransit?: () => void;
+  onEndTransit?: () => void | Promise<void>;
+  /** Enquanto o checklist corre `handleTransit` (GPS) para o fim de deslocamento. */
+  endTransitLoading?: boolean;
   taskId?: string | null;
+  /** OS tipo rota: tolerância (m) = `locationRadius` no despacho — corredor e métricas de patrulha. */
+  corridorToleranceM?: number;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -99,6 +104,62 @@ function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/** Distância ao longo da polilinha desde o 1.º vértice até à projeção ortogonal do ponto (lat,lng). */
+function closestPointOnPolylineArcM(
+  poly: number[][],
+  lat: number,
+  lng: number
+): { arcM: number; distM: number } {
+  if (!poly || poly.length < 2) return { arcM: 0, distM: Infinity };
+  let bestDist = Infinity;
+  let bestArc = 0;
+  let arcBefore = 0;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const [aL, aG] = poly[i];
+    const [bL, bG] = poly[i + 1];
+    const segLen = haversineM(aL, aG, bL, bG);
+    const dx = bG - aG;
+    const dy = bL - aL;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const pL = aL + t * dy;
+    const pG = aG + t * dx;
+    const d = haversineM(lat, lng, pL, pG);
+    if (d < bestDist) {
+      bestDist = d;
+      bestArc = arcBefore + t * segLen;
+    }
+    arcBefore += segLen;
+  }
+  return { arcM: bestArc, distM: bestDist };
+}
+
+/** Corta a polilinha no comprimento de arco acumulado (metros): percorrido vs restante. */
+function splitPolylineByArcM(poly: number[][], targetArcM: number): { covered: number[][]; remaining: number[][] } {
+  if (!poly || poly.length < 2 || targetArcM <= 0) {
+    return { covered: [], remaining: poly && poly.length >= 2 ? poly.map((c) => [c[0], c[1]]) : [] };
+  }
+  let acc = 0;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const [la, ln] = poly[i];
+    const [lb, ln2] = poly[i + 1];
+    const segLen = haversineM(la, ln, lb, ln2);
+    if (acc + segLen >= targetArcM) {
+      const t = segLen > 0 ? (targetArcM - acc) / segLen : 0;
+      const tc = Math.max(0, Math.min(1, t));
+      const pl = la + (lb - la) * tc;
+      const pLn = ln + (ln2 - ln) * tc;
+      const covered = [...poly.slice(0, i + 1).map((c) => [c[0], c[1]] as number[]), [pl, pLn]];
+      const remaining: number[][] = [[pl, pLn], ...poly.slice(i + 1).map((c) => [c[0], c[1]] as number[])];
+      return { covered, remaining };
+    }
+    acc += segLen;
+  }
+  const last = poly[poly.length - 1];
+  return { covered: poly.map((c) => [c[0], c[1]]), remaining: [[last[0], last[1]]] };
+}
+
 /** Inclinação 3D semelhante a Apple / Google Maps em modo condução. */
 const NAVIGATION_MAP_PITCH = 52;
 
@@ -120,8 +181,20 @@ function computeDrivingMapHeading(
   return fallbackHeading;
 }
 
-const FOLLOW_CAMERA_MIN_MS = 2800;
-const FOLLOW_MOVE_THRESHOLD_M = 42;
+/** Interpola rumo no círculo (menor arco) para rotações menos bruscas na câmara. */
+function smoothHeadingDeg(current: number, target: number, factor: number): number {
+  const d = ((((target - current) % 360) + 540) % 360) - 180;
+  const next = current + d * factor;
+  return ((next % 360) + 360) % 360;
+}
+
+const FOLLOW_CAMERA_MIN_MS = 1400;
+const FOLLOW_MOVE_THRESHOLD_M = 30;
+const HEADING_SMOOTH_FACTOR = 0.34;
+
+/** Zoom em modo navegação; abaixo disto a câmara aproxima-se sozinha (ex.: após fit da rota inteira). */
+const NAV_FOLLOW_ZOOM = 17;
+const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
 
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
 function EtaBadge({
@@ -270,7 +343,17 @@ const etaStyles = StyleSheet.create({
 
 const { width, height } = Dimensions.get('window');
 
-export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, etaMinutes, onEndTransit, taskId }: Props) {
+export default function LiveRouteMapCard({
+  route,
+  visible,
+  zoneType,
+  targetLoc,
+  etaMinutes,
+  onEndTransit,
+  endTransitLoading = false,
+  taskId,
+  corridorToleranceM,
+}: Props) {
   const embedNativeMap = useMemo(() => shouldEmbedNativeTransitMap(), []);
   const { user } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
@@ -280,12 +363,14 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   const [expanded, setExpanded]       = useState(true);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
+  /** Comprimento (m) ao longo da linha de referência já «pintado» de laranja; só aumenta (pausa mantém o sítio). */
+  const [routePaintArcM, setRoutePaintArcM] = useState(0);
 
   const [isPaused, setIsPaused] = useState(false);
   const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
   const [etaHint, setEtaHint] = useState<string | null>(null);
-  /** Só recentraliza com GPS quando ligado (evita mapa “a saltar”). */
-  const [followUser, setFollowUser] = useState(false);
+  /** Modo navegação: mapa segue o GPS com rumo em cima (por defeito ao abrir o deslocamento). */
+  const [followUser, setFollowUser] = useState(true);
   /** Painel de dicas na primeira vez (mapa nativo). */
   const [showTransitHints, setShowTransitHints] = useState(false);
 
@@ -307,12 +392,21 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   /** Último rumo aplicado à câmara (modo navegação); mantém-se ao parar no semáforo. */
   const lastMapHeadingRef = useRef(0);
 
+  const dynamicRouteRef = useRef<number[][] | null>(null);
+  const routeRef = useRef<number[][]>(route);
+  dynamicRouteRef.current = dynamicRoute;
+  routeRef.current = route;
+
   // Subscribe to route tracker updates
   useEffect(() => {
     if (!visible) return;
 
+    const tol =
+      zoneType === 'route' && corridorToleranceM != null && Number.isFinite(corridorToleranceM)
+        ? Math.max(10, corridorToleranceM)
+        : 100;
     if (!routeTracker.isActive() || routeTracker.getRouteLength() !== route.length) {
-       routeTracker.start(route, 100).catch(() => {});
+      routeTracker.start(route, tol, { maxAccuracyM: 55 }).catch(() => {});
     }
 
     const handler = (u: RouteUpdate) => {
@@ -320,6 +414,22 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       const prev = myPosRef.current;
       prevPosRef.current = prev;
       setMyPos({ lat: u.currentLat, lng: u.currentLng });
+
+      const dyn = dynamicRouteRef.current;
+      const tpl = routeRef.current;
+      const paintLine =
+        dyn && dyn.length >= 2
+          ? dyn
+          : tpl && tpl.length >= 2
+            ? tpl
+            : null;
+      if (paintLine) {
+        const { arcM, distM } = closestPointOnPolylineArcM(paintLine, u.currentLat, u.currentLng);
+        if (distM < 160) {
+          setRoutePaintArcM((m) => Math.max(m, arcM));
+        }
+      }
+
       if (!embedNativeMap || !followUserRef.current) return;
 
       const dest = pickDestinationForOsrm(targetLoc, route);
@@ -327,12 +437,13 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
         prev && Number.isFinite(prev.lat) && Number.isFinite(prev.lng)
           ? { lat: prev.lat, lng: prev.lng }
           : null;
-      const heading = computeDrivingMapHeading(
+      const rawHeading = computeDrivingMapHeading(
         prevPos,
         { lat: u.currentLat, lng: u.currentLng },
         dest,
         lastMapHeadingRef.current
       );
+      const heading = smoothHeadingDeg(lastMapHeadingRef.current, rawHeading, HEADING_SMOOTH_FACTOR);
       lastMapHeadingRef.current = heading;
 
       const now = Date.now();
@@ -352,34 +463,36 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
         map?.animateCamera(
           {
             center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom: 16,
+            zoom: NAV_FOLLOW_ZOOM,
             heading,
             pitch: NAVIGATION_MAP_PITCH,
           },
-          { duration: 550 }
+          { duration: 420 }
         );
         return;
       }
       void map.getCamera().then((cam) => {
+        const z = cam.zoom ?? NAV_FOLLOW_ZOOM;
+        const zoom = z < NAV_MIN_ACCEPTABLE_ZOOM ? NAV_FOLLOW_ZOOM : z;
         map.animateCamera(
           {
             center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom: cam.zoom ?? 16,
+            zoom,
             pitch: NAVIGATION_MAP_PITCH,
             heading,
             altitude: cam.altitude,
           },
-          { duration: 550 }
+          { duration: 420 }
         );
       }).catch(() => {
         map?.animateCamera(
           {
             center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom: 16,
+            zoom: NAV_FOLLOW_ZOOM,
             heading,
             pitch: NAVIGATION_MAP_PITCH,
           },
-          { duration: 550 }
+          { duration: 420 }
         );
       });
     };
@@ -410,7 +523,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       routeTracker.off('status_changed', statusHandler);
       routeTracker.off('traversed_update', traversedHandler);
     };
-  }, [visible, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng]);
+  }, [visible, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng, zoneType, corridorToleranceM]);
 
   useEffect(() => {
     if (!visible) {
@@ -420,10 +533,22 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       prevPosRef.current = null;
       prevFollowUserRef.current = false;
       lastMapHeadingRef.current = 0;
-      setFollowUser(false);
+      setFollowUser(true);
       setShowTransitHints(false);
+      setRoutePaintArcM(0);
     }
   }, [visible]);
+
+  const dynamicRoutePaintSig = useMemo(() => {
+    if (!dynamicRoute || dynamicRoute.length < 2) return '';
+    const f = dynamicRoute[0];
+    const l = dynamicRoute[dynamicRoute.length - 1];
+    return `${dynamicRoute.length}|${f[0]},${f[1]}|${l[0]},${l[1]}`;
+  }, [dynamicRoute]);
+
+  useEffect(() => {
+    if (dynamicRoutePaintSig) setRoutePaintArcM(0);
+  }, [dynamicRoutePaintSig]);
 
   useEffect(() => {
     if (!visible || !expanded || !embedNativeMap) return;
@@ -519,8 +644,11 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   }, [visible, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng]);
 
   // Encaixe quando a polilinha principal muda (ex.: chega geometria OSRM), nunca por causa de myPos.
+  // Em modo navegação (seguir GPS) não fazer fit da rota inteira — rotas longas (KML) afastavam o zoom
+  // para a região metropolitana e o seguimento GPS mantinha esse zoom (cam.zoom).
   useEffect(() => {
     if (!embedNativeMap || !expanded || !visible) return;
+    if (followUserRef.current) return;
     const line =
       dynamicRoute && dynamicRoute.length >= 2
         ? dynamicRoute
@@ -548,26 +676,6 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
     }, 480);
     return () => clearTimeout(t);
   }, [embedNativeMap, expanded, visible, dynamicRoute, route]);
-
-  const fitFullRoute = () => {
-    if (!embedNativeMap) return;
-    const pts: { latitude: number; longitude: number }[] = [];
-    const pushRing = (ring: number[][]) => {
-      for (const c of ring) {
-        if (c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
-          pts.push({ latitude: c[0], longitude: c[1] });
-        }
-      }
-    };
-    if (dynamicRoute && dynamicRoute.length >= 2) pushRing(dynamicRoute);
-    else if (route && route.length >= 2) pushRing(route);
-    if (myPos) pts.push({ latitude: myPos.lat, longitude: myPos.lng });
-    if (pts.length < 2) return;
-    mapRef.current?.fitToCoordinates(pts, {
-      edgePadding: { top: 130, right: 52, bottom: 260, left: 52 },
-      animated: true,
-    });
-  };
 
   const osrmDest = useMemo(
     () => pickDestinationForOsrm(targetLoc, route),
@@ -658,26 +766,32 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       (route.length === 2 || dynamicRoute.length > 2)
     );
 
+  const dynamicRouteSplit = useMemo(() => {
+    if (!dynamicRoute || dynamicRoute.length < 2 || routePaintArcM <= 0) return null;
+    return splitPolylineByArcM(dynamicRoute, routePaintArcM);
+  }, [dynamicRoute, routePaintArcM]);
+
+  const templateRouteSplit = useMemo(() => {
+    if (zoneType === 'segment') return null;
+    if (dynamicRoute && dynamicRoute.length >= 2) return null;
+    if (!route || route.length < 2 || routePaintArcM <= 0) return null;
+    if (suppressTemplatePolyline) return null;
+    return splitPolylineByArcM(route, routePaintArcM);
+  }, [zoneType, dynamicRoute, route, routePaintArcM, suppressTemplatePolyline]);
+
+  const segmentRouteSplit = useMemo(() => {
+    if (zoneType !== 'segment') return null;
+    if (dynamicRoute && dynamicRoute.length >= 2) return null;
+    if (!route || route.length < 2 || routePaintArcM <= 0) return null;
+    if (suppressTemplatePolyline) return null;
+    return splitPolylineByArcM(route, routePaintArcM);
+  }, [zoneType, dynamicRoute, route, routePaintArcM, suppressTemplatePolyline]);
+
   const focusOnLatLng = useCallback((lat: number, lng: number, zoom = 17) => {
     mapRef.current?.animateCamera(
       { center: { latitude: lat, longitude: lng }, zoom },
       { duration: 450 }
     );
-  }, []);
-
-  const adjustZoom = useCallback(async (delta: number) => {
-    const map = mapRef.current;
-    if (!map?.getCamera) return;
-    try {
-      const cam = await map.getCamera();
-      const z = (cam.zoom ?? 15) + delta;
-      map.animateCamera(
-        { ...cam, zoom: Math.min(20, Math.max(10, z)) },
-        { duration: 220 }
-      );
-    } catch {
-      /* ignore */
-    }
   }, []);
 
   useEffect(() => {
@@ -693,7 +807,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
       map?.animateCamera(
         {
           center: { latitude: myPos.lat, longitude: myPos.lng },
-          zoom: 17,
+          zoom: NAV_FOLLOW_ZOOM,
           heading: h,
           pitch: NAVIGATION_MAP_PITCH,
         },
@@ -721,7 +835,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
   let statusColor = '#f97316';
   if (isComplete) statusColor = '#16a34a';
   else if (isPaused) statusColor = '#94a3b8';
-  else if (isDeviation) statusColor = '#dc2626';
+  else if (isDeviation) statusColor = '#d97706';
 
   const centerLat = myPos?.lat ?? (route && route.length > 0 ? route[0][0] : -23.5505);
   const centerLng = myPos?.lng ?? (route && route.length > 0 ? route[0][1] : -46.6333);
@@ -886,7 +1000,7 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
         <View style={[styles.floatingHeader, { borderLeftColor: statusColor }]}>
            <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>
-                 {isComplete ? 'Deslocamento Concluído' : isPaused ? 'Navegação Pausada' :(!hasRoute ? 'Deslocamento em Andamento' : (isDeviation ? `Desvio de ${update?.distanceFromRoute}m` : `Em Rota · ${pct}%`))}
+                 {isComplete ? 'Deslocamento Concluído' : isPaused ? 'Navegação Pausada' :(!hasRoute ? 'Deslocamento em Andamento' : (isDeviation ? `Aviso: ~${update?.distanceFromRoute} m fora do trajeto` : `Em Rota · ${pct}%${zoneType === 'route' && update?.patrolCoveragePercent != null ? ` · Patrulha ~${update.patrolCoveragePercent}%` : ''}`))}
               </Text>
               {/* ETA moved to floating map badge below */}
               {hasRoute && !isComplete && !isPaused && (
@@ -915,17 +1029,23 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </View>
             <ScrollView style={styles.hintScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.hintBody}>
-                <Text style={styles.hintStrong}>Centrar</Text> (ícone do alfinete): coloca-o no centro uma vez e{' '}
-                <Text style={styles.hintEm}>mantém o zoom</Text> atual. O mapa não segue o GPS sozinho.
+                Por defeito o mapa está em <Text style={styles.hintStrong}>modo navegação</Text>: segue a sua posição,
+                alinha o rumo em cima (com rotação suave) e inclina em 3D, como nas apps de navegação.
                 {'\n\n'}
-                <Text style={styles.hintStrong}>Seguir GPS</Text> (círculo com navegação): o mapa acompanha a sua
-                posição, <Text style={styles.hintStrong}>roda no sentido da marcha</Text> (como Apple / Google Maps)
-                e inclina em 3D. Desligue para voltar ao norte em cima e arrastar o mapa livremente.
+                Toque no ícone <Text style={styles.hintStrong}>navegação</Text> (círculo com seta) para{' '}
+                <Text style={styles.hintStrong}>mapa livre</Text>: norte em cima, pode arrastar e rodar o mapa.
+                Toque de novo para voltar a seguir o GPS.
                 {'\n\n'}
-                <Text style={styles.hintStrong}>+</Text> e <Text style={styles.hintStrong}>−</Text>: zoom. O ícone{' '}
-                <Text style={styles.hintStrong}>expandir</Text> volta a mostrar a rota completa.
+                Use <Text style={styles.hintStrong}>pinçar</Text> para ajustar o zoom em qualquer modo.
                 {'\n\n'}
                 Toque no <Text style={styles.hintStrong}>marcador do destino</Text> (ou nos pontos A/B) para aproximar e ver melhor a rua.
+                {'\n\n'}
+                <Text style={styles.hintStrong}>Rota KML / patrulha:</Text> linha{' '}
+                <Text style={styles.hintStrong}>laranja</Text> = trajeto planeado; linha{' '}
+                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registado; na linha de navegação (OSRM),
+                o trecho já percorrido fica <Text style={styles.hintStrong}>laranja sólido</Text> e o que falta em
+                azul tracejado — útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
+                trajeto planeado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização «sempre» ou «em segundo plano»
                 quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
@@ -955,26 +1075,50 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
           followsUserLocation={false}
           showsCompass={followUser}
           zoomEnabled
-          scrollEnabled
+          scrollEnabled={!followUser}
           pitchEnabled
-          rotateEnabled
+          rotateEnabled={!followUser}
         >
-          {route && route.length >= 2 && !suppressTemplatePolyline && (
-            <Polyline
-              coordinates={route.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-              strokeColor="#ea580c"
-              strokeWidth={2}
-              lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
-              zIndex={800}
-              geodesic
-            />
+          {route && route.length >= 2 && !suppressTemplatePolyline && zoneType !== 'segment' && (
+            templateRouteSplit ? (
+              <>
+                {templateRouteSplit.covered.length >= 2 && (
+                  <Polyline
+                    coordinates={templateRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                    strokeColor="#ea580c"
+                    strokeWidth={3}
+                    zIndex={810}
+                    geodesic
+                  />
+                )}
+                {templateRouteSplit.remaining.length >= 2 && (
+                  <Polyline
+                    coordinates={templateRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                    strokeColor="#fdba74"
+                    strokeWidth={2}
+                    lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
+                    zIndex={805}
+                    geodesic
+                  />
+                )}
+              </>
+            ) : (
+              <Polyline
+                coordinates={route.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                strokeColor="#ea580c"
+                strokeWidth={2}
+                lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
+                zIndex={800}
+                geodesic
+              />
+            )
           )}
           {coveredPath && coveredPath.length >= 2 && (
             <Polyline
               coordinates={coveredPath.map((c) => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#3b82f6"
               strokeWidth={3}
-              zIndex={900}
+              zIndex={880}
               geodesic
             />
           )}
@@ -999,17 +1143,41 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
 
           {zoneType === 'segment' && route && route.length >= 2 && !suppressTemplatePolyline && (
             <>
-              <Polyline
-                coordinates={[
-                  { latitude: route[0][0], longitude: route[0][1] },
-                  { latitude: route[1][0], longitude: route[1][1] },
-                ]}
-                strokeColor="#a855f7"
-                strokeWidth={2}
-                lineDashPattern={Platform.OS === 'android' ? undefined : [10, 6]}
-                zIndex={750}
-                geodesic
-              />
+              {segmentRouteSplit ? (
+                <>
+                  {segmentRouteSplit.covered.length >= 2 && (
+                    <Polyline
+                      coordinates={segmentRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                      strokeColor="#6d28d9"
+                      strokeWidth={3}
+                      zIndex={760}
+                      geodesic
+                    />
+                  )}
+                  {segmentRouteSplit.remaining.length >= 2 && (
+                    <Polyline
+                      coordinates={segmentRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                      strokeColor="#a855f7"
+                      strokeWidth={2}
+                      lineDashPattern={Platform.OS === 'android' ? undefined : [10, 6]}
+                      zIndex={755}
+                      geodesic
+                    />
+                  )}
+                </>
+              ) : (
+                <Polyline
+                  coordinates={[
+                    { latitude: route[0][0], longitude: route[0][1] },
+                    { latitude: route[1][0], longitude: route[1][1] },
+                  ]}
+                  strokeColor="#a855f7"
+                  strokeWidth={2}
+                  lineDashPattern={Platform.OS === 'android' ? undefined : [10, 6]}
+                  zIndex={750}
+                  geodesic
+                />
+              )}
               <Marker
                 coordinate={{ latitude: route[0][0], longitude: route[0][1] }}
                 title="Ponto A"
@@ -1023,17 +1191,41 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </>
           )}
           
-          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível) */}
+          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível); trecho já percorrido a laranja */}
           {dynamicRoute && dynamicRoute.length >= 2 && (
              <>
-               <Polyline
-                 coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                 strokeColor="#2563eb"
-                 strokeWidth={2}
-                 lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
-                 zIndex={1000}
-                 geodesic={false}
-               />
+               {dynamicRouteSplit ? (
+                 <>
+                   {dynamicRouteSplit.covered.length >= 2 && (
+                     <Polyline
+                       coordinates={dynamicRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                       strokeColor="#ea580c"
+                       strokeWidth={3}
+                       zIndex={1001}
+                       geodesic={false}
+                     />
+                   )}
+                   {dynamicRouteSplit.remaining.length >= 2 && (
+                     <Polyline
+                       coordinates={dynamicRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                       strokeColor="#2563eb"
+                       strokeWidth={2}
+                       lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
+                       zIndex={1000}
+                       geodesic={false}
+                     />
+                   )}
+                 </>
+               ) : (
+                 <Polyline
+                   coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                   strokeColor="#2563eb"
+                   strokeWidth={2}
+                   lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
+                   zIndex={1000}
+                   geodesic={false}
+                 />
+               )}
                <Marker
                  coordinate={{
                    latitude: dynamicRoute[dynamicRoute.length - 1][0],
@@ -1092,32 +1284,25 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </TouchableOpacity>
           )}
           {embedNativeMap && (
-            <>
-              <TouchableOpacity style={styles.recenterBtn} onPress={() => void adjustZoom(1)} accessibilityLabel="Aumentar zoom">
-                <Ionicons name="add" size={26} color="#475569" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.recenterBtn} onPress={() => void adjustZoom(-1)} accessibilityLabel="Diminuir zoom">
-                <Ionicons name="remove" size={26} color="#475569" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.recenterBtn} onPress={fitFullRoute} accessibilityLabel="Ver rota completa">
-                <Ionicons name="expand-outline" size={22} color="#475569" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.recenterBtn, followUser && styles.followActiveBtn]}
-                onPress={() => setFollowUser((v) => !v)}
-                accessibilityLabel={followUser ? 'Desligar seguir GPS' : 'Seguir GPS'}
-              >
-                <Ionicons
-                  name={followUser ? 'navigate-circle' : 'navigate-circle-outline'}
-                  size={22}
-                  color={followUser ? '#fff' : '#475569'}
-                />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.recenterBtn, followUser && styles.followActiveBtn]}
+              onPress={() => setFollowUser((v) => !v)}
+              accessibilityLabel={
+                followUser ? 'Modo mapa livre (norte em cima, arrastar mapa)' : 'Modo navegação (seguir GPS e rumo)'
+              }
+            >
+              <Ionicons
+                name={followUser ? 'navigate-circle' : 'navigate-circle-outline'}
+                size={22}
+                color={followUser ? '#fff' : '#475569'}
+              />
+            </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.recenterBtn} onPress={() => void handleRecenter()} accessibilityLabel="Centrar na minha posição">
-            <Ionicons name="locate" size={24} color="#475569" />
-          </TouchableOpacity>
+          {!embedNativeMap && (
+            <TouchableOpacity style={styles.recenterBtn} onPress={() => void handleRecenter()} accessibilityLabel="Atualizar posição no mapa">
+              <Ionicons name="locate" size={24} color="#475569" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Floating Controls at Bottom */}
@@ -1133,9 +1318,22 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
             </View>
 
             {onEndTransit && (
-               <TouchableOpacity style={styles.endTransitBtn} onPress={onEndTransit}>
-                  <Ionicons name="stop-circle" size={20} color="#fff" />
-                  <Text style={styles.endTransitText}>FINALIZAR DESLOCAMENTO</Text>
+               <TouchableOpacity
+                  style={[styles.endTransitBtn, endTransitLoading && { opacity: 0.85 }]}
+                  disabled={endTransitLoading}
+                  onPress={() => {
+                    if (endTransitLoading) return;
+                    void Promise.resolve(onEndTransit());
+                  }}
+               >
+                  {endTransitLoading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Ionicons name="stop-circle" size={20} color="#fff" />
+                  )}
+                  <Text style={styles.endTransitText}>
+                    {endTransitLoading ? 'A obter localização…' : 'FINALIZAR DESLOCAMENTO'}
+                  </Text>
                </TouchableOpacity>
             )}
         </View>
@@ -1148,8 +1346,10 @@ export default function LiveRouteMapCard({ route, visible, zoneType, targetLoc, 
         {/* Deviation Banner Overlay */}
         {isDeviation && !isPaused && (
           <View style={styles.deviationBanner}>
-            <Ionicons name="warning" size={18} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.deviationText}>Você está fora da rota definida!</Text>
+            <Ionicons name="warning" size={18} color="#78350f" style={{ marginRight: 8 }} />
+            <Text style={styles.deviationText}>
+              Aviso: fora do corredor (~{update?.distanceFromRoute ?? '—'} m). Não bloqueia o deslocamento.
+            </Text>
           </View>
         )}
       </View>
@@ -1179,8 +1379,26 @@ const styles = StyleSheet.create({
   endTransitBtn: { flexDirection: 'row', backgroundColor: '#ea580c', paddingVertical: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#ea580c', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, gap: 10 },
   endTransitText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
 
-  deviationBanner: { position: 'absolute', top: 120, left: 16, right: 16, backgroundColor: '#dc2626', borderRadius: 8, flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, alignItems: 'center', shadowColor: '#dc2626', shadowOpacity: 0.4, shadowRadius: 6, elevation: 5 },
-  deviationText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  deviationBanner: {
+    position: 'absolute',
+    top: 120,
+    left: 16,
+    right: 16,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  deviationText: { color: '#78350f', fontSize: 13, fontWeight: '700', flex: 1, textAlign: 'center' },
 
   /** ~30% menor que 64px; centrado no anchor do Marker. */
   navTechnicianWrap: {

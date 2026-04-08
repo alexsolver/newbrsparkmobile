@@ -38,13 +38,18 @@ import GeofenceMapScreen from './GeofenceMapScreen';
 import RouteProgressBar from './RouteProgressBar';
 import LiveRouteMapCard, { pickDestinationForOsrm } from './LiveRouteMapCard';
 import { routeTracker } from '../../src/services/routeTrackingService';
+import { computePatrolCompliance } from '../../src/services/patrolRouteMetrics';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
-import { enqueueExecutionStatusPatch, pushSyncQueue } from '../../src/services/syncService';
+import {
+  enqueueExecutionStatusPatch,
+  pushSyncQueue,
+  COMPLETED_BODY_LOCAL_TTL_MS,
+} from '../../src/services/syncService';
 import { applyMaterialsStockForSubmission, parseMaterialsValue } from '../../src/checklist/applyMaterialsStockOnSubmit';
 import { applyMaterialsReceiptForSubmission } from '../../src/checklist/applyMaterialsReceiptOnSubmit';
 import {
@@ -392,6 +397,31 @@ function getScopedFieldValue(
   return row && typeof row === 'object' ? row[fieldId] : undefined;
 }
 
+/** Valor de campo na raiz ou dentro de secções repetíveis (transit_start/end fora do sítio errado quebrava o mapa). */
+function findFieldValueInResponses(
+  responses: Record<string, any>,
+  fieldId: string,
+  schemaData: any[] | undefined
+): unknown {
+  if (!fieldId || !responses || typeof responses !== 'object') return undefined;
+  const root = responses[fieldId];
+  if (root != null && String(root).trim() !== '') return root;
+  if (!Array.isArray(schemaData)) return undefined;
+  for (const f of schemaData) {
+    if (f?.type !== 'section_break' || !f?.multiple || !f?.id) continue;
+    const rkey = sectionRepeatStorageKey(f.id);
+    const rows = responses[rkey];
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (row && typeof row === 'object') {
+        const v = row[fieldId];
+        if (v != null && String(v).trim() !== '') return v;
+      }
+    }
+  }
+  return undefined;
+}
+
 function getScopedTechComment(
   responses: Record<string, any>,
   scope: SectionRepeatScope | null | undefined,
@@ -687,6 +717,9 @@ export default function ChecklistEngine() {
   responsesForPauseExitRef.current = responses;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  /** Campo em que está a correr captura GPS (transit / geofence) — UI de loading e anti duplo toque. */
+  const [gpsBusyFieldId, setGpsBusyFieldId] = useState<string | null>(null);
+  const gpsCaptureLockRef = useRef(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [wizardIndex, setWizardIndex] = useState(0);
   /** Dentro de uma etapa em modo híbrido com «um campo de cada vez» só nessa etapa */
@@ -718,6 +751,8 @@ export default function ChecklistEngine() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
+  /** Secção repetível onde foi «Iniciar deslocamento» — o mapa finaliza com o mesmo scope. */
+  const lastTransitScopeRef = useRef<SectionRepeatScope | null>(null);
   // Tracking share link state
   const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
 
@@ -1004,6 +1039,9 @@ export default function ChecklistEngine() {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
     }
+    if (gpsCaptureLockRef.current) return;
+    gpsCaptureLockRef.current = true;
+    setGpsBusyFieldId(fieldId);
     const isGeofenceCheck = label === 'VALIDACAO_CERCA';
     try {
       setSubmitting(true);
@@ -1217,6 +1255,28 @@ export default function ChecklistEngine() {
               pathPointCount: path?.length ?? 0,
             };
           }
+
+          if (currentTask?.locationZoneType === 'route') {
+            const refPts = buildRouteCoordsFromTask(currentTask);
+            const tol = parseInt(String(currentTask?.locationRadius ?? '100'), 10) || 100;
+            if (refPts.length >= 2) {
+              let patrolSnap = routeTracker.getPatrolComplianceSnapshot(refPts, tol);
+              const pathSamples =
+                traversedPath && traversedPath.length >= 2
+                  ? traversedPath.map(([la, ln]) => ({ lat: la, lng: ln }))
+                  : [];
+              if (
+                (!patrolSnap || patrolSnap.samplesUsed < 2) &&
+                pathSamples.length >= 2
+              ) {
+                patrolSnap = computePatrolCompliance(refPts, pathSamples, {
+                  toleranceM: tol,
+                  maxAccuracyM: null,
+                });
+              }
+              if (patrolSnap) payload.patrolCompliance = patrolSnap;
+            }
+          }
         } catch (e) {
           console.warn('[transit] actualMetrics', e);
         }
@@ -1259,6 +1319,8 @@ export default function ChecklistEngine() {
     } catch (e) {
       Alert.alert("Erro Inesperado", "Ocorreu um erro ao tentar processar a operação.");
     } finally {
+      gpsCaptureLockRef.current = false;
+      setGpsBusyFieldId(null);
       setSubmitting(false);
     }
   };
@@ -1482,7 +1544,20 @@ export default function ChecklistEngine() {
       const inExecutedList = Boolean(
         taskId && execs.some((e) => (typeof e === 'string' ? e : e.id) === String(taskId)),
       );
-      const isCompleted = Boolean(taskId && (inExecutedList || snapshotIsTerminal));
+      let cloudTaskTerminal = false;
+      if (taskId) {
+        try {
+          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
+          const cloudTasks = JSON.parse(cloudTasksStr);
+          const ct = Array.isArray(cloudTasks)
+            ? cloudTasks.find((t: any) => String(t.id) === String(taskId))
+            : null;
+          if (ct && executionIsViewOnly(ct)) cloudTaskTerminal = true;
+        } catch {
+          /* ignore */
+        }
+      }
+      const isCompleted = Boolean(taskId && (inExecutedList || snapshotIsTerminal || cloudTaskTerminal));
       /** Só leitura: lista de concluídas, snapshot local COMPLETED/SYNCED, ou estado terminal na API (sem revisão). */
       let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
@@ -1505,11 +1580,16 @@ export default function ChecklistEngine() {
         if (execStr) {
           try {
             const cachedObj = JSON.parse(execStr);
-            if (cachedObj._cacheTime) {
-              const ageHours = (Date.now() - cachedObj._cacheTime) / (1000 * 60 * 60);
-              cacheStale = ageHours > 4;
-            } else {
+            const dl = Number(cachedObj._technicianViewDownloadAt);
+            if (!Number.isFinite(dl) || Date.now() - dl > COMPLETED_BODY_LOCAL_TTL_MS) {
               cacheStale = true;
+            } else {
+              const resp = cachedObj.responses;
+              const keys =
+                resp && typeof resp === 'object' && !Array.isArray(resp)
+                  ? Object.keys(resp).filter((k) => !k.startsWith('__'))
+                  : [];
+              if (keys.length === 0) cacheStale = true;
             }
           } catch {
             cacheStale = true;
@@ -1560,7 +1640,13 @@ export default function ChecklistEngine() {
                     ? remoteExec.responses
                     : {};
                 if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
-                const cachePayload = { ...remoteExec, responses: initialRes, _cacheTime: Date.now() };
+                const ts = Date.now();
+                const cachePayload = {
+                  ...remoteExec,
+                  responses: initialRes,
+                  _cacheTime: ts,
+                  _technicianViewDownloadAt: ts,
+                };
                 await AsyncStorage.setItem(`@brspark_execution_${taskId}`, JSON.stringify(cachePayload));
               } else if (res.status === 404) {
                 if (!execStr) {
@@ -1727,23 +1813,16 @@ export default function ChecklistEngine() {
       
       setTemplate(tmpl);
 
-      // Nova visita de revisão: zerar cronómetros de produtividade (respostas de campos mantêm-se)
-      if (taskId && !readOnlyMode) {
-        const completedMarkersOnServer =
-          !!(serverR.__form_completed_at || serverR.__form_fill_duration_sec);
-        const shouldResetProductivityTimers =
-          reopenRevisionPending ||
-          (lastSubmittedRevForNext >= 1 &&
-            completedMarkersOnServer &&
-            Object.keys(draftRes).length === 0);
-        if (shouldResetProductivityTimers) {
-          stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
-          stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
-          void routeTracker.stop().catch(() => {});
-          try {
-            await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
-          } catch {}
-        }
+      // Nova visita de revisão explícita (metadata): zerar cronómetros e limpar assinatura/deslocamento/geofence dessa sessão.
+      // NÃO usar «rascunho vazio + rev≥1 + marcadores no servidor» — apagava transit_start/end em execuções ainda ativas
+      // (ex.: PATCH atrasado, outro dispositivo, cache) e o relatório ficava sem deslocamento.
+      if (taskId && !readOnlyMode && reopenRevisionPending) {
+        stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
+        stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
+        void routeTracker.stop().catch(() => {});
+        try {
+          await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
+        } catch {}
       }
 
       // Injetar Default Values (AutoFill) para campos vazios
@@ -2194,11 +2273,15 @@ export default function ChecklistEngine() {
 
   const handleInput = (fieldId: string, value: any, scope?: SectionRepeatScope | null) => {
     if (isReadOnly) return;
-    if (serverPausedExecution) return;
-    if (responses.__form_paused_since) return;
 
     const isMetaField = fieldId.startsWith('__');
     const fieldDef = !isMetaField ? template?.schemaData?.find((f: any) => f.id === fieldId) : null;
+    const isTransitField =
+      fieldDef &&
+      (fieldDef.type === 'transit_start' || fieldDef.type === 'transit_end');
+    if (serverPausedExecution && !isTransitField) return;
+    if (responses.__form_paused_since && !isTransitField) return;
+
     let stored = value;
     if (fieldDef && fieldAllowsMultiple(fieldDef) && (value === null || value === '')) {
       stored = [];
@@ -2317,7 +2400,8 @@ export default function ChecklistEngine() {
               if (!cameraPermission?.granted) {
                 try {
                   const p = await requestCameraPermission();
-                  if (!p.granted) return Alert.alert('Atenção', 'Permissão negada para câmera virtual.');
+                  if (!p.granted)
+                    return Alert.alert(t('common.attention'), t('checklistForm.permissionVirtualCameraDenied'));
                 } catch (permErr: any) {
                   /* ignore */
                 }
@@ -2331,7 +2415,8 @@ export default function ChecklistEngine() {
 
           try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') return Alert.alert('Atenção', 'Permissão negada para câmera nativa.');
+            if (status !== 'granted')
+              return Alert.alert(t('common.attention'), t('checklistForm.permissionNativeCameraDenied'));
 
             const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
             if (!res.canceled && res.assets && res.assets.length > 0) {
@@ -2369,17 +2454,20 @@ export default function ChecklistEngine() {
               }
             }
           } catch (err: any) {
-            Alert.alert('Câmera Indisponível', err.message || 'Erro ao tentar abrir a câmera.');
+            Alert.alert(
+              t('checklistForm.cameraUnavailableTitle'),
+              err?.message || t('checklistForm.cameraUnavailableBody')
+            );
           }
         } else {
-          Alert.alert('Adicionar Foto', 'Importar foto de onde?', [
+          Alert.alert(t('checklistForm.addPhotoTitle'), t('checklistForm.addPhotoMessage'), [
             {
-              text: 'Câmera',
+              text: t('checklistForm.cameraOption'),
               onPress: async () => {
                 try {
                   const { status } = await ImagePicker.requestCameraPermissionsAsync();
                   if (status !== 'granted') {
-                    Alert.alert('Atenção', 'Permissão negada para câmera.');
+                    Alert.alert(t('common.attention'), t('checklistForm.permissionCameraDenied'));
                     return;
                   }
                   const res = await ImagePicker.launchCameraAsync({ quality: 0.5 });
@@ -2388,19 +2476,19 @@ export default function ChecklistEngine() {
                   }
                 } catch (camErr: any) {
                   Alert.alert(
-                    'Câmera Indisponível',
-                    camErr.message || 'Não foi possível abrir a câmera. Você está em um simulador?'
+                    t('checklistForm.cameraUnavailableTitle'),
+                    camErr?.message || t('checklistForm.cameraSimulatorBody')
                   );
                 }
               },
             },
             {
-              text: 'Galeria',
+              text: t('checklistForm.galleryOption'),
               onPress: async () => {
                 try {
                   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                   if (status !== 'granted') {
-                    Alert.alert('Atenção', 'Permissão negada para galeria.');
+                    Alert.alert(t('common.attention'), t('checklistForm.permissionGalleryDenied'));
                     return;
                   }
                   const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
@@ -2408,15 +2496,18 @@ export default function ChecklistEngine() {
                     mergeMediaUriIntoField(fieldId, res.assets[0].uri, scope);
                   }
                 } catch (galErr: any) {
-                  Alert.alert('Galeria Indisponível', galErr.message || 'Erro ao abrir a galeria.');
+                  Alert.alert(
+                    t('checklistForm.galleryUnavailableTitle'),
+                    galErr?.message || t('checklistForm.galleryUnavailableBody')
+                  );
                 }
               },
             },
-            { text: 'Cancelar', style: 'cancel' },
+            { text: t('common.cancel'), style: 'cancel' },
           ]);
         }
       } catch (e: any) {
-        Alert.alert('Erro', 'Erro geral na captura de mídia.');
+        Alert.alert(t('common.error'), t('checklistForm.mediaCaptureError'));
       }
     }
   };
@@ -3570,12 +3661,15 @@ export default function ChecklistEngine() {
 
         const endField = schema.find((f: any) => f.type === 'transit_end');
         const startField = schema.find((f: any) => f.type === 'transit_start');
-        
-        let isTransitFinished = false;
-        if (endField && responses[endField.id]) isTransitFinished = true;
-        
-        let isTransitStarted = false;
-        if (startField && responses[startField.id]) isTransitStarted = true;
+
+        const startVal =
+          startField &&
+          findFieldValueInResponses(responses, startField.id, schema);
+        const endVal =
+          endField && findFieldValueInResponses(responses, endField.id, schema);
+
+        const isTransitFinished = !!endVal;
+        const isTransitStarted = !!startVal;
         
         const isVisible = showLiveMap || (isTransitStarted && !isTransitFinished);
         const routeDest = getDestFromTaskLike(currentTask || {});
@@ -3609,10 +3703,16 @@ export default function ChecklistEngine() {
             return null;
           })();
 
+        const corridorTol =
+          currentTask?.locationZoneType === 'route'
+            ? parseInt(String(currentTask?.locationRadius ?? '100'), 10) || 100
+            : undefined;
+
         return <LiveRouteMapCard 
                   route={routeCoords} 
                   visible={isVisible}
                   zoneType={currentTask?.locationZoneType}
+                  corridorToleranceM={corridorTol}
                   targetLoc={
                     targetForMap
                       ? { lat: targetForMap.lat, lng: targetForMap.lng }
@@ -3620,14 +3720,23 @@ export default function ChecklistEngine() {
                   }
                   etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
                   taskId={resolvedTaskId || undefined}
-                  onEndTransit={endField ? () => {
-                      const hasValue = !!responses[endField.id];
-                      if (!hasValue) {
-                          // Retrieve final traversed path from tracker
-                          const path = routeTracker.getTraversedPath();
-                          handleTransit(endField.id, 'CHEGADA', path);
-                          setShowLiveMap(false);
-                      }
+                  endTransitLoading={endField ? gpsBusyFieldId === endField.id : false}
+                  onEndTransit={endField ? async () => {
+                      const hasValue = !!findFieldValueInResponses(
+                        responses,
+                        endField.id,
+                        template?.schemaData
+                      );
+                      if (hasValue) return;
+                      const path = routeTracker.getTraversedPath();
+                      await handleTransit(
+                        endField.id,
+                        'CHEGADA',
+                        path,
+                        lastTransitScopeRef.current
+                      );
+                      lastTransitScopeRef.current = null;
+                      setShowLiveMap(false);
                   } : undefined}
                />;
       })()}
@@ -4573,8 +4682,22 @@ export default function ChecklistEngine() {
                  const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
                  
+                 const gpsBusyHere = gpsBusyFieldId === field.id;
+                 const gpsBusyAny = gpsBusyFieldId != null;
                  return (
-                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: buttonColor, flexDirection:'row', gap:8}]} onPress={async () => {
+                    <View>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        {
+                          backgroundColor: buttonColor,
+                          flexDirection: 'row',
+                          gap: 8,
+                          opacity: gpsBusyAny && !gpsBusyHere ? 0.55 : 1,
+                        },
+                      ]}
+                      disabled={isReadOnly || isBlocked || hasValue || gpsBusyAny}
+                      onPress={async () => {
                        if (isBlocked) {
                            Alert.alert("Atenção", "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo.");
                            return;
@@ -4591,6 +4714,7 @@ export default function ChecklistEngine() {
                        );
                        const email = await AsyncStorage.getItem('@brspark_email');
                        if (field.type === 'transit_start') {
+                         lastTransitScopeRef.current = scope ?? null;
                          dataCollectionService.setState('IN_TRANSIT', {
                            executionId: String(taskId || ''),
                            ownerEmail: email || 'unknown',
@@ -4601,6 +4725,7 @@ export default function ChecklistEngine() {
                          }
                          void generateTrackingLink();
                        } else {
+                         lastTransitScopeRef.current = null;
                          dataCollectionService.setState('ARRIVED', {
                            executionId: String(taskId || ''),
                            ownerEmail: email || 'unknown',
@@ -4611,9 +4736,21 @@ export default function ChecklistEngine() {
                          routeTracker.stop();
                        }
                     }}>
-                       <Ionicons name={hasValue ? 'checkmark-circle' : (field.type === 'transit_start' ? 'play' : 'stop')} size={20} color="#FFF" />
-                       <Text style={{color: '#FFF', fontWeight: 'bold', fontSize:15}}>{hasValue ? labelWhenClicked : labelWhenEmpty}</Text>
+                       {gpsBusyHere ? (
+                         <ActivityIndicator color="#fff" size="small" />
+                       ) : (
+                         <Ionicons name={hasValue ? 'checkmark-circle' : (field.type === 'transit_start' ? 'play' : 'stop')} size={20} color="#FFF" />
+                       )}
+                       <Text style={{color: '#FFF', fontWeight: 'bold', fontSize:15}}>
+                         {gpsBusyHere ? 'A obter localização…' : (hasValue ? labelWhenClicked : labelWhenEmpty)}
+                       </Text>
                     </TouchableOpacity>
+                    {gpsBusyHere ? (
+                      <Text style={{ fontSize: 12, color: '#64748b', marginTop: 8, paddingHorizontal: 4 }}>
+                        O GPS pode demorar em campo ou com sinal fraco. Aguarde.
+                      </Text>
+                    ) : null}
+                    </View>
                  );
               })()}
               {field.type === 'location_pick' && (
@@ -4625,8 +4762,24 @@ export default function ChecklistEngine() {
                   requireOnlineValidation={!!field.requireOnlineValidation}
                 />
               )}
-              {field.type === 'geofence_check' && (
-                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#e2e8f0', borderColor:'#cbd5e1', borderWidth:1, flexDirection:'row', gap:8}]} onPress={() => ensureOnlineValidation(field, async () => {
+              {field.type === 'geofence_check' && (() => {
+                const geoBusyHere = gpsBusyFieldId === field.id;
+                const geoBusyAny = gpsBusyFieldId != null;
+                return (
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    {
+                      backgroundColor: '#e2e8f0',
+                      borderColor: '#cbd5e1',
+                      borderWidth: 1,
+                      flexDirection: 'row',
+                      gap: 8,
+                      opacity: geoBusyAny && !geoBusyHere ? 0.55 : 1,
+                    },
+                  ]}
+                  disabled={isReadOnly || geoBusyAny}
+                  onPress={() => ensureOnlineValidation(field, async () => {
                    await handleTransit(field.id, 'VALIDACAO_CERCA', undefined, scope);
                    // GPS chega na cerca eletrônica — modo IN_SERVICE
                    const resultStr = vv(field.id);
@@ -4642,10 +4795,17 @@ export default function ChecklistEngine() {
                      }).catch(() => {});
                    }
                 })}>
-                   <Ionicons name="location" size={20} color={colors.primary} />
-                   <Text style={{color: colors.primary, fontWeight: '700', fontSize:14}}>VALIDAR LOCALIZAÇÃO (GPS)</Text>
+                   {geoBusyHere ? (
+                     <ActivityIndicator color={colors.primary} size="small" />
+                   ) : (
+                     <Ionicons name="location" size={20} color={colors.primary} />
+                   )}
+                   <Text style={{color: colors.primary, fontWeight: '700', fontSize:14}}>
+                     {geoBusyHere ? 'A obter localização…' : 'VALIDAR LOCALIZAÇÃO (GPS)'}
+                   </Text>
                 </TouchableOpacity>
-              )}
+                );
+              })()}
               {field.type === 'signature' && (
                  <TouchableOpacity 
                    onPress={() => ensureOnlineValidation(field, () => {
@@ -5294,7 +5454,10 @@ export default function ChecklistEngine() {
                                         }
                                     }
                                 } catch (e) {
-                                    Alert.alert("Aviso de Hardware", "No simulador a tela de captura falhará. Mas no celular funcionará normal! :)");
+                                    Alert.alert(
+                                      t('checklistForm.hardwareSimulatorTitle'),
+                                      t('checklistForm.hardwareSimulatorBody')
+                                    );
                                 } finally {
                                     setIsCapturing(false);
                                 }

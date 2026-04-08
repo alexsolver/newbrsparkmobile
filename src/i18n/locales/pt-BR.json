@@ -184,6 +184,7 @@
     "upcomingBills": "Próximos Vencimentos",
     "performanceByAsset": "Desempenho por Bem",
     "installment": "Parcela",
+    "continuousInfinity": "Contínuo (∞)",
     "removeRecurringBill": "Remover esta conta recorrente?",
     "dashboard": "Dashboard",
     "statement": "Extrato",
@@ -631,6 +632,7 @@
     "revisionBadge": "Revisão",
     "nextAgenda": "Agenda",
     "sort": {
+      "open": "Ordenar",
       "default": "Filtro Padrão",
       "rating": "Avaliação",
       "agenda": "Agenda",
@@ -694,6 +696,7 @@
     },
     "availableNow": "Disponível agora",
     "providerDescription": "Descrição do prestador",
+    "providerCardBio": "Especialista em reparos e manutenções preventivas com garantia de 90 dias.",
     "topRated": "Melhor avaliado",
     "verifiedProviders": "Prestadores verificados"
   },
@@ -1132,6 +1135,24 @@
       "WARRANTY": "Garantia",
       "OTHER": "Outro"
     }
+  },
+  "checklistForm": {
+    "cameraUnavailableTitle": "Câmera indisponível",
+    "cameraUnavailableBody": "Erro ao tentar abrir a câmera.",
+    "cameraSimulatorBody": "Não foi possível abrir a câmera. Está a usar um simulador?",
+    "addPhotoTitle": "Adicionar foto",
+    "addPhotoMessage": "Importar foto de onde?",
+    "cameraOption": "Câmera",
+    "galleryOption": "Galeria",
+    "permissionCameraDenied": "Permissão negada para câmera.",
+    "permissionVirtualCameraDenied": "Permissão negada para câmera virtual.",
+    "permissionNativeCameraDenied": "Permissão negada para câmera nativa.",
+    "permissionGalleryDenied": "Permissão negada para galeria.",
+    "galleryUnavailableTitle": "Galeria indisponível",
+    "galleryUnavailableBody": "Erro ao abrir a galeria.",
+    "mediaCaptureError": "Erro geral na captura de mídia.",
+    "hardwareSimulatorTitle": "Aviso de hardware",
+    "hardwareSimulatorBody": "No simulador a tela de captura pode falhar. No celular funciona normalmente."
   },
   "pause": {
     "pickCategory": "Motivo da pausa",

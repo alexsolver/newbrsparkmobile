@@ -20,7 +20,7 @@ export default function RouteProgressBar() {
 
   const isDeviation = update.event === 'ROUTE_DEVIATION';
   const isComplete  = update.event === 'ROUTE_COMPLETED';
-  const color = isComplete ? '#16a34a' : isDeviation ? '#dc2626' : '#f97316';
+  const color = isComplete ? '#16a34a' : isDeviation ? '#d97706' : '#f97316';
 
   return (
     <View style={[styles.container, { borderColor: color + '40', backgroundColor: color + '12' }]}>
@@ -33,7 +33,7 @@ export default function RouteProgressBar() {
           {isComplete
             ? 'Rota concluída!'
             : isDeviation
-            ? `Desvio de rota · ${update.distanceFromRoute}m fora`
+            ? `Aviso: ~${update.distanceFromRoute} m fora do trajeto (não bloqueia)`
             : `No trajeto · ${update.progressPercent}% concluído`}
         </Text>
         <Text style={[styles.pct, { color }]}>{update.progressPercent}%</Text>
@@ -55,9 +55,15 @@ export default function RouteProgressBar() {
         ))}
       </View>
 
+      {update.patrolCoveragePercent != null && (
+        <Text style={styles.patrolLine}>
+          Cobertura do trajeto planeado (patrulha): ~{update.patrolCoveragePercent}%
+        </Text>
+      )}
+
       {isDeviation && (
         <Text style={styles.alert}>
-          Retorne ao trajeto definido para continuar.
+          Apenas lembrete: aproxime-se do trajeto planeado quando possível. O trabalho continua normalmente.
         </Text>
       )}
     </View>
@@ -84,5 +90,6 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#fff',
     marginLeft: -6,
   },
-  alert: { fontSize: 10, color: '#dc2626', marginTop: 6, fontStyle: 'italic' },
+  alert: { fontSize: 10, color: '#b45309', marginTop: 6, fontStyle: 'italic' },
+  patrolLine: { fontSize: 10, color: '#1d4ed8', marginTop: 4, fontWeight: '700' },
 });

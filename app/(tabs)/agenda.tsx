@@ -14,6 +14,7 @@ import { useAppContext } from '../../src/context/AppContext';
 import { AgendaService } from '../../src/services/agendaService';
 import { AgendaEvent } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database/index';
+import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 
 // Configura idioma do calendário para Português
 LocaleConfig.locales['pt-br'] = {
@@ -147,6 +148,9 @@ export default function AgendaScreen() {
       >
         <View style={styles.itemHeader}>
           <Text style={styles.itemTitle}>{ev.title}</Text>
+          {(ev.source === 'CHECKLIST' || ev.category === 'TASK') && (
+            <LocationZoneTypeBadge zoneType={ev.locationZoneType} style={{ marginRight: 8, flexShrink: 0 }} />
+          )}
           <View style={[styles.badge, { backgroundColor: ev.color + '20' }]}>
              <Text style={[styles.badgeText, { color: ev.color }]}>{ev.category}</Text>
           </View>
@@ -516,7 +520,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 6,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2
   },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 4 },
   itemTitle: { fontSize: 15, fontWeight: '800', color: '#1e293b', flex: 1, marginRight: 10 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 9, fontWeight: '900' },

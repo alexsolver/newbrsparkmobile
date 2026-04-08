@@ -10,6 +10,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { AgendaService } from '../../src/services/agendaService';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
+import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 
 /** Alinhado ao painel / sync: OS fechada na API ou só em cache local. */
 const CLOUD_DONE = new Set(['COMPLETED', 'SYNCED', 'DONE', 'CLOSED', 'FINISHED', 'COMPLETE', 'ARCHIVED']);
@@ -80,6 +81,7 @@ export default function OrdersScreen() {
              return {
                 id: String(t.id),
                 osNumber: t.osNumber ?? null,
+                locationZoneType: t.locationZoneType ?? null,
                 service: t.title || 'Serviço',
                 status: orderUiStatus(t, executedIds),
                 date: `${day}/${month}/${year}`,
@@ -198,6 +200,7 @@ export default function OrdersScreen() {
                           {taskOsLabel({ id: order.id, osNumber: order.osNumber ?? null })}
                         </Text>
                       </View>
+                      <LocationZoneTypeBadge zoneType={(order as { locationZoneType?: string | null }).locationZoneType} />
                     </View>
                     <Text style={styles.orderService}>{order.service}</Text>
                     <Text style={styles.orderProvider}>{order.provider}</Text>

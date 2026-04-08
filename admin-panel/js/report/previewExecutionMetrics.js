@@ -3,6 +3,33 @@
  * (espelha executionBusinessMetrics.js / operations.html).
  */
 
+/** Trilha GPS no JSON: [[lat,lng],…] ou [{lat,lng},…]; por vezes string JSON (API/Android). */
+export function normalizeTraversedPathForReport(raw) {
+  if (raw == null) return null;
+  let arr = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(arr)) return null;
+  const out = [];
+  for (const c of arr) {
+    if (Array.isArray(c) && c.length >= 2) {
+      const la = Number(c[0]);
+      const ln = Number(c[1]);
+      if (Number.isFinite(la) && Number.isFinite(ln)) out.push([la, ln]);
+    } else if (c && typeof c === 'object') {
+      const la = Number(c.lat ?? c.latitude);
+      const ln = Number(c.lng ?? c.lon ?? c.longitude);
+      if (Number.isFinite(la) && Number.isFinite(ln)) out.push([la, ln]);
+    }
+  }
+  return out.length ? out : null;
+}
+
 export function extractTransitEndpointsForReport(responses) {
   let startGPS = null;
   let endGPS = null;
@@ -12,12 +39,13 @@ export function extractTransitEndpointsForReport(responses) {
   for (const val of Object.values(responses)) {
     if (val == null) continue;
     const vStr = typeof val === 'string' ? val : JSON.stringify(val);
-    if (vStr.includes('"action":"SAIDA"')) {
-      try {
-        const j = typeof val === 'object' ? val : JSON.parse(val);
+    try {
+      const j = typeof val === 'object' ? val : JSON.parse(val);
+      const act = String(j.action || '').toUpperCase();
+      if (act === 'SAIDA') {
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
-        if (lat !== undefined) {
+        if (lat !== undefined && lat !== null && String(lat).trim() !== '') {
           startGPS = {
             lat,
             lng,
@@ -26,27 +54,30 @@ export function extractTransitEndpointsForReport(responses) {
             plannedMetrics: j.plannedMetrics && typeof j.plannedMetrics === 'object' ? j.plannedMetrics : null,
           };
         }
-      } catch {
-        /* ignore */
-      }
-    } else if (vStr.includes('"action":"CHEGADA"')) {
-      try {
-        const j = typeof val === 'object' ? val : JSON.parse(val);
+      } else if (act === 'CHEGADA') {
+        const pathNorm = normalizeTraversedPathForReport(j.traversedPath);
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
-        if (lat !== undefined) {
+        const hasCoord =
+          lat != null &&
+          String(lat).trim() !== '' &&
+          Number.isFinite(Number(lat));
+        const hasPath = pathNorm != null && pathNorm.length > 0;
+        const hasPatrol = j.patrolCompliance && typeof j.patrolCompliance === 'object';
+        if (hasCoord || hasPath || hasPatrol) {
           endGPS = {
-            lat,
-            lng,
+            ...(hasCoord ? { lat: Number(lat), lng: lng != null && Number.isFinite(Number(lng)) ? Number(lng) : undefined } : {}),
             addr: j.address || '',
             time: j.timestamp,
-            traversedPath: j.traversedPath,
+            traversedPath: pathNorm != null ? pathNorm : undefined,
             actualMetrics: j.actualMetrics && typeof j.actualMetrics === 'object' ? j.actualMetrics : null,
+            patrolCompliance:
+              j.patrolCompliance && typeof j.patrolCompliance === 'object' ? j.patrolCompliance : null,
           };
         }
-      } catch {
-        /* ignore */
       }
+    } catch {
+      /* ignore campo inválido */
     }
   }
   return { startGPS, endGPS };
@@ -76,12 +107,12 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 }
 
 function polylineLengthMeters(points) {
-  if (!Array.isArray(points) || points.length < 2) return null;
+  const norm = normalizeTraversedPathForReport(points);
+  if (!norm || norm.length < 2) return null;
   let sum = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+  for (let i = 1; i < norm.length; i++) {
+    const a = norm[i - 1];
+    const b = norm[i];
     const d = haversineMeters(Number(a[0]), Number(a[1]), Number(b[0]), Number(b[1]));
     if (d != null && Number.isFinite(d)) sum += d;
   }
@@ -126,7 +157,7 @@ export function buildTransitDisplayMetrics(startGPS, endGPS, task) {
       ? Math.round(Number(am.distanceMeters))
       : null;
   let actualDistFromPolyline = false;
-  if (actualDistanceM == null && endGPS && Array.isArray(endGPS.traversedPath) && endGPS.traversedPath.length >= 2) {
+  if (actualDistanceM == null && endGPS && normalizeTraversedPathForReport(endGPS.traversedPath)?.length >= 2) {
     const pl = polylineLengthMeters(endGPS.traversedPath);
     if (pl != null && pl > 0) {
       actualDistanceM = Math.round(pl);

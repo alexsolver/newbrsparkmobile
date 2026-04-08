@@ -92,12 +92,20 @@
       text-overflow: ellipsis;
     }
     .task-card-email {
-      font-size: 10px;
-      color: var(--text3);
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text2);
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       margin-bottom: 8px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+    .task-card-email ion-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+      color: var(--text3);
     }
     .task-card-meta {
       display: flex;
@@ -111,10 +119,14 @@
       font-weight: 600;
     }
     .task-card-id {
-      font-size: 9px;
-      color: var(--text2);
-      font-family: monospace;
+      font-size: 12px;
+      color: var(--text);
+      font-family: ui-monospace, monospace;
       font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .task-card-id strong {
+      font-weight: 900;
     }
     /* ion-icon usa Shadow DOM: cliques no ícone não herdam closest() até ao <button> */
     .btn-reopen-revision ion-icon {
@@ -311,6 +323,11 @@
       body, html { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       body > * { display: none !important; }
       #print-report { display: block !important; position: static !important; width: auto !important; left: 0 !important; top: 0 !important; }
+      #print-report img {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        max-width: none !important;
+      }
       @page { size: A4; margin: 0.8cm; }
     }
     #print-report {
@@ -425,7 +442,15 @@
        position: absolute; left: -44px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
        background: #F97316; color: white; display: flex; align-items: center; justify-content: center;
        font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid white;
-       box-shadow: 0 2px 6px rgba(249,115,22,0.3);
+       box-shadow: none;
+       -webkit-print-color-adjust: exact;
+       print-color-adjust: exact;
+    }
+    @media screen {
+      .pdf-form-num {
+        /* Só no ecrã: anel sem blur (blur rasteriza como quadrado no PDF após quebra de página) */
+        box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.45);
+      }
     }
     .pdf-q { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; }
     .pdf-a { font-size: 14px; font-weight: 600; color: #0f172a; }
@@ -916,6 +941,10 @@ import {
   normalizeModuleOrder,
 } from './js/report/reportPresetBrowser.js';
 import { mergeTheme } from './js/report/reportThemeBrowser.js';
+import {
+  formatServiceLocationInnerHtml,
+  formatServiceLocationPlainLine,
+} from './js/report/serviceLocationFormat.js';
 await initPage();
 
 // ── State ─────────────────────────────────────────────────────
@@ -1574,8 +1603,19 @@ function buildCard(task, colClass) {
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
       ${subBadge}
       <div class="task-card-title" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
-      <div class="task-card-email" style="margin-bottom:8px">
-        <ion-icon name="person-outline" style="font-size:11px"></ion-icon>
+      ${
+        (() => {
+          const loc = formatServiceLocationPlainLine(task);
+          if (!loc) return '';
+          const safe = String(loc)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          return `<div style="font-size:10px;color:var(--text2);margin-top:4px;line-height:1.35;word-break:break-word"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.3px">Local · </span>${safe}</div>`;
+        })()
+      }
+      <div class="task-card-email">
+        <ion-icon name="person-outline"></ion-icon>
         ${task.ownerEmail || '—'}
       </div>
       
@@ -1698,19 +1738,25 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
         }
       : null;
 
-    let pathData = [];
-    if (endPos && endPos.traversedPath) pathData = endPos.traversedPath;
+    let pathData = normalizeTraversedPathForReportOps(trEnd && trEnd.traversedPath) || [];
+    if (!pathData.length && endPos && endPos.traversedPath) {
+      pathData = normalizeTraversedPathForReportOps(endPos.traversedPath) || [];
+    }
 
     const fallbackEnd = pathData.length > 0 ? pathData[pathData.length - 1] : null;
     const fallbackStart = pathData.length > 0 ? pathData[0] : null;
 
-    const endLat = (endPos?.coordinates?.lat ?? endPos?.lat) ?? (fallbackEnd ? fallbackEnd[0] : undefined);
-    const endLng = (endPos?.coordinates?.lng ?? endPos?.lng) ?? (fallbackEnd ? fallbackEnd[1] : undefined);
+    const rawEndLat = (endPos?.coordinates?.lat ?? endPos?.lat) ?? (fallbackEnd ? fallbackEnd[0] : undefined);
+    const rawEndLng = (endPos?.coordinates?.lng ?? endPos?.lng) ?? (fallbackEnd ? fallbackEnd[1] : undefined);
+    const endLat = Number(rawEndLat);
+    const endLng = Number(rawEndLng);
 
-    const startLat = (startPos?.coordinates?.lat ?? startPos?.lat) ?? (fallbackStart ? fallbackStart[0] : undefined);
-    const startLng = (startPos?.coordinates?.lng ?? startPos?.lng) ?? (fallbackStart ? fallbackStart[1] : undefined);
+    const rawStartLat = (startPos?.coordinates?.lat ?? startPos?.lat) ?? (fallbackStart ? fallbackStart[0] : undefined);
+    const rawStartLng = (startPos?.coordinates?.lng ?? startPos?.lng) ?? (fallbackStart ? fallbackStart[1] : undefined);
+    const startLat = Number(rawStartLat);
+    const startLng = Number(rawStartLng);
 
-    if (endLat !== undefined) {
+    if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
       try {
         const map = L.map(mapElementId).setView([endLat, endLng], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -1719,7 +1765,7 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
 
         const polyline = L.polyline(pathData, { color: '#EA580C', weight: 5 }).addTo(map);
 
-        if (startLat !== undefined) {
+        if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
           L.marker([startLat, startLng], { icon: startIcon })
             .addTo(map)
             .bindPopup('<b>Saída (Início do Deslocamento)</b>');
@@ -1956,6 +2002,34 @@ function buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf) {
   </div>`;
 }
 
+/** Trilha GPS: [[lat,lng],…] ou [{lat,lng},…] ou string JSON (Android / API). */
+function normalizeTraversedPathForReportOps(raw) {
+  if (raw == null) return null;
+  var arr = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (!Array.isArray(arr)) return null;
+  var out = [];
+  for (var i = 0; i < arr.length; i++) {
+    var c = arr[i];
+    if (Array.isArray(c) && c.length >= 2) {
+      var la = Number(c[0]);
+      var ln = Number(c[1]);
+      if (isFinite(la) && isFinite(ln)) out.push([la, ln]);
+    } else if (c && typeof c === 'object') {
+      var la2 = Number(c.lat != null ? c.lat : c.latitude);
+      var ln2 = Number(c.lng != null ? c.lng : c.lon != null ? c.lon : c.longitude);
+      if (isFinite(la2) && isFinite(ln2)) out.push([la2, ln2]);
+    }
+  }
+  return out.length ? out : null;
+}
+
 /** Mesma lógica do PDF: SAÍDA/CHEGADA com timestamp para produtividade. */
 function extractTransitEndpointsForReport(responses) {
   let startGPS = null;
@@ -1963,13 +2037,13 @@ function extractTransitEndpointsForReport(responses) {
   if (!responses) return { startGPS, endGPS };
   Object.values(responses).forEach((val) => {
     if (!val) return;
-    const vStr = typeof val === 'string' ? val : JSON.stringify(val);
-    if (vStr.includes('"action":"SAIDA"')) {
-      try {
-        const j = typeof val === 'object' ? val : JSON.parse(val);
+    try {
+      const j = typeof val === 'object' ? val : JSON.parse(val);
+      const act = String(j.action || '').toUpperCase();
+      if (act === 'SAIDA') {
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
-        if (lat !== undefined) {
+        if (lat !== undefined && lat !== null && String(lat).trim() !== '') {
           startGPS = {
             lat,
             lng,
@@ -1978,26 +2052,570 @@ function extractTransitEndpointsForReport(responses) {
             plannedMetrics: j.plannedMetrics && typeof j.plannedMetrics === 'object' ? j.plannedMetrics : null,
           };
         }
-      } catch (e) { /* ignore */ }
-    } else if (vStr.includes('"action":"CHEGADA"')) {
-      try {
-        const j = typeof val === 'object' ? val : JSON.parse(val);
+      } else if (act === 'CHEGADA') {
+        const pathNorm = normalizeTraversedPathForReportOps(j.traversedPath);
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
-        if (lat !== undefined) {
-          endGPS = {
-            lat,
-            lng,
+        const hasCoord =
+          lat != null && String(lat).trim() !== '' && Number.isFinite(Number(lat));
+        const hasPath = pathNorm != null && pathNorm.length > 0;
+        const hasPatrol = j.patrolCompliance && typeof j.patrolCompliance === 'object';
+        if (hasCoord || hasPath || hasPatrol) {
+          const row = {
             addr: j.address || '',
             time: j.timestamp,
-            traversedPath: j.traversedPath,
+            traversedPath: pathNorm != null ? pathNorm : undefined,
             actualMetrics: j.actualMetrics && typeof j.actualMetrics === 'object' ? j.actualMetrics : null,
+            patrolCompliance:
+              j.patrolCompliance && typeof j.patrolCompliance === 'object' ? j.patrolCompliance : null,
           };
+          if (hasCoord) {
+            row.lat = Number(lat);
+            row.lng = lng != null && Number.isFinite(Number(lng)) ? Number(lng) : undefined;
+          }
+          endGPS = row;
         }
-      } catch (e) { /* ignore */ }
+      }
+    } catch (e) {
+      /* ignore */
     }
   });
   return { startGPS, endGPS };
+}
+
+function normalizePolygonVertexOps(pt) {
+  if (!pt) return null;
+  if (Array.isArray(pt) && pt.length >= 2) {
+    var la = Number(pt[0]);
+    var ln = Number(pt[1]);
+    if (isFinite(la) && isFinite(ln)) return [la, ln];
+  }
+  if (typeof pt === 'object') {
+    var la2 = Number(pt.lat != null ? pt.lat : pt.latitude);
+    var ln2 = Number(pt.lng != null ? pt.lng : pt.lon != null ? pt.lon : pt.longitude);
+    if (isFinite(la2) && isFinite(ln2)) return [la2, ln2];
+  }
+  return null;
+}
+
+function parseTaskRoutePolygonOps(task) {
+  const raw = task && task.locationPolygon;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(normalizePolygonVertexOps).filter(Boolean);
+  if (typeof raw === 'string') {
+    try {
+      const j = JSON.parse(raw);
+      return Array.isArray(j) ? j.map(normalizePolygonVertexOps).filter(Boolean) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function collectPatrolFlatCoordsOps(refLatLng, traversedLatLng) {
+  var flat = [];
+  function pushArr(arr) {
+    if (!Array.isArray(arr)) return;
+    arr.forEach(function (c) {
+      if (Array.isArray(c) && c.length >= 2) {
+        var la = Number(c[0]);
+        var ln = Number(c[1]);
+        if (Number.isFinite(la) && Number.isFinite(ln)) flat.push([la, ln]);
+      } else if (c && typeof c === 'object') {
+        var la2 = Number(c.lat != null ? c.lat : c.latitude);
+        var ln2 = Number(c.lng != null ? c.lng : c.lon != null ? c.lon : c.longitude);
+        if (Number.isFinite(la2) && Number.isFinite(ln2)) flat.push([la2, ln2]);
+      }
+    });
+  }
+  pushArr(refLatLng);
+  var tr = normalizeTraversedPathForReportOps(traversedLatLng);
+  if (tr) tr.forEach(function (p) { flat.push(p); });
+  return flat;
+}
+
+function bboxFromLatLngListPdfOps(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  var minLat = Infinity;
+  var maxLat = -Infinity;
+  var minLng = Infinity;
+  var maxLng = -Infinity;
+  for (var i = 0; i < arr.length; i++) {
+    var c = arr[i];
+    var la;
+    var ln;
+    if (Array.isArray(c) && c.length >= 2) {
+      la = Number(c[0]);
+      ln = Number(c[1]);
+    } else if (c && typeof c === 'object') {
+      la = Number(c.lat != null ? c.lat : c.latitude);
+      ln = Number(c.lng != null ? c.lng : c.lon != null ? c.lon : c.longitude);
+    } else continue;
+    if (!isFinite(la) || !isFinite(ln)) continue;
+    minLat = Math.min(minLat, la);
+    maxLat = Math.max(maxLat, la);
+    minLng = Math.min(minLng, ln);
+    maxLng = Math.max(maxLng, ln);
+  }
+  if (!isFinite(minLat)) return null;
+  return {
+    minLat: minLat,
+    maxLat: maxLat,
+    minLng: minLng,
+    maxLng: maxLng,
+    dlat: maxLat - minLat,
+    dlng: maxLng - minLng,
+  };
+}
+
+function unionBboxPdfOps(a, b) {
+  var minLat = Math.min(a.minLat, b.minLat);
+  var maxLat = Math.max(a.maxLat, b.maxLat);
+  var minLng = Math.min(a.minLng, b.minLng);
+  var maxLng = Math.max(a.maxLng, b.maxLng);
+  return { minLat: minLat, maxLat: maxLat, minLng: minLng, maxLng: maxLng, dlat: maxLat - minLat, dlng: maxLng - minLng };
+}
+
+function patrolRasterFitBoundsOps(refLatLng, traversedLatLng) {
+  var tr = normalizeTraversedPathForReportOps(traversedLatLng);
+  var trB = tr && tr.length >= 2 ? bboxFromLatLngListPdfOps(tr) : null;
+  var refB =
+    Array.isArray(refLatLng) && refLatLng.length >= 1 ? bboxFromLatLngListPdfOps(refLatLng) : null;
+  var b = null;
+  if (trB) {
+    var trSpan = Math.max(trB.dlat, trB.dlng);
+    var refSpan = refB ? Math.max(refB.dlat, refB.dlng) : 0;
+    if (refB && refSpan > trSpan * 4) {
+      b = trB;
+    } else if (refB) {
+      b = unionBboxPdfOps(trB, refB);
+    } else {
+      b = trB;
+    }
+  } else if (refB && refLatLng.length >= 2) {
+    b = refB;
+  } else {
+    var flat = collectPatrolFlatCoordsOps(refLatLng, traversedLatLng);
+    if (flat.length === 0) return null;
+    b = bboxFromLatLngListPdfOps(flat);
+  }
+  if (!b) return null;
+  var pad = 1.24;
+  var clat = (b.minLat + b.maxLat) / 2;
+  var clng = (b.minLng + b.maxLng) / 2;
+  var dlat = (b.maxLat - b.minLat) * pad;
+  var dlng = (b.maxLng - b.minLng) * pad;
+  var minSpan = 0.00032;
+  if (dlat < minSpan) dlat = minSpan;
+  if (dlng < minSpan) dlng = minSpan;
+  return { clat: clat, clng: clng, dlat: dlat, dlng: dlng };
+}
+
+function pickPatrolOsmZoomOps(dlat, dlng) {
+  var d = Math.max(dlat > 0 ? dlat : 0.00025, dlng > 0 ? dlng : 0.00025);
+  var z;
+  if (d > 1.5) z = 9;
+  else if (d > 0.55) z = 10;
+  else if (d > 0.22) z = 11;
+  else if (d > 0.09) z = 12;
+  else if (d > 0.035) z = 13;
+  else if (d > 0.012) z = 14;
+  else if (d > 0.004) z = 15;
+  else z = 16;
+  return Math.min(18, z);
+}
+
+function lngLatToOsmTileOps(lng, lat, z) {
+  var n = Math.pow(2, z);
+  var x = Math.floor(((lng + 180) / 360) * n);
+  var latRad = (lat * Math.PI) / 180;
+  var y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  );
+  return { x: x, y: y, n: n };
+}
+
+function osmTileYToLatNorthEdgeOps(ty, z) {
+  var n = Math.pow(2, z);
+  var rad = Math.PI * (1 - (2 * ty) / n);
+  return (180 / Math.PI) * Math.atan(Math.sinh(rad));
+}
+
+function patrolDisplayedTileBoundsOps(cx, cy, z) {
+  var n = Math.pow(2, z);
+  var txs = [cx - 1, cx, cx + 1].map(function (t) {
+    return Math.max(0, Math.min(n - 1, t));
+  });
+  var tys = [cy - 1, cy, cy + 1].map(function (t) {
+    return Math.max(0, Math.min(n - 1, t));
+  });
+  var minTx = Math.min.apply(null, txs);
+  var maxTx = Math.max.apply(null, txs);
+  var minTy = Math.min.apply(null, tys);
+  var maxTy = Math.max.apply(null, tys);
+  return {
+    west: (minTx / n) * 360 - 180,
+    east: ((maxTx + 1) / n) * 360 - 180,
+    north: osmTileYToLatNorthEdgeOps(minTy, z),
+    south: osmTileYToLatNorthEdgeOps(maxTy + 1, z),
+  };
+}
+
+function mercYFromLatOps(lat) {
+  var rad = (lat * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+}
+
+function lngLatToSvgPercentFromBoundsOps(lng, lat, b) {
+  var du = b.east - b.west;
+  if (!(du > 0)) return null;
+  var mercN = mercYFromLatOps(b.north);
+  var mercS = mercYFromLatOps(b.south);
+  var dv = mercN - mercS;
+  if (Math.abs(dv) < 1e-14) return null;
+  var merc = mercYFromLatOps(lat);
+  var u = ((lng - b.west) / du) * 100;
+  var v = ((mercN - merc) / dv) * 100;
+  if (!isFinite(u) || !isFinite(v)) return null;
+  return { u: u, v: v };
+}
+
+function coordsToSvgPolylineOps(coords, b) {
+  if (!Array.isArray(coords)) return '';
+  var parts = [];
+  for (var i = 0; i < coords.length; i++) {
+    var c = coords[i];
+    if (!Array.isArray(c) || c.length < 2) continue;
+    var la = Number(c[0]);
+    var ln = Number(c[1]);
+    if (!isFinite(la) || !isFinite(ln)) continue;
+    var p = lngLatToSvgPercentFromBoundsOps(ln, la, b);
+    if (!p) continue;
+    parts.push(p.u.toFixed(2) + ',' + p.v.toFixed(2));
+  }
+  if (parts.length < 2) return '';
+  return parts.join(' ');
+}
+
+function fmtPatrolDistanceMetersPdfOps(m) {
+  if (m === null || m === undefined) return '—';
+  var n = Number(m);
+  if (!isFinite(n) || n < 0) return '—';
+  if (n >= 1000) return (n / 1000).toFixed(2) + ' km (' + Math.round(n) + ' m)';
+  return Math.round(n) + ' m';
+}
+
+function polylineLengthTraversedPdfOps(tr) {
+  if (!Array.isArray(tr) || tr.length < 2) return null;
+  var sum = 0;
+  var R = 6371000;
+  var toRad = function (d) {
+    return (d * Math.PI) / 180;
+  };
+  for (var i = 1; i < tr.length; i++) {
+    var a = tr[i - 1];
+    var b = tr[i];
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+    var la = Number(a[0]);
+    var ln = Number(a[1]);
+    var la2 = Number(b[0]);
+    var ln2 = Number(b[1]);
+    if (!isFinite(la) || !isFinite(ln) || !isFinite(la2) || !isFinite(ln2)) continue;
+    var dLat = toRad(la2 - la);
+    var dLng = toRad(ln2 - ln);
+    var x =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(la)) * Math.cos(toRad(la2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    sum += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+  return sum > 0 ? sum : null;
+}
+
+function haversineMetersPatrolPdfOps(lat1, lng1, lat2, lng2) {
+  var R = 6371000;
+  function toRad(d) {
+    return (d * Math.PI) / 180;
+  }
+  var a1 = Number(lat1);
+  var o1 = Number(lng1);
+  var a2 = Number(lat2);
+  var o2 = Number(lng2);
+  if (!isFinite(a1) || !isFinite(o1) || !isFinite(a2) || !isFinite(o2)) return 0;
+  var dLat = toRad(a2 - a1);
+  var dLng = toRad(o2 - o1);
+  var x =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(a1)) * Math.cos(toRad(a2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function projectPointOnPolylinePatrolPdfOps(lat, lng, ref) {
+  if (!ref || ref.length < 2) return { distM: Infinity };
+  var minDist = Infinity;
+  for (var i = 0; i < ref.length - 1; i++) {
+    var aL = Number(ref[i][0]);
+    var aG = Number(ref[i][1]);
+    var bL = Number(ref[i + 1][0]);
+    var bG = Number(ref[i + 1][1]);
+    if (!isFinite(aL) || !isFinite(aG) || !isFinite(bL) || !isFinite(bG)) continue;
+    var dx = bG - aG;
+    var dy = bL - aL;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    var pL = aL + t * dy;
+    var pG = aG + t * dx;
+    var d = haversineMetersPatrolPdfOps(lat, lng, pL, pG);
+    if (d < minDist) minDist = d;
+  }
+  return { distM: minDist };
+}
+
+function computeTrajectoryOnRouteMetersPatrolPdfOps(refLatLng, trLatLng, toleranceM) {
+  var tol = Math.max(5, Number(toleranceM) || 100);
+  var ref = (refLatLng || []).filter(function (p) {
+    return (
+      Array.isArray(p) &&
+      p.length >= 2 &&
+      isFinite(Number(p[0])) &&
+      isFinite(Number(p[1]))
+    );
+  });
+  if (ref.length < 2 || !Array.isArray(trLatLng) || trLatLng.length < 2) return null;
+  var sum = 0;
+  for (var j = 1; j < trLatLng.length; j++) {
+    var a = trLatLng[j - 1];
+    var b = trLatLng[j];
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+    var la0 = Number(a[0]);
+    var ln0 = Number(a[1]);
+    var la1 = Number(b[0]);
+    var ln1 = Number(b[1]);
+    if (!isFinite(la0) || !isFinite(ln0) || !isFinite(la1) || !isFinite(ln1)) continue;
+    var midLat = (la0 + la1) / 2;
+    var midLng = (ln0 + ln1) / 2;
+    var dm = projectPointOnPolylinePatrolPdfOps(midLat, midLng, ref).distM;
+    if (isFinite(dm) && dm <= tol) {
+      sum += haversineMetersPatrolPdfOps(la0, ln0, la1, ln1);
+    }
+  }
+  return Math.round(sum);
+}
+
+function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z) {
+  var b = patrolDisplayedTileBoundsOps(cx, cy, z);
+  var refLine = coordsToSvgPolylineOps(refLatLng, b);
+  var trLine = coordsToSvgPolylineOps(traversedLatLng, b);
+  var markers = '';
+  if (Array.isArray(traversedLatLng) && traversedLatLng.length >= 1) {
+    var s = traversedLatLng[0];
+    var e = traversedLatLng[traversedLatLng.length - 1];
+    var ps = lngLatToSvgPercentFromBoundsOps(Number(s[1]), Number(s[0]), b);
+    var pe = lngLatToSvgPercentFromBoundsOps(Number(e[1]), Number(e[0]), b);
+    if (ps) {
+      markers +=
+        '<g transform="translate(' +
+        ps.u.toFixed(3) +
+        ',' +
+        ps.v.toFixed(3) +
+        ')"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#16a34a" stroke-width="0.5"/><path d="M -0.9 -1.05 L -0.9 1.05 L 1.2 0 Z" fill="#16a34a"/></g>';
+    }
+    if (pe && traversedLatLng.length > 1) {
+      markers +=
+        '<g transform="translate(' +
+        pe.u.toFixed(3) +
+        ',' +
+        pe.v.toFixed(3) +
+        ')"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#dc2626" stroke-width="0.5"/><rect x="-0.95" y="-0.95" width="1.9" height="1.9" rx="0.28" fill="#dc2626"/></g>';
+    }
+  }
+  if (!refLine && !trLine && !markers) return '';
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" aria-hidden="true">' +
+    (refLine
+      ? '<polyline fill="none" stroke="#ea580c" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="' +
+        refLine +
+        '"/>'
+      : '') +
+    (trLine
+      ? '<polyline fill="none" stroke="#2563eb" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" points="' +
+        trLine +
+        '"/>'
+      : '') +
+    markers +
+    '</svg>'
+  );
+}
+
+function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng) {
+  var fit = patrolRasterFitBoundsOps(refLatLng, traversedLatLng);
+  if (!fit) return null;
+  var clat = fit.clat;
+  var clng = fit.clng;
+  var dlat = fit.dlat;
+  var dlng = fit.dlng;
+  var z = pickPatrolOsmZoomOps(dlat, dlng);
+  var tile = lngLatToOsmTileOps(clng, clat, z);
+  var cx = tile.x;
+  var cy = tile.y;
+  var n = tile.n;
+  var imgs = [];
+  for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      var tx = Math.max(0, Math.min(n - 1, cx + dx));
+      var ty = Math.max(0, Math.min(n - 1, cy + dy));
+      var src = 'https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png';
+      imgs.push(
+        '<img loading="eager" decoding="async" src="' +
+          escUrlAttrOps(src) +
+          '" alt="" width="256" height="256" style="width:33.333333%;height:auto;display:block;margin:0;padding:0;border:0;vertical-align:top;box-sizing:border-box" />',
+      );
+    }
+  }
+  var overlay = buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z);
+  return (
+    '<div style="position:relative;width:100%;border-bottom:1px solid ' +
+    th.colorBorder +
+    ';background:#d9dde0;overflow:hidden">' +
+    '<div style="display:flex;flex-wrap:wrap;width:100%;line-height:0;font-size:0">' +
+    imgs.join('') +
+    '</div>' +
+    overlay +
+    '</div>' +
+    '<div style="font-size:8px;color:' +
+    th.colorMuted +
+    ';padding:6px 10px;background:#f1f5f9;line-height:1.4">Laranja: referência · Azul: GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+    th.colorAccent +
+    ';font-weight:700">© OpenStreetMap contributors</a>.</div>'
+  );
+}
+
+function buildOsmPatrolBrowseUrlOps(refLatLng, traversedLatLng) {
+  var fit = patrolRasterFitBoundsOps(refLatLng, traversedLatLng);
+  if (!fit) return null;
+  var z = Math.min(19, pickPatrolOsmZoomOps(fit.dlat, fit.dlng) + 1);
+  return 'https://www.openstreetmap.org/#map=' + z + '/' + fit.clat.toFixed(6) + '/' + fit.clng.toFixed(6);
+}
+
+function escUrlAttrOps(url) {
+  return String(url || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
+/** PDF Central: patrulha de rota (alinhado a reportPdfPreview.js). `escPdfFn` — obrigatório quando chamado desde printReport (escPdf não existe no escopo global). */
+function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
+  const escPdf =
+    typeof escPdfFn === 'function'
+      ? escPdfFn
+      : (s) =>
+          String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+  if (!task || task.locationZoneType !== 'route') return '';
+  const ref = parseTaskRoutePolygonOps(task);
+  const tr = endGPS ? normalizeTraversedPathForReportOps(endGPS.traversedPath) || [] : [];
+  if (!endGPS && ref.length < 2) return '';
+  const p =
+    endGPS && endGPS.patrolCompliance && typeof endGPS.patrolCompliance === 'object'
+      ? endGPS.patrolCompliance
+      : null;
+  const browseOsmUrl = buildOsmPatrolBrowseUrlOps(ref, tr);
+  const rasterMapInner = buildPatrolOsmRasterMapHtmlOps(th, ref, tr);
+  const hrefAttrPatrol = (u) => String(u || '').replace(/"/g, '&quot;');
+  const tol =
+    task.locationRadius != null
+      ? String(task.locationRadius)
+      : p && p.toleranceM != null
+        ? String(p.toleranceM)
+        : '—';
+  const ok =
+    p && p.maxDeviationM != null && Number(p.toleranceM) > 0
+      ? Number(p.maxDeviationM) <= Number(p.toleranceM)
+      : null;
+  const badge =
+    ok === true
+      ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#dcfce7;color:#166534">Dentro do corredor (pior desvio ≤ tolerância)</span>`
+      : ok === false
+        ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#fee2e2;color:#991b1b">Desvio máximo acima da tolerância</span>`
+        : '';
+  const title =
+    p != null ? 'PATRULHA DE ROTA (certificação)' : 'PATRULHA DE ROTA (evidência)';
+  let metricsBlock = '';
+  if (p) {
+    const tolNum = Math.max(5, Number(p.toleranceM) || Number(task.locationRadius) || 100);
+    let onRouteMeters = p.trajectoryOnRouteM;
+    if (onRouteMeters === null || onRouteMeters === undefined || !isFinite(Number(onRouteMeters))) {
+      onRouteMeters = computeTrajectoryOnRouteMetersPatrolPdfOps(ref, tr, tolNum);
+    } else {
+      onRouteMeters = Number(onRouteMeters);
+    }
+    const dTraj = escPdf(fmtPatrolDistanceMetersPdfOps(p.trajectoryLengthM));
+    const dOn = escPdf(fmtPatrolDistanceMetersPdfOps(onRouteMeters));
+    const dRef = escPdf(fmtPatrolDistanceMetersPdfOps(p.referenceLengthM));
+    metricsBlock = `
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-size:10px;color:${th.colorText}">
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Cobertura</div><div style="font-weight:900;font-size:14px;margin-top:2px">${escPdf(String(p.coveragePercent ?? '—'))}%</div></div>
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Desvio máx.</div><div style="font-weight:900;font-size:14px;margin-top:2px">${escPdf(String(p.maxDeviationM ?? '—'))} m</div></div>
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Tolerância</div><div style="font-weight:900;font-size:14px;margin-top:2px">${escPdf(tol)} m</div></div>
+      </div>
+      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a «distância no corredor ÷ referência».</div>
+      <div style="margin-top:10px;padding:10px 12px;background:#fffbea;border:1px solid #fde68a;border-radius:8px">
+        <div style="font-size:9px;font-weight:900;color:#9a3412;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Resumo do percurso</div>
+        <table style="width:100%;font-size:10px;color:${th.colorText};line-height:1.5;border-collapse:collapse">
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância percorrida <span style="font-size:8px">(trilha GPS, amostras válidas na app)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dTraj}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registo, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Comprimento da rota de referência</td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dRef}</td></tr>
+        </table>
+        <div style="margin-top:8px;font-size:8px;color:${th.colorMuted};line-height:1.4;border-top:1px solid ${th.colorBorder};padding-top:8px">
+          Pontos GPS válidos: ${escPdf(String(p.samplesUsed ?? '—'))}${p.samplesDiscardedAccuracy > 0 ? escPdf(` · Descartados (precisão): ${p.samplesDiscardedAccuracy}`) : ''}
+        </div>
+      </div>`;
+  } else {
+    const refHint =
+      ref.length < 2
+        ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+        : 'Não há métricas de patrulha neste registo (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+    const estLen = polylineLengthTraversedPdfOps(tr);
+    const extraEst =
+      estLen != null
+        ? `<div style="margin-top:8px;font-size:10px;color:${th.colorText};line-height:1.45"><strong>Distância percorrida (estimada, só pela trilha):</strong> ${escPdf(fmtPatrolDistanceMetersPdfOps(estLen))}</div>`
+        : '';
+    metricsBlock = `<div style="margin-bottom:8px;font-size:10px;color:${th.colorText};line-height:1.5;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid ${th.colorBorder}">${escPdf(refHint)}</div>${extraEst}`;
+  }
+  let mapBlock = '';
+  const osmLinkRowPatrol = browseOsmUrl
+    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em ecrã completo (OpenStreetMap)</a></div>`
+    : '';
+  if (rasterMapInner) {
+    mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
+      ${osmLinkRowPatrol}
+      ${rasterMapInner}
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e pormenor, use «Abrir em ecrã completo». O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+    </div>`;
+  } else if (!p) {
+    mapBlock =
+      ref.length < 2 && (!tr || tr.length < 1)
+        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: a rota de despacho precisa de pontos ou registe o fim de deslocamento com trilha GPS.</div>`
+        : browseOsmUrl
+          ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45"><a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">Abrir no OpenStreetMap</a></div>`
+          : '';
+  } else if (p && browseOsmUrl) {
+    mapBlock = `<div style="margin-top:10px;padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;background:#f8fafc;font-size:10px;color:${th.colorMuted}">Sem coordenadas para gerar o mapa raster. <a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Ver no OpenStreetMap</a></div>`;
+  }
+  return `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(135deg,#fff7ed 0%,#fff 100%);box-sizing:border-box">
+      <div style="font-size:11px;font-weight:900;color:#9a3412;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <ion-icon name="git-network-outline" style="font-size:18px;color:#ea580c"></ion-icon>
+        ${escPdf(title)}
+        ${badge}
+      </div>
+      ${metricsBlock}
+      ${mapBlock}
+    </div>`;
 }
 
 function computeTransitSecondsFromEndpoints(startGPS, endGPS) {
@@ -2504,6 +3122,10 @@ function buildInfoTab(t) {
       <div class="report-field" style="grid-column:1/-1">
         <div class="report-field-label">N.º FT</div>
         <div class="report-field-value mono">${ftDisplay}</div>
+      </div>
+      <div class="report-field" style="grid-column:1/-1">
+        <div class="report-field-label">Local de atendimento</div>
+        <div class="report-field-value" style="line-height:1.45">${formatServiceLocationInnerHtml(t, escI)}</div>
       </div>
       <div class="report-field">
         <div class="report-field-label">Técnico Designado</div>
@@ -3342,8 +3964,89 @@ window.openDetail = function (id) {
 
 window.switchTab = switchTab;
 
+/**
+ * Espera pelas imagens dentro do nó (tiles OSM, fotos, mapas estáticos) antes de imprimir.
+ * Com apenas ~100 ms, o PDF captura grelhas vazias porque os pedidos HTTP ainda não terminaram.
+ */
+function waitForImagesInNode(root, options) {
+  var opts = options || {};
+  var perImgMs = opts.perImgMs != null ? opts.perImgMs : 20000;
+  var maxConcurrent = opts.maxConcurrent != null ? Math.max(1, Number(opts.maxConcurrent) || 1) : 8;
+  if (!root || !root.querySelectorAll) return Promise.resolve();
+  var imgs = Array.prototype.slice.call(root.querySelectorAll('img'));
+
+  function waitOne(img) {
+    var src = (img.getAttribute('src') || '').trim();
+    if (!src) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish() {
+        if (done) return;
+        done = true;
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onErr);
+        clearTimeout(tid);
+        resolve();
+      }
+      function afterDecode() {
+        if (img.decode) {
+          img.decode().then(finish).catch(finish);
+        } else {
+          finish();
+        }
+      }
+      function onLoad() {
+        afterDecode();
+      }
+      function onErr() {
+        finish();
+      }
+      var tid = setTimeout(finish, perImgMs);
+      if (img.complete) {
+        if (img.naturalWidth === 0) {
+          clearTimeout(tid);
+          resolve();
+          return;
+        }
+        afterDecode();
+        return;
+      }
+      img.addEventListener('load', onLoad);
+      img.addEventListener('error', onErr);
+    });
+  }
+
+  return new Promise(function (resolveOuter) {
+    var idx = 0;
+    var active = 0;
+    function maybeDone() {
+      if (active === 0 && idx >= imgs.length) resolveOuter();
+    }
+    function next() {
+      while (active < maxConcurrent && idx < imgs.length) {
+        var img = imgs[idx++];
+        active++;
+        waitOne(img).then(function () {
+          active--;
+          next();
+          maybeDone();
+        });
+      }
+    }
+    if (imgs.length === 0) {
+      resolveOuter();
+      return;
+    }
+    next();
+    maybeDone();
+  });
+}
+
 window.printReport = async function() {
-  if (!_currentTask) return;
+  if (!_currentTask) {
+    alert('Nenhuma atividade selecionada. Abra o detalhe de uma OS e tente novamente.');
+    return;
+  }
 
   const pdfBtn = document.getElementById('detail-pdf-btn');
   const prevPdfLabel = pdfBtn ? pdfBtn.innerHTML : '';
@@ -4230,6 +4933,7 @@ window.printReport = async function() {
        ${makeTransitCard(endGPS, "FIM DO DESLOCAMENTO", th.pillNoBg, "stop")}
     </div>
     ${speedBadgeHtml}
+    ${buildPatrolRoutePdfBlockOps(th, t, endGPS, escPdf)}
   `
     : '';
 
@@ -4360,7 +5064,8 @@ window.printReport = async function() {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${displayOsLabel(t)}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px">${(() => { const _lr = displayLastConcludedRevisionNumber(t); if (_lr <= 0) return '—'; if (_lr === 1) return '1 (inicial)'; return String(_lr); })()}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? Number(t.metadata.reopenCount) : '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.title||'—'}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local de atendimento</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${formatServiceLocationInnerHtml(t, escPdf)}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Título da OS</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${escPdf(t.title||'—')}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.description||'Não preenchido'}</div></div>
           <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.priority||'Normal'}</div></div>
           ${(t.metadata?.notes||t.metadata?.observation)?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed ${th.colorBorder}"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Observação</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${t.metadata?.notes||t.metadata?.observation}</div></div>`:''}
@@ -4550,8 +5255,26 @@ window.printReport = async function() {
   printEl.innerHTML =
     themeStyle +
     `<div class="pdf-theme-scope" style="font-family:${escAttr(th.fontFamily)};color:${escAttr(th.colorText)};font-size:${12 * th.fontScale}px;line-height:1.45">${orderedParts.join('')}</div>`;
-  
-  setTimeout(() => window.print(), 100);
+
+  await new Promise(function (resolve) {
+    requestAnimationFrame(function () {
+      waitForImagesInNode(printEl, { perImgMs: 15000, maxConcurrent: 2 })
+        .catch(function () {})
+        .then(function () {
+          return new Promise(function (r) {
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                setTimeout(r, 450);
+              });
+            });
+          });
+        })
+        .then(function () {
+          window.print();
+          resolve();
+        });
+    });
+  });
   } catch (pdfErr) {
     console.error('[PDF] Falha ao montar relatório:', pdfErr);
     alert('Não foi possível gerar o PDF.\n\n' + (pdfErr && pdfErr.message ? pdfErr.message : String(pdfErr)));

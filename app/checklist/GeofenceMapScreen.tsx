@@ -1,7 +1,7 @@
 /**
  * GeofenceMapScreen — Opção B
  * Full-screen map confirmation shown BEFORE the technician starts the checklist.
- * Shows zone/route + live position. Can block start if outside + failMode='block'.
+ * Shows zone/route + live position. Pode bloquear início se fora + failMode='block' (exceto tipo **rota**: só aviso, nunca bloqueia).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -112,7 +112,10 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       if (dist <= threshold) {
         setStatus('inside'); setStatusMsg(`DENTRO: Você está no trajeto correto (${dist}m da rota)`);
       } else {
-        setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m do trajeto (limite: ${threshold}m)`);
+        setStatus('outside');
+        setStatusMsg(
+          `AVISO: ~${dist} m do trajeto planeado (corredor ${threshold} m). Não bloqueia — pode iniciar; o percurso fica registado.`
+        );
       }
     } else if (zoneType === 'segment') {
       if (polygon.length >= 2) {
@@ -192,6 +195,11 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
   };
 
   const handleProceed = () => {
+    // Rota (KML): nunca bloquear — o cartão já mostra FORA/DENTRO; deslocamento regista patrulha no relatório.
+    if (zoneType === 'route') {
+      onProceed();
+      return;
+    }
     if (status === 'outside' && failMode === 'block') {
       Alert.alert('Acesso Bloqueado', 'Você precisa estar na área de serviço para iniciar esta OS.\n\n' + statusMsg);
       return;
@@ -206,7 +214,14 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
     onProceed();
   };
 
-  const statusColor = status === 'inside' ? '#16a34a' : status === 'outside' ? '#dc2626' : '#6b7280';
+  const statusColor =
+    status === 'inside'
+      ? '#16a34a'
+      : status === 'outside'
+        ? zoneType === 'route'
+          ? '#d97706'
+          : '#dc2626'
+        : '#6b7280';
 
   // Map region defaults
   const initialRegion = {
@@ -342,11 +357,21 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.btnStart, { backgroundColor: status === 'outside' && failMode === 'block' ? '#9ca3af' : '#f97316' }]}
+          style={[
+            styles.btnStart,
+            {
+              backgroundColor:
+                status === 'outside' && failMode === 'block' && zoneType !== 'route'
+                  ? '#9ca3af'
+                  : '#f97316',
+            },
+          ]}
           onPress={handleProceed}
         >
           <Text style={styles.btnStartText}>
-            {status === 'outside' && failMode === 'block' ? 'BLOQUEADO' : 'INICIAR OS'}
+            {status === 'outside' && failMode === 'block' && zoneType !== 'route'
+              ? 'BLOQUEADO'
+              : 'INICIAR OS'}
           </Text>
         </TouchableOpacity>
       </View>

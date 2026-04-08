@@ -6,6 +6,11 @@
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 import type { LocationObject } from 'expo-location';
+import {
+  computePatrolCompliance,
+  type PatrolComplianceResult,
+  type PatrolSample,
+} from './patrolRouteMetrics';
 
 export const ROUTE_TRACKING_TASK_NAME = 'brspark-route-tracking-v1';
 
@@ -18,6 +23,8 @@ export interface RouteUpdate {
   currentLat: number;
   currentLng: number;
   closestPointIndex: number;
+  /** Cobertura estimada da rota de referência (patrulha), % */
+  patrolCoveragePercent?: number;
 }
 
 type Listener = (data: any) => void;
@@ -34,6 +41,9 @@ class RouteTrackingService {
   private listeners: Map<string, Set<Listener>> = new Map();
 
   private traversedPath: number[][] = [];
+  private patrolSamples: PatrolSample[] = [];
+  private maxAccuracyMForPatrol = 55;
+  private lastPatrolComputeAt = 0;
 
   on(event: string, fn: Listener) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
@@ -97,6 +107,30 @@ class RouteTrackingService {
 
     this.traversedPath.push([lat, lng]);
 
+    const acc = loc.coords.accuracy;
+    const accOk =
+      acc == null ||
+      !Number.isFinite(acc) ||
+      acc <= this.maxAccuracyMForPatrol;
+    if (accOk) {
+      this.patrolSamples.push({
+        lat,
+        lng,
+        ...(Number.isFinite(acc as number) ? { accuracy: acc as number } : {}),
+      });
+    }
+
+    let patrolCoveragePercent: number | undefined;
+    const now = Date.now();
+    if (this.route.length >= 2 && now - this.lastPatrolComputeAt > 2500) {
+      this.lastPatrolComputeAt = now;
+      const pc = computePatrolCompliance(this.route, this.patrolSamples, {
+        toleranceM: this.deviationThreshold,
+        maxAccuracyM: this.maxAccuracyMForPatrol,
+      });
+      patrolCoveragePercent = pc.coveragePercent;
+    }
+
     const event: RouteEvent =
       progressPercent >= COMPLETE_THRESHOLD * 100
         ? 'ROUTE_COMPLETED'
@@ -111,6 +145,7 @@ class RouteTrackingService {
       currentLat: lat,
       currentLng: lng,
       closestPointIndex: idx,
+      ...(patrolCoveragePercent !== undefined ? { patrolCoveragePercent } : {}),
     };
 
     this.emit(event, update);
@@ -118,11 +153,19 @@ class RouteTrackingService {
     this.emit('traversed_update', this.traversedPath);
   }
 
-  async start(routeCoords: number[][], deviationThresholdMeters = DEFAULT_DEVIATION_M) {
+  async start(
+    routeCoords: number[][],
+    deviationThresholdMeters = DEFAULT_DEVIATION_M,
+    opts?: { maxAccuracyM?: number }
+  ) {
     if (this._active) await this.stop();
 
     this.route = routeCoords;
     this.traversedPath = [];
+    this.patrolSamples = [];
+    this.lastPatrolComputeAt = 0;
+    this.maxAccuracyMForPatrol =
+      opts?.maxAccuracyM != null && Number.isFinite(opts.maxAccuracyM) ? opts.maxAccuracyM : 55;
     this.deviationThreshold = deviationThresholdMeters;
     this.usingBackgroundTask = false;
 
@@ -141,7 +184,21 @@ class RouteTrackingService {
 
     try {
       const initLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      this.traversedPath.push([initLoc.coords.latitude, initLoc.coords.longitude]);
+      const ila = initLoc.coords.latitude;
+      const ilg = initLoc.coords.longitude;
+      this.traversedPath.push([ila, ilg]);
+      const iacc = initLoc.coords.accuracy;
+      if (
+        iacc == null ||
+        !Number.isFinite(iacc) ||
+        iacc <= this.maxAccuracyMForPatrol
+      ) {
+        this.patrolSamples.push({
+          lat: ila,
+          lng: ilg,
+          ...(Number.isFinite(iacc as number) ? { accuracy: iacc as number } : {}),
+        });
+      }
     } catch {
       /* ignore */
     }
@@ -210,6 +267,7 @@ class RouteTrackingService {
     }
     this.usingBackgroundTask = false;
     this.route = [];
+    this.patrolSamples = [];
   }
 
   pause() {
@@ -233,6 +291,22 @@ class RouteTrackingService {
   }
   getRouteLength() {
     return this.route.length;
+  }
+
+  getPatrolSamples(): PatrolSample[] {
+    return [...this.patrolSamples];
+  }
+
+  /** Relatório de patrulha (OS tipo rota) antes de `stop()`. */
+  getPatrolComplianceSnapshot(
+    reference: number[][],
+    toleranceM: number
+  ): PatrolComplianceResult | null {
+    if (!reference || reference.length < 2) return null;
+    return computePatrolCompliance(reference, this.patrolSamples, {
+      toleranceM,
+      maxAccuracyM: this.maxAccuracyMForPatrol,
+    });
   }
 }
 

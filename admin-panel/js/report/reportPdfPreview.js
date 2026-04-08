@@ -14,12 +14,14 @@ import {
   buildTransitDisplayMetrics,
   fmtDurationPtBr,
   transitPctDeltaVsPlanned,
+  normalizeTraversedPathForReport,
 } from './previewExecutionMetrics.js';
 import {
   collectSectionTimingRowsForPreview,
   buildPauseProductivityPdfFragment,
 } from './pdfStandardBlocks.js';
 import { buildPreviewPdfEntries } from './pdfPreviewFormEntries.js';
+import { formatServiceLocationInnerHtml } from './serviceLocationFormat.js';
 
 const esc = (s) =>
   String(s ?? '')
@@ -38,6 +40,8 @@ export const MOCK_PREVIEW_SCHEMA = [
   { id: 'q_obs', label: 'Observações', type: 'text' },
   { id: 'q_vazio', label: 'Campo opcional (vazio no exemplo)', type: 'text' },
   { id: 'ph_antes', label: 'Foto antes', type: 'photo' },
+  { id: 'tr_in', label: 'Início deslocamento', type: 'transit_start' },
+  { id: 'tr_out', label: 'Fim deslocamento', type: 'transit_end' },
 ];
 
 /** Dados de exemplo para o canvas */
@@ -61,7 +65,13 @@ export const MOCK_PREVIEW_TASK = {
   startedAt: new Date(Date.now() - 86400000 * 2 + 7200000),
   completedAt: new Date(Date.now() - 3600000),
   syncedAt: new Date(Date.now() - 1800000),
-  locationZoneType: 'point',
+  locationZoneType: 'route',
+  locationRadius: 100,
+  locationPolygon: [
+    [-23.561, -46.655],
+    [-23.562, -46.656],
+    [-23.5635, -46.6545],
+  ],
   locationAddress: 'Av. Paulista, 1000 — São Paulo',
   template: { title: 'Checklist manutenção predial' },
   responses: {
@@ -70,6 +80,39 @@ export const MOCK_PREVIEW_TASK = {
     q_ok: true,
     q_obs: 'Substituído filtro da unidade 12B.',
     ph_antes: ['https://placehold.co/400x240/e2e8f0/64748b?text=Foto+exemplo'],
+    tr_in: JSON.stringify({
+      action: 'SAIDA',
+      timestamp: new Date(Date.now() - 7200000).toISOString(),
+      address: 'Base operacional',
+      coordinates: { lat: -23.56, lng: -46.654 },
+    }),
+    tr_out: JSON.stringify({
+      action: 'CHEGADA',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      address: 'Linha de patrulha — término',
+      coordinates: { lat: -23.563, lng: -46.655 },
+      traversedPath: [
+        [-23.5608, -46.6548],
+        [-23.5615, -46.6555],
+        [-23.5625, -46.6558],
+        [-23.5632, -46.6552],
+      ],
+      actualMetrics: { durationSeconds: 3600, distanceMeters: 4200, pathPointCount: 4 },
+      patrolCompliance: {
+        version: 1,
+        coveragePercent: 87,
+        checkpointsTotal: 12,
+        checkpointsCovered: 10,
+        maxDeviationM: 62,
+        samplesUsed: 28,
+        samplesDiscardedAccuracy: 2,
+        referenceLengthM: 2100,
+        trajectoryLengthM: 1950,
+        trajectoryOnRouteM: 1680,
+        toleranceM: 100,
+        referenceFingerprint: 'r1_demo',
+      },
+    }),
   },
 };
 
@@ -173,6 +216,12 @@ function formatTransitPayloadHtml(o, th) {
   }
   if (Array.isArray(o.traversedPath) && o.traversedPath.length > 1) {
     html += `<div style="font-size:9px;color:${th.colorMutedLight};margin-top:8px">Percurso: ${o.traversedPath.length} pontos registados</div>`;
+  }
+  if (o.action === 'CHEGADA' && o.patrolCompliance && typeof o.patrolCompliance === 'object') {
+    const pc = o.patrolCompliance;
+    html += `<div style="margin-top:10px;padding:8px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:9px;line-height:1.5;color:#7c2d12">`;
+    html += `<strong>Patrulha de rota:</strong> cobertura ${esc(String(pc.coveragePercent ?? '—'))}% · desvio máx. ${esc(String(pc.maxDeviationM ?? '—'))} m (tol. ${esc(String(pc.toleranceM ?? '—'))} m)`;
+    html += `</div>`;
   }
   html += '</div>';
   return html;
@@ -582,6 +631,501 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
   return speedBadgeHtml;
 }
 
+function normalizePolygonVertexPdf(pt) {
+  if (!pt) return null;
+  if (Array.isArray(pt) && pt.length >= 2) {
+    const la = Number(pt[0]);
+    const ln = Number(pt[1]);
+    if (Number.isFinite(la) && Number.isFinite(ln)) return [la, ln];
+  }
+  if (typeof pt === 'object') {
+    const la = Number(pt.lat ?? pt.latitude);
+    const ln = Number(pt.lng ?? pt.lon ?? pt.longitude);
+    if (Number.isFinite(la) && Number.isFinite(ln)) return [la, ln];
+  }
+  return null;
+}
+
+function parseTaskRoutePolygonForPdf(t) {
+  const raw = t?.locationPolygon;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(normalizePolygonVertexPdf).filter(Boolean);
+  if (typeof raw === 'string') {
+    try {
+      const j = JSON.parse(raw);
+      return Array.isArray(j) ? j.map(normalizePolygonVertexPdf).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/** Reúne coordenadas [lat,lng] da referência e da trilha GPS. */
+function collectPatrolFlatCoords(refLatLng, traversedLatLng) {
+  const flat = [];
+  const pushArr = (arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach((c) => {
+      if (Array.isArray(c) && c.length >= 2) {
+        const la = Number(c[0]);
+        const ln = Number(c[1]);
+        if (Number.isFinite(la) && Number.isFinite(ln)) flat.push([la, ln]);
+      } else if (c && typeof c === 'object') {
+        const la = Number(c.lat ?? c.latitude);
+        const ln = Number(c.lng ?? c.lon ?? c.longitude);
+        if (Number.isFinite(la) && Number.isFinite(ln)) flat.push([la, ln]);
+      }
+    });
+  };
+  pushArr(refLatLng);
+  const tr = normalizeTraversedPathForReport(traversedLatLng);
+  if (tr) tr.forEach((p) => flat.push(p));
+  return flat;
+}
+
+function bboxFromLatLngListPdf(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for (const c of arr) {
+    let la;
+    let ln;
+    if (Array.isArray(c) && c.length >= 2) {
+      la = Number(c[0]);
+      ln = Number(c[1]);
+    } else if (c && typeof c === 'object') {
+      la = Number(c.lat ?? c.latitude);
+      ln = Number(c.lng ?? c.lon ?? c.longitude);
+    } else continue;
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) continue;
+    minLat = Math.min(minLat, la);
+    maxLat = Math.max(maxLat, la);
+    minLng = Math.min(minLng, ln);
+    maxLng = Math.max(maxLng, ln);
+  }
+  if (!Number.isFinite(minLat)) return null;
+  return {
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+    dlat: maxLat - minLat,
+    dlng: maxLng - minLng,
+  };
+}
+
+function unionBboxPdf(a, b) {
+  const minLat = Math.min(a.minLat, b.minLat);
+  const maxLat = Math.max(a.maxLat, b.maxLat);
+  const minLng = Math.min(a.minLng, b.minLng);
+  const maxLng = Math.max(a.maxLng, b.maxLng);
+  return { minLat, maxLat, minLng, maxLng, dlat: maxLat - minLat, dlng: maxLng - minLng };
+}
+
+/**
+ * Centro e extensão para o mapa 3×3: prioriza a trilha GPS. Se a referência for muito mais
+ * extensa que a trilha (ex.: polilinha de despacho com trechos longínquos), o zoom não fica
+ * destruído pela referência — alinhado ao que o técnico efetivamente percorreu.
+ */
+function patrolRasterFitBounds(refLatLng, traversedLatLng) {
+  const tr = normalizeTraversedPathForReport(traversedLatLng);
+  const trB = tr && tr.length >= 2 ? bboxFromLatLngListPdf(tr) : null;
+  const refB =
+    Array.isArray(refLatLng) && refLatLng.length >= 1 ? bboxFromLatLngListPdf(refLatLng) : null;
+
+  let b = null;
+  if (trB) {
+    const trSpan = Math.max(trB.dlat, trB.dlng);
+    const refSpan = refB ? Math.max(refB.dlat, refB.dlng) : 0;
+    if (refB && refSpan > trSpan * 4) {
+      b = trB;
+    } else if (refB) {
+      b = unionBboxPdf(trB, refB);
+    } else {
+      b = trB;
+    }
+  } else if (refB && refLatLng.length >= 2) {
+    b = refB;
+  } else {
+    const flat = collectPatrolFlatCoords(refLatLng, traversedLatLng);
+    if (flat.length === 0) return null;
+    b = bboxFromLatLngListPdf(flat);
+  }
+  if (!b) return null;
+
+  const pad = 1.24;
+  const clat = (b.minLat + b.maxLat) / 2;
+  const clng = (b.minLng + b.maxLng) / 2;
+  let dlat = (b.maxLat - b.minLat) * pad;
+  let dlng = (b.maxLng - b.minLng) * pad;
+  const minSpan = 0.00032;
+  dlat = Math.max(dlat, minSpan);
+  dlng = Math.max(dlng, minSpan);
+  return { clat, clng, dlat, dlng };
+}
+
+function pickPatrolOsmZoom(dlat, dlng) {
+  const d = Math.max(dlat > 0 ? dlat : 0.00025, dlng > 0 ? dlng : 0.00025);
+  let z;
+  if (d > 1.5) z = 9;
+  else if (d > 0.55) z = 10;
+  else if (d > 0.22) z = 11;
+  else if (d > 0.09) z = 12;
+  else if (d > 0.035) z = 13;
+  else if (d > 0.012) z = 14;
+  else if (d > 0.004) z = 15;
+  else z = 16;
+  return Math.min(18, z);
+}
+
+/** Tile XYZ (Slippy Map) — mesmos tiles que o site OSM. */
+function lngLatToOsmTile(lng, lat, z) {
+  const n = 2 ** z;
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  );
+  return { x, y, n };
+}
+
+function osmTileYToLatNorthEdge(ty, z) {
+  const n = 2 ** z;
+  const rad = Math.PI * (1 - (2 * ty) / n);
+  return (180 / Math.PI) * Math.atan(Math.sinh(rad));
+}
+
+function patrolDisplayedTileBounds(cx, cy, z) {
+  const n = 2 ** z;
+  const txs = [cx - 1, cx, cx + 1].map((t) => Math.max(0, Math.min(n - 1, t)));
+  const tys = [cy - 1, cy, cy + 1].map((t) => Math.max(0, Math.min(n - 1, t)));
+  const minTx = Math.min(...txs);
+  const maxTx = Math.max(...txs);
+  const minTy = Math.min(...tys);
+  const maxTy = Math.max(...tys);
+  return {
+    west: (minTx / n) * 360 - 180,
+    east: ((maxTx + 1) / n) * 360 - 180,
+    north: osmTileYToLatNorthEdge(minTy, z),
+    south: osmTileYToLatNorthEdge(maxTy + 1, z),
+  };
+}
+
+function mercYFromLat(lat) {
+  const rad = (lat * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+}
+
+function lngLatToSvgPercentFromBounds(lng, lat, b) {
+  const du = b.east - b.west;
+  if (!(du > 0)) return null;
+  const mercN = mercYFromLat(b.north);
+  const mercS = mercYFromLat(b.south);
+  const dv = mercN - mercS;
+  if (Math.abs(dv) < 1e-14) return null;
+  const merc = mercYFromLat(lat);
+  const u = ((lng - b.west) / du) * 100;
+  const v = ((mercN - merc) / dv) * 100;
+  if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+  return { u, v };
+}
+
+function coordsToSvgPolyline(coords, b) {
+  if (!Array.isArray(coords)) return '';
+  const parts = [];
+  for (const c of coords) {
+    if (!Array.isArray(c) || c.length < 2) continue;
+    const la = Number(c[0]);
+    const ln = Number(c[1]);
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) continue;
+    const p = lngLatToSvgPercentFromBounds(ln, la, b);
+    if (!p) continue;
+    parts.push(`${p.u.toFixed(2)},${p.v.toFixed(2)}`);
+  }
+  if (parts.length < 2) return '';
+  return parts.join(' ');
+}
+
+function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z) {
+  const b = patrolDisplayedTileBounds(cx, cy, z);
+  const refLine = coordsToSvgPolyline(refLatLng, b);
+  const trLine = coordsToSvgPolyline(traversedLatLng, b);
+  let markers = '';
+  if (Array.isArray(traversedLatLng) && traversedLatLng.length >= 1) {
+    const s = traversedLatLng[0];
+    const e = traversedLatLng[traversedLatLng.length - 1];
+    const ps = lngLatToSvgPercentFromBounds(Number(s[1]), Number(s[0]), b);
+    const pe = lngLatToSvgPercentFromBounds(Number(e[1]), Number(e[0]), b);
+    if (ps) {
+      markers += `<g transform="translate(${ps.u.toFixed(3)},${ps.v.toFixed(3)})"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#16a34a" stroke-width="0.5"/><path d="M -0.9 -1.05 L -0.9 1.05 L 1.2 0 Z" fill="#16a34a"/></g>`;
+    }
+    if (pe && traversedLatLng.length > 1) {
+      markers += `<g transform="translate(${pe.u.toFixed(3)},${pe.v.toFixed(3)})"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#dc2626" stroke-width="0.5"/><rect x="-0.95" y="-0.95" width="1.9" height="1.9" rx="0.28" fill="#dc2626"/></g>`;
+    }
+  }
+  if (!refLine && !trLine && !markers) return '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" aria-hidden="true">${
+    refLine
+      ? `<polyline fill="none" stroke="#ea580c" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="${refLine}"/>`
+      : ''
+  }${
+    trLine
+      ? `<polyline fill="none" stroke="#2563eb" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" points="${trLine}"/>`
+      : ''
+  }${markers}</svg>`;
+}
+
+/**
+ * Mapa raster 3×3 com tiles oficiais + SVG (rota / GPS) alinhado a Web Mercator.
+ * Política OSM: uso moderado; © na legenda.
+ */
+function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng) {
+  const fit = patrolRasterFitBounds(refLatLng, traversedLatLng);
+  if (!fit) return null;
+  const { clat, clng, dlat, dlng } = fit;
+  const z = pickPatrolOsmZoom(dlat, dlng);
+  const { x: cx, y: cy, n } = lngLatToOsmTile(clng, clat, z);
+  const imgs = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const tx = Math.max(0, Math.min(n - 1, cx + dx));
+      const ty = Math.max(0, Math.min(n - 1, cy + dy));
+      const src = `https://tile.openstreetmap.org/${z}/${tx}/${ty}.png`;
+      imgs.push(
+        `<img loading="eager" decoding="async" src="${escUrlAttr(src)}" alt="" width="256" height="256" style="width:33.333333%;height:auto;display:block;margin:0;padding:0;border:0;vertical-align:top;box-sizing:border-box" />`,
+      );
+    }
+  }
+  const overlay = buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z);
+  return `
+    <div style="position:relative;width:100%;border-bottom:1px solid ${th.colorBorder};background:#d9dde0;overflow:hidden">
+      <div style="display:flex;flex-wrap:wrap;width:100%;line-height:0;font-size:0">${imgs.join('')}</div>
+      ${overlay}
+    </div>
+    <div style="font-size:8px;color:${th.colorMuted};padding:6px 10px;background:#f1f5f9;line-height:1.4">
+      Laranja: referência · Azul: GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.
+    </div>`;
+}
+
+/** Abre OSM em novo separador (zoom centrado no mesmo enquadramento lógico do raster). */
+function buildOsmPatrolBrowseUrl(refLatLng, traversedLatLng) {
+  const fit = patrolRasterFitBounds(refLatLng, traversedLatLng);
+  if (!fit) return null;
+  const z = Math.min(19, pickPatrolOsmZoom(fit.dlat, fit.dlng) + 1);
+  return `https://www.openstreetmap.org/#map=${z}/${fit.clat.toFixed(6)}/${fit.clng.toFixed(6)}`;
+}
+
+function escUrlAttr(url) {
+  return String(url || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtPatrolDistanceMetersPdf(m) {
+  if (m === null || m === undefined) return '—';
+  const n = Number(m);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n >= 1000) return `${(n / 1000).toFixed(2)} km (${Math.round(n)} m)`;
+  return `${Math.round(n)} m`;
+}
+
+function haversineMetersPatrolPdf(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const a1 = Number(lat1);
+  const o1 = Number(lng1);
+  const a2 = Number(lat2);
+  const o2 = Number(lng2);
+  if (![a1, o1, a2, o2].every((x) => Number.isFinite(x))) return 0;
+  const dLat = toRad(a2 - a1);
+  const dLng = toRad(o2 - o1);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a1)) * Math.cos(toRad(a2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function projectPointOnPolylinePatrolPdf(lat, lng, ref) {
+  if (!ref || ref.length < 2) return { distM: Infinity };
+  let minDist = Infinity;
+  for (let i = 0; i < ref.length - 1; i++) {
+    const aL = Number(ref[i][0]);
+    const aG = Number(ref[i][1]);
+    const bL = Number(ref[i + 1][0]);
+    const bG = Number(ref[i + 1][1]);
+    if (![aL, aG, bL, bG].every((x) => Number.isFinite(x))) continue;
+    const dx = bG - aG;
+    const dy = bL - aL;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const pL = aL + t * dy;
+    const pG = aG + t * dx;
+    const d = haversineMetersPatrolPdf(lat, lng, pL, pG);
+    if (d < minDist) minDist = d;
+  }
+  return { distM: minDist };
+}
+
+/** Igual à app: soma segmentos da trilha cujo ponto médio está ≤ tolerância da referência. */
+function computeTrajectoryOnRouteMetersPatrolPdf(refLatLng, trLatLng, toleranceM) {
+  const tol = Math.max(5, Number(toleranceM) || 100);
+  const ref = (refLatLng || []).filter(
+    (p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(+p[0]) && Number.isFinite(+p[1]),
+  );
+  if (ref.length < 2 || !Array.isArray(trLatLng) || trLatLng.length < 2) return null;
+  let sum = 0;
+  for (let i = 1; i < trLatLng.length; i++) {
+    const a = trLatLng[i - 1];
+    const b = trLatLng[i];
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+    const la0 = Number(a[0]);
+    const ln0 = Number(a[1]);
+    const la1 = Number(b[0]);
+    const ln1 = Number(b[1]);
+    if (![la0, ln0, la1, ln1].every((x) => Number.isFinite(x))) continue;
+    const midLat = (la0 + la1) / 2;
+    const midLng = (ln0 + ln1) / 2;
+    const dm = projectPointOnPolylinePatrolPdf(midLat, midLng, ref).distM;
+    if (Number.isFinite(dm) && dm <= tol) {
+      sum += haversineMetersPatrolPdf(la0, ln0, la1, ln1);
+    }
+  }
+  return Math.round(sum);
+}
+
+function polylineLengthTraversedPdf(tr) {
+  if (!Array.isArray(tr) || tr.length < 2) return null;
+  let sum = 0;
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  for (let i = 1; i < tr.length; i++) {
+    const a = tr[i - 1];
+    const b = tr[i];
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) continue;
+    const la = Number(a[0]);
+    const ln = Number(a[1]);
+    const la2 = Number(b[0]);
+    const ln2 = Number(b[1]);
+    if (![la, ln, la2, ln2].every((x) => Number.isFinite(x))) continue;
+    const dLat = toRad(la2 - la);
+    const dLng = toRad(ln2 - ln);
+    const x =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(la)) * Math.cos(toRad(la2)) * Math.sin(dLng / 2) ** 2;
+    sum += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+  return sum > 0 ? sum : null;
+}
+
+/** Evidência de patrulha (OS tipo rota). Gera mesmo sem `patrolCompliance` (ex.: referência com &lt;2 pontos ou poucas amostras GPS). */
+function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
+  if (!task || task.locationZoneType !== 'route') return '';
+  const ref = parseTaskRoutePolygonForPdf(task);
+  const tr = endGPS ? normalizeTraversedPathForReport(endGPS.traversedPath) || [] : [];
+  if (!endGPS && ref.length < 2) return '';
+  const p =
+    endGPS && endGPS.patrolCompliance && typeof endGPS.patrolCompliance === 'object'
+      ? endGPS.patrolCompliance
+      : null;
+  const browseOsmUrl = buildOsmPatrolBrowseUrl(ref, tr);
+  const rasterMapInner = buildPatrolOsmRasterMapHtml(th, ref, tr);
+  const hrefAttr = (u) => String(u || '').replace(/"/g, '&quot;');
+  const tol =
+    task.locationRadius != null
+      ? String(task.locationRadius)
+      : p && p.toleranceM != null
+        ? String(p.toleranceM)
+        : '—';
+  const ok =
+    p && p.maxDeviationM != null && Number(p.toleranceM) > 0
+      ? Number(p.maxDeviationM) <= Number(p.toleranceM)
+      : null;
+  const badge =
+    ok === true
+      ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#dcfce7;color:#166534">Dentro do corredor (pior desvio ≤ tolerância)</span>`
+      : ok === false
+        ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#fee2e2;color:#991b1b">Desvio máximo acima da tolerância</span>`
+        : '';
+  const title =
+    p != null ? 'PATRULHA DE ROTA (certificação)' : 'PATRULHA DE ROTA (evidência)';
+  let metricsBlock = '';
+  if (p) {
+    const tolNum = Math.max(5, Number(p.toleranceM) || Number(task.locationRadius) || 100);
+    let onRouteMeters = p.trajectoryOnRouteM;
+    if (onRouteMeters === null || onRouteMeters === undefined || !Number.isFinite(Number(onRouteMeters))) {
+      onRouteMeters = computeTrajectoryOnRouteMetersPatrolPdf(ref, tr, tolNum);
+    } else {
+      onRouteMeters = Number(onRouteMeters);
+    }
+    const dTraj = esc(fmtPatrolDistanceMetersPdf(p.trajectoryLengthM));
+    const dOn = esc(fmtPatrolDistanceMetersPdf(onRouteMeters));
+    const dRef = esc(fmtPatrolDistanceMetersPdf(p.referenceLengthM));
+    metricsBlock = `
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-size:10px;color:${th.colorText}">
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Cobertura</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(String(p.coveragePercent ?? '—'))}%</div></div>
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Desvio máx.</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(String(p.maxDeviationM ?? '—'))} m</div></div>
+        <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Tolerância</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(tol)} m</div></div>
+      </div>
+      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a «distância no corredor ÷ referência».</div>
+      <div style="margin-top:10px;padding:10px 12px;background:#fffbea;border:1px solid #fde68a;border-radius:8px">
+        <div style="font-size:9px;font-weight:900;color:#9a3412;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Resumo do percurso</div>
+        <table style="width:100%;font-size:10px;color:${th.colorText};line-height:1.5;border-collapse:collapse">
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância percorrida <span style="font-size:8px">(trilha GPS, amostras válidas na app)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dTraj}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registo, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Comprimento da rota de referência</td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dRef}</td></tr>
+        </table>
+        <div style="margin-top:8px;font-size:8px;color:${th.colorMuted};line-height:1.4;border-top:1px solid ${th.colorBorder};padding-top:8px">
+          Pontos GPS válidos: ${esc(String(p.samplesUsed ?? '—'))}${p.samplesDiscardedAccuracy > 0 ? esc(` · Descartados (precisão): ${p.samplesDiscardedAccuracy}`) : ''}
+        </div>
+      </div>`;
+  } else {
+    const refHint =
+      ref.length < 2
+        ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+        : 'Não há métricas de patrulha neste registo (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+    const estLen = polylineLengthTraversedPdf(tr);
+    const extraEst =
+      estLen != null
+        ? `<div style="margin-top:8px;font-size:10px;color:${th.colorText};line-height:1.45"><strong>Distância percorrida (estimada, só pela trilha):</strong> ${esc(fmtPatrolDistanceMetersPdf(estLen))}</div>`
+        : '';
+    metricsBlock = `<div style="margin-bottom:8px;font-size:10px;color:${th.colorText};line-height:1.5;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid ${th.colorBorder}">${esc(refHint)}</div>${extraEst}`;
+  }
+  let mapBlock = '';
+  const osmLinkRow = browseOsmUrl
+    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em ecrã completo (OpenStreetMap)</a></div>`
+    : '';
+  if (rasterMapInner) {
+    mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
+      ${osmLinkRow}
+      ${rasterMapInner}
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e pormenor, use «Abrir em ecrã completo». O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+    </div>`;
+  } else if (!p) {
+    mapBlock =
+      ref.length < 2 && (!tr || tr.length < 1)
+        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: a rota de despacho precisa de pontos ou registe o fim de deslocamento com trilha GPS.</div>`
+        : browseOsmUrl
+          ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">Abrir no OpenStreetMap</a></div>`
+          : '';
+  } else if (p && browseOsmUrl) {
+    mapBlock = `<div style="margin-top:10px;padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;background:#f8fafc;font-size:10px;color:${th.colorMuted}">Sem coordenadas para gerar o mapa raster. <a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Ver no OpenStreetMap</a></div>`;
+  }
+  return `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(135deg,#fff7ed 0%,#fff 100%);box-sizing:border-box">
+      <div style="font-size:11px;font-weight:900;color:#9a3412;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <ion-icon name="git-network-outline" style="font-size:18px;color:#ea580c"></ion-icon>
+        ${esc(title)}
+        ${badge}
+      </div>
+      ${metricsBlock}
+      ${mapBlock}
+    </div>`;
+}
+
 const PDF_STATUS_BADGE = {
   PENDING: { bg: '#fef9c3', fg: '#854d0e', lab: 'Pendente' },
   RECEIVED: { bg: '#bfdbfe', fg: '#1e40af', lab: 'Aparelho Recebeu' },
@@ -937,7 +1481,8 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Nº OS</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px;font-family:monospace;word-break:break-all">${esc(displayOsLabel(t))}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Submissão indexada (última)</div><div style="font-size:10px;color:${th.colorText};font-weight:800;margin-top:1px">${esc(displayLastRevPreview(t))}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Reaberturas</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${Number(t.metadata?.reopenCount) > 0 ? esc(String(t.metadata.reopenCount)) : '—'}</div></div>
-          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local / Ativo</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.title || '—')}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Local de atendimento</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${formatServiceLocationInnerHtml(t, esc)}</div></div>
+          <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Título da OS</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.title || '—')}</div></div>
           <div style="margin-bottom:4px"><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Descrição</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.description || 'Não preenchido')}</div></div>
           <div><div style="font-size:8px;color:${th.colorMutedLight};font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Prioridade</div><div style="font-size:10px;color:${th.colorText};font-weight:600;margin-top:1px">${esc(t.metadata?.priority || 'Normal')}</div></div>
           ${obsBlockPdf}
@@ -1056,6 +1601,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
        ${makeTransitCardPreview(enPrev, 'FIM DO DESLOCAMENTO', th.pillNoBg, 'stop')}
     </div>
     ${buildSpeedBadgeHtmlPreview(stPrev, enPrev, t, th)}
+    ${buildPatrolRoutePdfBlockPreview(th, t, enPrev)}
   `
     : '';
 
@@ -1072,17 +1618,9 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     </div>`
     : '';
 
-  const piecePhoto =
-    m.photoGallery
-      ? `<div class="pdf-section-title" style="margin-top:35px; border-bottom:1px solid ${th.colorBorder}; padding-bottom:8px;">
-         <ion-icon name="camera-outline" style="font-size:20px; color:${th.photoAccent}"></ion-icon>
-         EVIDÊNCIAS FOTOGRÁFICAS
-      </div>
-      <div class="pdf-photo-grid" style="margin-top:12px">
-        <div class="pdf-photo-card"><div class="pdf-photo-title">Exemplo de galeria</div>
-        <img class="pdf-photo-img" src="https://placehold.co/400x180/e2e8f0/64748b?text=Galeria+PDF" alt="" /></div>
-      </div>`
-      : '';
+  // Fotos reais já entram em `pieceForm` quando `m.photoGallery` está ligado (como no PDF da Central).
+  // Não há secção separada com dados da API só para a galeria — o placeholder antigo confundia a pré-visualização.
+  const piecePhoto = '';
 
   const pieceFooter = m.footer
     ? `<div class="pdf-footer" style="margin-top:50px; border-top:1px solid ${th.colorBorder}; padding-top:15px; display:flex; justify-content:space-between; color:${th.colorMuted}; font-size:10px;">

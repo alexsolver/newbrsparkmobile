@@ -131,13 +131,22 @@
     },
     "status": {
       "MAINTENANCE OK": "Mantenimiento OK",
-      "INSURANCE RENEWAL SOON": "Seguro por Vencer"
-    }
+      "INSURANCE RENEWAL SOON": "Seguro por Vencer",
+      "OPERATIONAL": "Operativo",
+      "RENTED": "Alquilado",
+      "ACTIVE": "Activo",
+      "PAID": "Pagado",
+      "PENDING": "Pendiente"
+    },
+    "stockOk": "Stock correcto",
+    "stockLow": "Stock bajo"
   },
   "modules": {
     "title": "Módulos",
     "info": "Información",
     "infoSub": "Ficha General",
+    "media": "Medios",
+    "mediaSub": "Fotos y vídeos",
     "maintenance": "Mantenimiento",
     "maintenanceSub": "Workflow SOS",
     "costs": "Costos",
@@ -175,6 +184,7 @@
     "upcomingBills": "Próximos Vencimientos",
     "performanceByAsset": "Rendimiento por Bien",
     "installment": "Cuota",
+    "continuousInfinity": "Continuo (∞)",
     "removeRecurringBill": "¿Eliminar esta cuenta recurrente?",
     "dashboard": "Dashboard",
     "statement": "Extracto",
@@ -308,12 +318,6 @@
       "beverages": "Bebidas",
       "supplies": "Suministros"
     },
-    "movement": {
-      "IN": "Entrada",
-      "OUT": "Salida",
-      "ADJUST": "Ajuste",
-      "TRANSFER": "Transferencia"
-    },
     "units": {
       "un": "un",
       "lt": "lt",
@@ -325,7 +329,14 @@
       "gal": "gal",
       "ft": "ft"
     },
+    "movement": {
+      "IN": "Entrada",
+      "OUT": "Salida",
+      "ADJUST": "Ajuste",
+      "TRANSFER": "Transferencia"
+    },
     "targetLabel": "META",
+    "lastMovements": "MOVIMIENTOS RECIENTES",
     "fields": {
       "itemName": "NOMBRE DEL ARTÍCULO",
       "skuBarcode": "SKU / CÓDIGO BARRAS",
@@ -597,7 +608,10 @@
       "coverage": "Cobertura",
       "broker": "Corredor",
       "brokerPhone": "Tel. Corredor"
-    }
+    },
+    "insurerPlaceholder": "Ej.: Mapfre, Allianz…",
+    "policyPlaceholder": "Ej.: 041.23.456789-0",
+    "datePlaceholder": "AAAA-MM-DD"
   },
   "home": {
     "services": "Servicios",
@@ -616,6 +630,50 @@
     "noProviders": "Ningún proveedor encontrado",
     "activePortfolio": "Portafolio",
     "revisionBadge": "Revisión",
+    "nextAgenda": "Disponibilidad",
+    "sort": {
+      "open": "Ordenar",
+      "default": "Orden predeterminado",
+      "rating": "Valoración",
+      "agenda": "Disponibilidad",
+      "verified": "Verificados",
+      "distance": "Distancia",
+      "price": "Mejor relación calidad-precio"
+    },
+    "mock": {
+      "boatName": "Embarcación Brspark",
+      "beachHouse": "Casa de playa",
+      "p1": {
+        "name": "CoolTech HVAC | Central",
+        "next": "Mañana, 09:00",
+        "h1": "Mejor valorados"
+      },
+      "p2": {
+        "name": "EngVist Consulting | Siniestros",
+        "next": "25 mar, 14:00",
+        "h1": "Experto senior"
+      },
+      "p3": {
+        "name": "LimpClean Pro | Unidad sur",
+        "next": "Mañana, 08:30",
+        "h1": "Equipo propio"
+      },
+      "p4": {
+        "name": "Forte Security | Central 24h",
+        "next": "Hoy, 19:30",
+        "h1": "Respuesta inmediata"
+      },
+      "p5": {
+        "name": "Express Renovation | SP",
+        "next": "28 mar, 10:00",
+        "h1": "Pago en 12 plazos"
+      },
+      "p6": {
+        "name": "Electro Master | Instalación",
+        "next": "Hoy, 20:00",
+        "h1": "Certificado NR10"
+      }
+    },
     "serviceCategories": {
       "all": "Ver todos",
       "maintenance": "Mantenimiento",
@@ -638,6 +696,7 @@
     },
     "availableNow": "Disponible ahora",
     "providerDescription": "Descripción del proveedor",
+    "providerCardBio": "Especialista en reparaciones y mantenimiento preventivo con garantía de 90 días.",
     "topRated": "Mejor valorado",
     "verifiedProviders": "Proveedores verificados"
   },
@@ -654,9 +713,20 @@
     "noOrders": "No se encontraron pedidos",
     "noOrdersSub": "¡Solicite un servicio desde la pestaña Inicio!",
     "createAccountHint": "Cree una cuenta para solicitar servicios y seguir sus pedidos.",
-    "createOrLogin": "Crear Cuenta o Ingresar"
+    "createOrLogin": "Crear Cuenta o Ingresar",
+    "mock": {
+      "airSplit": "Mantenimiento de split",
+      "inspection": "Inspección de edificio",
+      "cleaning": "Limpieza residencial"
+    }
   },
   "assetDetail": {
+    "mock": {
+      "oilChange": "Mantenimiento de aceite y frenos",
+      "engineCalib": "Calibración del motor",
+      "twoDaysAgo": "Hace 2 días",
+      "march2026": "Marzo 2026"
+    },
     "addSubAsset": "Agregar Sub-bien",
     "addSubAssetMsg": "¿Cómo desea proceder?",
     "registerNew": "Registrar Nuevo",
@@ -683,6 +753,7 @@
     "fieldText": "Texto",
     "fieldNumber": "Número",
     "fieldBoolean": "Booleano S/N",
+    "photoDescription": "Descripción de la foto…",
     "addPhoto": "Agregar Fotografía",
     "addPhotoMsg": "¿Cómo desea insertar el archivo?",
     "qrExportFailed": "Error al exportar código QR.",
@@ -694,7 +765,6 @@
     "numericData": "Dato Numérico...",
     "freeTextData": "Dato Texto Libre...",
     "hierarchy": "Jerarquía",
-    "belongsTo": "Pertenece a",
     "linkParent": "Vincular Activo Padre",
     "selectParent": "Seleccione el activo padre:",
     "linkedToParent": "VINCULADO A PADRE",
@@ -741,11 +811,25 @@
     "noAssetsAvailable": "Ningún bien disponible para vincular.",
     "confirmLink": "Confirmar Vínculo",
     "confirmLinkMsg": "¿Desea que \"{{child}}\" sea un sub-bien de \"{{parent}}\"?",
+    "confirmParentLinkMsg": "¿Desea que «{{child}}» pase a ser sub-elemento de «{{parent}}»?",
     "linkBtn": "Vincular",
+    "linkParentTitle": "Vincular activo padre",
+    "assetTree": {
+      "title": "Relaciones entre activos",
+      "portfolioCount": "{{count}} activos en la cartera",
+      "legend": "Toca para ver detalles · Mantén para expandir/contraer",
+      "empty": "Sin activos registrados\nToca + para añadir",
+      "subAsset": "sub-activo",
+      "subAssets": "sub-activos"
+    },
     "hierarchyLink": "VÍNCULOS",
     "hierarchyLinkDetails": "Bien \"{{title}}\" vinculado como sub-bien.",
     "linkSuccess": "\"{{child}}\" ahora es un sub-bien de \"{{parent}}\".",
     "linkError": "Error al persistir vínculo.",
+    "unlinkConfirm": "¿Quitar el vínculo de «{{title}}»?",
+    "confirmReLinkMsg": "«{{child}}» ya está vinculado a «{{oldParent}}». ¿Cambiar el padre a «{{newParent}}»?",
+    "belongsTo": "Pertenece a",
+    "available": "Disponible para vincular",
     "registerExpense": "REGISTRAR GASTO EN BIEN",
     "whatWasPaid": "¿QUÉ SE PAGÓ?",
     "expensePlaceholder": "Ej: Reparación de Grifo",
@@ -810,12 +894,12 @@
     "frameworkDesc": "Seleccione la clase raíz para definir las propiedades heredadas del Activo.",
     "realEstate": "Inmueble",
     "realEstateSub": "Edificios, Terrenos",
-    "vehicle": "Vehículo",
-    "vehicleSub": "Flotas Ligeras/Pesadas",
-    "collection": "Patrimonio",
-    "collectionSub": "Muebles, TI",
-    "machine": "Máquina/Equipo",
-    "machineSub": "Industria, IoT",
+    "terrestrial": "Terrestre",
+    "terrestrialSub": "Coches, motos, camiones, máquinas",
+    "aquatic": "Acuático",
+    "aquaticSub": "Lanchas, motos de agua, veleros",
+    "special": "Especial",
+    "specialSub": "Colecciones, TI, aeronaves",
     "selectedCategory": "Categoría Seleccionada",
     "primaryInfo": "Información Primaria",
     "nameLabel": "Nombre / Etiqueta Principal",
@@ -1004,6 +1088,71 @@
       "contract": "Contrato",
       "certificate": "Certificado"
     }
+  },
+  "scanner": {
+    "title": "Sincronización física",
+    "description": "Para seguir activos en el mundo real con sellos digitales, BrSpark debe usar las lentes de su dispositivo.",
+    "enableBtn": "Activar lente óptica",
+    "backBtn": "Volver al panel",
+    "hint": "Acerque la etiqueta 👀",
+    "searching": "Buscando señal codificada…",
+    "error": {
+      "title": "Etiqueta invisible o fraude",
+      "message": "El equipo no aparece en la malla de datos corporativos y podría ser un objeto no autorizado.",
+      "continue": "Continuar patrulla",
+      "cancel": "Cancelar visión"
+    }
+  },
+  "media": {
+    "title": "Medios",
+    "addMedia": "Añadir medio",
+    "addBtn": "Añadir",
+    "chooseSource": "ELEGIR ORIGEN",
+    "cameraPhoto": "📷 Cámara — Foto",
+    "cameraVideo": "🎬 Cámara — Vídeo",
+    "gallery": "🖼️ Galería",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Describa este medio…",
+    "geoStamp": "Marcar geolocalización",
+    "geoStampSub": "Registra coordenadas y dirección",
+    "datetimeStamp": "Marcar fecha y hora",
+    "datetimeStampSub": "Registra el momento de la captura",
+    "tag": "Categoría",
+    "tagPlaceholder": "Seleccione una categoría",
+    "save": "GUARDAR MEDIO",
+    "emptyTitle": "Sin medios registrados",
+    "emptySubtitle": "Toca + para añadir fotos y vídeos con geolocalización y descripción.",
+    "deleteConfirm": "¿Eliminar este medio?",
+    "detectingGeo": "Detectando ubicación…",
+    "geoFailed": "No se pudo obtener la ubicación.",
+    "permDenied": "Permiso denegado para cámara o galería.",
+    "videoThumb": "🎬 Vídeo",
+    "tags": {
+      "BEFORE": "Antes",
+      "DURING": "Durante",
+      "AFTER": "Después",
+      "DAMAGE": "Daño",
+      "WARRANTY": "Garantía",
+      "OTHER": "Otro"
+    }
+  },
+  "checklistForm": {
+    "cameraUnavailableTitle": "Cámara no disponible",
+    "cameraUnavailableBody": "No se pudo abrir la cámara.",
+    "cameraSimulatorBody": "No se pudo abrir la cámara. ¿Está en un simulador?",
+    "addPhotoTitle": "Añadir foto",
+    "addPhotoMessage": "¿Importar foto desde?",
+    "cameraOption": "Cámara",
+    "galleryOption": "Galería",
+    "permissionCameraDenied": "Permiso de cámara denegado.",
+    "permissionVirtualCameraDenied": "Permiso denegado para la cámara virtual.",
+    "permissionNativeCameraDenied": "Permiso denegado para la cámara nativa.",
+    "permissionGalleryDenied": "Permiso de galería denegado.",
+    "galleryUnavailableTitle": "Galería no disponible",
+    "galleryUnavailableBody": "No se pudo abrir la galería.",
+    "mediaCaptureError": "Error general al capturar contenido.",
+    "hardwareSimulatorTitle": "Aviso de hardware",
+    "hardwareSimulatorBody": "En el simulador la captura puede fallar. En el móvil funciona con normalidad."
   },
   "pause": {
     "pickCategory": "Motivo de la pausa",

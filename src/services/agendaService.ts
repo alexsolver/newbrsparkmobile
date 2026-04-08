@@ -3,7 +3,7 @@ import { AuthService } from './auth';
 import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
-import { enqueueMutation } from './syncService';
+import { enqueueMutation, overlayExecutionStatusOutboxOnTasks } from './syncService';
 
 const KEY = (email: string) => AuthService.getUserKey('agenda_events', email);
 
@@ -63,9 +63,10 @@ export const AgendaService = {
       try { cloudData = JSON.parse(cloudStr); } catch(e){}
       
       if (Array.isArray(cloudData) && cloudData.length > 0) {
-         const cloudIds = new Set(cloudData.map(t => t.id));
+         const mergedCloud = await overlayExecutionStatusOutboxOnTasks(cloudData);
+         const cloudIds = new Set(mergedCloud.map(t => t.id));
          localEvents = localEvents.filter(e => !cloudIds.has(e.id));
-         localEvents = [...localEvents, ...cloudData];
+         localEvents = [...localEvents, ...mergedCloud];
       }
     } catch (err) {
       console.warn('Falha silenciosa ao ler cloud tasks do AsyncStorage:', err);

@@ -96,8 +96,11 @@
       border-radius: var(--radius);
       padding: 20px;
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 16px;
+    }
+    @media (min-width: 1200px) {
+      .details-panel { grid-template-columns: repeat(6, 1fr); }
     }
     .detail-box {
       background: var(--surface);
@@ -150,6 +153,9 @@
               </div>
             </div>
             
+            <p style="font-size:10px;color:var(--text3);line-height:1.35;margin:0 0 8px 0;padding:0 2px">
+              O filtro por data usa a hora em que o servidor recebeu o lote. Na lista e no mapa, a hora mostrada é a da <strong>coleta no dispositivo</strong> (GPS), quando o app a enviou.
+            </p>
             <div class="filter-group" style="margin-bottom: 0;">
               <label>Limitar</label>
               <select id="filter-limit">
@@ -185,6 +191,8 @@
             <div class="detail-box"><div class="detail-label">Bateria / Carga</div><div class="detail-val" id="det-bat">—</div></div>
             <div class="detail-box"><div class="detail-label">Rede</div><div class="detail-val" id="det-net">—</div></div>
             <div class="detail-box"><div class="detail-label">Precisão GPS</div><div class="detail-val" id="det-acc">—</div></div>
+            <div class="detail-box"><div class="detail-label">Hora da coleta (dispositivo)</div><div class="detail-val" id="det-ts-device" style="font-size:12px">—</div></div>
+            <div class="detail-box"><div class="detail-label">Hora de receção (servidor)</div><div class="detail-val" id="det-ts-server" style="font-size:12px">—</div></div>
           </div>
 
           <div class="map-container">
@@ -215,6 +223,16 @@ document.getElementById('filter-date-to').valueAsDate = new Date();
 let map = null;
 let polyline = null;
 let markers = [];
+
+/** Instante da coleta (GPS / relógio do dispositivo); fallback = receção no servidor. */
+function telemetryDisplayTime(ev) {
+  const raw = ev.deviceTimestamp || ev.serverTimestamp;
+  return raw ? new Date(raw) : new Date(0);
+}
+
+function sortEventsByCollectionTime(events) {
+  return [...events].sort((a, b) => telemetryDisplayTime(b) - telemetryDisplayTime(a));
+}
 let allEvents = [];
 let liveIntervalId = null;
 
@@ -280,14 +298,15 @@ window.loadTelemetry = async (isSilent = false) => {
       return;
     }
 
-    // Se é refresh silencioso e o banco não trouxe novidade (mesmo último evento lido e mesmo tamanho de cache), nao piscar a UI.
-    if (isSilent && allEvents.length > 0 && events.length === allEvents.length && events[0]?.id === allEvents[0]?.id) {
+    const sorted = sortEventsByCollectionTime(events);
+
+    // Refresh silencioso: evitar piscar se o “mais recente por coleta” e o tamanho forem iguais ao cache.
+    if (isSilent && allEvents.length > 0 && sorted.length === allEvents.length && sorted[0]?.id === allEvents[0]?.id) {
       return;
     }
-
-    allEvents = events;
-    renderList(events);
-    drawMap(events);
+    allEvents = sorted;
+    renderList(sorted);
+    drawMap(sorted);
   } catch (err) {
     if (!isSilent) listEl.innerHTML = `<li style="padding:20px;text-align:center;color:red">Erro: ${err.message}</li>`;
   }
@@ -296,7 +315,7 @@ window.loadTelemetry = async (isSilent = false) => {
 function renderList(events) {
   const listEl = document.getElementById('events-list');
   listEl.innerHTML = events.map((ev, i) => {
-    const time = new Date(ev.serverTimestamp).toLocaleTimeString('pt-BR');
+    const time = telemetryDisplayTime(ev).toLocaleTimeString('pt-BR');
     const typeCls = `evt-${ev.eventType}` || 'evt-HEARTBEAT';
     const bat = getBatteryHtml(ev.batteryLevel, ev.batteryCharging);
     const mockIcon = ev.isMockLocation ? '<ion-icon name="warning" style="color:#ef4444" title="Mock GPS Detectado"></ion-icon>' : '';
@@ -333,6 +352,20 @@ window.selectEvent = (idx) => {
   document.getElementById('det-bat').innerHTML = `${batLvl}${chgStr}`;
   
   document.getElementById('det-net').innerHTML = ev.networkType || 'Desconhecida';
+
+  const fmtTs = (iso) =>
+    iso
+      ? new Date(iso).toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      : '—';
+  document.getElementById('det-ts-device').textContent = fmtTs(ev.deviceTimestamp);
+  document.getElementById('det-ts-server').textContent = fmtTs(ev.serverTimestamp);
   
   let accHtml = ev.accuracy ? `${Math.round(ev.accuracy)} metros` : '—';
   if (ev.isMockLocation) accHtml = `<span class="detail-val alert"><ion-icon name="warning" style="vertical-align:-2px"></ion-icon> Mock GPS</span>`;
@@ -373,7 +406,7 @@ function drawMap(events) {
     });
 
     const m = L.marker([ev.lat, ev.lng], { icon: circleIcon, eventId: ev.id }).addTo(map);
-    const time = new Date(ev.serverTimestamp).toLocaleTimeString('pt-BR');
+    const time = telemetryDisplayTime(ev).toLocaleTimeString('pt-BR');
     
     m.bindPopup(`
       <div style="font-size:12px;font-family:Inter,sans-serif">
@@ -405,8 +438,22 @@ window.exportTelemetry = () => {
     return;
   }
   
-  const headers = ['Data Hora (UTC)', 'Evento', 'Precisao (m)', 'Mock GPS', 'Bateria (%)', 'Carregando', 'Rede', 'Dispositivo', 'OS', 'Latitude', 'Longitude'];
+  const headers = [
+    'Coleta UTC (dispositivo)',
+    'Rececao UTC (servidor)',
+    'Evento',
+    'Precisao (m)',
+    'Mock GPS',
+    'Bateria (%)',
+    'Carregando',
+    'Rede',
+    'Dispositivo',
+    'OS',
+    'Latitude',
+    'Longitude',
+  ];
   const rows = allEvents.map(ev => [
+    ev.deviceTimestamp ? new Date(ev.deviceTimestamp).toISOString() : '',
     new Date(ev.serverTimestamp).toISOString(),
     ev.eventType,
     ev.accuracy ?? '',

@@ -9,7 +9,9 @@
     "web": "expo start --web",
     "android:dev": "expo run:android",
     "ios:dev": "expo run:ios",
-    "prebuild": "expo prebuild --clean"
+    "prebuild": "expo prebuild --clean",
+    "i18n:check": "node scripts/i18n-validate.mjs",
+    "i18n:sync-es": "node scripts/i18n-sync-es.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

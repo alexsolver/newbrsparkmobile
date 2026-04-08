@@ -76,24 +76,41 @@ export default function GeofenceStatusBar({ task }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const check = async () => {
-    if (!task) { setStatus('no_zone'); setDetail('Sem zona definida nesta OS.'); return; }
-
-    const zoneType = task.locationZoneType;
-    if (!zoneType || zoneType === 'none' || zoneType === 'route') {
-      setStatus('no_zone'); setDetail('Sem validação da barra (Gerido por outros cards)'); return;
-    }
-
-    const { status: perm } = await Location.requestForegroundPermissionsAsync();
-    if (perm !== 'granted') { setStatus('unknown'); setDetail('Permissão de GPS negada.'); return; }
-
     try {
+      if (!task) {
+        setStatus('no_zone');
+        setDetail('Sem zona definida nesta OS.');
+        return;
+      }
+
+      const zoneType = task.locationZoneType;
+      if (!zoneType || zoneType === 'none' || zoneType === 'route') {
+        setStatus('no_zone');
+        setDetail('Sem validação da barra (Gerido por outros cards)');
+        return;
+      }
+
+      const { status: perm } = await Location.requestForegroundPermissionsAsync();
+      if (perm !== 'granted') {
+        setStatus('unknown');
+        setDetail('Permissão de GPS negada.');
+        return;
+      }
+
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude: lat, longitude: lng } = loc.coords;
 
       if (zoneType === 'radius') {
-        const destLat = task.locationLat!, destLng = task.locationLng!;
+        const destLat = task.locationLat!;
+        const destLng = task.locationLng!;
+        if (destLat == null || destLng == null || !Number.isFinite(Number(destLat)) || !Number.isFinite(Number(destLng))) {
+          setStatus('unknown');
+          setDetail('Coordenadas do local não definidas no despacho.');
+          setProgress(null);
+          return;
+        }
         const radius = task.locationRadius || 200;
-        const dist = Math.round(haversine(lat, lng, destLat, destLng));
+        const dist = Math.round(haversine(lat, lng, Number(destLat), Number(destLng)));
         const borderZone = Math.round(radius * 0.2); // 20% of radius = border zone
         if (dist <= radius) {
           const s: GeoStatus = dist >= radius - borderZone ? 'border' : 'inside';
@@ -104,13 +121,28 @@ export default function GeofenceStatusBar({ task }: Props) {
           setDetail(`FORA: da área · ${dist}m do local (raio: ${radius}m)`);
         }
         setProgress(null);
-
       } else if (zoneType === 'polygon') {
         const raw = task.locationPolygon;
-        const polygon: number[][] = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
-        const inside = pointInPolygon(lat, lng, polygon);
+        let polygon: number[][] = [];
+        if (typeof raw === 'string') {
+          try {
+            const p = JSON.parse(raw);
+            polygon = Array.isArray(p) ? p : [];
+          } catch {
+            polygon = [];
+          }
+        } else {
+          polygon = (raw || []) as number[][];
+        }
+        const inside = polygon.length >= 3 ? pointInPolygon(lat, lng, polygon) : false;
         setStatus(inside ? 'inside' : 'outside');
-        setDetail(inside ? 'DENTRO: da área de serviço' : 'FORA: do polígono de serviço');
+        setDetail(
+          polygon.length >= 3
+            ? inside
+              ? 'DENTRO: da área de serviço'
+              : 'FORA: do polígono de serviço'
+            : 'Polígono de serviço inválido ou vazio.',
+        );
         setProgress(null);
       }
     } catch {
@@ -120,8 +152,16 @@ export default function GeofenceStatusBar({ task }: Props) {
   };
 
   useEffect(() => {
-    check();
-    const timer = setInterval(check, 15000);
+    void check().catch(() => {
+      setStatus('unknown');
+      setDetail('GPS indisponível no momento.');
+    });
+    const timer = setInterval(() => {
+      void check().catch(() => {
+        setStatus('unknown');
+        setDetail('GPS indisponível no momento.');
+      });
+    }, 15000);
     return () => clearInterval(timer);
   }, [task]);
 
@@ -141,7 +181,16 @@ export default function GeofenceStatusBar({ task }: Props) {
 
   return (
     <View style={[styles.bar, { backgroundColor: bg, borderColor: border }]}>
-      <TouchableOpacity onPress={() => { setExpanded(e => !e); check(); }} activeOpacity={0.8}>
+      <TouchableOpacity
+        onPress={() => {
+          setExpanded((e) => !e);
+          void check().catch(() => {
+            setStatus('unknown');
+            setDetail('GPS indisponível no momento.');
+          });
+        }}
+        activeOpacity={0.8}
+      >
         <View style={styles.row}>
           <View style={[styles.dot, { backgroundColor: border }]} />
           <Text style={[styles.label, { color: text }]} numberOfLines={expanded ? 0 : 1}>{detail}</Text>

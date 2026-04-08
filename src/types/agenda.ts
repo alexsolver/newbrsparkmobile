@@ -19,6 +19,9 @@ export interface AgendaEvent {
   source: 'MANUAL' | 'COST' | 'INSURANCE' | 'CHECKLIST'; 
   refId?: string;         // Link to original Expense or Policy ID if it's aggregated
   ownerEmail: string;     // Must be multi-tenant safe
+
+  /** Tipo de local de atendimento (execução checklist na nuvem): radius, segment, route, polygon, none. */
+  locationZoneType?: string | null;
 }
 
 // Visual helpers for the UI mapping

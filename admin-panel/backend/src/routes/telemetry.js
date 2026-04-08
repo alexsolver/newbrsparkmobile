@@ -6,6 +6,21 @@ const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetry
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('../lib/osrmBaseUrl');
 const { osrmEtaMinutesMatchOrRoute } = require('../lib/osrmEta');
 
+/** Hora da amostra no dispositivo (GPS); se ausente, hora de receção no servidor. */
+function telemetrySampleTimeMs(row) {
+  const t = row && (row.deviceTimestamp || row.serverTimestamp);
+  return t ? new Date(t).getTime() : 0;
+}
+
+function sortTelemetryRowsChronologically(rows) {
+  return [...rows].sort((a, b) => telemetrySampleTimeMs(a) - telemetrySampleTimeMs(b));
+}
+
+function tracePointAt(row) {
+  const t = row.deviceTimestamp || row.serverTimestamp;
+  return t ? new Date(t) : null;
+}
+
 /** Sem GPS válido há N segundos → alerta para o técnico (notificação local no app). */
 const STALE_GPS_NOTIFY_SEC = Math.min(
   3600,
@@ -121,24 +136,30 @@ async function runEtaCron() {
       // Trace recente (cron) → OSRM Match com timestamps/radiuses/tidy; fallback Route no helper
       let traceRows = await prisma.telemetryEvent.findMany({
         where: { executionId: task.id, lat: { not: null }, lng: { not: null } },
-        orderBy: { serverTimestamp: 'desc' },
-        take: 18,
+        take: 200,
         select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
       });
-      traceRows.reverse();
+      traceRows = sortTelemetryRowsChronologically(traceRows);
+      traceRows = traceRows.slice(-18);
 
       if (traceRows.length === 0) {
-        const fallbackEv = await prisma.telemetryEvent.findFirst({
+        const fallbackList = await prisma.telemetryEvent.findMany({
           where: { ownerEmail: task.ownerEmail, lat: { not: null }, lng: { not: null } },
+          take: 50,
           orderBy: { serverTimestamp: 'desc' },
           select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
         });
+        const fallbackEv = fallbackList.reduce(
+          (best, r) => (!best || telemetrySampleTimeMs(r) > telemetrySampleTimeMs(best) ? r : best),
+          null,
+        );
         if (fallbackEv) traceRows = [fallbackEv];
       }
 
       if (traceRows.length === 0) continue;
 
-      const newestTs = traceRows[traceRows.length - 1].serverTimestamp;
+      const lastRow = traceRows[traceRows.length - 1];
+      const newestTs = lastRow ? lastRow.deviceTimestamp || lastRow.serverTimestamp : null;
       if (newestTs) {
         const ageMin = (Date.now() - new Date(newestTs).getTime()) / 60000;
         if (ageMin > 30) continue;
@@ -147,7 +168,7 @@ async function runEtaCron() {
       const trace = traceRows.map((row) => ({
         lat: row.lat,
         lng: row.lng,
-        at: row.serverTimestamp || row.deviceTimestamp || null,
+        at: tracePointAt(row),
       }));
 
       try {
@@ -322,15 +343,15 @@ router.post('/batch', async (req, res) => {
           if (task && (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && destLat && destLng && !meta.trackingPaused && !meta.trackingEndedAt) {
             let traceRows = await prisma.telemetryEvent.findMany({
               where: { executionId: execId, lat: { not: null }, lng: { not: null } },
-              orderBy: { serverTimestamp: 'desc' },
-              take: 18,
+              take: 200,
               select: { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true },
             });
-            traceRows.reverse();
+            traceRows = sortTelemetryRowsChronologically(traceRows);
+            traceRows = traceRows.slice(-18);
             const trace = traceRows.map((row) => ({
               lat: row.lat,
               lng: row.lng,
-              at: row.serverTimestamp || row.deviceTimestamp || null,
+              at: tracePointAt(row),
             }));
 
             try {

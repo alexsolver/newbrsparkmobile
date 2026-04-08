@@ -239,17 +239,17 @@ export default function AssetDetailScreen() {
   /** Prompt unsaved-changes dialog; if confirmed call onProceed */
   const showUnsavedAlert = (onProceed: () => void) => {
     Alert.alert(
-      t('assetDetail.unsavedTitle') || 'Alterações não salvas',
-      t('assetDetail.unsavedMsg') || 'Você tem alterações não salvas.',
+      t('assetDetail.unsavedTitle'),
+      t('assetDetail.unsavedMsg'),
       [
-        { text: t('assetDetail.keepEditing') || 'Continuar editando', style: 'cancel' },
+        { text: t('assetDetail.keepEditing'), style: 'cancel' },
         {
-          text: t('assetDetail.discardChanges') || 'Descartar',
+          text: t('assetDetail.discardChanges'),
           style: 'destructive',
           onPress: () => { setIsDirty(false); guardRef.current.isDirty = false; onProceed(); },
         },
         {
-          text: t('assetDetail.saveAndLeave') || 'Salvar e sair',
+          text: t('assetDetail.saveAndLeave'),
           onPress: () => handleSaveInfo(),
         },
       ]
@@ -804,11 +804,11 @@ export default function AssetDetailScreen() {
     guardRef.current.onSave = (isDirty && activeModule === 'info') ? handleSaveInfo : null;
     if (activeModule === 'info') {
       guardRef.current.labels = {
-        title: t('assetDetail.unsavedTitle') || 'Alterações não salvas',
-        msg: t('assetDetail.unsavedMsg') || 'Você tem alterações não salvas.',
-        keep: t('assetDetail.keepEditing') || 'Continuar editando',
-        discard: t('assetDetail.discardChanges') || 'Descartar',
-        save: t('assetDetail.saveAndLeave') || 'Salvar e sair',
+        title: t('assetDetail.unsavedTitle'),
+        msg: t('assetDetail.unsavedMsg'),
+        keep: t('assetDetail.keepEditing'),
+        discard: t('assetDetail.discardChanges'),
+        save: t('assetDetail.saveAndLeave'),
       };
     }
   }); // no dep array — runs every render, pure mutation, safe
@@ -1511,8 +1511,8 @@ export default function AssetDetailScreen() {
                               <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600', marginBottom: 8, textTransform: 'uppercase' }}>
                                 {r.category} · {r.frequency}
                                 {r.totalInstallments
-                                  ? ` · ${t('costs.installment') || 'Parcela'} ${(r.totalInstallments - (r.remainingInstallments || 0)) + 1} de ${r.totalInstallments}`
-                                  : ` · Contínuo (∞)`}
+                                  ? ` · ${t('costs.installment')} ${(r.totalInstallments - (r.remainingInstallments || 0)) + 1} de ${r.totalInstallments}`
+                                  : ` · ${t('costs.continuousInfinity')}`}
                               </Text>
 
                               {/* 3 — Data vencimento + urgência */}

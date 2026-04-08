@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -37,6 +38,8 @@ export type LocationPickPayloadV1 = {
   pin: { lat: number; lng: number };
   addressGps?: string;
   addressPin?: string;
+  /** true quando o técnico moveu o alfinete ou atualizou o GPS após uma confirmação — obriga confirmar outra vez. */
+  adjustmentPending?: boolean;
 };
 
 const DELTA = 0.004;
@@ -87,7 +90,10 @@ function parsePayload(raw: unknown): LocationPickPayloadV1 | null {
 }
 
 export function isLocationPickAnswerValid(raw: unknown): boolean {
-  return parsePayload(raw) != null;
+  const p = parsePayload(raw);
+  if (!p) return false;
+  if (p.adjustmentPending === true) return false;
+  return true;
 }
 
 async function reverseLabel(lat: number, lng: number): Promise<string | undefined> {
@@ -126,6 +132,8 @@ export function ChecklistLocationPickField({
   primaryColor,
   requireOnlineValidation = false,
 }: Props) {
+  const { height: windowH } = useWindowDimensions();
+  const mapHeight = useMemo(() => Math.round(Math.min(200, Math.max(120, windowH * 0.22))), [windowH]);
   const networkState = Network.useNetworkState();
   const offlineBlocked =
     requireOnlineValidation && !disabled && networkState.isConnected === false;
@@ -180,12 +188,41 @@ export function ChecklistLocationPickField({
     return () => clearTimeout(t);
   }, [region?.latitude, region?.longitude, region?.latitudeDelta, region?.longitudeDelta]);
 
-  const draftMatchesSaved = useMemo(() => {
+  /** Resposta aceite pelo checklist (inclui bloquear «Seguinte» com ajuste por confirmar). */
+  const hasConfirmedAnswer = useMemo(() => {
     if (!saved || !gps || !pin) return false;
+    if (saved.adjustmentPending === true) return false;
     return coordsMatchSaved(saved, gps, pin);
   }, [saved, gps, pin]);
 
-  const needsReconfirm = !!saved && !!gps && !!pin && !draftMatchesSaved;
+  const needsReconfirm = useMemo(() => {
+    if (!gps || !pin) return false;
+    if (!saved) return false;
+    return saved.adjustmentPending === true || !coordsMatchSaved(saved, gps, pin);
+  }, [saved, gps, pin]);
+
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const gpsRef = useRef(gps);
+  gpsRef.current = gps;
+
+  const pushAdjustmentPending = useCallback(
+    (nextGps: { lat: number; lng: number; accuracy?: number | null }, nextPin: { lat: number; lng: number }) => {
+      const s = parsePayload(valueRef.current);
+      if (!s) return;
+      const payload: LocationPickPayloadV1 = {
+        version: 1,
+        capturedAt: s.capturedAt,
+        gps: { lat: nextGps.lat, lng: nextGps.lng, accuracy: nextGps.accuracy ?? null },
+        pin: { lat: nextPin.lat, lng: nextPin.lng },
+        ...(s.addressGps ? { addressGps: s.addressGps } : {}),
+        ...(s.addressPin ? { addressPin: s.addressPin } : {}),
+        adjustmentPending: true,
+      };
+      onChange(JSON.stringify(payload));
+    },
+    [onChange],
+  );
 
   const captureGps = useCallback(async () => {
     if (disabled) return;
@@ -213,12 +250,13 @@ export function ChecklistLocationPickField({
         latitudeDelta: DELTA,
         longitudeDelta: DELTA,
       });
+      pushAdjustmentPending(g, { lat, lng });
     } catch (e: any) {
       Alert.alert('GPS', e?.message || 'Não foi possível obter a posição.');
     } finally {
       setLoadingGps(false);
     }
-  }, [disabled, requireOnlineValidation]);
+  }, [disabled, requireOnlineValidation, pushAdjustmentPending]);
 
   const confirmPick = useCallback(async () => {
     if (!gps || !pin || disabled) return;
@@ -267,9 +305,12 @@ export function ChecklistLocationPickField({
         if (!ok) return;
       }
       const { latitude, longitude } = e.nativeEvent.coordinate;
-      setPin({ lat: latitude, lng: longitude });
+      const newPin = { lat: latitude, lng: longitude };
+      setPin(newPin);
+      const g = gpsRef.current;
+      if (g) pushAdjustmentPending(g, newPin);
     },
-    [disabled, requireOnlineValidation]
+    [disabled, requireOnlineValidation, pushAdjustmentPending],
   );
 
   if (disabled && saved) {
@@ -327,22 +368,32 @@ export function ChecklistLocationPickField({
 
       {gps ? (
         <View style={styles.coordsBox}>
-          <Text style={styles.coordsLabel}>Coordenadas do GPS</Text>
-          <Text style={styles.coordsVal}>
-            {gps.lat.toFixed(6)}, {gps.lng.toFixed(6)}
-            {gps.accuracy != null ? ` · precisão ±${Math.round(gps.accuracy)} m` : ''}
-          </Text>
+          <View style={styles.coordsRow}>
+            <Text style={styles.coordsLabel}>GPS</Text>
+            <Text style={styles.coordsVal} numberOfLines={2}>
+              {gps.lat.toFixed(6)}, {gps.lng.toFixed(6)}
+              {gps.accuracy != null ? ` · ±${Math.round(gps.accuracy)}m` : ''}
+            </Text>
+          </View>
+          {pin ? (
+            <View style={[styles.coordsRow, styles.coordsRowDivider]}>
+              <Text style={styles.coordsLabel}>Alfinete</Text>
+              <Text style={styles.coordsVal} numberOfLines={2}>
+                {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : (
-        <Text style={styles.hint}>Primeiro obtenha o GPS. Depois ajuste o alfinete no mapa, se necessário.</Text>
+        <Text style={styles.hint}>Obtenha o GPS e, se precisar, ajuste o alfinete no mapa antes de confirmar.</Text>
       )}
 
       {region && pin ? (
         <>
           <Text style={styles.mapHint}>
-            {offlineBlocked ? 'Alfinete bloqueado sem internet.' : 'Arraste o alfinete para o ponto exato.'}
+            {offlineBlocked ? 'Alfinete bloqueado sem internet.' : 'Arraste o alfinete no mapa; depois confirme em baixo.'}
           </Text>
-          <View style={styles.mapContainer}>
+          <View style={[styles.mapContainer, { height: mapHeight }]}>
             <MapView
               ref={mapRef}
               style={StyleSheet.absoluteFill}
@@ -354,12 +405,6 @@ export function ChecklistLocationPickField({
                 onDragEnd={onDragEnd}
               />
             </MapView>
-          </View>
-          <View style={styles.coordsBox}>
-            <Text style={styles.coordsLabel}>Coordenadas do alfinete</Text>
-            <Text style={styles.coordsVal}>
-              {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
-            </Text>
           </View>
         </>
       ) : null}
@@ -373,21 +418,21 @@ export function ChecklistLocationPickField({
             <TouchableOpacity
               style={[
                 styles.btnPrimary,
-                draftMatchesSaved ? styles.btnPrimarySuccess : { backgroundColor: primaryColor },
+                hasConfirmedAnswer ? styles.btnPrimarySuccess : { backgroundColor: primaryColor },
                 offlineBlocked && styles.btnPrimaryMuted,
               ]}
               onPress={confirmPick}
-              disabled={disabled || offlineBlocked || draftMatchesSaved}
-              activeOpacity={draftMatchesSaved ? 1 : 0.85}
+              disabled={disabled || offlineBlocked || hasConfirmedAnswer}
+              activeOpacity={hasConfirmedAnswer ? 1 : 0.85}
             >
               <Ionicons
-                name={draftMatchesSaved ? 'checkmark-done' : 'checkmark-circle'}
+                name={hasConfirmedAnswer ? 'checkmark-done' : 'checkmark-circle'}
                 size={20}
                 color="#fff"
                 style={{ marginRight: 6 }}
               />
               <Text style={styles.btnPrimaryText}>
-                {draftMatchesSaved
+                {hasConfirmedAnswer
                   ? 'Localização confirmada'
                   : needsReconfirm
                     ? 'Confirmar novamente'
@@ -400,8 +445,8 @@ export function ChecklistLocationPickField({
               </TouchableOpacity>
             ) : null}
           </View>
-          {draftMatchesSaved && !disabled ? (
-            <Text style={styles.afterSaveHint}>Use Limpar se quiser alterar a localização guardada.</Text>
+          {hasConfirmedAnswer && !disabled ? (
+            <Text style={styles.afterSaveHint}>Use Limpar para voltar a definir a localização.</Text>
           ) : null}
         </View>
       ) : null}
@@ -410,7 +455,7 @@ export function ChecklistLocationPickField({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 10 },
+  wrap: { gap: 7 },
   onlineBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -433,17 +478,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 2,
     backgroundColor: '#f8fafc',
   },
-  btnGpsText: { fontSize: 15, fontWeight: '800' },
-  hint: { fontSize: 12, color: '#64748b', lineHeight: 17 },
-  mapHint: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  btnGpsText: { fontSize: 14, fontWeight: '800' },
+  hint: { fontSize: 11, color: '#64748b', lineHeight: 15 },
+  mapHint: { fontSize: 11, fontWeight: '700', color: '#0f172a', lineHeight: 15 },
   mapContainer: {
-    height: 240,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
@@ -452,20 +496,29 @@ const styles = StyleSheet.create({
   },
   coordsBox: {
     backgroundColor: '#f1f5f9',
-    padding: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    gap: 0,
   },
-  coordsLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 4 },
-  coordsVal: { fontSize: 13, color: '#0f172a', fontFamily: 'monospace' },
-  rowBtnsCol: { gap: 8 },
-  rowBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  coordsRow: { gap: 2 },
+  coordsRowDivider: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#cbd5e1',
+  },
+  coordsLabel: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase' },
+  coordsVal: { fontSize: 12, color: '#0f172a', fontFamily: 'monospace', lineHeight: 16 },
+  rowBtnsCol: { gap: 6 },
+  rowBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   btnPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 10,
     flexGrow: 1,
     justifyContent: 'center',
@@ -475,7 +528,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#15803d',
   },
-  btnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  btnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   btnGhost: { paddingVertical: 12, paddingHorizontal: 12 },
   btnGhostText: { color: '#dc2626', fontWeight: '700', fontSize: 14 },
   reconfirmHint: {

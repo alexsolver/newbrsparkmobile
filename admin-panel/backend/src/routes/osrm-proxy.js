@@ -111,11 +111,16 @@ async function fetchOsrmJson(url, timeoutMs) {
 
 /** Só Route (sem Match): percurso com vários waypoints — Match não serve para esta forma. */
 async function multiWaypointRouteGeometry(base, coordPath, timeoutMs) {
+  // Preferir overview=full no mapa: simplified omite vértices e a linha parece incompleta / “a cortar quarteirões”.
   const routeQs = [
-    'overview=simplified&geometries=polyline',
-    'overview=simplified&geometries=polyline6',
+    'overview=full&geometries=polyline&steps=true',
+    'overview=full&geometries=polyline6&steps=true',
     'overview=full&geometries=polyline',
     'overview=full&geometries=polyline6',
+    'overview=simplified&geometries=polyline&steps=true',
+    'overview=simplified&geometries=polyline6&steps=true',
+    'overview=simplified&geometries=polyline',
+    'overview=simplified&geometries=polyline6',
     'overview=simplified&geometries=geojson',
     'overview=full&geometries=geojson',
   ];
@@ -129,11 +134,16 @@ async function multiWaypointRouteGeometry(base, coordPath, timeoutMs) {
 
 async function drivingPolylineForPath(base, coordPath, timeoutMs) {
   const routeQs = [
-    'overview=simplified&geometries=polyline',
-    'overview=simplified&geometries=polyline6',
+    'overview=full&geometries=polyline&steps=true',
+    'overview=full&geometries=polyline6&steps=true',
     'overview=full&geometries=polyline',
     'overview=full&geometries=polyline6',
+    'overview=simplified&geometries=polyline&steps=true',
+    'overview=simplified&geometries=polyline6&steps=true',
+    'overview=simplified&geometries=polyline',
+    'overview=simplified&geometries=polyline6',
     'overview=simplified&geometries=geojson',
+    'overview=full&geometries=geojson',
   ];
   for (const q of routeQs) {
     const j = await fetchOsrmJson(`${base}/route/v1/driving/${coordPath}?${q}`, timeoutMs);
@@ -143,8 +153,10 @@ async function drivingPolylineForPath(base, coordPath, timeoutMs) {
   const t0 = Math.floor(Date.now() / 1000);
   const t1 = t0 + 120;
   const matchQs = [
-    `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=simplified&geometries=polyline`,
     `timestamps=${t0};${t1}&radiuses=200;200&tidy=false&overview=full&geometries=polyline`,
+    `timestamps=${t0};${t1}&radiuses=200;200&tidy=false&overview=full&geometries=polyline6`,
+    `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=full&geometries=polyline`,
+    `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=simplified&geometries=polyline`,
   ];
   for (const q of matchQs) {
     const j = await fetchOsrmJson(`${base}/match/v1/driving/${coordPath}?${q}`, timeoutMs);

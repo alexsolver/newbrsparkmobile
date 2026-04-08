@@ -36,6 +36,79 @@ let isSyncing = false;
 
 const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
 
+/** Prefixo das cópias locais do corpo da execução (respostas) — OS concluídas só devem persistir após visualização e com TTL curto. */
+const EXECUTION_CACHE_PREFIX = '@brspark_execution_';
+
+/**
+ * Tempo máximo que o técnico mantém no aparelho o corpo (respostas) de uma OS já concluída na nuvem,
+ * após a última visualização com download bem-sucedido.
+ */
+export const COMPLETED_BODY_LOCAL_TTL_MS = 2 * 60 * 60 * 1000;
+
+/** Alinhar a `EXEC_VIEW_ONLY_STATUSES` do checklist: só estas execuções são alvo de purge por TTL. */
+const TERMINAL_EXEC_CACHE_STATUSES = new Set([
+  'COMPLETED',
+  'SYNCED',
+  'CANCELLED',
+  'CANCELED',
+  'DONE',
+  'CLOSED',
+  'FINISHED',
+  'COMPLETE',
+  'ARCHIVED',
+]);
+
+/**
+ * Remove `@brspark_execution_*` de OS terminais na nuvem quando o download para visualização expirou
+ * ou nunca foi marcado (instalações antigas). Preserva: fila de submissão pendente e estados não terminais.
+ */
+export async function purgeExpiredCompletedExecutionCaches(): Promise<void> {
+  try {
+    const outboxRaw = await AsyncStorage.getItem('@brspark_outbox');
+    let outbox: unknown[] = [];
+    try {
+      outbox = outboxRaw ? JSON.parse(outboxRaw) : [];
+    } catch {
+      outbox = [];
+    }
+    if (!Array.isArray(outbox)) outbox = [];
+    const outboxTaskIds = new Set(
+      outbox.map((o: any) => (o?.taskId != null ? String(o.taskId) : '')).filter(Boolean)
+    );
+
+    const allKeys = await AsyncStorage.getAllKeys();
+    const execKeys = allKeys.filter((k) => k.startsWith(EXECUTION_CACHE_PREFIX));
+    const now = Date.now();
+
+    for (const key of execKeys) {
+      const id = key.slice(EXECUTION_CACHE_PREFIX.length);
+      if (!id || outboxTaskIds.has(id)) continue;
+
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) continue;
+
+      let obj: Record<string, unknown>;
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (!obj || typeof obj !== 'object') continue;
+
+      const st = String(obj.status || '').toUpperCase();
+      if (!TERMINAL_EXEC_CACHE_STATUSES.has(st)) continue;
+
+      const dl = Number(obj._technicianViewDownloadAt);
+      if (!Number.isFinite(dl) || now - dl > COMPLETED_BODY_LOCAL_TTL_MS) {
+        await AsyncStorage.removeItem(key);
+        console.log(`[SYNC] Cache de corpo concluído removido (expirado ou sem marcação): ${id}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] purgeExpiredCompletedExecutionCaches:', e);
+  }
+}
+
 export type ExecutionStatusPatchBody = Record<string, unknown>;
 
 /**
@@ -266,8 +339,19 @@ async function pushChecklistOutbox() {
        outbox = JSON.parse(raw);
        if (!Array.isArray(outbox)) outbox = [];
      } catch (parseErr) {
-       console.warn('[SYNC] Outbox corrompida, limpando para desbloquear fila...', parseErr);
-       await AsyncStorage.removeItem('@brspark_outbox');
+       const backupKey = `@brspark_outbox_corrupt_${Date.now()}`;
+       try {
+         await AsyncStorage.setItem(backupKey, raw);
+         await AsyncStorage.removeItem('@brspark_outbox');
+         console.error(
+           '[SYNC] Outbox JSON inválido — cópia em',
+           backupKey,
+           '; chave principal limpa para não bloquear sync (recuperar payload com suporte se necessário).',
+           parseErr
+         );
+       } catch (backupErr) {
+         console.error('[SYNC] Outbox corrompida e falha ao gravar backup:', backupErr, parseErr);
+       }
        return;
      }
 
@@ -671,7 +755,7 @@ function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): a
 }
 
 /** PATCH de execução ainda na fila (offline ou falha): deve vencer sobre o GET /tasks até sincronizar. */
-async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise<any[]> {
+export async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise<any[]> {
   try {
     const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
     let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
@@ -713,6 +797,37 @@ async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise<any[]>
     });
   } catch {
     return tasks;
+  }
+}
+
+/**
+ * IDs com último PATCH pendente IN_PROGRESS ou PAUSED (fila offline).
+ * Usado no dashboard para não perder a aba «Em andamento» quando o pull ainda não gravou o estado no cache.
+ */
+export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
+    try {
+      arr = raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+
+    const lastStatusByTask = new Map<string, string>();
+    for (const item of arr) {
+      if (!item?.taskId || !item.body) continue;
+      const st = String(item.body.status || '').toUpperCase();
+      if (st) lastStatusByTask.set(String(item.taskId), st);
+    }
+    const ids: string[] = [];
+    for (const [id, st] of lastStatusByTask) {
+      if (st === 'IN_PROGRESS' || st === 'PAUSED') ids.push(id);
+    }
+    return ids;
+  } catch {
+    return [];
   }
 }
 
@@ -879,6 +994,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         }
 
         await AsyncStorage.setItem('@brspark_pull_tasks_ever', '1');
+        await purgeExpiredCompletedExecutionCaches();
         console.log(`[pullTasks] 💾 Cache @brspark_cloud_tasks atualizado`);
     } else {
         const err = await res.text();

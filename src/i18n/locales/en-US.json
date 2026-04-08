@@ -184,6 +184,7 @@
     "upcomingBills": "Upcoming Bills",
     "performanceByAsset": "Performance by Property",
     "installment": "Installment",
+    "continuousInfinity": "Continuous (∞)",
     "removeRecurringBill": "Remove this recurring bill?",
     "dashboard": "Dashboard",
     "statement": "Statement",
@@ -631,6 +632,7 @@
     "revisionBadge": "Revision",
     "nextAgenda": "Availability",
     "sort": {
+      "open": "Sort",
       "default": "Default Sort",
       "rating": "Rating",
       "agenda": "Availability",
@@ -694,6 +696,7 @@
     },
     "availableNow": "Available now",
     "providerDescription": "Provider description",
+    "providerCardBio": "Repairs and preventive maintenance specialist with a 90-day warranty.",
     "topRated": "Top rated",
     "verifiedProviders": "Verified providers"
   },
@@ -1132,6 +1135,24 @@
       "WARRANTY": "Warranty",
       "OTHER": "Other"
     }
+  },
+  "checklistForm": {
+    "cameraUnavailableTitle": "Camera unavailable",
+    "cameraUnavailableBody": "Could not open the camera.",
+    "cameraSimulatorBody": "Could not open the camera. Are you using a simulator?",
+    "addPhotoTitle": "Add photo",
+    "addPhotoMessage": "Import photo from?",
+    "cameraOption": "Camera",
+    "galleryOption": "Gallery",
+    "permissionCameraDenied": "Camera permission denied.",
+    "permissionVirtualCameraDenied": "Virtual camera permission denied.",
+    "permissionNativeCameraDenied": "Native camera permission denied.",
+    "permissionGalleryDenied": "Gallery permission denied.",
+    "galleryUnavailableTitle": "Gallery unavailable",
+    "galleryUnavailableBody": "Could not open the gallery.",
+    "mediaCaptureError": "Something went wrong while capturing media.",
+    "hardwareSimulatorTitle": "Hardware notice",
+    "hardwareSimulatorBody": "Capture may fail in the simulator. On a phone it works normally."
   },
   "pause": {
     "pickCategory": "Pause reason",

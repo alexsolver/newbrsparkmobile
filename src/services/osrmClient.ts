@@ -296,6 +296,11 @@ function geometryFromRouteLikeItem(item: any): number[][] | null {
   return null;
 }
 
+function nearlySameLatLng(a: number[], b: number[]): boolean {
+  if (!a || !b || a.length < 2 || b.length < 2) return false;
+  return Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+}
+
 /** Quando `routes[0].geometry` vem vazio mas há `steps=true`, a geometria está por passo. */
 function mergeLegStepGeometries(routeItem: any): number[][] | null {
   const legs = routeItem?.legs;
@@ -312,7 +317,7 @@ function mergeLegStepGeometries(routeItem: any): number[][] | null {
       } else {
         const last = merged[merged.length - 1];
         const first = ring[0];
-        if (last[0] === first[0] && last[1] === first[1]) merged.push(...ring.slice(1));
+        if (nearlySameLatLng(last, first)) merged.push(...ring.slice(1));
         else merged.push(...ring);
       }
     }
@@ -457,13 +462,16 @@ export async function fetchDrivingGeometryLatLng(
     qLng: number
   ): Promise<number[][] | null> => {
     const path = `${oLng},${oLat};${qLng},${qLat}`;
+    // overview=full primeiro: simplified remove vértices e a linha no mapa fica “incompleta” ou rectilínea a mais.
     const routeAttempts: { suffix: string; t: number }[] = [
+      { suffix: 'overview=full&geometries=polyline&steps=true', t: polyTimeoutMs },
+      { suffix: 'overview=full&geometries=polyline6&steps=true', t: polyTimeoutMs },
+      { suffix: 'overview=full&geometries=polyline', t: polyTimeoutMs },
+      { suffix: 'overview=full&geometries=polyline6', t: polyTimeoutMs },
       { suffix: 'overview=simplified&geometries=polyline&steps=true', t: polyTimeoutMs },
       { suffix: 'overview=simplified&geometries=polyline6&steps=true', t: polyTimeoutMs },
       { suffix: 'overview=simplified&geometries=polyline', t: polyTimeoutMs },
       { suffix: 'overview=simplified&geometries=polyline6', t: polyTimeoutMs },
-      { suffix: 'overview=full&geometries=polyline', t: polyTimeoutMs },
-      { suffix: 'overview=full&geometries=polyline6', t: polyTimeoutMs },
       { suffix: 'overview=simplified&geometries=geojson', t: polyTimeoutMs },
       { suffix: 'overview=full&geometries=geojson', t: geojsonTimeoutMs },
     ];
@@ -476,15 +484,23 @@ export async function fetchDrivingGeometryLatLng(
     const t1 = t0 + 120;
     const matchAttempts: { q: string; t: number }[] = [
       {
+        q: `timestamps=${t0};${t1}&radiuses=200;200&tidy=false&overview=full&geometries=polyline`,
+        t: polyTimeoutMs,
+      },
+      {
+        q: `timestamps=${t0};${t1}&radiuses=200;200&tidy=false&overview=full&geometries=polyline6`,
+        t: polyTimeoutMs,
+      },
+      {
+        q: `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=full&geometries=polyline`,
+        t: polyTimeoutMs,
+      },
+      {
         q: `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=simplified&geometries=polyline`,
         t: polyTimeoutMs,
       },
       {
         q: `timestamps=${t0};${t1}&radiuses=unlimited;unlimited&tidy=false&overview=simplified&geometries=polyline6`,
-        t: polyTimeoutMs,
-      },
-      {
-        q: `timestamps=${t0};${t1}&radiuses=200;200&tidy=false&overview=full&geometries=polyline`,
         t: polyTimeoutMs,
       },
     ];
@@ -556,12 +572,14 @@ export async function fetchOsrmMultiWaypointLatLng(
   };
 
   const routeAttempts: { suffix: string; t: number }[] = [
+    { suffix: 'overview=full&geometries=polyline&steps=true', t: timeoutMs },
+    { suffix: 'overview=full&geometries=polyline6&steps=true', t: timeoutMs },
+    { suffix: 'overview=full&geometries=polyline', t: timeoutMs },
+    { suffix: 'overview=full&geometries=polyline6', t: timeoutMs },
     { suffix: 'overview=simplified&geometries=polyline&steps=true', t: timeoutMs },
     { suffix: 'overview=simplified&geometries=polyline6&steps=true', t: timeoutMs },
     { suffix: 'overview=simplified&geometries=polyline', t: timeoutMs },
     { suffix: 'overview=simplified&geometries=polyline6', t: timeoutMs },
-    { suffix: 'overview=full&geometries=polyline', t: timeoutMs },
-    { suffix: 'overview=full&geometries=polyline6', t: timeoutMs },
     { suffix: 'overview=simplified&geometries=geojson', t: timeoutMs },
     { suffix: 'overview=full&geometries=geojson', t: geojsonTimeoutMs },
   ];

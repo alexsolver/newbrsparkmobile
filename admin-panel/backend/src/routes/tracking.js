@@ -239,28 +239,36 @@ router.get('/:token', async (req, res) => {
     let currentLng = null;
     let gpsAge     = null;
     try {
-      const gpsSelect = { lat: true, lng: true, serverTimestamp: true };
+      const gpsSelect = { lat: true, lng: true, serverTimestamp: true, deviceTimestamp: true };
 
-      const evExec = await prisma.telemetryEvent.findFirst({
-        where: { executionId: exec.id, lat: { not: null }, lng: { not: null } },
-        orderBy: { serverTimestamp: 'desc' },
-        select: gpsSelect,
+      const pickLatestBySampleTime = async (where) => {
+        const rows = await prisma.telemetryEvent.findMany({
+          where,
+          take: 100,
+          orderBy: { serverTimestamp: 'desc' },
+          select: gpsSelect,
+        });
+        if (!rows.length) return null;
+        const sampleMs = (e) => new Date(e.deviceTimestamp || e.serverTimestamp).getTime();
+        return rows.reduce((best, r) => (sampleMs(r) > sampleMs(best) ? r : best));
+      };
+
+      const evExec = await pickLatestBySampleTime({
+        executionId: exec.id,
+        lat: { not: null },
+        lng: { not: null },
       });
 
-      const evOwnerLoose = await prisma.telemetryEvent.findFirst({
-        where: {
-          ownerEmail: exec.ownerEmail,
-          lat: { not: null },
-          lng: { not: null },
-          OR: [{ executionId: null }, { executionId: '' }],
-        },
-        orderBy: { serverTimestamp: 'desc' },
-        select: gpsSelect,
+      const evOwnerLoose = await pickLatestBySampleTime({
+        ownerEmail: exec.ownerEmail,
+        lat: { not: null },
+        lng: { not: null },
+        OR: [{ executionId: null }, { executionId: '' }],
       });
 
       const ageSec = (ev) =>
         ev
-          ? Math.round((Date.now() - new Date(ev.serverTimestamp).getTime()) / 1000)
+          ? Math.round((Date.now() - new Date(ev.deviceTimestamp || ev.serverTimestamp).getTime()) / 1000)
           : null;
 
       let ev = evExec;
@@ -272,7 +280,8 @@ router.get('/:token', async (req, res) => {
         } else if (
           execAge != null &&
           execAge > DISPLACEMENT_GPS_STALE_SEC &&
-          new Date(evOwnerLoose.serverTimestamp) > new Date(evExec.serverTimestamp)
+          new Date(evOwnerLoose.deviceTimestamp || evOwnerLoose.serverTimestamp) >
+            new Date(evExec.deviceTimestamp || evExec.serverTimestamp)
         ) {
           ev = evOwnerLoose;
         }

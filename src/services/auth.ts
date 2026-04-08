@@ -188,21 +188,30 @@ export class AuthService {
 
   /** Valida sessão no servidor (verifica se JWT ainda é válido) */
   static async validateSession(): Promise<User | null> {
-    try {
-      const res = await apiFetch('/api/me');
-      if (!res.ok) {
-        await AuthService.logout();
-        return null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await apiFetch('/api/me');
+        if (res.ok) {
+          const serverUser = (await res.json()) as User;
+          const prev = await AuthService.getUser();
+          const merged = await mergeServerUserWithLocalAvatar(prev, serverUser);
+          await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
+          return merged;
+        }
+        // Só invalidar sessão com 401 explícito — 5xx/timeout após reconexão não devem forçar novo login.
+        if (res.status === 401) {
+          await AuthService.logout();
+          return null;
+        }
+        console.warn(`[Auth] validateSession tentativa ${attempt + 1}/3 — HTTP ${res.status}`);
+      } catch (e) {
+        console.warn(`[Auth] validateSession tentativa ${attempt + 1}/3 — rede:`, e);
       }
-      const serverUser = (await res.json()) as User;
-      const prev = await AuthService.getUser();
-      const merged = await mergeServerUserWithLocalAvatar(prev, serverUser);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
-      return merged;
-    } catch {
-      // Sem internet — retorna o usuário local (modo offline)
-      return AuthService.getUser();
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
     }
+    return AuthService.getUser();
   }
 
   /** Exclusão de conta (LGPD) */

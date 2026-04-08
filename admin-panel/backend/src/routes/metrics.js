@@ -14,13 +14,17 @@ router.post('/calculate/:executionId', async (req, res) => {
     if (!execution) return res.status(404).json({ error: 'Execução não encontrada.' });
 
     // Busca eventos de telemetria desta execução
-    const events = await prisma.telemetryEvent.findMany({
+    const eventsRaw = await prisma.telemetryEvent.findMany({
       where: { executionId },
-      orderBy: { serverTimestamp: 'asc' },
     });
+    const sampleMs = (e) => new Date(e.deviceTimestamp || e.serverTimestamp).getTime();
+    const events = [...eventsRaw].sort((a, b) => sampleMs(a) - sampleMs(b));
 
-    // ── Cálculo de tempos ────────────────────────────────────────────────────
-    const getTs = (type) => events.find(e => e.eventType === type)?.serverTimestamp;
+    // ── Cálculo de tempos (instante da coleta no dispositivo quando existir) ──
+    const getTs = (type) => {
+      const e = events.find((ev) => ev.eventType === type);
+      return e ? e.deviceTimestamp || e.serverTimestamp : undefined;
+    };
     const diff  = (a, b) => a && b ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
 
     const transitStart = getTs('TRANSIT_START');
