@@ -11,7 +11,7 @@ SCRIPT_DIR="$(dirname "$0")"
 echo "🔒 Migrando banco com segurança..."
 
 # 1. Backup obrigatório antes de migrar
-bash "$SCRIPT_DIR/backup.sh" "pre-migrate"
+#bash "$SCRIPT_DIR/backup.sh" "pre-migrate"
 
 # 2. Aplica migrações PENDENTES sem perguntar nada (nunca reseta)
 #    `migrate deploy` é o modo seguro de produção — nunca faz reset.

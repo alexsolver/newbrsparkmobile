@@ -26,7 +26,7 @@ const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessári
 const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
 export const API_BASE = __DEV__
   ? `http://${MAC_IP}:${DEV_API_PORT}`
-  : 'https://api.brspark.com';           // produção (ajuste quando deployar)
+  : 'https://brsparks.wstrategy.com.br';           // produção (ajuste quando deployar)
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface User {
