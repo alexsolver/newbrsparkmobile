@@ -27,4 +27,8 @@ export type TechnicianFinanceEntry = {
    * desde que todas as OS do rateio estejam no telemóvel. Após guardar, volta a false.
    */
   financeValueUnlocked?: boolean;
+  /**
+   * Mesmo valor em todas as linhas de um rateio manual (estável após sync; o `id` por linha pode mudar).
+   */
+  splitGroupId?: string | null;
 };

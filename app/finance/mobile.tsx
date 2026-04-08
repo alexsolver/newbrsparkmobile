@@ -103,7 +103,7 @@ function OsLinkedDetailsBlock({
   );
 }
 
-/** Id de lote: `tech_fin_<ms>_<índice>_<random>` (createManual com várias OS). */
+/** Id de lote legado: `tech_fin_<ms>_<índice>_<random>` (quando ainda não havia `split_group_id`). */
 function manualExpenseSplitBatchKey(id: string): string | null {
   const parts = String(id).split('_');
   if (parts.length < 5) return null;
@@ -119,22 +119,87 @@ function baseDescriptionWithoutRateio(desc?: string): string {
   return desc.replace(/\s*\(rateio\s+\d+\s*\/\s*\d+\)\s*$/i, '').trim();
 }
 
+/** Índice da parte a partir da descrição «(rateio i/n)». */
+function rateioPartIndexFromDescription(desc?: string): number | null {
+  const m = String(desc || '').match(/\(rateio\s+(\d+)\s*\/\s*\d+\)\s*$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Agrupa linhas antigas/sincronizadas sem `splitGroupId` mas com texto de rateio e mesmo minuto + descrição base.
+ */
+function heuristicSplitBatchKey(e: TechnicianFinanceEntry, ownerEmail?: string): string | null {
+  if (e.source !== 'manual' || e.kind !== 'expense') return null;
+  const m = String(e.description || '').match(/\(rateio\s+\d+\s*\/\s*(\d+)\)\s*$/i);
+  if (!m) return null;
+  const totalParts = Number(m[1]);
+  if (!Number.isFinite(totalParts) || totalParts < 2) return null;
+  const base = baseDescriptionWithoutRateio(e.description);
+  const t = new Date(e.createdAt).getTime();
+  if (!Number.isFinite(t)) return null;
+  const minute = Math.floor(t / 60000);
+  const own = String(ownerEmail || '').trim().toLowerCase();
+  return `heur:${own}:${minute}:${totalParts}:${base.slice(0, 200)}`;
+}
+
+function sortManualSplitParts(arr: TechnicianFinanceEntry[]) {
+  arr.sort((a, b) => {
+    const ia = rateioPartIndexFromDescription(a.description);
+    const ib = rateioPartIndexFromDescription(b.description);
+    if (ia != null && ib != null && ia !== ib) return ia - ib;
+    const pa = String(a.id).split('_');
+    const pb = String(b.id).split('_');
+    const na = Number(pa[3]);
+    const nb = Number(pb[3]);
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    return String(a.taskId || '').localeCompare(String(b.taskId || ''));
+  });
+}
+
 type FinanceListRow =
   | { kind: 'single'; entry: TechnicianFinanceEntry }
   | { kind: 'split'; groupId: string; parts: TechnicianFinanceEntry[] };
 
-function buildFinanceListRows(entries: TechnicianFinanceEntry[]): FinanceListRow[] {
+function buildFinanceListRows(entries: TechnicianFinanceEntry[], ownerEmail?: string): FinanceListRow[] {
   const splitMap = new Map<string, TechnicianFinanceEntry[]>();
   const consumed = new Set<string>();
 
+  const addToSplit = (key: string, e: TechnicianFinanceEntry) => {
+    const arr = splitMap.get(key) || [];
+    arr.push(e);
+    splitMap.set(key, arr);
+    consumed.add(e.id);
+  };
+
   for (const e of entries) {
     if (e.source !== 'manual' || e.kind !== 'expense') continue;
-    const k = manualExpenseSplitBatchKey(e.id);
-    if (!k) continue;
-    const arr = splitMap.get(k) || [];
+    const gid = e.splitGroupId != null ? String(e.splitGroupId).trim() : '';
+    if (gid) {
+      addToSplit(`gid:${gid}`, e);
+      continue;
+    }
+    const bk = manualExpenseSplitBatchKey(e.id);
+    if (bk) {
+      addToSplit(bk, e);
+    }
+  }
+
+  const heurBuckets = new Map<string, TechnicianFinanceEntry[]>();
+  for (const e of entries) {
+    if (consumed.has(e.id)) continue;
+    if (e.source !== 'manual' || e.kind !== 'expense') continue;
+    const hk = heuristicSplitBatchKey(e, ownerEmail);
+    if (!hk) continue;
+    const arr = heurBuckets.get(hk) || [];
     arr.push(e);
-    splitMap.set(k, arr);
-    consumed.add(e.id);
+    heurBuckets.set(hk, arr);
+  }
+  for (const [hk, arr] of heurBuckets) {
+    if (arr.length < 2) continue;
+    splitMap.set(hk, arr);
+    for (const x of arr) consumed.add(x.id);
   }
 
   const rows: FinanceListRow[] = [];
@@ -145,11 +210,7 @@ function buildFinanceListRows(entries: TechnicianFinanceEntry[]): FinanceListRow
   }
 
   for (const [k, arr] of splitMap) {
-    arr.sort((a, b) => {
-      const pa = String(a.id).split('_');
-      const pb = String(b.id).split('_');
-      return (Number(pa[3]) || 0) - (Number(pb[3]) || 0);
-    });
+    sortManualSplitParts(arr);
     if (arr.length > 1) {
       rows.push({ kind: 'split', groupId: k, parts: arr });
     } else if (arr.length === 1) {
@@ -217,8 +278,8 @@ export default function TechnicianFinanceScreen() {
 
   const listRows = useMemo(() => {
     const base = filter === 'all' ? items : items.filter((x) => x.kind === filter);
-    return buildFinanceListRows(base);
-  }, [items, filter]);
+    return buildFinanceListRows(base, user?.email);
+  }, [items, filter, user?.email]);
 
   const totals = useMemo(() => {
     let exp = 0;
@@ -261,13 +322,17 @@ export default function TechnicianFinanceScreen() {
             <View style={[styles.badge, { backgroundColor: '#fee2e2' }]}>
               <Text style={styles.badgeTxt}>Despesa</Text>
             </View>
-            <Text style={styles.amt}>{formatBrl(total)}</Text>
+            <View style={styles.totalBlock}>
+              <Text style={styles.totalLbl}>Total</Text>
+              <Text style={styles.amt}>{formatBrl(total)}</Text>
+            </View>
           </View>
           <Text style={styles.desc} numberOfLines={2}>
             {title}
           </Text>
-          <View style={styles.splitBox}>
-            <Text style={styles.splitBoxTitle}>Rateio entre {parts.length} OS</Text>
+          <View style={styles.detailsSection}>
+            <Text style={styles.detailsSectionTitle}>Detalhes do rateio</Text>
+            <Text style={styles.detailsSectionSub}>{parts.length} OS · valor por ordem abaixo</Text>
             {parts.map((p, si) => {
               const tid = p.taskId ? String(p.taskId) : '';
               if (!tid) {
@@ -346,7 +411,14 @@ export default function TechnicianFinanceScreen() {
           >
             <Text style={styles.badgeTxt}>{item.kind === 'revenue' ? 'Receita' : 'Despesa'}</Text>
           </View>
-          <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
+          {item.kind === 'expense' ? (
+            <View style={styles.totalBlock}>
+              <Text style={styles.totalLbl}>Total</Text>
+              <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
+            </View>
+          ) : (
+            <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
+          )}
         </View>
         {item.description ? (
           <Text style={styles.desc} numberOfLines={3}>
@@ -354,12 +426,17 @@ export default function TechnicianFinanceScreen() {
           </Text>
         ) : null}
         {hasOs ? (
-          <View style={styles.osDetailsWrap}>
-            {osIds.map((tid, oi) => (
-              <View key={tid} style={{ marginBottom: oi === osIds.length - 1 ? 0 : 10 }}>
-                <OsLinkedDetailsBlock taskId={tid} taskById={taskById} />
-              </View>
-            ))}
+          <View style={styles.detailsSection}>
+            <Text style={styles.detailsSectionTitle}>
+              {osIds.length > 1 ? 'Detalhes (OS ligadas)' : 'Detalhes da OS'}
+            </Text>
+            <View style={styles.osDetailsWrap}>
+              {osIds.map((tid, oi) => (
+                <View key={tid} style={{ marginBottom: oi === osIds.length - 1 ? 0 : 10 }}>
+                  <OsLinkedDetailsBlock taskId={tid} taskById={taskById} />
+                </View>
+              ))}
+            </View>
           </View>
         ) : null}
         {item.attachments && item.attachments.length > 0 ? (
@@ -546,7 +623,16 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeTxt: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
-  amt: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
+  totalBlock: { alignItems: 'flex-end' },
+  totalLbl: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  amt: { fontSize: 20, fontWeight: '900', color: '#0f172a' },
   desc: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 20 },
   osDetailsWrap: { marginTop: 10 },
   osDetailCard: {
@@ -568,23 +654,27 @@ const styles = StyleSheet.create({
   osDetailLine: { fontSize: 12, color: '#475569', lineHeight: 17, marginTop: 4 },
   osDetailLbl: { fontWeight: '700', color: '#64748b' },
   osDetailMissing: { fontSize: 11, color: '#94a3b8', fontStyle: 'italic', marginTop: 4 },
-  splitBox: {
-    marginTop: 10,
-    padding: 10,
+  detailsSection: {
+    marginTop: 12,
+    padding: 12,
     backgroundColor: '#f8fafc',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  splitBoxTitle: {
-    fontSize: 11,
+  detailsSectionTitle: {
+    fontSize: 12,
     fontWeight: '800',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 8,
+    color: '#475569',
+    marginBottom: 4,
   },
-  splitLineAmt: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  detailsSectionSub: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  splitLineAmt: { fontSize: 13, fontWeight: '800', color: '#0f172a', paddingVertical: 4 },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   attachMeta: { fontSize: 12, color: '#64748b', fontWeight: '700' },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, flexWrap: 'wrap' },

@@ -3713,6 +3713,17 @@ export default function ChecklistEngine() {
             ? parseInt(String(currentTask?.locationRadius ?? '100'), 10) || 100
             : undefined;
 
+        let transitStartedAtIso: string | null = null;
+        if (startVal != null && String(startVal).trim() !== '') {
+          try {
+            const o = typeof startVal === 'string' ? JSON.parse(startVal) : startVal;
+            const ts = o?.timestamp;
+            if (typeof ts === 'string' && ts.trim()) transitStartedAtIso = ts.trim();
+          } catch {
+            /* ignore */
+          }
+        }
+
         return <LiveRouteMapCard 
                   route={routeCoords} 
                   visible={isVisible}
@@ -3724,6 +3735,7 @@ export default function ChecklistEngine() {
                       : undefined
                   }
                   etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
+                  transitStartedAtIso={transitStartedAtIso}
                   taskId={resolvedTaskId || undefined}
                   endTransitLoading={endField ? gpsBusyFieldId === endField.id : false}
                   onEndTransit={endField ? async () => {

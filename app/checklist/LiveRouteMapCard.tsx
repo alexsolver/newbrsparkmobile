@@ -50,6 +50,8 @@ interface Props {
   /** Destino explícito; pode omitir se `route` tiver pontos (o mapa usa o último vértice). */
   targetLoc?: { lat?: number | null; lng?: number | null };
   etaMinutes?: number | null;
+  /** ISO do `transit_start` (campo SAÍDA) — para mostrar tempo em deslocamento quando não há ETA. */
+  transitStartedAtIso?: string | null;
   onEndTransit?: () => void | Promise<void>;
   /** Enquanto o checklist corre `handleTransit` (GPS) para o fim de deslocamento. */
   endTransitLoading?: boolean;
@@ -196,50 +198,71 @@ const HEADING_SMOOTH_FACTOR = 0.34;
 const NAV_FOLLOW_ZOOM = 17;
 const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
 
+function formatElapsedSinceTransitPt(isoStart: string): string {
+  const t0 = Date.parse(isoStart);
+  if (!Number.isFinite(t0)) return '';
+  const sec = Math.max(0, Math.floor((Date.now() - t0) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `Em deslocamento há ${h} h${m > 0 ? ` ${m} min` : ''}`;
+  if (m > 0) return `Em deslocamento há ${m} min`;
+  return 'Deslocamento acabou de iniciar';
+}
+
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
 function EtaBadge({
   etaMinutes,
   pct,
   hint,
+  noDestination,
+  transitElapsedLabel,
 }: {
   etaMinutes: number | null | undefined;
   pct: number;
   hint?: string | null;
+  /** Não há ponto de chegada para OSRM — não mostrar «Calculando...». */
+  noDestination?: boolean;
+  transitElapsedLabel?: string | null;
 }) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (noDestination) return;
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.8, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [noDestination]);
 
   const hasNum = typeof etaMinutes === 'number' && Number.isFinite(etaMinutes);
-  const waiting = !hasNum;
+  const waiting = !hasNum && !hint && !noDestination;
   let timeStr = 'Calculando...';
   if (hasNum) {
     const hours = Math.floor(etaMinutes as number / 60);
     const mins = (etaMinutes as number) % 60;
     timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
+  } else if (noDestination) {
+    timeStr = 'ETA indisponível';
   } else if (hint) {
     timeStr = hint;
   }
 
   return (
-    <View style={etaStyles.wrapper} pointerEvents="none">
+    <View style={[etaStyles.wrapper, noDestination && etaStyles.wrapperWide]} pointerEvents="none">
       <LinearGradient
         colors={['#f97316', '#ea580c']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={etaStyles.gradient}
+        style={[etaStyles.gradient, noDestination && etaStyles.gradientWide]}
       >
         {/* Top Row: live dot + label */}
         <View style={etaStyles.topRow}>
           <View style={etaStyles.dotWrapper}>
-            <Animated.View style={[etaStyles.pulseDot, { transform: [{ scale: pulse }] }]} />
+            {!noDestination ? (
+              <Animated.View style={[etaStyles.pulseDot, { transform: [{ scale: pulse }] }]} />
+            ) : null}
             <View style={etaStyles.dot} />
           </View>
           <Text style={etaStyles.label}>EM ROTA</Text>
@@ -247,12 +270,20 @@ function EtaBadge({
         </View>
 
         {/* Main time display */}
-        <Text style={etaStyles.time}>{timeStr}</Text>
+        <Text style={[etaStyles.time, noDestination && etaStyles.timeCompact]}>{timeStr}</Text>
 
-        {!waiting && <Text style={etaStyles.sub}>tempo estimado de chegada</Text>}
+        {hasNum ? <Text style={etaStyles.sub}>tempo estimado de chegada</Text> : null}
+        {noDestination ? (
+          <>
+            <Text style={etaStyles.sub}>Sem local de atendimento definido nesta OS.</Text>
+            {transitElapsedLabel ? (
+              <Text style={etaStyles.subMuted}>{transitElapsedLabel}</Text>
+            ) : null}
+          </>
+        ) : null}
 
         {/* Progress bar if we have route data */}
-        {pct > 0 && (
+        {pct > 0 && !noDestination && (
           <View style={etaStyles.progressTrack}>
             <View style={[etaStyles.progressFill, { width: `${Math.max(pct, 5)}%` as any }]} />
           </View>
@@ -275,6 +306,11 @@ const etaStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
+  wrapperWide: {
+    maxWidth: 300,
+    right: 16,
+    left: 16,
+  },
   gradient: {
     paddingHorizontal: 11,
     paddingTop: 7,
@@ -282,6 +318,10 @@ const etaStyles = StyleSheet.create({
     borderRadius: 14,
     minWidth: 112,
     maxWidth: 220,
+  },
+  gradientWide: {
+    maxWidth: 300,
+    alignSelf: 'stretch',
   },
   topRow: {
     flexDirection: 'row',
@@ -320,11 +360,21 @@ const etaStyles = StyleSheet.create({
     letterSpacing: -0.3,
     lineHeight: 21,
   },
+  timeCompact: {
+    fontSize: 15,
+    lineHeight: 19,
+  },
   sub: {
     fontSize: 9,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '500',
     marginTop: 1,
+  },
+  subMuted: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '600',
+    marginTop: 4,
   },
   progressTrack: {
     height: 2,
@@ -349,6 +399,7 @@ export default function LiveRouteMapCard({
   zoneType,
   targetLoc,
   etaMinutes,
+  transitStartedAtIso,
   onEndTransit,
   endTransitLoading = false,
   taskId,
@@ -825,12 +876,30 @@ export default function LiveRouteMapCard({
     prevFollowUserRef.current = followUser;
   }, [followUser, myPos?.lat, myPos?.lng, embedNativeMap, targetLoc?.lat, targetLoc?.lng, routeDestKey]);
 
+  const displayEtaMinutes = parentHasFiniteEta ? etaMinutes : clientEtaMinutes;
+  const hasNumericEta =
+    typeof displayEtaMinutes === 'number' && Number.isFinite(displayEtaMinutes);
+  const noDestinationForEta = !hasNumericEta && osrmDest == null;
+
+  const [elapsedTick, setElapsedTick] = useState(0);
+  useEffect(() => {
+    if (!visible || !noDestinationForEta || !transitStartedAtIso) return;
+    const t0 = Date.parse(transitStartedAtIso);
+    if (!Number.isFinite(t0)) return;
+    const iv = setInterval(() => setElapsedTick((n) => n + 1), 30000);
+    return () => clearInterval(iv);
+  }, [visible, noDestinationForEta, transitStartedAtIso]);
+
+  const transitElapsedLabel = useMemo(() => {
+    if (!noDestinationForEta || !transitStartedAtIso) return null;
+    return formatElapsedSinceTransitPt(transitStartedAtIso);
+  }, [noDestinationForEta, transitStartedAtIso, elapsedTick]);
+
   if (!visible) return null;
 
   const isDeviation = update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
-  const displayEtaMinutes = parentHasFiniteEta ? etaMinutes : clientEtaMinutes;
 
   let statusColor = '#f97316';
   if (isComplete) statusColor = '#16a34a';
@@ -1340,7 +1409,13 @@ export default function LiveRouteMapCard({
 
         {/* ──── Premium ETA Badge — always visible during transit ──── */}
         {!isComplete && !isPaused && (
-          <EtaBadge etaMinutes={displayEtaMinutes ?? null} pct={pct} hint={etaHint} />
+          <EtaBadge
+            etaMinutes={displayEtaMinutes ?? null}
+            pct={pct}
+            hint={etaHint}
+            noDestination={noDestinationForEta}
+            transitElapsedLabel={transitElapsedLabel}
+          />
         )}
 
         {/* Deviation Banner Overlay */}

@@ -81,6 +81,12 @@ function rowToEntry(row: any): TechnicianFinanceEntry {
       row.finance_value_unlocked === 1 ||
       row.finance_value_unlocked === true ||
       row.financeValueUnlocked === true,
+    splitGroupId:
+      row.split_group_id != null && String(row.split_group_id).trim() !== ''
+        ? String(row.split_group_id).trim()
+        : row.splitGroupId != null && String(row.splitGroupId).trim() !== ''
+          ? String(row.splitGroupId).trim()
+          : undefined,
   };
 }
 
@@ -174,6 +180,10 @@ export const TechnicianFinanceService = {
       {
         ...entry,
         finance_value_unlocked: entry.financeValueUnlocked ? 1 : 0,
+        split_group_id:
+          entry.splitGroupId != null && String(entry.splitGroupId).trim() !== ''
+            ? String(entry.splitGroupId).trim()
+            : null,
         owner_email: ownerEmail || null,
       },
       ownerEmail
@@ -348,6 +358,8 @@ export const TechnicianFinanceService = {
         partial.attachments && partial.attachments.length > 0 ? partial.attachments : undefined;
       let firstSaved: TechnicianFinanceEntry | null = null;
       const t0 = Date.now();
+      const splitGroupId =
+        linked.length > 1 ? `mg_${t0}_${Math.random().toString(36).slice(2, 11)}` : undefined;
       for (let i = 0; i < linked.length; i++) {
         const taskId = linked[i];
         const entryId = `tech_fin_${t0}_${i}_${Math.random().toString(36).slice(2, 10)}`;
@@ -370,6 +382,8 @@ export const TechnicianFinanceService = {
           source: 'manual',
           createdAt: new Date().toISOString(),
           attachments: i === 0 ? atts : undefined,
+          splitGroupId,
+          linkedTaskIds: linked,
         };
         await TechnicianFinanceService.saveEntry(entry, ownerEmail);
         if (!firstSaved) firstSaved = entry;
