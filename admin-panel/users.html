@@ -142,6 +142,7 @@
         <td style="color:var(--text3);font-size:11px">${fmt(u.lastLogin)}</td>
         <td><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Inativo'}</span></td>
         <td style="text-align:right;white-space:nowrap">
+          <a class="btn btn-primary btn-sm" href="user-edit.html?id=${encodeURIComponent(u.id)}">Editar</a>
           <button class="btn btn-ghost btn-sm" onclick="openReset('${u.id}')">Resetar senha</button>
           <button class="btn ${u.isActive ? 'btn-danger' : 'btn-success'} btn-sm" onclick="toggleUser('${u.id}')">${u.isActive ? 'Desativar' : 'Ativar'}</button>
         </td>

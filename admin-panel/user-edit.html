@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Editar utilizador</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .ue-nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; position:sticky; top:0; z-index:20; background:var(--bg); padding:10px 0; border-bottom:1px solid var(--border); }
+    .ue-nav a { font-size:12px; font-weight:700; color:var(--text3); padding:6px 12px; border-radius:8px; background:var(--surface2); }
+    .ue-nav a:hover { color:var(--accent); }
+    .ue-section { scroll-margin-top:72px; }
+    .doc-table th { font-size:11px; text-transform:uppercase; color:var(--text3); }
+    .hint-box { font-size:12px; color:var(--text3); line-height:1.45; padding:12px 14px; background:var(--surface2); border-radius:10px; border:1px solid var(--border); margin-bottom:16px; }
+  </style>
+</head>
+<body>
+<div id="page-root" class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:6px">← Utilizadores</a>
+        <span class="topbar-title" id="ue-title">Carregar…</span>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px" id="ue-sub"></div>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-primary" id="btn-save">Guardar alterações</button>
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="hint-box">
+        <strong>UX:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica — alinhado ao modelo Multi-Location do painel.
+      </div>
+
+      <nav class="ue-nav">
+        <a href="#sec-dados">Dados pessoais</a>
+        <a href="#sec-endereco">Endereço</a>
+        <a href="#sec-acesso">Tipo de acesso</a>
+        <a href="#sec-tecnico">Prestador</a>
+        <a href="#sec-docs-p">Docs. pessoais</a>
+        <a href="#sec-docs-pro">Docs. profissionais</a>
+        <a href="#sec-horarios">Horários</a>
+        <a href="#sec-regioes">Regiões atendidas</a>
+      </nav>
+
+      <div class="panel ue-section" id="sec-dados">
+        <div class="panel-header"><span class="panel-title">Dados pessoais</span></div>
+        <div style="padding:16px 20px">
+          <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="f-name" /></div>
+            <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="f-email" type="email" /></div>
+            <div class="form-group"><label class="form-label">Telefone / WhatsApp</label><input class="form-control" id="f-phone" placeholder="+55 …" /></div>
+            <div class="form-group"><label class="form-label">URL foto de perfil</label><input class="form-control" id="f-avatar" placeholder="https://…" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-endereco" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Endereço (JSON estruturado / multi-location)</span></div>
+        <div style="padding:16px 20px">
+          <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="form-group"><label class="form-label">Linha 1 (rua, nº)</label><input class="form-control" id="a-line1" /></div>
+            <div class="form-group"><label class="form-label">Linha 2 (complemento)</label><input class="form-control" id="a-line2" /></div>
+            <div class="form-group"><label class="form-label">Bairro</label><input class="form-control" id="a-district" /></div>
+            <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="a-city" /></div>
+            <div class="form-group"><label class="form-label">Estado / UF</label><input class="form-control" id="a-state" /></div>
+            <div class="form-group"><label class="form-label">CEP / Código postal</label><input class="form-control" id="a-postal" /></div>
+            <div class="form-group"><label class="form-label">País (ISO, ex. BR)</label><input class="form-control" id="a-country" maxlength="2" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-acesso" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Tipo de acesso na conta</span></div>
+        <div style="padding:16px 20px">
+          <div class="form-group"><label class="form-label">Papel</label>
+            <select class="form-control" id="f-role">
+              <option value="USER">Usuário</option>
+              <option value="MANAGER">Gestor</option>
+              <option value="ADMIN">Administrador do tenant</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer">
+            <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão)
+          </label>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-tecnico" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Prestador de serviço (técnico)</span></div>
+        <div style="padding:16px 20px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:16px">
+            <input type="checkbox" id="f-provider" /> Este utilizador é <strong>prestador</strong> (perfil técnico no app)
+          </label>
+          <p style="font-size:12px;color:var(--text3);margin:-8px 0 16px">Desmarcar coloca o perfil técnico em <code>INACTIVE</code> (não apaga histórico).</p>
+          <div id="tech-panel" style="display:none">
+            <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div class="form-group"><label class="form-label">Estado do prestador</label>
+                <select class="form-control" id="t-status">
+                  <option value="PENDING">Pendente</option>
+                  <option value="ACTIVE">Ativo</option>
+                  <option value="INACTIVE">Inativo</option>
+                  <option value="SUSPENDED">Suspenso</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Score interno</label><input class="form-control" id="t-score" type="number" step="0.1" min="0" max="10" /></div>
+              <div class="form-group"><label class="form-label">CFT / registro profissional</label><input class="form-control" id="t-cft" /></div>
+              <div class="form-group"><label class="form-label">Especialidade principal</label><input class="form-control" id="t-specialty" /></div>
+              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Habilidades (tags separadas por vírgula)</label>
+                <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-docs-p" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Documentos pessoais — escopo por base (multi-location)</span></div>
+        <div style="padding:16px 20px">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-p">+ Adicionar documento</button>
+          <div class="table-wrap" style="margin-top:12px">
+            <table class="doc-table">
+              <thead><tr>
+                <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
+              </tr></thead>
+              <tbody id="tbody-docs-personal"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-docs-pro" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Documentos profissionais (certificações, ASO, NR, etc.)</span></div>
+        <div style="padding:16px 20px">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-pro">+ Adicionar documento</button>
+          <div class="table-wrap" style="margin-top:12px">
+            <table class="doc-table">
+              <thead><tr>
+                <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
+              </tr></thead>
+              <tbody id="tbody-docs-pro"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-horarios" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Horários de trabalho (prestador)</span></div>
+        <div style="padding:16px 20px">
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Defina início/fim por dia. Desmarque «Ativo» para folga.</p>
+          <div id="schedule-rows"></div>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-regioes" style="margin-top:16px;margin-bottom:40px">
+        <div class="panel-header"><span class="panel-title">Regiões / bases atendidas</span></div>
+        <div style="padding:16px 20px">
+          <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Seleção múltipla das <strong>Locations</strong> do tenant onde o técnico pode operar (Ctrl/Cmd + clique).</p>
+          <select class="form-control" id="t-service-locs" multiple size="8" style="min-height:160px;font-size:13px"></select>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { bootUserEditPage } from './js/user-edit-page.js';
+  bootUserEditPage();
+</script>
+</body>
+</html>

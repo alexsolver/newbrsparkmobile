@@ -70,7 +70,8 @@ export function renderSidebar(alertCount = 3) {
     }
     const pageKey = currentPage.replace('.html','');
     const itemKey = item.page.replace('.html','');
-    const active = pageKey === itemKey ? 'active' : '';
+    const active =
+      pageKey === itemKey || (pageKey === 'user-edit' && item.page === 'users.html') ? 'active' : '';
     const badge = item.page === 'audit.html' ? `<span class="nav-badge">${alertCount}</span>` : '';
     return `${sectionHtml}
       <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${item.label.replace(/"/g, '&quot;')}">

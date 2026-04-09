@@ -188,6 +188,11 @@ model User {
   name       String
   password   String   // bcrypt hash
   avatarUrl  String?
+  phone      String?
+  /// Endereço residencial / correspondência (JSON estruturado, alinhado a multi-location)
+  addressJson       Json?
+  /// Documentos pessoais: [{ id, docType, label, identifier, validFrom, validTo, issuingBody, notes, locationIds[] }]
+  personalDocuments Json?
   role       UserRole @default(USER)
   isActive   Boolean  @default(true)
   lastLogin  DateTime?
@@ -217,6 +222,14 @@ model TechnicianProfile {
   score     Float    @default(5.0)
   cft       String?  // Conselho Federal dos Técnicos
   specialty String?
+  /// Horários por dia: { mon: { enabled, start, end }, ... }
+  workScheduleJson Json?
+  /// Lista de competências / tags
+  skillsJson       Json?
+  /// IDs de Location (tenant) onde o prestador atende — multi-location
+  serviceLocationIds Json?
+  /// Documentos profissionais (certificações, ASO, etc.) com locationIds[] por linha
+  professionalDocuments Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
