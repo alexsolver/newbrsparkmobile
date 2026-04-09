@@ -312,7 +312,7 @@ function openProviderTaskInExternalMaps(t: any) {
   }
 }
 
-/** Cliente/local, cronograma e descrição — modal da OS e painel «Detalhes» nos cards. */
+/** Cliente/local, cronograma e descrição — modal da OS e painel "Detalhes" nos cards. */
 function ProviderTaskDetailSections({ task, compact }: { task: any; compact?: boolean }) {
   const { colors: P } = useTheme();
   const mbMain = compact ? 10 : 20;
@@ -482,7 +482,7 @@ function isDisplacementTrackingPausedMeta(meta: Record<string, unknown>): boolea
 
 /**
  * Ciclo de revisão após reabertura no painel: `reopenForRevisionPending` só até RECEIVED/ACCEPTED/IN_PROGRESS;
- * `revisionVisitActive` mantém-se na visita; legado: `reopenCount > 0` em execuções ainda activas.
+ * `revisionVisitActive` mantém-se na visita; legado: `reopenCount > 0` em execuções ainda ativas.
  */
 function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown>): boolean {
   if (metaFlagTrue(meta, 'reopenForRevisionPending') || metaFlagTrue(meta, 'revisionVisitActive')) return true;
@@ -490,7 +490,7 @@ function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown
   return Number.isFinite(rc) && rc > 0;
 }
 
-/** OS em visita de revisão (cor índigo) enquanto activa — cartão concluído usa verde; ver badge abaixo. */
+/** OS em visita de revisão (cor índigo) enquanto ativa — cartão concluído usa verde; ver badge abaixo. */
 function isProviderRevisionTask(t: any): boolean {
   const st = String(t?.status || '').toUpperCase();
   if (['COMPLETED', 'SYNCED', 'CANCELLED', 'DONE', 'CLOSED', 'ARCHIVED'].includes(st)) return false;
@@ -499,7 +499,7 @@ function isProviderRevisionTask(t: any): boolean {
 }
 
 /**
- * Badge «Revisão» em qualquer aba: visita aberta OU OS que já teve ciclo de reabertura
+ * Badge "Revisão" em qualquer aba: visita aberta OU OS que já teve ciclo de reabertura
  * (`reopenCount` no metadata mantém-se após concluir) ou mais de uma submissão (`lastSubmittedRevision`).
  */
 function providerTaskShowsRevisionBadge(t: any): boolean {
@@ -527,13 +527,13 @@ function effectiveProviderTaskStatus(
   acceptedIds: Set<string> = new Set()
 ): string {
   const raw = String(t.status || 'PENDING').toUpperCase();
-  /** OS reaberta no admin: servidor manda PENDING/IN_PROGRESS/… — o cache local «executada» não pode esconder isso. */
+  /** OS reaberta no admin: servidor manda PENDING/IN_PROGRESS/… — o cache local "executada" não pode esconder isso. */
   const serverActive = ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(raw);
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
   if (completedIds.has(String(t.id)) && !serverActive) return 'COMPLETED';
   const meta = taskMetadataRecord(t);
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
-  // Revisão: como OS nova em Pendentes até aceitar; depois de aceitar / iniciar, «Em andamento».
+  // Revisão: como OS nova em Pendentes até aceitar; depois de aceitar / iniciar, "Em andamento".
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
     if (inprogressIds.has(String(t.id)) || acceptedIds.has(String(t.id))) return 'IN_PROGRESS';
     return 'PENDING';
@@ -545,7 +545,7 @@ function effectiveProviderTaskStatus(
   if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
   if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
   if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
-  // Aceite no app (lista local) ou no Kanban: não deixar em «Pendentes» só porque o PATCH ainda não chegou ao servidor.
+  // Aceite no app (lista local) ou no Kanban: não deixar em "Pendentes" só porque o PATCH ainda não chegou ao servidor.
   if (acceptedIds.has(String(t.id)) && (raw === 'PENDING' || raw === 'RECEIVED')) return 'IN_PROGRESS';
   if (raw === 'RECEIVED') return 'PENDING';
   if (raw === 'ACCEPTED') return 'IN_PROGRESS';
@@ -556,7 +556,7 @@ function providerTabMatchesTask(
   tab: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
   status: string
 ): boolean {
-  // PAUSED: mesma aba que «Em andamento» (OS já iniciada; cartão vermelho com badge de pausa).
+  // PAUSED: mesma aba que "Em andamento" (OS já iniciada; cartão vermelho com badge de pausa).
   if (tab === 'PENDING') return status === 'PENDING';
   if (tab === 'IN_PROGRESS') return status === 'IN_PROGRESS' || status === 'PAUSED';
   return status === tab;
@@ -1347,7 +1347,7 @@ export default function DashboardScreen() {
     return () => clearTimeout(timer);
   }, [mode, pagerWidth, userRole]);
 
-  // Rajada de sync ao recuperar rede (complementa o poller de 5 s e reduz sensação de «app preso»).
+  // Rajada de sync ao recuperar rede (complementa o poller de 5 s e reduz sensação de "app preso").
   useEffect(() => {
     if (!user?.email) return;
     if (isOnline === false) {

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Avaliações &amp; Produtividade</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Avaliações (Minha Produtividade)</span>
+      <div class="topbar-actions">
+        <select class="form-control" id="filter-tenant" style="width:220px;padding:7px 10px;font-size:12px">
+          <option value="">Todos os tenants</option>
+        </select>
+        <button type="button" class="btn btn-primary" id="btn-refresh">Atualizar</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label">Instâncias (período)</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label">Pendentes</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label">Média 0–100</div></div>
+        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="warning-outline"></ion-icon></div><div class="stat-value" id="st-crit">—</div><div class="stat-label">Críticas</div></div>
+        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="pulse-outline"></ion-icon></div><div class="stat-value" id="st-rate">—</div><div class="stat-label">Taxa resposta %</div></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header"><span class="panel-title">Revisões pendentes (disputas)</span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Tenant / Técnico</th><th>OS</th><th>Justificativa</th><th style="text-align:right">Ações</th></tr></thead>
+          <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>Link cliente</th><th style="text-align:right">Token</th></tr></thead>
+          <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Templates de avaliação</span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th></tr></thead>
+          <tbody id="tbody-tpl"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+<script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG } from './js/config.js';
+  await initPage();
+
+  const tenantSel = document.getElementById('filter-tenant');
+  const origin = window.location.origin;
+
+  async function loadTenants() {
+    const res = await CONFIG.get('/tenants?limit=500');
+    const list = res?.data || res || [];
+    for (const t of list) {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = (t.name || t.email || t.id).slice(0, 48);
+      tenantSel.appendChild(o);
+    }
+  }
+
+  async function loadAnalytics() {
+    const p = new URLSearchParams();
+    if (tenantSel.value) p.set('tenantId', tenantSel.value);
+    const qs = p.toString();
+    const url = '/admin/evaluations/analytics' + (qs ? `?${qs}` : '');
+    const a = await CONFIG.get(url);
+    if (a?.error) return;
+    document.getElementById('st-total').textContent = a.counts?.total ?? '—';
+    document.getElementById('st-pend').textContent = a.counts?.pending ?? '—';
+    document.getElementById('st-avg').textContent = a.averageTotalScore != null ? String(a.averageTotalScore) : '—';
+    document.getElementById('st-crit').textContent = a.counts?.critical ?? '—';
+    document.getElementById('st-rate').textContent = a.responseRatePercent != null ? String(a.responseRatePercent) : '—';
+  }
+
+  async function loadDisputes() {
+    const url = '/admin/evaluations/disputes?status=PENDING' + (tenantSel.value ? '&tenantId=' + encodeURIComponent(tenantSel.value) : '');
+    const d = await CONFIG.get(url);
+    const tb = document.getElementById('tbody-disputes');
+    const items = d?.items || [];
+    if (!items.length) {
+      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma revisão pendente.</td></tr>';
+      return;
+    }
+    tb.innerHTML = items.map((x) => {
+      const tech = x.technician?.email || '';
+      const os = x.instance?.execution?.osNumber || '—';
+      const raw = String(x.justification || '').replace(/</g, '&lt;');
+      const j = raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+      return `<tr>
+        <td>${tech}</td><td>${os}</td><td>${j}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-sm btn-primary" data-d="${x.id}" data-a="MAINTAIN_EVAL">Manter</button>
+          <button class="btn btn-sm" data-d="${x.id}" data-a="INVALIDATED">Invalidar</button>
+        </td></tr>`;
+    }).join('');
+    tb.querySelectorAll('button[data-d]').forEach((btn) => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute('data-d');
+        const st = btn.getAttribute('data-a');
+        if (!confirm('Confirmar decisão ' + st + '?')) return;
+        await CONFIG.patch('/admin/evaluations/disputes/' + id + '/resolve', { status: st, resolutionNote: 'Painel admin' });
+        loadDisputes();
+      };
+    });
+  }
+
+  async function loadInstances() {
+    const url = '/admin/evaluations/instances' + (tenantSel.value ? '?tenantId=' + encodeURIComponent(tenantSel.value) : '');
+    const d = await CONFIG.get(url);
+    const tb = document.getElementById('tbody-inst');
+    const items = d?.items || [];
+    if (!items.length) {
+      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem instâncias.</td></tr>';
+      return;
+    }
+    tb.innerHTML = items.map((x) => {
+      const href =
+        x.clientSurveyFullUrl ||
+        (x.publicToken ? `${origin}/evaluation-survey.html?token=${encodeURIComponent(x.publicToken)}` : '');
+      const link = href
+        ? `<a href="${String(href).replace(/"/g, '&quot;')}" target="_blank" rel="noopener">Abrir formulário</a>`
+        : '—';
+      const regen = x.status === 'PENDING'
+        ? `<button class="btn btn-sm" data-regen="${x.id}">Novo token</button>`
+        : '';
+      return `<tr><td>${x.status}</td><td>${(x.templateName || '').replace(/</g, '&lt;')}</td><td>${(x.technicianEmail || '').replace(/</g, '&lt;')}</td><td>${x.osNumber || '—'}</td><td>${link}</td><td style="text-align:right">${regen}</td></tr>`;
+    }).join('');
+    tb.querySelectorAll('button[data-regen]').forEach((btn) => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute('data-regen');
+        await CONFIG.post('/admin/evaluations/instances/' + id + '/regenerate-token', {});
+        loadInstances();
+      };
+    });
+  }
+
+  async function loadTemplates() {
+    const url = '/admin/evaluations/templates' + (tenantSel.value ? '?tenantId=' + encodeURIComponent(tenantSel.value) : '');
+    const rows = await CONFIG.get(url);
+    const tb = document.getElementById('tbody-tpl');
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Sem templates.</td></tr>';
+      return;
+    }
+    tb.innerHTML = list.map((t) => `<tr>
+      <td>${(t.name || '').replace(/</g, '&lt;')}</td>
+      <td>${t.type}</td>
+      <td>${(t.tenant?.name || t.tenantId || '').toString().replace(/</g, '&lt;')}</td>
+      <td>${t._count?.questions ?? '—'}</td>
+      <td>${t._count?.instances ?? '—'}</td>
+    </tr>`).join('');
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadAnalytics(), loadDisputes(), loadInstances(), loadTemplates()]);
+  }
+
+  tenantSel.addEventListener('change', refreshAll);
+  document.getElementById('btn-refresh').addEventListener('click', refreshAll);
+
+  await loadTenants();
+  await refreshAll();
+</script>
+</body>
+</html>

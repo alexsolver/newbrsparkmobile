@@ -397,6 +397,7 @@ enum MetatagType {
   SERVICE_CATEGORY
   EXPENSE_CATEGORY
   REVENUE_CATEGORY
+  TECHNICIAN_EXPENSE_CATEGORY
   ASSET_STATUS
   MEDIA_CATEGORY
   GLOBAL_TAG
@@ -1045,6 +1046,11 @@ model EvaluationInstance {
   idempotencyKey   String?                  @unique
   displayText      String?                  @db.Text
   rawClientText    String?                  @db.Text
+  /// Token opaco para o cliente abrir o formulário público (sem login).
+  publicToken      String?                  @unique
+  publicTokenExpiresAt DateTime?
+  moderationMeta   Json?
+  insights         Json?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 

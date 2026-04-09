@@ -292,7 +292,7 @@ function applyColumnSignalsToProposals(items, columnSignals, formContext = {}) {
         'field',
         'barcode_scan',
         'Código de barras',
-        'Coluna sugere identificador / EAN / património'
+        'Coluna sugere identificador / EAN / patrimônio'
       );
       const k = pickFirstKeyOfType('barcode_scan');
       if (k) recommendedOptionKey = k;
@@ -317,7 +317,7 @@ function applyColumnSignalsToProposals(items, columnSignals, formContext = {}) {
     }
 
     if (recommendedOptionKey !== prevRecommended) {
-      warnings.push(`Campo «${item.label}»: tipo sugerido ajustado com base nos dados da coluna (perfil: ${sig.signal}).`);
+      warnings.push(`Campo "${item.label}": tipo sugerido ajustado com base nos dados da coluna (perfil: ${sig.signal}).`);
     }
 
     return {
@@ -347,23 +347,23 @@ function applyColumnSignalsToSchemaData(schemaData, columnSignals, formContext =
     if (sig.signal === 'barcode_hint' && (was === 'text' || was === 'number')) {
       next.type = 'barcode_scan';
       next.options = null;
-      warnings.push(`«${f.label}»: tipo alterado para leitura de código de barras (perfil da coluna).`);
+      warnings.push(`"${f.label}": tipo alterado para leitura de código de barras (perfil da coluna).`);
     } else if (sig.signal === 'photo_hint' && was === 'text') {
       next.type = ctx.requireStampedPhotos === true ? 'photo_stamped' : 'photo';
       next.options = null;
-      warnings.push(`«${f.label}»: tipo alterado para ${next.type} (cabeçalho sugere foto).`);
+      warnings.push(`"${f.label}": tipo alterado para ${next.type} (cabeçalho sugere foto).`);
     } else if ((sig.signal === 'dropdown' || sig.signal === 'dropdown_weak') && was === 'text') {
       next.type = 'dropdown';
       next.options = sig.suggestedOptionsLine || next.options || 'Opção 1, Opção 2';
-      warnings.push(`«${f.label}»: tipo alterado para lista (dropdown) com base nos dados.`);
+      warnings.push(`"${f.label}": tipo alterado para lista (dropdown) com base nos dados.`);
     } else if (sig.signal === 'yes_no' && was === 'text') {
       next.type = 'yes_no';
       next.options = null;
-      warnings.push(`«${f.label}»: tipo alterado para Sim/Não.`);
+      warnings.push(`"${f.label}": tipo alterado para Sim/Não.`);
     } else if (sig.signal === 'multiselect_hint' && was === 'text') {
       next.type = 'multiselect';
       next.options = sig.suggestedOptionsLine || next.options || 'A, B, C';
-      warnings.push(`«${f.label}»: tipo alterado para múltipla escolha.`);
+      warnings.push(`"${f.label}": tipo alterado para múltipla escolha.`);
     } else if (sig.signal === 'email_hint' && was === 'text') {
       next.type = 'email';
       next.options = null;
@@ -383,7 +383,7 @@ function applyColumnSignalsToSchemaData(schemaData, columnSignals, formContext =
 }
 
 /**
- * Estrutura vinda da IA (só secções + campos, sem opções de tipo).
+ * Estrutura vinda da IA (só seções + campos, sem opções de tipo).
  * Aceita "blocks" ou legado "items".
  * @param {unknown} parsed
  * @returns {{ blocks: object[], warnings: string[] }}
@@ -508,7 +508,7 @@ function normalizeProposalOption(raw, kind) {
 }
 
 /**
- * Valida e normaliza a lista de itens devolvida pela fase «analisar planilha».
+ * Valida e normaliza a lista de itens devolvida pela fase "analisar planilha".
  * @param {unknown} parsed
  * @param {Record<string, unknown>} [formContext] — tipos avançados na paleta conforme checkboxes do painel
  * @returns {{ items: object[], warnings: string[] }}
@@ -542,14 +542,14 @@ function normalizeProposalsFromLlm(parsed, formContext) {
           { key: `${key}_once`, type: 'section_break', shortLabel: 'Etapa única', hint: '', multiple: false },
           { key: `${key}_rep`, type: 'section_break', shortLabel: 'Lista repetível', hint: '', multiple: true },
         ];
-        warnings.push(`Secção «${label}»: opções geradas por defeito.`);
+        warnings.push(`Seção "${label}": opções geradas por padrão.`);
       }
     } else {
       const thin = options.length < 2;
       options = mergeFieldOptionsWithAnalyzePalette(key, options, ctx);
       if (thin) {
         warnings.push(
-          `Campo «${label}»: a IA sugeriu poucos tipos — o menu foi alargado com os tipos habituais do BrSpark (pode escolher outro).`
+          `Campo "${label}": a IA sugeriu poucos tipos — o menu foi alargado com os tipos habituais do BrSpark (pode escolher outro).`
         );
       }
     }
@@ -587,7 +587,7 @@ function normalizeProposalsFromLlm(parsed, formContext) {
 }
 
 /**
- * Monta schemaData a partir das propostas confirmadas pelo utilizador (sem segunda chamada LLM).
+ * Monta schemaData a partir das propostas confirmadas pelo usuário (sem segunda chamada LLM).
  * @param {object[]} items — saída de normalizeProposalsFromLlm
  * @param {Record<string, { optionKey?: string, required?: boolean, options?: string }>} selections
  */
@@ -602,7 +602,7 @@ function buildSchemaFromProposalSelections(items, selections) {
     const optionKey = typeof s.optionKey === 'string' && s.optionKey.trim() ? s.optionKey.trim() : item.recommendedOptionKey;
     const opt = (item.options || []).find((o) => o.key === optionKey) || item.options[0];
     if (!opt) {
-      warnings.push(`Item «${item.label}»: opção em falta — ignorado.`);
+      warnings.push(`Item "${item.label}": opção em falta — ignorado.`);
       continue;
     }
     if (item.kind === 'section_break') {

@@ -1,6 +1,6 @@
 /**
  * Expande campos do formulário para o PDF de pré-visualização igual ao printReport
- * da Central de Operações (secções repetíveis, instâncias, cabeçalhos).
+ * da Central de Operações (seções repetíveis, instâncias, cabeçalhos).
  */
 
 function normTypeOps(t) {
@@ -148,7 +148,7 @@ function repeatSectionLabel(template, sectionId, labelBySidPdf) {
       ? template.sectionBreaks.find((s) => s && s.id === sectionId)
       : null;
   if (br && br.label != null && String(br.label).trim() !== '') return String(br.label).trim();
-  return 'Secção repetível';
+  return 'Seção repetível';
 }
 
 /**

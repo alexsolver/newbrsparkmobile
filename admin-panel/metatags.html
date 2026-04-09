@@ -16,7 +16,8 @@
           <option value="ASSET_TYPE">Tipos de Bem</option>
           <option value="STOCK_CATEGORY">Categorias de Estoque</option>
           <option value="SERVICE_CATEGORY">Categorias de Serviço</option>
-          <option value="EXPENSE_CATEGORY">Categorias de Despesa</option>
+          <option value="EXPENSE_CATEGORY">Categorias de Despesa (bens)</option>
+          <option value="TECHNICIAN_EXPENSE_CATEGORY">Despesa do técnico</option>
           <option value="REVENUE_CATEGORY">Categorias de Receita</option>
           <option value="ASSET_STATUS">Status de Bens</option>
           <option value="MEDIA_CATEGORY">Categorias de Mídia</option>
@@ -27,12 +28,13 @@
     </div>
     <div class="page-body">
 
-      <div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:20px">
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));margin-bottom:20px">
         <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="pricetags-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total</div></div>
         <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="home-outline"></ion-icon></div><div class="stat-value" id="stat-asset-types">—</div><div class="stat-label">Tipos de Bem</div></div>
         <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cube-outline"></ion-icon></div><div class="stat-value" id="stat-stock">—</div><div class="stat-label">Cat. Estoque</div></div>
         <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="construct-outline"></ion-icon></div><div class="stat-value" id="stat-service">—</div><div class="stat-label">Cat. Serviço</div></div>
-        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="trending-down-outline"></ion-icon></div><div class="stat-value" id="stat-expense">—</div><div class="stat-label">Cat. Despesa</div></div>
+        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="trending-down-outline"></ion-icon></div><div class="stat-value" id="stat-expense">—</div><div class="stat-label">Despesa (bens)</div></div>
+        <div class="stat-card" style="--accent-color:#C2410C"><div class="stat-icon" style="background:#FFF7ED;color:#C2410C"><ion-icon name="briefcase-outline"></ion-icon></div><div class="stat-value" id="stat-tech-expense">—</div><div class="stat-label">Desp. técnico</div></div>
         <div class="stat-card" style="--accent-color:#10B981"><div class="stat-icon" style="background:#ECFDF5;color:#10B981"><ion-icon name="trending-up-outline"></ion-icon></div><div class="stat-value" id="stat-revenue">—</div><div class="stat-label">Cat. Receita</div></div>
         <div class="stat-card" style="--accent-color:#8B5CF6"><div class="stat-icon" style="background:#F5F3FF;color:#8B5CF6"><ion-icon name="images-outline"></ion-icon></div><div class="stat-value" id="stat-media">—</div><div class="stat-label">Cat. Mídia</div></div>
         <div class="stat-card" style="--accent-color:var(--text3)"><div class="stat-icon" style="background:var(--surface2);color:var(--text3)"><ion-icon name="globe-outline"></ion-icon></div><div class="stat-value" id="stat-global">—</div><div class="stat-label">Tags Globais</div></div>
@@ -69,7 +71,8 @@
             <option value="ASSET_TYPE">Tipo de Bem</option>
             <option value="STOCK_CATEGORY">Categoria de Estoque</option>
             <option value="SERVICE_CATEGORY">Categoria de Serviço</option>
-            <option value="EXPENSE_CATEGORY">Categoria de Despesa <ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></option>
+            <option value="EXPENSE_CATEGORY">Despesa de bem <ion-icon name="trending-down-outline" style="vertical-align:-2px"></ion-icon></option>
+            <option value="TECHNICIAN_EXPENSE_CATEGORY">Despesa do técnico (app) <ion-icon name="briefcase-outline" style="vertical-align:-2px"></ion-icon></option>
             <option value="REVENUE_CATEGORY">Categoria de Receita <ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></option>
             <option value="ASSET_STATUS">Status de Bem</option>
             <option value="MEDIA_CATEGORY">Categoria de Mídia <ion-icon name="camera-outline" style="vertical-align:-2px"></ion-icon></option>
@@ -128,7 +131,8 @@
     ASSET_TYPE:       '<ion-icon name="home-outline"></ion-icon> Tipo de Bem',
     STOCK_CATEGORY:   '<ion-icon name="cube-outline"></ion-icon> Cat. Estoque',
     SERVICE_CATEGORY: '<ion-icon name="construct-outline"></ion-icon> Cat. Serviço',
-    EXPENSE_CATEGORY: '<ion-icon name="trending-down-outline"></ion-icon> Cat. Despesa',
+    EXPENSE_CATEGORY: '<ion-icon name="trending-down-outline"></ion-icon> Desp. bem',
+    TECHNICIAN_EXPENSE_CATEGORY: '<ion-icon name="briefcase-outline"></ion-icon> Desp. técnico',
     REVENUE_CATEGORY: '<ion-icon name="trending-up-outline"></ion-icon> Cat. Receita',
     ASSET_STATUS:     '<ion-icon name="bulb-outline"></ion-icon> Status',
     MEDIA_CATEGORY:   '<ion-icon name="images-outline"></ion-icon> Cat. Mídia',
@@ -137,6 +141,7 @@
   const typeBadge = {
     ASSET_TYPE: 'badge-blue', STOCK_CATEGORY: 'badge-green',
     SERVICE_CATEGORY: 'badge-amber', EXPENSE_CATEGORY: 'badge-danger',
+    TECHNICIAN_EXPENSE_CATEGORY: 'badge-danger',
     REVENUE_CATEGORY: 'badge-success', ASSET_STATUS: 'badge-accent',
     MEDIA_CATEGORY: 'badge-purple', GLOBAL_TAG: 'badge-gray'
   };
@@ -150,6 +155,7 @@
     document.getElementById('stat-stock').textContent        = tags.filter(t => t.type === 'STOCK_CATEGORY').length;
     document.getElementById('stat-service').textContent      = tags.filter(t => t.type === 'SERVICE_CATEGORY').length;
     document.getElementById('stat-expense').textContent      = tags.filter(t => t.type === 'EXPENSE_CATEGORY').length;
+    document.getElementById('stat-tech-expense').textContent   = tags.filter(t => t.type === 'TECHNICIAN_EXPENSE_CATEGORY').length;
     document.getElementById('stat-revenue').textContent      = tags.filter(t => t.type === 'REVENUE_CATEGORY').length;
     document.getElementById('stat-media').textContent        = tags.filter(t => t.type === 'MEDIA_CATEGORY').length;
     document.getElementById('stat-global').textContent       = tags.filter(t => t.type === 'GLOBAL_TAG').length;
@@ -736,6 +742,35 @@
   }
 
   seedMediaCategories();
+
+  async function seedTechnicianExpenseCategories() {
+    const existing = await CONFIG.get('/metatags?type=TECHNICIAN_EXPENSE_CATEGORY') || [];
+    if (existing.length > 0) return;
+
+    const defaults = [
+      { key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#EA580C' },
+      { key: 'estacionamento', ptBr: 'Estacionamento', enUs: 'Parking', esEs: 'Estacionamiento', icon: 'business-outline', color: '#64748B' },
+      { key: 'pedagio', ptBr: 'Pedágio / pedágios', enUs: 'Tolls', esEs: 'Peajes', icon: 'ticket-outline', color: '#7C3AED' },
+      { key: 'transporte_publico_taxi_app', ptBr: 'Transporte público / táxi / app', enUs: 'Public transit / taxi / ride-hail', esEs: 'Transporte / taxi / app', icon: 'bus-outline', color: '#2563EB' },
+      { key: 'materiais_consumiveis', ptBr: 'Materiais / consumíveis', enUs: 'Materials / consumables', esEs: 'Materiales / consumibles', icon: 'cube-outline', color: '#0D9488' },
+      { key: 'pecas_antecipadas', ptBr: 'Peças antecipadas', enUs: 'Advance parts purchase', esEs: 'Piezas anticipadas', icon: 'hardware-chip-outline', color: '#0891B2' },
+      { key: 'servicos_terceiros_obra', ptBr: 'Serviços de terceiros na obra', enUs: 'Third-party services on site', esEs: 'Servicios de terceros en obra', icon: 'people-outline', color: '#4F46E5' },
+      { key: 'alimentacao', ptBr: 'Refeição / alimentação', enUs: 'Meals', esEs: 'Comidas', icon: 'restaurant-outline', color: '#D97706' },
+      { key: 'hospedagem', ptBr: 'Hospedagem', enUs: 'Lodging', esEs: 'Hospedaje', icon: 'bed-outline', color: '#9333EA' },
+      { key: 'ferramentas_equipamento', ptBr: 'Ferramentas / equipamento', enUs: 'Tools / equipment', esEs: 'Herramientas / equipo', icon: 'construct-outline', color: '#475569' },
+      { key: 'epi', ptBr: 'EPI', enUs: 'PPE', esEs: 'EPP', icon: 'shield-checkmark-outline', color: '#059669' },
+      { key: 'taxas_multas', ptBr: 'Taxas / multas', enUs: 'Fees / fines', esEs: 'Tasas / multas', icon: 'warning-outline', color: '#DC2626' },
+      { key: 'comunicacao', ptBr: 'Comunicação (dados, SIM)', enUs: 'Communication (data, SIM)', esEs: 'Comunicación (datos, SIM)', icon: 'phone-portrait-outline', color: '#0284C7' },
+      { key: 'outros', ptBr: 'Outros', enUs: 'Other', esEs: 'Otros', icon: 'ellipsis-horizontal-outline', color: '#6B7280' },
+    ];
+
+    for (const [i, d] of defaults.entries()) {
+      await CONFIG.post('/metatags', { type: 'TECHNICIAN_EXPENSE_CATEGORY', sortOrder: 200 + i, ...d });
+    }
+    loadTags();
+  }
+
+  seedTechnicianExpenseCategories();
 </script>
 </body>
 </html>

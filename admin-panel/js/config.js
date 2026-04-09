@@ -30,7 +30,7 @@ function normalizeStoredApiOrigin(raw) {
 
 /**
  * Se o painel está em localhost/127.0.0.1 na mesma porta que a origem gravada no localStorage,
- * usa sempre o hostname da página actual. Evita misturar localhost vs 127.0.0.1 (origens diferentes
+ * usa sempre o hostname da página atual. Evita misturar localhost vs 127.0.0.1 (origens diferentes
  * no browser) — o GET pode parecer OK e o POST / CORS falhar ou ficar pendente.
  */
 function normalizeLoopbackApiOrigin(storedOrigin) {

@@ -79,7 +79,7 @@ router.post('/help-image', adminAuth, async (req, res) => {
   }
 });
 
-// --- Pastas de modelos (Form Builder → «Meus formulários») ---
+// --- Pastas de modelos (Form Builder → "Meus formulários") ---
 router.get('/template-folders', async (req, res) => {
   try {
     const rows = await prisma.checklistTemplateFolder.findMany({
@@ -425,7 +425,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
         if (statusNorm === 'RECEIVED') {
             mergedMeta.receivedAt = ts;
-            // Revisão reaberta pelo admin: após o telemóvel confirmar receção, volta ao fluxo normal (Pendentes → Aceitar).
+            // Revisão reaberta pelo admin: após o celular confirmar recebimento, volta ao fluxo normal (Pendentes → Aceitar).
             delete mergedMeta.reopenForRevisionPending;
         } else if (statusNorm === 'ACCEPTED') {
             mergedMeta.acceptedAt = ts;
@@ -859,14 +859,14 @@ router.post('/dispatch', async (req, res) => {
                 userIds = users.map((x) => x.id);
                 if (users.length > 1) {
                     console.warn(
-                        '[DISPATCH] Vários utilizadores ativos com o mesmo e-mail (tenant distinto); push a todos os que tiverem token:',
+                        '[DISPATCH] Vários usuários ativos com o mesmo e-mail (tenant distinto); push a todos os que tiverem token:',
                         emailRaw
                     );
                 }
             }
 
             if (userIds.length === 0) {
-                console.warn('[DISPATCH] Push ignorado: nenhum utilizador ativo com este e-mail:', emailRaw);
+                console.warn('[DISPATCH] Push ignorado: nenhum usuário ativo com este e-mail:', emailRaw);
             } else {
                 const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
                 if (pushTokens.length === 0) {

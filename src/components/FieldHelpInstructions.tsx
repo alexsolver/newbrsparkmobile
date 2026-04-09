@@ -30,7 +30,7 @@ function decodeAttrEntities(s: string): string {
 
 /**
  * O painel grava frequentemente src relativas (`/uploads/checklist-help/...`) ou
- * `http://localhost:3001/...` — no telemóvel isso não resolve; usa a mesma base que a API.
+ * `http://localhost:3001/...` — no celular isso não resolve; usa a mesma base que a API.
  */
 export function resolveHelpMediaUri(raw: string): string {
   let s = decodeAttrEntities((raw || '').trim());
@@ -135,7 +135,7 @@ export function FieldHelpInstructions({ plainDescription, helpHtml }: FieldHelpI
   const [open, setOpen] = useState(false);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  /** Altura máxima da folha e do ScrollView — sem isto o RN muitas vezes não faz scroll dentro do modal. */
+  /** Altura máxima da planilha e do ScrollView — sem isto o RN muitas vezes não faz scroll dentro do modal. */
   const sheetMaxHeight = Math.round(windowHeight * 0.9);
   const scrollMaxHeight = Math.max(200, sheetMaxHeight - SHEET_HEADER_PX - Math.round(insets.bottom));
 

@@ -85,7 +85,7 @@ const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
   other: '#64748B',
 };
 
-/** Alinhado ao builder do painel — condição “cronómetro geral”. */
+/** Alinhado ao builder do painel — condição “cronômetro geral”. */
 const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
 function formatDurationClock(totalSec: number) {
@@ -113,7 +113,7 @@ function metaRevisionVisitContext(m: unknown): boolean {
   return Number.isFinite(rc) && rc > 0;
 }
 
-/** Estados terminais na API / sync (alinhar com `SERVER_COMPLETED_STATUSES` no ecrã inicial). */
+/** Estados terminais na API / sync (alinhar com `SERVER_COMPLETED_STATUSES` na tela inicial). */
 const EXEC_VIEW_ONLY_STATUSES = new Set([
   'COMPLETED',
   'SYNCED',
@@ -164,7 +164,7 @@ function stripRevisionSessionFieldResponses(res: Record<string, any>, schemaData
   }
 }
 
-/** Remove cronómetros / produtividade da visita anterior (mesmo executionId em revisão). */
+/** Remove cronômetros / produtividade da visita anterior (mesmo executionId em revisão). */
 function stripFormProductivityTimerFields(res: Record<string, any>, schemaData: any[] | undefined): void {
   const fixed = new Set([
     '__form_started_at',
@@ -208,7 +208,7 @@ function parsePauseHistory(responses: Record<string, any>): any[] {
   return [];
 }
 
-/** Lista local usada no dashboard (`effectiveProviderTaskStatus`) para a aba «Em andamento». */
+/** Lista local usada no dashboard (`effectiveProviderTaskStatus`) para a aba "Em andamento". */
 async function ensureTaskMarkedInProgressLocally(executionId: string): Promise<void> {
   const id = String(executionId || '').trim();
   if (!id) return;
@@ -333,7 +333,7 @@ function technicianCommentKey(fieldId: string) {
   return `__comment_${fieldId}`;
 }
 
-/** Tipos em que «múltiplo» não se aplica (secção usa outro fluxo; calculado/transit são especiais). */
+/** Tipos em que "múltiplo" não se aplica (seção usa outro fluxo; calculado/transit são especiais). */
 const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'section_break',
   'hidden',
@@ -374,7 +374,7 @@ function sectionRepeatMaxRows(sectionField: any): number | null {
   return null;
 }
 
-/** Comentário do técnico guardado dentro de uma linha de secção repetível. */
+/** Comentário do técnico guardado dentro de uma linha de seção repetível. */
 function rowTechnicianCommentKey(fieldId: string) {
   return `_comment_${fieldId}`;
 }
@@ -397,7 +397,7 @@ function getScopedFieldValue(
   return row && typeof row === 'object' ? row[fieldId] : undefined;
 }
 
-/** Valor de campo na raiz ou dentro de secções repetíveis (transit_start/end fora do sítio errado quebrava o mapa). */
+/** Valor de campo na raiz ou dentro de seções repetíveis (transit_start/end fora do sítio errado quebrava o mapa). */
 function findFieldValueInResponses(
   responses: Record<string, any>,
   fieldId: string,
@@ -435,7 +435,7 @@ function getScopedTechComment(
   return v != null ? String(v) : '';
 }
 
-/** Legendas/comentários por item de foto ou ficheiro (quando allowMediaDescription no template). */
+/** Legendas/comentários por item de foto ou arquivo (quando allowMediaDescription no template). */
 function mediaCaptionStorageKey(fieldId: string) {
   return `__media_cap_${fieldId}`;
 }
@@ -667,7 +667,7 @@ function buildRouteCoordsFromTask(task: any): number[][] {
   });
 }
 
-/** Modo de visualização dentro da etapa (definido no separador de secção no builder). */
+/** Modo de visualização dentro da etapa (definido no separador de seção no builder). */
 function normalizeSectionFillMode(v: any): 'inherit' | 'list' | 'wizard' {
   if (v === 'list' || v === 'wizard') return v;
   return 'inherit';
@@ -684,8 +684,8 @@ function resolvePageInnerMode(
 }
 
 /**
- * Modo global no app: se todas as secções estão em «inherit», usa settings.appFillMode (legado).
- * Caso contrário: scroll único quando todas são lista; híbrido se alguma secção for assistente.
+ * Modo global no app: se todas as seções estão em "inherit", usa settings.appFillMode (legado).
+ * Caso contrário: scroll único quando todas são lista; híbrido se alguma seção for assistente.
  */
 function computeEffectiveFillModeFromTemplate(
   schema: any[],
@@ -724,9 +724,9 @@ export default function ChecklistEngine() {
   const gpsCaptureLockRef = useRef(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [wizardIndex, setWizardIndex] = useState(0);
-  /** Dentro de uma etapa em modo híbrido com «um campo de cada vez» só nessa etapa */
+  /** Dentro de uma etapa em modo híbrido com "um campo de cada vez" só nessa etapa */
   const [hybridInnerWizardIndex, setHybridInnerWizardIndex] = useState(0);
-  /** Menu de etapas (settings.appSectionStart === 'hub') antes de entrar numa secção */
+  /** Menu de etapas (settings.appSectionStart === 'hub') antes de entrar numa seção */
   const [hubPicking, setHubPicking] = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -753,7 +753,7 @@ export default function ChecklistEngine() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
-  /** Secção repetível onde foi «Iniciar deslocamento» — o mapa finaliza com o mesmo scope. */
+  /** Seção repetível onde foi "Iniciar deslocamento" — o mapa finaliza com o mesmo scope. */
   const lastTransitScopeRef = useRef<SectionRepeatScope | null>(null);
   // Tracking share link state
   const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
@@ -785,7 +785,7 @@ export default function ChecklistEngine() {
   /** Evita dois Alert seguidos ao premir o mesmo fluxo duas vezes muito rápido. */
   const pauseExitAlertGateRef = useRef(0);
   /**
-   * Após confirmar «Sair da OS», o router.back() dispara beforeRemove com __form_paused_since ainda true
+   * Após confirmar "Sair da OS", o router.back() dispara beforeRemove com __form_paused_since ainda true
    * (o estado só limpa depois). Sem isto, o listener mostrava o mesmo Alert outra vez.
    */
   const pauseExitBypassBeforeRemoveUntilRef = useRef(0);
@@ -1569,7 +1569,7 @@ export default function ChecklistEngine() {
       let serverPausedFlag = false;
       let remotePausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
       let cloudPausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
-      /** Só preenchidos no ramo editável; usados após o template para reset de cronómetros em revisão. */
+      /** Só preenchidos no ramo editável; usados após o template para reset de cronômetros em revisão. */
       let serverR: Record<string, any> = {};
       let reopenRevisionPending = false;
       let draftRes: Record<string, unknown> = {};
@@ -1687,7 +1687,7 @@ export default function ChecklistEngine() {
            draftRes = {};
          }
 
-         // OS em nuvem: servidor tem estado IN_PROGRESS + respostas (debounce PATCH); outro telemóvel
+         // OS em nuvem: servidor tem estado IN_PROGRESS + respostas (debounce PATCH); outro celular
          // não tinha @draft_tsk_* — precisamos puxar GET para continuar a mesma atividade.
          if (taskId) {
            let ctEarly: any = null;
@@ -1815,8 +1815,8 @@ export default function ChecklistEngine() {
       
       setTemplate(tmpl);
 
-      // Nova visita de revisão explícita (metadata): zerar cronómetros e limpar assinatura/deslocamento/geofence dessa sessão.
-      // NÃO usar «rascunho vazio + rev≥1 + marcadores no servidor» — apagava transit_start/end em execuções ainda ativas
+      // Nova visita de revisão explícita (metadata): zerar cronômetros e limpar assinatura/deslocamento/geofence dessa sessão.
+      // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" — apagava transit_start/end em execuções ainda ativas
       // (ex.: PATCH atrasado, outro dispositivo, cache) e o relatório ficava sem deslocamento.
       if (taskId && !readOnlyMode && reopenRevisionPending) {
         stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
@@ -1947,9 +1947,9 @@ export default function ChecklistEngine() {
         console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'readOnlyMode=', readOnlyMode);
       }
 
-      // Dashboard: aba «Em andamento» usa @brspark_inprogress_tasks. Só gravávamos no 1.º handleInput
-      // (assíncrono) — offline com rascunho já carregado ou saída rápida deixava a OS em «Pendentes».
-      // Revisão ainda não «Aceite» (PENDING/RECEIVED sem id em accepted_tasks): não marcar até o fluxo do modal.
+      // Dashboard: aba "Em andamento" usa @brspark_inprogress_tasks. Só gravávamos no 1.º handleInput
+      // (assíncrono) — offline com rascunho já carregado ou saída rápida deixava a OS em "Pendentes".
+      // Revisão ainda não "Aceite" (PENDING/RECEIVED sem id em accepted_tasks): não marcar até o fluxo do modal.
       if (resolvedTaskId && !readOnlyMode) {
         let skipAutoInProgress = false;
         if (reopenRevisionPending) {
@@ -2377,7 +2377,7 @@ export default function ChecklistEngine() {
         if (sizeBytes == null || !Number.isFinite(sizeBytes)) {
           Alert.alert(
             'Anexo',
-            'Não foi possível verificar o tamanho do ficheiro. Tente outro ficheiro ou formato.'
+            'Não foi possível verificar o tamanho do arquivo. Tente outro arquivo ou formato.'
           );
           return;
         }
@@ -2392,7 +2392,7 @@ export default function ChecklistEngine() {
         }
         mergeMediaUriIntoField(fieldId, asset.uri, scope);
       } catch (e) {
-        Alert.alert('Anexo', 'Não foi possível selecionar o ficheiro.');
+        Alert.alert('Anexo', 'Não foi possível selecionar o arquivo.');
       }
     } else {
       try {
@@ -2561,14 +2561,14 @@ export default function ChecklistEngine() {
         if (rows.length < minR) {
           Alert.alert(
             'Atenção',
-            `A secção "${sh.label || secKey}" exige pelo menos ${minR} preenchimento(s) repetido(s).`
+            `A seção "${sh.label || secKey}" exige pelo menos ${minR} preenchimento(s) repetido(s).`
           );
           return;
         }
         if (maxR != null && rows.length > maxR) {
           Alert.alert(
             'Atenção',
-            `A secção "${sh.label || secKey}" admite no máximo ${maxR} preenchimento(s).`
+            `A seção "${sh.label || secKey}" admite no máximo ${maxR} preenchimento(s).`
           );
           return;
         }
@@ -2954,7 +2954,7 @@ export default function ChecklistEngine() {
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
       if (field.type === 'section_break' && !checkSectionBreak) return false; 
       if (field.type === 'hidden') return false;
-      /** Custos do técnico: só por API/rascunho/sync — nunca no ecrã de execução. */
+      /** Custos do técnico: só por API/rascunho/sync — nunca na tela de execução. */
       if (field.type === 'technician_finance') return false;
       
       const rules = getAllRules();
@@ -3063,7 +3063,7 @@ export default function ChecklistEngine() {
   const appHubSectionOrder: 'free' | 'sequential' =
     template?.settings?.appHubSectionOrder === 'sequential' ? 'sequential' : 'free';
   const useSectionHub = appSectionStart === 'hub';
-  /** Com hub + lista completa, passamos a paginar por secção em vez do scroll único. */
+  /** Com hub + lista completa, passamos a paginar por seção em vez do scroll único. */
   const paginateSectionsForLayout =
     effectiveFillMode !== 'full' || (useSectionHub && effectiveFillMode === 'full');
 
@@ -3083,7 +3083,7 @@ export default function ChecklistEngine() {
     return pages;
   }, [paginateSectionsForLayout, pages, template?.title]);
 
-  /** Passos do assistente global: cada entrada é um ou vários campos (secção em modo lista agrupa). */
+  /** Passos do assistente global: cada entrada é um ou vários campos (seção em modo lista agrupa). */
   const wizardSteps = useMemo(() => {
     if (effectiveFillMode !== 'wizard')
       return [] as {
@@ -3153,7 +3153,7 @@ export default function ChecklistEngine() {
     setWizardIndex((w) => Math.min(w, max));
   }, [effectiveFillMode, wizardSteps.length]);
 
-  /** Em modo lista completa, agrupa campos por secção para suportar secções repetíveis. */
+  /** Em modo lista completa, agrupa campos por seção para suportar seções repetíveis. */
   const fullRenderChunks = useMemo(() => {
     if (effectiveFillMode !== 'full')
       return null as null | { kind: 'flat' | 'repeat'; sectionField?: any; fields: any[] }[];
@@ -3383,12 +3383,12 @@ export default function ChecklistEngine() {
       if (rows.length < minR) {
         Alert.alert(
           'Atenção',
-          `A secção "${sb.label || ''}" exige pelo menos ${minR} preenchimento(s).`
+          `A seção "${sb.label || ''}" exige pelo menos ${minR} preenchimento(s).`
         );
         return;
       }
       if (maxR != null && rows.length > maxR) {
-        Alert.alert('Atenção', `Máximo de ${maxR} instâncias nesta secção.`);
+        Alert.alert('Atenção', `Máximo de ${maxR} instâncias nesta seção.`);
         return;
       }
       const n = Math.max(rows.length, minR, 1);
@@ -4560,7 +4560,7 @@ export default function ChecklistEngine() {
                              : 'FOTOGRAFAR (GPS OBRIGATÓRIO)'
                            : field.type === 'file_upload'
                              ? fieldAllowsMultiple(field) && normalizeResponseArray(vv(field.id)).length > 0
-                               ? 'Anexar outro ficheiro'
+                               ? 'Anexar outro arquivo'
                                : 'Anexar Arquivo'
                              : fieldAllowsMultiple(field) && normalizeResponseArray(vv(field.id)).length > 0
                                ? 'Adicionar outra foto...'
@@ -4981,7 +4981,7 @@ export default function ChecklistEngine() {
                       }}
                     >
                       <Text style={{ fontWeight: '800', color: '#4f46e5' }}>
-                        {sb.label || 'Secção'} · {ri + 1}
+                        {sb.label || 'Seção'} · {ri + 1}
                       </Text>
                       {!isReadOnly && rs.length > minR ? (
                         <TouchableOpacity
@@ -5040,7 +5040,7 @@ export default function ChecklistEngine() {
                       <View key={`fcrep_${sb.id}_${ci}`} style={{ marginBottom: 20 }}>
                         {chunk.fields.length > 0 ? (
                           <Text style={{ fontWeight: '800', fontSize: 15, marginBottom: 10, color: '#0f172a' }}>
-                            {sb.label || 'Secção'}
+                            {sb.label || 'Seção'}
                           </Text>
                         ) : null}
                         {idxs.map((ri) => (
@@ -5113,7 +5113,7 @@ export default function ChecklistEngine() {
                     }}
                   >
                     <Text style={{ fontWeight: '800', color: '#4f46e5', marginBottom: 10 }}>
-                      {sb.label || 'Secção'} · {ri + 1}
+                      {sb.label || 'Seção'} · {ri + 1}
                     </Text>
                     {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
                   </View>
@@ -5218,7 +5218,7 @@ export default function ChecklistEngine() {
               )}
               {wizardIndex < wizardSteps.length - 1 ? (
                 <TouchableOpacity style={styles.navBtnNext} onPress={handleWizardNext}>
-                  <Text style={styles.navBtnText}>{"Seguinte >"}</Text>
+                  <Text style={styles.navBtnText}>{"Próximo >"}</Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
@@ -5261,7 +5261,7 @@ export default function ChecklistEngine() {
               )}
               {hybridInnerWizardIndex < hybridVisibleFields.length - 1 ? (
                 <TouchableOpacity style={styles.navBtnNext} onPress={handleHybridInnerNext}>
-                  <Text style={styles.navBtnText}>{"Seguinte >"}</Text>
+                  <Text style={styles.navBtnText}>{"Próximo >"}</Text>
                 </TouchableOpacity>
               ) : currentPage < displayPages.length - 1 ? (
                 <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>

@@ -40,7 +40,7 @@ const PRODUCTION_API_DEFAULT = 'https://brsparks.wstrategy.com.br';
 /**
  * Base da API (origem sem `/api` no fim).
  * - Se `EXPO_PUBLIC_API_BASE` estiver definido (.env / EAS), usa-se **sempre** (também em `__DEV__`),
- *   para testar no telemóvel com Expo contra produção sem depender do IP local :3001.
+ *   para testar no celular com Expo contra produção sem depender do IP local :3001.
  * - Sem variável: em dev → `http://MAC_IP:porta`; em release → produção.
  */
 const RESOLVED_API_BASE =
@@ -147,7 +147,7 @@ export async function getToken(): Promise<string | null> {
 // ─── AuthService ─────────────────────────────────────────────────────────────
 export class AuthService {
 
-  /** Avatar do utilizador anterior + purge total antes de gravar nova sessão (mesmo aparelho, outra conta). */
+  /** Avatar do usuário anterior + purge total antes de gravar nova sessão (mesmo aparelho, outra conta). */
   static async wipeLocalDataBeforeNewSession(): Promise<void> {
     const existing = await AuthService.getUser();
     if (existing?.id) {
@@ -223,7 +223,7 @@ export class AuthService {
     return data.user as User;
   }
 
-  /** Atualiza utilizador em memória persistente (ex.: cache de avatar). */
+  /** Atualiza usuário em memória persistente (ex.: cache de avatar). */
   static async patchUserInStorage(partial: Partial<User>): Promise<User | null> {
     const u = await AuthService.getUser();
     if (!u) return null;

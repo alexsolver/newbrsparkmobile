@@ -135,7 +135,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
               const hasKids   = (asset.childrenCount ?? 0) > 0;
               // intermediário: tem pai E filhos → laranja
               // raiz com filhos: não tem pai → verde
-              // folha: tem pai, sem filhos → amarelo
+              // planilha: tem pai, sem filhos → amarelo
               const pill = hasParent && hasKids
                 ? S.linkPillOrange
                 : !hasParent && hasKids
@@ -169,7 +169,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
                   </TouchableOpacity>
                 );
               }
-              // folha — só mostra badge estático amarelo
+              // planilha — só mostra badge estático amarelo
               return (
                 <View style={pill}>
                   <Ionicons name="link" size={11} color={iconColor} />

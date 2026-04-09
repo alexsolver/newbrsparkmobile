@@ -273,7 +273,31 @@ async function main() {
       create: { ...tag, sortOrder: i } 
     });
   }
-  console.log(`✅ Metatags: ${metatags.length} tags seeded`);
+
+  const techExpenseCats = [
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#EA580C' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'estacionamento', ptBr: 'Estacionamento', enUs: 'Parking', esEs: 'Estacionamiento', icon: 'business-outline', color: '#64748B' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'pedagio', ptBr: 'Pedágio / pedágios', enUs: 'Tolls', esEs: 'Peajes', icon: 'ticket-outline', color: '#7C3AED' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'transporte_publico_taxi_app', ptBr: 'Transporte público / táxi / app', enUs: 'Public transit / taxi / ride-hail', esEs: 'Transporte / taxi / app', icon: 'bus-outline', color: '#2563EB' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'materiais_consumiveis', ptBr: 'Materiais / consumíveis', enUs: 'Materials / consumables', esEs: 'Materiales / consumibles', icon: 'cube-outline', color: '#0D9488' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'pecas_antecipadas', ptBr: 'Peças antecipadas', enUs: 'Advance parts purchase', esEs: 'Piezas anticipadas', icon: 'hardware-chip-outline', color: '#0891B2' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'servicos_terceiros_obra', ptBr: 'Serviços de terceiros na obra', enUs: 'Third-party services on site', esEs: 'Servicios de terceros en obra', icon: 'people-outline', color: '#4F46E5' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'alimentacao', ptBr: 'Refeição / alimentação', enUs: 'Meals', esEs: 'Comidas', icon: 'restaurant-outline', color: '#D97706' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'hospedagem', ptBr: 'Hospedagem', enUs: 'Lodging', esEs: 'Hospedaje', icon: 'bed-outline', color: '#9333EA' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'ferramentas_equipamento', ptBr: 'Ferramentas / equipamento', enUs: 'Tools / equipment', esEs: 'Herramientas / equipo', icon: 'construct-outline', color: '#475569' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'epi', ptBr: 'EPI', enUs: 'PPE', esEs: 'EPP', icon: 'shield-checkmark-outline', color: '#059669' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'taxas_multas', ptBr: 'Taxas / multas', enUs: 'Fees / fines', esEs: 'Tasas / multas', icon: 'warning-outline', color: '#DC2626' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'comunicacao', ptBr: 'Comunicação (dados, SIM)', enUs: 'Communication (data, SIM)', esEs: 'Comunicación (datos, SIM)', icon: 'phone-portrait-outline', color: '#0284C7' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'outros', ptBr: 'Outros', enUs: 'Other', esEs: 'Otros', icon: 'ellipsis-horizontal-outline', color: '#6B7280' },
+  ];
+  for (const [i, tag] of techExpenseCats.entries()) {
+    await prisma.metatag.upsert({
+      where: { key: tag.key },
+      update: { type: tag.type, icon: tag.icon, color: tag.color, ptBr: tag.ptBr, enUs: tag.enUs, esEs: tag.esEs },
+      create: { ...tag, sortOrder: 200 + i },
+    });
+  }
+  console.log(`✅ Metatags: ${metatags.length} base + ${techExpenseCats.length} categorias despesa técnico`);
 
   // ── Compliance Docs ────────────────────────────────────
   const complianceDocs = [
@@ -561,6 +585,21 @@ async function main() {
         });
       }
       console.log('✅ Avaliação demo (Minha Produtividade) verificada');
+    }
+
+    const { newPublicTokenFields } = require('./lib/evaluationTrigger');
+    const pendingNoToken = await prisma.evaluationInstance.findMany({
+      where: { status: 'PENDING', publicToken: null },
+      select: { id: true },
+    });
+    for (const row of pendingNoToken) {
+      await prisma.evaluationInstance.update({
+        where: { id: row.id },
+        data: newPublicTokenFields(),
+      });
+    }
+    if (pendingNoToken.length) {
+      console.log(`✅ Tokens públicos de avaliação: ${pendingNoToken.length} instância(s) atualizada(s)`);
     }
   } catch (e) {
     console.warn('⚠️  Seed avaliação demo:', e.message);

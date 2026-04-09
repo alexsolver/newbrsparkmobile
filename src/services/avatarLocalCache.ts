@@ -50,7 +50,7 @@ export async function writeAvatarFromBase64(
   return path;
 }
 
-/** Remove ficheiros de avatar locais do utilizador. */
+/** Remove arquivos de avatar locais do usuário. */
 export async function deleteAvatarCache(userId: string): Promise<void> {
   const { jpg, png } = avatarPaths(userId);
   for (const p of [jpg, png]) {
@@ -63,7 +63,7 @@ export async function deleteAvatarCache(userId: string): Promise<void> {
   }
 }
 
-/** URI para mostrar: ficheiro local se existir; senão URL remota. */
+/** URI para mostrar: arquivo local se existir; senão URL remota. */
 export async function resolveAvatarUri(
   user: { avatarUrl?: string; avatarLocalUri?: string } | null | undefined
 ): Promise<string | undefined> {
@@ -86,7 +86,7 @@ export type AvatarMergeUser = {
 };
 
 /**
- * Preserva avatarLocalUri se a URL remota não mudou e o ficheiro ainda existe.
+ * Preserva avatarLocalUri se a URL remota não mudou e o arquivo ainda existe.
  * Se a URL mudou, apaga cache antigo (nova imagem será descarregada depois).
  */
 export async function mergeServerUserWithLocalAvatar<T extends AvatarMergeUser>(
@@ -148,7 +148,7 @@ export async function hasLocalAvatarFile(user: AvatarMergeUser | null | undefine
   }
 }
 
-/** Garante cópia local quando há URL mas ainda não há ficheiro (não bloqueia UI). */
+/** Garante cópia local quando há URL mas ainda não há arquivo (não bloqueia UI). */
 export async function warmAvatarCacheForUser(
   user: AvatarMergeUser | null | undefined,
   patchUser: (partial: { avatarLocalUri: string }) => Promise<void>

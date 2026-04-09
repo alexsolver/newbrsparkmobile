@@ -142,7 +142,7 @@ export function computePatrolCompliance(
   let maxDev = 0;
   const coveredIdx = new Set<number>();
 
-  /** Segmento conta para «no corredor» se o ponto médio do segmento está ≤ tolerância (mais estável que exigir os dois extremos). */
+  /** Segmento conta para "no corredor" se o ponto médio do segmento está ≤ tolerância (mais estável que exigir os dois extremos). */
   let onRouteM = 0;
   if (ref.length >= 2 && refLen >= 1) {
     for (let i = 1; i < used.length; i++) {

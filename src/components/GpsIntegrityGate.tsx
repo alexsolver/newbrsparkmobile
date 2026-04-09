@@ -25,7 +25,7 @@ export function GpsIntegrityGate({ children }: { children: React.ReactNode }) {
   const [reason, setReason] = useState<GpsIntegrityFailReason | null>(null);
 
   /**
-   * silent: não mostrar ecrã de «a verificar» nem desmontar o router.
+   * silent: não mostrar tela de "verificação" nem desmontar o router.
    * Usado ao regressar da background — caso contrário o Stack perde a rota (ex.: OS aberta).
    */
   const runCheck = useCallback(async (silent = false) => {

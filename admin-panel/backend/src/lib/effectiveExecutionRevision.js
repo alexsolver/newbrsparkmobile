@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Última revisão concluída mostrada ao utilizador: max(coluna ChecklistExecution.lastSubmittedRevision,
+ * Última revisão concluída mostrada ao usuário: max(coluna ChecklistExecution.lastSubmittedRevision,
  * maior revision em ChecklistExecutionRevision). Evita relatório/PDF com "—" quando há snapshots na tabela.
  */
 function effectiveLastSubmittedRevision(storedLsr, latestRevisionFromTable) {

@@ -166,7 +166,7 @@ function splitPolylineByArcM(poly: number[][], targetArcM: number): { covered: n
 const NAVIGATION_MAP_PITCH = 52;
 
 /**
- * Azimute do mapa em modo «rumo em cima»: deslocamento entre leituras ou, quase parado, rumo ao destino.
+ * Azimute do mapa em modo "rumo em cima": deslocamento entre leituras ou, quase parado, rumo ao destino.
  */
 function computeDrivingMapHeading(
   prev: { lat: number; lng: number } | null,
@@ -183,7 +183,7 @@ function computeDrivingMapHeading(
   return fallbackHeading;
 }
 
-/** Interpola rumo no círculo (menor arco) para rotações menos bruscas na câmara. */
+/** Interpola rumo no círculo (menor arco) para rotações menos bruscas na câmera. */
 function smoothHeadingDeg(current: number, target: number, factor: number): number {
   const d = ((((target - current) % 360) + 540) % 360) - 180;
   const next = current + d * factor;
@@ -194,7 +194,7 @@ const FOLLOW_CAMERA_MIN_MS = 1400;
 const FOLLOW_MOVE_THRESHOLD_M = 30;
 const HEADING_SMOOTH_FACTOR = 0.34;
 
-/** Zoom em modo navegação; abaixo disto a câmara aproxima-se sozinha (ex.: após fit da rota inteira). */
+/** Zoom em modo navegação; abaixo disto a câmera aproxima-se sozinha (ex.: após fit da rota inteira). */
 const NAV_FOLLOW_ZOOM = 17;
 const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
 
@@ -220,7 +220,7 @@ function EtaBadge({
   etaMinutes: number | null | undefined;
   pct: number;
   hint?: string | null;
-  /** Não há ponto de chegada para OSRM — não mostrar «Calculando...». */
+  /** Não há ponto de chegada para OSRM — não mostrar "Calculando...". */
   noDestination?: boolean;
   transitElapsedLabel?: string | null;
 }) {
@@ -414,13 +414,13 @@ export default function LiveRouteMapCard({
   const [expanded, setExpanded]       = useState(true);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
-  /** Comprimento (m) ao longo da linha de referência já «pintado» de laranja; só aumenta (pausa mantém o sítio). */
+  /** Comprimento (m) ao longo da linha de referência já "pintado" de laranja; só aumenta (pausa mantém o sítio). */
   const [routePaintArcM, setRoutePaintArcM] = useState(0);
 
   const [isPaused, setIsPaused] = useState(false);
   const [clientEtaMinutes, setClientEtaMinutes] = useState<number | null>(null);
   const [etaHint, setEtaHint] = useState<string | null>(null);
-  /** Modo navegação: mapa segue o GPS com rumo em cima (por defeito ao abrir o deslocamento). */
+  /** Modo navegação: mapa segue o GPS com rumo em cima (por padrão ao abrir o deslocamento). */
   const [followUser, setFollowUser] = useState(true);
   /** Painel de dicas na primeira vez (mapa nativo). */
   const [showTransitHints, setShowTransitHints] = useState(false);
@@ -440,7 +440,7 @@ export default function LiveRouteMapCard({
 
   /** Encaixe automático só quando a polilinha exibida muda (template → OSRM), não a cada GPS. */
   const lastAutoFitSigRef = useRef('');
-  /** Último rumo aplicado à câmara (modo navegação); mantém-se ao parar no semáforo. */
+  /** Último rumo aplicado à câmera (modo navegação); mantém-se ao parar no semáforo. */
   const lastMapHeadingRef = useRef(0);
 
   const dynamicRouteRef = useRef<number[][] | null>(null);
@@ -1098,7 +1098,7 @@ export default function LiveRouteMapCard({
             </View>
             <ScrollView style={styles.hintScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.hintBody}>
-                Por defeito o mapa está em <Text style={styles.hintStrong}>modo navegação</Text>: segue a sua posição,
+                Por padrão o mapa está em <Text style={styles.hintStrong}>modo navegação</Text>: segue a sua posição,
                 alinha o rumo em cima (com rotação suave) e inclina em 3D, como nas apps de navegação.
                 {'\n\n'}
                 Toque no ícone <Text style={styles.hintStrong}>navegação</Text> (círculo com seta) para{' '}
@@ -1116,9 +1116,9 @@ export default function LiveRouteMapCard({
                 azul tracejado — útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
                 trajeto planeado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
-                <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização «sempre» ou «em segundo plano»
+                <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"
                 quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
-                «Deslocamento em andamento» — é normal enquanto o deslocamento estiver activo.
+                "Deslocamento em andamento" — é normal enquanto o deslocamento estiver ativo.
               </Text>
             </ScrollView>
             <TouchableOpacity style={styles.hintBtn} onPress={dismissTransitHints} activeOpacity={0.85}>

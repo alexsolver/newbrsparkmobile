@@ -1,5 +1,5 @@
 /**
- * Tema visual do PDF — partilhado entre construtor e operations print.
+ * Tema visual do PDF — compartilhado entre construtor e operations print.
  */
 
 export const DEFAULT_THEME = {

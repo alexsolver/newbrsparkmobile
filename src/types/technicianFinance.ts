@@ -1,6 +1,6 @@
 export type TechnicianFinanceKind = 'expense' | 'revenue';
 
-/** Anexos: após sync, `uri` costuma ser URL https do storage; antes disso pode ser ficheiro local. */
+/** Anexos: após sync, `uri` costuma ser URL https do storage; antes disso pode ser arquivo local. */
 export type TechnicianFinanceAttachment = {
   uri: string;
   name?: string;
@@ -12,8 +12,10 @@ export type TechnicianFinanceEntry = {
   kind: TechnicianFinanceKind;
   amount: number;
   currency: string;
+  /** Chave da metatag TECHNICIAN_EXPENSE_CATEGORY (só despesas; opcional para legado). */
+  categoryKey?: string | null;
   description?: string;
-  /** Despesas manuais podem ligar-se a várias OS com campo «custos do técnico» no formulário. */
+  /** Despesas manuais podem ligar-se a várias OS com campo "custos do técnico" no formulário. */
   linkedTaskIds?: string[];
   taskId?: string | null;
   templateId?: string | null;
@@ -24,7 +26,7 @@ export type TechnicianFinanceEntry = {
   attachments?: TechnicianFinanceAttachment[];
   /**
    * Quando true (ex.: devolvido pelo escritório via sync), o técnico pode alterar valor, descrição e anexos
-   * desde que todas as OS do rateio estejam no telemóvel. Após guardar, volta a false.
+   * desde que todas as OS do rateio estejam no celular. Após guardar, volta a false.
    */
   financeValueUnlocked?: boolean;
   /**

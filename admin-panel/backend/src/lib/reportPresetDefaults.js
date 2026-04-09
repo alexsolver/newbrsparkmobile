@@ -90,7 +90,7 @@ function mergePresetConfig(raw) {
 /**
  * @param {object} config
  * @param {string} fieldId
- * @param {string} [fieldType] — `technician_finance` fica oculto no PDF por defeito (só aparece se explicitamente visível no preset).
+ * @param {string} [fieldType] — `technician_finance` fica oculto no PDF por padrão (só aparece se explicitamente visível no preset).
  */
 function isFieldVisible(config, fieldId, fieldType) {
   if (!fieldId) return true;

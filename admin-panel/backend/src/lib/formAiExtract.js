@@ -224,23 +224,23 @@ function formatColumnSignalsForLlm(profiles) {
   }
   const lines = [];
   lines.push(
-    'Regras: se signal for «dropdown» ou «dropdown_weak», a coluna tem poucos valores repetidos — prefere tipo dropdown (lista) em vez de texto livre.'
+    'Regras: se signal for "dropdown" ou "dropdown_weak", a coluna tem poucos valores repetidos — prefere tipo dropdown (lista) em vez de texto livre.'
   );
   lines.push(
-    'Se «yes_no», usa yes_no. Se «multiselect_hint», células trazem vários valores separados por vírgula/ponto-e-vírgula — prefere multiselect.'
+    'Se "yes_no", usa yes_no. Se "multiselect_hint", células trazem vários valores separados por vírgula/ponto-e-vírgula — prefere multiselect.'
   );
   lines.push(
-    'Se «barcode_hint», cabeçalho/valores sugerem identificador numérico (EAN/património) — prefere tipo barcode_scan nas opções.'
+    'Se "barcode_hint", cabeçalho/valores sugerem identificador numérico (EAN/patrimônio) — prefere tipo barcode_scan nas opções.'
   );
   lines.push(
-    'Se «photo_hint», o cabeçalho sugere evidência fotográfica — prefere photo ou photo_stamped conforme o contexto do utilizador.'
+    'Se "photo_hint", o cabeçalho sugere evidência fotográfica — prefere photo ou photo_stamped conforme o contexto do usuário.'
   );
   lines.push('');
   for (const p of profiles) {
     if (p.signal === 'none' && !p.suggestedOptionsLine) continue;
     const samp = (p.samples || []).slice(0, 6).join(' | ');
     lines.push(
-      `- Folha «${p.sheet}» | coluna ${p.colIndex} | cabeçalho «${p.header}» | signal=${p.signal} | ` +
+      `- Folha "${p.sheet}" | coluna ${p.colIndex} | cabeçalho "${p.header}" | signal=${p.signal} | ` +
         `${p.distinctCount} valores distintos em ${p.filledCount} células (repetição ${p.repeatRatio})` +
         (samp ? ` | amostra: ${samp}` : '') +
         (p.suggestedOptionsLine ? ` | valores sugeridos p/ lista: ${p.suggestedOptionsLine}` : '')

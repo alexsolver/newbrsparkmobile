@@ -26,6 +26,7 @@ function buildCategoryConfig(C: ColorPalette): Record<string, { icon: any; color
     sync: { icon: 'cloud-done', color: MEDIA_TAG_COLORS.AFTER, label: 'Sincronismo' },
     alert: { icon: 'warning', color: C.branding, label: 'Alerta' },
     info: { icon: 'information-circle', color: MEDIA_TAG_COLORS.BEFORE, label: 'Info' },
+    evaluation: { icon: 'star-half', color: C.accent, label: 'Produtividade' },
   };
 }
 
@@ -72,6 +73,16 @@ export default function NotificationsScreen() {
 
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as any;
+      const t = data?.type;
+      if (
+        t === 'EVALUATION_CRITICAL' ||
+        t === 'EVALUATION_NEW' ||
+        t === 'EVALUATION_DISPUTE_RESOLVED'
+      ) {
+        const eid = data?.evaluationInstanceId;
+        if (eid) router.push(`/productivity/${eid}` as any);
+        return;
+      }
       if (data?.assetId) router.push(`/asset/${data.assetId}` as any);
     });
 
@@ -103,14 +114,23 @@ export default function NotificationsScreen() {
     });
   };
 
-  const categories = ['all', 'maintenance', 'expiry', 'alert', 'sync', 'info'];
+  const categories = ['all', 'maintenance', 'expiry', 'alert', 'sync', 'info', 'evaluation'];
   const filtered = filter === 'all' ? items : items.filter((i) => i.category === filter);
   const unread = items.filter((i) => !i.read).length;
 
   const renderItem = ({ item, index }: { item: AppNotification; index: number }) => {
     const cfg = categoryConfig[item.category] || categoryConfig.info;
     return (
-      <TouchableOpacity style={[styles.card, !item.read && styles.cardUnread]} activeOpacity={0.82} onPress={() => handleMarkRead(item.id)}>
+      <TouchableOpacity
+        style={[styles.card, !item.read && styles.cardUnread]}
+        activeOpacity={0.82}
+        onPress={() => {
+          handleMarkRead(item.id);
+          if (item.evaluationInstanceId) {
+            router.push(`/productivity/${item.evaluationInstanceId}` as any);
+          }
+        }}
+      >
         <View style={[styles.iconWrap, { backgroundColor: cfg.color + '18' }]}>
           <Ionicons name={cfg.icon} size={22} color={cfg.color} />
         </View>

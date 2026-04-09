@@ -132,6 +132,39 @@
     .btn-reopen-revision ion-icon {
       pointer-events: none;
     }
+    /* Mesmo problema nos botões de modal (fechar / cabeçalho): o alvo do clique fica no shadow do ícone. */
+    .modal-overlay .modal-close ion-icon,
+    .modal-overlay .modal-title ion-icon {
+      pointer-events: none;
+    }
+    /*
+      Escolha de submissão: <dialog showModal> usa a "top layer" do browser (acima de Leaflet, mapas
+      no despacho, etc.). Evita overlay invisível a roubar cliques em algumas OS.
+    */
+    #revision-picker-modal.revision-picker-dialog {
+      border: none;
+      padding: 0;
+      margin: auto;
+      max-width: calc(100vw - 20px);
+      width: min(480px, 96vw);
+      background: transparent;
+      box-shadow: none;
+      color: inherit;
+    }
+    #revision-picker-modal.revision-picker-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #revision-picker-modal.revision-picker-dialog .modal {
+      width: 100%;
+      max-width: 480px;
+      pointer-events: auto;
+    }
+    #revision-picker-modal.revision-picker-dialog .modal-close ion-icon,
+    #revision-picker-modal.revision-picker-dialog .modal-title ion-icon {
+      pointer-events: none;
+    }
 
     /* Autocompletar técnico — Despachar OS */
     .dispatch-tech-suggest-wrap { position: relative; }
@@ -448,7 +481,7 @@
     }
     @media screen {
       .pdf-form-num {
-        /* Só no ecrã: anel sem blur (blur rasteriza como quadrado no PDF após quebra de página) */
+        /* Só na tela: anel sem blur (blur rasteriza como quadrado no PDF após quebra de página) */
         box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.45);
       }
     }
@@ -643,12 +676,12 @@
   </div>
 </div>
 
-<!-- ── Escolher submissão antes de abrir detalhe (várias revisões) ── -->
-<div class="modal-overlay" id="revision-picker-modal" style="display:none;opacity:1;pointer-events:all;z-index:10055;">
-  <div class="modal" style="max-width:480px;width:95%;">
+<!-- ── Escolher submissão antes de abrir detalhe (várias revisões) — dialog = top layer ── -->
+<dialog id="revision-picker-modal" class="revision-picker-dialog" aria-labelledby="revision-picker-dialog-title">
+  <div class="modal" style="max-width:480px;width:100%;">
     <div class="modal-header">
-      <span class="modal-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Qual submissão abrir?</span>
-      <button type="button" class="modal-close" onclick="closeRevisionPickerModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <span class="modal-title" id="revision-picker-dialog-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Qual submissão abrir?</span>
+      <button type="button" class="modal-close" onclick="void window.closeRevisionPickerModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p id="revision-picker-hint" style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 14px;">
@@ -657,11 +690,11 @@
       <div id="revision-picker-options" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="closeRevisionPickerModal()">Cancelar</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="void window.closeRevisionPickerModal()">Cancelar</button>
       <button type="button" class="btn btn-primary btn-sm" id="revision-picker-confirm-btn" onclick="void window.confirmRevisionPicker()">Abrir</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- ── Snapshot de revisão (histórico) ───────────────────────── -->
 <div class="modal-overlay" id="revision-snapshot-modal" style="display:none;opacity:1;pointer-events:all;z-index:10050;">
@@ -683,7 +716,7 @@
 </div>
 
 <!-- ── Reabrir FT para revisão (admin) ───────────────────────── -->
-<div class="modal-overlay" id="reopen-revision-modal" data-reopen-task-id="" style="display:none;opacity:1;pointer-events:all;z-index:10060;">
+<div class="modal-overlay" id="reopen-revision-modal" data-reopen-task-id="" style="display:none;opacity:1;pointer-events:all;z-index:130000;">
   <div class="modal" style="max-width:500px;width:95%;">
     <div class="modal-header">
       <span class="modal-title"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> Reabrir para revisão</span>
@@ -691,7 +724,7 @@
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 12px;">
-        A FT <strong id="reopen-revision-ft-label">—</strong> volta para «Em campo» (mesmo número). Quem deve executar esta revisão?
+        A FT <strong id="reopen-revision-ft-label">—</strong> volta para "Em campo" (mesmo número). Quem deve executar esta revisão?
       </p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
@@ -700,7 +733,7 @@
         </label>
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;">
           <input type="radio" name="reopen-assign" id="reopen-revision-other" value="other" onchange="window.toggleReopenRevisionTechUi()" />
-          <span style="font-size:13px;line-height:1.4"><strong>Atribuir a outro técnico</strong><br><span style="color:var(--text3);font-size:11px">Utilizador com login no app móvel</span></span>
+          <span style="font-size:13px;line-height:1.4"><strong>Atribuir a outro técnico</strong><br><span style="color:var(--text3);font-size:11px">Usuário com login no app móvel</span></span>
         </label>
         <div id="reopen-revision-tech-wrap" style="display:none;padding-left:4px;">
           <label class="form-label" for="reopen-revision-tech-select">Técnico</label>
@@ -976,7 +1009,7 @@ function displayLastConcludedRevisionNumber(t) {
 }
 
 /**
- * A 1.ª conclusão é indexada como 1 na BD, mas não é «revisão» no sentido de nova visita.
+ * A 1.ª conclusão é indexada como 1 na BD, mas não é "revisão" no sentido de nova visita.
  * Badge nos cartões só a partir da 2.ª submissão.
  */
 function completedTaskSubmissionBadgeHtml(task) {
@@ -995,7 +1028,7 @@ function reopenRevisionPendingFromTask(t) {
   return false;
 }
 
-/** Texto curto para cabeçalho PDF: não chamar 1.ª conclusão de «revisão». */
+/** Texto curto para cabeçalho PDF: não chamar 1.ª conclusão de "revisão". */
 function revisionContextSubtitle(t) {
   if (!t) return '';
   const n = displayLastConcludedRevisionNumber(t);
@@ -1070,7 +1103,7 @@ let reopenRevisionTaskId = null;
 let _reopenUsersCache = null;
 let _dispatchSuggestIndex = -1;
 
-/** Utilizadores activos para reabertura e despacho (partilha cache). */
+/** Usuários ativos para reabertura e despacho (cache compartilhado). */
 async function ensureOpsActiveUsersCache() {
   if (_reopenUsersCache) return _reopenUsersCache;
   try {
@@ -1242,7 +1275,7 @@ window.openReopenRevisionModal = async function (taskId) {
   window.toggleReopenRevisionTechUi();
 
   const sel = document.getElementById('reopen-revision-tech-select');
-  sel.innerHTML = '<option value="">A carregar…</option>';
+  sel.innerHTML = '<option value="">Carregando…</option>';
   document.getElementById('reopen-revision-modal').style.display = 'flex';
 
   const escOpt = (s) =>
@@ -1258,7 +1291,7 @@ window.openReopenRevisionModal = async function (taskId) {
       String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' })
     );
     if (sorted.length === 0) {
-      sel.innerHTML = '<option value="">Nenhum utilizador activo</option>';
+      sel.innerHTML = '<option value="">Nenhum usuário ativo</option>';
       return;
     }
     sel.innerHTML = sorted
@@ -1271,7 +1304,7 @@ window.openReopenRevisionModal = async function (taskId) {
     sel.value = firstOther ? firstOther.email : sorted[0].email;
   } catch (e) {
     console.error('[reopen] users', e);
-    sel.innerHTML = '<option value="">Erro ao carregar utilizadores</option>';
+    sel.innerHTML = '<option value="">Erro ao carregar usuários</option>';
   }
 };
 
@@ -1286,7 +1319,7 @@ window.submitReopenRevision = async function () {
     reopenRevisionTaskId ||
     (modalEl && modalEl.dataset.reopenTaskId ? String(modalEl.dataset.reopenTaskId).trim() : '');
   if (!taskId) {
-    alert('Não foi possível identificar a OS. Feche o modal, actualize o quadro (F5) e tente de novo.');
+    alert('Não foi possível identificar a OS. Feche o modal, atualize o quadro (F5) e tente de novo.');
     console.warn('[reopen] submit sem taskId');
     return;
   }
@@ -1346,7 +1379,7 @@ window.submitReopenRevision = async function () {
     const msg =
       !same && task && body.targetOwnerEmail
         ? 'OS reaberta e atribuída. O novo técnico verá a tarefa após sincronizar o app.'
-        : 'OS reaberta. O técnico verá a actividade em «Em campo» após sincronizar o app.';
+        : 'OS reaberta. O técnico verá a atividade em "Em campo" após sincronizar o app.';
     alert(msg);
     _reopenUsersCache = null;
     await window.loadBoard();
@@ -1366,11 +1399,13 @@ window.submitReopenRevision = async function () {
 // ── Load Board ────────────────────────────────────────────────
 window.loadBoard = async function() {
   try {
+    const rpDlg = document.getElementById('revision-picker-modal');
+    if (rpDlg && rpDlg.open) return;
     const data = await CONFIG.get(`/operations/tasks?_t=${Date.now()}`);
     if (!data) return;
     if (!Array.isArray(data)) {
       console.error('[OPS] /operations/tasks não devolveu array:', data);
-      alert('A API devolveu um formato inesperado ao carregar o quadro. Veja a consola (F12) ou confirme o login.');
+      alert('A API devolveu um formato inesperado ao carregar o quadro. Veja a console (F12) ou confirme o login.');
       return;
     }
     allTasks = data;
@@ -1975,7 +2010,7 @@ function buildPauseProductivityPdfFragment(t, responses, escPdf, fmtDurPdf) {
   if (!rows && metaBits.length === 0) {
     return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fde68a">
       <div style="font-size:7px;font-weight:900;color:#92400e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Pausas no atendimento</div>
-      <div style="font-size:7px;color:#94a3b8;font-style:italic">Sem registo de pausas.</div>
+      <div style="font-size:7px;color:#94a3b8;font-style:italic">Sem registro de pausas.</div>
     </div>`;
   }
   let inner = metaBits.join('');
@@ -2562,12 +2597,12 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Desvio máx.</div><div style="font-weight:900;font-size:14px;margin-top:2px">${escPdf(String(p.maxDeviationM ?? '—'))} m</div></div>
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Tolerância</div><div style="font-weight:900;font-size:14px;margin-top:2px">${escPdf(tol)} m</div></div>
       </div>
-      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a «distância no corredor ÷ referência».</div>
+      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a "distância no corredor ÷ referência".</div>
       <div style="margin-top:10px;padding:10px 12px;background:#fffbea;border:1px solid #fde68a;border-radius:8px">
         <div style="font-size:9px;font-weight:900;color:#9a3412;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Resumo do percurso</div>
         <table style="width:100%;font-size:10px;color:${th.colorText};line-height:1.5;border-collapse:collapse">
           <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância percorrida <span style="font-size:8px">(trilha GPS, amostras válidas na app)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dTraj}</td></tr>
-          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registo, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registro, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
           <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Comprimento da rota de referência</td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dRef}</td></tr>
         </table>
         <div style="margin-top:8px;font-size:8px;color:${th.colorMuted};line-height:1.4;border-top:1px solid ${th.colorBorder};padding-top:8px">
@@ -2578,7 +2613,7 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
     const refHint =
       ref.length < 2
         ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
-        : 'Não há métricas de patrulha neste registo (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
     const estLen = polylineLengthTraversedPdfOps(tr);
     const extraEst =
       estLen != null
@@ -2588,13 +2623,13 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
   }
   let mapBlock = '';
   const osmLinkRowPatrol = browseOsmUrl
-    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em ecrã completo (OpenStreetMap)</a></div>`
+    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em tela cheia (OpenStreetMap)</a></div>`
     : '';
   if (rasterMapInner) {
     mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
       ${osmLinkRowPatrol}
       ${rasterMapInner}
-      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e pormenor, use «Abrir em ecrã completo». O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
     </div>`;
   } else if (!p) {
     mapBlock =
@@ -2825,7 +2860,7 @@ function parseSchemaArrayOps(schemaData) {
   return [];
 }
 
-/** Mapa campo → id da secção repetível (`multiple`); vem do API ou é derivado de `schemaData`. */
+/** Mapa campo → id da seção repetível (`multiple`); vem do API ou é derivado de `schemaData`. */
 function buildRepeatFieldMapFromTemplate(template) {
   if (
     template &&
@@ -2859,7 +2894,7 @@ function normalizeSectionRepeatRows(responses, sectionId) {
 }
 
 /**
- * Agrupa campos consecutivos do template que pertencem à mesma secção repetível (`repeatMap`).
+ * Agrupa campos consecutivos do template que pertencem à mesma seção repetível (`repeatMap`).
  * Usado no relatório e no PDF para listar por instância (linha) em vez de por tipo de campo.
  */
 function groupTemplateFieldsByRepeatRuns(fields, repeatMap) {
@@ -2889,7 +2924,7 @@ function groupTemplateFieldsByRepeatRuns(fields, repeatMap) {
 }
 
 function repeatSectionLabelFromTemplate(template, sectionId) {
-  if (!sectionId) return 'Secção repetível';
+  if (!sectionId) return 'Seção repetível';
   const fromSchema = sectionLabelsFromSchemaData(template && template.schemaData);
   if (fromSchema[sectionId]) return fromSchema[sectionId];
   const br =
@@ -2897,7 +2932,7 @@ function repeatSectionLabelFromTemplate(template, sectionId) {
       ? template.sectionBreaks.find((s) => s && s.id === sectionId)
       : null;
   if (br && br.label != null && String(br.label).trim() !== '') return String(br.label).trim();
-  return 'Secção repetível';
+  return 'Seção repetível';
 }
 
 function sectionLabelsFromSchemaData(schemaData) {
@@ -2996,7 +3031,7 @@ function buildRevisionHistoryHtml(t) {
     return `
     <div class="report-field" style="margin-top:10px">
       <div class="report-field-label">Histórico de submissões</div>
-      <div class="report-field-value" style="color:var(--text3)">A carregar…</div>
+      <div class="report-field-value" style="color:var(--text3)">Carregando…</div>
     </div>`;
   }
   if (t._revisionHistoryFetchFailed) {
@@ -3010,7 +3045,7 @@ function buildRevisionHistoryHtml(t) {
     return `
     <div class="report-field" style="margin-top:10px">
       <div class="report-field-label">Histórico de submissões</div>
-      <div class="report-field-value" style="color:var(--text3)">Nenhum registo (OS sem conclusões indexadas).</div>
+      <div class="report-field-value" style="color:var(--text3)">Nenhum registro (OS sem conclusões indexadas).</div>
     </div>`;
   }
   const rows = revs
@@ -3524,7 +3559,7 @@ function buildReportTab(t) {
     return str;
   };
 
-  // Se temos as definições do template, renderiza com labels
+  // Se temos as configurações do template, renderiza com labels
   let items = '';
   if (Array.isArray(fields) && fields.length > 0) {
     const repeatMap = buildRepeatFieldMapFromTemplate(template);
@@ -3809,10 +3844,20 @@ function applyDetailModalHeader(t) {
 
 function closeRevisionPickerModal() {
   const el = document.getElementById('revision-picker-modal');
-  if (el) el.style.display = 'none';
+  if (el) {
+    try {
+      if (el.open) el.close();
+    } catch (e) {
+      el.removeAttribute('open');
+    }
+    el.classList.remove('open');
+  }
   window._revisionPickerTaskId = null;
 }
+/* Módulo ES: onclick="" só vê globais em window — sem isto Cancelar e o X não fazem nada. */
+window.closeRevisionPickerModal = closeRevisionPickerModal;
 
+/** Opções do picker criadas via DOM (evita HTML partido se submissionId tiver caracteres especiais). */
 function openRevisionPickerModal(id, revs, t) {
   window._revisionPickerTaskId = id;
   const wrap = document.getElementById('revision-picker-options');
@@ -3820,35 +3865,89 @@ function openRevisionPickerModal(id, revs, t) {
   const st = String(t.status || '').toUpperCase();
   const showLive = !['COMPLETED', 'SYNCED'].includes(st);
   const fd = (d) => (d ? new Date(d).toLocaleString('pt-BR') : '—');
-  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let maxRev = 0;
   revs.forEach((r) => {
     maxRev = Math.max(maxRev, Number(r.revision) || 0);
   });
-  const parts = [];
+
+  const baseLabelStyle = {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'flex-start',
+    cursor: 'pointer',
+    padding: '12px',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+  };
+
+  wrap.replaceChildren();
+
   if (showLive) {
-    parts.push(
-      `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
-        <input type="radio" name="rev-pick-choice" value="live" checked />
-        <span style="font-size:13px;line-height:1.4"><strong>Estado actual</strong><br><span style="color:var(--text3);font-size:12px">Respostas e metadata actuais da execução no servidor (rascunho, em curso ou última sincronização).</span></span>
-      </label>`
-    );
+    const lab = document.createElement('label');
+    Object.assign(lab.style, baseLabelStyle, { background: 'var(--surface2)' });
+    const inp = document.createElement('input');
+    inp.type = 'radio';
+    inp.name = 'rev-pick-choice';
+    inp.value = 'live';
+    inp.checked = true;
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:13px;line-height:1.4';
+    const s1 = document.createElement('strong');
+    s1.textContent = 'estado atual';
+    const br = document.createElement('br');
+    const s2 = document.createElement('span');
+    s2.style.cssText = 'color:var(--text3);font-size:12px';
+    s2.textContent =
+      'Respostas e metadata actuais da execução no servidor (rascunho, em curso ou última sincronização).';
+    span.append(s1, br, s2);
+    lab.append(inp, span);
+    wrap.appendChild(lab);
   }
+
   revs.forEach((r) => {
     const revn = Number(r.revision) || 0;
-    const checked = !showLive && revn === maxRev ? ' checked' : '';
-    const sid = r.submissionId ? String(r.submissionId) : '';
-    const cid = sid ? esc(sid.length > 36 ? sid.slice(0, 36) + '…' : sid) : '—';
-    parts.push(
-      `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
-        <input type="radio" name="rev-pick-choice" value="${revn}"${checked} />
-        <span style="font-size:13px;line-height:1.4"><strong>Submissão n.º ${revn}</strong><br><span style="color:var(--text3);font-size:12px">Concluída: ${fd(r.completedAt)} · Submission: ${cid}</span></span>
-      </label>`
-    );
+    const checked = !showLive && revn === maxRev;
+    const sid = r.submissionId != null ? String(r.submissionId) : '';
+    const cid = sid ? (sid.length > 36 ? `${sid.slice(0, 36)}…` : sid) : '—';
+
+    const lab = document.createElement('label');
+    Object.assign(lab.style, baseLabelStyle, { background: 'var(--surface)' });
+    const inp = document.createElement('input');
+    inp.type = 'radio';
+    inp.name = 'rev-pick-choice';
+    inp.value = String(revn);
+    if (checked) inp.checked = true;
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:13px;line-height:1.4';
+    const strong = document.createElement('strong');
+    strong.textContent = `Submissão n.º ${revn}`;
+    const br = document.createElement('br');
+    const sub = document.createElement('span');
+    sub.style.cssText = 'color:var(--text3);font-size:12px';
+    sub.textContent = `Concluída: ${fd(r.completedAt)} · Submission: ${cid}`;
+    span.append(strong, br, sub);
+    lab.append(inp, span);
+    wrap.appendChild(lab);
   });
-  wrap.innerHTML = parts.join('');
+
   const modal = document.getElementById('revision-picker-modal');
-  if (modal) modal.style.display = 'flex';
+  if (!modal) return;
+  if (modal.open) {
+    try {
+      modal.close();
+    } catch (e) {}
+  }
+  modal.classList.add('open');
+  try {
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      modal.setAttribute('open', '');
+    }
+  } catch (e) {
+    console.warn('[revision-picker] showModal', e);
+    modal.setAttribute('open', '');
+  }
 }
 
 window.confirmRevisionPicker = async function () {
@@ -4075,7 +4174,7 @@ window.printReport = async function() {
               const snap = await snapRes.json();
               t = mergeSnapshotIntoTask(found, snap);
             } else {
-              console.warn('[PDF] Snapshot da submissão', viewingRev, 'indisponível; a usar estado actual.');
+              console.warn('[PDF] Snapshot da submissão', viewingRev, 'indisponível; a usar estado atual.');
             }
           } catch (e) {
             console.warn('[PDF] Falha ao recarregar snapshot para PDF:', e);
@@ -4317,7 +4416,7 @@ window.printReport = async function() {
     });
   }
 
-  /** Comentários por foto/anexo (`__media_cap_<fieldId>`) — por linha em secções repetíveis */
+  /** Comentários por foto/anexo (`__media_cap_<fieldId>`) — por linha em seções repetíveis */
   const pdfMediaCapHtml = (fieldId, index, rowScope) => {
     if (!fieldId) return '';
     const raw =
@@ -4552,7 +4651,7 @@ window.printReport = async function() {
             displayVal = attachList
               .map((u, i) => {
                 if (u.startsWith('file://')) {
-                  return `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` + pdfMediaCapHtml(id, i, row);
+                  return `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Arquivo ainda no dispositivo (aguarda upload)</div>` + pdfMediaCapHtml(id, i, row);
                 }
                 const base = u.split('?')[0];
                 let name = base.split('/').pop() || 'anexo';
@@ -4787,7 +4886,7 @@ window.printReport = async function() {
       else if (tm.plannedSourceKey === 'straight_line') {
         plannedFoot = 'Distância em linha reta · tempo não estimado';
       } else if (tm.plannedSourceKey === 'task_eta_legacy') {
-        plannedFoot = 'ETA da OS (sem registo detalhado na saída)';
+        plannedFoot = 'ETA da OS (sem registro detalhado na saída)';
       }
 
       let transitSeconds = tm.actualDurationSec;
@@ -4859,7 +4958,7 @@ window.printReport = async function() {
         }
       }
 
-      const actualDistHint = tm.actualDistFromPolyline ? 'trajeto GPS' : 'aprox. (reta ou registo)';
+      const actualDistHint = tm.actualDistFromPolyline ? 'trajeto GPS' : 'aprox. (reta ou registro)';
       const remainHtml = (!reachedDestination && hasDestCoords)
         ? `<div style="font-size:8px;color:#DC2626;font-weight:700;margin-top:2px">${distToDestKm.toFixed(2)} km p/ destino</div>`
         : '';
@@ -5360,7 +5459,7 @@ window.openRevisionSnapshotModal = async function (execId, revision) {
         : `Submissão n.º ${rN} — ${displayOsLabel(base)}`;
   }
   document.getElementById('revision-snapshot-body').innerHTML =
-    '<div style="padding:24px;color:var(--text3)">A carregar…</div>';
+    '<div style="padding:24px;color:var(--text3)">Carregando…</div>';
   document.getElementById('revision-snapshot-modal').style.display = 'flex';
 
   try {
@@ -6016,6 +6115,17 @@ window.confirmDispatch = async function() {
     }
   } catch(e) { alert('Erro de rede ao despachar OS.'); }
 };
+
+// ── Escolha de submissão: sincronizar estado ao fechar com Escape ou programaticamente ──
+(() => {
+  const d = document.getElementById('revision-picker-modal');
+  if (!d || d.dataset.revisionPickerCloseBound) return;
+  d.dataset.revisionPickerCloseBound = '1';
+  d.addEventListener('close', () => {
+    window._revisionPickerTaskId = null;
+    d.classList.remove('open');
+  });
+})();
 
 // ── Auto-refresh (30s) ─────────────────────────────────────────
 initDispatchTechAutocomplete();

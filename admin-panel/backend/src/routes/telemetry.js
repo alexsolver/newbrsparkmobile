@@ -6,7 +6,7 @@ const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetry
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('../lib/osrmBaseUrl');
 const { osrmEtaMinutesMatchOrRoute } = require('../lib/osrmEta');
 
-/** Hora da amostra no dispositivo (GPS); se ausente, hora de receção no servidor. */
+/** Hora da amostra no dispositivo (GPS); se ausente, hora de recebimento no servidor. */
 function telemetrySampleTimeMs(row) {
   const t = row && (row.deviceTimestamp || row.serverTimestamp);
   return t ? new Date(t).getTime() : 0;

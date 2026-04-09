@@ -117,7 +117,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
     return (
       <View style={styles.loadingBox}>
         <ActivityIndicator color="#15803d" />
-        <Text style={styles.loadingText}>A carregar estoque técnico…</Text>
+        <Text style={styles.loadingText}>Carregando estoque técnico…</Text>
       </View>
     );
   }
@@ -196,7 +196,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
           <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Entrada no estoque técnico</Text>
             <Text style={styles.modalHint}>
-              Regista materiais recebidos; o saldo aumenta ao concluir o checklist. Itens cadastrados em «Meu estoque».
+              Registre materiais recebidos; o saldo aumenta ao concluir o checklist. Itens cadastrados em "Meu estoque".
             </Text>
             <TextInput
               style={styles.searchInput}
@@ -211,7 +211,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
               style={{ maxHeight: 320 }}
               ListEmptyComponent={
                 <Text style={styles.emptyPick}>
-                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou o ecrã de cadastro.
+                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
                 </Text>
               }
               renderItem={({ item: it }) => (

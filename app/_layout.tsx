@@ -127,7 +127,7 @@ function AppInitializer() {
     return () => clearInterval(intervalId);
   }, [user, loading]);
 
-  // Regista token Expo Push ao iniciar sessão (antes só ao abrir o separador Notificações)
+  // Registre token Expo Push ao iniciar sessão (antes só ao abrir o separador Notificações)
   useEffect(() => {
     if (loading || !user) return;
     NotificationService.registerForPushNotificationsAsync().catch(() => {});

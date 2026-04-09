@@ -42,20 +42,20 @@
     "month": "mês"
   },
   "deviceTime": {
-    "checking": "A verificar data e hora…",
+    "checking": "Verificando data e hora…",
     "blockTitle": "Data e hora do dispositivo",
-    "blockBodyAndroid": "Para utilizar o BrSpark, ative a data e hora automáticas e o fuso horário automático em Definições → Geral → Data e hora.",
-    "blockBodyIos": "O relógio do iPhone está muito diferente do servidor (mais de 3 minutos). Ative «Definir automaticamente» em Definições → Geral → Data e hora e confirme que tem ligação à internet.",
-    "openSettings": "Abrir definições",
+    "blockBodyAndroid": "Para utilizar o BrSpark, ative a data e hora automáticas e o fuso horário automático em Configurações → Geral → Data e hora.",
+    "blockBodyIos": "O relógio do iPhone está muito diferente do servidor (mais de 3 minutos). Ative \u201cDefinir automaticamente\u201d em Configurações → Geral → Data e hora e confirme que há conexão com a internet.",
+    "openSettings": "Abrir configurações",
     "verifyAgain": "Verificar novamente"
   },
   "gpsIntegrity": {
-    "checking": "A verificar integridade do GPS…",
+    "checking": "Verificando integridade do GPS…",
     "blockTitle": "Localização não confiável",
-    "blockBodyAndroidSettings": "Foi detetada uma app de localização fictícia (ex.: Fake GPS) ou modo de teste nas opções de programador. Desative a app de localização fictícia e repor as definições de localização reais para continuar.",
+    "blockBodyAndroidSettings": "Foi detectado um app de localização falsa (ex.: Fake GPS) ou modo de teste nas opções de desenvolvedor. Desative o app de localização falsa e restaure as configurações de localização reais para continuar.",
     "blockBodyAndroidPosition": "O sistema reportou que a posição atual é simulada. Desative apps de GPS falso e use apenas a localização real do dispositivo.",
-    "blockBodyIos": "A posição parece estar a ser simulada por software (por exemplo depuração com localização fictícia). Use apenas o GPS real do iPhone para utilizar o BrSpark.",
-    "openSettings": "Abrir definições",
+    "blockBodyIos": "A posição parece estar sendo simulada por software (por exemplo, depuração com localização falsa). Use apenas o GPS real do iPhone para usar o BrSpark.",
+    "openSettings": "Abrir configurações",
     "verifyAgain": "Verificar novamente"
   },
   "tabs": {
@@ -101,9 +101,13 @@
     "duration": "Duração aproximada: {{min}} min",
     "status": "Status",
     "scores": "Pontuação",
+    "insights": "Sugestões",
+    "clientSurvey": "Formulário do cliente",
+    "clientSurveyFullLink": "Link para enviar ao cliente (copie e compartilhe):",
+    "clientSurveyHint": "Configure ADMIN_PANEL_PUBLIC_BASE_URL no servidor para obter o link completo. Caminho relativo no painel:",
     "comment": "Comentário",
     "internalNote": "Nota interna",
-    "internalNotePh": "Registo interno (não visível ao cliente)",
+    "internalNotePh": "Registro interno (não visível ao cliente)",
     "sendNote": "Guardar nota",
     "dispute": "Solicitar revisão",
     "disputePh": "Explique o motivo (mín. 10 caracteres)",
@@ -1274,7 +1278,7 @@
         "other": "Outro (comunicação) — especificar"
       },
       "admin": {
-        "documentation": "Documentação / registo",
+        "documentation": "Documentação / registro",
         "billing": "Faturação / aprovação comercial",
         "other": "Outro (administrativo) — especificar"
       },

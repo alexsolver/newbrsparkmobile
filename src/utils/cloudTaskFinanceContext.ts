@@ -65,7 +65,7 @@ function activityTitleFromTask(t: any): string {
   return tt;
 }
 
-/** Constrói o registo a guardar no mapa id → contexto (a partir de um item cru do pull de tarefas). */
+/** Constrói o registro a guardar no mapa id → contexto (a partir de um item cru do pull de tarefas). */
 export function cloudTaskToFinanceInfo(t: any): CloudTaskFinanceInfo {
   const rawOs = t?.osNumber ?? t?.os_number;
   const osNumber = rawOs != null && String(rawOs).trim() !== '' ? String(rawOs).trim() : null;

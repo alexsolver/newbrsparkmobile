@@ -1,5 +1,5 @@
 /**
- * Texto de «local de atendimento» a partir do despacho (endereço + lat/lng).
+ * Texto de "local de atendimento" a partir do despacho (endereço + lat/lng).
  * Não confundir com o título da OS / nome do formulário.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Registo global da tarefa de localização em segundo plano (expo-task-manager).
+ * Registro global da tarefa de localização em segundo plano (expo-task-manager).
  * Deve ser importado no arranque da app (app/_layout.tsx) antes de qualquer startLocationUpdatesAsync.
  */
 import * as TaskManager from 'expo-task-manager';

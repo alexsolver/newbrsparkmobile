@@ -10,6 +10,7 @@ export type FinanceLine = {
   kind: TechnicianFinanceKind;
   amount: number;
   description?: string;
+  categoryKey?: string;
 };
 
 export type ParsedFinanceField = {
@@ -30,6 +31,10 @@ export function parseTechnicianFinanceValue(raw: unknown): ParsedFinanceField {
         kind: x?.kind === 'revenue' ? 'revenue' : 'expense',
         amount: Math.max(0, Number(String(x?.amount ?? '').replace(',', '.')) || 0),
         description: x?.description != null ? String(x.description) : undefined,
+        categoryKey:
+          x?.categoryKey != null && String(x.categoryKey).trim() !== ''
+            ? String(x.categoryKey).trim()
+            : undefined,
       }))
       .filter((l: FinanceLine) => l.amount > 0);
 
@@ -111,6 +116,10 @@ export async function applyTechnicianFinanceForSubmission(args: {
           amount: line.amount,
           currency: 'BRL',
           description: line.description,
+          category_key:
+            line.kind === 'expense' && line.categoryKey != null && String(line.categoryKey).trim() !== ''
+              ? String(line.categoryKey).trim()
+              : null,
           taskId: taskId || null,
           templateId: templateId || null,
           fieldId: field.id,

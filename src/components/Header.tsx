@@ -170,10 +170,10 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
     lineHeight: fontSize.xs + 2,
     letterSpacing: 0.2,
     textAlign: 'center' as const,
-    /** Não usar adjustsFontSizeToFit: com flex igual por segmento, «PRESTADOR» ficava microscópico vs «BENS». */
+    /** Não usar adjustsFontSizeToFit: com flex igual por segmento, "PRESTADOR" ficava microscópico vs "BENS". */
   };
 
-  /** Largura um pouco maior com 2 segmentos para «PRESTADOR» + «BENS» sem apertar o texto. */
+  /** Largura um pouco maior com 2 segmentos para "PRESTADOR" + "BENS" sem apertar o texto. */
   const idealBadgeWidth = badgeSegmentCount <= 1 ? 122 : badgeSegmentCount === 2 ? 186 : 228;
   /** Espaço entre logo (≈100) + margem, avatar (≈54) e padding do header — evita sobrepor o logo com absolute center. */
   const headerSideReserve = 32 + 108 + 54;

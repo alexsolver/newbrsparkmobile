@@ -1,6 +1,14 @@
 'use strict';
 
+const crypto = require('crypto');
 const prisma = require('../db');
+
+function newPublicTokenFields() {
+  return {
+    publicToken: crypto.randomBytes(24).toString('hex'),
+    publicTokenExpiresAt: new Date(Date.now() + 30 * 86400000),
+  };
+}
 
 const DEFAULT_TEMPLATE_NAME = 'Satisfação pós-OS (padrão)';
 
@@ -84,7 +92,15 @@ async function onChecklistExecutionSynced(executionId) {
   const idempotencyKey = `os_sync:${executionId}:${revision}`;
 
   const dup = await prisma.evaluationInstance.findUnique({ where: { idempotencyKey } });
-  if (dup) return dup;
+  if (dup) {
+    if (!dup.publicToken && dup.status === 'PENDING') {
+      return prisma.evaluationInstance.update({
+        where: { id: dup.id },
+        data: newPublicTokenFields(),
+      });
+    }
+    return dup;
+  }
 
   const template = await getOrCreateDefaultClientTemplate(tenantId);
 
@@ -98,6 +114,7 @@ async function onChecklistExecutionSynced(executionId) {
       status: 'PENDING',
       triggeredBy: 'OS_SYNCED',
       idempotencyKey,
+      ...newPublicTokenFields(),
     },
   });
 
@@ -108,4 +125,5 @@ module.exports = {
   getOrCreateDefaultClientTemplate,
   onChecklistExecutionSynced,
   DEFAULT_TEMPLATE_NAME,
+  newPublicTokenFields,
 };

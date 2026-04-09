@@ -3,9 +3,9 @@
  */
 
 const MSG_END_BEFORE_START =
-    'O campo «Finalizar deslocamento» não pode aparecer antes de «Iniciar deslocamento» (nem sem este último).';
+    'O campo "Finalizar deslocamento" não pode aparecer antes de "Iniciar deslocamento" (nem sem este último).';
 const MSG_START_WITHOUT_END =
-    'Se o formulário inclui «Iniciar deslocamento», também tem de incluir «Finalizar deslocamento».';
+    'Se o formulário inclui "Iniciar deslocamento", também tem de incluir "Finalizar deslocamento".';
 
 /**
  * @param {unknown[]} schemaData

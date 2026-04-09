@@ -362,7 +362,7 @@ function capGeometryPoints(ring: number[][]): number[][] {
 }
 
 /**
- * Geometria via backend Brspark: o telemóvel fala com a API (Wi‑Fi/LAN/produção);
+ * Geometria via backend Brspark: o celular fala com a API (Wi‑Fi/LAN/produção);
  * o servidor fala com o OSRM (rede interna, VPN, URL inacessível no 5G).
  */
 async function fetchDrivingGeometryViaBackend(
@@ -424,7 +424,7 @@ export async function fetchDrivingGeometryLatLng(
   const geojsonTimeoutMs = Math.max(polyTimeoutMs, 150000);
 
   // 1) Proxy no backend primeiro: o app fala com a API BrSpark; o servidor fala com o OSRM (LAN/VPN).
-  // Se tentarmos antes o `osrmBaseUrl` da integração no telemóvel, costuma falhar (IP interno) e o mapa
+  // Se tentarmos antes o `osrmBaseUrl` da integração no celular, costuma falhar (IP interno) e o mapa
   // fica só com a linha reta até esgotar dezenas de timeouts.
   const backendMs = Math.min(90000, Math.max(15000, polyTimeoutMs));
   const viaBackend = await fetchDrivingGeometryViaBackend(oLat, oLng, dLat, dLng, backendMs);
@@ -528,7 +528,7 @@ export async function fetchDrivingGeometryLatLng(
 
 /**
  * Rota OSRM com vários waypoints num único GET (mesma base que as durações).
- * O proxy `/api/osrm` no telemóvel pode falhar (rede/IP); isto evita só linha reta quando o OSRM público/integração responde.
+ * O proxy `/api/osrm` no celular pode falhar (rede/IP); isto evita só linha reta quando o OSRM público/integração responde.
  * URLs muito longas: limitar a ~25 pontos por pedido (instâncias OSRM / proxies).
  */
 /** Alinhado ao limite prático do POST `route-geometry` no app (evitar URL gigante no GET). */

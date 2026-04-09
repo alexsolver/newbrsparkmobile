@@ -3,7 +3,7 @@
   "info": {
     "title": "BrSpark API",
     "version": "1.0.0",
-    "description": "API HTTP do BrSpark (painel admin + app móvel). Todas as rotas usam o prefixo `/api` no mesmo host que serve o painel estático (ex.: `http://localhost:3001`).\n\n**Autenticação admin:** `POST /api/auth/login` → header `Authorization: Bearer <jwt>`. O JWT de admin **não** inclui `tenantId`.\n\n**Autenticação app:** `POST /api/login` ou `POST /api/register` → `Authorization: Bearer <jwt>`. O JWT de utilizador **deve** incluir `tenantId` e `sessionId` válidos (rotas protegidas por `authUser`).\n\nRotas marcadas como públicas não exigem JWT; ainda assim podem exigir query/body específicos.\n\nEsta especificação é gerada por `admin-panel/scripts/build-openapi.js`; ao alterar rotas no backend, atualize o script e volte a executá-lo."
+    "description": "API HTTP do BrSpark (painel admin + app móvel). Todas as rotas usam o prefixo `/api` no mesmo host que serve o painel estático (ex.: `http://localhost:3001`).\n\n**Autenticação admin:** `POST /api/auth/login` → header `Authorization: Bearer <jwt>`. O JWT de admin **não** inclui `tenantId`.\n\n**Autenticação app:** `POST /api/login` ou `POST /api/register` → `Authorization: Bearer <jwt>`. O JWT de usuário **deve** incluir `tenantId` e `sessionId` válidos (rotas protegidas por `authUser`).\n\nRotas marcadas como públicas não exigem JWT; ainda assim podem exigir query/body específicos.\n\nEsta especificação é gerada por `admin-panel/scripts/build-openapi.js`; ao alterar rotas no backend, atualize o script e volte a executá-lo."
   },
   "servers": [
     {
@@ -85,7 +85,7 @@
       "description": ""
     },
     {
-      "name": "Admin — Utilizadores",
+      "name": "Admin — Usuários",
       "description": ""
     },
     {
@@ -98,6 +98,10 @@
     },
     {
       "name": "App — Chat",
+      "description": ""
+    },
+    {
+      "name": "App — Compartilhamentos",
       "description": ""
     },
     {
@@ -114,10 +118,6 @@
     },
     {
       "name": "App — Módulos sync",
-      "description": ""
-    },
-    {
-      "name": "App — Partilhas",
       "description": ""
     },
     {
@@ -2695,7 +2695,7 @@
     },
     "/api/storage/sync-local": {
       "post": {
-        "summary": "Sincronizar ficheiros locais pendentes",
+        "summary": "Sincronizar arquivos locais pendentes",
         "tags": [
           "App — Armazenamento"
         ],
@@ -2763,9 +2763,9 @@
     },
     "/api/shares/invite": {
       "post": {
-        "summary": "Convidar partilha de bem",
+        "summary": "Convidar compartilhamento de bem",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -2831,9 +2831,9 @@
     },
     "/api/shares/{assetId}/{sharedWithEmail}": {
       "delete": {
-        "summary": "Revogar partilha",
+        "summary": "Revogar compartilhamento",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -2915,9 +2915,9 @@
         ]
       },
       "put": {
-        "summary": "Atualizar partilha",
+        "summary": "Atualizar compartilhamento",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -3003,7 +3003,7 @@
       "get": {
         "summary": "Convites pendentes",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -3071,7 +3071,7 @@
       "post": {
         "summary": "Aceitar convite",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -3149,7 +3149,7 @@
       "post": {
         "summary": "Rejeitar convite",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -3225,9 +3225,9 @@
     },
     "/api/shares/asset/{assetId}": {
       "get": {
-        "summary": "Partilhas de um bem",
+        "summary": "Compartilhamentos de um bem",
         "tags": [
-          "App — Partilhas"
+          "App — Compartilhamentos"
         ],
         "security": [
           {
@@ -3720,6 +3720,84 @@
     "/api/chat/rooms/{roomId}/members": {
       "put": {
         "summary": "Atualizar membros da sala",
+        "tags": [
+          "App — Chat"
+        ],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Proibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/chat/rooms/{roomId}/messaging-state": {
+      "get": {
+        "summary": "Estado do envio (chat técnico–cliente)",
         "tags": [
           "App — Chat"
         ],
@@ -5117,7 +5195,7 @@
     },
     "/api/checklists/ai/analyze-from-file": {
       "post": {
-        "summary": "Analisar ficheiro (multipart: file)",
+        "summary": "Analisar arquivo (multipart: file)",
         "tags": [
           "Admin — Formulários IA"
         ],
@@ -5277,7 +5355,7 @@
     },
     "/api/checklists/ai/draft-from-file": {
       "post": {
-        "summary": "Rascunho a partir de ficheiro",
+        "summary": "Rascunho a partir de arquivo",
         "tags": [
           "Admin — Formulários IA"
         ],
@@ -8391,9 +8469,9 @@
     },
     "/api/users": {
       "get": {
-        "summary": "Listar utilizadores",
+        "summary": "Listar usuários",
         "tags": [
-          "Admin — Utilizadores"
+          "Admin — Usuários"
         ],
         "security": [
           {
@@ -8457,9 +8535,9 @@
         }
       },
       "post": {
-        "summary": "Criar utilizador",
+        "summary": "Criar usuário",
         "tags": [
-          "Admin — Utilizadores"
+          "Admin — Usuários"
         ],
         "security": [
           {
@@ -8536,7 +8614,7 @@
       "patch": {
         "summary": "Redefinir palavra-passe",
         "tags": [
-          "Admin — Utilizadores"
+          "Admin — Usuários"
         ],
         "security": [
           {
@@ -8614,7 +8692,7 @@
       "patch": {
         "summary": "Ativar/desativar",
         "tags": [
-          "Admin — Utilizadores"
+          "Admin — Usuários"
         ],
         "security": [
           {
@@ -8692,7 +8770,7 @@
       "post": {
         "summary": "Invalidar sessões",
         "tags": [
-          "Admin — Utilizadores"
+          "Admin — Usuários"
         ],
         "security": [
           {
@@ -11788,7 +11866,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Token obtido em POST /api/auth/login (utilizador Admin da consola)."
+        "description": "Token obtido em POST /api/auth/login (usuário administrador do painel)."
       },
       "bearerApp": {
         "type": "http",

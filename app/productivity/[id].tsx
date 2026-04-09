@@ -227,6 +227,51 @@ export default function ProductivityDetailScreen() {
           </>
         ) : null}
 
+        {instance.insights &&
+        (instance.insights.tips?.length > 0 || instance.insights.summary) ? (
+          <>
+            <Text style={[styles.label, { color: C.textSecondary }]}>{t('productivity.insights')}</Text>
+            <View style={[styles.card, { backgroundColor: C.cardWhite, borderColor: C.divider }]}>
+              {Array.isArray(instance.insights.tips) && instance.insights.tips.length > 0
+                ? instance.insights.tips.map((tip: string, idx: number) => (
+                    <Text key={idx} style={{ color: C.slate, marginTop: idx ? 6 : 0, lineHeight: 20 }}>
+                      • {tip}
+                    </Text>
+                  ))
+                : (
+                    <Text style={{ color: C.textSecondary, lineHeight: 20 }}>{instance.insights.summary}</Text>
+                  )}
+            </View>
+          </>
+        ) : null}
+
+        {instance.clientSurveyFullUrl || instance.clientSurveyRelativePath ? (
+          <>
+            <Text style={[styles.label, { color: C.textSecondary }]}>{t('productivity.clientSurvey')}</Text>
+            <View style={[styles.card, { backgroundColor: C.cardWhite, borderColor: C.divider }]}>
+              {instance.clientSurveyFullUrl ? (
+                <>
+                  <Text style={{ color: C.textLight, fontSize: 12, marginBottom: 6 }}>
+                    {t('productivity.clientSurveyFullLink')}
+                  </Text>
+                  <Text selectable style={{ color: C.slate, fontSize: 13 }}>
+                    {instance.clientSurveyFullUrl}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ color: C.textLight, fontSize: 12, marginBottom: 6 }}>
+                    {t('productivity.clientSurveyHint')}
+                  </Text>
+                  <Text selectable style={{ color: C.slate, fontSize: 13 }}>
+                    {instance.clientSurveyRelativePath}
+                  </Text>
+                </>
+              )}
+            </View>
+          </>
+        ) : null}
+
         {instance.displayText ? (
           <>
             <Text style={[styles.label, { color: C.textSecondary }]}>{t('productivity.comment')}</Text>

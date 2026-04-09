@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Header } from '../../../src/components/Header';
+import { TechnicianExpenseCategoryChips } from '../../../src/components/TechnicianExpenseCategoryChips';
 import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
 import type { TechnicianFinanceAttachment, TechnicianFinanceKind } from '../../../src/types/technicianFinance';
@@ -58,6 +59,7 @@ export default function NewTechnicianFinanceScreen() {
   const [linkableOs, setLinkableOs] = useState<LinkableExpenseTask[]>([]);
   const [linkableLoading, setLinkableLoading] = useState(false);
   const [selectedOsIds, setSelectedOsIds] = useState<string[]>([]);
+  const [categoryKey, setCategoryKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (kind === 'revenue') setSelectedOsIds([]);
@@ -95,7 +97,7 @@ export default function NewTechnicianFinanceScreen() {
         _localId: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       }));
       if (items.length > room) {
-        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} ficheiros por lançamento.`);
+        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} arquivos por lançamento.`);
       }
       return [...prev, ...next];
     });
@@ -141,7 +143,7 @@ export default function NewTechnicianFinanceScreen() {
         },
       },
       {
-        text: 'Documento / ficheiro',
+        text: 'Documento / arquivo',
         onPress: async () => {
           const res = await DocumentPicker.getDocumentAsync({
             type: ['image/*', 'application/pdf', '*/*'],
@@ -172,6 +174,16 @@ export default function NewTechnicianFinanceScreen() {
       Alert.alert('Atenção', 'Indique um valor maior que zero.');
       return;
     }
+    if (kind === 'expense') {
+      if (categoryKey == null || String(categoryKey).trim() === '') {
+        Alert.alert('Atenção', 'Selecione a categoria da despesa.');
+        return;
+      }
+      if (categoryKey === 'outros' && !description.trim()) {
+        Alert.alert('Atenção', 'Para a categoria "Outros", preencha a descrição.');
+        return;
+      }
+    }
     const email = user?.email || undefined;
     const payload: TechnicianFinanceAttachment[] = attachments.map(({ uri, name, mimeType }) => ({
       uri,
@@ -183,6 +195,7 @@ export default function NewTechnicianFinanceScreen() {
         kind,
         amount,
         description: description.trim() || undefined,
+        categoryKey: kind === 'expense' ? categoryKey : null,
         attachments: payload.length > 0 ? payload : undefined,
         linkedTaskIds:
           kind === 'expense' && selectedOsIds.length > 0 ? selectedOsIds : undefined,
@@ -204,7 +217,7 @@ export default function NewTechnicianFinanceScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.hint}>
-          Este registo não está ligado a um bem nem ao módulo de custos do portfólio.
+          Este registro não está ligado a um bem nem ao módulo de custos do portfólio.
         </Text>
 
         <Text style={styles.lbl}>Tipo</Text>
@@ -233,6 +246,10 @@ export default function NewTechnicianFinanceScreen() {
           onChangeText={setAmountStr}
         />
 
+        {kind === 'expense' ? (
+          <TechnicianExpenseCategoryChips value={categoryKey} onChange={(k) => setCategoryKey(k)} />
+        ) : null}
+
         <Text style={styles.lbl}>Descrição (opcional)</Text>
         <TextInput
           style={[styles.input, styles.inputMulti]}
@@ -248,14 +265,14 @@ export default function NewTechnicianFinanceScreen() {
           <>
             <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
             <Text style={styles.osHint}>
-              Aparecem OS cujo modelo tem campo de despesas do técnico: em aberto no telemóvel ou concluídas há até 30
+              Aparecem OS cujo modelo tem campo de despesas do técnico: em aberto no celular ou concluídas há até 30
               dias (sincronize a lista). Várias OS dividem o valor em partes iguais; cada parte fica ligada à OS no
               rascunho do formulário.
             </Text>
             {linkableLoading ? (
               <View style={styles.osLoading}>
                 <ActivityIndicator color="#0f766e" />
-                <Text style={styles.osLoadingTxt}>A carregar OS elegíveis…</Text>
+                <Text style={styles.osLoadingTxt}>Carregando OS elegíveis…</Text>
               </View>
             ) : linkableOs.length === 0 ? (
               <Text style={styles.osEmpty}>Nenhuma OS elegível neste momento.</Text>

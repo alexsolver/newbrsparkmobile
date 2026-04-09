@@ -91,7 +91,7 @@ export function buildPauseProductivityPdfFragment(escPdf, fmtDurPdf, t, response
   if (!rows && metaBits.length === 0) {
     return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fde68a">
       <div style="font-size:7px;font-weight:900;color:#92400e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Pausas no atendimento</div>
-      <div style="font-size:7px;color:#94a3b8;font-style:italic">Sem registo de pausas.</div>
+      <div style="font-size:7px;color:#94a3b8;font-style:italic">Sem registro de pausas.</div>
     </div>`;
   }
   let inner = metaBits.join('');

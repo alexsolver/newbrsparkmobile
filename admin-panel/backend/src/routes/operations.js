@@ -404,7 +404,7 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
       mergedMeta.reassignedAt = ts;
     }
 
-    // Revisão: voltar ao fluxo «pendente» no app (aba Pendentes), não «Em andamento».
+    // Revisão: voltar ao fluxo "pendente" no app (aba Pendentes), não "Em andamento".
     for (const k of [
       'receivedAt',
       'acceptedAt',
@@ -418,7 +418,7 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
       delete mergedMeta[k];
     }
     mergedMeta.reopenForRevisionPending = true;
-    /** Mantém-se até nova submissão COMPLETED (o app mostra «revisão» durante toda a visita). */
+    /** Mantém-se até nova submissão COMPLETED (o app mostra "revisão" durante toda a visita). */
     mergedMeta.revisionVisitActive = true;
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);

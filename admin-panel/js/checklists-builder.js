@@ -6,7 +6,7 @@
 function brsparkApiBase() {
   if (typeof window !== 'undefined' && window.__BRSPARK_API_BASE__) {
     let b = String(window.__BRSPARK_API_BASE__).replace(/\/+$/, '');
-    // Evita pedidos a …/api/api/checklists/… (404 «Route not found» no Express)
+    // Evita pedidos a …/api/api/checklists/… (404 "Route not found" no Express)
     while (/\/api\/api$/i.test(b)) {
       b = b.replace(/\/api$/i, '');
     }
@@ -268,7 +268,7 @@ function fieldHelpImageHandler() {
   } catch (e) {
     cleanup();
     console.error('[help-image] file picker', e);
-    alert('Não foi possível abrir o seletor de ficheiros. Tente outro browser ou permissões de ficheiros.');
+    alert('Não foi possível abrir o seletor de arquivos. Tente outro browser ou permissões de arquivos.');
   }
 }
 
@@ -308,7 +308,7 @@ window.initFieldHelpEditor = function (field) {
         handlers: { image: fieldHelpImageHandler },
       },
     },
-    placeholder: 'Texto e imagens que o técnico consulta no app (botão «Instruções»).',
+    placeholder: 'Texto e imagens que o técnico consulta no app (botão "Instruções").',
   });
   window.fieldHelpQuill = quill;
   window.quillBoundFieldId = field.id;
@@ -371,7 +371,7 @@ const ICON_SEARCH_PT_ALIASES = {
     carro: 'car',
     casa: 'home',
     telefone: 'phone',
-    telemovel: 'phone',
+    celular: 'phone',
     chamada: 'call',
     email: 'mail',
     correio: 'mail',
@@ -384,7 +384,7 @@ const ICON_SEARCH_PT_ALIASES = {
     utilizador: 'user',
     usuario: 'user',
     camera: 'camera',
-    câmara: 'camera',
+    câmera: 'camera',
     foto: 'camera',
     imagem: 'image',
     copiar: 'copy',
@@ -404,7 +404,7 @@ const ICON_SEARCH_PT_ALIASES = {
     relógio: 'time',
     tempo: 'time',
     documento: 'document',
-    ficheiro: 'file',
+    arquivo: 'file',
     pasta: 'folder',
     cadeado: 'lock',
     seguranca: 'security',
@@ -631,7 +631,7 @@ window.confirmIconSelection = function(val, libOverride) {
     document.getElementById('icon-picker-modal').style.display = 'none';
 };
 
-/** Rascunho do modal «Editar etapa» (nome + ícone da secção). */
+/** Rascunho do modal "Editar etapa" (nome + ícone da seção). */
 window.__sectionStepEditDraft = {
     sectionId: null,
     label: '',
@@ -655,7 +655,7 @@ window.refreshSectionStepEditIconPreview = function () {
         el.innerHTML = window.renderWebIcon(d.iconLibrary || 'Ionicons', d.icon, d.iconColor || '#1d4ed8', 36);
     } else {
         el.innerHTML =
-            '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#94a3b8;font-size:12px;font-weight:600;"><ion-icon name="albums-outline" style="font-size:40px;color:#cbd5e1;"></ion-icon>Predefinição (álbuns)</div>';
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#94a3b8;font-size:12px;font-weight:600;"><ion-icon name="albums-outline" style="font-size:40px;color:#cbd5e1;"></ion-icon>Padrão (álbuns)</div>';
     }
 };
 
@@ -775,7 +775,7 @@ const iconMap = {
     'signature': '<ion-icon name="create-outline"></ion-icon>'
 };
 
-/** Estado de secções colapsadas no canvas (id do grupo: __preamble__ ou id do section_break). */
+/** Estado de seções colapsadas no canvas (id do grupo: __preamble__ ou id do section_break). */
 if (typeof window.__brsparkSectionCollapsed !== 'object' || window.__brsparkSectionCollapsed === null) {
     window.__brsparkSectionCollapsed = {};
 }
@@ -847,8 +847,8 @@ function destroyCanvasGroupsSortable() {
 function makeSectionHeadDragGrip() {
     const secDrag = document.createElement('span');
     secDrag.className = 'canvas-section-head__section-drag';
-    secDrag.setAttribute('title', 'Arrastar para reordenar as secções');
-    secDrag.setAttribute('aria-label', 'Arrastar para reordenar as secções');
+    secDrag.setAttribute('title', 'Arrastar para reordenar as seções');
+    secDrag.setAttribute('aria-label', 'Arrastar para reordenar as seções');
     secDrag.innerHTML =
         '<ion-icon name="reorder-two-outline" style="font-size:20px;vertical-align:-2px;"></ion-icon>';
     return secDrag;
@@ -1206,8 +1206,8 @@ function createDefaultSectionField() {
 }
 
 /**
- * Garante que não existem campos «órfãos» antes da primeira secção e que o schema começa sempre por um section_break.
- * Corrige também arrastos que colocam o cartão da secção na posição errada.
+ * Garante que não existem campos "órfãos" antes da primeira seção e que o schema começa sempre por um section_break.
+ * Corrige também arrastos que colocam o cartão da seção na posição errada.
  */
 function normalizeFieldsRequireSections(fieldArr) {
     if (!fieldArr || fieldArr.length === 0) return;
@@ -1252,9 +1252,9 @@ function normalizeFieldsRequireSections(fieldArr) {
 }
 
 const TRANSIT_MSG_END_BEFORE_START =
-    'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento». Coloque primeiro o início ou arraste o fim para depois do início.';
+    'O campo "Finalizar deslocamento" não pode ficar antes de "Iniciar deslocamento". Coloque primeiro o início ou arraste o fim para depois do início.';
 const TRANSIT_MSG_START_WITHOUT_END =
-    'Com «Iniciar deslocamento» no formulário, também é obrigatório incluir «Finalizar deslocamento».';
+    'Com "Iniciar deslocamento" no formulário, também é obrigatório incluir "Finalizar deslocamento".';
 
 /**
  * @param {Array<{ type?: string }>} fieldArr
@@ -1525,7 +1525,7 @@ function renderCanvas() {
 
         if (isPreamble) {
             titleEl.innerHTML =
-                '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:#64748b;"></ion-icon> Antes da primeira secção';
+                '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:#64748b;"></ion-icon> Antes da primeira seção';
             badge.textContent = answerableCount + (answerableCount === 1 ? ' campo' : ' campos');
             if (canReorderSections) head.appendChild(makeSectionHeadDragGrip());
             head.appendChild(chev);
@@ -1549,7 +1549,7 @@ function renderCanvas() {
             iconBox.className = 'canvas-section-head__step-icon';
             iconBox.innerHTML = sectionStepIconCanvasHtml(sf);
             const labSp = document.createElement('span');
-            labSp.textContent = 'Secção · ';
+            labSp.textContent = 'Seção · ';
             labSp.style.flexShrink = '0';
             labSp.style.color = '#64748b';
             labSp.style.fontWeight = '600';
@@ -1594,7 +1594,7 @@ function renderCanvas() {
                 return b;
             };
             toolbar.appendChild(
-                mkBtn('Propriedades da secção', 'settings-outline', false, () => {
+                mkBtn('Propriedades da seção', 'settings-outline', false, () => {
                     window.selectField(sf.id);
                 })
             );
@@ -1617,12 +1617,12 @@ function renderCanvas() {
                 })
             );
             toolbar.appendChild(
-                mkBtn('Duplicar secção', 'copy-outline', false, () => {
+                mkBtn('Duplicar seção', 'copy-outline', false, () => {
                     window.cloneSection(sf.id);
                 })
             );
             toolbar.appendChild(
-                mkBtn('Eliminar secção', 'trash-outline', true, () => {
+                mkBtn('Eliminar seção', 'trash-outline', true, () => {
                     window.deleteSection(sf.id);
                 })
             );
@@ -1662,7 +1662,7 @@ function renderCanvas() {
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'btn btn-outline btn-sm';
-    addBtn.innerHTML = '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Nova secção';
+    addBtn.innerHTML = '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Nova seção';
     addBtn.addEventListener('click', () => window.builderAddSectionAfterLast());
     addSecBar.appendChild(addBtn);
     elCanvas.appendChild(addSecBar);
@@ -1788,7 +1788,7 @@ window.cloneSection = function (sectionId) {
 window.deleteSection = function (sectionId) {
     if (
         !confirm(
-            'Eliminar esta secção e todas as perguntas dentro dela? O formulário mantém sempre pelo menos uma secção (será criada uma nova vazia se necessário).'
+            'Eliminar esta seção e todas as perguntas dentro dela? O formulário mantém sempre pelo menos uma seção (será criada uma nova vazia se necessário).'
         )
     ) {
         return;
@@ -1871,7 +1871,7 @@ function renderProperties() {
     if(!selectedFieldId) {
         flushQuillToBoundField();
         if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique numa pergunta no canvas ou use o ícone de definições no cabeçalho de uma secção.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.</div>';
         return;
     }
 
@@ -1882,7 +1882,7 @@ function renderProperties() {
     const f = fields.find(x => x.id === selectedFieldId);
     if (!f) {
         selectedFieldId = null;
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique numa pergunta no canvas ou use o ícone de definições no cabeçalho de uma secção.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.</div>';
         return;
     }
     
@@ -1906,10 +1906,10 @@ function renderProperties() {
         extraProps += `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fde68a; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="font-size:12px; font-weight:800; color:#92400e; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                <ion-icon name="document-text-outline"></ion-icon> PDF e partilha com o cliente
+                <ion-icon name="document-text-outline"></ion-icon> PDF e compartilhamento com o cliente
             </div>
             <div style="font-size:10px; color:#78350f; line-height:1.45;">
-                Por defeito, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se activar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de partilhar.
+                Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de compartilhar.
             </div>
         </div>`;
     }
@@ -2003,7 +2003,7 @@ function renderProperties() {
         extraProps = `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fcd34d; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px"><ion-icon name="document-attach-outline"></ion-icon> Anexar Arquivo (app)</div>
-            <div style="font-size:10px; color:#92400e; line-height:1.35;">Máximo <b>50 MB</b> por ficheiro. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e ficheiros correntes (PDF, Office, imagens, ZIP, etc.) são aceites.</div>
+            <div style="font-size:10px; color:#92400e; line-height:1.35;">Máximo <b>50 MB</b> por arquivo. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e arquivos correntes (PDF, Office, imagens, ZIP, etc.) são aceitos.</div>
         </div>`;
     } else if (f.type === 'dropdown' || f.type === 'multiselect') {
         extraProps = `
@@ -2040,23 +2040,23 @@ function renderProperties() {
                     <input type="radio" name="propSectionFillMode" value="list" ${pick === 'list' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'list')" />
                     <span>
                         <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="list-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Lista com scroll</span>
-                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Todos os campos desta secção visíveis com scroll.</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Todos os campos desta seção visíveis com scroll.</span>
                     </span>
                 </label>
                 <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
                     <input type="radio" name="propSectionFillMode" value="wizard" ${pick === 'wizard' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'wizard')" />
                     <span>
                         <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="git-commit-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Um campo de cada vez</span>
-                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Assistente: Seguinte / Voltar só dentro desta secção.</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Assistente: Próximo / Voltar só dentro desta seção.</span>
                     </span>
                 </label>
             </div>
-            ${rawSfm === 'inherit' ? '<div style="font-size:10px; color:#b45309; margin-top:8px; line-height:1.35;">Legado: «seguir global» — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.</div>' : ''}
+            ${rawSfm === 'inherit' ? '<div style="font-size:10px; color:#b45309; margin-top:8px; line-height:1.35;">Legado: "seguir global" — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.</div>' : ''}
         </div>
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-section-repeat" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
-                <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Repetir esta secção (lista)</label>
+                <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Repetir esta seção (lista)</label>
             </div>
             <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O técnico pode preencher <b>várias instâncias</b> seguidas dos mesmos campos (ex.: vários equipamentos). Cada linha grava um objeto no array <b>__section_repeat_&lt;id&gt;</b> na execução. Use mín./máx. para limitar quantas instâncias.</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -2075,7 +2075,7 @@ function renderProperties() {
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
                 <label class="prop-label" style="margin:0; flex:1; min-width:160px;">Instruções ao técnico (rich text, opcional)</label>
                 ${f.type !== 'section_break' ? `
-                <label title="Mostrar instruções no telemóvel do técnico" style="display:inline-flex; align-items:center; cursor:pointer; user-select:none;">
+                <label title="Mostrar instruções no celular do técnico" style="display:inline-flex; align-items:center; cursor:pointer; user-select:none;">
                     <input type="checkbox" id="prop-show-field-instructions" aria-label="Mostrar instruções no app móvel" ${f.showFieldInstructions === true ? 'checked' : ''} onchange="window.handleFieldUpdate('showFieldInstructions', this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;" />
                 </label>
                 ` : ''}
@@ -2122,8 +2122,8 @@ function renderProperties() {
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
-                <label for="prop-allow-media-desc" style="font-size:13px; font-weight:700; color:#047857; cursor:pointer;">Comentário opcional por foto / ficheiro</label>
-                <div style="font-size:10px; color:#065f46; margin-top:4px; line-height:1.35;">Diferente do comentário geral do campo: aqui o técnico pode comentar cada foto, captura ou anexo (câmara, galeria ou ficheiro). Tudo opcional.</div>
+                <label for="prop-allow-media-desc" style="font-size:13px; font-weight:700; color:#047857; cursor:pointer;">Comentário opcional por foto / arquivo</label>
+                <div style="font-size:10px; color:#065f46; margin-top:4px; line-height:1.35;">Diferente do comentário geral do campo: aqui o técnico pode comentar cada foto, captura ou anexo (câmera, galeria ou arquivo). Tudo opcional.</div>
             </div>
         </div>
         ` : ''}
@@ -2185,7 +2185,7 @@ let globalFormSettings = {
     rules: [],
     /** full | wizard | hybrid — experiência no app móvel */
     appFillMode: 'full',
-    /** direct = abre na 1.ª etapa; hub = lista de etapas no ecrã */
+    /** direct = abre na 1.ª etapa; hub = lista de etapas na tela */
     appSectionStart: 'direct',
     /** free | sequential — só com appSectionStart hub */
     appHubSectionOrder: 'free',
@@ -2343,7 +2343,7 @@ window.configureGlobalSettings = function () {
 // Global: JSON EXPORTER & IMPORTER
 window.exportJSON = function() {
     if (!fields.some((f) => f.type !== 'section_break')) {
-        return alert('Adicione pelo menos um campo de pergunta ao canvas (a primeira secção já existe).');
+        return alert('Adicione pelo menos um campo de pergunta ao canvas (a primeira seção já existe).');
     }
     const output = {
         settings: globalFormSettings,
@@ -2497,7 +2497,7 @@ window.saveChecklist = async function() {
             return;
         }
 
-        // Snapshot serializável (evita referências partilhadas e garante helpHtml no JSON)
+        // Snapshot serializável (evita referências compartilhadas e garante helpHtml no JSON)
         const schemaSnapshot = JSON.parse(JSON.stringify(fields));
         
         // 1. BACKUP OFFLINE-FIRST SEMPRE FUNCIONA (GARANTIDO)
@@ -2812,7 +2812,7 @@ window.openNewFolderModal = function () {
     const m = document.getElementById('new-folder-modal');
     const inp = document.getElementById('new-folder-name-input');
     if (!m || !inp) {
-        alert('Recarregue a página (interface «Nova pasta» em falta).');
+        alert('Recarregue a página (interface "Nova pasta" em falta).');
         return;
     }
     inp.value = '';
@@ -3280,7 +3280,7 @@ window.renderFormsGridFromLocal = function (db) {
 
     if (subfolders.length === 0 && sortedForms.length === 0) {
         grid.innerHTML =
-            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">Nenhuma pasta nem formulário neste nível. Use «Nova pasta» ou «Novo formulário aqui».</p>';
+            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">Nenhuma pasta nem formulário neste nível. Use "Nova pasta" ou "Novo formulário aqui".</p>';
     }
 
     if (window.filterFormsList) window.filterFormsList();
@@ -3390,7 +3390,7 @@ window.confirmCreateNewChecklist = function () {
         select.value = 'temp_new';
     }
     
-    alert(`Painel preparado para: "${title}". Já existe uma primeira secção no canvas — arraste perguntas para dentro dela (ou adicione mais secções).`);
+    alert(`Painel preparado para: "${title}". Já existe uma primeira seção no canvas — arraste perguntas para dentro dela (ou adicione mais seções).`);
 };
 
 // --- MOBILE SIMULATOR RENDER LOGIC --- //
@@ -3433,7 +3433,7 @@ function renderMobilePreview() {
         const sim = window.__mobilePreviewFillSim;
         hintElToolbar.textContent = sim
             ? 'Simulação: ' + (sim === 'wizard' ? 'Um-a-um' : sim === 'hybrid' ? 'Híbrido' : 'Lista')
-            : 'Preview: ' + (derived === 'wizard' ? 'Um-a-um (global legado)' : derived === 'hybrid' ? 'Por secção (alguma em modo assistente)' : 'Lista / scroll');
+            : 'Preview: ' + (derived === 'wizard' ? 'Um-a-um (global legado)' : derived === 'hybrid' ? 'Por seção (alguma em modo assistente)' : 'Lista / scroll');
     }
 
     const sectionPages = splitBuilderFieldsIntoSectionPages(fields);
@@ -3446,7 +3446,7 @@ function renderMobilePreview() {
 
     if (mode === 'full') {
         previewFields = fields.filter((f) => f.type !== 'section_break');
-        modeBanner = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 12px;font-size:11px;color:#1e40af;margin-bottom:8px;font-weight:700;">Lista completa — todos os campos num só ecrã com scroll.</div>`;
+        modeBanner = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 12px;font-size:11px;color:#1e40af;margin-bottom:8px;font-weight:700;">Lista completa — todos os campos numa só tela com scroll.</div>`;
     } else if (mode === 'wizard') {
         const n = answerable.length;
         let ix = Math.min(window.__mobilePreviewSimWizardIx || 0, Math.max(0, n - 1));
@@ -3465,7 +3465,7 @@ function renderMobilePreview() {
         const pg = hy[pix] || { fields: [], pageTitle: 'Etapa' };
         previewFields = pg.fields || [];
         modeBanner = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 12px;font-size:11px;color:#166534;margin-bottom:8px;line-height:1.45;">
-            <b>Híbrido:</b> «${pg.pageTitle || 'Etapa'}» — etapa ${hy.length ? pix + 1 : 0} de ${hy.length}
+            <b>Híbrido:</b> "${pg.pageTitle || 'Etapa'}" — etapa ${hy.length ? pix + 1 : 0} de ${hy.length}
             <span style="display:inline-block;margin-left:8px;vertical-align:middle;">
             <button type="button" onclick="window.shiftMobilePreviewHybridPage(-1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;">◀</button>
             <button type="button" onclick="window.shiftMobilePreviewHybridPage(1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;margin-left:4px;">▶</button>
@@ -3632,7 +3632,7 @@ window.confirmTestDispatch = async function() {
         if(!res.ok) throw new Error("Servidor Node.js (Backend) não respondeu OK.");
 
         console.log("🚀 PAYLOAD ENVIADO AO BACKEND:", payload);
-        alert(`Envio Concluído!\n\nO servidor despachou a OS [${payload.id}] contendo o Formulário [${currentFormId}] para [${email}].\n\nAbra o App na aba Agenda para verificar!`);
+        alert(`Envio Concluído!\n\nO servidor despachou a OS [${payload.id}] contendo o Formulário [${currentFormId}] para [${email}].\n\nAbra o App na aba Agenda parverificação!`);
 
     } catch(err) {
         console.error("Erro no envio local de teste:", err);
@@ -4153,7 +4153,7 @@ function renderAiFormHistorySession(sess) {
         ? new Date(sess.analyzedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
         : '—';
     let meta =
-        '<strong>Ficheiro:</strong> ' +
+        '<strong>Arquivo:</strong> ' +
         escapeHtmlAi(sess.sourceFileName || '(sem nome)') +
         '<br><strong>Analisado:</strong> ' +
         escapeHtmlAi(when);
@@ -4265,7 +4265,7 @@ function renderAiStructureStep() {
         if (heading) heading.textContent = 'Título do formulário';
         if (sub) {
             sub.textContent =
-                'A IA extraiu etapas e colunas. Confirme o título; a seguir cada bloco é adicionado ao canvas quando carregar em «Adicionar ao canvas».';
+                'A IA extraiu etapas e colunas. Confirme o título; a seguir cada bloco é adicionado ao canvas quando carregar em "Adicionar ao canvas".';
         }
         if (skipBtn) skipBtn.style.display = 'none';
         if (primBtn) primBtn.textContent = 'Começar →';
@@ -4362,12 +4362,12 @@ function renderAiStructureStep() {
 
     if (b.kind === 'section_break') {
         if (badge) badge.textContent = 'Etapa';
-        if (heading) heading.textContent = 'Etapa (secção)';
+        if (heading) heading.textContent = 'Etapa (seção)';
         if (sub) sub.textContent = 'Defina o título e o modo da etapa; depois adicione ao canvas.';
 
         const idf = document.createElement('div');
         idf.className = 'ai-wizard-identified';
-        idf.textContent = 'A IA identificou uma etapa / folha';
+        idf.textContent = 'A IA identificou uma etapa / planilha';
         host.appendChild(idf);
 
         const ll = document.createElement('label');
@@ -4412,7 +4412,7 @@ function renderAiStructureStep() {
     } else {
         if (badge) badge.textContent = 'Campo';
         if (heading) heading.textContent = 'Campo';
-        if (sub) sub.textContent = 'Escolha o tipo na lista (a mesma da toolbox). Cada clique em «Adicionar» coloca um campo no canvas.';
+        if (sub) sub.textContent = 'Escolha o tipo na lista (a mesma da toolbox). Cada clique em "Adicionar" coloca um campo no canvas.';
 
         const idf = document.createElement('div');
         idf.className = 'ai-wizard-identified';
@@ -4672,13 +4672,13 @@ window.brsparkAiFormAnalyze = async function () {
     }
     const fi = document.getElementById('ai-form-file');
     if (!fi || !fi.files || !fi.files[0]) {
-        alert('Escolha um ficheiro .xlsx.');
+        alert('Escolha um arquivo .xlsx.');
         return;
     }
     const file = fi.files[0];
     const name = (file.name || '').toLowerCase();
     if (!name.endsWith('.xlsx') && !name.endsWith('.xlsm')) {
-        alert('Nesta versão só são aceites ficheiros Excel .xlsx.');
+        alert('Nesta versão só são aceitos arquivos Excel .xlsx.');
         return;
     }
     const hintEl = document.getElementById('ai-form-hint');
@@ -4708,7 +4708,7 @@ window.brsparkAiFormAnalyze = async function () {
         }
         const blocks = normalizeBlocksFromApi(data);
         if (!blocks.length) {
-            throw new Error('A IA não devolveu etapas/campos. Tente outro ficheiro ou instruções.');
+            throw new Error('A IA não devolveu etapas/campos. Tente outro arquivo ou instruções.');
         }
         window.__brsparkAiSession = {
             blocks: blocks,
@@ -4812,7 +4812,7 @@ window.brsparkCopilotSend = async function () {
     let summary = '';
     if (window.__brsparkAiSession) {
         summary =
-            'Ficheiro analisado: ' +
+            'Arquivo analisado: ' +
             (window.__brsparkAiSession.sourceFileName || '') +
             (window.__brsparkAiSession.hint ? '\nNotas: ' + window.__brsparkAiSession.hint : '');
     }
@@ -4995,7 +4995,7 @@ window.brsparkCopilotApplyLogic = function () {
 /**
  * O HTML inicial do #canvas só tinha .canvas-empty; o Sortable vive em .canvas-section-body
  * criado por renderCanvas(). Sem esta chamada ao carregar, não há lista receptora até
- * «Criar novo» ou «Abrir formulário».
+ * "Criar novo" ou "Abrir formulário".
  */
 try {
     renderCanvas();

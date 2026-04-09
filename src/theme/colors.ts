@@ -83,7 +83,7 @@ export const lightColors = {
     thumb: '#FFFFFF',
   },
   /**
-   * Botões retangulares «ink» (Guardar, Voltar cheio, chips ativos escuros).
+   * Botões retangulares "ink" (Guardar, Voltar cheio, chips ativos escuros).
    * Nunca usar `slate` como fundo: em dark o slate é cor de texto clara.
    */
   filledButtonBg: '#0F172A',
@@ -94,7 +94,7 @@ export const lightColors = {
 };
 
 export const darkColors = {
-  /** Mesma cor de marca que no light — evita fundos «claros» invisíveis com texto branco */
+  /** Mesma cor de marca que no light — evita fundos "claros" invisíveis com texto branco */
   primary: '#F97316',
   accent: '#FFB84D',
   branding: '#F97316',

@@ -41,7 +41,7 @@ function extractClientEmailFromMetadata(meta) {
 }
 
 /**
- * Sala 1:1 com exatamente um utilizador com TechnicianProfile e outro sem.
+ * Sala 1:1 com exatamente um usuário com TechnicianProfile e outro sem.
  * @returns {{ techEmail: string, clientEmail: string } | null}
  */
 async function resolveTechnicianClientPair(roomId) {
@@ -109,6 +109,54 @@ async function isTechnicianClientMessagingActive(techEmail, clientEmail) {
 }
 
 /**
+ * Avaliação já respondida (ou finalizada com pontuação) numa OS que liga técnico↔cliente
+ * bloqueia chat mesmo que a OS ainda esteja COMPLETED (antes de SYNCED).
+ */
+async function evaluationBlocksTechClientChat(techEmail, clientEmail) {
+  const tech = String(techEmail || '').trim().toLowerCase();
+  const client = String(clientEmail || '').trim().toLowerCase();
+  if (!tech || !client) return false;
+
+  const rows = await prisma.checklistExecution.findMany({
+    where: {
+      ownerEmail: { equals: tech, mode: 'insensitive' },
+      status: { in: ACTIVITY_CHAT_STATUSES },
+    },
+    select: { id: true, metadata: true },
+  });
+
+  const linkedIds = [];
+  for (const row of rows) {
+    const spec = extractClientEmailFromMetadata(row.metadata);
+    if (spec && spec === client) linkedIds.push(row.id);
+  }
+
+  const hasExplicitOther = rows.some((row) => {
+    const spec = extractClientEmailFromMetadata(row.metadata);
+    return spec != null && spec !== client;
+  });
+  if (!hasExplicitOther && rows.length === 1 && linkedIds.length === 0) {
+    const spec0 = extractClientEmailFromMetadata(rows[0].metadata);
+    if (spec0 == null) linkedIds.push(rows[0].id);
+  }
+
+  if (linkedIds.length === 0) return false;
+
+  const blocker = await prisma.evaluationInstance.findFirst({
+    where: {
+      executionId: { in: linkedIds },
+      OR: [
+        { status: { in: ['RESPONDED', 'IN_REVIEW'] } },
+        { status: 'FINALIZED', score: { isNot: null } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return !!blocker;
+}
+
+/**
  * @returns {Promise<{ technicianClientGated: boolean, messagingActive: boolean }>}
  */
 async function getRoomMessagingState(roomId) {
@@ -116,13 +164,17 @@ async function getRoomMessagingState(roomId) {
   if (!pair) {
     return { technicianClientGated: false, messagingActive: true };
   }
-  const active = await isTechnicianClientMessagingActive(pair.techEmail, pair.clientEmail);
+  let active = await isTechnicianClientMessagingActive(pair.techEmail, pair.clientEmail);
+  if (active && (await evaluationBlocksTechClientChat(pair.techEmail, pair.clientEmail))) {
+    active = false;
+  }
   return { technicianClientGated: true, messagingActive: active };
 }
 
 module.exports = {
   resolveTechnicianClientPair,
   isTechnicianClientMessagingActive,
+  evaluationBlocksTechClientChat,
   getRoomMessagingState,
   extractClientEmailFromMetadata,
   ACTIVITY_CHAT_STATUSES,

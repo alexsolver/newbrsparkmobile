@@ -57,7 +57,7 @@ router.patch('/:id/technician-profile', async (req, res) => {
       include: { technicianProfile: true },
     });
     if (!user || !user.technicianProfile) {
-      return res.status(404).json({ error: 'Este utilizador não tem perfil de prestador.' });
+      return res.status(404).json({ error: 'Este usuário não tem perfil de prestador.' });
     }
 
     const updated = await prisma.technicianProfile.update({

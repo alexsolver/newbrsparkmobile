@@ -21,7 +21,7 @@ function normalizeOpenAiV1Base(url) {
 }
 
 /**
- * API key: integração «OpenAI» (AI_LLM) na BD; senão OPENAI_API_KEY no .env.
+ * API key: integração "OpenAI" (AI_LLM) na BD; senão OPENAI_API_KEY no .env.
  * Modelo: metadata.model > baseUrl (quando não é URL — o painel grava o modelo aqui) > OPENAI_MODEL > gpt-4o-mini.
  * Base URL da API: baseUrl se for URL; senão OPENAI_BASE_URL ou api.openai.com.
  *

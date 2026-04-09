@@ -1,5 +1,5 @@
 /**
- * useConnectivity — estado «online» coerente para o app offline-first.
+ * useConnectivity — estado "online" coerente para o app offline-first.
  *
  * 1) Sem transporte (Wi‑Fi/dados) → offline imediato.
  * 2) Caso contrário, ping leve em /api/config (servidor BrSpark acessível).

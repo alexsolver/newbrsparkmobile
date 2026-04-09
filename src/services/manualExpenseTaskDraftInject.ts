@@ -18,7 +18,7 @@ export function splitCurrencyBrl(total: number, parts: number): number[] {
 
 type FinanceTarget = { kind: 'direct'; fieldId: string } | { kind: 'repeat'; sectionId: string; fieldId: string };
 
-/** Primeiro campo `technician_finance` na ordem do schema (raiz → secções). */
+/** Primeiro campo `technician_finance` na ordem do schema (raiz → seções). */
 export function firstTechnicianFinanceTarget(schema: any[]): FinanceTarget | null {
   if (!Array.isArray(schema)) return null;
   let curRepeat = false;
@@ -41,7 +41,13 @@ export function firstTechnicianFinanceTarget(schema: any[]): FinanceTarget | nul
 
 function mergeFinanceJson(
   prevRaw: unknown,
-  line: { entryId: string; kind: TechnicianFinanceKind; amount: number; description?: string }
+  line: {
+    entryId: string;
+    kind: TechnicianFinanceKind;
+    amount: number;
+    description?: string;
+    categoryKey?: string;
+  }
 ): string {
   let parsed: Record<string, unknown> = {};
   try {
@@ -57,6 +63,13 @@ function mergeFinanceJson(
     kind: line.kind,
     amount: line.amount,
   };
+  if (
+    line.kind === 'expense' &&
+    line.categoryKey != null &&
+    String(line.categoryKey).trim() !== ''
+  ) {
+    payload.categoryKey = String(line.categoryKey).trim();
+  }
   if (line.description != null && String(line.description).trim() !== '') {
     payload.description = String(line.description).trim();
   }
@@ -142,7 +155,13 @@ function stripFinanceLineFromJson(prevRaw: unknown, entryId: string): string | n
 function applyLineToResponses(
   responses: Record<string, any>,
   target: FinanceTarget,
-  line: { entryId: string; kind: TechnicianFinanceKind; amount: number; description?: string }
+  line: {
+    entryId: string;
+    kind: TechnicianFinanceKind;
+    amount: number;
+    description?: string;
+    categoryKey?: string;
+  }
 ) {
   if (target.kind === 'direct') {
     const prev = responses[target.fieldId];
@@ -215,8 +234,9 @@ export async function injectManualFinanceLineIntoTaskDraft(args: {
   kind: TechnicianFinanceKind;
   amount: number;
   description?: string;
+  categoryKey?: string;
 }): Promise<void> {
-  const { taskId, entryId, kind, amount, description } = args;
+  const { taskId, entryId, kind, amount, description, categoryKey } = args;
   const refId = await cloudTaskRefId(taskId);
   if (!refId) return;
   const schema = await fetchChecklistTemplateSchema(refId);
@@ -225,7 +245,7 @@ export async function injectManualFinanceLineIntoTaskDraft(args: {
   if (!target) return;
 
   const responses = await loadMergedResponses(taskId);
-  applyLineToResponses(responses, target, { entryId, kind, amount, description });
+  applyLineToResponses(responses, target, { entryId, kind, amount, description, categoryKey });
   await persistTaskResponses(taskId, responses);
 }
 

@@ -128,7 +128,7 @@ function pushHandler(module) {
         update: { data: myData },
       });
 
-      // 2. Processar Mutações em Dados Compartilhados (Rotear para o dono)
+      // 2. Processar Mutações em Dados Comcompartilhados (Rotear para o dono)
       if (sharedData.length > 0) {
          // Agrupar por dono original
          const byOwner = {};

@@ -3,7 +3,7 @@ import type { User } from '../services/auth';
 import { resolveAvatarUri } from '../services/avatarLocalCache';
 
 /**
- * URI estável para o avatar do utilizador: preferência por ficheiro local (offline).
+ * URI estável para o avatar do usuário: preferência por arquivo local (offline).
  */
 export function useResolvedAvatarUri(user: User | null | undefined): string | undefined {
   const [uri, setUri] = useState<string | undefined>(

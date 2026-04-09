@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Pré-carga de «materiais / entrada» para o app (tabela materials_receipt_inputs).
+ * Pré-carga de "materiais / entrada" para o app (tabela materials_receipt_inputs).
  *
- * - GET  /api/materials-receipt-inputs — JWT utilizador: lista linhas do próprio conductor_id.
+ * - GET  /api/materials-receipt-inputs — JWT usuário: lista linhas do próprio conductor_id.
  * - POST /api/materials-receipt-inputs/import — admin JWT ou REPORTS_API_KEY: cria linhas em lote.
  */
 
@@ -59,7 +59,7 @@ router.post('/import', adminOrReportsApiKey, async (req, res) => {
       select: { id: true },
     });
     if (!user) {
-      return res.status(404).json({ error: 'Utilizador (conductor_id) não encontrado neste tenant.' });
+      return res.status(404).json({ error: 'Usuário (conductor_id) não encontrado neste tenant.' });
     }
 
     const data = [];

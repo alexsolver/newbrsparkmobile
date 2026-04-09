@@ -74,6 +74,13 @@ export function initDatabase() {
       icon TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS technician_expense_categories (
+      id TEXT PRIMARY KEY NOT NULL,
+      label TEXT NOT NULL,
+      icon TEXT,
+      color TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS system_configs (
       id TEXT PRIMARY KEY NOT NULL,
       category TEXT NOT NULL, -- e.g. 'expense_categories', 'revenue_categories'
@@ -288,6 +295,9 @@ export function initDatabase() {
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN split_group_id TEXT DEFAULT NULL;`);
   } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN category_key TEXT DEFAULT NULL;`);
+  } catch (_) {}
 }
 
 
@@ -424,7 +434,7 @@ export function upsertAssetNoteFromSync(note: AssetNote, ownerEmail?: string) {
   ]);
 }
 
-/** Todas as notas do utilizador para POST /api/sync/asset-notes */
+/** Todas as notas do usuário para POST /api/sync/asset-notes */
 export function getLocalAssetNotesForSync(ownerEmail?: string): Record<string, unknown>[] {
   const rows = ownerEmail
     ? db.getAllSync<any>('SELECT * FROM asset_notes WHERE owner_email = ?', [ownerEmail])
@@ -770,6 +780,26 @@ export function saveServiceCategories(categories: any[]) {
   categories.forEach(c => stmt.executeSync([c.id, c.label, c.icon]));
 }
 
+export function getTechnicianExpenseCategories(): { id: string; label: string; icon: string | null; color: string | null }[] {
+  return db.getAllSync('SELECT id, label, icon, color FROM technician_expense_categories ORDER BY id ASC');
+}
+
+export function saveTechnicianExpenseCategories(
+  items: { id: string; label: string; icon?: string | null; color?: string | null }[]
+) {
+  if (!items?.length) return;
+  const stmt = db.prepareSync(`
+    INSERT INTO technician_expense_categories (id, label, icon, color) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      label = excluded.label,
+      icon = excluded.icon,
+      color = excluded.color
+  `);
+  items.forEach((c) =>
+    stmt.executeSync([c.id, c.label, c.icon ?? null, c.color ?? null])
+  );
+}
+
 export function getSystemConfigs(category: string): any[] {
   return db.getAllSync('SELECT * FROM system_configs WHERE category = ?', [category]);
 }
@@ -1018,10 +1048,16 @@ function serializeLinkedTaskIdsJson(row: any): string | null {
 export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
   const attachmentsJson = serializeTechFinanceAttachmentsJson(row);
   const linkedTaskIdsJson = serializeLinkedTaskIdsJson(row);
+  const categoryKey =
+    row.category_key != null && String(row.category_key).trim() !== ''
+      ? String(row.category_key).trim()
+      : row.categoryKey != null && String(row.categoryKey).trim() !== ''
+        ? String(row.categoryKey).trim()
+        : null;
   const stmt = db.prepareSync(`
     INSERT INTO tech_finance_entries (
-      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, finance_value_unlocked, split_group_id, attachments_json, linked_task_ids_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, finance_value_unlocked, split_group_id, attachments_json, linked_task_ids_json, category_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       kind = excluded.kind,
       amount = excluded.amount,
@@ -1037,7 +1073,8 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
       finance_value_unlocked = excluded.finance_value_unlocked,
       split_group_id = COALESCE(excluded.split_group_id, tech_finance_entries.split_group_id),
       attachments_json = excluded.attachments_json,
-      linked_task_ids_json = COALESCE(excluded.linked_task_ids_json, tech_finance_entries.linked_task_ids_json)
+      linked_task_ids_json = COALESCE(excluded.linked_task_ids_json, tech_finance_entries.linked_task_ids_json),
+      category_key = COALESCE(excluded.category_key, tech_finance_entries.category_key)
   `);
   const finUnl =
     row.finance_value_unlocked === 1 ||
@@ -1068,6 +1105,7 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
     splitGid,
     attachmentsJson,
     linkedTaskIdsJson,
+    categoryKey,
   ]);
 }
 
@@ -1185,10 +1223,24 @@ export function getDatabaseOwner(): string | null {
   return row?.owner_email || null;
 }
 
-/** saveConfigLocal — salva assetTypes e categories do backend no SQLite */
-export function saveConfigLocal(config: { assetTypes?: any[]; categories?: any[] }) {
+/** saveConfigLocal — salva assetTypes, categorias de serviço e categorias de despesa do técnico no SQLite */
+export function saveConfigLocal(config: {
+  assetTypes?: any[];
+  categories?: any[];
+  technicianExpenseCategories?: any[];
+}) {
   if (config.assetTypes?.length) saveAssetTypes(config.assetTypes);
-  if (config.categories?.length)  saveServiceCategories(config.categories);
+  if (config.categories?.length) saveServiceCategories(config.categories);
+  if (config.technicianExpenseCategories?.length) {
+    saveTechnicianExpenseCategories(
+      config.technicianExpenseCategories.map((c: any) => ({
+        id: String(c.id),
+        label: String(c.label),
+        icon: c.icon ?? null,
+        color: c.color ?? null,
+      }))
+    );
+  }
 }
 
 // ── Media Items ───────────────────────────────────────────────────────────────

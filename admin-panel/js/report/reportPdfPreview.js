@@ -344,7 +344,7 @@ function formatFileUploadPdfHtml(val, f, responses, row) {
     .map((u, i) => {
       if (u.startsWith('file://')) {
         return (
-          `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Ficheiro ainda no dispositivo (aguarda upload)</div>` +
+          `<div style="margin-top:8px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">${attachList.length > 1 ? 'Anexo ' + (i + 1) + ': ' : ''}Arquivo ainda no dispositivo (aguarda upload)</div>` +
           pdfMediaCapPreview(id, i, responses, row)
         );
       }
@@ -374,16 +374,92 @@ function techCommentBlockHtml(f, responses, row) {
   return `<div style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:10px;color:#713f12;line-height:1.45"><strong>Comentário do técnico:</strong> ${esc(raw)}</div>`;
 }
 
+/** Payload do campo "custos do técnico" (`v`, `lines`, `financeAppliedRev`). */
+function formatTechnicianFinancePdfHtml(val, th) {
+  const fo = tryParseObject(val);
+  if (!fo) {
+    if (typeof val === 'string' && val.trim()) {
+      return `<span style="color:${th.colorMutedLight};font-style:italic">${esc(val)}</span>`;
+    }
+    return `<span style="color:${th.colorMutedLight};font-style:italic">Sem lançamentos</span>`;
+  }
+  const flines = Array.isArray(fo.lines) ? fo.lines : [];
+  const rowsFin = flines
+    .map((ln) => {
+      const amt = Math.max(0, Number(ln && ln.amount) || 0);
+      if (amt <= 0) return '';
+      const kind = ln && ln.kind === 'revenue' ? 'Receita' : 'Despesa';
+      const desc = ln && ln.description != null ? String(ln.description) : '—';
+      const amtStr = amt.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+      });
+      return (
+        `<tr><td style="padding:6px 10px;border-bottom:1px solid ${th.colorBorder};font-weight:800">` +
+        esc(kind) +
+        `</td><td style="padding:6px 10px;border-bottom:1px solid ${th.colorBorder};text-align:right;white-space:nowrap">` +
+        esc(amtStr) +
+        `</td><td style="padding:6px 10px;border-bottom:1px solid ${th.colorBorder}">` +
+        esc(desc) +
+        '</td></tr>'
+      );
+    })
+    .join('');
+  if (!rowsFin) {
+    return `<span style="color:${th.colorMutedLight};font-style:italic">Sem lançamentos</span>`;
+  }
+  return (
+    `<div style="overflow-x:auto;margin-top:4px">` +
+    `<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid ${th.colorBorder};border-radius:8px;overflow:hidden">` +
+    `<thead><tr style="background:${th.colorSurface}">` +
+    `<th style="text-align:left;padding:8px 10px;font-weight:800">Tipo</th>` +
+    `<th style="text-align:right;padding:8px 10px;font-weight:800">Valor</th>` +
+    `<th style="text-align:left;padding:8px 10px;font-weight:800">Descrição</th>` +
+    `</tr></thead><tbody>` +
+    rowsFin +
+    `</tbody></table></div>`
+  );
+}
+
+/** Detecta payload «custos do técnico» quando `field.type` veio errado (ex.: `text`). */
+function looksLikeTechnicianFinancePayload(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o) || !Array.isArray(o.lines)) return false;
+  if (o.lines.length === 0) {
+    return o.financeAppliedRev != null || Number(o.v) === 1;
+  }
+  const sample = o.lines.find((ln) => ln && typeof ln === 'object');
+  if (!sample) return o.financeAppliedRev != null || Number(o.v) === 1;
+  if (sample.sku !== undefined && sample.qty !== undefined && sample.amount === undefined) return false;
+  return (
+    sample.kind === 'expense' ||
+    sample.kind === 'revenue' ||
+    (typeof sample.entryId === 'string' && sample.entryId.startsWith('tech_fin_')) ||
+    (Number(sample.amount) > 0 &&
+      sample.description != null &&
+      sample.name === undefined &&
+      sample.sku === undefined)
+  );
+}
+
 /**
  * HTML rico para tipos especiais; `null` → usar ramo genérico.
  * @param {any} val
  * @param {{ id: string, label?: string, type?: string, allowTechnicianComment?: boolean }} f
  * @param {ReturnType<mergeTheme>} th
  * @param {Record<string, unknown>} responses
- * @param {object|null|undefined} row — linha de secção repetível
+ * @param {object|null|undefined} row — linha de seção repetível
  */
 function formatSpecialFieldHtml(val, f, th, responses, row) {
   if (val === undefined || val === null || val === '') return null;
+
+  const fType = String(f && f.type != null ? f.type : '')
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+  if (fType === 'technician_finance') {
+    return formatTechnicianFinancePdfHtml(val, th);
+  }
 
   if (f.type === 'file_upload') {
     return formatFileUploadPdfHtml(val, f, responses, row);
@@ -401,6 +477,10 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
   if (asObj && typeof asObj === 'object' && !Array.isArray(asObj) && !isTransitPayload(asObj)) {
     const loc = formatLocationPickHtml(asObj, th);
     if (loc) return loc;
+  }
+
+  if (asObj && looksLikeTechnicianFinancePayload(asObj)) {
+    return formatTechnicianFinancePdfHtml(val, th);
   }
 
   return null;
@@ -483,7 +563,7 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
     else if (tm.plannedSourceKey === 'straight_line') {
       plannedFoot = 'Distância em linha reta · tempo não estimado';
     } else if (tm.plannedSourceKey === 'task_eta_legacy') {
-      plannedFoot = 'ETA da OS (sem registo detalhado na saída)';
+      plannedFoot = 'ETA da OS (sem registro detalhado na saída)';
     }
 
     let transitSeconds = tm.actualDurationSec;
@@ -558,7 +638,7 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
       }
     }
 
-    const actualDistHint = tm.actualDistFromPolyline ? 'trajeto GPS' : 'aprox. (reta ou registo)';
+    const actualDistHint = tm.actualDistFromPolyline ? 'trajeto GPS' : 'aprox. (reta ou registro)';
     const remainHtml =
       !reachedDestination && hasDestCoords
         ? `<div style="font-size:8px;color:#DC2626;font-weight:700;margin-top:2px">${distToDestKm.toFixed(2)} km p/ destino</div>`
@@ -1070,12 +1150,12 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Desvio máx.</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(String(p.maxDeviationM ?? '—'))} m</div></div>
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Tolerância</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(tol)} m</div></div>
       </div>
-      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a «distância no corredor ÷ referência».</div>
+      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a "distância no corredor ÷ referência".</div>
       <div style="margin-top:10px;padding:10px 12px;background:#fffbea;border:1px solid #fde68a;border-radius:8px">
         <div style="font-size:9px;font-weight:900;color:#9a3412;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Resumo do percurso</div>
         <table style="width:100%;font-size:10px;color:${th.colorText};line-height:1.5;border-collapse:collapse">
           <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância percorrida <span style="font-size:8px">(trilha GPS, amostras válidas na app)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dTraj}</td></tr>
-          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registo, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
+          <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Distância no corredor <span style="font-size:8px">(soma de segmentos cujo ponto médio está ≤ tolerância; se faltar no registro, recalculado a partir da trilha do PDF)</span></td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dOn}</td></tr>
           <tr><td style="padding:4px 8px 4px 0;vertical-align:top;color:${th.colorMuted}">Comprimento da rota de referência</td><td style="padding:4px 0;font-weight:800;white-space:nowrap;text-align:right">${dRef}</td></tr>
         </table>
         <div style="margin-top:8px;font-size:8px;color:${th.colorMuted};line-height:1.4;border-top:1px solid ${th.colorBorder};padding-top:8px">
@@ -1086,7 +1166,7 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
     const refHint =
       ref.length < 2
         ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
-        : 'Não há métricas de patrulha neste registo (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
     const estLen = polylineLengthTraversedPdf(tr);
     const extraEst =
       estLen != null
@@ -1096,13 +1176,13 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
   }
   let mapBlock = '';
   const osmLinkRow = browseOsmUrl
-    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em ecrã completo (OpenStreetMap)</a></div>`
+    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em tela cheia (OpenStreetMap)</a></div>`
     : '';
   if (rasterMapInner) {
     mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
       ${osmLinkRow}
       ${rasterMapInner}
-      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e pormenor, use «Abrir em ecrã completo». O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
     </div>`;
   } else if (!p) {
     mapBlock =
@@ -1260,7 +1340,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row) {
           <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Aguardando sincronização para pré-visualizar a foto.</div>
         </div>`;
       } else if (singleVal) {
-        block = `<div style="padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;font-size:10px;color:${th.colorMuted}">Pré-visualização indisponível para este ficheiro</div>`;
+        block = `<div style="padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;font-size:10px;color:${th.colorMuted}">Pré-visualização indisponível para este arquivo</div>`;
       } else {
         block = `<div class="pdf-photo-card" style="margin-top:8px;max-width:350px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
           <img class="pdf-photo-img" style="min-height:180px;border-radius:0" src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" alt="" />
@@ -1619,7 +1699,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     : '';
 
   // Fotos reais já entram em `pieceForm` quando `m.photoGallery` está ligado (como no PDF da Central).
-  // Não há secção separada com dados da API só para a galeria — o placeholder antigo confundia a pré-visualização.
+  // Não há seção separada com dados da API só para a galeria — o placeholder antigo confundia a pré-visualização.
   const piecePhoto = '';
 
   const pieceFooter = m.footer

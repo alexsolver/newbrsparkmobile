@@ -383,7 +383,7 @@ export default function TechnicianStockScreen() {
                   <Ionicons name="cube-outline" size={48} color="#94a3b8" />
                   <Text style={styles.emptyTitle}>Sem materiais</Text>
                   <Text style={styles.emptySub}>
-                    Este inventário é só seu: não usa bens nem locais do portfólio. Toque em «Novo material» para
+                    Este inventário é só seu: não usa bens nem locais do portfólio. Toque em "Novo material" para
                     começar.
                   </Text>
                 </View>
@@ -450,7 +450,7 @@ export default function TechnicianStockScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.periodHint}>
-                « retrocede 30 dias; » avança em direção a hoje (máx. 30 dias por pedido).
+                " retrocede 30 dias; " avança em direção a hoje (máx. 30 dias por pedido).
               </Text>
             </View>
           ) : (
@@ -477,7 +477,7 @@ export default function TechnicianStockScreen() {
             <Ionicons name={online ? 'cloud-done-outline' : 'cloud-offline-outline'} size={18} color="#64748b" />
             <Text style={styles.bannerText}>
               {online
-                ? 'Online: consulta por janelas de 30 dias no servidor. Offline: até 30 dias só no telemóvel.'
+                ? 'Online: consulta por janelas de 30 dias no servidor. Offline: até 30 dias só no celular.'
                 : 'Sem conexão: mostrando até 30 dias de movimentos guardados neste aparelho. Use o campo acima para filtrar.'}
             </Text>
           </View>
@@ -510,7 +510,7 @@ export default function TechnicianStockScreen() {
                         <Ionicons name="file-tray-outline" size={48} color="#94a3b8" />
                         <Text style={styles.emptyTitle}>Nenhuma movimentação</Text>
                         <Text style={styles.emptySub}>
-                          Não há registos sincronizados neste intervalo de datas. Recue 30 dias com o botão « ou
+                          Não há registos sincronizados neste intervalo de datas. Recue 30 dias com o botão " ou
                           sincronize.
                         </Text>
                       </View>

@@ -127,7 +127,7 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
     return (
       <View style={styles.loadingBox}>
         <ActivityIndicator color="#0369a1" />
-        <Text style={styles.loadingText}>A carregar estoque técnico…</Text>
+        <Text style={styles.loadingText}>Carregando estoque técnico…</Text>
       </View>
     );
   }
@@ -210,7 +210,7 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
           <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Seu estoque técnico</Text>
             <Text style={styles.modalHint}>
-              Cadastro separado dos bens do portfólio. Adicione itens em «Meu estoque» no menu ou em Estoque técnico.
+              Cadastro separado dos bens do portfólio. Adicione itens em "Meu estoque" no menu ou em Estoque técnico.
             </Text>
             <TextInput
               style={styles.searchInput}
@@ -225,7 +225,7 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
               style={{ maxHeight: 320 }}
               ListEmptyComponent={
                 <Text style={styles.emptyPick}>
-                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou o ecrã de cadastro.
+                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
                 </Text>
               }
               renderItem={({ item: it }) => (

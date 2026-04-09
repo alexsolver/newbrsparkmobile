@@ -135,7 +135,7 @@ export function checkAttachmentMeta(options: {
     return {
       ok: false,
       reason: 'size',
-      message: `O ficheiro excede o limite de ${ATTACHMENT_MAX_BYTES / (1024 * 1024)} MB.`,
+      message: `O arquivo excede o limite de ${ATTACHMENT_MAX_BYTES / (1024 * 1024)} MB.`,
     };
   }
 
@@ -144,7 +144,7 @@ export function checkAttachmentMeta(options: {
     return {
       ok: false,
       reason: 'type',
-      message: `Este tipo de ficheiro (.${ext}) não é permitido por motivos de segurança.`,
+      message: `Este tipo de arquivo (.${ext}) não é permitido por motivos de segurança.`,
     };
   }
 
@@ -152,7 +152,7 @@ export function checkAttachmentMeta(options: {
     return {
       ok: false,
       reason: 'type',
-      message: 'Este tipo de ficheiro não é permitido por motivos de segurança.',
+      message: 'Este tipo de arquivo não é permitido por motivos de segurança.',
     };
   }
 

@@ -12,26 +12,26 @@ const { normalizeLabelKey } = require('./formAiNormalize');
 function buildCopilotSystemPrompt(formContext) {
   const typeDoc = formatSchemaTypeDocBlock();
   const fieldTypes = buildAnalyzeFieldTypesList(formContext || {}).join(', ');
-  return `És o copiloto do Form Builder BrSpark (checklists no telemóvel). Ajudas a desenhar e corrigir formulários.
+  return `Você é o copiloto do Form Builder BrSpark (checklists no celular). Ajuda a criar e corrigir formulários.
 
 Tipos de campo suportados (referência):
 ${typeDoc}
 
 Na fase de propostas por botão, tipos mais comuns para opções: ${fieldTypes}.
 
-Responde sempre em português (pt-BR), claro e profissional.
+Responda sempre em português (pt-BR), claro e profissional.
 
-Devolves APENAS JSON válido (sem markdown), com as chaves:
-- "replyText": texto para o utilizador (explicações, dúvidas, resumo do que sugeriste).
+Retorne APENAS JSON válido (sem markdown), com as chaves:
+- "replyText": texto para o usuário (explicações, dúvidas, resumo do que sugeriu).
 - "schemaPatch": objeto com "operations" (array) OU null. Cada operação:
   - { "op": "add_field", "afterId": null ou id de campo antes do qual inserir (omitir ou null = fim), "field": { "type", "label", "required"?: bool, "options"?: string, "description"?: string } }
   - { "op": "update_field", "id": "<field_id>", "patch": { "label"?, "type"?, "required"?, "options"?, "description"? } }
-  - { "op": "remove_field", "id": "<field_id>" } — só se o utilizador pedir remoção explícita.
+  - { "op": "remove_field", "id": "<field_id>" } — só se o usuário pedir remoção explícita.
 - "logicSuggestions": array OU null. Cada entrada: { "monitorLabel": "rótulo do campo SE", "operator": "==" | "!=" | "contains", "value": "valor comparado", "targetLabel": "rótulo do campo alvo", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }.
-  Usa rótulos exactos ou muito próximos dos que aparecem no schema. Não inventes rótulos que não existam.
+  Use rótulos exatos ou muito próximos dos que aparecem no schema. Não invente rótulos que não existam.
 
-Se só estiveres a responder uma dúvida sem alterar o formulário, usa schemaPatch: null e logicSuggestions: null.
-Não cries campos duplicados com o mesmo rótulo sem o utilizador pedir.
+Se estiver apenas respondendo a uma dúvida sem alterar o formulário, use schemaPatch: null e logicSuggestions: null.
+Não crie campos duplicados com o mesmo rótulo sem o usuário pedir.
 `;
 }
 
@@ -56,7 +56,7 @@ async function openAiCopilotJson(systemPrompt, messages, temperature = 0.32) {
   const { apiKey: key, model, baseUrl } = await resolveOpenAiCredentials();
   if (!key || !String(key).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração «OpenAI» em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
+      'Chave OpenAI em falta: configure a integração "OpenAI" em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;
@@ -161,7 +161,7 @@ async function runFormCopilot(input) {
     systemBase +
     (ctxBlock ? '\n\n' + ctxBlock : '') +
     (summary ? `\n\n### Resumo da planilha (se aplicável)\n${summary}` : '') +
-    '\n\n### Estado actual do formulário (JSON compacto)\n' +
+    '\n\n### estado atual do formulário (JSON compacto)\n' +
     compactSchemaForPrompt(schemaData);
 
   const bounded = messages
@@ -215,24 +215,24 @@ async function runFormCopilot(input) {
  */
 async function suggestLogicRules(schemaData, userGoal, formContext = {}) {
   const ctxBlock = buildFormContextBlock(formContext);
-  const systemPrompt = `És especialista em regras condicionais do Form Builder BrSpark.
-Cada regra no app: monitoriza um campo (ou cronómetro); SE condição; ENTÃO acções (mostrar/ocultar/tornar obrigatório).
-Usa apenas rótulos de campos que existam no JSON do schema enviado pelo utilizador.
+  const systemPrompt = `Você é especialista em regras condicionais do Form Builder BrSpark.
+Cada regra no app: monitora um campo (ou cronômetro); SE condição; ENTÃO ações (mostrar/ocultar/tornar obrigatório).
+Use apenas rótulos de campos que existam no JSON do schema enviado pelo usuário.
 
-Devolves APENAS JSON válido:
+Retorne APENAS JSON válido:
 {
   "replyText": "explicação curta em pt-BR",
   "logicSuggestions": [
-    { "monitorLabel": "rótulo do campo que dispara", "operator": "==", "value": "valor", "targetLabel": "rótulo do campo afectado", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }
+    { "monitorLabel": "rótulo do campo que dispara", "operator": "==", "value": "valor", "targetLabel": "rótulo do campo afetado", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }
   ]
 }
-Usa rótulos que existam no schema. Se não houver sugestões úteis, logicSuggestions: [].
+Use rótulos que existam no schema. Se não houver sugestões úteis, logicSuggestions: [].
 
 ${ctxBlock ? '\n' + ctxBlock : ''}`;
 
   const userContent =
-    `Objectivo / pedido do administrador:\n${String(userGoal || '').trim().slice(0, 4000)}\n\n` +
-    `Schema actual (JSON compacto):\n${compactSchemaForPrompt(schemaData)}`;
+    `Objetivo / pedido do administrador:\n${String(userGoal || '').trim().slice(0, 4000)}\n\n` +
+    `Schema atual (JSON compacto):\n${compactSchemaForPrompt(schemaData)}`;
 
   const parsed = await openAiCopilotJson(
     systemPrompt,

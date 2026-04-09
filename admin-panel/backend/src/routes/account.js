@@ -209,7 +209,7 @@ router.post('/me/technician', authUser, async (req, res) => {
     });
     if (existing) {
       return res.status(400).json({
-        error: 'Já existe um pedido ou registo de prestador para esta conta.',
+        error: 'Já existe um pedido ou registro de prestador para esta conta.',
       });
     }
 

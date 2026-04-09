@@ -30,12 +30,12 @@ router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (re
   try {
     const file = req.file;
     if (!file || !file.buffer) {
-      return res.status(400).json({ error: 'Envie um ficheiro no campo "file".' });
+      return res.status(400).json({ error: 'Envie um arquivo no campo "file".' });
     }
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (ext !== '.xlsx' && ext !== '.xlsm') {
       return res.status(400).json({
-        error: 'Formato não suportado nesta versão. Use ficheiro Excel .xlsx (MVP).',
+        error: 'Formato não suportado nesta versão. Use arquivo Excel .xlsx (MVP).',
       });
     }
 
@@ -137,12 +137,12 @@ router.post('/ai/draft-from-file', adminAuth, upload.single('file'), async (req,
   try {
     const file = req.file;
     if (!file || !file.buffer) {
-      return res.status(400).json({ error: 'Envie um ficheiro no campo "file".' });
+      return res.status(400).json({ error: 'Envie um arquivo no campo "file".' });
     }
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (ext !== '.xlsx' && ext !== '.xlsm') {
       return res.status(400).json({
-        error: 'Formato não suportado nesta versão. Use ficheiro Excel .xlsx (MVP).',
+        error: 'Formato não suportado nesta versão. Use arquivo Excel .xlsx (MVP).',
       });
     }
 

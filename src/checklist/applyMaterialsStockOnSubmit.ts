@@ -145,7 +145,7 @@ export async function applyMaterialsStockForSubmission(args: {
         throw new Error(`Item de stock não encontrado (${itemId}). Sincronize o inventário.`);
       }
       if (delta > 0 && item.currentStock < delta) {
-        throw new Error(`Saldo insuficiente para «${item.name}» (SKU ${item.sku}).`);
+        throw new Error(`Saldo insuficiente para "${item.name}" (SKU ${item.sku}).`);
       }
 
       const ftRaw = osNumber != null ? String(osNumber).trim() : '';

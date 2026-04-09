@@ -63,11 +63,18 @@ function linkedTaskIdsForEntry(item: TechnicianFinanceEntry): string[] {
 }
 
 function rowToEntry(row: any): TechnicianFinanceEntry {
+  const ck =
+    row.category_key != null && String(row.category_key).trim() !== ''
+      ? String(row.category_key).trim()
+      : row.categoryKey != null && String(row.categoryKey).trim() !== ''
+        ? String(row.categoryKey).trim()
+        : null;
   return {
     id: row.id,
     kind: row.kind === 'revenue' ? 'revenue' : 'expense',
     amount: Number(row.amount) || 0,
     currency: row.currency || 'BRL',
+    categoryKey: ck,
     description: row.description || undefined,
     linkedTaskIds: parseLinkedTaskIds(row),
     taskId: row.taskId ?? null,
@@ -214,6 +221,8 @@ export const TechnicianFinanceService = {
       amount: number;
       description?: string;
       currency?: string;
+      /** Só despesas; chave da metatag no painel. */
+      categoryKey?: string | null;
       attachments?: TechnicianFinanceAttachment[];
       /** OS ligadas (vazio = sem vínculo). */
       linkedTaskIds: string[];
@@ -292,7 +301,7 @@ export const TechnicianFinanceService = {
         const okR = await linkedTasksAllowFullEditAfterReview(checkIds);
         if (!okR) {
           throw new Error(
-            'Para corrigir este lançamento devolvido, sincronize o telemóvel: todas as OS do rateio têm de estar na lista local.'
+            'Para corrigir este lançamento devolvido, sincronize o celular: todas as OS do rateio têm de estar na lista local.'
           );
         }
       }
@@ -302,7 +311,7 @@ export const TechnicianFinanceService = {
       const ok2 = await areTaskIdsEligibleForExpenseLink(newLinked);
       if (!ok2) {
         throw new Error(
-          'Só pode relacionar OS com campo de despesas no modelo, em aberto ou concluídas há no máximo 30 dias, após sincronizar a lista neste telemóvel.'
+          'Só pode relacionar OS com campo de despesas no modelo, em aberto ou concluídas há no máximo 30 dias, após sincronizar a lista neste celular.'
         );
       }
     }
@@ -321,6 +330,7 @@ export const TechnicianFinanceService = {
         amount: total,
         description: fields.description,
         currency: fields.currency,
+        categoryKey: fields.kind === 'expense' ? fields.categoryKey ?? null : null,
         attachments: fields.attachments,
         linkedTaskIds: newLinked.length > 0 ? newLinked : undefined,
       },
@@ -334,12 +344,17 @@ export const TechnicianFinanceService = {
       amount: number;
       description?: string;
       currency?: string;
+      categoryKey?: string | null;
       attachments?: TechnicianFinanceAttachment[];
       linkedTaskIds?: string[];
     },
     ownerEmail?: string
   ): Promise<TechnicianFinanceEntry> => {
     const total = Math.max(0, Number(partial.amount) || 0);
+    const expenseCat =
+      partial.kind === 'expense' && partial.categoryKey != null && String(partial.categoryKey).trim() !== ''
+        ? String(partial.categoryKey).trim()
+        : null;
     const linked =
       partial.kind === 'expense' && partial.linkedTaskIds && partial.linkedTaskIds.length > 0
         ? [...new Set(partial.linkedTaskIds.map((id) => String(id).trim()).filter(Boolean))]
@@ -349,7 +364,7 @@ export const TechnicianFinanceService = {
       const eligible = await areTaskIdsEligibleForExpenseLink(linked);
       if (!eligible) {
         throw new Error(
-          'Só pode associar OS com campo de despesas no formulário, em aberto neste telemóvel ou concluídas há no máximo 30 dias. Sincronize a lista de OS.'
+          'Só pode associar OS com campo de despesas no formulário, em aberto neste celular ou concluídas há no máximo 30 dias. Sincronize a lista de OS.'
         );
       }
       const amounts = splitCurrencyBrl(total, linked.length);
@@ -374,6 +389,7 @@ export const TechnicianFinanceService = {
           kind: partial.kind,
           amount: amounts[i] ?? 0,
           currency: partial.currency || 'BRL',
+          categoryKey: expenseCat,
           description: desc,
           taskId,
           templateId: null,
@@ -393,6 +409,7 @@ export const TechnicianFinanceService = {
           kind: partial.kind,
           amount: entry.amount,
           description: desc,
+          categoryKey: expenseCat ?? undefined,
         });
       }
       return firstSaved!;
@@ -403,6 +420,7 @@ export const TechnicianFinanceService = {
       kind: partial.kind,
       amount: total,
       currency: partial.currency || 'BRL',
+      categoryKey: expenseCat,
       description: partial.description,
       taskId: null,
       templateId: null,

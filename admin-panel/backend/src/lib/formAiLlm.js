@@ -22,20 +22,20 @@ const {
  */
 function buildAnalyzeSystemPrompt(formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(formContext || {});
-  return `És um assistente que analisa planilhas Excel convertidas em texto e prepara um formulário BrSpark (checklist no telemóvel).
+  return `Você é um assistente que analisa planilhas Excel convertidas em texto e prepara um formulário BrSpark (checklist no celular).
 
-Devolves APENAS JSON válido (sem markdown), com as chaves:
+Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
 - "description": descrição curta ou vazio.
-- "items": array ORDENADO de blocos, na mesma ordem lógica do documento (folhas, colunas, secções).
+- "items": array ORDENADO de blocos, na mesma ordem lógica do documento (folhas, colunas, seções).
 
 Cada elemento de "items" é um objeto com:
 - "key": identificador estável único no array (ex.: "i0", "i1"…).
 - "kind": "section_break" OU "field".
 - "label": texto em português — para campos, DEVE coincidir com o cabeçalho da coluna na planilha (mesmo nome), para o sistema alinhar o perfil estatístico.
-- "context": opcional, uma frase (ex.: coluna «Estado» na folha «OS»).
-- "recommendedOptionKey": a "key" da opção que achas mais adequada (deve existir em "options").
-- "options": array com 3 a 6 opções clicáveis (tipos diferentes) para o utilizador confirmar.
+- "context": opcional, uma frase (ex.: coluna "Estado" na planilha "OS").
+- "recommendedOptionKey": a "key" da opção que você considera mais adequada (deve existir em "options").
+- "options": array com 3 a 6 opções clicáveis (tipos diferentes) para o usuário confirmar.
 
 Para kind "section_break", cada opção tem:
 - "key": id único neste item
@@ -50,34 +50,34 @@ Para kind "field", cada opção tem:
 - "shortLabel": rótulo curto do botão
 - "hint": opcional — porque este tipo encaixa nos dados
 
-REGRAS DE TIPO (prioridade alta — lê também o bloco «Perfil estatístico das colunas» no input do utilizador):
+REGRAS DE TIPO (prioridade alta — leia também o bloco "Perfil estatístico das colunas" no input do usuário):
 - Se o perfil indicar signal=dropdown ou dropdown_weak para essa coluna: recommendedOptionKey DEVE ser a opção com type "dropdown"; preenche "suggestedOptions" com os valores listados no perfil (ou inferidos das linhas).
 - Se signal=yes_no: recommendedOptionKey = opção "yes_no".
 - Se signal=multiselect_hint: recommendedOptionKey = opção "multiselect" e suggestedOptions com valores únicos.
 - Se signal=email_hint / phone_hint / date_hint / number_hint: escolhe a opção desse tipo como recomendada.
 - Se signal=barcode_hint: inclui opção "barcode_scan" e recomenda-a quando fizer sentido.
-- Se signal=photo_hint: inclui "photo" ou "photo_stamped" (se o contexto do utilizador pedir fotos carimbadas) como opções.
+- Se signal=photo_hint: inclui "photo" ou "photo_stamped" (se o contexto do usuário pedir fotos carimbadas) como opções.
 - Coluna com os MESMOS textos a repetir-se muitas vezes (poucos distintos) NÃO é "text" — é quase sempre "dropdown" ou "yes_no".
 
 "suggestedOptions": string com valores separados por vírgula para dropdown/multiselect (obrigatório quando recommended é dropdown ou multiselect).
 
 Regras estruturais:
-- Começa cada folha (## Folha:) com um section_break com label = nome da folha, depois os campos dessa folha.
-- Se a primeira linha de cada folha for cabeçalho, um campo por coluna relevante (ignora colunas vazias ou totais óbvios).
-- Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o utilizador os pediu explicitamente no contexto.
+- Comece cada planilha (## Folha:) com um section_break com label = nome da planilha, depois os campos dessa planilha.
+- Se a primeira linha de cada planilha for cabeçalho, um campo por coluna relevante (ignora colunas vazias ou totais óbvios).
+- Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o usuário os pediu explicitamente no contexto.
 `;
 }
 
 /**
- * IA só extrai estrutura (etapas + rótulos de colunas). Tipos de campo escolhe o utilizador no painel.
+ * IA só extrai estrutura (etapas + rótulos de colunas). Tipos de campo escolhe o usuário no painel.
  * @param {Record<string, unknown>} [_formContext] reservado (contexto já vai no user content)
  */
 function buildStructureExtractSystemPrompt(_formContext) {
-  return `És um assistente que lê planilhas Excel convertidas em texto e extrai apenas a ESTRUTURA lógica de um formulário BrSpark (checklist no telemóvel).
+  return `Você é um assistente que lê planilhas Excel convertidas em texto e extrai apenas a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
 
-NÃO escolhas tipos de campo (dropdown, número, foto, etc.) — isso será feito pelo utilizador no painel. Não uses "options", "recommendedOptionKey" nem "suggestedOptions".
+NÃO escolha tipos de campo (dropdown, número, foto, etc.) — isso será feito pelo usuário no painel. Não use "options", "recommendedOptionKey" nem "suggestedOptions".
 
-Devolves APENAS JSON válido (sem markdown), com as chaves:
+Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
 - "description": descrição curta ou string vazia.
 - "blocks": array ORDENADO na mesma ordem do documento (folhas, depois colunas relevantes).
@@ -86,36 +86,36 @@ Cada elemento de "blocks" tem:
 - "key": identificador estável único no array (ex.: "b0", "b1"…).
 - "kind": "section_break" OU "field".
 - "label": texto em português — para field, usa o texto do cabeçalho da coluna na planilha (alinhado ao Excel).
-- "context": opcional, uma frase curta (ex.: coluna «X» na folha «Y»).
+- "context": opcional, uma frase curta (ex.: coluna "X" na planilha "Y").
 
 Regras estruturais:
-- Quando o conteúdo tiver folhas marcadas (## Folha:), começa cada folha com um block kind=section_break e label = nome da folha; a seguir, um field por coluna útil dessa folha.
+- Quando o conteúdo tiver planilhas marcadas (## Folha:), comece cada planilha com um block kind=section_break e label = nome da planilha; em seguida, um field por coluna útil dessa planilha.
 - Se houver cabeçalho na primeira linha, um field por coluna com dados (ignora colunas vazias, totais óbvios ou índices sem significado).
-- Mantém a ordem de leitura natural (cima → baixo, esquerda → direita nas colunas).
+- Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita nas colunas).
 `;
 }
 
 function buildCanonicalSystemPrompt() {
   const typeDoc = formatSchemaTypeDocBlock();
-  return `És um assistente que gera formulários para a plataforma BrSpark (checklist no telemóvel).
-Devolves APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData".
+  return `Você é um assistente que gera formulários para a plataforma BrSpark (checklist no celular).
+Retorne APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData".
 
 schemaData é um array ordenado de objetos. Cada objeto representa um campo OU um separador de etapa.
 
-Tipos permitidos em "type" (usa exactamente estes identificadores):
+Tipos permitidos em "type" (use exatamente estes identificadores):
 ${typeDoc}
 
 - section_break: "label" = título da etapa; opcional "multiple": true para lista repetível.
 
-O contexto do administrador (se existir) vem no início do conteúdo do utilizador.
+O contexto do administrador (se existir) vem no início do conteúdo do usuário.
 
 Cada campo (exceto section_break) deve ter "label" claro em português (pt-BR), alinhado ao cabeçalho da coluna quando existir. Opcional: "required": true, "description": texto curto.
 
-IDs: podes omitir "id" ou usar placeholders — o servidor corrige. Não repitas labels vazios.
+IDs: pode omitir "id" ou usar placeholders — o servidor corrige. Não repita labels vazios.
 
-Se o input incluir «Perfil estatístico das colunas», respeita os signals: dropdown/yes_no/multiselect_hint têm prioridade sobre "text"; barcode_hint → barcode_scan; photo_hint → photo ou photo_stamped.
+Se o input incluir "Perfil estatístico das colunas", respeita os signals: dropdown/yes_no/multiselect_hint têm prioridade sobre "text"; barcode_hint → barcode_scan; photo_hint → photo ou photo_stamped.
 
-Se o input tiver várias folhas (## Folha:), começa cada folha com um section_break com label = nome da folha, depois os campos dessa folha.
+Se o input tiver várias planilhas (## Folha:), comece cada planilha com um section_break com label = nome da planilha, depois os campos dessa planilha.
 Colunas onde os valores se repetem entre poucas etiquetas distintas devem ser "dropdown" ou "yes_no", não texto livre.
 `;
 }
@@ -124,7 +124,7 @@ async function openAiJsonObjectChat(systemPrompt, userContent, temperature = 0.2
   const { apiKey: key, model, baseUrl } = await resolveOpenAiCredentials();
   if (!key || !String(key).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração «OpenAI» em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
+      'Chave OpenAI em falta: configure a integração "OpenAI" em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;
@@ -183,7 +183,7 @@ function buildUserContentWithProfile(input) {
     String(input.markdown || '').slice(0, 130_000) +
     `\n\n### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)\n` +
     profileBlock +
-    `\n\n---\nInstruções extra do utilizador: ${String(input.userHint || '').trim() || '(nenhuma)'}\n`
+    `\n\n---\nInstruções extra do usuário: ${String(input.userHint || '').trim() || '(nenhuma)'}\n`
   );
 }
 
@@ -213,7 +213,7 @@ async function analyzeSpreadsheetProposals(input) {
 }
 
 /**
- * Análise só de estrutura: secções + campos (rótulos). Tipos escolhidos no builder.
+ * Análise só de estrutura: seções + campos (rótulos). Tipos escolhidos no builder.
  * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
  */
 async function analyzeSpreadsheetStructure(input) {

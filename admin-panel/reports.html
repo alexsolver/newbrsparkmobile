@@ -17,17 +17,25 @@
     }
     .report-builder-topbar {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      align-items: flex-start;
+      gap: 10px 14px;
       flex-wrap: wrap;
-      padding: 10px 16px;
+      padding: 6px 14px 8px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
     .report-builder-topbar .topbar-title-wrap {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
+      flex: 1;
+      min-width: 200px;
+    }
+    .report-topbar-heading {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
     }
     .report-builder-topbar h1 {
       margin: 0;
@@ -35,11 +43,85 @@
       font-weight: 800;
       letter-spacing: -0.3px;
     }
-    .report-builder-topbar .hint {
+    .report-compact-help {
+      margin: 0;
+      border: none;
+    }
+    .report-compact-help > summary {
+      list-style: none;
+      cursor: pointer;
       font-size: 11px;
+      font-weight: 700;
+      color: var(--text2);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      user-select: none;
+      padding: 2px 0;
+    }
+    .report-compact-help > summary::-webkit-details-marker {
+      display: none;
+    }
+    .report-compact-help .report-help-chevron {
+      font-size: 9px;
       color: var(--text3);
-      max-width: 520px;
-      line-height: 1.35;
+      transition: transform 0.15s ease;
+    }
+    .report-compact-help[open] > summary .report-help-chevron {
+      transform: rotate(90deg);
+    }
+    .report-compact-help .report-help-body {
+      margin-top: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--text2);
+      line-height: 1.45;
+      background: var(--surface2, #f8fafc);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      max-width: 640px;
+    }
+    .report-compact-help .report-help-body code {
+      font-size: 10px;
+    }
+    .report-section-help {
+      margin: 0 0 8px 0;
+      border: none;
+    }
+    .report-section-help > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 0 4px;
+      user-select: none;
+    }
+    .report-section-help > summary::-webkit-details-marker {
+      display: none;
+    }
+    .report-section-help .report-help-chevron {
+      font-size: 9px;
+      color: var(--text3);
+      transition: transform 0.15s ease;
+    }
+    .report-section-help[open] > summary .report-help-chevron {
+      transform: rotate(90deg);
+    }
+    .report-section-help .report-help-body {
+      margin: 0 0 8px 0;
+      padding: 8px 10px;
+      font-size: 10px;
+      color: var(--text3);
+      line-height: 1.4;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border);
+      border-radius: 8px;
     }
     .report-builder-body {
       display: flex;
@@ -47,9 +129,9 @@
       min-height: 0;
     }
     .report-builder-sidebar {
-      width: 380px;
-      min-width: 300px;
-      max-width: 42vw;
+      width: 340px;
+      min-width: 280px;
+      max-width: 36vw;
       border-right: 1px solid var(--border);
       overflow-y: auto;
       background: var(--surface2);
@@ -57,25 +139,133 @@
       flex-direction: column;
     }
     .report-inspector-section {
-      padding: 14px 16px;
+      padding: 10px 12px;
       border-bottom: 1px solid var(--border);
     }
     .report-inspector-section h3 {
-      margin: 0 0 10px;
+      margin: 0 0 6px;
       font-size: 10px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.8px;
       color: var(--text3);
     }
+    /* Destaque — fonte de dados da pré-visualização (UX) */
+    .report-inspector-section--preview-data {
+      padding: 8px 10px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface2)) 0%, var(--surface2) 100%);
+    }
+    .report-preview-focus {
+      padding: 10px 11px 9px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+      border-left: 4px solid var(--accent);
+      background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--accent) 11%, var(--surface)) 0%,
+        var(--surface) 55%,
+        color-mix(in srgb, var(--surface2) 70%, var(--surface)) 100%
+      );
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
+        0 2px 8px color-mix(in srgb, var(--color-slate) 6%, transparent);
+    }
+    .report-preview-focus-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px 10px;
+      margin-bottom: 7px;
+    }
+    .report-preview-focus-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text1);
+    }
+    .report-preview-focus-title ion-icon {
+      font-size: 17px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .report-preview-focus-help {
+      margin: 0;
+      border: none;
+      flex: 0 1 auto;
+      min-width: min-content;
+    }
+    .report-preview-focus-help[open] {
+      flex: 1 0 100%;
+    }
+    .report-preview-focus-help > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      padding: 2px 0;
+      user-select: none;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .report-preview-focus-help > summary::-webkit-details-marker {
+      display: none;
+    }
+    .report-preview-focus-help .report-help-body {
+      margin: 6px 0 0 0;
+      padding: 8px 10px;
+      font-size: 10px;
+      line-height: 1.45;
+      color: var(--text2);
+      background: color-mix(in srgb, var(--surface2) 40%, var(--surface));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .report-preview-focus-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .report-preview-focus-row .form-control {
+      flex: 1;
+      min-width: 100px;
+      font-size: 11px;
+      padding: 6px 9px;
+    }
+    .report-preview-focus-row .btn {
+      font-size: 11px;
+      padding: 5px 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .report-preview-focus-row .btn ion-icon {
+      margin-right: 4px;
+      vertical-align: -3px;
+      font-size: 15px;
+    }
+    .report-preview-focus-foot {
+      font-size: 10px;
+      margin: 6px 0 0;
+      color: var(--text3);
+      min-height: 1.2em;
+    }
     .report-module-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      padding: 8px 0;
+      padding: 5px 0;
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: 11px;
     }
     .report-module-row:last-child { border-bottom: none; }
     .report-module-label {
@@ -125,9 +315,9 @@
     .report-field-row {
       display: grid;
       grid-template-columns: 1fr 36px;
-      gap: 8px;
+      gap: 6px;
       align-items: start;
-      padding: 8px 0;
+      padding: 6px 0;
       border-bottom: 1px dashed var(--border);
       font-size: 11px;
     }
@@ -157,8 +347,8 @@
     .report-canvas-toolbar {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 16px;
+      gap: 10px;
+      padding: 5px 12px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       flex-wrap: wrap;
@@ -167,7 +357,7 @@
     .report-canvas-scroll {
       flex: 1;
       overflow: auto;
-      padding: 20px;
+      padding: 12px;
       display: flex;
       justify-content: center;
       align-items: flex-start;
@@ -310,7 +500,7 @@
     .report-theme-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px 10px;
+      gap: 6px 8px;
       align-items: center;
     }
     .report-theme-grid label {
@@ -337,10 +527,18 @@
     <div class="report-builder-page">
       <div class="report-builder-topbar">
         <div class="topbar-title-wrap">
-          <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Construtor PDF <span class="report-badge-live">WYSIWYG</span></h1>
-          <p class="hint">O painel à direita simula a folha A4. Alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração. API: <code style="font-size:10px">GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></p>
+          <div class="report-topbar-heading">
+            <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Construtor PDF <span class="report-badge-live">WYSIWYG</span></h1>
+            <details class="report-compact-help">
+              <summary><span class="report-help-chevron">▸</span> Notas + API</summary>
+              <div class="report-help-body">
+                O painel à direita simula a planilha A4. As alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração.
+                <div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong> — <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>
+              </div>
+            </details>
+          </div>
         </div>
-        <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex-shrink:0;align-self:center">
           <select id="preset-select" class="form-control" style="min-width:200px;font-size:12px;padding:6px 10px"></select>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-new-preset">+ Novo</button>
           <button type="button" class="btn btn-primary btn-sm" id="ed-save">Guardar</button>
@@ -371,15 +569,37 @@
             </div>
           </div>
 
-          <div class="report-inspector-section">
-            <h3>Dados na pré-visualização</h3>
-            <p style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.4">Por defeito usa um exemplo. Carregue uma execução real para ver respostas verdadeiras (só no canvas). Pode usar o <strong>ID interno</strong> da execução ou o número <strong>FT-…</strong> da OS.</p>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <input class="form-control" id="preview-exec-id" placeholder="ID interno ou FT-AAAA-MM-…" style="flex:1;min-width:120px;font-size:11px;padding:6px 8px" />
-              <button type="button" class="btn btn-ghost btn-sm" id="preview-load-exec">Carregar</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="preview-reset-mock">Exemplo</button>
+          <div class="report-inspector-section report-inspector-section--preview-data">
+            <div class="report-preview-focus">
+              <div class="report-preview-focus-head">
+                <h3 class="report-preview-focus-title">
+                  <ion-icon name="eye-outline" aria-hidden="true"></ion-icon>
+                  Dados na pré-visualização
+                </h3>
+                <details class="report-preview-focus-help">
+                  <summary>Ajuda</summary>
+                  <div class="report-help-body">
+                    Por padrão o canvas usa um <strong>exemplo</strong>. Informe o <strong>ID interno</strong> da execução ou o número <strong>FT-…</strong> da OS e clique em Carregar para ver respostas reais (só na pré-visualização).
+                  </div>
+                </details>
+              </div>
+              <div class="report-preview-focus-row">
+                <input
+                  class="form-control"
+                  id="preview-exec-id"
+                  placeholder="ID ou FT-AAAA-MM-…"
+                  autocomplete="off"
+                  aria-label="ID da execução ou número FT"
+                />
+                <button type="button" class="btn btn-primary btn-sm" id="preview-load-exec" title="Carregar execução no canvas">
+                  <ion-icon name="cloud-download-outline" aria-hidden="true"></ion-icon>Carregar
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" id="preview-reset-mock" title="Voltar aos dados de exemplo">
+                  <ion-icon name="flask-outline" aria-hidden="true"></ion-icon>Exemplo
+                </button>
+              </div>
+              <p class="report-preview-focus-foot" id="preview-load-msg"></p>
             </div>
-            <p id="preview-load-msg" style="font-size:10px;margin:6px 0 0;color:var(--text3)"></p>
           </div>
 
           <div class="report-inspector-section">
@@ -399,8 +619,11 @@
           </div>
 
           <div class="report-inspector-section">
-            <h3>Módulos na folha</h3>
-            <p style="font-size:10px;color:var(--text3);margin:0 0 10px;line-height:1.35">Use o interruptor para mostrar ou ocultar; as setas definem a ordem no PDF. Se «Produtividade» vier logo a seguir a «Bloco técnico», a faixa fica dentro do mesmo cartão.</p>
+            <h3>Módulos na planilha</h3>
+            <details class="report-section-help">
+              <summary><span class="report-help-chevron">▸</span> Ordem e agrupamento</summary>
+              <div class="report-help-body">Use o interruptor para mostrar ou ocultar; as setas definem a ordem no PDF. Se "Produtividade" vier logo a seguir a "Bloco técnico", a faixa fica dentro do mesmo cartão.</div>
+            </details>
             <div id="ed-modules"></div>
           </div>
 
@@ -421,8 +644,8 @@
               <label>Cabeçalho técnico (fim)<input type="color" id="th-color-tech-end" value="#334155" /></label>
               <label>Destaque (links, formulário)<input type="color" id="th-color-accent" value="#3b82f6" /></label>
               <label>Nº pergunta<input type="color" id="th-color-form-num" value="#f97316" /></label>
-              <label>Pill «sim»<input type="color" id="th-color-pill-yes" value="#3b82f6" /></label>
-              <label>Pill «não»<input type="color" id="th-color-pill-no" value="#ef4444" /></label>
+              <label>Pill "sim"<input type="color" id="th-color-pill-yes" value="#3b82f6" /></label>
+              <label>Pill "não"<input type="color" id="th-color-pill-no" value="#ef4444" /></label>
               <label>Linha do tempo (azul)<input type="color" id="th-color-tl-blue" value="#3b82f6" /></label>
               <label>Linha do tempo (verde)<input type="color" id="th-color-tl-green" value="#22c55e" /></label>
               <label>Fotos / galeria<input type="color" id="th-color-photo" value="#10b981" /></label>
@@ -430,21 +653,24 @@
             </div>
           </div>
 
-          <div class="report-inspector-section" style="flex:1;padding-bottom:24px">
+          <div class="report-inspector-section" style="flex:1;padding-bottom:16px">
             <h3>Campos do formulário</h3>
-            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;font-size:12px">
               <input type="checkbox" id="ed-hide-empty" /> Ocultar vazios no PDF
             </label>
-            <p style="font-size:10px;color:var(--text3);margin:-4px 0 8px">Mostrar/ocultar e renomear rótulos. Com OS carregada, a lista segue o formulário dessa OS.</p>
+            <details class="report-section-help">
+              <summary><span class="report-help-chevron">▸</span> Rótulos e lista</summary>
+              <div class="report-help-body">Mostrar ou ocultar campos e renomear rótulos no PDF. Com uma OS carregada, a lista segue o formulário dessa execução.</div>
+            </details>
             <div id="field-rows"></div>
           </div>
         </aside>
 
         <main class="report-builder-stage">
           <div class="report-canvas-toolbar">
-            <span style="font-size:12px;font-weight:800;color:var(--text2)">Pré-visualização A4</span>
-            <label><input type="range" id="canvas-zoom" min="40" max="100" value="72" style="width:120px;vertical-align:middle" /> <span id="canvas-zoom-label">72%</span></label>
-            <span class="report-badge-live report-badge-live--info">Atualização em tempo real</span>
+            <span style="font-size:11px;font-weight:800;color:var(--text2)">A4</span>
+            <label style="display:inline-flex;align-items:center;gap:6px"><input type="range" id="canvas-zoom" min="40" max="100" value="72" style="width:100px;vertical-align:middle" /> <span id="canvas-zoom-label" style="font-size:11px;min-width:2.5em">72%</span></label>
+            <span class="report-badge-live report-badge-live--info" style="font-size:9px;padding:2px 6px">Live</span>
           </div>
           <div class="report-canvas-scroll">
             <div class="report-canvas-sheet" id="canvas-sheet">
@@ -671,7 +897,7 @@ function readFieldsFromDom() {
 
 /** @param {Record<string,{visible?:boolean,label?:string}>} [seed] — valores do preset ao abrir */
 const TECH_FIN_PDF_WARNING =
-  'Ao incluir «Custos do técnico» no PDF, informações que podem corresponder a custos operacionais internos passam a poder ser vistas pelo cliente ou por quem receber o relatório. Confirme que pretende expor estes dados.';
+  'Ao incluir "Custos do técnico" no PDF, informações que podem corresponder a custos operacionais internos passam a poder ser vistas pelo cliente ou por quem receber o relatório. Confirme que deseja expor estes dados.';
 
 function renderFieldRows(seed) {
   const host = document.getElementById('field-rows');
@@ -687,7 +913,7 @@ function renderFieldRows(seed) {
       const warnBox = isTechFin
         ? `<div class="report-techfin-pdf-warn" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:10px;line-height:1.45;color:#92400e;font-weight:600">
           <ion-icon name="warning-outline" style="vertical-align:-3px"></ion-icon>
-          Por defeito este campo não entra no PDF. Se activar a visibilidade, dados de custos internos do técnico podem ficar disponíveis ao cliente.
+          Por padrão este campo não entra no PDF. Se ativar a visibilidade, dados de custos internos do técnico podem ficar disponíveis ao cliente.
         </div>`
         : '';
       return `<div class="report-field-row" data-fid="${f.id}" data-ftype="${f.type || ''}">
@@ -906,7 +1132,7 @@ document.getElementById('preview-load-exec').addEventListener('click', async () 
     return;
   }
   const prevFieldCfg = readFieldsFromDom();
-  msg.textContent = 'A carregar…';
+  msg.textContent = 'Carregando…';
   try {
     const r = await fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, {
       headers: CONFIG.headers(),

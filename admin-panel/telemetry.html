@@ -192,7 +192,7 @@
             <div class="detail-box"><div class="detail-label">Rede</div><div class="detail-val" id="det-net">—</div></div>
             <div class="detail-box"><div class="detail-label">Precisão GPS</div><div class="detail-val" id="det-acc">—</div></div>
             <div class="detail-box"><div class="detail-label">Hora da coleta (dispositivo)</div><div class="detail-val" id="det-ts-device" style="font-size:12px">—</div></div>
-            <div class="detail-box"><div class="detail-label">Hora de receção (servidor)</div><div class="detail-val" id="det-ts-server" style="font-size:12px">—</div></div>
+            <div class="detail-box"><div class="detail-label">Hora de recebimento (servidor)</div><div class="detail-val" id="det-ts-server" style="font-size:12px">—</div></div>
           </div>
 
           <div class="map-container">
@@ -224,7 +224,7 @@ let map = null;
 let polyline = null;
 let markers = [];
 
-/** Instante da coleta (GPS / relógio do dispositivo); fallback = receção no servidor. */
+/** Instante da coleta (GPS / relógio do dispositivo); fallback = recebimento no servidor. */
 function telemetryDisplayTime(ev) {
   const raw = ev.deviceTimestamp || ev.serverTimestamp;
   return raw ? new Date(raw) : new Date(0);

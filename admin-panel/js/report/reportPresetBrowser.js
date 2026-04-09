@@ -76,7 +76,7 @@ export function mergePresetConfig(raw) {
 }
 
 /**
- * @param {string} [fieldType] — custos do técnico: omitidos do PDF por defeito.
+ * @param {string} [fieldType] — custos do técnico: omitidos do PDF por padrão.
  */
 export function isFieldVisible(config, fieldId, fieldType) {
   if (!fieldId) return true;

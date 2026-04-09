@@ -51,7 +51,7 @@ function applySchemaPatch(schemaData, patch) {
         const idx = data.findIndex((x) => x.id === afterId);
         if (idx < 0) {
           data.push(n);
-          warnings.push(`add_field: afterId «${afterId}» não encontrado — campo acrescentado ao fim.`);
+          warnings.push(`add_field: afterId "${afterId}" não encontrado — campo acrescentado ao fim.`);
         } else {
           data.splice(idx + 1, 0, n);
         }
@@ -65,7 +65,7 @@ function applySchemaPatch(schemaData, patch) {
       }
       const idx = data.findIndex((x) => x.id === id);
       if (idx < 0) {
-        warnings.push(`update_field: id «${id}» não encontrado.`);
+        warnings.push(`update_field: id "${id}" não encontrado.`);
         continue;
       }
       const cur = { ...data[idx] };
@@ -107,7 +107,7 @@ function applySchemaPatch(schemaData, patch) {
       if (!id) continue;
       const prevLen = data.length;
       data = data.filter((x) => x.id !== id);
-      if (data.length === prevLen) warnings.push(`remove_field: id «${id}» não encontrado.`);
+      if (data.length === prevLen) warnings.push(`remove_field: id "${id}" não encontrado.`);
     } else {
       warnings.push(`Operação desconhecida: ${op}`);
     }

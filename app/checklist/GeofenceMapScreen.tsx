@@ -195,7 +195,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
   };
 
   const handleProceed = () => {
-    // Rota (KML): nunca bloquear — o cartão já mostra FORA/DENTRO; deslocamento regista patrulha no relatório.
+    // Rota (KML): nunca bloquear — o cartão já mostra FORA/DENTRO; deslocamento registre patrulha no relatório.
     if (zoneType === 'route') {
       onProceed();
       return;

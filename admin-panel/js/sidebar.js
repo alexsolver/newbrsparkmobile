@@ -34,6 +34,7 @@ export const NAV_ITEMS = [
   { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
   { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
+  { page: 'evaluations.html',   icon: 'star-half-outline',     label: 'Avaliações',           section: null },
   { page: 'cockpit.html',       icon: 'pulse-outline',      label: 'Sync Cockpit',         section: null },
   { page: 'locations.html',     icon: 'location-outline',   label: 'Multi-Location',        section: 'Multi-Location' },
   { page: 'i18n.html',          icon: 'globe-outline',      label: 'Config. Regionais',     section: null },

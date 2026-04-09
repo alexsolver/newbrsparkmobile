@@ -282,24 +282,33 @@ router.get('/config', async (_req, res) => {
   try {
     const metatags = await prisma.metatag.findMany({
       where: { isActive: true },
-      orderBy: { type: 'asc' },
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }],
     });
 
     const assetTypes = metatags.filter(m => m.type === 'ASSET_TYPE').map(m => ({
-      id:        m.key,
-      titleKey:  m.translations?.['pt-BR'] || m.key,
-      subtitleKey: m.translations?.['en-US'] || m.key,
-      icon:      m.icon || 'cube-outline',
-      color:     m.color || '#6366F1',
+      id: m.key,
+      titleKey: m.ptBr || m.key,
+      subtitleKey: m.enUs || m.key,
+      icon: m.icon || 'cube-outline',
+      color: m.color || '#6366F1',
     }));
 
-    const categories = metatags.filter(m => m.type === 'CATEGORY').map(m => ({
-      id:    m.key,
-      label: m.translations?.['pt-BR'] || m.key,
-      icon:  m.icon || 'grid-outline',
+    const categories = metatags.filter(m => m.type === 'SERVICE_CATEGORY').map(m => ({
+      id: m.key,
+      label: m.ptBr || m.key,
+      icon: m.icon || 'grid-outline',
     }));
 
-    res.json({ assetTypes, categories, updatedAt: new Date() });
+    const technicianExpenseCategories = metatags
+      .filter(m => m.type === 'TECHNICIAN_EXPENSE_CATEGORY')
+      .map(m => ({
+        id: m.key,
+        label: m.ptBr || m.key,
+        icon: m.icon || 'pricetag-outline',
+        color: m.color || '#64748B',
+      }));
+
+    res.json({ assetTypes, categories, technicianExpenseCategories, updatedAt: new Date() });
   } catch (err) {
     console.error('[sync/config]', err);
     res.status(500).json({ error: err.message });
@@ -357,14 +366,14 @@ function mapChecklistExecutionToSyncTask(ex) {
 }
 
 // ─── GET /api/sync/tasks ──────────────────────────────────────────────────────
-// OS ativas (pendentes / em campo) + concluídas recentes no servidor (para aba «Concluídas»
-// sem depender só do AsyncStorage local do telemóvel).
+// OS ativas (pendentes / em campo) + concluídas recentes no servidor (para aba "Concluídas"
+// sem depender só do AsyncStorage local do celular).
 router.get('/tasks', async (req, res) => {
   try {
     const jwtEmail = String(req.user?.email || '').trim();
     const qEmail = String(req.query.owner_email || '').trim();
     if (qEmail && qEmail.toLowerCase() !== jwtEmail.toLowerCase()) {
-      return res.status(403).json({ error: 'owner_email não coincide com o utilizador autenticado.' });
+      return res.status(403).json({ error: 'owner_email não coincide com o usuário autenticado.' });
     }
     const ownerEmail = qEmail || jwtEmail;
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });

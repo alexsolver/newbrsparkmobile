@@ -3,19 +3,15 @@
 const express = require('express');
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
+const { classifyTotal } = require('../lib/evaluationConstants');
+const { buildInsights } = require('../lib/evaluationInsights');
+const { pushToUserById } = require('../lib/evaluationPush');
+const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
 
 const router = express.Router();
 
-const CRITICAL_THRESHOLD = 60;
-
 function isManagerRole(role) {
   return role === 'MANAGER' || role === 'ADMIN';
-}
-
-function classifyTotal(score100) {
-  if (score100 >= 80) return 'EXCELLENT';
-  if (score100 >= CRITICAL_THRESHOLD) return 'GOOD';
-  return 'CRITICAL';
 }
 
 async function writeAudit(tenantId, userId, action, resource, metadata) {
@@ -111,6 +107,7 @@ router.get('/me/instances', authUser, async (req, res) => {
       include: {
         template: { select: { id: true, name: true, type: true } },
         score: true,
+        acknowledgements: { where: { userId: technicianUserId } },
         execution: { select: { id: true, osNumber: true, completedAt: true, startedAt: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -143,20 +140,28 @@ router.get('/me/instances', authUser, async (req, res) => {
     });
 
     res.json({
-      items: sorted.map((i) => ({
-        id: i.id,
-        status: i.status,
-        createdAt: i.createdAt,
-        template: i.template,
-        osNumber: i.execution?.osNumber || null,
-        executionId: i.executionId,
-        score: i.score
-          ? {
-              totalScore: i.score.totalScore,
-              classification: i.score.classification,
-            }
-          : null,
-      })),
+      items: sorted.map((i) => {
+        const needsAck =
+          i.score?.classification === 'CRITICAL' && (i.acknowledgements?.length ?? 0) === 0;
+        const survey =
+          i.status === 'PENDING' && i.publicToken ? buildClientSurveyLinks(i.publicToken) : null;
+        return {
+          id: i.id,
+          status: i.status,
+          createdAt: i.createdAt,
+          template: i.template,
+          osNumber: i.execution?.osNumber || null,
+          executionId: i.executionId,
+          needsAck,
+          ...(survey?.fullUrl ? { clientSurveyFullUrl: survey.fullUrl } : {}),
+          score: i.score
+            ? {
+                totalScore: i.score.totalScore,
+                classification: i.score.classification,
+              }
+            : null,
+        };
+      }),
     });
   } catch (err) {
     console.error('GET /evaluations/me/instances', err);
@@ -198,6 +203,21 @@ router.get('/instances/:id', authUser, async (req, res) => {
     const needsAck =
       inst.score?.classification === 'CRITICAL' && inst.acknowledgements.length === 0;
 
+    const insights =
+      inst.insights ||
+      (inst.score
+        ? buildInsights({
+            classification: inst.score.classification,
+            totalScore: inst.score.totalScore,
+            scoreByCategory: inst.score.scoreByCategory,
+          })
+        : null);
+
+    const surveyLinks =
+      inst.status === 'PENDING' && inst.publicToken
+        ? buildClientSurveyLinks(inst.publicToken)
+        : { relativePath: null, fullUrl: null };
+
     res.json({
       instance: {
         id: inst.id,
@@ -206,6 +226,9 @@ router.get('/instances/:id', authUser, async (req, res) => {
         displayText: inst.displayText,
         template: inst.template,
         targetType: inst.targetType,
+        insights,
+        clientSurveyRelativePath: surveyLinks.relativePath,
+        clientSurveyFullUrl: surveyLinks.fullUrl,
       },
       context: {
         osNumber: ex?.osNumber || null,
@@ -478,7 +501,7 @@ router.patch('/disputes/:disputeId', authUser, async (req, res) => {
         await tx.evaluationResponse.deleteMany({ where: { instanceId: dispute.instanceId } });
         await tx.evaluationInstance.update({
           where: { id: dispute.instanceId },
-          data: { status: 'FINALIZED', displayText: null, rawClientText: null },
+          data: { status: 'FINALIZED', displayText: null, rawClientText: null, insights: null },
         });
       }
     });
@@ -487,6 +510,16 @@ router.patch('/disputes/:disputeId', authUser, async (req, res) => {
       disputeId: dispute.id,
       outcome: status,
     });
+
+    await pushToUserById(dispute.instance.technicianUserId, {
+      title: 'Decisão de revisão',
+      body: `A sua solicitação de revisão foi analisada (${status}).`,
+      data: {
+        type: 'EVALUATION_DISPUTE_RESOLVED',
+        evaluationInstanceId: dispute.instanceId,
+      },
+    });
+
     const fresh = await prisma.evaluationDispute.findUnique({ where: { id: dispute.id } });
     res.json(fresh);
   } catch (err) {

@@ -27,6 +27,11 @@ import {
   cloudTaskToFinanceInfo,
   formatOsHeadline,
 } from '../../src/utils/cloudTaskFinanceContext';
+import {
+  loadTechnicianExpenseCategoryCatalog,
+  labelForTechnicianExpenseCategory,
+  type TechnicianExpenseCategoryRow,
+} from '../../src/utils/technicianExpenseCategoryCatalog';
 
 type FilterKey = 'all' | 'expense' | 'revenue';
 
@@ -119,7 +124,7 @@ function baseDescriptionWithoutRateio(desc?: string): string {
   return desc.replace(/\s*\(rateio\s+\d+\s*\/\s*\d+\)\s*$/i, '').trim();
 }
 
-/** Índice da parte a partir da descrição «(rateio i/n)». */
+/** Índice da parte a partir da descrição "(rateio i/n)". */
 function rateioPartIndexFromDescription(desc?: string): number | null {
   const m = String(desc || '').match(/\(rateio\s+(\d+)\s*\/\s*\d+\)\s*$/i);
   if (!m) return null;
@@ -161,6 +166,30 @@ function sortManualSplitParts(arr: TechnicianFinanceEntry[]) {
 type FinanceListRow =
   | { kind: 'single'; entry: TechnicianFinanceEntry }
   | { kind: 'split'; groupId: string; parts: TechnicianFinanceEntry[] };
+
+function ExpenseCategoryRow({
+  catalog,
+  categoryKey,
+}: {
+  catalog: TechnicianExpenseCategoryRow[];
+  categoryKey?: string | null;
+}) {
+  if (!categoryKey || String(categoryKey).trim() === '') return null;
+  const lbl = labelForTechnicianExpenseCategory(catalog, categoryKey);
+  if (!lbl) return null;
+  const meta = catalog.find((c) => c.id === categoryKey);
+  const col = meta?.color || '#64748b';
+  return (
+    <View style={styles.expenseCatRow}>
+      {meta?.icon ? (
+        <Ionicons name={meta.icon as any} size={15} color={col} style={{ marginRight: 6 }} />
+      ) : null}
+      <Text style={[styles.expenseCatTxt, { color: col }]} numberOfLines={2}>
+        {lbl}
+      </Text>
+    </View>
+  );
+}
 
 function buildFinanceListRows(entries: TechnicianFinanceEntry[], ownerEmail?: string): FinanceListRow[] {
   const splitMap = new Map<string, TechnicianFinanceEntry[]>();
@@ -235,6 +264,9 @@ export default function TechnicianFinanceScreen() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [taskById, setTaskById] = useState<Map<string, CloudTaskFinanceInfo>>(() => new Map());
   const [cloudTasksRaw, setCloudTasksRaw] = useState<any[]>([]);
+  const [expenseCatCatalog, setExpenseCatCatalog] = useState<TechnicianExpenseCategoryRow[]>(() =>
+    loadTechnicianExpenseCategoryCatalog()
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -271,6 +303,7 @@ export default function TechnicianFinanceScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setExpenseCatCatalog(loadTechnicianExpenseCategoryCatalog());
       load();
       loadTaskMap();
     }, [load, loadTaskMap])
@@ -327,6 +360,7 @@ export default function TechnicianFinanceScreen() {
               <Text style={styles.amt}>{formatBrl(total)}</Text>
             </View>
           </View>
+          <ExpenseCategoryRow catalog={expenseCatCatalog} categoryKey={parts[0]?.categoryKey} />
           <Text style={styles.desc} numberOfLines={2}>
             {title}
           </Text>
@@ -367,7 +401,7 @@ export default function TechnicianFinanceScreen() {
             <View style={styles.editHintRow}>
               <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
               <Text style={[styles.editHint, { color: '#b45309' }]}>
-                Devolvido para revisão: toque para corrigir valor, descrição ou rateio (todas as OS no telemóvel).
+                Devolvido para revisão: toque para corrigir valor, descrição ou rateio (todas as OS no celular).
               </Text>
             </View>
           ) : splitEditable ? (
@@ -377,7 +411,7 @@ export default function TechnicianFinanceScreen() {
             </View>
           ) : (
             <Text style={styles.editHintMuted}>
-              Sincronize todas as OS deste rateio neste telemóvel para poder incluir ou remover OS.
+              Sincronize todas as OS deste rateio neste celular para poder incluir ou remover OS.
             </Text>
           )}
         </>
@@ -420,6 +454,10 @@ export default function TechnicianFinanceScreen() {
             <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
           )}
         </View>
+        <ExpenseCategoryRow
+          catalog={expenseCatCatalog}
+          categoryKey={item.kind === 'expense' ? item.categoryKey : null}
+        />
         {item.description ? (
           <Text style={styles.desc} numberOfLines={3}>
             {item.description}
@@ -469,7 +507,7 @@ export default function TechnicianFinanceScreen() {
           <View style={styles.editHintRow}>
             <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
             <Text style={[styles.editHint, { color: '#b45309' }]}>
-              Devolvido para revisão: toque para corrigir (todas as OS no telemóvel).
+              Devolvido para revisão: toque para corrigir (todas as OS no celular).
             </Text>
           </View>
         ) : item.source === 'manual' && item.kind === 'expense' && hasOs ? (
@@ -478,7 +516,7 @@ export default function TechnicianFinanceScreen() {
             <Text style={styles.editHint}>
               {onDevice
                 ? 'Toque para ajustar a OS (rateio). Valor e anexos estão fechados.'
-                : 'Sincronize a OS neste telemóvel para ajustar o vínculo.'}
+                : 'Sincronize a OS neste celular para ajustar o vínculo.'}
             </Text>
           </View>
         ) : item.source === 'manual' ? (
@@ -633,6 +671,20 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   amt: { fontSize: 20, fontWeight: '900', color: '#0f172a' },
+  expenseCatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  expenseCatTxt: { fontSize: 12, fontWeight: '800', flexShrink: 1 },
   desc: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 20 },
   osDetailsWrap: { marginTop: 10 },
   osDetailCard: {

@@ -197,7 +197,7 @@ export async function buildProviderTaskStatusSets(): Promise<{
 }
 
 /**
- * OS com campo de despesas do técnico no formulário: em aberto no telemóvel **ou** concluídas há no máximo 30 dias
+ * OS com campo de despesas do técnico no formulário: em aberto no celular **ou** concluídas há no máximo 30 dias
  * (conforme estado efectivo e datas no payload sincronizado).
  */
 export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableExpenseTask[]> {

@@ -32,7 +32,9 @@ const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
-const evaluationsRoutes   = require('./routes/evaluations');
+const evaluationsRoutes       = require('./routes/evaluations');
+const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
+const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
@@ -78,6 +80,7 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formulário sem login
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
@@ -158,7 +161,7 @@ app.post('/api/compliance/accept', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/compliance/consents — histórico de aceites por técnico
+// GET /api/compliance/consents — histórico de aceitações por técnico
 app.get('/api/compliance/consents', async (req, res) => {
   try {
     const { ownerEmail } = req.query;
@@ -254,26 +257,40 @@ app.get('/api/config', async (req, res) => {
     }
 
     // 2. Fetch active metatags
-    const metatags = await prisma.metatag.findMany({ where: { isActive: true }, orderBy: { type: 'asc' } });
-    
-    // 3. Helper for translation merging
+    const metatags = await prisma.metatag.findMany({
+      where: { isActive: true },
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }],
+    });
+
+    // 3. Rótulo por idioma (campos ptBr / enUs / esEs no modelo)
     const getLabel = (m, targetLang) => {
-       const t = m.translations || {};
-       return t[targetLang] || t['pt-BR'] || m.key;
+      const L = String(targetLang || '').replace('_', '-');
+      if (L === 'en-US' || L === 'en') return m.enUs || m.ptBr || m.key;
+      if (L === 'es-ES' || L === 'es') return m.esEs || m.ptBr || m.key;
+      return m.ptBr || m.key;
     };
 
     const assetTypes = metatags.filter(m => m.type === 'ASSET_TYPE').map(m => ({
-      id: m.key, 
+      id: m.key,
       titleKey: getLabel(m, lang),
-      icon: m.icon || 'cube-outline', 
+      icon: m.icon || 'cube-outline',
       color: m.color || '#6366F1',
     }));
 
-    const categories = metatags.filter(m => m.type === 'CATEGORY').map(m => ({
-      id: m.key, 
-      label: getLabel(m, lang), 
+    const categories = metatags.filter(m => m.type === 'SERVICE_CATEGORY').map(m => ({
+      id: m.key,
+      label: getLabel(m, lang),
       icon: m.icon || 'grid-outline',
     }));
+
+    const technicianExpenseCategories = metatags
+      .filter(m => m.type === 'TECHNICIAN_EXPENSE_CATEGORY')
+      .map(m => ({
+        id: m.key,
+        label: getLabel(m, lang),
+        icon: m.icon || 'pricetag-outline',
+        color: m.color || '#64748B',
+      }));
 
     // URL base OSRM para o app (Integrações → OSRM); fallback = demo público
     let osrmBaseUrl = DEFAULT_OSRM_BASE;
@@ -285,12 +302,13 @@ app.get('/api/config', async (req, res) => {
       if (osrmRow?.baseUrl) osrmBaseUrl = normalizeOsrmBaseUrl(osrmRow.baseUrl);
     } catch (_) { /* mantém default */ }
 
-    res.json({ 
-      assetTypes, 
-      categories, 
+    res.json({
+      assetTypes,
+      categories,
+      technicianExpenseCategories,
       locale, // Send the formatting rules (currency, dateFormat, etc)
       osrmBaseUrl,
-      updatedAt: new Date() 
+      updatedAt: new Date(),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -298,6 +316,7 @@ app.get('/api/config', async (req, res) => {
 app.use('/api/i18n', i18nRoutes);
 
 // ── Protected routes (require admin JWT) ──────────────────
+app.use('/api/admin/evaluations', adminAuth, evaluationsAdminRoutes);
 app.use('/api/dashboard',     adminAuth, dashboardRoutes);
 app.use('/api/tenants',       adminAuth, tenantRoutes);
 app.use('/api/users',         adminAuth, userRoutes);

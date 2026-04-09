@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Header } from '../../../src/components/Header';
+import { TechnicianExpenseCategoryChips } from '../../../src/components/TechnicianExpenseCategoryChips';
 import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
 import type { TechnicianFinanceAttachment, TechnicianFinanceKind } from '../../../src/types/technicianFinance';
@@ -80,6 +81,7 @@ export default function EditTechnicianFinanceScreen() {
   const [financeValueUnlocked, setFinanceValueUnlocked] = useState(false);
   /** Despesa com OS guardada: valor/descrição/anexos fechados até revisão. */
   const [expenseValueLockActive, setExpenseValueLockActive] = useState(false);
+  const [categoryKey, setCategoryKey] = useState<string | null>(null);
 
   const valueFieldsLocked = expenseValueLockActive && !financeValueUnlocked;
 
@@ -171,6 +173,13 @@ export default function EditTechnicianFinanceScreen() {
           setAttachments(atts);
           setFinanceValueUnlocked(unlocked);
           setExpenseValueLockActive(k0 === 'expense' && osOrder.length > 0 && !unlocked);
+          setCategoryKey(
+            k0 === 'expense'
+              ? parts[0].categoryKey != null && String(parts[0].categoryKey).trim() !== ''
+                ? String(parts[0].categoryKey).trim()
+                : null
+              : null
+          );
           setBlocked(false);
         }
       } catch {
@@ -203,7 +212,7 @@ export default function EditTechnicianFinanceScreen() {
         _localId: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       }));
       if (items.length > room) {
-        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} ficheiros por lançamento.`);
+        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} arquivos por lançamento.`);
       }
       return [...prev, ...next];
     });
@@ -256,7 +265,7 @@ export default function EditTechnicianFinanceScreen() {
         },
       },
       {
-        text: 'Documento / ficheiro',
+        text: 'Documento / arquivo',
         onPress: async () => {
           const res = await DocumentPicker.getDocumentAsync({
             type: ['image/*', 'application/pdf', '*/*'],
@@ -289,6 +298,10 @@ export default function EditTechnicianFinanceScreen() {
       Alert.alert('Atenção', 'Indique um valor maior que zero.');
       return;
     }
+    if (kind === 'expense' && categoryKey === 'outros' && !description.trim()) {
+      Alert.alert('Atenção', 'Para a categoria "Outros", preencha a descrição.');
+      return;
+    }
     const email = user?.email || undefined;
     const payload: TechnicianFinanceAttachment[] = attachments.map(({ uri, name, mimeType }) => ({
       uri,
@@ -302,6 +315,7 @@ export default function EditTechnicianFinanceScreen() {
           kind,
           amount,
           description: description.trim() || undefined,
+          categoryKey: kind === 'expense' ? categoryKey : null,
           attachments: payload.length > 0 ? payload : undefined,
           linkedTaskIds: kind === 'expense' ? selectedOsIds : [],
         },
@@ -343,7 +357,7 @@ export default function EditTechnicianFinanceScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.hint}>
           {financeValueUnlocked
-            ? 'Lançamento devolvido para revisão: pode alterar valor, texto, anexos e OS. Todas as OS do rateio têm de estar sincronizadas neste telemóvel. Ao guardar, o lançamento volta a ficar fechado.'
+            ? 'Lançamento devolvido para revisão: pode alterar valor, texto, anexos e OS. Todas as OS do rateio têm de estar sincronizadas neste celular. Ao guardar, o lançamento volta a ficar fechado.'
             : valueFieldsLocked
               ? 'Valor, descrição e anexos estão fechados. Pode incluir ou remover OS no rateio (só OS elegíveis: em aberto ou concluídas há até 30 dias, com campo de despesas no modelo). Para corrigir valores, o escritório deve devolver o lançamento para revisão.'
               : 'Despesas sem OS podem ser editadas livremente. Com OS vinculadas, após guardar o valor fica fechado até revisão.'}
@@ -378,6 +392,10 @@ export default function EditTechnicianFinanceScreen() {
           editable={!valueFieldsLocked}
         />
 
+        {kind === 'expense' ? (
+          <TechnicianExpenseCategoryChips value={categoryKey} onChange={setCategoryKey} />
+        ) : null}
+
         <Text style={styles.lbl}>Descrição (opcional)</Text>
         <TextInput
           style={[styles.input, styles.inputMulti, valueFieldsLocked && styles.inputDisabled]}
@@ -394,13 +412,13 @@ export default function EditTechnicianFinanceScreen() {
           <>
             <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
             <Text style={styles.osHint}>
-              Lista: OS com campo de despesas no modelo, em aberto no telemóvel ou concluídas há até 30 dias. Várias OS
+              Lista: OS com campo de despesas no modelo, em aberto no celular ou concluídas há até 30 dias. Várias OS
               dividem o valor em partes iguais.
             </Text>
             {linkableLoading ? (
               <View style={styles.osLoading}>
                 <ActivityIndicator color="#0f766e" />
-                <Text style={styles.osLoadingTxt}>A carregar OS elegíveis…</Text>
+                <Text style={styles.osLoadingTxt}>Carregando OS elegíveis…</Text>
               </View>
             ) : linkableOs.length === 0 ? (
               <Text style={styles.osEmpty}>Nenhuma OS elegível neste momento.</Text>

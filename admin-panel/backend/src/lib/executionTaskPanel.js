@@ -56,7 +56,7 @@ function buildRepeatFieldMap(schemaArray) {
 }
 
 /**
- * Mapeia uma linha Prisma ChecklistExecution (+ template + revisions parciais) para o objeto «task» do painel.
+ * Mapeia uma linha Prisma ChecklistExecution (+ template + revisions parciais) para o objeto "task" do painel.
  * @param {object} ex - execution com template e opcionalmente revisions
  * @param {{ ownerAvatar?: string|null, includeSchemaRaw?: boolean, lastSubmittedRevision?: number }} opts
  */
@@ -117,7 +117,7 @@ function mapExecutionToPanelTask(ex, opts = {}) {
             .map((f) => ({
               id: f.id,
               label: f.label || f.id,
-              type: f.type,
+              type: effectiveFormFieldType(f) || f.type || f.fieldType || 'text',
               allowTechnicianComment: !!f.allowTechnicianComment,
             })),
           sectionBreaks: schemaArray

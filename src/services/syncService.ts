@@ -926,7 +926,7 @@ export async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise
 
 /**
  * IDs com último PATCH pendente IN_PROGRESS ou PAUSED (fila offline).
- * Usado no dashboard para não perder a aba «Em andamento» quando o pull ainda não gravou o estado no cache.
+ * Usado no dashboard para não perder a aba "Em andamento" quando o pull ainda não gravou o estado no cache.
  */
 export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<string[]> {
   try {
@@ -958,12 +958,12 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
 const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
 
 /**
- * OS reaberta para revisão: o mesmo id pode ainda estar em «aceites» do ciclo anterior.
- * Limpa só accepted_tasks para voltar a exigir «Aceitar».
+ * OS reaberta para revisão: o mesmo id pode ainda estar em "aceites" do ciclo anterior.
+ * Limpa só accepted_tasks para voltar a exigir "Aceitar".
  *
  * Não limpar @brspark_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET
  * (até RECEIVED/ACCEPTED/IN_PROGRESS no servidor), apagar inprogress a cada pullTasks
- * desfaz o «Iniciar» e a OS nunca fica na aba Em andamento.
+ * desfaz o "Iniciar" e a OS nunca fica na aba Em andamento.
  * (revisionVisitActive mantém-se na visita; não entra nesta limpeza.)
  */
 async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<void> {
@@ -1024,7 +1024,7 @@ async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]
     });
     if (next.length !== arr.length) {
       await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(next));
-      console.log(`[pullTasks] Cache executed_tasks limpo para ${arr.length - next.length} OS(s) activas no servidor`);
+      console.log(`[pullTasks] Cache executed_tasks limpo para ${arr.length - next.length} OS(s) ativas no servidor`);
     }
   } catch {
     /* ignore */
@@ -1229,7 +1229,7 @@ export async function pollStaleGpsReminders(): Promise<void> {
         content: {
           title: 'Sem sinal de GPS',
           body: r.title
-            ? `A OS «${String(r.title).slice(0, 80)}» está sem atualização de localização há vários minutos.`
+            ? `A OS "${String(r.title).slice(0, 80)}" está sem atualização de localização há vários minutos.`
             : 'Uma OS em deslocamento está sem atualização de GPS.',
         },
         trigger: null,

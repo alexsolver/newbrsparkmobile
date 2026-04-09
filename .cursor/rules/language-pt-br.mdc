@@ -1,0 +1,9 @@
+---
+description: Idioma padrão das respostas e textos gerados — português do Brasil
+globs: 
+alwaysApply: true
+---
+
+- Responda **sempre em português do Brasil (pt-BR)** — vocabulário, ortografia e convenções brasileiras (ex.: «você», tratamento neutro ou adequado ao contexto técnico).
+- Em código e UI, quando criar ou sugerir **textos visíveis ao utilizador** (labels, mensagens, `Alert`, tooltips), use **pt-BR** por defeito, salvo pedido explícito noutro idioma.
+- Não misture pt-PT e pt-BR no mesmo fluxo (ex.: «ficheiro» vs «arquivo») — prefira **pt-BR** neste projeto.

@@ -20,9 +20,9 @@ const FIELD_SPECS = [
   { type: 'dropdown', tier: 'core', proposalsDefault: true, descPt: 'Lista fechada (uma opção).' },
   { type: 'multiselect', tier: 'core', proposalsDefault: true, descPt: 'Várias opções.' },
   { type: 'rating', tier: 'core', proposalsDefault: true, descPt: 'Classificação por estrelas.' },
-  { type: 'file_upload', tier: 'core', proposalsDefault: true, descPt: 'Anexo de ficheiro.' },
-  { type: 'photo', tier: 'core', proposalsDefault: true, descPt: 'Fotografia (galeria ou câmara).' },
-  { type: 'signature', tier: 'core', proposalsDefault: true, descPt: 'Assinatura no ecrã.' },
+  { type: 'file_upload', tier: 'core', proposalsDefault: true, descPt: 'Anexo de arquivo.' },
+  { type: 'photo', tier: 'core', proposalsDefault: true, descPt: 'Fotografia (galeria ou câmera).' },
+  { type: 'signature', tier: 'core', proposalsDefault: true, descPt: 'Assinatura na tela.' },
   {
     type: 'materials_consumption',
     tier: 'advanced',
@@ -42,13 +42,13 @@ const FIELD_SPECS = [
     descPt: 'Despesas/receitas do técnico por atendimento; módulo financeiro técnico (sem bens).',
   },
   { type: 'location_pick', tier: 'core', proposalsDefault: true, descPt: 'GPS + mapa (alfinete).' },
-  { type: 'hidden', tier: 'advanced', proposalsDefault: true, descPt: 'Campo oculto no telemóvel.' },
+  { type: 'hidden', tier: 'advanced', proposalsDefault: true, descPt: 'Campo oculto no celular.' },
   {
     type: 'photo_stamped',
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'requireStampedPhotos',
-    descPt: 'Foto só com câmara ao vivo; carimbo GPS/data (anti-fraude).',
+    descPt: 'Foto só com câmera ao vivo; carimbo GPS/data (anti-fraude).',
   },
   {
     type: 'barcode_scan',
@@ -69,7 +69,7 @@ const FIELD_SPECS = [
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'allowTransit',
-    descPt: 'Início de deslocamento (registo operacional).',
+    descPt: 'Início de deslocamento (registro operacional).',
   },
   {
     type: 'transit_end',
@@ -115,7 +115,7 @@ function buildAnalyzeFieldTypesList(formContext = {}) {
 }
 
 /**
- * Lista para o system prompt da fase «analisar» (opções por campo).
+ * Lista para o system prompt da fase "analisar" (opções por campo).
  * @param {Record<string, unknown>} [formContext]
  */
 function formatAnalyzeFieldTypesForPrompt(formContext) {
@@ -139,7 +139,7 @@ function formatSchemaTypeDocBlock() {
 function buildFormContextBlock(ctx) {
   if (!ctx || typeof ctx !== 'object') return '';
   const lines = [];
-  if (ctx.objective) lines.push(`Objectivo: ${String(ctx.objective).trim().slice(0, 800)}`);
+  if (ctx.objective) lines.push(`Objetivo: ${String(ctx.objective).trim().slice(0, 800)}`);
   if (ctx.sector) lines.push(`Sector / área: ${String(ctx.sector).trim().slice(0, 200)}`);
   if (ctx.formKind) lines.push(`Tipo de formulário: ${String(ctx.formKind).trim().slice(0, 80)}`);
   const flags = [];
@@ -156,7 +156,7 @@ function buildFormContextBlock(ctx) {
   return '### Contexto do formulário (definido pelo administrador)\n' + lines.join('\n') + '\n';
 }
 
-/** Rótulos curtos para botões no assistente «analisar planilha». */
+/** Rótulos curtos para botões no assistente "analisar planilha". */
 const ANALYZE_OPTION_SHORT_PT = {
   text: 'Texto livre',
   number: 'Número',
@@ -168,7 +168,7 @@ const ANALYZE_OPTION_SHORT_PT = {
   dropdown: 'Lista (dropdown)',
   multiselect: 'Múltipla escolha',
   rating: 'Estrelas',
-  file_upload: 'Anexo (ficheiro)',
+  file_upload: 'Anexo (arquivo)',
   photo: 'Fotografia',
   signature: 'Assinatura',
   location_pick: 'GPS / mapa',
@@ -186,7 +186,7 @@ const ANALYZE_OPTION_SHORT_PT = {
 };
 
 /**
- * Opções-padrão por tipo (uma por tipo permitido na fase analisar), para o utilizador nunca ficar só com 2 botões.
+ * Opções-padrão por tipo (uma por tipo permitido na fase analisar), para o usuário nunca ficar só com 2 botões.
  * @param {Record<string, unknown>} [formContext]
  * @returns {{ type: string, shortLabel: string, hint: string }[]}
  */

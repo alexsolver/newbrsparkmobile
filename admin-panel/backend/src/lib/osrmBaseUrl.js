@@ -5,7 +5,7 @@ const DEFAULT_OSRM_BASE = 'https://router.project-osrm.org';
 
 /**
  * Garante URL base do servidor OSRM (sem path de serviço).
- * Se o utilizador colar …/match/v1/driving ou …/route/v1/driving, remove o sufixo.
+ * Se o usuário colar …/match/v1/driving ou …/route/v1/driving, remove o sufixo.
  */
 function normalizeOsrmBaseUrl(raw) {
   if (!raw || typeof raw !== 'string') return DEFAULT_OSRM_BASE;

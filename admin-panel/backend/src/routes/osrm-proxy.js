@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Proxy de geometria OSRM para o app móvel: o telemóvel chama a API (já acessível),
+ * Proxy de geometria OSRM para o app móvel: o celular chama a API (já acessível),
  * o backend chama o OSRM (VPN / rede interna / URL só servidor).
  */
 const express = require('express');

@@ -178,7 +178,7 @@ class RouteTrackingService {
     const bg = await Location.requestBackgroundPermissionsAsync();
     if (bg.status !== 'granted') {
       console.warn(
-        '[RouteTracking] Sem permissão «sempre» / segundo plano — ao abrir outra app (Waze) o GPS pode parar. Conceda localização em segundo plano nas definições.'
+        '[RouteTracking] Sem permissão "sempre" / segundo plano — ao abrir outra app (Waze) o GPS pode parar. Conceda localização em segundo plano nas configurações.'
       );
     }
 

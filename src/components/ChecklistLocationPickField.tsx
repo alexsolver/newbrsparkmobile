@@ -178,7 +178,7 @@ export function ChecklistLocationPickField({
     }
   }, [value]);
 
-  /** initialRegion só vale na 1.ª montagem — sempre que a região alvo muda, centramos a câmara no alfinete */
+  /** initialRegion só vale na 1.ª montagem — sempre que a região alvo muda, centramos a câmera no alfinete */
   useEffect(() => {
     if (!region) return;
     const r = region;
@@ -188,7 +188,7 @@ export function ChecklistLocationPickField({
     return () => clearTimeout(t);
   }, [region?.latitude, region?.longitude, region?.latitudeDelta, region?.longitudeDelta]);
 
-  /** Resposta aceite pelo checklist (inclui bloquear «Seguinte» com ajuste por confirmar). */
+  /** Resposta aceite pelo checklist (inclui bloquear "Próximo" com ajuste por confirmar). */
   const hasConfirmedAnswer = useMemo(() => {
     if (!saved || !gps || !pin) return false;
     if (saved.adjustmentPending === true) return false;
@@ -234,7 +234,7 @@ export function ChecklistLocationPickField({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('GPS', 'Permissão de localização negada. Ative nas definições do telemóvel.');
+        Alert.alert('GPS', 'Permissão de localização negada. Ative nas configurações do celular.');
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });

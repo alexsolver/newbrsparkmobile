@@ -142,7 +142,7 @@
     .toolbox-item ion-icon {
       pointer-events: none;
     }
-    /* Clique no ícone deve ir para o <button> (onclick / handlers); senão parece que «nada acontece». */
+    /* Clique no ícone deve ir para o <button> (onclick / handlers); senão parece que "nada acontece". */
     .topbar-actions button ion-icon,
     .topbar-title button ion-icon {
       pointer-events: none;
@@ -189,7 +189,7 @@
     }
     .canvas-empty { text-align: center; color: var(--text3); font-size: 14px; padding: 40px; border: 2px dashed #cbd5e1; border-radius: 12px; }
 
-    /* Secções no canvas: agrupar campos entre separadores de etapa */
+    /* Seções no canvas: agrupar campos entre separadores de etapa */
     .canvas-section-group {
       width: 100%;
       max-width: 100%;
@@ -928,7 +928,7 @@
       border-bottom: 1px solid #f1f5f9;
     }
 
-    /* Form builder — barra compacta «navegação / início no app» (mais canvas) */
+    /* Form builder — barra compacta "navegação / início no app" (mais canvas) */
     .formbuilder-app-nav-strip {
       background: var(--card);
       border-bottom: 1px solid var(--border);
@@ -1105,11 +1105,11 @@
         <summary>
           <span class="fb-help-chevron">▸</span>
           <ion-icon name="phone-portrait-outline" style="font-size:16px; color:var(--accent); vertical-align:-3px;"></ion-icon>
-          Ajuda: navegação por secções no app (lista vs um a um)
+          Ajuda: navegação por seções no app (lista vs um a um)
         </summary>
         <div class="fb-help-body">
-          <p style="margin:0 0 8px 0;"><strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>secção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as secções num scroll único quando todas são lista; se alguma for «um a um», usa ecrãs por etapa. Formulários antigos só com «seguir global» continuam a usar o modo guardado no JSON até definir modo por secção.</p>
-          <p style="margin:0; font-size:10px; color:var(--text3);">Com uma única secção, o menu de etapas é ignorado no app. Com hub ativo e várias secções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.</p>
+          <p style="margin:0 0 8px 0;"><strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>seção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as seções num scroll único quando todas são lista; se alguma for "um a um", usa telas por etapa. Formulários antigos só com "seguir global" continuam a usar o modo guardado no JSON até definir modo por seção.</p>
+          <p style="margin:0; font-size:10px; color:var(--text3);">Com uma única seção, o menu de etapas é ignorado no app. Com hub ativo e várias seções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.</p>
         </div>
       </details>
       <div class="formbuilder-app-nav-row" id="app-section-start-radios">
@@ -1128,10 +1128,10 @@
             <input type="radio" name="appSectionStart" value="hub">
             <ion-icon name="grid-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
             Menu de etapas
-            <small>— escolhe a secção</small>
+            <small>— escolhe a seção</small>
           </label>
         </div>
-        <div id="app-hub-order-wrap" class="app-hub-order-muted" title="Ativo quando «Menu de etapas» está selecionado">
+        <div id="app-hub-order-wrap" class="app-hub-order-muted" title="Ativo quando "Menu de etapas" está selecionado">
           <span class="fb-app-hub-sep">No menu</span>
           <label class="fb-app-inline-radio">
             <input type="radio" name="appHubSectionOrder" value="free" checked>
@@ -1192,7 +1192,7 @@
         </div>
         <div class="panel-body" style="flex:1; background:#f8fafc; padding:20px; border-radius:8px; overflow-y:auto;">
            <div id="canvas" style="min-height: 200px;">
-              <div class="canvas-empty" style="font-size:12px;">A carregar o canvas… Cada formulário começa com uma secção; arraste perguntas para dentro dela.</div>
+              <div class="canvas-empty" style="font-size:12px;">Carregando o canvas… Cada formulário começa com uma seção; arraste perguntas para dentro dela.</div>
            </div>
         </div>
       </div>
@@ -1202,7 +1202,7 @@
          <div class="panel-header"><span class="panel-title">Propriedades do Campo</span></div>
          <div class="panel-body" id="properties-body" style="flex:1; overflow-y:auto;">
             <div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">
-              Clique numa pergunta no canvas ou use o ícone de definições no cabeçalho de uma secção.
+              Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.
             </div>
          </div>
       </div>
@@ -1336,14 +1336,14 @@
 <div id="global-geofence-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeGlobalGeofenceModal()">
     <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
         <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Cerca eletrónica global</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Se ativar, o app deve exigir que o técnico esteja dentro do raio (metros) do GPS da manutenção para abrir este checklist. A validação completa no telemóvel depende da implementação no app.</p>
+        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Se ativar, o app deve exigir que o técnico esteja dentro do raio (metros) do GPS da manutenção para abrir este checklist. A validação completa no celular depende da implementação no app.</p>
         <label style="display:flex; align-items:center; gap:10px; margin-bottom:16px; font-size:14px; font-weight:600; color:#1e293b; cursor:pointer;">
             <input type="checkbox" id="global-geofence-enabled" style="width:18px; height:18px;" />
             Exigir cerca para abrir o formulário
         </label>
         <label class="prop-label" for="global-geofence-radius">Raio (metros)</label>
         <input type="number" id="global-geofence-radius" class="prop-input" min="10" max="50000" step="1" style="margin-bottom:16px;" />
-        <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8;">Pode continuar a usar o bloco «Validar Cerca» em passos isolados. Use <strong>Salvar Schema</strong> para gravar estas definições.</p>
+        <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8;">Pode continuar a usar o bloco "Validar Cerca" em passos isolados. Use <strong>Salvar Schema</strong> para gravar estas configurações.</p>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
             <button type="button" class="btn btn-ghost" onclick="window.closeGlobalGeofenceModal()">Fechar</button>
             <button type="button" class="btn btn-primary" onclick="window.applyGlobalGeofenceModal()">Aplicar</button>
@@ -1351,11 +1351,11 @@
     </div>
 </div>
 
-<!-- Editar nome e ícone da etapa (secção) — z-index abaixo do icon-picker para a grelha ficar por cima -->
+<!-- Editar nome e ícone da etapa (seção) — z-index abaixo do icon-picker para a grelha ficar por cima -->
 <div id="section-step-edit-modal" style="display:none; position:fixed; inset:0; z-index:99997; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeSectionStepEditModal()">
     <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
         <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Editar etapa</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Nome e ícone usados no canvas e no app móvel (quando o campo de secção tiver ícone definido).</p>
+        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Nome e ícone usados no canvas e no app móvel (quando o campo de seção tiver ícone definido).</p>
         <label class="prop-label" for="section-step-edit-title">Nome da etapa</label>
         <input type="text" id="section-step-edit-title" class="prop-input" placeholder="Ex.: Inspeção inicial" autocomplete="off" style="margin-bottom:16px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.applySectionStepEditModal();}" />
         <label class="prop-label">Ícone (app móvel)</label>
@@ -1455,18 +1455,18 @@
         <h3 style="margin:0 0 8px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;">
           <ion-icon name="sparkles" style="color:#7c3aed"></ion-icon> Assistente IA
         </h3>
-        <p class="ai-form-lead">A IA <strong>só extrai</strong> etapas e cabeçalhos de coluna. O tipo de cada campo escolhe-o na <strong>lista dinâmica</strong> (igual à toolbox). Cada «Adicionar ao canvas» insere <strong>um</strong> bloco no formulário — em tempo real.</p>
+        <p class="ai-form-lead">A IA <strong>só extrai</strong> etapas e cabeçalhos de coluna. O tipo de cada campo escolhe-o na <strong>lista dinâmica</strong> (igual à toolbox). Cada "Adicionar ao canvas" insere <strong>um</strong> bloco no formulário — em tempo real.</p>
       </div>
       <button type="button" id="ai-form-close-btn" class="btn btn-ghost btn-sm" onclick="window.closeAiFormModal()" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
     <div id="ai-form-upload-section">
       <div class="ai-form-phase-pill" id="ai-form-phase-upload-label">Fase 1 · Enviar Excel</div>
-      <label class="prop-label">Ficheiro Excel (.xlsx)</label>
+      <label class="prop-label">Arquivo Excel (.xlsx)</label>
       <input id="ai-form-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="prop-input" style="margin-bottom:12px;" />
       <details class="ai-form-upload-advanced">
         <summary>Contexto para a IA — opcional (objectivo, sector, tipos de campo…)</summary>
         <div>
-          <label class="prop-label">Objectivo do formulário</label>
+          <label class="prop-label">Objetivo do formulário</label>
           <textarea id="ai-form-objective" class="prop-input" rows="2" placeholder="Ex.: inspecção de elevadores em obra…" style="resize:vertical; margin-bottom:10px;"></textarea>
           <div class="ai-form-ctx-grid">
             <div>
@@ -1477,7 +1477,7 @@
               <label class="prop-label" for="ai-form-kind">Tipo</label>
               <select id="ai-form-kind" class="prop-input">
                 <option value="checklist">Checklist / inspeção</option>
-                <option value="report">Relatório / registo</option>
+                <option value="report">Relatório / registro</option>
                 <option value="survey">Questionário</option>
                 <option value="other">Outro</option>
               </select>
@@ -1493,7 +1493,7 @@
             <label><input type="checkbox" id="ai-ctx-signature" /> Assinatura</label>
             <label><input type="checkbox" id="ai-ctx-calc" /> Campos calculados</label>
           </div>
-          <label class="prop-label">Instruções extra (ex.: «cada folha é uma etapa»)</label>
+          <label class="prop-label">Instruções extra (ex.: "cada planilha é uma etapa")</label>
           <textarea id="ai-form-hint" class="prop-input" rows="2" placeholder="Opcional…" style="resize:vertical; margin-bottom:0;"></textarea>
         </div>
       </details>
@@ -1548,7 +1548,7 @@
   <div class="ai-copilot-foot" style="border-top:none; border-bottom:1px solid #e2e8f0;">
     <div class="ai-copilot-ctx-mini">
       <label for="copilot-ctx-objective">Contexto (opcional)</label>
-      <textarea id="copilot-ctx-objective" class="prop-input" rows="2" placeholder="Objectivo do formulário…" style="font-size:12px; margin-bottom:8px;"></textarea>
+      <textarea id="copilot-ctx-objective" class="prop-input" rows="2" placeholder="Objetivo do formulário…" style="font-size:12px; margin-bottom:8px;"></textarea>
       <div class="ai-form-ctx-checks" style="margin-bottom:0;">
         <label><input type="checkbox" id="copilot-ctx-stamped" /> Carimbo</label>
         <label><input type="checkbox" id="copilot-ctx-barcode" /> Barras</label>
@@ -1561,7 +1561,7 @@
   <div id="ai-copilot-messages"></div>
   <div class="ai-copilot-foot">
     <label class="prop-label" for="ai-copilot-input">Mensagem</label>
-    <textarea id="ai-copilot-input" class="prop-input" rows="3" placeholder="Ex.: «Troca o campo X para lista com Sim/Não» ou «Para que serve geofence?»" style="font-size:13px; margin-bottom:8px;"></textarea>
+    <textarea id="ai-copilot-input" class="prop-input" rows="3" placeholder="Ex.: "Troca o campo X para lista com Sim/Não" ou "Para que serve geofence?"" style="font-size:13px; margin-bottom:8px;"></textarea>
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <button type="button" class="btn btn-primary btn-sm" onclick="window.brsparkCopilotSend()">Enviar</button>
       <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotClear()">Limpar chat</button>
@@ -1572,9 +1572,9 @@
       <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled>Desfazer</button>
     </div>
     <label class="prop-label" for="ai-copilot-logic-goal" style="margin-top:14px;">Sugerir lógica (gatilhos)</label>
-    <textarea id="ai-copilot-logic-goal" class="prop-input" rows="2" placeholder="Ex.: «Se Conforme = Não, mostrar Plano de acção»" style="font-size:12px;"></textarea>
+    <textarea id="ai-copilot-logic-goal" class="prop-input" rows="2" placeholder="Ex.: "Se Conforme = Não, mostrar Plano de acção"" style="font-size:12px;"></textarea>
     <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="window.brsparkCopilotSuggestLogic()">Pedir sugestões de regras</button>
-    <p id="ai-copilot-logic-hint" style="display:none; font-size:11px; color:#0369a1; margin:8px 0 0;">Sugestões prontas — «Aplicar regras sugeridas».</p>
+    <p id="ai-copilot-logic-hint" style="display:none; font-size:11px; color:#0369a1; margin:8px 0 0;">Sugestões prontas — "Aplicar regras sugeridas".</p>
     <button type="button" class="btn btn-sm" style="margin-top:8px;background:#0ea5e9;color:#fff;border:none;display:none;" id="ai-copilot-apply-logic-btn" onclick="window.brsparkCopilotApplyLogic()" disabled>Aplicar regras sugeridas</button>
   </div>
 </div>

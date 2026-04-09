@@ -1,13 +1,27 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { TechnicianFinanceKind } from '../types/technicianFinance';
+import {
+  loadTechnicianExpenseCategoryCatalog,
+  labelForTechnicianExpenseCategory,
+  type TechnicianExpenseCategoryRow,
+} from '../utils/technicianExpenseCategoryCatalog';
 
 type DraftLine = {
   entryId?: string;
   kind: TechnicianFinanceKind;
   amountStr: string;
   description: string;
+  categoryKey?: string;
 };
 
 type Props = {
@@ -42,6 +56,10 @@ function parseDraftLines(prevRaw: string | undefined): DraftLine[] {
           ? String(x.amount).replace('.', ',')
           : '',
       description: x?.description != null ? String(x.description) : '',
+      categoryKey:
+        x?.categoryKey != null && String(x.categoryKey).trim() !== ''
+          ? String(x.categoryKey).trim()
+          : undefined,
     }));
   } catch {
     return [];
@@ -58,6 +76,9 @@ function serialize(lines: DraftLine[], prevRaw: string | undefined): string {
       description: l.description.trim() || undefined,
     };
     if (l.entryId) o.entryId = l.entryId;
+    if (l.kind === 'expense' && l.categoryKey != null && String(l.categoryKey).trim() !== '') {
+      o.categoryKey = String(l.categoryKey).trim();
+    }
     return o;
   });
   const base: Record<string, unknown> = { v: 1, lines: outLines };
@@ -66,9 +87,23 @@ function serialize(lines: DraftLine[], prevRaw: string | undefined): string {
 }
 
 export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: Props) {
+  const [expenseCatalog, setExpenseCatalog] = useState<TechnicianExpenseCategoryRow[]>(() =>
+    loadTechnicianExpenseCategoryCatalog()
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      setExpenseCatalog(loadTechnicianExpenseCategoryCatalog());
+    }, [])
+  );
+
   const lines = useMemo(() => {
     const d = parseDraftLines(value);
-    return d.length > 0 ? d : readOnly ? [] : [{ kind: 'expense' as const, amountStr: '', description: '' }];
+    return d.length > 0
+      ? d
+      : readOnly
+        ? []
+        : [{ kind: 'expense' as const, amountStr: '', description: '', categoryKey: undefined }];
   }, [value, readOnly]);
 
   const push = useCallback(
@@ -81,14 +116,17 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
   const setLines = useCallback(
     (updater: (prev: DraftLine[]) => DraftLine[]) => {
       const prev = parseDraftLines(value);
-      const base = prev.length > 0 ? prev : [{ kind: 'expense' as const, amountStr: '', description: '' }];
+      const base =
+        prev.length > 0
+          ? prev
+          : [{ kind: 'expense' as const, amountStr: '', description: '', categoryKey: undefined }];
       push(updater(base));
     },
     [push, value]
   );
 
   const addLine = () => {
-    setLines((prev) => [...prev, { kind: 'expense', amountStr: '', description: '' }]);
+    setLines((prev) => [...prev, { kind: 'expense', amountStr: '', description: '', categoryKey: undefined }]);
   };
 
   const removeLine = (idx: number) => {
@@ -108,7 +146,7 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
       return (
         <View style={styles.emptyBox}>
           <Ionicons name="wallet-outline" size={32} color="#94a3b8" />
-          <Text style={styles.emptyText}>Nenhum custo ou receita registado</Text>
+          <Text style={styles.emptyText}>Nenhum custo ou receita registrado</Text>
         </View>
       );
     }
@@ -116,6 +154,10 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
       <View style={{ gap: 10 }}>
         {display.map((l, i) => {
           const amt = Number(String(l.amountStr).replace(',', '.')) || 0;
+          const catLbl =
+            l.kind === 'expense'
+              ? labelForTechnicianExpenseCategory(expenseCatalog, l.categoryKey)
+              : null;
           return (
             <View key={i} style={styles.lineCard}>
               <View
@@ -128,6 +170,11 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.amtText}>{fmtBrl(amt)}</Text>
+                {catLbl ? (
+                  <Text style={styles.catText} numberOfLines={2}>
+                    {catLbl}
+                  </Text>
+                ) : null}
                 {l.description.trim() ? (
                   <Text style={styles.descText} numberOfLines={3}>
                     {l.description}
@@ -144,7 +191,7 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
   return (
     <View>
       <Text style={styles.hint}>
-        Registe valores associados a este atendimento. São guardados no seu financeiro técnico (separado dos bens).
+        Registre valores associados a este atendimento. Eles ficam no seu financeiro técnico (separado dos bens).
       </Text>
       <View style={{ gap: 12 }}>
         {lines.map((l, idx) => (
@@ -178,6 +225,51 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
               value={l.amountStr}
               onChangeText={(t) => updateLine(idx, { amountStr: t })}
             />
+            {l.kind === 'expense' ? (
+              <>
+                <Text style={styles.lbl}>Categoria da despesa</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.catChipRow}
+                >
+                  {expenseCatalog.map((c) => {
+                    const on = l.categoryKey === c.id;
+                    const col = c.color || '#64748b';
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[
+                          styles.catChip,
+                          on && { borderColor: col, backgroundColor: `${col}18` },
+                        ]}
+                        onPress={() => updateLine(idx, { categoryKey: c.id })}
+                        activeOpacity={0.85}
+                      >
+                        {c.icon ? (
+                          <Ionicons
+                            name={c.icon as ComponentProps<typeof Ionicons>['name']}
+                            size={14}
+                            color={on ? col : '#64748b'}
+                            style={{ marginRight: 4 }}
+                          />
+                        ) : null}
+                        <Text
+                          style={[styles.catChipTxt, on && { color: col, fontWeight: '800' }]}
+                          numberOfLines={2}
+                        >
+                          {c.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {l.categoryKey === 'outros' && !l.description.trim() ? (
+                  <Text style={styles.warnTxt}>Em "Outros", preencha a descrição.</Text>
+                ) : null}
+              </>
+            ) : null}
             <Text style={styles.lbl}>Descrição (opcional)</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
@@ -231,7 +323,22 @@ const styles = StyleSheet.create({
   kindRev: { backgroundColor: '#d1fae5' },
   kindPillText: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
   amtText: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
+  catText: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 4 },
   descText: { fontSize: 13, color: '#64748b', marginTop: 4 },
+  catChipRow: { flexDirection: 'row', flexWrap: 'nowrap', gap: 8, marginBottom: 10, paddingRight: 8 },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: 200,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  catChipTxt: { fontSize: 11, fontWeight: '600', color: '#475569', flexShrink: 1 },
+  warnTxt: { fontSize: 11, color: '#b45309', fontWeight: '700', marginBottom: 8 },
   editCard: {
     padding: 12,
     backgroundColor: '#fff',

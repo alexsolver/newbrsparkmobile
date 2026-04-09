@@ -25,11 +25,13 @@ export interface AppNotification {
   id: string;
   title: string;
   body: string;
-  category: 'maintenance' | 'expiry' | 'sync' | 'alert' | 'info';
+  category: 'maintenance' | 'expiry' | 'sync' | 'alert' | 'info' | 'evaluation';
   read: boolean;
   timestamp: number;
   assetId?: string;
   assetTitle?: string;
+  /** Navegação para detalhe em Minha Produtividade */
+  evaluationInstanceId?: string;
 }
 
 // ─── Storage local em memória (vazio por padrão) ───────────────────────
@@ -118,6 +120,37 @@ export const NotificationService = {
         });
       }
     });
+
+    // 2c. Avaliações — críticas pendentes de confirmação (ciência)
+    try {
+      const evRes = await apiFetch('/api/evaluations/me/instances');
+      if (evRes.ok) {
+        const evJson = await evRes.json();
+        const evItems: Array<{
+          id: string;
+          needsAck?: boolean;
+          osNumber?: string | null;
+          template?: { name?: string };
+          createdAt?: string;
+        }> = evJson.items || [];
+        for (const it of evItems) {
+          if (!it.needsAck) continue;
+          const os = it.osNumber ? ` OS ${it.osNumber}` : '';
+          const tpl = it.template?.name || 'Avaliação';
+          generated.push({
+            id: `eval_ack_${it.id}`,
+            title: 'Avaliação crítica — confirme ciência',
+            body: `${tpl}${os}: toque para abrir e confirmar que tomou conhecimento.`,
+            category: 'evaluation',
+            read: false,
+            timestamp: new Date(it.createdAt || Date.now()).getTime(),
+            evaluationInstanceId: it.id,
+          });
+        }
+      }
+    } catch (e) {
+      /* offline / não autenticado */
+    }
 
     // 3. Maintenance / Warning Assets
     const assets = getLocalAssets(userEmail, { includeMobileWarehouse: false });

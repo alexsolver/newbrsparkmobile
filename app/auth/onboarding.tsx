@@ -331,7 +331,7 @@ export default function OnboardingScreen() {
               consentKey="LOCATION_FOREGROUND"
               icon="locate-outline"
               title="Permitir localização com app aberto"
-              description="Mapa de ativos e captura de GPS no cadastro de bens. Pode recusar e ativar mais tarde nas definições."
+              description="Mapa de ativos e captura de GPS no cadastro de bens. Pode recusar e ativar mais tarde nas configurações."
             />
             <View style={s.warnBox}>
               <Ionicons name="information-circle-outline" size={16} color="#d97706" />
@@ -364,7 +364,7 @@ export default function OnboardingScreen() {
                 <Text style={s.infoText}>
                   Sinais de GPS simulado e relógio desajustado podem ser analisados automaticamente para proteger a
                   operação.
-                  <Text style={{ fontWeight: '700' }}> Não exige permissão extra</Text> no telemóvel.
+                  <Text style={{ fontWeight: '700' }}> Não exige permissão extra</Text> no celular.
                 </Text>
               </View>
             </View>
@@ -382,7 +382,7 @@ export default function OnboardingScreen() {
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DEVICE_TELEMETRY"
               icon="hardware-chip-outline"
-              title="Partilhar estado do dispositivo"
+              title="Compartilhar estado do dispositivo"
               description="Nível de bateria, tipo de rede e modelo do aparelho. Não é obrigatório para usar o BrSpark."
             />
             <View style={s.infoCard}>

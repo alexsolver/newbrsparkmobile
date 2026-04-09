@@ -70,7 +70,7 @@ export async function getOsrmBaseUrl(): Promise<string> {
 }
 
 /**
- * Lista de bases para geometria no telemóvel: a integração pode apontar para um OSRM interno inacessível no 4G;
+ * Lista de bases para geometria no celular: a integração pode apontar para um OSRM interno inacessível no 4G;
  * tentamos também o demo público (deduplicado).
  */
 export async function getOsrmRoutingBaseCandidates(): Promise<string[]> {

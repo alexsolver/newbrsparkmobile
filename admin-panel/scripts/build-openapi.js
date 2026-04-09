@@ -95,30 +95,30 @@ const ROUTES = [
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
   ['get', '/api/storage/config', op('Provedor de storage configurado', ['App — Armazenamento'], bearerApp)],
-  ['post', '/api/storage/sync-local', op('Sincronizar ficheiros locais pendentes', ['App — Armazenamento'], bearerApp)],
+  ['post', '/api/storage/sync-local', op('Sincronizar arquivos locais pendentes', ['App — Armazenamento'], bearerApp)],
 
   // ── Shares
-  ['post', '/api/shares/invite', op('Convidar partilha de bem', ['App — Partilhas'], bearerApp)],
-  ['delete', '/api/shares/{assetId}/{sharedWithEmail}', op('Revogar partilha', ['App — Partilhas'], bearerApp, {
+  ['post', '/api/shares/invite', op('Convidar compartilhamento de bem', ['App — Compartilhamentos'], bearerApp)],
+  ['delete', '/api/shares/{assetId}/{sharedWithEmail}', op('Revogar compartilhamento', ['App — Compartilhamentos'], bearerApp, {
     parameters: [
       { name: 'assetId', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'sharedWithEmail', in: 'path', required: true, schema: { type: 'string' } },
     ],
   })],
-  ['put', '/api/shares/{assetId}/{sharedWithEmail}', op('Atualizar partilha', ['App — Partilhas'], bearerApp, {
+  ['put', '/api/shares/{assetId}/{sharedWithEmail}', op('Atualizar compartilhamento', ['App — Compartilhamentos'], bearerApp, {
     parameters: [
       { name: 'assetId', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'sharedWithEmail', in: 'path', required: true, schema: { type: 'string' } },
     ],
   })],
-  ['get', '/api/shares/pending', op('Convites pendentes', ['App — Partilhas'], bearerApp)],
-  ['post', '/api/shares/{assetId}/accept', op('Aceitar convite', ['App — Partilhas'], bearerApp, {
+  ['get', '/api/shares/pending', op('Convites pendentes', ['App — Compartilhamentos'], bearerApp)],
+  ['post', '/api/shares/{assetId}/accept', op('Aceitar convite', ['App — Compartilhamentos'], bearerApp, {
     parameters: [{ name: 'assetId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/shares/{assetId}/reject', op('Rejeitar convite', ['App — Partilhas'], bearerApp, {
+  ['post', '/api/shares/{assetId}/reject', op('Rejeitar convite', ['App — Compartilhamentos'], bearerApp, {
     parameters: [{ name: 'assetId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['get', '/api/shares/asset/{assetId}', op('Partilhas de um bem', ['App — Partilhas'], bearerApp, {
+  ['get', '/api/shares/asset/{assetId}', op('Compartilhamentos de um bem', ['App — Compartilhamentos'], bearerApp, {
     parameters: [{ name: 'assetId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -191,13 +191,13 @@ const ROUTES = [
   })],
 
   // ── Checklists IA (admin)
-  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar ficheiro (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
+  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar arquivo (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } } },
   })],
   ['post', '/api/checklists/ai/build-form', op('Construir formulário a partir de análise', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['post', '/api/checklists/ai/draft-from-file', op('Rascunho a partir de ficheiro', ['Admin — Formulários IA'], bearerAdmin, {
+  ['post', '/api/checklists/ai/draft-from-file', op('Rascunho a partir de arquivo', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } } },
   })],
   ['post', '/api/checklists/ai/session/chat', op('Chat da sessão de construção', ['Admin — Formulários IA'], bearerAdmin, {
@@ -319,17 +319,17 @@ const ROUTES = [
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
 
-  ['get', '/api/users', op('Listar utilizadores', ['Admin — Utilizadores'], bearerAdmin)],
-  ['post', '/api/users', op('Criar utilizador', ['Admin — Utilizadores'], bearerAdmin, {
+  ['get', '/api/users', op('Listar usuários', ['Admin — Usuários'], bearerAdmin)],
+  ['post', '/api/users', op('Criar usuário', ['Admin — Usuários'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['patch', '/api/users/{id}/reset-password', op('Redefinir palavra-passe', ['Admin — Utilizadores'], bearerAdmin, {
+  ['patch', '/api/users/{id}/reset-password', op('Redefinir palavra-passe', ['Admin — Usuários'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['patch', '/api/users/{id}/toggle-active', op('Ativar/desativar', ['Admin — Utilizadores'], bearerAdmin, {
+  ['patch', '/api/users/{id}/toggle-active', op('Ativar/desativar', ['Admin — Usuários'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/users/{id}/disconnect', op('Invalidar sessões', ['Admin — Utilizadores'], bearerAdmin, {
+  ['post', '/api/users/{id}/disconnect', op('Invalidar sessões', ['Admin — Usuários'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -466,7 +466,7 @@ const doc = {
     description:
       'API HTTP do BrSpark (painel admin + app móvel). Todas as rotas usam o prefixo `/api` no mesmo host que serve o painel estático (ex.: `http://localhost:3001`).\n\n' +
       '**Autenticação admin:** `POST /api/auth/login` → header `Authorization: Bearer <jwt>`. O JWT de admin **não** inclui `tenantId`.\n\n' +
-      '**Autenticação app:** `POST /api/login` ou `POST /api/register` → `Authorization: Bearer <jwt>`. O JWT de utilizador **deve** incluir `tenantId` e `sessionId` válidos (rotas protegidas por `authUser`).\n\n' +
+      '**Autenticação app:** `POST /api/login` ou `POST /api/register` → `Authorization: Bearer <jwt>`. O JWT de usuário **deve** incluir `tenantId` e `sessionId` válidos (rotas protegidas por `authUser`).\n\n' +
       'Rotas marcadas como públicas não exigem JWT; ainda assim podem exigir query/body específicos.\n\n' +
       'Esta especificação é gerada por `admin-panel/scripts/build-openapi.js`; ao alterar rotas no backend, atualize o script e volte a executá-lo.',
   },
@@ -481,7 +481,7 @@ const doc = {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Token obtido em POST /api/auth/login (utilizador Admin da consola).',
+        description: 'Token obtido em POST /api/auth/login (usuário administrador do painel).',
       },
       bearerApp: {
         type: 'http',

@@ -154,7 +154,7 @@
                 </div>
                 <div style="font-size:10px;color:var(--text3)">
                   Publicado: ${active.publishedAt ? new Date(active.publishedAt).toLocaleDateString('pt-BR') : '—'}
-                  &nbsp;·&nbsp; ${active._count?.acceptances || 0} aceites registrados
+                  &nbsp;·&nbsp; ${active._count?.acceptances || 0} aceitações registradas
                 </div>
               </div>
               <button class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">Editar Vigente</button>
