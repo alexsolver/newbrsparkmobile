@@ -8,6 +8,19 @@ const LS_API_ORIGIN = 'brspark_admin_api_origin';
 /** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */
 let _apiBase = null;
 
+/**
+ * Garante exatamente um sufixo `/api` na URL completa (origem + path).
+ * Evita `…/api/api/auth/…` → 404 "Route not found" no Express.
+ */
+export function normalizeApiBaseUrl(fullBase) {
+  let s = String(fullBase || '').trim().replace(/\/+$/, '');
+  if (!s) return 'http://127.0.0.1:3001/api';
+  while (/\/api$/i.test(s)) {
+    s = s.slice(0, -4);
+  }
+  return `${s}/api`;
+}
+
 /** Origem sem barra final; se alguém gravou …/api no localStorage, não duplicar ao acrescentar /api. */
 function normalizeStoredApiOrigin(raw) {
   let s = String(raw || '').trim().replace(/\/+$/, '');
@@ -83,12 +96,12 @@ export async function ensureAdminApiDetected() {
         /* ignore */
       }
     }
-    _apiBase = `${origin}/api`;
+    _apiBase = normalizeApiBaseUrl(`${origin}/api`);
     return;
   }
 
   if (window.location?.protocol !== 'file:' && window.location?.hostname) {
-    const same = `${window.location.origin}/api`;
+    const same = normalizeApiBaseUrl(`${window.location.origin}/api`);
     if (await isPrismaAdminApi(same)) {
       _apiBase = same;
       return;
@@ -96,7 +109,7 @@ export async function ensureAdminApiDetected() {
   }
 
   for (const port of [3001, 3000]) {
-    const base = `http://127.0.0.1:${port}/api`;
+    const base = normalizeApiBaseUrl(`http://127.0.0.1:${port}/api`);
     if (await isPrismaAdminApi(base)) {
       _apiBase = base;
       localStorage.setItem(LS_API_ORIGIN, `http://127.0.0.1:${port}`);
@@ -104,19 +117,23 @@ export async function ensureAdminApiDetected() {
     }
   }
 
-  _apiBase = 'http://127.0.0.1:3001/api';
+  _apiBase = normalizeApiBaseUrl('http://127.0.0.1:3001/api');
 }
 
 export function resolveApiBase() {
-  if (_apiBase) return _apiBase;
+  if (_apiBase) return normalizeApiBaseUrl(_apiBase);
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem(LS_API_ORIGIN);
-    if (custom) return `${normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(custom))}/api`;
+    if (custom) {
+      return normalizeApiBaseUrl(
+        `${normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(custom))}/api`
+      );
+    }
     if (window.location?.origin && window.location.protocol !== 'file:') {
-      return `${window.location.origin}/api`;
+      return normalizeApiBaseUrl(`${window.location.origin}/api`);
     }
   }
-  return 'http://127.0.0.1:3001/api';
+  return normalizeApiBaseUrl('http://127.0.0.1:3001/api');
 }
 
 export const CONFIG = {

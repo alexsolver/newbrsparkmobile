@@ -1,5 +1,33 @@
 'use strict';
 const jwt = require('jsonwebtoken');
+const { enforcePanelPermissions } = require('./panelPermissions');
+
+function attachAdminFromPayload(payload) {
+  if (payload.panel === true && payload.userId) {
+    return {
+      panelUser: true,
+      id: null,
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      email: payload.email,
+      name: payload.name,
+      role: payload.role,
+      tenantSlug: payload.tenantSlug,
+      tenantName: payload.tenantName,
+    };
+  }
+  return {
+    panelUser: false,
+    id: payload.id,
+    userId: null,
+    tenantId: null,
+    email: payload.email,
+    name: payload.name,
+    role: null,
+    tenantSlug: null,
+    tenantName: null,
+  };
+}
 
 function adminAuth(req, res, next) {
   const header = req.headers['authorization'];
@@ -9,11 +37,16 @@ function adminAuth(req, res, next) {
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = payload;
+    req.admin = attachAdminFromPayload(payload);
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
+}
+
+/** Autenticação admin + restrições do perfil Gestor (MANAGER) nas rotas do painel. */
+function adminAuthThenPanel(req, res, next) {
+  adminAuth(req, res, () => enforcePanelPermissions(req, res, next));
 }
 
 /**
@@ -32,11 +65,11 @@ function adminOrReportsApiKey(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = payload;
+    req.admin = attachAdminFromPayload(payload);
     return next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
 }
 
-module.exports = { adminAuth, adminOrReportsApiKey };
+module.exports = { adminAuth, adminAuthThenPanel, adminOrReportsApiKey };

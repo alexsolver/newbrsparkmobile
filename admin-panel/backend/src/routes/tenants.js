@@ -1,9 +1,11 @@
 'use strict';
 const router = require('express').Router();
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 
-function auditLog(adminId, action, resource, tenantId = null) {
-  return prisma.auditLog.create({ data: { adminId, action, resource, category: 'ADMIN', tenantId } });
+function auditFromReq(req, action, resource, tenantId = null) {
+  const { adminId, userId } = auditActor(req);
+  return prisma.auditLog.create({ data: { adminId, userId, action, resource, category: 'ADMIN', tenantId } });
 }
 
 // GET /api/tenants
@@ -69,7 +71,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    await auditLog(req.admin.id, 'TENANT_CREATE', tenant.name);
+    await auditFromReq(req, 'TENANT_CREATE', tenant.name);
     res.status(201).json(tenant);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -79,7 +81,7 @@ router.patch('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
     const tenant = await prisma.tenant.update({ where: { id: req.params.id }, data: { status } });
-    await auditLog(req.admin.id, `TENANT_${status}`, tenant.name, tenant.id);
+    await auditFromReq(req, `TENANT_${status}`, tenant.name, tenant.id);
     res.json(tenant);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -92,7 +94,7 @@ router.put('/:id', async (req, res) => {
       where: { id: req.params.id }, 
       data: { name, email, phone, taxId, defaultLang, localeId } 
     });
-    await auditLog(req.admin.id, 'TENANT_UPDATE', tenant.name, tenant.id);
+    await auditFromReq(req, 'TENANT_UPDATE', tenant.name, tenant.id);
     res.json(tenant);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

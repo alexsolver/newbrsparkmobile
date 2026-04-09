@@ -5,10 +5,13 @@ const fs = require('fs').promises;
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
+
+const USER_ROLES = new Set(['USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
 
 function normalizeFacePhotos(raw) {
   if (raw == null) return [];
@@ -68,12 +71,23 @@ router.get('/', async (req, res) => {
 // POST /api/users
 router.post('/', async (req, res) => {
   try {
-    const { name, email, password, tenantId, role = 'USER' } = req.body;
+    const { name, email, password, tenantId, role: bodyRole = 'USER' } = req.body;
     if (!name || !email || !password || !tenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    const role = String(bodyRole).toUpperCase();
+    if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Papel inválido.' });
     const hash = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({ data: { name, email, password: hash, tenantId, role } });
+    const user = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({ data: { name, email, password: hash, tenantId, role } });
+      if (role === 'PROVIDER') {
+        await tx.technicianProfile.create({
+          data: { userId: u.id, status: 'PENDING', score: 5 },
+        });
+      }
+      return u;
+    });
+    const _a = auditActor(req);
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, tenantId, action: 'USER_CREATE', resource: email, category: 'ADMIN' },
+      data: { ..._a, tenantId, action: 'USER_CREATE', resource: email, category: 'ADMIN' },
     });
     res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
   } catch (err) {
@@ -88,8 +102,9 @@ router.patch('/:id/reset-password', async (req, res) => {
     if (!newPassword) return res.status(400).json({ error: 'Nova senha ausente.' });
     const hash = await bcrypt.hash(newPassword, 10);
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { password: hash } });
+    const _a2 = auditActor(req);
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, action: 'USER_RESET_PASSWORD', resource: user.email, category: 'ADMIN' },
+      data: { ..._a2, action: 'USER_RESET_PASSWORD', resource: user.email, category: 'ADMIN' },
     });
     res.json({ ok: true });
   } catch (err) {
@@ -120,7 +135,7 @@ router.patch('/:id/technician-profile', async (req, res) => {
     await prisma.auditLog
       .create({
         data: {
-          adminId: req.admin.id,
+          ...auditActor(req),
           tenantId: user.tenantId,
           action: 'TECHNICIAN_PROFILE_STATUS',
           resource: user.email,
@@ -227,7 +242,7 @@ router.post('/:id/face-enrollment', async (req, res) => {
     await prisma.auditLog
       .create({
         data: {
-          adminId: req.admin.id,
+          ...auditActor(req),
           tenantId: user.tenantId,
           action: 'USER_FACE_ENROLLMENT_ADD',
           resource: user.email,
@@ -338,6 +353,10 @@ router.patch('/:id', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'faceEnrollmentPhotos deve ser um array.' });
     }
 
+    if (role != null && !USER_ROLES.has(String(role).toUpperCase())) {
+      return res.status(400).json({ error: 'Papel inválido.' });
+    }
+
     if (email != null && String(email).toLowerCase().trim() !== existing.email.toLowerCase()) {
       const dup = await prisma.user.findFirst({
         where: {
@@ -354,7 +373,7 @@ router.patch('/:id', express.json(), async (req, res) => {
       if (name != null) userPatch.name = String(name).trim();
       if (email != null) userPatch.email = String(email).trim().toLowerCase();
       if (phone !== undefined) userPatch.phone = phone ? String(phone).trim() : null;
-      if (role != null) userPatch.role = role;
+      if (role != null) userPatch.role = String(role).toUpperCase();
       if (avatarUrl !== undefined) userPatch.avatarUrl = avatarUrl ? String(avatarUrl).trim() : null;
       if (typeof isActive === 'boolean') userPatch.isActive = isActive;
       if (addressJson !== undefined) userPatch.addressJson = addressJson;
@@ -366,8 +385,12 @@ router.patch('/:id', express.json(), async (req, res) => {
       }
 
       const techPayload = buildTechnicianData(technician);
+      const mergedRole = userPatch.role !== undefined ? userPatch.role : existing.role;
+      const wantsProvider =
+        mergedRole === 'PROVIDER' ||
+        (userPatch.role === undefined && isProvider === true);
 
-      if (isProvider === true) {
+      if (wantsProvider) {
         if (!existing.technicianProfile) {
           await tx.technicianProfile.create({
             data: {
@@ -388,15 +411,10 @@ router.patch('/:id', express.json(), async (req, res) => {
             data: techPayload,
           });
         }
-      } else if (isProvider === false && existing.technicianProfile) {
+      } else if (!wantsProvider && existing.technicianProfile) {
         await tx.technicianProfile.update({
           where: { userId: id },
           data: { status: 'INACTIVE' },
-        });
-      } else if (existing.technicianProfile && Object.keys(techPayload).length) {
-        await tx.technicianProfile.update({
-          where: { userId: id },
-          data: techPayload,
         });
       }
     });
@@ -404,7 +422,7 @@ router.patch('/:id', express.json(), async (req, res) => {
     await prisma.auditLog
       .create({
         data: {
-          adminId: req.admin.id,
+          ...auditActor(req),
           tenantId: existing.tenantId,
           action: 'USER_UPDATE_ADMIN',
           resource: existing.email,

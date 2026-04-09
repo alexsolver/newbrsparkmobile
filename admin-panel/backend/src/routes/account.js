@@ -38,7 +38,7 @@ router.post('/register', async (req, res) => {
       });
 
       const user = await tx.user.create({
-        data: { name, email, password: hash, tenantId: tenant.id, role: 'ADMIN' }
+        data: { name, email, password: hash, tenantId: tenant.id, role: 'TENANT_ADMIN' }
       });
 
       await tx.auditLog.create({
@@ -63,7 +63,7 @@ router.post('/register', async (req, res) => {
         id: result.user.id,
         tenantId: result.tenant.id,
         email: result.user.email,
-        role: 'ADMIN',
+        role: result.user.role,
         sessionId: newSessionId,
       },
       process.env.JWT_SECRET,

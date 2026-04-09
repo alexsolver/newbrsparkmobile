@@ -1,0 +1,19 @@
+-- Papeis: USER, PROVIDER, MANAGER, TENANT_ADMIN, SAAS_ADMIN (ADMIN legado -> TENANT_ADMIN)
+CREATE TYPE "UserRole_new" AS ENUM ('USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN');
+
+ALTER TABLE "User" ALTER COLUMN "role" DROP DEFAULT;
+
+ALTER TABLE "User" ALTER COLUMN "role" TYPE "UserRole_new" USING (
+  CASE "role"::text
+    WHEN 'ADMIN' THEN 'TENANT_ADMIN'::"UserRole_new"
+    WHEN 'USER' THEN 'USER'::"UserRole_new"
+    WHEN 'MANAGER' THEN 'MANAGER'::"UserRole_new"
+    ELSE 'USER'::"UserRole_new"
+  END
+);
+
+DROP TYPE "UserRole";
+
+ALTER TYPE "UserRole_new" RENAME TO "UserRole";
+
+ALTER TABLE "User" ALTER COLUMN "role" SET DEFAULT 'USER'::"UserRole";

@@ -1,7 +1,8 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
-const { adminAuth } = require('../middleware/auth');
+const { auditActor } = require('../lib/auditActor');
+const { adminAuthThenPanel } = require('../middleware/auth');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
@@ -348,7 +349,7 @@ router.post('/tasks/:id/reject', async (req, res) => {
 
 // ─── POST /api/operations/tasks/:id/reopen-for-revision ───────
 // Admin: reabre FT concluída para o técnico (nova revisão; mesma FT). App técnico não tem este endpoint.
-router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
+router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await prisma.checklistExecution.findUnique({
@@ -465,7 +466,7 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
     await prisma.auditLog
       .create({
         data: {
-          adminId: req.admin?.id || null,
+          ...auditActor(req),
           action: 'OS_REOPENED_FOR_REVISION',
           resource: 'ChecklistExecution',
           category: 'ADMIN',

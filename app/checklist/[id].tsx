@@ -95,6 +95,117 @@ function formatDurationClock(totalSec: number) {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
+/** Evidência guardada em transit_start / transit_end (JSON no mapa de respostas). */
+function parseTransitFieldEvidence(raw: unknown): {
+  timestamp?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  accuracyMeters?: number;
+  plannedMetrics?: {
+    durationSeconds?: number | null;
+    distanceMeters?: number | null;
+    source?: string;
+  };
+  actualMetrics?: {
+    durationSeconds?: number;
+    distanceMeters?: number;
+    pathPointCount?: number;
+  };
+} | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string' && raw.trim() === '') return null;
+  try {
+    const o =
+      typeof raw === 'object' && raw !== null
+        ? (raw as Record<string, unknown>)
+        : (JSON.parse(String(raw)) as Record<string, unknown>);
+    if (!o || typeof o !== 'object') return null;
+    const coords = o.coordinates as Record<string, unknown> | undefined;
+    const latRaw = coords?.lat ?? o.lat;
+    const lngRaw = coords?.lng ?? o.lng;
+    const lat = typeof latRaw === 'number' ? latRaw : parseFloat(String(latRaw));
+    const lng = typeof lngRaw === 'number' ? lngRaw : parseFloat(String(lngRaw));
+    const accRaw = o.accuracyMeters ?? o.accuracy;
+    const accuracyMeters =
+      accRaw != null && Number.isFinite(Number(accRaw)) ? Number(accRaw) : undefined;
+    return {
+      timestamp: typeof o.timestamp === 'string' ? o.timestamp : undefined,
+      address: typeof o.address === 'string' ? o.address : undefined,
+      lat: Number.isFinite(lat) ? lat : undefined,
+      lng: Number.isFinite(lng) ? lng : undefined,
+      accuracyMeters,
+      plannedMetrics: o.plannedMetrics as
+        | { durationSeconds?: number | null; distanceMeters?: number | null; source?: string }
+        | undefined,
+      actualMetrics: o.actualMetrics as
+        | { durationSeconds?: number; distanceMeters?: number; pathPointCount?: number }
+        | undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatTransitEvidenceLines(
+  ev: NonNullable<ReturnType<typeof parseTransitFieldEvidence>>
+): string[] {
+  const lines: string[] = [];
+  if (ev.timestamp) {
+    const d = new Date(ev.timestamp);
+    if (Number.isFinite(d.getTime())) {
+      lines.push(
+        `Data e hora: ${d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}`
+      );
+    }
+  }
+  if (ev.address && ev.address.trim()) {
+    lines.push(`Local: ${ev.address.trim()}`);
+  }
+  const hasCoords =
+    ev.lat != null &&
+    ev.lng != null &&
+    !(ev.lat === 0 && ev.lng === 0) &&
+    Number.isFinite(ev.lat) &&
+    Number.isFinite(ev.lng);
+  if (hasCoords) {
+    lines.push(`Coordenadas: ${ev.lat!.toFixed(6)}, ${ev.lng!.toFixed(6)}`);
+  } else if (lines.length > 0) {
+    lines.push('Coordenadas: não disponíveis (GPS indisponível ou sem permissão).');
+  }
+  if (ev.accuracyMeters != null && ev.accuracyMeters > 0 && Number.isFinite(ev.accuracyMeters)) {
+    lines.push(`Precisão estimada: ±${Math.round(ev.accuracyMeters)} m`);
+  }
+  const pm = ev.plannedMetrics;
+  if (pm && (pm.distanceMeters != null || pm.durationSeconds != null)) {
+    const parts: string[] = [];
+    if (pm.distanceMeters != null && Number.isFinite(pm.distanceMeters)) {
+      parts.push(`${(pm.distanceMeters / 1000).toFixed(2)} km`);
+    }
+    if (pm.durationSeconds != null && Number.isFinite(pm.durationSeconds) && pm.durationSeconds > 0) {
+      parts.push(`~${Math.round(pm.durationSeconds / 60)} min (estimativa)`);
+    }
+    if (parts.length) lines.push(`Rota planejada: ${parts.join(' · ')}`);
+  }
+  const am = ev.actualMetrics;
+  if (am && (am.distanceMeters != null || am.durationSeconds != null)) {
+    const parts: string[] = [];
+    if (am.durationSeconds != null && Number.isFinite(am.durationSeconds)) {
+      const h = Math.floor(am.durationSeconds / 3600);
+      const m = Math.floor((am.durationSeconds % 3600) / 60);
+      const s = Math.floor(am.durationSeconds % 60);
+      parts.push(
+        h > 0 ? `${h}h ${m}min` : m > 0 ? `${m}min ${s}s` : `${s}s`
+      );
+    }
+    if (am.distanceMeters != null && Number.isFinite(am.distanceMeters)) {
+      parts.push(`${(am.distanceMeters / 1000).toFixed(2)} km`);
+    }
+    if (parts.length) lines.push(`Trecho real: ${parts.join(' · ')}`);
+  }
+  return lines;
+}
+
 function getSectionTimingKeys(sectionId: string) {
   return {
     start: `__section_start_${sectionId}`,
@@ -1051,6 +1162,7 @@ export default function ChecklistEngine() {
       
       let lat = 0;
       let lng = 0;
+      let accuracyMeters: number | undefined;
       let address = "Localização não capturada";
       
       if (status === 'granted') {
@@ -1058,6 +1170,10 @@ export default function ChecklistEngine() {
               const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
               lat = loc.coords.latitude;
               lng = loc.coords.longitude;
+              const acc = loc.coords.accuracy;
+              if (acc != null && Number.isFinite(acc) && acc > 0) {
+                accuracyMeters = acc;
+              }
               
               try {
                  const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
@@ -1162,7 +1278,8 @@ export default function ChecklistEngine() {
          action: label,
          timestamp: new Date().toISOString(),
          coordinates: { lat, lng },
-         address: address
+         address: address,
+         ...(accuracyMeters != null ? { accuracyMeters } : {}),
       };
       
       if (traversedPath && traversedPath.length > 0) {
@@ -4695,6 +4812,8 @@ export default function ChecklistEngine() {
                  }
                  
                  const hasValue = !!vv(field.id);
+                 const transitEvidence = hasValue ? parseTransitFieldEvidence(vv(field.id)) : null;
+                 const transitEvidenceLines = transitEvidence ? formatTransitEvidenceLines(transitEvidence) : [];
                  const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? C.primary : C.accent));
                  const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
@@ -4766,6 +4885,42 @@ export default function ChecklistEngine() {
                       <Text style={{ fontSize: 12, color: '#64748b', marginTop: 8, paddingHorizontal: 4 }}>
                         O GPS pode demorar em campo ou com sinal fraco. Aguarde.
                       </Text>
+                    ) : null}
+                    {hasValue ? (
+                      <View
+                        style={{
+                          marginTop: 12,
+                          padding: 12,
+                          backgroundColor: '#f1f5f9',
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: '#e2e8f0',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
+                          Dados coletados
+                        </Text>
+                        {transitEvidenceLines.length > 0 ? (
+                          transitEvidenceLines.map((line, i) => (
+                            <Text
+                              key={`${field.id}-te-${i}`}
+                              style={{
+                                fontSize: 13,
+                                color: '#475569',
+                                lineHeight: 20,
+                                marginTop: i > 0 ? 4 : 0,
+                              }}
+                            >
+                              {line}
+                            </Text>
+                          ))
+                        ) : (
+                          <Text style={{ fontSize: 13, color: '#64748b', lineHeight: 20 }}>
+                            Registro efetuado; não foi possível ler os detalhes salvos (formato antigo ou
+                            incompleto).
+                          </Text>
+                        )}
+                      </View>
                     ) : null}
                     </View>
                  );

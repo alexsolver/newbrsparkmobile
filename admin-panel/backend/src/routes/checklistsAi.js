@@ -3,7 +3,7 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const { adminAuth } = require('../middleware/auth');
+const { adminAuthThenPanel } = require('../middleware/auth');
 const { extractWorkbookForAi } = require('../lib/formAiExtract');
 const {
   normalizeProposalsFromLlm,
@@ -26,7 +26,7 @@ const upload = multer({
  * multipart: file (.xlsx), optional field "options" JSON string { hint?: string }
  * Resposta: title, description, blocks (estrutura: section_break | field), warnings, truncated, source
  */
-router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (req, res) => {
+router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     if (!file || !file.buffer) {
@@ -102,7 +102,7 @@ router.post('/ai/analyze-from-file', adminAuth, upload.single('file'), async (re
  * POST /api/checklists/ai/build-form
  * JSON: { title?, description?, items: [...], selections: { [itemKey]: { optionKey?, required?, options? } } }
  */
-router.post('/ai/build-form', adminAuth, async (req, res) => {
+router.post('/ai/build-form', adminAuthThenPanel, async (req, res) => {
   try {
     const body = req.body || {};
     const { items: rawItems, selections } = body;
@@ -133,7 +133,7 @@ router.post('/ai/build-form', adminAuth, async (req, res) => {
  * POST /api/checklists/ai/draft-from-file
  * multipart: file (.xlsx), optional field "options" JSON string { hint?: string }
  */
-router.post('/ai/draft-from-file', adminAuth, upload.single('file'), async (req, res) => {
+router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     if (!file || !file.buffer) {
@@ -208,7 +208,7 @@ router.post('/ai/draft-from-file', adminAuth, upload.single('file'), async (req,
  * POST /api/checklists/ai/session/chat
  * JSON: { messages: [{role, content}], schemaData?: [], formContext?: {}, spreadsheetSummary?: string }
  */
-router.post('/ai/session/chat', adminAuth, async (req, res) => {
+router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
   try {
     const body = req.body || {};
     const messages = body.messages;
@@ -240,7 +240,7 @@ router.post('/ai/session/chat', adminAuth, async (req, res) => {
  * POST /api/checklists/ai/suggest-logic
  * JSON: { schemaData: [], userGoal: string, formContext?: {} }
  */
-router.post('/ai/suggest-logic', adminAuth, async (req, res) => {
+router.post('/ai/suggest-logic', adminAuthThenPanel, async (req, res) => {
   try {
     const body = req.body || {};
     if (!Array.isArray(body.schemaData)) {

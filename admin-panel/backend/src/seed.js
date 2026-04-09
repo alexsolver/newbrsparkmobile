@@ -120,11 +120,84 @@ async function main() {
       email: 'maria@brspark.com',
       name: 'Maria Souza',
       password: demoUserHash,
-      role: 'ADMIN',
+      role: 'TENANT_ADMIN',
       isActive: true,
       lastLogin: now,
     },
   });
+
+  // Tenant BrSpark (SaaS admin — login por organização no painel)
+  try {
+    const saasPwd =
+      process.env.SAAS_PANEL_PASSWORD ||
+      process.env.ADMIN_PASSWORD ||
+      'admin123';
+    const saasHash = await bcrypt.hash(saasPwd, 10);
+    const brsparkTenant = await prisma.tenant.upsert({
+      where: { slug: 'brspark' },
+      update: { name: 'BrSpark', status: 'ACTIVE', localeId: locBr.id },
+      create: {
+        name: 'BrSpark',
+        slug: 'brspark',
+        email: 'platform@brspark.com',
+        ownerName: 'BrSpark Plataforma',
+        localeId: locBr.id,
+        status: 'ACTIVE',
+        defaultLang: 'pt-BR',
+      },
+    });
+    await prisma.user.upsert({
+      where: {
+        email_tenantId: {
+          email: 'admin@brspark.com',
+          tenantId: brsparkTenant.id,
+        },
+      },
+      update: {
+        role: 'SAAS_ADMIN',
+        isActive: true,
+        name: 'Administrador SaaS',
+      },
+      create: {
+        tenantId: brsparkTenant.id,
+        email: 'admin@brspark.com',
+        name: 'Administrador SaaS',
+        password: saasHash,
+        role: 'SAAS_ADMIN',
+        isActive: true,
+      },
+    });
+    await prisma.user.upsert({
+      where: {
+        email_tenantId: {
+          email: 'gestor@brspark.com',
+          tenantId: brsparkTenant.id,
+        },
+      },
+      update: { role: 'MANAGER', isActive: true, name: 'Gestor (demo)' },
+      create: {
+        tenantId: brsparkTenant.id,
+        email: 'gestor@brspark.com',
+        name: 'Gestor (demo)',
+        password: saasHash,
+        role: 'MANAGER',
+        isActive: true,
+      },
+    });
+    const removedTypo = await prisma.user.deleteMany({
+      where: { tenantId: brsparkTenant.id, email: 'asmin@brspark.com' },
+    });
+    if (removedTypo.count) {
+      console.log(
+        `   Removido utilizador legado asmin@brspark.com (${removedTypo.count})`
+      );
+    }
+    console.log(
+      '✅ Tenant brspark + SaaS admin@brspark.com + gestor@brspark.com (MANAGER; mesma senha env)'
+    );
+  } catch (e) {
+    console.warn('⚠️  Seed tenant brspark:', e.message);
+  }
 
   const tenantTrial = await prisma.tenant.upsert({
     where: { email: 'trial@startup.io' },
@@ -162,7 +235,7 @@ async function main() {
       email: 'alex@startup.io',
       name: 'Alex Founder',
       password: demoUserHash,
-      role: 'ADMIN',
+      role: 'TENANT_ADMIN',
       isActive: true,
     },
   });

@@ -30,7 +30,6 @@ export const NAV_ITEMS = [
   { page: 'dashboard.html',     icon: 'grid-outline',       label: 'Dashboard',           section: null },
   { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
   { page: 'users.html',         icon: 'people-outline',     label: 'Usuários',              section: null },
-  { page: 'subscriptions.html', icon: 'card-outline',       label: 'Assinaturas',          section: null },
   { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
   { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
@@ -39,6 +38,7 @@ export const NAV_ITEMS = [
   { page: 'locations.html',     icon: 'location-outline',   label: 'Multi-Location',        section: 'Multi-Location' },
   { page: 'i18n.html',          icon: 'globe-outline',      label: 'Config. Regionais',     section: null },
   { page: 'metatags.html',      icon: 'pricetags-outline',  label: 'Metatags',              section: 'Plataforma' },
+  { page: 'subscriptions.html', icon: 'card-outline',       label: 'Assinaturas',          section: null },
   { page: 'integrations.html',  icon: 'flash-outline',       label: 'Integrações',           section: null },
   { page: 'notifications.html', icon: 'notifications-outline', label: 'Notificações',          section: null },
   { page: 'compliance.html',      icon: 'shield-checkmark-outline', label: 'LGPD & Compliance',   section: null },
@@ -49,9 +49,57 @@ export const NAV_ITEMS = [
   { page: 'system.html',        icon: 'settings-outline',   label: 'Configurações',         section: null },
 ];
 
+/** Papéis com menu completo no painel. */
+export const FULL_PANEL_MENU_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN']);
+
+/**
+ * Páginas visíveis ao perfil Gestor (MANAGER) — grupos menu Gestão + Operações.
+ * (Sem Dashboard, Plataforma, Multi-Location, Sistema, etc.)
+ */
+export const MANAGER_PANEL_PAGES = new Set([
+  'tenants.html',
+  'users.html',
+  'user-edit.html',
+  'subscriptions.html',
+  'checklists.html',
+  'operations.html',
+  'reports.html',
+  'evaluations.html',
+  'cockpit.html',
+]);
+
+export function getStoredPanelRole() {
+  return (sessionStorage.getItem('brspark_admin_role') || '').trim();
+}
+
+export function navItemsForRole(role) {
+  const r = String(role || '').trim();
+  if (!r || FULL_PANEL_MENU_ROLES.has(r)) return NAV_ITEMS;
+  if (r === 'MANAGER') return NAV_ITEMS.filter((item) => MANAGER_PANEL_PAGES.has(item.page));
+  return NAV_ITEMS;
+}
+
+/** Página HTML atual (ex.: user-edit.html) permitida para o papel? */
+export function isPanelPageAllowed(role, pathOrFile) {
+  const file = String(pathOrFile || '').split('/').pop() || '';
+  const normalized = file.endsWith('.html') ? file : `${file}.html`;
+  const r = String(role || '').trim();
+  if (!r || FULL_PANEL_MENU_ROLES.has(r)) return true;
+  if (r === 'MANAGER') return MANAGER_PANEL_PAGES.has(normalized);
+  return true;
+}
+
+export function defaultLandingPageForRole(role) {
+  return String(role || '').trim() === 'MANAGER' ? 'tenants.html' : 'dashboard.html';
+}
+
 function logout() {
   sessionStorage.removeItem('brspark_admin_token');
   sessionStorage.removeItem('brspark_admin_email');
+  sessionStorage.removeItem('brspark_admin_name');
+  sessionStorage.removeItem('brspark_admin_role');
+  sessionStorage.removeItem('brspark_panel_mode');
+  sessionStorage.removeItem('brspark_panel_tenant');
   window.location.href = 'index.html';
 }
 
@@ -59,10 +107,25 @@ export function renderSidebar(alertCount = 3) {
   const page = window.location.pathname.split('/').pop().replace('.html','') || 'dashboard';
   const currentPage = page.endsWith('.html') ? page : page + '.html';
   const email = sessionStorage.getItem('brspark_admin_email') || 'admin@brspark.com';
-  const initials = email.slice(0, 2).toUpperCase();
+  const displayName = sessionStorage.getItem('brspark_admin_name') || '';
+  const panelMode = sessionStorage.getItem('brspark_panel_mode') || 'global';
+  let tenantLine = '';
+  try {
+    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    if (raw && panelMode === 'tenant') {
+      const t = JSON.parse(raw);
+      tenantLine = `<div class="sidebar-tenant-chip">${t.name || ''} <span style="opacity:0.75">· ${t.slug || ''}</span></div>`;
+    }
+  } catch {
+    /* ignore */
+  }
+  const initials = (displayName || email).slice(0, 2).toUpperCase();
+  const footerTitle = displayName || (panelMode === 'tenant' ? 'Utilizador' : 'Administrador');
 
+  const role = getStoredPanelRole();
+  const items = navItemsForRole(role);
   let lastSection = null;
-  const navHtml = NAV_ITEMS.map(item => {
+  const navHtml = items.map(item => {
     let sectionHtml = '';
     if (item.section && item.section !== lastSection) {
       sectionHtml = `<div class="nav-section-label">${item.section}</div>`;
@@ -85,23 +148,26 @@ export function renderSidebar(alertCount = 3) {
   return `
     <aside class="sidebar">
       <div class="sidebar-header">
-        <a href="dashboard.html" class="sidebar-brand" title="BrSpark — Dashboard">
-          <img src="img/logo.png" alt="BrSpark">
-        </a>
-        <button type="button" class="sidebar-toggle" id="sidebar-toggle"
-          aria-label="${collapsed ? 'Expandir menu' : 'Recolher menu'}"
-          aria-expanded="${collapsed ? 'false' : 'true'}"
-          title="${collapsed ? 'Expandir menu' : 'Recolher menu'}">
-          <ion-icon name="chevron-back-outline"></ion-icon>
-        </button>
+        <div class="sidebar-header-row">
+          <a href="${defaultLandingPageForRole(role)}" class="sidebar-brand" title="BrSpark — Início">
+            <img src="img/logo.png" alt="BrSpark">
+          </a>
+          <button type="button" class="sidebar-toggle" id="sidebar-toggle"
+            aria-label="${collapsed ? 'Expandir menu' : 'Recolher menu'}"
+            aria-expanded="${collapsed ? 'false' : 'true'}"
+            title="${collapsed ? 'Expandir menu' : 'Recolher menu'}">
+            <ion-icon name="chevron-back-outline"></ion-icon>
+          </button>
+        </div>
+        ${tenantLine}
       </div>
       <nav class="sidebar-nav">${navHtml}</nav>
       <div class="sidebar-footer">
         <div class="admin-profile" id="logout-btn" title="Sair">
           <div class="admin-avatar">${initials}</div>
           <div class="admin-info">
-            <div class="admin-name">Administrador</div>
-            <div class="admin-email">${email}</div>
+            <div class="admin-name">${footerTitle.replace(/</g, '&lt;')}</div>
+            <div class="admin-email">${email.replace(/</g, '&lt;')}</div>
           </div>
           <ion-icon name="log-out-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
         </div>
@@ -114,6 +180,14 @@ export async function initPage() {
 
   if (!sessionStorage.getItem('brspark_admin_token')) {
     window.location.href = 'index.html';
+    return;
+  }
+
+  const pathFile = window.location.pathname.split('/').pop() || 'dashboard.html';
+  const currentHtml = pathFile.includes('.') ? pathFile : `${pathFile}.html`;
+  const panelRole = getStoredPanelRole();
+  if (!isPanelPageAllowed(panelRole, currentHtml)) {
+    window.location.href = defaultLandingPageForRole(panelRole);
     return;
   }
 

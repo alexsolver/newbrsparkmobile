@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 const { testIntegration } = require('../lib/integrationTester');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 
@@ -51,7 +52,9 @@ router.post('/', async (req, res) => {
     const integration = await prisma.integration.create({
       data: { name, type, description, icon, apiKey, baseUrl: resolvedBase, webhookUrl, status, metadata }
     });
-    await prisma.auditLog.create({ data: { adminId: req.admin.id, action: 'INTEGRATION_ADD', resource: name, category: 'ADMIN' } });
+    await prisma.auditLog.create({
+      data: { ...auditActor(req), action: 'INTEGRATION_ADD', resource: name, category: 'ADMIN' },
+    });
     res.status(201).json({ ...integration, apiKey: integration.apiKey ? '••••••••' : null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

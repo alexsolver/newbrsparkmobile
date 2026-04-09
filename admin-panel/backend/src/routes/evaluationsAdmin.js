@@ -2,6 +2,7 @@
 
 const express = require('express');
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 const { classifyTotal } = require('../lib/evaluationConstants');
 const { pushToUserById } = require('../lib/evaluationPush');
 const { newPublicTokenFields } = require('../lib/evaluationTrigger');
@@ -128,8 +129,8 @@ router.post('/templates', express.json(), async (req, res) => {
 
     await prisma.auditLog.create({
       data: {
+        ...auditActor(req),
         tenantId,
-        adminId: req.admin.id,
         action: 'EVALUATION_TEMPLATE_CREATE',
         resource: created.id,
         category: 'DATA',
@@ -194,8 +195,8 @@ router.patch('/templates/:id', express.json(), async (req, res) => {
 
     await prisma.auditLog.create({
       data: {
+        ...auditActor(req),
         tenantId: existing.tenantId,
-        adminId: req.admin.id,
         action: 'EVALUATION_TEMPLATE_UPDATE',
         resource: id,
         category: 'DATA',
@@ -270,8 +271,8 @@ router.post('/instances/:id/regenerate-token', async (req, res) => {
     });
     await prisma.auditLog.create({
       data: {
+        ...auditActor(req),
         tenantId: inst.tenantId,
-        adminId: req.admin.id,
         action: 'EVALUATION_PUBLIC_TOKEN_REGEN',
         resource: inst.id,
         category: 'DATA',
@@ -383,8 +384,8 @@ router.patch('/disputes/:disputeId/resolve', express.json(), async (req, res) =>
 
     await prisma.auditLog.create({
       data: {
+        ...auditActor(req),
         tenantId: dispute.tenantId,
-        adminId: req.admin.id,
         action: 'EVALUATION_DISPUTE_RESOLVED_ADMIN',
         resource: dispute.instanceId,
         category: 'DATA',

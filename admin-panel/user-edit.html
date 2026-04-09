@@ -146,13 +146,16 @@
       <div class="panel ue-section" id="sec-acesso" style="margin-top:16px">
         <div class="panel-header"><span class="panel-title">Tipo de acesso na conta</span></div>
         <div style="padding:16px 20px">
-          <div class="form-group"><label class="form-label">Papel</label>
+          <div class="form-group"><label class="form-label">Papel na conta</label>
             <select class="form-control" id="f-role">
               <option value="USER">Usuário</option>
+              <option value="PROVIDER">Prestador</option>
               <option value="MANAGER">Gestor</option>
-              <option value="ADMIN">Administrador do tenant</option>
+              <option value="TENANT_ADMIN">Administrador do tenant</option>
+              <option value="SAAS_ADMIN">Administrador SaaS (plataforma)</option>
             </select>
           </div>
+          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4"><strong>Prestador</strong> ativa o perfil técnico (horários, regiões, docs. profissionais). <strong>SaaS admin</strong> é para equipa da plataforma; use só em contas que devam operar ao nível global do serviço.</p>
           <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer">
             <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão)
           </label>
@@ -162,10 +165,7 @@
       <div class="panel ue-section" id="sec-tecnico" style="margin-top:16px">
         <div class="panel-header"><span class="panel-title">Prestador de serviço (técnico)</span></div>
         <div style="padding:16px 20px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:16px">
-            <input type="checkbox" id="f-provider" /> Este utilizador é <strong>prestador</strong> (perfil técnico no app)
-          </label>
-          <p style="font-size:12px;color:var(--text3);margin:-8px 0 16px">Desmarcar coloca o perfil técnico em <code>INACTIVE</code> (não apaga histórico).</p>
+          <p style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong>. Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
           <div id="tech-panel" style="display:none">
             <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
               <div class="form-group"><label class="form-label">Estado do prestador</label>

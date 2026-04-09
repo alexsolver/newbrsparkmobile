@@ -19,7 +19,7 @@ async function run() {
       create: { name: 'João Teste', slug: 'joao-teste', email, ownerName: 'João', status: 'ACTIVE', defaultLang: 'pt-BR' }
     });
     const hash = await bcrypt.hash(password, 10);
-    await p.user.create({ data: { name: 'João Teste', email, password: hash, tenantId: tenant.id, role: 'ADMIN', isActive: true } });
+    await p.user.create({ data: { name: 'João Teste', email, password: hash, tenantId: tenant.id, role: 'TENANT_ADMIN', isActive: true } });
     console.log('✅ Criado');
   } else {
     const hash = await bcrypt.hash(password, 10);

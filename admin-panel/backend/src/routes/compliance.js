@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
+const { auditActor } = require('../lib/auditActor');
 
 // ─── PUBLIC routes (no admin auth — used by the mobile app) ──────────────────
 
@@ -69,7 +70,12 @@ router.post('/', async (req, res) => {
       data: { type, version, title, content, isActive: publish, publishedAt: publish ? new Date() : null, createdBy: req.admin.email }
     });
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, action: 'COMPLIANCE_CREATE', resource: `${type} v${version}`, category: 'ADMIN' }
+      data: {
+        ...auditActor(req),
+        action: 'COMPLIANCE_CREATE',
+        resource: `${type} v${version}`,
+        category: 'ADMIN',
+      },
     });
     res.status(201).json(doc);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -102,7 +108,12 @@ router.patch('/:id/publish', async (req, res) => {
       where: { id: req.params.id }, data: { isActive: true, publishedAt: new Date() }
     });
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, action: 'COMPLIANCE_PUBLISH', resource: `${doc.type} v${doc.version}`, category: 'ADMIN' }
+      data: {
+        ...auditActor(req),
+        action: 'COMPLIANCE_PUBLISH',
+        resource: `${doc.type} v${doc.version}`,
+        category: 'ADMIN',
+      },
     });
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -118,7 +129,12 @@ router.delete('/:id', async (req, res) => {
     await prisma.complianceAcceptance.deleteMany({ where: { docId: req.params.id } });
     await prisma.complianceDoc.delete({ where: { id: req.params.id } });
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, action: 'COMPLIANCE_DELETE', resource: `${doc.type} v${doc.version}`, category: 'ADMIN' }
+      data: {
+        ...auditActor(req),
+        action: 'COMPLIANCE_DELETE',
+        resource: `${doc.type} v${doc.version}`,
+        category: 'ADMIN',
+      },
     });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

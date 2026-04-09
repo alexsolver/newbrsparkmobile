@@ -34,7 +34,7 @@ async function main() {
       email: 'joao.silva@brspark.com',
       password: hash,
       tenantId: tenant.id,
-      role: 'ADMIN',
+      role: 'TENANT_ADMIN',
       isActive: true,
     }
   });

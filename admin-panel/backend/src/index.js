@@ -4,7 +4,7 @@ const express = require('express');
 const cors    = require('cors');
 const morgan  = require('morgan');
 
-const { adminAuth } = require('./middleware/auth');
+const { adminAuthThenPanel } = require('./middleware/auth');
 const prisma          = require('./db');
 const { runBackfillOsNumbers } = require('./lib/backfillOsNumbersLib');
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('./lib/osrmBaseUrl');
@@ -49,10 +49,6 @@ const path = require('path');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── Serve Admin Panel (static) e Uploads Locais ────────────
-app.use(express.static(path.join(__dirname, '../../')));
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
-
 // ── Middleware ─────────────────────────────────────────────
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
 app.use(express.json({ limit: '50mb' }));
@@ -71,7 +67,8 @@ app.get('/health', (_req, res) => {
 });
 
 // ── Public routes ──────────────────────────────────────────
-app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login
+app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login | /tenant-login
+app.post('/api/tenant-login', authRoutes.postTenantLogin); // alias (evita 404 se o cliente omitir /auth)
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
@@ -316,27 +313,31 @@ app.get('/api/config', async (req, res) => {
 app.use('/api/i18n', i18nRoutes);
 
 // ── Protected routes (require admin JWT) ──────────────────
-app.use('/api/admin/evaluations', adminAuth, evaluationsAdminRoutes);
-app.use('/api/dashboard',     adminAuth, dashboardRoutes);
-app.use('/api/tenants',       adminAuth, tenantRoutes);
-app.use('/api/users',         adminAuth, userRoutes);
-app.use('/api/plans',         adminAuth, planRoutes);
-app.use('/api/subscriptions', adminAuth, subscriptionRoutes);
-app.use('/api/assets',        adminAuth, assetRoutes);
-app.use('/api/locations',     adminAuth, locationRoutes);
-app.use('/api/audit',         adminAuth, auditRoutes);
-app.use('/api/flags',         adminAuth, flagRoutes);
-app.use('/api/metatags',      adminAuth, metatagRoutes);
-app.use('/api/integrations',  adminAuth, integrationRoutes);
-app.use('/api/compliance',         adminAuth, complianceRoutes);
-app.use('/api/notifications',      adminAuth, notificationRoutes);
-app.use('/api/cockpit',            adminAuth, cockpitRoutes);
-app.use('/api/collection-policy',  adminAuth, collectionPolicyRoutes);
+app.use('/api/admin/evaluations', adminAuthThenPanel, evaluationsAdminRoutes);
+app.use('/api/dashboard',     adminAuthThenPanel, dashboardRoutes);
+app.use('/api/tenants',       adminAuthThenPanel, tenantRoutes);
+app.use('/api/users',         adminAuthThenPanel, userRoutes);
+app.use('/api/plans',         adminAuthThenPanel, planRoutes);
+app.use('/api/subscriptions', adminAuthThenPanel, subscriptionRoutes);
+app.use('/api/assets',        adminAuthThenPanel, assetRoutes);
+app.use('/api/locations',     adminAuthThenPanel, locationRoutes);
+app.use('/api/audit',         adminAuthThenPanel, auditRoutes);
+app.use('/api/flags',         adminAuthThenPanel, flagRoutes);
+app.use('/api/metatags',      adminAuthThenPanel, metatagRoutes);
+app.use('/api/integrations',  adminAuthThenPanel, integrationRoutes);
+app.use('/api/compliance',         adminAuthThenPanel, complianceRoutes);
+app.use('/api/notifications',      adminAuthThenPanel, notificationRoutes);
+app.use('/api/cockpit',            adminAuthThenPanel, cockpitRoutes);
+app.use('/api/collection-policy',  adminAuthThenPanel, collectionPolicyRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app
-app.use('/api/metrics',            adminAuth, metricsRoutes);
+app.use('/api/metrics',            adminAuthThenPanel, metricsRoutes);
 app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
+
+// ── Painel estático e uploads (depois das rotas /api para não sombrear a API) ──
+app.use(express.static(path.join(__dirname, '../../')));
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // ── 404 ───────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));

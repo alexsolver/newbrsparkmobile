@@ -249,6 +249,21 @@ function readFileAsDataUrl(file) {
 let cachedLocations = [];
 let faceEnrollmentList = [];
 let faceUserId = '';
+/** Já existe TechnicianProfile (mostrar bloco técnico mesmo com papel ainda não migrado a PROVIDER) */
+let hasTechnicianProfile = false;
+
+function normalizeRoleForForm(r) {
+  if (r === 'ADMIN') return 'TENANT_ADMIN';
+  return r || 'USER';
+}
+
+function syncTechPanelVisibility() {
+  const roleEl = document.getElementById('f-role');
+  const panel = document.getElementById('tech-panel');
+  if (!roleEl || !panel) return;
+  const show = roleEl.value === 'PROVIDER' || hasTechnicianProfile;
+  panel.style.display = show ? 'block' : 'none';
+}
 
 function renderFaceGallery() {
   const el = document.getElementById('face-gallery');
@@ -310,7 +325,7 @@ export async function bootUserEditPage() {
   document.getElementById('f-name').value = u.name || '';
   document.getElementById('f-email').value = u.email || '';
   document.getElementById('f-phone').value = u.phone || '';
-  document.getElementById('f-role').value = u.role || 'USER';
+  document.getElementById('f-role').value = normalizeRoleForForm(u.role);
   document.getElementById('f-avatar').value = u.avatarUrl || '';
   document.getElementById('f-active').checked = !!u.isActive;
 
@@ -366,8 +381,13 @@ export async function bootUserEditPage() {
   document.getElementById('a-country').value = addr.countryCode || 'BR';
 
   const tp = u.technicianProfile;
-  document.getElementById('f-provider').checked = !!tp;
-  document.getElementById('tech-panel').style.display = tp ? 'block' : 'none';
+  hasTechnicianProfile = !!tp;
+  syncTechPanelVisibility();
+  const fr = document.getElementById('f-role');
+  if (fr && !fr.dataset.ueRoleBound) {
+    fr.dataset.ueRoleBound = '1';
+    fr.addEventListener('change', syncTechPanelVisibility);
+  }
   if (tp) {
     document.getElementById('t-status').value = tp.status || 'PENDING';
     document.getElementById('t-cft').value = tp.cft || '';
@@ -393,10 +413,6 @@ export async function bootUserEditPage() {
       .join('');
     renderDocRows('tbody-docs-pro', [], cachedLocations);
   }
-
-  document.getElementById('f-provider').onchange = () => {
-    document.getElementById('tech-panel').style.display = document.getElementById('f-provider').checked ? 'block' : 'none';
-  };
 
   renderDocRows('tbody-docs-personal', parseJsonSafe(u.personalDocuments, []), cachedLocations);
 
@@ -429,11 +445,14 @@ export async function bootUserEditPage() {
     const svcSel = document.getElementById('t-service-locs');
     const serviceLocationIds = svcSel ? [...svcSel.selectedOptions].map((o) => o.value) : [];
 
+    const selRole = document.getElementById('f-role').value;
+    const isProviderRole = selRole === 'PROVIDER';
+
     const body = {
       name: document.getElementById('f-name').value.trim(),
       email: document.getElementById('f-email').value.trim(),
       phone: document.getElementById('f-phone').value.trim() || null,
-      role: document.getElementById('f-role').value,
+      role: selRole,
       avatarUrl: document.getElementById('f-avatar').value.trim() || null,
       isActive: document.getElementById('f-active').checked,
       addressJson: {
@@ -446,8 +465,8 @@ export async function bootUserEditPage() {
         countryCode: document.getElementById('a-country').value.trim() || 'BR',
       },
       personalDocuments: collectDocTable('tbody-docs-personal'),
-      isProvider: document.getElementById('f-provider').checked,
-      technician: document.getElementById('f-provider').checked
+      isProvider: isProviderRole,
+      technician: isProviderRole
         ? {
             status: document.getElementById('t-status').value,
             cft: document.getElementById('t-cft').value.trim() || null,

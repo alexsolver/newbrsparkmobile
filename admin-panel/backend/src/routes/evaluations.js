@@ -11,7 +11,12 @@ const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
 const router = express.Router();
 
 function isManagerRole(role) {
-  return role === 'MANAGER' || role === 'ADMIN';
+  return (
+    role === 'MANAGER' ||
+    role === 'TENANT_ADMIN' ||
+    role === 'SAAS_ADMIN' ||
+    role === 'ADMIN'
+  );
 }
 
 async function writeAudit(tenantId, userId, action, resource, metadata) {

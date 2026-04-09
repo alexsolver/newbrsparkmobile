@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
+const { auditActor } = require('../lib/auditActor');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ router.post('/', async (req, res) => {
     const policy = await prisma.collectionPolicy.create({ data });
     await prisma.auditLog.create({
       data: {
-        adminId: req.admin?.id || null,
+        ...auditActor(req),
         action: 'COLLECTION_POLICY_CREATE',
         resource: `Policy ${policy.id} | tenant: ${tenantId || 'global'}`,
         category: 'ADMIN',

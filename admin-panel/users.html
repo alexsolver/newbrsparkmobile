@@ -12,11 +12,13 @@
       <span class="topbar-title">Usuários</span>
       <div class="topbar-actions">
         <div class="search-wrap"><span class="search-icon"><ion-icon name="time-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></span><input type="text" placeholder="Buscar usuário…" id="search-input" /></div>
-        <select class="form-control" style="width:140px;padding:7px 10px;font-size:12px" id="filter-role">
+        <select class="form-control" style="width:200px;padding:7px 10px;font-size:12px" id="filter-role">
           <option value="">Todos os papeis</option>
-          <option value="ADMIN">Admin</option>
-          <option value="MANAGER">Gestor</option>
           <option value="USER">Usuário</option>
+          <option value="PROVIDER">Prestador</option>
+          <option value="MANAGER">Gestor</option>
+          <option value="TENANT_ADMIN">Admin do tenant</option>
+          <option value="SAAS_ADMIN">Admin SaaS</option>
         </select>
         <button class="btn btn-primary" onclick="openModal('new-user-modal')">+ Novo Usuário</button>
       </div>
@@ -64,7 +66,11 @@
         </div>
         <div class="form-group"><label class="form-label">Papel</label>
           <select class="form-control" id="new-role">
-            <option value="USER">Usuário</option><option value="MANAGER">Gestor</option><option value="ADMIN">Admin</option>
+            <option value="USER">Usuário</option>
+            <option value="PROVIDER">Prestador</option>
+            <option value="MANAGER">Gestor</option>
+            <option value="TENANT_ADMIN">Administrador do tenant</option>
+            <option value="SAAS_ADMIN">Administrador SaaS</option>
           </select>
         </div>
       </div>
@@ -104,8 +110,22 @@
   import { CONFIG }   from './js/config.js';
   await initPage();
 
-  const roleMap = { ADMIN:'badge-red', MANAGER:'badge-amber', USER:'badge-gray' };
-  const roleLbl = { ADMIN:'<ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin', MANAGER:'<ion-icon name="construct-outline"></ion-icon> Gestor', USER:'<ion-icon name="person-outline" style="vertical-align:-2px"></ion-icon> Usuário' };
+  const roleMap = {
+    USER: 'badge-gray',
+    PROVIDER: 'badge-blue',
+    MANAGER: 'badge-amber',
+    TENANT_ADMIN: 'badge-red',
+    SAAS_ADMIN: 'badge-purple',
+    ADMIN: 'badge-red',
+  };
+  const roleLbl = {
+    USER: '<ion-icon name="person-outline" style="vertical-align:-2px"></ion-icon> Usuário',
+    PROVIDER: '<ion-icon name="briefcase-outline" style="vertical-align:-2px"></ion-icon> Prestador',
+    MANAGER: '<ion-icon name="construct-outline"></ion-icon> Gestor',
+    TENANT_ADMIN: '<ion-icon name="business-outline" style="vertical-align:-2px"></ion-icon> Admin tenant',
+    SAAS_ADMIN: '<ion-icon name="cloud-outline" style="vertical-align:-2px"></ion-icon> Admin SaaS',
+    ADMIN: '<ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin',
+  };
   let currentPage = 1;
 
   // Populate tenant dropdown
@@ -147,7 +167,12 @@
     document.getElementById('count-badge').textContent = `${total} usuários`;
     document.getElementById('stat-total').textContent   = total;
     document.getElementById('stat-active').textContent  = data.filter(u => u.isActive).length;
-    document.getElementById('stat-admins').textContent  = data.filter(u => u.role === 'ADMIN').length;
+    document.getElementById('stat-admins').textContent  = data.filter(u =>
+      u.role === 'TENANT_ADMIN' ||
+      u.role === 'SAAS_ADMIN' ||
+      u.role === 'MANAGER' ||
+      u.role === 'ADMIN'
+    ).length;
     document.getElementById('stat-inactive').textContent = data.filter(u => !u.isActive).length;
 
     const fmt = d => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';

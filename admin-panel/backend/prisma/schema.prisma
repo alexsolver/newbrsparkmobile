@@ -237,9 +237,11 @@ model TechnicianProfile {
 }
 
 enum UserRole {
-  ADMIN
-  MANAGER
   USER
+  PROVIDER
+  MANAGER
+  TENANT_ADMIN
+  SAAS_ADMIN
 }
 
 // ─────────────────────────────────────────────────────────

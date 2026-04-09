@@ -44,7 +44,7 @@ async function main() {
       where: { email_tenantId: { email: t.email, tenantId: tenant.id } },
       update: {},
       create: { 
-        name: t.name + ' Admin', email: t.email, password: hash, tenantId: tenant.id, role: 'ADMIN', isActive: true
+        name: t.name + ' Admin', email: t.email, password: hash, tenantId: tenant.id, role: 'TENANT_ADMIN', isActive: true
       }
     });
 

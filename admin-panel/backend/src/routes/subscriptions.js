@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 
 // GET /api/subscriptions
 router.get('/', async (req, res) => {
@@ -32,7 +33,15 @@ router.post('/', async (req, res) => {
       create: { tenantId, planId, billingCycle, status: 'ACTIVE', currentStart: now, currentEnd: end },
       update: { planId, billingCycle, status: 'ACTIVE', currentStart: now, currentEnd: end },
     });
-    await prisma.auditLog.create({ data: { adminId: req.admin.id, tenantId, action: 'SUBSCRIPTION_CHANGE', resource: planId, category: 'ADMIN' } });
+    await prisma.auditLog.create({
+      data: {
+        ...auditActor(req),
+        tenantId,
+        action: 'SUBSCRIPTION_CHANGE',
+        resource: planId,
+        category: 'ADMIN',
+      },
+    });
     res.json(sub);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

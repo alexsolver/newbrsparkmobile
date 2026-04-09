@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma = require('../db');
+const { auditActor } = require('../lib/auditActor');
 
 // GET /api/flags
 router.get('/', async (req, res) => {
@@ -33,7 +34,12 @@ router.patch('/:key', async (req, res) => {
       });
     }
     await prisma.auditLog.create({
-      data: { adminId: req.admin.id, action: `FLAG_${enabled ? 'ON' : 'OFF'}`, resource: req.params.key, category: 'ADMIN' }
+      data: {
+        ...auditActor(req),
+        action: `FLAG_${enabled ? 'ON' : 'OFF'}`,
+        resource: req.params.key,
+        category: 'ADMIN',
+      },
     });
     res.json(flag);
   } catch (err) { res.status(500).json({ error: err.message }); }

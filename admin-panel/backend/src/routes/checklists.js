@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const router = express.Router();
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
-const { adminAuth } = require('../middleware/auth');
+const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
@@ -42,7 +42,7 @@ function sameOwnerEmail(execEmail, jwtEmail) {
 }
 
 // Imagens nas instruções rich-text do Form Builder (painel admin autenticado)
-router.post('/help-image', adminAuth, async (req, res) => {
+router.post('/help-image', adminAuthThenPanel, async (req, res) => {
   try {
     const { fileBase64, mimeType } = req.body;
     if (!fileBase64 || typeof fileBase64 !== 'string') {

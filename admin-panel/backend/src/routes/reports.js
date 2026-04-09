@@ -2,7 +2,8 @@
 
 const router = require('express').Router();
 const prisma = require('../db');
-const { adminAuth, adminOrReportsApiKey } = require('../middleware/auth');
+const { adminAuthThenPanel, adminOrReportsApiKey } = require('../middleware/auth');
+const { enforcePanelPermissions } = require('../middleware/panelPermissions');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
 const { mergePresetConfig } = require('../lib/reportPresetDefaults');
@@ -26,7 +27,7 @@ router.use(ensurePdfReportPresetModel);
 
 // ── Presets CRUD (só admin) ───────────────────────────────────
 
-router.get('/presets', adminAuth, async (_req, res) => {
+router.get('/presets', adminAuthThenPanel, async (_req, res) => {
   try {
     const rows = await prisma.pdfReportPreset.findMany({
       orderBy: [{ updatedAt: 'desc' }],
@@ -39,7 +40,7 @@ router.get('/presets', adminAuth, async (_req, res) => {
   }
 });
 
-router.get('/presets/:id', adminAuth, async (req, res) => {
+router.get('/presets/:id', adminAuthThenPanel, async (req, res) => {
   try {
     const row = await prisma.pdfReportPreset.findUnique({ where: { id: req.params.id } });
     if (!row) return res.status(404).json({ error: 'Preset não encontrado.' });
@@ -51,7 +52,7 @@ router.get('/presets/:id', adminAuth, async (req, res) => {
   }
 });
 
-router.post('/presets', adminAuth, async (req, res) => {
+router.post('/presets', adminAuthThenPanel, async (req, res) => {
   try {
     const { name, slug, tenantId, config, isDefault } = req.body || {};
     if (!name || String(name).trim() === '') {
@@ -74,7 +75,7 @@ router.post('/presets', adminAuth, async (req, res) => {
   }
 });
 
-router.patch('/presets/:id', adminAuth, async (req, res) => {
+router.patch('/presets/:id', adminAuthThenPanel, async (req, res) => {
   try {
     const { name, slug, tenantId, config, isDefault } = req.body || {};
     const existing = await prisma.pdfReportPreset.findUnique({ where: { id: req.params.id } });
@@ -96,7 +97,7 @@ router.patch('/presets/:id', adminAuth, async (req, res) => {
   }
 });
 
-router.delete('/presets/:id', adminAuth, async (req, res) => {
+router.delete('/presets/:id', adminAuthThenPanel, async (req, res) => {
   try {
     await prisma.pdfReportPreset.delete({ where: { id: req.params.id } });
     res.status(204).end();
@@ -109,7 +110,11 @@ router.delete('/presets/:id', adminAuth, async (req, res) => {
 
 // ── Export execução (admin ou REPORTS_API_KEY) ────────────────
 
-router.get('/executions/:executionId/export', adminOrReportsApiKey, async (req, res) => {
+router.get(
+  '/executions/:executionId/export',
+  adminOrReportsApiKey,
+  enforcePanelPermissions,
+  async (req, res) => {
   try {
     const { executionId } = req.params;
     const presetId = req.query.presetId;
