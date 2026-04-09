@@ -517,11 +517,23 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             });
         }
 
+        const prevStatus = String(existing.status || '').toUpperCase();
         const execution = await prisma.checklistExecution.update({
             where: { id: taskId },
             data: updateData
         });
-        
+
+        if (
+            statusNorm === 'SYNCED' &&
+            prevStatus !== 'SYNCED' &&
+            String(execution.status || '').toUpperCase() === 'SYNCED'
+        ) {
+            const { onChecklistExecutionSynced } = require('../lib/evaluationTrigger');
+            onChecklistExecutionSynced(execution.id).catch((e) =>
+                console.error('[evaluationTrigger] onChecklistExecutionSynced', e)
+            );
+        }
+
         res.json({ ok: true, id: execution.id, status: execution.status });
     } catch (err) {
         console.error("PATCH /executions/:taskId/status error:", err);

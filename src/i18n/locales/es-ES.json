@@ -72,6 +72,47 @@
     "orders": "Pedidos",
     "scanner": "Escáner"
   },
+  "radialMenu": {
+    "productivity": "Mi productividad"
+  },
+  "productivity": {
+    "title": "Mi productividad",
+    "average": "Nota media general",
+    "respondedCount": "{{count}} evaluaciones con respuesta",
+    "criticalAckBanner": "{{count}} evaluación(es) crítica(s) requieren confirmación.",
+    "categories": "Por categoría",
+    "cat": {
+      "qualidade": "Calidad",
+      "prazo": "Plazo",
+      "atendimento": "Atención"
+    },
+    "sort": {
+      "critical": "Críticas",
+      "neutral": "Neutras",
+      "positive": "Positivas"
+    },
+    "listTitle": "Evaluaciones",
+    "emptyList": "Aún no hay evaluaciones.",
+    "loadError": "No se pudieron cargar los datos.",
+    "notFound": "Evaluación no encontrada.",
+    "needsAck": "Esta evaluación es crítica. Confirme que ha tomado conocimiento.",
+    "ack": "Confirmar conocimiento",
+    "context": "Contexto",
+    "duration": "Duración aprox.: {{min}} min",
+    "status": "Estado",
+    "scores": "Puntuación",
+    "comment": "Comentario",
+    "internalNote": "Nota interna",
+    "internalNotePh": "Registro interno (no visible al cliente)",
+    "sendNote": "Guardar nota",
+    "dispute": "Solicitar revisión",
+    "disputePh": "Explique el motivo (mín. 10 caracteres)",
+    "disputeMin": "La justificación debe tener al menos 10 caracteres.",
+    "openDispute": "Abrir solicitud de revisión",
+    "actionPlan": "Plan de acción",
+    "actionPlanPh": "Descripción de la mejora",
+    "addPlan": "Añadir plan"
+  },
   "auth": {
     "login": "Iniciar Sesión",
     "logout": "Cerrar Sesión",

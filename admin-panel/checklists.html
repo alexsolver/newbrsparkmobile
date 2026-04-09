@@ -927,6 +927,134 @@
       padding-bottom: 8px;
       border-bottom: 1px solid #f1f5f9;
     }
+
+    /* Form builder — barra compacta «navegação / início no app» (mais canvas) */
+    .formbuilder-app-nav-strip {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 16px 8px;
+      flex-shrink: 0;
+    }
+    .formbuilder-app-nav-help {
+      margin: 0 0 6px 0;
+      border: none;
+    }
+    .formbuilder-app-nav-help > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+      user-select: none;
+    }
+    .formbuilder-app-nav-help > summary::-webkit-details-marker {
+      display: none;
+    }
+    .formbuilder-app-nav-help > summary .fb-help-chevron {
+      font-size: 10px;
+      color: var(--text3);
+      transition: transform 0.15s ease;
+    }
+    .formbuilder-app-nav-help[open] > summary .fb-help-chevron {
+      transform: rotate(90deg);
+    }
+    .formbuilder-app-nav-help .fb-help-body {
+      margin: 6px 0 0 0;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--text2);
+      line-height: 1.45;
+      background: var(--background, #f8fafc);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .formbuilder-app-nav-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+    }
+    .fb-app-nav-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text1);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .fb-app-start-group,
+    #app-hub-order-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    #app-hub-order-wrap {
+      padding-left: 10px;
+      margin-left: 2px;
+      border-left: 1px solid var(--border);
+      min-height: 28px;
+      transition: opacity 0.15s ease;
+    }
+    #app-hub-order-wrap.app-hub-order-muted {
+      opacity: 0.42;
+    }
+    .fb-app-hub-sep {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 2px;
+    }
+    label.fb-app-inline-radio {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fafafa;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text1);
+      cursor: pointer;
+      line-height: 1.2;
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+    label.fb-app-inline-radio:hover {
+      border-color: #cbd5e1;
+      background: #f1f5f9;
+    }
+    label.fb-app-inline-radio:has(input:checked) {
+      border-color: var(--primary, #2563eb);
+      background: #eff6ff;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+    }
+    label.fb-app-inline-radio input {
+      margin: 0;
+      flex-shrink: 0;
+      accent-color: var(--primary);
+    }
+    label.fb-app-inline-radio small {
+      display: none;
+    }
+    @media (min-width: 1100px) {
+      label.fb-app-inline-radio small {
+        display: inline;
+        font-weight: 500;
+        color: var(--text3);
+        margin-left: 4px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -972,43 +1100,49 @@
        </div>
     </div>
 
-    <div style="background:var(--card); border-bottom:1px solid var(--border); padding:14px 20px 16px; flex-shrink:0;">
-      <p style="margin:0 0 14px 0; font-size:12px; color:var(--text2); line-height:1.45; display:flex; gap:8px; align-items:flex-start;">
-        <ion-icon name="phone-portrait-outline" style="font-size:20px; color:var(--accent); flex-shrink:0; margin-top:1px;"></ion-icon>
-        <span><strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>secção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as secções num scroll único quando todas são lista; se alguma for «um a um», usa ecrãs por etapa. Formulários antigos só com «seguir global» continuam a usar o modo guardado no JSON até definir modo por secção.</span>
-      </p>
-      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-        <ion-icon name="map-outline" style="font-size:18px; color:var(--accent);"></ion-icon>
-        <span style="font-size:13px; font-weight:800; color:var(--text1);">Início do formulário (app)</span>
+    <div class="formbuilder-app-nav-strip">
+      <details class="formbuilder-app-nav-help">
+        <summary>
+          <span class="fb-help-chevron">▸</span>
+          <ion-icon name="phone-portrait-outline" style="font-size:16px; color:var(--accent); vertical-align:-3px;"></ion-icon>
+          Ajuda: navegação por secções no app (lista vs um a um)
+        </summary>
+        <div class="fb-help-body">
+          <p style="margin:0 0 8px 0;"><strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>secção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as secções num scroll único quando todas são lista; se alguma for «um a um», usa ecrãs por etapa. Formulários antigos só com «seguir global» continuam a usar o modo guardado no JSON até definir modo por secção.</p>
+          <p style="margin:0; font-size:10px; color:var(--text3);">Com uma única secção, o menu de etapas é ignorado no app. Com hub ativo e várias secções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.</p>
+        </div>
+      </details>
+      <div class="formbuilder-app-nav-row" id="app-section-start-radios">
+        <span class="fb-app-nav-eyebrow">
+          <ion-icon name="map-outline" style="font-size:15px; color:var(--accent);"></ion-icon>
+          Início no app
+        </span>
+        <div class="fb-app-start-group" title="Como o técnico entra no formulário">
+          <label class="fb-app-inline-radio">
+            <input type="radio" name="appSectionStart" value="direct" checked>
+            <ion-icon name="play-forward-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+            1.ª etapa
+            <small>— clássico</small>
+          </label>
+          <label class="fb-app-inline-radio">
+            <input type="radio" name="appSectionStart" value="hub">
+            <ion-icon name="grid-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+            Menu de etapas
+            <small>— escolhe a secção</small>
+          </label>
+        </div>
+        <div id="app-hub-order-wrap" class="app-hub-order-muted" title="Ativo quando «Menu de etapas» está selecionado">
+          <span class="fb-app-hub-sep">No menu</span>
+          <label class="fb-app-inline-radio">
+            <input type="radio" name="appHubSectionOrder" value="free" checked>
+            Livre
+          </label>
+          <label class="fb-app-inline-radio">
+            <input type="radio" name="appHubSectionOrder" value="sequential">
+            Ordem fixa
+          </label>
+        </div>
       </div>
-      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:stretch;" id="app-section-start-radios">
-        <label class="app-fill-mode-card" style="flex:1; min-width:200px; cursor:pointer; border:2px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fafafa;">
-          <input type="radio" name="appSectionStart" value="direct" checked style="margin-top:3px; accent-color:var(--primary);">
-          <span>
-            <span style="display:block; font-weight:800; font-size:12px; color:var(--text1);"><ion-icon name="play-forward-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Abrir na 1.ª etapa</span>
-            <span style="display:block; font-size:11px; color:var(--text3); line-height:1.35; margin-top:4px;">O técnico entra logo a preencher a primeira secção (comportamento clássico).</span>
-          </span>
-        </label>
-        <label class="app-fill-mode-card" style="flex:1; min-width:200px; cursor:pointer; border:2px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fafafa;">
-          <input type="radio" name="appSectionStart" value="hub" style="margin-top:3px; accent-color:var(--primary);">
-          <span>
-            <span style="display:block; font-weight:800; font-size:12px; color:var(--text1);"><ion-icon name="grid-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Menu de etapas</span>
-            <span style="display:block; font-size:11px; color:var(--text3); line-height:1.35; margin-top:4px;">Mostra todas as secções no ecrã; o técnico escolhe qual abrir. Útil com várias etapas.</span>
-          </span>
-        </label>
-      </div>
-      <div id="app-hub-order-wrap" style="margin-top:10px; padding:10px 12px; border:1px dashed var(--border); border-radius:10px; background:#f8fafc;">
-        <div style="font-size:11px; font-weight:800; color:var(--text2); margin-bottom:8px;">Navegação no menu de etapas</div>
-        <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; cursor:pointer; font-size:12px;">
-          <input type="radio" name="appHubSectionOrder" value="free" checked style="margin-top:2px; accent-color:var(--primary);">
-          <span><strong>Livre</strong> — pode abrir qualquer etapa em qualquer ordem.</span>
-        </label>
-        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:12px;">
-          <input type="radio" name="appHubSectionOrder" value="sequential" style="margin-top:2px; accent-color:var(--primary);">
-          <span><strong>Ordem fixa</strong> — só desbloqueia a etapa seguinte depois de as anteriores estarem válidas (obrigatórios preenchidos).</span>
-        </label>
-      </div>
-      <p style="margin:10px 0 0 0; font-size:10px; color:var(--text3); line-height:1.4;">Com uma única secção, o menu de etapas é ignorado no app. Com hub ativo e várias secções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.</p>
     </div>
 
     <div class="page-body" style="display:flex; gap:20px; flex:1; min-height:0; padding: 20px; overflow: hidden;">

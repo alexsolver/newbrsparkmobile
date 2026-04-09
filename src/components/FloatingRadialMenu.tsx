@@ -6,6 +6,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 const ADMIN_MENU_ITEMS = [
   { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
@@ -17,6 +18,14 @@ const ADMIN_MENU_ITEMS = [
 ];
 
 const PROVIDER_MENU_ITEMS = [
+  {
+    id: 'productivity',
+    labelKey: 'radialMenu.productivity',
+    labelDefault: 'Minha Produtividade',
+    icon: 'trending-up-outline',
+    color: '#7c3aed',
+    route: '/productivity',
+  },
   { id: 'mobile_stock', label: 'Estoque técnico', icon: 'cube-outline', color: '#0369a1', route: '/stock/mobile' },
   {
     id: 'tech_finance',
@@ -27,11 +36,27 @@ const PROVIDER_MENU_ITEMS = [
   },
 ];
 
+type ProviderMenuItem =
+  | { id: string; label: string; icon: string; color: string; route: string }
+  | {
+      id: string;
+      labelKey: string;
+      labelDefault: string;
+      icon: string;
+      color: string;
+      route: string;
+    };
+
+function providerItemLabel(item: ProviderMenuItem, t: (k: string, o?: { defaultValue?: string }) => string) {
+  return 'labelKey' in item ? t(item.labelKey, { defaultValue: item.labelDefault }) : item.label;
+}
+
 export function FloatingRadialMenu() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
   const { mode } = useAppContext();
+  const { t } = useTranslation();
 
   const MENU_ITEMS = mode === 'PROVIDER' ? PROVIDER_MENU_ITEMS : ADMIN_MENU_ITEMS;
 
@@ -39,7 +64,7 @@ export function FloatingRadialMenu() {
 
   const closeMenu = () => setIsOpen(false);
 
-  const handlePress = (item: (typeof ADMIN_MENU_ITEMS)[number]) => {
+  const handlePress = (item: (typeof ADMIN_MENU_ITEMS)[number] | ProviderMenuItem) => {
     closeMenu();
     setTimeout(() => {
       router.push(item.route as any);
@@ -104,7 +129,9 @@ export function FloatingRadialMenu() {
                   <Ionicons name={item.icon as any} size={26} color={item.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>{item.label}</Text>
+                  <Text style={styles.rowTitle}>
+                    {mode === 'PROVIDER' ? providerItemLabel(item as ProviderMenuItem, t) : (item as (typeof ADMIN_MENU_ITEMS)[number]).label}
+                  </Text>
                 </View>
                 <View style={styles.rowChevronWrap}>
                   <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />

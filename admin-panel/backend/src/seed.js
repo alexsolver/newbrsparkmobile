@@ -510,6 +510,62 @@ async function main() {
     console.log(`✅ OSRM (integração): criado → ${osrmBase}`);
   }
 
+  // ── Avaliação demo (Minha Produtividade) — primeiro prestador ACTIVE ───────
+  try {
+    const { getOrCreateDefaultClientTemplate } = require('./lib/evaluationTrigger');
+    const techUser = await prisma.user.findFirst({
+      where: { technicianProfile: { status: 'ACTIVE' } },
+    });
+    if (techUser) {
+      const tmpl = await getOrCreateDefaultClientTemplate(techUser.tenantId);
+      const questions = await prisma.evaluationTemplateQuestion.findMany({
+        where: { templateId: tmpl.id },
+        orderBy: { sortOrder: 'asc' },
+      });
+      const existingDemo = await prisma.evaluationInstance.findFirst({
+        where: { technicianUserId: techUser.id, idempotencyKey: 'seed:demo_evaluation_v1' },
+      });
+      if (!existingDemo && questions.length >= 3) {
+        const inst = await prisma.evaluationInstance.create({
+          data: {
+            tenantId: techUser.tenantId,
+            templateId: tmpl.id,
+            targetType: 'TECHNICIAN',
+            technicianUserId: techUser.id,
+            status: 'RESPONDED',
+            triggeredBy: 'SEED',
+            idempotencyKey: 'seed:demo_evaluation_v1',
+            displayText:
+              'Bom trabalho no atendimento. Cliente satisfeito com o resultado final.',
+            rawClientText: '[seed_demo]',
+          },
+        });
+        const values = [5, 4, 5];
+        for (let i = 0; i < questions.length; i++) {
+          await prisma.evaluationResponse.create({
+            data: {
+              instanceId: inst.id,
+              questionId: questions[i].id,
+              value: { value: values[i] ?? 4 },
+            },
+          });
+        }
+        const total100 = Math.round(((5 + 4 + 5) / 3 / 5) * 100);
+        await prisma.evaluationScore.create({
+          data: {
+            instanceId: inst.id,
+            totalScore: total100,
+            scoreByCategory: { qualidade: 100, prazo: 80, atendimento: 100 },
+            classification: 'EXCELLENT',
+          },
+        });
+      }
+      console.log('✅ Avaliação demo (Minha Produtividade) verificada');
+    }
+  } catch (e) {
+    console.warn('⚠️  Seed avaliação demo:', e.message);
+  }
+
   console.log('\n🎉 Seed concluído com sucesso!');
   console.log(`   Admin: ${adminEmail} / ${process.env.ADMIN_PASSWORD || 'admin123'}\n`);
 }

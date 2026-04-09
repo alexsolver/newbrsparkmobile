@@ -2211,7 +2211,10 @@ window.syncAppSectionNavRadios = function () {
         r.checked = r.value === start;
     });
     const wrap = document.getElementById('app-hub-order-wrap');
-    if (wrap) wrap.style.opacity = start === 'hub' ? '1' : '0.45';
+    if (wrap) {
+        wrap.classList.toggle('app-hub-order-muted', start !== 'hub');
+        wrap.style.opacity = '';
+    }
     document.querySelectorAll('input[name="appHubSectionOrder"]').forEach((r) => {
         r.checked = r.value === ord;
         r.disabled = start !== 'hub';

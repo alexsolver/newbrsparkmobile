@@ -72,6 +72,47 @@
     "orders": "Orders",
     "scanner": "Scanner"
   },
+  "radialMenu": {
+    "productivity": "My productivity"
+  },
+  "productivity": {
+    "title": "My productivity",
+    "average": "Overall average score",
+    "respondedCount": "{{count}} evaluations with responses",
+    "criticalAckBanner": "{{count}} critical evaluation(s) require acknowledgment.",
+    "categories": "By category",
+    "cat": {
+      "qualidade": "Quality",
+      "prazo": "Timeliness",
+      "atendimento": "Service"
+    },
+    "sort": {
+      "critical": "Critical",
+      "neutral": "Neutral",
+      "positive": "Positive"
+    },
+    "listTitle": "Evaluations",
+    "emptyList": "No evaluations yet.",
+    "loadError": "Could not load data.",
+    "notFound": "Evaluation not found.",
+    "needsAck": "This evaluation is critical. Please acknowledge.",
+    "ack": "Acknowledge",
+    "context": "Context",
+    "duration": "Approx. duration: {{min}} min",
+    "status": "Status",
+    "scores": "Score",
+    "comment": "Comment",
+    "internalNote": "Internal note",
+    "internalNotePh": "Internal record (not visible to customer)",
+    "sendNote": "Save note",
+    "dispute": "Request review",
+    "disputePh": "Explain why (min. 10 characters)",
+    "disputeMin": "Justification must be at least 10 characters.",
+    "openDispute": "Open review request",
+    "actionPlan": "Action plan",
+    "actionPlanPh": "Improvement description",
+    "addPlan": "Add plan"
+  },
   "auth": {
     "login": "Sign In",
     "logout": "Sign Out",

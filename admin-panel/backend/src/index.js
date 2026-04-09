@@ -32,6 +32,7 @@ const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
+const evaluationsRoutes   = require('./routes/evaluations');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
@@ -77,6 +78,7 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);

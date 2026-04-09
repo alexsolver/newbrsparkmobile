@@ -72,6 +72,47 @@
     "orders": "Pedidos",
     "scanner": "Scanner"
   },
+  "radialMenu": {
+    "productivity": "Minha Produtividade"
+  },
+  "productivity": {
+    "title": "Minha Produtividade",
+    "average": "Nota média geral",
+    "respondedCount": "{{count}} avaliações com resposta",
+    "criticalAckBanner": "{{count}} avaliação(ões) crítica(s) exige(m) confirmação de ciência.",
+    "categories": "Por categoria",
+    "cat": {
+      "qualidade": "Qualidade",
+      "prazo": "Prazo",
+      "atendimento": "Atendimento"
+    },
+    "sort": {
+      "critical": "Críticas",
+      "neutral": "Neutras",
+      "positive": "Positivas"
+    },
+    "listTitle": "Avaliações",
+    "emptyList": "Nenhuma avaliação ainda.",
+    "loadError": "Não foi possível carregar os dados.",
+    "notFound": "Avaliação não encontrada.",
+    "needsAck": "Esta avaliação é crítica. Confirme que tomou ciência.",
+    "ack": "Confirmar ciência",
+    "context": "Contexto",
+    "duration": "Duração aproximada: {{min}} min",
+    "status": "Status",
+    "scores": "Pontuação",
+    "comment": "Comentário",
+    "internalNote": "Nota interna",
+    "internalNotePh": "Registo interno (não visível ao cliente)",
+    "sendNote": "Guardar nota",
+    "dispute": "Solicitar revisão",
+    "disputePh": "Explique o motivo (mín. 10 caracteres)",
+    "disputeMin": "A justificativa deve ter pelo menos 10 caracteres.",
+    "openDispute": "Abrir pedido de revisão",
+    "actionPlan": "Plano de ação",
+    "actionPlanPh": "Descrição da melhoria",
+    "addPlan": "Adicionar plano"
+  },
   "auth": {
     "login": "Entrar",
     "logout": "Sair",

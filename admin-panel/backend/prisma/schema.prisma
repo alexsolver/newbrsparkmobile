@@ -71,6 +71,10 @@ model Tenant {
   collectionPolicies   CollectionPolicy[]
   complianceDocs       ComplianceDoc[]       @relation("TenantComplianceDocs")
   materialsReceiptInputs MaterialsReceiptInput[]
+  evaluationTemplates   EvaluationTemplate[]
+  evaluationInstances   EvaluationInstance[]
+  evaluationActionPlans EvaluationActionPlan[]
+  evaluationDisputes    EvaluationDispute[]
 }
 
 // ─────────────────────────────────────────────────────────
@@ -195,6 +199,12 @@ model User {
   currentSessionId String?
   currentDeviceId  String?
   materialsReceiptInputs MaterialsReceiptInput[] @relation("MaterialsReceiptConductor")
+  evaluationInstancesAsTechnician EvaluationInstance[] @relation("EvaluationInstanceTechnician")
+  evaluationAcknowledgements      EvaluationAcknowledgement[]
+  evaluationInternalNotes         EvaluationInternalNote[]
+  evaluationActionPlans           EvaluationActionPlan[] @relation("ActionPlanTechnician")
+  disputesOpened                  EvaluationDispute[] @relation("DisputeOpenedByTechnician")
+  disputesResolved                EvaluationDispute[] @relation("DisputeResolvedBySupervisor")
 
   @@unique([email, tenantId])
 }
@@ -716,6 +726,8 @@ model ChecklistExecution {
   syncedAt    DateTime?
   createdAt   DateTime @default(now())
 
+  evaluationInstances EvaluationInstance[]
+
   @@index([ownerEmail])
   @@index([status])
   @@index([ownerEmail, status])
@@ -936,4 +948,195 @@ model ConsentRecord {
   @@unique([ownerEmail, policyId, consentType])
   @@index([ownerEmail])
   @@index([tenantId])
+}
+
+// ─────────────────────────────────────────────────────────
+// AVALIAÇÕES / MINHA PRODUTIVIDADE (técnico + satisfação cliente)
+// ─────────────────────────────────────────────────────────
+
+enum EvaluationTemplateType {
+  CLIENT
+  AUDIT
+  INTERNAL
+}
+
+enum EvaluationQuestionType {
+  RATING
+  NPS
+  BOOLEAN
+  TEXT
+  MULTIPLE_CHOICE
+}
+
+enum EvaluationInstanceStatus {
+  PENDING
+  RESPONDED
+  IN_REVIEW
+  FINALIZED
+}
+
+enum EvaluationClassification {
+  EXCELLENT
+  GOOD
+  CRITICAL
+}
+
+enum EvaluationDisputeStatus {
+  PENDING
+  MAINTAIN_EVAL
+  ADJUSTED
+  INVALIDATED
+}
+
+enum EvaluationActionPlanStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+model EvaluationTemplate {
+  id           String                 @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  type         EvaluationTemplateType
+  active       Boolean                @default(true)
+  triggerRules Json?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  questions EvaluationTemplateQuestion[]
+  instances EvaluationInstance[]
+
+  @@index([tenantId, active])
+}
+
+model EvaluationTemplateQuestion {
+  id         String               @id @default(cuid())
+  templateId String
+  template   EvaluationTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  text       String
+  type       EvaluationQuestionType
+  weight     Float                @default(1)
+  required   Boolean              @default(true)
+  options    Json?
+  categoryKey String?
+  sortOrder  Int                  @default(0)
+
+  responses EvaluationResponse[]
+
+  @@index([templateId])
+}
+
+model EvaluationInstance {
+  id               String                   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  templateId       String
+  template         EvaluationTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  targetType       String
+  executionId      String?
+  execution        ChecklistExecution?      @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  technicianUserId String
+  technician       User                     @relation("EvaluationInstanceTechnician", fields: [technicianUserId], references: [id], onDelete: Cascade)
+  status           EvaluationInstanceStatus @default(PENDING)
+  triggeredBy      String?
+  scheduledFor     DateTime?
+  idempotencyKey   String?                  @unique
+  displayText      String?                  @db.Text
+  rawClientText    String?                  @db.Text
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  responses        EvaluationResponse[]
+  score            EvaluationScore?
+  acknowledgements EvaluationAcknowledgement[]
+  internalNotes    EvaluationInternalNote[]
+  actionPlans      EvaluationActionPlan[]
+  disputes         EvaluationDispute[]
+
+  @@index([tenantId, technicianUserId, createdAt])
+  @@index([executionId])
+}
+
+model EvaluationResponse {
+  id         String                   @id @default(cuid())
+  instanceId String
+  instance   EvaluationInstance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  questionId String
+  question   EvaluationTemplateQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      Json
+
+  @@unique([instanceId, questionId])
+  @@index([instanceId])
+}
+
+model EvaluationScore {
+  id               String                   @id @default(cuid())
+  instanceId       String                   @unique
+  instance         EvaluationInstance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  totalScore       Float
+  scoreByCategory  Json
+  classification   EvaluationClassification
+}
+
+model EvaluationAcknowledgement {
+  id         String             @id @default(cuid())
+  instanceId String
+  instance   EvaluationInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime           @default(now())
+
+  @@unique([instanceId, userId])
+}
+
+model EvaluationInternalNote {
+  id         String             @id @default(cuid())
+  instanceId String
+  instance   EvaluationInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body       String             @db.Text
+  createdAt  DateTime           @default(now())
+
+  @@index([instanceId])
+}
+
+model EvaluationActionPlan {
+  id               String                     @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instanceId       String
+  instance         EvaluationInstance         @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  technicianUserId String
+  technician       User                       @relation("ActionPlanTechnician", fields: [technicianUserId], references: [id], onDelete: Cascade)
+  description      String                     @db.Text
+  status           EvaluationActionPlanStatus @default(OPEN)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([instanceId])
+  @@index([tenantId])
+}
+
+model EvaluationDispute {
+  id                 String                  @id @default(cuid())
+  tenantId           String
+  tenant             Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instanceId         String
+  instance           EvaluationInstance      @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  technicianUserId   String
+  technician         User                    @relation("DisputeOpenedByTechnician", fields: [technicianUserId], references: [id], onDelete: Cascade)
+  justification      String                  @db.Text
+  status             EvaluationDisputeStatus @default(PENDING)
+  supervisorId       String?
+  supervisor         User?                   @relation("DisputeResolvedBySupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  resolutionNote     String?                 @db.Text
+  adjustedTotalScore Float?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([tenantId, status])
+  @@index([instanceId])
 }
