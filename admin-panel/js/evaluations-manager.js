@@ -28,6 +28,22 @@ function showTab(name) {
   });
 }
 
+function showSurveyPreview(url) {
+  const wrap = document.getElementById('eval-survey-preview');
+  const iframe = document.getElementById('eval-survey-iframe');
+  if (!wrap || !iframe || !url) return;
+  iframe.src = url;
+  wrap.hidden = false;
+  requestAnimationFrame(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+}
+
+function hideSurveyPreview() {
+  const wrap = document.getElementById('eval-survey-preview');
+  const iframe = document.getElementById('eval-survey-iframe');
+  if (iframe) iframe.src = 'about:blank';
+  if (wrap) wrap.hidden = true;
+}
+
 function openModal(overlayId) {
   document.getElementById(overlayId)?.classList.add('is-open');
 }
@@ -232,6 +248,7 @@ async function submitDisputeModal() {
 }
 
 async function loadInstances() {
+  hideSurveyPreview();
   const st = document.getElementById('instance-status-filter')?.value || '';
   const tv = document.getElementById('filter-tenant')?.value || '';
   const p = new URLSearchParams();
@@ -252,14 +269,20 @@ async function loadInstances() {
       const href =
         x.clientSurveyFullUrl ||
         (x.publicToken ? `${origin}/evaluation-survey.html?token=${encodeURIComponent(x.publicToken)}` : '');
-      const link = href
-        ? `<a href="${esc(href)}" target="_blank" rel="noopener">Abrir formulário</a>`
-        : '—';
+      const enc = href ? encodeURIComponent(href) : '';
+      const urlCell = href
+        ? `<input type="text" readonly class="form-control inst-url-input" value="${esc(href)}" aria-label="URL do formulário web" />
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <a class="btn btn-sm btn-primary" href="${esc(href)}" target="_blank" rel="noopener">Abrir</a>
+            <button type="button" class="btn btn-sm btn-survey-copy" data-enc="${enc}">Copiar URL</button>
+            <button type="button" class="btn btn-sm btn-survey-preview" data-enc="${enc}">Pré-visualizar</button>
+          </div>`
+        : '<span style="color:var(--text3)">—</span>';
       const regen =
         x.status === 'PENDING'
           ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">Novo token</button>`
-          : '';
-      return `<tr><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td>${link}</td><td style="text-align:right">${regen}</td></tr>`;
+          : '—';
+      return `<tr><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen}</td></tr>`;
     })
     .join('');
   tb.querySelectorAll('button[data-regen]').forEach((btn) => {
@@ -424,6 +447,30 @@ export async function bootEvaluationsPage() {
   document.getElementById('dispute-modal-overlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'dispute-modal-overlay') closeModal('dispute-modal-overlay');
   });
+
+  document.getElementById('tbody-inst')?.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.btn-survey-copy');
+    const prevBtn = e.target.closest('.btn-survey-preview');
+    if (copyBtn?.getAttribute('data-enc')) {
+      const u = decodeURIComponent(copyBtn.getAttribute('data-enc'));
+      navigator.clipboard.writeText(u).then(
+        () => {
+          const t = copyBtn.textContent;
+          copyBtn.textContent = 'Copiado!';
+          setTimeout(() => {
+            copyBtn.textContent = t;
+          }, 1600);
+        },
+        () => alert('Não foi possível copiar automaticamente. Selecione o texto na caixa acima e use Ctrl+C / ⌘C.')
+      );
+      return;
+    }
+    if (prevBtn?.getAttribute('data-enc')) {
+      showSurveyPreview(decodeURIComponent(prevBtn.getAttribute('data-enc')));
+    }
+  });
+
+  document.getElementById('eval-survey-preview-close')?.addEventListener('click', hideSurveyPreview);
 
   showTab('resumo');
   await refreshAll();

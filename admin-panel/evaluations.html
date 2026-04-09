@@ -27,6 +27,10 @@
     .form-row label { display:block; font-size:12px; font-weight:600; color:var(--text3); margin-bottom:4px; }
     .hint-sm { font-size:12px; color:var(--text3); margin-top:6px; line-height:1.4; }
     .eval-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .eval-survey-preview { margin-top:16px; padding:16px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); }
+    .eval-survey-preview[hidden] { display:none !important; }
+    .eval-survey-preview-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+    .inst-url-input { width:100%; font-size:11px; padding:6px 8px; margin-bottom:8px; font-family:ui-monospace,monospace; word-break:break-all; }
   </style>
 </head>
 <body>
@@ -101,9 +105,18 @@
         </div>
         <div class="panel">
           <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
+          <p class="hint-sm" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
           <div class="table-wrap">
-            <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>Link cliente</th><th style="text-align:right">Token</th></tr></thead>
+            <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>URL do formulário web</th><th style="text-align:right">Ações</th></tr></thead>
             <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+          </div>
+          <div id="eval-survey-preview" class="eval-survey-preview" hidden>
+            <div class="eval-survey-preview-header">
+              <span class="panel-title" style="margin:0;font-size:15px">Pré-visualização do formulário (iframe)</span>
+              <button type="button" class="btn btn-sm" id="eval-survey-preview-close">Fechar</button>
+            </div>
+            <iframe id="eval-survey-iframe" title="Formulário de avaliação ao cliente" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" style="width:100%;min-height:520px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></iframe>
+            <p class="hint-sm" style="margin-top:10px;margin-bottom:0">Se o quadro ficar vazio, o servidor pode bloquear iframes (<code>X-Frame-Options</code>). Nesse caso use <strong>Abrir</strong> ou copie o URL.</p>
           </div>
         </div>
       </div>
