@@ -1,5 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Easing,
+  Modal,
+  TouchableWithoutFeedback,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
@@ -51,14 +61,132 @@ function providerItemLabel(item: ProviderMenuItem, t: (k: string, o?: { defaultV
   return 'labelKey' in item ? t(item.labelKey, { defaultValue: item.labelDefault }) : item.label;
 }
 
+/** Arco do leque (radial) — itens distribuídos acima do botão + */
+const RADIUS = 112;
+const START_ANGLE = Math.PI * 1.1;
+const END_ANGLE = Math.PI * -0.1;
+
+function AdminRadialFan({
+  isOpen,
+  closeMenu,
+  onToggle,
+  insetsBottom,
+  textSecondary,
+  onItemPress,
+}: {
+  isOpen: boolean;
+  closeMenu: () => void;
+  onToggle: () => void;
+  insetsBottom: number;
+  textSecondary: string;
+  onItemPress: (item: (typeof ADMIN_MENU_ITEMS)[number]) => void;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: isOpen ? 1 : 0,
+      duration: 300,
+      easing: Easing.out(Easing.back(1.5)),
+      useNativeDriver: true,
+    }).start();
+  }, [isOpen, anim]);
+
+  const spin = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '45deg'],
+  });
+
+  const backdropOpacity = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.72],
+  });
+
+  const n = ADMIN_MENU_ITEMS.length;
+  const denom = Math.max(1, n - 1);
+
+  return (
+    <>
+      <TouchableOpacity style={radialStyles.addBtn} activeOpacity={0.8} onPress={onToggle}>
+        <Animated.View style={{ transform: [{ rotate: spin }] }}>
+          <Ionicons name="add" size={32} color={textSecondary} />
+        </Animated.View>
+      </TouchableOpacity>
+
+      <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeMenu}>
+        <TouchableWithoutFeedback onPress={closeMenu}>
+          <View style={radialStyles.overlay}>
+            <Animated.View style={[radialStyles.backdrop, { opacity: backdropOpacity }]} />
+
+            <View style={[radialStyles.menuAnchor, { bottom: insetsBottom + 16 }]}>
+              <Animated.View style={StyleSheet.absoluteFillObject}>
+                {ADMIN_MENU_ITEMS.map((item, index) => {
+                  const progress = n === 1 ? 0.5 : index / denom;
+                  const angle = START_ANGLE + progress * (END_ANGLE - START_ANGLE);
+
+                  const translateX = anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, RADIUS * Math.cos(angle)],
+                  });
+
+                  const translateY = anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -RADIUS * Math.sin(angle)],
+                  });
+
+                  const scale = anim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [0.1, 0.55, 1],
+                  });
+
+                  const opacity = anim.interpolate({
+                    inputRange: [0, 0.65, 1],
+                    outputRange: [0, 1, 1],
+                  });
+
+                  return (
+                    <Animated.View
+                      key={item.id}
+                      style={[
+                        radialStyles.menuItemWrap,
+                        {
+                          opacity,
+                          transform: [{ translateX }, { translateY }, { scale }],
+                        },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        style={[radialStyles.menuItemBtn, { backgroundColor: item.color }]}
+                        activeOpacity={0.85}
+                        onPress={() => onItemPress(item)}
+                      >
+                        <Ionicons name={item.icon as any} size={22} color="#fff" />
+                      </TouchableOpacity>
+                      <Text style={radialStyles.menuItemLabel}>{item.label}</Text>
+                    </Animated.View>
+                  );
+                })}
+              </Animated.View>
+
+              <TouchableOpacity style={[radialStyles.addBtn, radialStyles.addBtnActive]} activeOpacity={0.85} onPress={closeMenu}>
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <Ionicons name="add" size={32} color="#fff" />
+                </Animated.View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </>
+  );
+}
+
 export function FloatingRadialMenu() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
   const { mode } = useAppContext();
   const { t } = useTranslation();
-
-  const MENU_ITEMS = mode === 'PROVIDER' ? PROVIDER_MENU_ITEMS : ADMIN_MENU_ITEMS;
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -71,81 +199,158 @@ export function FloatingRadialMenu() {
     }, 150);
   };
 
-  return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.addBtn} activeOpacity={0.8} onPress={() => setIsOpen(true)}>
-        <Ionicons name="add" size={32} color={C.textSecondary} />
-      </TouchableOpacity>
+  if (mode === 'PROVIDER') {
+    return (
+      <View style={listStyles.container}>
+        <TouchableOpacity style={listStyles.addBtn} activeOpacity={0.8} onPress={() => setIsOpen(true)}>
+          <Ionicons name="add" size={32} color={C.textSecondary} />
+        </TouchableOpacity>
 
-      <Modal visible={isOpen} animationType="slide" onRequestClose={closeMenu}>
-        <View style={styles.modalRoot}>
-          <LinearGradient
-            colors={['#EA580C', '#F97316']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[
-              styles.headerGradient,
-              {
-                paddingTop: insets.top + 10,
-                paddingBottom: 18,
-              },
-            ]}
-          >
-            <View style={styles.headerRow}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="flash-outline" size={22} color="#fff" />
+        <Modal visible={isOpen} animationType="slide" onRequestClose={closeMenu}>
+          <View style={listStyles.modalRoot}>
+            <LinearGradient
+              colors={['#EA580C', '#F97316']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[listStyles.headerGradient, { paddingTop: insets.top + 10, paddingBottom: 18 }]}
+            >
+              <View style={listStyles.headerRow}>
+                <View style={listStyles.headerIconCircle}>
+                  <Ionicons name="flash-outline" size={22} color="#fff" />
+                </View>
+                <View style={listStyles.headerTextCol}>
+                  <Text style={listStyles.headerTitle}>Ações rápidas</Text>
+                  <Text style={listStyles.headerLead}>Toque em uma opção para abrir a respectiva área do aplicativo.</Text>
+                </View>
+                <TouchableOpacity onPress={closeMenu} style={listStyles.headerClose}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
               </View>
-              <View style={styles.headerTextCol}>
-                <Text style={styles.headerTitle}>Ações rápidas</Text>
-                <Text style={styles.headerLead}>Toque em uma opção para abrir a respectiva área do aplicativo.</Text>
-              </View>
-              <TouchableOpacity onPress={closeMenu} style={styles.headerClose}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
+            </LinearGradient>
 
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
-            showsVerticalScrollIndicator={false}
-          >
-            {MENU_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.88}
-                onPress={() => handlePress(item)}
-                style={styles.rowCard}
-              >
-                <View
-                  style={[
-                    styles.rowIconWrap,
-                    {
-                      backgroundColor: `${item.color}18`,
-                      borderColor: `${item.color}35`,
-                    },
-                  ]}
+            <ScrollView
+              style={listStyles.scroll}
+              contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {PROVIDER_MENU_ITEMS.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.88}
+                  onPress={() => handlePress(item)}
+                  style={listStyles.rowCard}
                 >
-                  <Ionicons name={item.icon as any} size={26} color={item.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>
-                    {mode === 'PROVIDER' ? providerItemLabel(item as ProviderMenuItem, t) : (item as (typeof ADMIN_MENU_ITEMS)[number]).label}
-                  </Text>
-                </View>
-                <View style={styles.rowChevronWrap}>
-                  <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+                  <View
+                    style={[
+                      listStyles.rowIconWrap,
+                      {
+                        backgroundColor: `${item.color}18`,
+                        borderColor: `${item.color}35`,
+                      },
+                    ]}
+                  >
+                    <Ionicons name={item.icon as any} size={26} color={item.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={listStyles.rowTitle}>{providerItemLabel(item, t)}</Text>
+                  </View>
+                  <View style={listStyles.rowChevronWrap}>
+                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
+
+  return (
+    <View style={radialStyles.container}>
+      <AdminRadialFan
+        isOpen={isOpen}
+        closeMenu={closeMenu}
+        onToggle={() => setIsOpen((o) => !o)}
+        insetsBottom={insets.bottom}
+        textSecondary={C.textSecondary}
+        onItemPress={handlePress}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const radialStyles = StyleSheet.create({
+  container: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  addBtnActive: {
+    backgroundColor: '#1E293B',
+    borderColor: '#0F172A',
+  },
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0f172a',
+  },
+  menuAnchor: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 64,
+    height: 64,
+  },
+  menuItemWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 72,
+  },
+  menuItemBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  menuItemLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 6,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+});
+
+const listStyles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',

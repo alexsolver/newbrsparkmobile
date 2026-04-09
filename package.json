@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "node scripts/ensure-expo-sqlite-ios.js",
+    "ios:pod": "cd ios && pod install",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
