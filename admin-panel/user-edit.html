@@ -70,6 +70,88 @@
     .face-card { position:relative; border-radius:10px; overflow:hidden; border:1px solid var(--border); aspect-ratio:3/4; background:var(--surface2); }
     .face-card img { width:100%; height:100%; object-fit:cover; display:block; }
     .face-card .face-rm { position:absolute; top:6px; right:6px; z-index:2; }
+    .ue-compreface-sync {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid var(--border2);
+      background: linear-gradient(165deg, var(--surface2) 0%, var(--surface) 100%);
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+    }
+    .ue-compreface-sync__row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .ue-compreface-sync__icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--accent-dim, rgba(59, 130, 246, 0.12));
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .ue-compreface-sync__icon ion-icon { font-size: 24px; }
+    .ue-compreface-sync__text { flex: 1; min-width: 200px; }
+    .ue-compreface-sync__text strong {
+      display: block;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .ue-compreface-sync__text span.desc {
+      font-size: 12px;
+      color: var(--text3);
+      line-height: 1.45;
+    }
+    .ue-compreface-sync__actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .ue-compreface-sync__actions .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #compreface-sync-status {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      flex: 1;
+      min-width: 160px;
+    }
+    #compreface-sync-status.cf-sync--idle { color: var(--text3); font-weight: 500; }
+    #compreface-sync-status.cf-sync--loading { color: var(--accent); }
+    #compreface-sync-status.cf-sync--ok { color: var(--green, #15803d); }
+    #compreface-sync-status.cf-sync--err { color: var(--red, #dc2626); }
+    #compreface-admin-status { width: 100%; margin-top: 12px; }
+    .cf-admin-badge {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .cf-admin-badge strong { font-weight: 800; }
+    .cf-admin--muted { background: var(--surface2); color: var(--text3); }
+    .cf-admin--ok { background: #ecfdf5; border-color: #6ee7b7; color: #14532d; }
+    .cf-admin--pending { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    .cf-admin--err { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -120,16 +202,31 @@
       <div class="panel ue-section" id="sec-face" style="margin-top:16px">
         <div class="panel-header"><span class="panel-title">Reconhecimento facial — fotos base</span></div>
         <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Envie <strong>várias fotos nítidas do rosto</strong> (frente, ligeiras variações de ângulo ou iluminação) para o motor de reconhecimento usar como referência. Formatos: JPEG, PNG ou WebP; até <strong>12</strong> imagens, máx. <strong>5 MB</strong> cada. Estas imagens são distintas da URL de avatar.</p>
+          <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Envie <strong>várias fotos nítidas do rosto</strong> (frente, ligeiras variações de ângulo ou iluminação) para o motor de reconhecimento usar como referência. Formatos: <strong>JPEG, PNG ou WebP</strong> (fotos <strong>HEIC</strong> do iPhone não são aceites — use «Mais compatível» nas definições da câmara ou exporte JPEG). Em telemóveis Android o tipo do ficheiro por vezes vem vazio: o servidor tenta detetar a imagem pelo conteúdo. Até <strong>12</strong> imagens, máx. <strong>5 MB</strong> cada. Estas imagens são distintas da URL de avatar.</p>
           <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
           <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
           <span id="face-upload-status" style="font-size:12px;color:var(--text3);margin-left:10px"></span>
           <div class="face-grid" id="face-gallery"></div>
-          <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button type="button" class="btn btn-sm btn-secondary" id="btn-compreface-sync">Sincronizar galeria CompreFace</button>
-            <span id="compreface-sync-status" style="font-size:12px;color:var(--text3)"></span>
+          <div class="ue-compreface-sync" id="compreface-sync-card">
+            <div class="ue-compreface-sync__row">
+              <div class="ue-compreface-sync__icon" aria-hidden="true">
+                <ion-icon name="cloud-upload-outline"></ion-icon>
+              </div>
+              <div class="ue-compreface-sync__text">
+                <strong>Galeria CompreFace (Recognition)</strong>
+                <span class="desc">Ao adicionar ou remover fotos base, a galeria é <strong>atualizada automaticamente</strong> no CompreFace (avatar URL + matrículas). Requer integração «Exadel CompreFace» ativa em Integrações.</span>
+              </div>
+            </div>
+            <div class="ue-compreface-sync__actions">
+              <button type="button" class="btn btn-sm btn-outline" id="btn-compreface-sync">
+                <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-3px"></ion-icon>
+                Sincronizar novamente
+              </button>
+              <span id="compreface-sync-status" class="cf-sync--idle" role="status">Pronto — a sincronizar após alterar fotos.</span>
+            </div>
+            <div id="compreface-admin-status" aria-live="polite"></div>
           </div>
-          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4">Envia o avatar (URL) e estas fotos base ao serviço Recognition do CompreFace (subject = tenant:utilizador). Necessita integração ativa em Integrações.</p>
+          <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no CompreFace segue o formato tenant:utilizador definido pelo painel.</p>
         </div>
       </div>
 
@@ -162,18 +259,19 @@
           </div>
           <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4"><strong>Prestador</strong> ativa o perfil técnico (horários, regiões, docs. profissionais). <strong>SaaS admin</strong> é para equipa da plataforma; use só em contas que devam operar ao nível global do serviço.</p>
           <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer">
-            <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão)
+            <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão no app / painel)
           </label>
+          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4">Isto é <strong>independente</strong> do estado do prestador abaixo: uma conta pode estar ativa e o prestador <strong>inativo</strong> — nesse caso <strong>não</strong> é possível despachar OS para este e-mail.</p>
         </div>
       </div>
 
       <div class="panel ue-section" id="sec-tecnico" style="margin-top:16px">
         <div class="panel-header"><span class="panel-title">Prestador de serviço (técnico)</span></div>
         <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong>. Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
+          <p style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong> (ou quando já existe perfil técnico). Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
           <div id="tech-panel" style="display:none">
             <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div class="form-group"><label class="form-label">Estado do prestador</label>
+              <div class="form-group"><label class="form-label">Estado do prestador (habilitação para receber OS)</label>
                 <select class="form-control" id="t-status">
                   <option value="PENDING">Pendente</option>
                   <option value="ACTIVE">Ativo</option>

@@ -246,11 +246,129 @@ function readFileAsDataUrl(file) {
   });
 }
 
+/** MIME confiável para o backend (muitos telemóveis deixam `file.type` vazio ou «octet-stream»). */
+function resolveFaceUploadMime(file) {
+  const t = String(file?.type || '').toLowerCase().trim();
+  if (/^image\/(jpeg|jpg|png|webp)$/i.test(t)) return t === 'image/jpg' ? 'image/jpeg' : t;
+  if (t === 'image/heic' || t === 'image/heif') return 'image/heic';
+  const n = String(file?.name || '').toLowerCase();
+  if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg';
+  if (n.endsWith('.png')) return 'image/png';
+  if (n.endsWith('.webp')) return 'image/webp';
+  if (n.endsWith('.heic') || n.endsWith('.heif')) return 'image/heic';
+  return t || '';
+}
+
 let cachedLocations = [];
 let faceEnrollmentList = [];
 let faceUserId = '';
 /** Já existe TechnicianProfile (mostrar bloco técnico mesmo com papel ainda não migrado a PROVIDER) */
 let hasTechnicianProfile = false;
+
+let comprefaceDebounceTimer = null;
+
+function setComprefaceSyncStatus(state, message) {
+  const el = document.getElementById('compreface-sync-status');
+  if (!el) return;
+  el.className = `cf-sync--${state}`;
+  el.textContent = message;
+}
+
+function applyCompreFaceSyncFromServer(sync) {
+  if (!sync || typeof sync !== 'object') return;
+  if (sync.ok) {
+    const faces = sync.faces ?? 0;
+    const sub = sync.subject || '—';
+    setComprefaceSyncStatus('ok', `Galeria atualizada — ${faces} imagem(ns) enviada(s) · subject: ${sub}`);
+  } else {
+    setComprefaceSyncStatus('err', sync.error || 'CompreFace: sincronização falhou.');
+  }
+}
+
+/** Estado persistido no utilizador (lista admin + painel de edição). */
+function paintComprefaceAdminPanel(sync) {
+  const wrap = document.getElementById('compreface-admin-status');
+  if (!wrap) return;
+  if (!sync || typeof sync !== 'object') {
+    wrap.innerHTML =
+      '<span class="cf-admin-badge cf-admin--muted"><strong>CompreFace (registo)</strong> — sem estado guardado. Após enviar fotos ou «Sincronizar», o estado aparece aqui.</span>';
+    return;
+  }
+  const st = String(sync.status || '').toLowerCase();
+  const dateStr = sync.at
+    ? new Date(sync.at).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—';
+
+  if (st === 'synced') {
+    const sub = sync.subject
+      ? ` · subject <code style="font-size:10px">${esc(String(sync.subject))}</code>`
+      : '';
+    wrap.innerHTML = `<span class="cf-admin-badge cf-admin--ok"><strong>Sincronizado</strong> (${dateStr}) · ${Number(sync.faces) || 0} imagem(ns) na galeria${sub}</span>`;
+    return;
+  }
+  if (st === 'pending') {
+    wrap.innerHTML = `<span class="cf-admin-badge cf-admin--pending"><strong>Pendente</strong> (${dateStr}) — ${esc(String(sync.message || 'Aguarda sincronização com CompreFace.'))}</span>`;
+    return;
+  }
+  if (st === 'error') {
+    let prev = '';
+    if (sync.previous && typeof sync.previous === 'object') {
+      const pa = sync.previous.at
+        ? new Date(sync.previous.at).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      prev = ` Último OK: ${pa} (${sync.previous.faces ?? 0} img).`;
+    }
+    wrap.innerHTML = `<span class="cf-admin-badge cf-admin--err"><strong>Erro de sincronização</strong> (${dateStr}) — ${esc(String(sync.message || 'Falha'))}${prev}</span>`;
+    return;
+  }
+  wrap.innerHTML = `<span class="cf-admin-badge cf-admin--muted">${esc(JSON.stringify(sync))}</span>`;
+}
+
+async function runCompreFaceSync({ manual = false } = {}) {
+  if (!faceUserId) return;
+  const btn = document.getElementById('btn-compreface-sync');
+  if (btn) btn.disabled = true;
+  setComprefaceSyncStatus('loading', 'A sincronizar com CompreFace…');
+  try {
+    const res = await CONFIG.post(`/users/${encodeURIComponent(faceUserId)}/sync-compreface`, {});
+    if (res?.error || res?.ok === false) {
+      const msg = res?.error || 'Falha na sincronização.';
+      setComprefaceSyncStatus('err', msg);
+      if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
+      if (manual) alert(msg);
+    } else {
+      const faces = res.faces ?? 0;
+      const sub = res.subject || '—';
+      setComprefaceSyncStatus('ok', `Galeria atualizada — ${faces} imagem(ns) enviada(s) · subject: ${sub}`);
+      if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
+    }
+  } catch {
+    setComprefaceSyncStatus('err', 'Erro de rede ao contactar o servidor.');
+    if (manual) alert('Erro de rede ao sincronizar.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/** Após várias fotos seguidas, uma só chamada ao CompreFace (evita N sincronizações). */
+function scheduleCompreFaceAutoSync() {
+  if (comprefaceDebounceTimer) clearTimeout(comprefaceDebounceTimer);
+  comprefaceDebounceTimer = setTimeout(() => {
+    comprefaceDebounceTimer = null;
+    void runCompreFaceSync({ manual: false });
+  }, 550);
+}
 
 function normalizeRoleForForm(r) {
   if (r === 'ADMIN') return 'TENANT_ADMIN';
@@ -298,6 +416,9 @@ async function removeFacePhoto(photoId) {
   }
   faceEnrollmentList = Array.isArray(res.photos) ? res.photos : faceEnrollmentList.filter((x) => x.id !== photoId);
   renderFaceGallery();
+  if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
+  if (res.comprefaceSync) applyCompreFaceSyncFromServer(res.comprefaceSync);
+  else scheduleCompreFaceAutoSync();
 }
 
 export async function bootUserEditPage() {
@@ -333,6 +454,7 @@ export async function bootUserEditPage() {
   faceEnrollmentList = parseJsonSafe(u.faceEnrollmentPhotos, []);
   if (!Array.isArray(faceEnrollmentList)) faceEnrollmentList = [];
   renderFaceGallery();
+  paintComprefaceAdminPanel(u.comprefaceRecognitionSync);
 
   const btnFacePick = document.getElementById('btn-face-pick');
   const faceFileInput = document.getElementById('face-file-input');
@@ -343,8 +465,15 @@ export async function bootUserEditPage() {
       const files = [...(ev.target.files || [])];
       ev.target.value = '';
       for (const file of files) {
-        if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) {
-          alert(`Ignorado (use JPEG, PNG ou WebP): ${file.name}`);
+        const mime = resolveFaceUploadMime(file);
+        if (mime === 'image/heic' || mime === 'image/heif') {
+          alert(
+            `HEIC não é suportado aqui: ${file.name}\nNo iPhone use Ajustes → Câmera → Formatos → «Mais compatível», ou converta para JPEG.`
+          );
+          continue;
+        }
+        if (mime && !/^image\/(jpeg|png|webp)$/i.test(mime)) {
+          alert(`Formato não reconhecido (use JPEG, PNG ou WebP): ${file.name || 'ficheiro'}`);
           continue;
         }
         if (faceUploadStatus) faceUploadStatus.textContent = `A enviar ${file.name}…`;
@@ -354,16 +483,20 @@ export async function bootUserEditPage() {
           const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : '';
           const res = await CONFIG.post(`/users/${encodeURIComponent(id)}/face-enrollment`, {
             fileBase64: b64,
-            mimeType: file.type || 'image/jpeg',
+            mimeType: mime || 'application/octet-stream',
           });
+          if (res == null) break;
           if (res?.error) {
             alert(res.error);
             break;
           }
           if (Array.isArray(res.photos)) faceEnrollmentList = res.photos;
           renderFaceGallery();
-        } catch {
-          alert('Falha ao ler o ficheiro.');
+          if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
+          scheduleCompreFaceAutoSync();
+        } catch (e) {
+          console.error('[face-enrollment]', e);
+          alert('Falha ao enviar a foto. Verifique a ligação à API e o consola do navegador.');
           break;
         }
       }
@@ -372,28 +505,10 @@ export async function bootUserEditPage() {
   }
 
   const btnCfSync = document.getElementById('btn-compreface-sync');
-  const cfSyncStatus = document.getElementById('compreface-sync-status');
   if (btnCfSync) {
-    btnCfSync.onclick = async () => {
+    btnCfSync.onclick = () => {
       if (!faceUserId) return;
-      if (cfSyncStatus) cfSyncStatus.textContent = 'A sincronizar…';
-      btnCfSync.disabled = true;
-      try {
-        const res = await CONFIG.post(`/users/${encodeURIComponent(faceUserId)}/sync-compreface`, {});
-        if (res?.error || res?.ok === false) {
-          alert(res?.error || 'Falha na sincronização.');
-          if (cfSyncStatus) cfSyncStatus.textContent = '';
-        } else {
-          if (cfSyncStatus) {
-            cfSyncStatus.textContent = `OK — ${res.faces || 0} foto(s), subject: ${res.subject || '—'}`;
-          }
-        }
-      } catch {
-        alert('Erro de rede ao sincronizar.');
-        if (cfSyncStatus) cfSyncStatus.textContent = '';
-      } finally {
-        btnCfSync.disabled = false;
-      }
+      void runCompreFaceSync({ manual: true });
     };
   }
 
@@ -473,6 +588,8 @@ export async function bootUserEditPage() {
 
     const selRole = document.getElementById('f-role').value;
     const isProviderRole = selRole === 'PROVIDER';
+    /** Painel técnico também aparece com perfil já criado; é preciso enviar `technician` senão o backend assumia «não prestador» e forçava INACTIVE. */
+    const includeTechnician = isProviderRole || hasTechnicianProfile;
 
     const body = {
       name: document.getElementById('f-name').value.trim(),
@@ -492,7 +609,7 @@ export async function bootUserEditPage() {
       },
       personalDocuments: collectDocTable('tbody-docs-personal'),
       isProvider: isProviderRole,
-      technician: isProviderRole
+      technician: includeTechnician
         ? {
             status: document.getElementById('t-status').value,
             cft: document.getElementById('t-cft').value.trim() || null,

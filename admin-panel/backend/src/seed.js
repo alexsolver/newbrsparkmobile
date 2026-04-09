@@ -184,6 +184,33 @@ async function main() {
         isActive: true,
       },
     });
+    // Prestador demo: despacho exige User ativo + TechnicianProfile.status ACTIVE (não basta isActive).
+    const alexTech = await prisma.user.upsert({
+      where: {
+        email_tenantId: {
+          email: 'alex@brspark.com',
+          tenantId: brsparkTenant.id,
+        },
+      },
+      update: {
+        isActive: true,
+        role: 'PROVIDER',
+        name: 'Alex (técnico demo)',
+      },
+      create: {
+        tenantId: brsparkTenant.id,
+        email: 'alex@brspark.com',
+        name: 'Alex (técnico demo)',
+        password: saasHash,
+        role: 'PROVIDER',
+        isActive: true,
+      },
+    });
+    await prisma.technicianProfile.upsert({
+      where: { userId: alexTech.id },
+      update: { status: 'ACTIVE' },
+      create: { userId: alexTech.id, status: 'ACTIVE', score: 5 },
+    });
     const removedTypo = await prisma.user.deleteMany({
       where: { tenantId: brsparkTenant.id, email: 'asmin@brspark.com' },
     });
@@ -193,7 +220,7 @@ async function main() {
       );
     }
     console.log(
-      '✅ Tenant brspark + SaaS admin@brspark.com + gestor@brspark.com (MANAGER; mesma senha env)'
+      '✅ Tenant brspark + admin + gestor + alex@brspark.com (PROVIDER, perfil ACTIVE; mesma senha env)'
     );
   } catch (e) {
     console.warn('⚠️  Seed tenant brspark:', e.message);

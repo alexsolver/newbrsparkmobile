@@ -137,6 +137,10 @@
     .modal-overlay .modal-title ion-icon {
       pointer-events: none;
     }
+    /* Despachar OS: ícones dentro de <button> (Enviar OS, abas geo, Buscar, etc.) — mesmo problema Shadow DOM */
+    #dispatch-modal button ion-icon {
+      pointer-events: none;
+    }
     /*
       Escolha de submissão: <dialog showModal> usa a "top layer" do browser (acima de Leaflet, mapas
       no despacho, etc.). Evita overlay invisível a roubar cliques em algumas OS.
@@ -753,11 +757,11 @@
 
 
 <!-- ── Quick Dispatch Modal ──────────────────────────────────── -->
-<div class="modal-overlay" id="dispatch-modal" style="display:none;opacity:1;pointer-events:all;">
+<div class="modal-overlay" id="dispatch-modal" style="display:none;opacity:1;pointer-events:all;z-index:10050;">
   <div class="modal" style="max-width:680px; width:95%;">
     <div class="modal-header">
       <span class="modal-title"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar Nova OS</span>
-      <button class="modal-close" onclick="closeDispatchModal()"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" onclick="window.closeDispatchModal()"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:82vh; overflow-y:auto;">
 
@@ -957,8 +961,8 @@
 
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost btn-sm" onclick="closeDispatchModal()">Cancelar</button>
-      <button class="btn btn-primary btn-sm" onclick="confirmDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeDispatchModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="window.confirmDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
     </div>
   </div>
 </div>

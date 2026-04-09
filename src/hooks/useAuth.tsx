@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
   AuthService,
@@ -32,6 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, _setUserRole] = useState<'CLIENT' | 'TECHNICIAN'>('CLIENT');
+  /** Último status de technicianProfile visto — para detetar PENDING/INACTIVE → ACTIVE em tempo de execução */
+  const prevTechnicianStatusRef = useRef<string | null>(null);
 
   const runAvatarWarm = useCallback((u: User | null) => {
     if (!u) return;
@@ -49,6 +52,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     }
   }, [user, user?.technicianProfile?.status, userRole]);
+
+  /** Prestador habilitado remotamente (painel): passar a TECHNICIAN + modo prestador no Header */
+  useEffect(() => {
+    if (!user) {
+      prevTechnicianStatusRef.current = null;
+      return;
+    }
+    const st = String(user.technicianProfile?.status || '').toUpperCase() || '';
+    const prev = prevTechnicianStatusRef.current;
+    if (prev !== null && prev !== 'ACTIVE' && st === 'ACTIVE' && userRole === 'CLIENT') {
+      _setUserRole('TECHNICIAN');
+      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch(() => {});
+      dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
+    }
+    prevTechnicianStatusRef.current = st || null;
+  }, [user, user?.technicianProfile?.status, userRole]);
+
+  /** Ao voltar ao primeiro plano, atualizar /me para refletir habilitação feita no painel (com throttle). */
+  const lastMeRefreshRef = useRef(0);
+  useEffect(() => {
+    const onState = async (s: AppStateStatus) => {
+      if (s !== 'active') return;
+      const now = Date.now();
+      if (now - lastMeRefreshRef.current < 45_000) return;
+      const local = await AuthService.getUser();
+      if (!local) return;
+      lastMeRefreshRef.current = now;
+      try {
+        const fresh = await AuthService.validateSession();
+        if (fresh) {
+          setUser(fresh);
+          runAvatarWarm(fresh);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const sub = AppState.addEventListener('change', onState);
+    return () => sub.remove();
+  }, [runAvatarWarm]);
 
   useEffect(() => {
     const unsub = subscribeSessionInvalidated(() => {
@@ -68,31 +111,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    AuthService.getUser()
-      .then(localUser => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const localUser = await AuthService.getUser();
+        if (cancelled) return;
         setUser(localUser);
-        setLoading(false);
+
+        let effective: User | null = localUser;
         if (localUser) {
-          AuthService.validateSession()
-            .then(fresh => {
-              if (fresh) {
-                setUser(fresh);
-                runAvatarWarm(fresh);
-              } else setUser(null); // Token expirado e limpo do ASyncStorage
-            })
-            .catch(() => {});
+          try {
+            const fresh = await AuthService.validateSession();
+            if (cancelled) return;
+            if (fresh) {
+              effective = fresh;
+              setUser(fresh);
+              runAvatarWarm(fresh);
+            } else {
+              effective = null;
+              setUser(null);
+            }
+          } catch {
+            /* mantém localUser em effective */
+          }
         }
-        return AsyncStorage.getItem('@brspark_active_role').then(role => ({ localUser, role }));
-      })
-      .then(({ localUser, role: savedRole }) => {
-         if (localUser && (savedRole === 'TECHNICIAN' || savedRole === 'CLIENT')) {
-            _setUserRole(savedRole);
-         } else {
-            _setUserRole('CLIENT');
-         }
-         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+
+        const rawSaved = await AsyncStorage.getItem('@brspark_active_role');
+        let role: 'CLIENT' | 'TECHNICIAN' =
+          rawSaved === 'TECHNICIAN' || rawSaved === 'CLIENT' ? rawSaved : 'CLIENT';
+
+        const wasActive = localUser ? isTechnicianProfileActive(localUser) : false;
+        const nowActive = effective ? isTechnicianProfileActive(effective) : false;
+
+        if (role === 'TECHNICIAN' && !nowActive) {
+          role = 'CLIENT';
+          await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+        }
+        // Habilitação no painel enquanto o papel guardado era cliente (ou primeira sessão)
+        if (role === 'CLIENT' && !wasActive && nowActive) {
+          role = 'TECHNICIAN';
+          await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+        }
+
+        if (cancelled) return;
+        _setUserRole(role);
+        if (effective) {
+          dataCollectionService.onSessionOpen(
+            effective.email,
+            effective.tenantId,
+            role === 'TECHNICIAN',
+          );
+        }
+        const st = String(effective?.technicianProfile?.status || '').toUpperCase() || '';
+        prevTechnicianStatusRef.current = st || null;
+      } catch {
+        if (!cancelled) _setUserRole('CLIENT');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [runAvatarWarm]);
 
   const patchUser = async (partial: Partial<User>) => {

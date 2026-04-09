@@ -271,6 +271,9 @@ function stripRevisionSessionFieldResponses(res: Record<string, any>, schemaData
     if (!f?.id) continue;
     if (REVISION_SESSION_FIELD_TYPES.has(effectiveSchemaFieldType(f))) {
       delete res[f.id];
+      if (effectiveSchemaFieldType(f) === 'facial_recognition') {
+        delete res[`${f.id}__biometric`];
+      }
     }
   }
 }
@@ -549,6 +552,38 @@ function getScopedTechComment(
 /** Legendas/comentários por item de foto ou arquivo (quando allowMediaDescription no template). */
 function mediaCaptionStorageKey(fieldId: string) {
   return `__media_cap_${fieldId}`;
+}
+
+/** Auditoria JSON guardada por `processFacialImage` após verify-face (mesmo scope que o campo). */
+function facialBiometricStorageKey(fieldId: string) {
+  return `${fieldId}__biometric`;
+}
+
+function parseFacialBiometricAudit(raw: unknown): {
+  at?: string;
+  engine?: string;
+  confidence?: number;
+  facialAuthMode?: string;
+  identifiedUserId?: string;
+  identifiedUser?: { id?: string; name?: string; email?: string; role?: string };
+} | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw as any;
+  if (typeof raw === 'string') {
+    try {
+      const o = JSON.parse(raw);
+      return typeof o === 'object' && o ? (o as any) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function formatFacialConfidencePct(c: unknown): string | null {
+  if (typeof c !== 'number' || !Number.isFinite(c)) return null;
+  const pct = c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, c));
+  return `${pct}%`;
 }
 
 function normalizeMediaCaptions(field: any, raw: any, mediaCount: number): string[] {
@@ -1086,11 +1121,11 @@ export default function ChecklistEngine() {
                 Alert.alert(
                   'Rosto não reconhecido',
                   apiResp.message ||
-                    'A biometria facial falhou. Verifique a matrícula no painel e a sincronização CompreFace.'
+                    'Não houve correspondência na galeria Recognition do CompreFace. No painel BrSpark: Utilizadores → edite o utilizador → «Reconhecimento facial» → «Sincronizar com CompreFace» (avatar e fotos base). Depois tente de novo.'
                 );
                 return false;
               }
-              const bioKey = `${fieldId}__biometric`;
+              const bioKey = facialBiometricStorageKey(fieldId);
               try {
                 handleInput(
                   bioKey,
@@ -4656,36 +4691,104 @@ export default function ChecklistEngine() {
               {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition' || field.type === 'file_upload') && (
                 <View>
                   {field.type === 'facial_recognition' ? (
-                     <TouchableOpacity 
-                         onPress={() => ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))}
-                         activeOpacity={0.8}
-                         style={{
-                             borderRadius: 16, overflow: 'hidden', marginVertical: 4,
-                             shadowColor: "#e11d48", shadowOffset: { width: 0, height: 6 },
-                             shadowOpacity: 0.25, shadowRadius: 10, elevation: 6,
-                             backgroundColor: '#fff',
-                             borderWidth: 1, borderColor: '#fda4af'
-                         }}
-                     >
-                        <LinearGradient
-                            colors={['#fff1f2', '#ffe4e6']}
-                            start={{x:0, y:0}} end={{x:1, y:1}}
-                            style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}
+                    (() => {
+                      const urisNow = fieldAllowsMultiple(field)
+                        ? normalizeResponseArray(vv(field.id))
+                        : vv(field.id)
+                          ? [vv(field.id)]
+                          : [];
+                      const hasPhoto = urisNow.length > 0;
+                      if (hasPhoto && !fieldAllowsMultiple(field)) {
+                        return null;
+                      }
+                      if (hasPhoto && fieldAllowsMultiple(field)) {
+                        return (
+                          <TouchableOpacity
+                            onPress={() =>
+                              ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))
+                            }
+                            activeOpacity={0.85}
+                            style={[styles.cameraBox, { borderColor: '#fda4af', backgroundColor: '#fff1f2' }]}
+                          >
+                            <Ionicons name="scan" size={28} color="#e11d48" />
+                            <Text style={[styles.cameraText, { color: '#9f1239' }]}>
+                              Adicionar outra validação facial
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      }
+                      return (
+                        <TouchableOpacity
+                          onPress={() =>
+                            ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))
+                          }
+                          activeOpacity={0.8}
+                          style={{
+                            borderRadius: 16,
+                            overflow: 'hidden',
+                            marginVertical: 4,
+                            shadowColor: '#e11d48',
+                            shadowOffset: { width: 0, height: 6 },
+                            shadowOpacity: 0.25,
+                            shadowRadius: 10,
+                            elevation: 6,
+                            backgroundColor: '#fff',
+                            borderWidth: 1,
+                            borderColor: '#fda4af',
+                          }}
                         >
-                            <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: '#f43f5e', alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#9f1239', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset:{width:0, height:4} }}>
-                                <Ionicons name="scan" size={40} color="#fff" />
-                                <View style={{ position: 'absolute' }}>
-                                    <Ionicons name="person" size={20} color="#fff" style={{ marginTop: 2 }} />
-                                </View>
+                          <LinearGradient
+                            colors={['#fff1f2', '#ffe4e6']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <View
+                              style={{
+                                width: 68,
+                                height: 68,
+                                borderRadius: 34,
+                                backgroundColor: '#f43f5e',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginBottom: 16,
+                                shadowColor: '#9f1239',
+                                shadowOpacity: 0.3,
+                                shadowRadius: 8,
+                                shadowOffset: { width: 0, height: 4 },
+                              }}
+                            >
+                              <Ionicons name="scan" size={40} color="#fff" />
+                              <View style={{ position: 'absolute' }}>
+                                <Ionicons name="person" size={20} color="#fff" style={{ marginTop: 2 }} />
+                              </View>
                             </View>
-                            <Text style={{ fontSize: 16, fontWeight: '900', color: '#881337', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                Validar Biometria
+                            <Text
+                              style={{
+                                fontSize: 16,
+                                fontWeight: '900',
+                                color: '#881337',
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5,
+                              }}
+                            >
+                              Validar Biometria
                             </Text>
-                            <Text style={{ fontSize: 13, color: '#be123c', fontWeight: '500', marginTop: 4, textAlign: 'center' }}>
-                                Toque para escanear a face do operador e autenticar esta operação.
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                color: '#be123c',
+                                fontWeight: '500',
+                                marginTop: 4,
+                                textAlign: 'center',
+                              }}
+                            >
+                              Toque para escanear a face do operador e autenticar esta operação.
                             </Text>
-                        </LinearGradient>
-                     </TouchableOpacity>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      );
+                    })()
                   ) : (
                      <TouchableOpacity 
                         style={[styles.cameraBox]} 
@@ -4716,6 +4819,126 @@ export default function ChecklistEngine() {
                     if (mediaUris.length === 0) return null;
                     return (
                     <View style={{ marginTop: 10, gap: 10 }}>
+                      {field.type === 'facial_recognition' &&
+                        (() => {
+                          const audit = parseFacialBiometricAudit(
+                            vv(facialBiometricStorageKey(field.id))
+                          );
+                          const reqOnline = !!field.requireOnlineValidation;
+                          const confStr = formatFacialConfidencePct(audit?.confidence);
+                          const uid =
+                            audit?.identifiedUserId || audit?.identifiedUser?.id || '';
+                          let fullName = (audit?.identifiedUser?.name || '').trim();
+                          let loginEmail = (audit?.identifiedUser?.email || '').trim();
+                          if (
+                            user &&
+                            uid &&
+                            String(uid) === String((user as any).id) &&
+                            (!fullName || !loginEmail)
+                          ) {
+                            if (!fullName && (user as any).name)
+                              fullName = String((user as any).name).trim();
+                            if (!loginEmail && (user as any).email)
+                              loginEmail = String((user as any).email).trim();
+                          }
+                          if (audit && (audit.at || audit.engine || confStr)) {
+                            return (
+                              <View
+                                style={{
+                                  padding: 14,
+                                  borderRadius: 12,
+                                  backgroundColor: '#ecfdf5',
+                                  borderWidth: 1,
+                                  borderColor: '#6ee7b7',
+                                }}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                                  <Ionicons name="checkmark-done-circle" size={26} color="#15803d" />
+                                  <View style={{ flex: 1 }}>
+                                    <Text
+                                      style={{
+                                        fontSize: 15,
+                                        fontWeight: '800',
+                                        color: '#14532d',
+                                      }}
+                                    >
+                                      Rosto reconhecido
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: '#166534', marginTop: 4, lineHeight: 17 }}>
+                                      A identidade foi validada no servidor para este campo.
+                                    </Text>
+                                    {fullName ? (
+                                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#14532d', marginTop: 8 }}>
+                                        Nome completo: {fullName}
+                                      </Text>
+                                    ) : null}
+                                    {loginEmail ? (
+                                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#166534', marginTop: 4 }}>
+                                        Login: {loginEmail}
+                                      </Text>
+                                    ) : null}
+                                    {!fullName && !loginEmail ? (
+                                      <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontStyle: 'italic' }}>
+                                        Dados do utilizador não incluídos na resposta — atualize a app/API.
+                                      </Text>
+                                    ) : null}
+                                    {confStr ? (
+                                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#047857', marginTop: 6 }}>
+                                        Confiança: {confStr}
+                                      </Text>
+                                    ) : null}
+                                    {audit.facialAuthMode === 'identify' ? (
+                                      <Text style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                                        Modo: identificação na galeria
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                </View>
+                              </View>
+                            );
+                          }
+                          if (reqOnline) {
+                            return (
+                              <View
+                                style={{
+                                  padding: 12,
+                                  borderRadius: 12,
+                                  backgroundColor: '#fffbeb',
+                                  borderWidth: 1,
+                                  borderColor: '#fcd34d',
+                                }}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                                  <Ionicons name="alert-circle-outline" size={22} color="#b45309" />
+                                  <Text style={{ flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 }}>
+                                    Foto registada, mas sem registo de verificação no servidor. Confirme a rede e
+                                    sincronize a galeria CompreFace no painel (utilizador → Reconhecimento facial →
+                                    Sincronizar). Depois capture de novo.
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          }
+                          return (
+                            <View
+                              style={{
+                                padding: 12,
+                                borderRadius: 12,
+                                backgroundColor: '#f1f5f9',
+                                borderWidth: 1,
+                                borderColor: '#cbd5e1',
+                              }}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                                <Ionicons name="camera-outline" size={22} color="#64748b" />
+                                <Text style={{ flex: 1, fontSize: 12, color: '#475569', lineHeight: 17 }}>
+                                  Foto registada. A validação biométrica online está desativada neste campo — não foi
+                                  pedido reconhecimento ao servidor.
+                                </Text>
+                              </View>
+                            </View>
+                          );
+                        })()}
                       {mediaUris.map((oneUri: any, midx: number) => (
                     <View key={midx} style={{padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
                        {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') && (
@@ -4737,8 +4960,26 @@ export default function ChecklistEngine() {
                           </View>
                        )}
                        <View style={{flexDirection:'row', alignItems:'center'}}>
-                           <Ionicons name="checkmark-circle" size={24} color="#15803d" style={{marginRight:8}} />
-                           <Text style={{color:'#15803d', flex:1, fontSize:12}} numberOfLines={1}>{String(oneUri).split('/').pop()}</Text>
+                           <Ionicons
+                             name={
+                               field.type === 'facial_recognition'
+                                 ? 'image-outline'
+                                 : 'checkmark-circle'
+                             }
+                             size={24}
+                             color={field.type === 'facial_recognition' ? '#64748b' : '#15803d'}
+                             style={{marginRight:8}}
+                           />
+                           <Text
+                             style={{
+                               color: field.type === 'facial_recognition' ? '#475569' : '#15803d',
+                               flex:1,
+                               fontSize:12,
+                             }}
+                             numberOfLines={1}
+                           >
+                             {String(oneUri).split('/').pop()}
+                           </Text>
                            <TouchableOpacity onPress={() => {
                              const ck = mediaCaptionStorageKey(field.id);
                              const rowForCap =
@@ -4747,6 +4988,9 @@ export default function ChecklistEngine() {
                                scope && rowForCap && typeof rowForCap === 'object'
                                  ? rowForCap[ck]
                                  : responses[ck];
+                             if (field.type === 'facial_recognition') {
+                               hi(facialBiometricStorageKey(field.id), null);
+                             }
                              if (fieldAllowsMultiple(field)) {
                                const uris = normalizeResponseArray(vv(field.id));
                                const next = uris.filter((_: any, j: number) => j !== midx);
@@ -5603,6 +5847,7 @@ export default function ChecklistEngine() {
                               onPress={() => {
                                 setShowScanner(false);
                                 setScannerScope(null);
+                                setScannerFieldId(null);
                               }}
                               disabled={isCapturing}
                             >
@@ -5639,7 +5884,13 @@ export default function ChecklistEngine() {
                                         if (ok) {
                                             setShowScanner(false);
                                             setScannerScope(null);
+                                            setScannerFieldId(null);
                                         }
+                                    } else if (!snap?.base64) {
+                                        Alert.alert(
+                                          t('common.attention'),
+                                          'Não foi possível obter a imagem. Tente de novo.'
+                                        );
                                     }
                                 } catch (e) {
                                     Alert.alert(

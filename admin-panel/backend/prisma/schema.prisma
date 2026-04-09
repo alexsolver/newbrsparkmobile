@@ -195,6 +195,8 @@ model User {
   personalDocuments Json?
   /// Fotos base para reconhecimento facial (admin): [{ id, url, mimeType?, createdAt }]
   faceEnrollmentPhotos Json?
+  /// Último estado da galeria Recognition CompreFace: { status, at, faces?, subject?, message?, previous? }
+  comprefaceRecognitionSync Json?
   role       UserRole @default(USER)
   isActive   Boolean  @default(true)
   lastLogin  DateTime?

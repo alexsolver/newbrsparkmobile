@@ -27,9 +27,9 @@
 
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
         <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total de Usuários</div></div>
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Ativos</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Contas ativas</div></div>
         <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-admins">—</div><div class="stat-label">Admins / Donos</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-inactive">—</div><div class="stat-label">Inativos</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-inactive">—</div><div class="stat-label">Contas inativas</div></div>
       </div>
 
       <div class="panel">
@@ -40,9 +40,9 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Nome</th><th>E-mail</th><th>Conta</th><th>Papel</th><th>Último Acesso</th><th>Status</th><th style="text-align:right">Ações</th></tr>
+              <tr><th>Nome</th><th>E-mail</th><th>Conta</th><th>Papel</th><th>Último Acesso</th><th>Conta / OS</th><th>CompreFace</th><th style="text-align:right">Ações</th></tr>
             </thead>
-            <tbody id="users-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
+            <tbody id="users-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
           </table>
         </div>
         <div id="pagination" style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border)"></div>
@@ -155,7 +155,7 @@
         .replace(/>/g, '&gt;')
         .slice(0, 1200);
       document.getElementById('users-tbody').innerHTML =
-        `<tr><td colspan="7" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
+        `<tr><td colspan="8" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
           <strong>Não foi possível carregar os utilizadores.</strong> Reinicie o servidor da API após <code>npx prisma generate</code> se acabou de migrar o schema.<br/>
           <span style="display:block;margin-top:10px;font-size:11px;color:var(--text3);white-space:pre-wrap;font-weight:400">${detail}</span>
         </td></tr>`;
@@ -177,6 +177,60 @@
 
     const fmt = d => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
 
+    const prestadorOsHint = (tp) => {
+      if (!tp || !tp.status) return '';
+      const st = String(tp.status).toUpperCase();
+      const lines = {
+        ACTIVE: { c: 'var(--green)', t: 'Prestador: pode receber OS' },
+        PENDING: { c: 'var(--amber)', t: 'Prestador: pendente (ainda não recebe OS)' },
+        INACTIVE: { c: 'var(--text3)', t: 'Prestador: inativo (não recebe OS)' },
+        SUSPENDED: { c: 'var(--red)', t: 'Prestador: suspenso' },
+      };
+      const x = lines[st];
+      if (!x) return '';
+      return `<span style="display:block;font-size:10px;font-weight:600;color:${x.c};margin-top:5px;line-height:1.25">${x.t}</span>`;
+    };
+
+    const escAttr = (s) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const comprefaceListCell = (sync) => {
+      if (!sync || typeof sync !== 'object') {
+        return '<span style="font-size:11px;color:var(--text3)" title="Sem registo de sincronização CompreFace">—</span>';
+      }
+      const st = String(sync.status || '').toLowerCase();
+      const shortDate = sync.at
+        ? new Date(sync.at).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const tip =
+        st === 'synced'
+          ? `Sincronizado · ${Number(sync.faces) || 0} imagem(ns) · ${shortDate}${sync.subject ? ` · ${sync.subject}` : ''}`
+          : st === 'pending'
+            ? `Pendente · ${shortDate} · ${sync.message || ''}`
+            : st === 'error'
+              ? `Erro · ${shortDate} · ${sync.message || ''}`
+              : JSON.stringify(sync);
+      if (st === 'synced') {
+        return `<span class="badge badge-green" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="checkmark-done-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Sincronizado</span>`;
+      }
+      if (st === 'pending') {
+        return `<span class="badge badge-amber" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="time-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Pendente</span>`;
+      }
+      if (st === 'error') {
+        return `<span class="badge badge-red" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="alert-circle-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Erro</span>`;
+      }
+      return `<span class="badge badge-gray" style="font-size:10px" title="${escAttr(tip)}">${escAttr(st || '?')}</span>`;
+    };
+
     document.getElementById('users-tbody').innerHTML = data.length ? data.map(u => `
       <tr>
         <td class="bold">${u.name}</td>
@@ -184,14 +238,15 @@
         <td><span class="badge badge-gray">${u.tenant?.name || '—'}</span></td>
         <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleLbl[u.role] || u.role}</span></td>
         <td style="color:var(--text3);font-size:11px">${fmt(u.lastLogin)}</td>
-        <td><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Inativo'}</span></td>
+        <td style="vertical-align:top"><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta ativa' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta inativa'}</span>${prestadorOsHint(u.technicianProfile)}</td>
+        <td style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
         <td style="text-align:right;white-space:nowrap">
           <a class="btn btn-primary btn-sm" href="user-edit.html?id=${encodeURIComponent(u.id)}">Editar</a>
           <button class="btn btn-ghost btn-sm" onclick="openReset('${u.id}')">Resetar senha</button>
           <button class="btn ${u.isActive ? 'btn-danger' : 'btn-success'} btn-sm" onclick="toggleUser('${u.id}')">${u.isActive ? 'Desativar' : 'Ativar'}</button>
         </td>
       </tr>`).join('')
-    : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum usuário encontrado.</td></tr>';
+    : '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum usuário encontrado.</td></tr>';
 
     // Pagination
     const pages = Math.ceil(total / 50);

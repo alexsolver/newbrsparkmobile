@@ -165,7 +165,22 @@ export const CONFIG = {
 
   async post(path, body) {
     const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'POST', headers: CONFIG.headers(), body: JSON.stringify(body) });
-    return res.json();
+    if (res.status === 401) {
+      sessionStorage.clear();
+      window.location.href = 'index.html';
+      return null;
+    }
+    const raw = await res.text();
+    try {
+      const data = raw ? JSON.parse(raw) : {};
+      if (!res.ok && data && typeof data === 'object' && !data.error) {
+        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      }
+      return data;
+    } catch {
+      console.error('[CONFIG.post] Resposta não é JSON', path, res.status, raw?.slice?.(0, 200));
+      return { error: `Resposta inválida do servidor (HTTP ${res.status}).` };
+    }
   },
 
   async patch(path, body) {

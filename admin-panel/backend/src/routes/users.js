@@ -28,6 +28,65 @@ function mimeToFaceExt(mt) {
   return null;
 }
 
+/** Quando o browser envia `application/octet-stream` ou MIME vazio (comum em Android). */
+function detectFaceExtFromBuffer(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  const head = buf.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF' && head.slice(8, 12).toString('ascii') === 'WEBP') return 'webp';
+  // HEIC/HEIF (ISO BMFF): não suportado pelo pipeline atual
+  if (buf.length >= 12 && buf.slice(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.slice(8, 12).toString('ascii').toLowerCase();
+    if (brand.includes('heic') || brand.includes('heix') || brand === 'mif1' || brand === 'msf1') return 'heic';
+  }
+  return null;
+}
+
+/**
+ * Persiste estado CompreFace Recognition no User (painel: lista + edição).
+ * @param {{ ok: boolean, faces?: number, subject?: string, error?: string }} r — retorno de syncUserToCompreface
+ */
+async function persistComprefaceRecognitionSync(prisma, userId, r) {
+  if (!userId || !r || typeof r !== 'object') return;
+  const now = new Date().toISOString();
+  if (r.ok) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        comprefaceRecognitionSync: {
+          status: 'synced',
+          at: now,
+          faces: Number(r.faces) || 0,
+          subject: r.subject || null,
+        },
+      },
+    });
+    return;
+  }
+  const errMsg = String(r.error || 'Falha na sincronização.').slice(0, 480);
+  const prev = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { comprefaceRecognitionSync: true },
+  });
+  let previous = null;
+  const s = prev?.comprefaceRecognitionSync;
+  if (s && typeof s === 'object' && !Array.isArray(s) && s.status === 'synced') {
+    previous = { at: s.at, faces: s.faces, subject: s.subject };
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      comprefaceRecognitionSync: {
+        status: 'error',
+        at: now,
+        message: errMsg,
+        previous,
+      },
+    },
+  });
+}
+
 const userListSelect = {
   id: true,
   tenantId: true,
@@ -40,6 +99,7 @@ const userListSelect = {
   lastLogin: true,
   createdAt: true,
   updatedAt: true,
+  comprefaceRecognitionSync: true,
   tenant: { select: { name: true } },
   technicianProfile: { select: { id: true, status: true } },
 };
@@ -196,9 +256,6 @@ router.post('/:id/face-enrollment', async (req, res) => {
     if (!fileBase64 || typeof fileBase64 !== 'string') {
       return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
     }
-    const ext = mimeToFaceExt(mimeType);
-    if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
-
     const b64 = String(fileBase64).replace(/\s/g, '');
     let buf;
     try {
@@ -210,6 +267,16 @@ router.post('/:id/face-enrollment', async (req, res) => {
       return res.status(400).json({ error: 'Imagem muito grande (máx. 5 MB).' });
     }
     if (buf.length < 64) return res.status(400).json({ error: 'Arquivo inválido.' });
+
+    let ext = mimeToFaceExt(mimeType);
+    if (!ext) ext = detectFaceExtFromBuffer(buf);
+    if (ext === 'heic') {
+      return res.status(400).json({
+        error:
+          'HEIC/HEIF não é suportado. No iPhone: Ajustes → Câmera → Formatos → «Mais compatível», ou exporte a foto como JPEG antes de enviar.',
+      });
+    }
+    if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
 
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -237,7 +304,14 @@ router.post('/:id/face-enrollment', async (req, res) => {
 
     await prisma.user.update({
       where: { id },
-      data: { faceEnrollmentPhotos: next },
+      data: {
+        faceEnrollmentPhotos: next,
+        comprefaceRecognitionSync: {
+          status: 'pending',
+          at: new Date().toISOString(),
+          message: 'Novas fotos de matrícula — a sincronizar com a galeria CompreFace.',
+        },
+      },
     });
 
     await prisma.auditLog
@@ -253,7 +327,12 @@ router.post('/:id/face-enrollment', async (req, res) => {
       })
       .catch(() => {});
 
-    res.status(201).json({ photo: entry, photos: next });
+    const row = await prisma.user.findUnique({
+      where: { id },
+      select: { comprefaceRecognitionSync: true },
+    });
+
+    res.status(201).json({ photo: entry, photos: next, comprefaceRecognitionSync: row?.comprefaceRecognitionSync });
   } catch (err) {
     console.error('POST /users/:id/face-enrollment', err);
     res.status(500).json({ error: err.message });
@@ -265,25 +344,41 @@ router.post('/:id/sync-compreface', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await syncUserToCompreface(prisma, id);
+    await persistComprefaceRecognitionSync(prisma, id, result);
+    const row = await prisma.user.findUnique({
+      where: { id },
+      select: { email: true, tenantId: true, comprefaceRecognitionSync: true },
+    });
+    const syncPayload = row?.comprefaceRecognitionSync;
+
     if (!result.ok) {
-      return res.status(400).json({ ok: false, error: result.error || 'Falha na sincronização.' });
+      return res.status(400).json({
+        ok: false,
+        error: result.error || 'Falha na sincronização.',
+        comprefaceRecognitionSync: syncPayload,
+      });
     }
-    const user = await prisma.user.findUnique({ where: { id }, select: { email: true, tenantId: true } });
-    if (user) {
+    if (row) {
       await prisma.auditLog
         .create({
           data: {
             ...auditActor(req),
-            tenantId: user.tenantId,
+            tenantId: row.tenantId,
             action: 'USER_COMPREFACE_SYNC',
-            resource: user.email,
+            resource: row.email,
             category: 'ADMIN',
             metadata: { userId: id, subject: result.subject, faces: result.faces },
           },
         })
         .catch(() => {});
     }
-    res.json({ ok: true, subject: result.subject, faces: result.faces, root: result.root });
+    res.json({
+      ok: true,
+      subject: result.subject,
+      faces: result.faces,
+      root: result.root,
+      comprefaceRecognitionSync: syncPayload,
+    });
   } catch (err) {
     console.error('POST /users/:id/sync-compreface', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -317,7 +412,38 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
       data: { faceEnrollmentPhotos: next },
     });
 
-    res.json({ photos: next });
+    let comprefaceSync = null;
+    try {
+      const r = await syncUserToCompreface(prisma, id);
+      comprefaceSync = r.ok
+        ? { ok: true, subject: r.subject, faces: r.faces }
+        : { ok: false, error: r.error || 'Falha na sincronização.' };
+      await persistComprefaceRecognitionSync(prisma, id, r);
+      if (r.ok) {
+        await prisma.auditLog
+          .create({
+            data: {
+              ...auditActor(req),
+              tenantId: user.tenantId,
+              action: 'USER_COMPREFACE_SYNC',
+              resource: user.email,
+              category: 'ADMIN',
+              metadata: { userId: id, subject: r.subject, faces: r.faces, trigger: 'face_enrollment_delete' },
+            },
+          })
+          .catch(() => {});
+      }
+    } catch (e) {
+      comprefaceSync = { ok: false, error: e.message || String(e) };
+      await persistComprefaceRecognitionSync(prisma, id, { ok: false, error: comprefaceSync.error });
+    }
+
+    const rowCf = await prisma.user.findUnique({
+      where: { id },
+      select: { comprefaceRecognitionSync: true },
+    });
+
+    res.json({ photos: next, comprefaceSync, comprefaceRecognitionSync: rowCf?.comprefaceRecognitionSync });
   } catch (err) {
     console.error('DELETE /users/:id/face-enrollment/:photoId', err);
     res.status(500).json({ error: err.message });
@@ -405,7 +531,14 @@ router.patch('/:id', express.json(), async (req, res) => {
       if (email != null) userPatch.email = String(email).trim().toLowerCase();
       if (phone !== undefined) userPatch.phone = phone ? String(phone).trim() : null;
       if (role != null) userPatch.role = String(role).toUpperCase();
-      if (avatarUrl !== undefined) userPatch.avatarUrl = avatarUrl ? String(avatarUrl).trim() : null;
+      if (avatarUrl !== undefined) {
+        userPatch.avatarUrl = avatarUrl ? String(avatarUrl).trim() : null;
+        userPatch.comprefaceRecognitionSync = {
+          status: 'pending',
+          at: new Date().toISOString(),
+          message: 'Avatar alterado — sincronize a galeria CompreFace.',
+        };
+      }
       if (typeof isActive === 'boolean') userPatch.isActive = isActive;
       if (addressJson !== undefined) userPatch.addressJson = addressJson;
       if (personalDocuments !== undefined) userPatch.personalDocuments = personalDocuments;
@@ -421,7 +554,18 @@ router.patch('/:id', express.json(), async (req, res) => {
         mergedRole === 'PROVIDER' ||
         (userPatch.role === undefined && isProvider === true);
 
-      if (wantsProvider) {
+      /** Só desativa o prestador ao mudar o papel de PROVIDER para outro — não em cada gravação com papel já não-PROVIDER. */
+      const demotedFromProvider =
+        userPatch.role !== undefined &&
+        existing.role === 'PROVIDER' &&
+        mergedRole !== 'PROVIDER';
+
+      if (demotedFromProvider && existing.technicianProfile) {
+        await tx.technicianProfile.update({
+          where: { userId: id },
+          data: { status: 'INACTIVE' },
+        });
+      } else if (wantsProvider) {
         if (!existing.technicianProfile) {
           await tx.technicianProfile.create({
             data: {
@@ -442,10 +586,10 @@ router.patch('/:id', express.json(), async (req, res) => {
             data: techPayload,
           });
         }
-      } else if (!wantsProvider && existing.technicianProfile) {
+      } else if (existing.technicianProfile && Object.keys(techPayload).length) {
         await tx.technicianProfile.update({
           where: { userId: id },
-          data: { status: 'INACTIVE' },
+          data: techPayload,
         });
       }
     });

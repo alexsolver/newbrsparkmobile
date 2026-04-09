@@ -17,6 +17,10 @@ const MIN_SIMILARITY = Math.min(
 
 const IDENTIFY_ROLES = new Set(['MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
 
+/** Texto comum quando o reconhecimento falha — utilizadores sem faces na galeria Recognition. */
+const COMPREFACE_SYNC_HINT =
+  'No painel BrSpark: Utilizadores → edite o utilizador → secção «Reconhecimento facial» → «Sincronizar com CompreFace» (envia avatar e fotos base para a galeria Recognition).';
+
 function parseMeta(raw) {
   try {
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -103,7 +107,7 @@ router.post('/verify-face', authUser, async (req, res) => {
     } catch (e) {
       console.error('[VISION] CompreFace recognize', e);
       return res.status(503).json({
-        error: e.message || 'Falha ao contactar CompreFace.',
+        error: `${e.message || 'Falha ao contactar CompreFace.'} Verifique Integrações (CompreFace ativo) e a sincronização da galeria no utilizador.`,
         match: false,
         engine: 'compreface',
       });
@@ -116,7 +120,7 @@ router.post('/verify-face', authUser, async (req, res) => {
         match: false,
         confidence: null,
         fraud_flag: true,
-        message: 'Nenhum rosto reconhecido na galeria. Verifique a matrícula e a sincronização com o CompreFace.',
+        message: `Rosto não reconhecido na galeria Recognition do CompreFace (nenhuma correspondência). ${COMPREFACE_SYNC_HINT}`,
       });
     }
 
@@ -127,7 +131,7 @@ router.post('/verify-face', authUser, async (req, res) => {
         match: false,
         confidence: top.similarity,
         fraud_flag: true,
-        message: 'Identificação fora do seu tenant.',
+        message: `Rosto não reconhecido no contexto da sua organização. ${COMPREFACE_SYNC_HINT}`,
       });
     }
 
@@ -137,7 +141,7 @@ router.post('/verify-face', authUser, async (req, res) => {
         match: false,
         confidence: top.similarity,
         fraud_flag: true,
-        message: `Similaridade abaixo do limiar (${MIN_SIMILARITY}).`,
+        message: `Rosto não reconhecido com confiança suficiente (mínimo ${MIN_SIMILARITY}; obtido ${Number(top.similarity).toFixed(3)}). Melhore luz/ângulo ou atualize as fotos na galeria CompreFace. ${COMPREFACE_SYNC_HINT}`,
       });
     }
 
@@ -152,7 +156,7 @@ router.post('/verify-face', authUser, async (req, res) => {
         match: false,
         confidence: top.similarity,
         fraud_flag: true,
-        message: 'Utilizador identificado não encontrado ou inativo.',
+        message: `Rosto associado a um utilizador inexistente ou inativo no BrSpark. ${COMPREFACE_SYNC_HINT}`,
       });
     }
 
@@ -181,9 +185,16 @@ router.post('/verify-face', authUser, async (req, res) => {
       facialAuthMode: 'self_verify',
       identifiedUserId: identified.id,
       ...(selfOk
-        ? {}
+        ? {
+            identifiedUser: {
+              id: identified.id,
+              name: identified.name,
+              email: identified.email,
+              role: identified.role,
+            },
+          }
         : {
-            message: 'O rosto não corresponde ao utilizador autenticado.',
+            message: `Rosto não reconhecido como o utilizador com sessão nesta app. Se for a mesma pessoa, sincronize de novo a galeria CompreFace. ${COMPREFACE_SYNC_HINT}`,
           }),
     });
   } catch (err) {
