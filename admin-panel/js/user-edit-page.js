@@ -371,6 +371,32 @@ export async function bootUserEditPage() {
     };
   }
 
+  const btnCfSync = document.getElementById('btn-compreface-sync');
+  const cfSyncStatus = document.getElementById('compreface-sync-status');
+  if (btnCfSync) {
+    btnCfSync.onclick = async () => {
+      if (!faceUserId) return;
+      if (cfSyncStatus) cfSyncStatus.textContent = 'A sincronizar…';
+      btnCfSync.disabled = true;
+      try {
+        const res = await CONFIG.post(`/users/${encodeURIComponent(faceUserId)}/sync-compreface`, {});
+        if (res?.error || res?.ok === false) {
+          alert(res?.error || 'Falha na sincronização.');
+          if (cfSyncStatus) cfSyncStatus.textContent = '';
+        } else {
+          if (cfSyncStatus) {
+            cfSyncStatus.textContent = `OK — ${res.faces || 0} foto(s), subject: ${res.subject || '—'}`;
+          }
+        }
+      } catch {
+        alert('Erro de rede ao sincronizar.');
+        if (cfSyncStatus) cfSyncStatus.textContent = '';
+      } finally {
+        btnCfSync.disabled = false;
+      }
+    };
+  }
+
   const addr = parseJsonSafe(u.addressJson, {});
   document.getElementById('a-line1').value = addr.line1 || '';
   document.getElementById('a-line2').value = addr.line2 || '';

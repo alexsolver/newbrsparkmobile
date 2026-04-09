@@ -37,17 +37,50 @@ function normalizeProductionApiBase(raw: string | undefined): string | undefined
 
 const PRODUCTION_API_DEFAULT = 'https://brsparks.wstrategy.com.br';
 
+const fromEnvRaw = normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE);
+/** Em dev, permite forçar produção: `EXPO_PUBLIC_USE_PRODUCTION_API=1` no .env (e `EXPO_PUBLIC_API_BASE` se quiser outro host). */
+const forceProductionInDev =
+  __DEV__ && String(process.env.EXPO_PUBLIC_USE_PRODUCTION_API || '').trim() === '1';
+
+function isLikelyLocalLanApiBase(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:') return false;
+    const h = u.hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2') return true;
+    if (h.startsWith('192.168.')) return true;
+    const p = h.split('.').map((x) => Number(x));
+    return p.length === 4 && p[0] === 10 && p.every((n) => !Number.isNaN(n));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Base da API (origem sem `/api` no fim).
- * - Se `EXPO_PUBLIC_API_BASE` estiver definido (.env / EAS), usa-se **sempre** (também em `__DEV__`),
- *   para testar no celular com Expo contra produção sem depender do IP local :3001.
- * - Sem variável: em dev → `http://MAC_IP:porta`; em release → produção.
+ * - **Release:** `EXPO_PUBLIC_API_BASE` (EAS / build) ou produção por defeito.
+ * - **Dev:** servidor local (`MAC_IP:porta`), exceto se `fromEnv` for claramente LAN (ex.: .env com IP) ou
+ *   `EXPO_PUBLIC_USE_PRODUCTION_API=1` para testar contra produção com Metro.
+ *   Isto evita credenciais válidas só na BD local irem parar à API remota por `EXPO_PUBLIC_API_BASE` residual no shell.
  */
-const RESOLVED_API_BASE =
-  normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE) ||
-  (__DEV__ ? `http://${MAC_IP}:${DEV_API_PORT}` : PRODUCTION_API_DEFAULT);
+const RESOLVED_API_BASE: string = (() => {
+  if (__DEV__) {
+    if (forceProductionInDev) {
+      return fromEnvRaw || PRODUCTION_API_DEFAULT;
+    }
+    if (fromEnvRaw && isLikelyLocalLanApiBase(fromEnvRaw)) {
+      return fromEnvRaw;
+    }
+    return `http://${MAC_IP}:${DEV_API_PORT}`;
+  }
+  return fromEnvRaw || PRODUCTION_API_DEFAULT;
+})();
 
 export const API_BASE = RESOLVED_API_BASE;
+
+if (__DEV__) {
+  console.log('[BrSpark] API_BASE →', API_BASE);
+}
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface User {

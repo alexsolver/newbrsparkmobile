@@ -62,7 +62,7 @@ const FIELD_SPECS = [
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'allowFacial',
-    descPt: 'Biometria facial (compara com perfil do técnico).',
+    descPt: 'Biometria facial (CompreFace: self_verify ou identify no builder).',
   },
   {
     type: 'transit_start',

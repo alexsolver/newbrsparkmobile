@@ -1071,19 +1071,41 @@ export default function ChecklistEngine() {
           try {
               const rawResp = await apiFetch('/api/vision/verify-face', {
                   method: 'POST',
-                  body: JSON.stringify({ 
-                     imageBase64: imgBase64,
-                     provider: fieldData.visionProvider || 'AUTO'
-                  })
-              });
+                  body: JSON.stringify({
+                    imageBase64: imgBase64,
+                    provider: fieldData.visionProvider || 'AUTO',
+                    facialAuthMode: fieldData.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+                  }),
+                });
               const apiResp = await rawResp.json();
               if (apiResp.error) {
-                  Alert.alert("Erro de Reconhecimento", apiResp.error);
-                  return false;
+                Alert.alert('Erro de Reconhecimento', apiResp.error);
+                return false;
               }
               if (!apiResp.match) {
-                  Alert.alert("Rosto não reconhecido", "A biometria facial falhou em comparar o rosto. Você não possui autorização para este formulário.");
-                  return false;
+                Alert.alert(
+                  'Rosto não reconhecido',
+                  apiResp.message ||
+                    'A biometria facial falhou. Verifique a matrícula no painel e a sincronização CompreFace.'
+                );
+                return false;
+              }
+              const bioKey = `${fieldId}__biometric`;
+              try {
+                handleInput(
+                  bioKey,
+                  JSON.stringify({
+                    at: new Date().toISOString(),
+                    engine: apiResp.engine,
+                    confidence: apiResp.confidence,
+                    facialAuthMode: apiResp.facialAuthMode || fieldData.facialAuthMode || 'self_verify',
+                    identifiedUserId: apiResp.identifiedUserId ?? apiResp.identifiedUser?.id,
+                    identifiedUser: apiResp.identifiedUser,
+                  }),
+                  scope
+                );
+              } catch {
+                /* não bloquear captura se JSON falhar */
               }
           } catch (err: any) {
               Alert.alert("Falha no Motor de IA", "Não foi possível conectar ao servidor para validação biométrica.");

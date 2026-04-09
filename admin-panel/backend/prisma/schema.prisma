@@ -424,19 +424,21 @@ enum MetatagType {
 // INTEGRAÇÕES
 // ─────────────────────────────────────────────────────────
 model Integration {
-  id           String   @id @default(cuid())
-  name         String
-  type         IntType
-  description  String?
-  icon         String?
-  apiKey       String?  // encrypted in production
-  baseUrl      String?
-  webhookUrl   String?
-  status       String   @default("ACTIVE")  // ACTIVE | ERROR | DISCONNECTED
-  lastTestedAt DateTime?
-  metadata     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  name                      String
+  type                      IntType
+  description               String?
+  icon                      String?
+  apiKey                    String?  // encrypted in production — CompreFace: Recognition
+  comprefaceDetectionKey    String?
+  comprefaceVerificationKey String?
+  baseUrl                   String?
+  webhookUrl                String?
+  status                    String   @default("ACTIVE")  // ACTIVE | ERROR | DISCONNECTED
+  lastTestedAt              DateTime?
+  metadata                  Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 enum IntType {

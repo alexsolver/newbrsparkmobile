@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { syncUserToCompreface } = require('../lib/comprefaceSync');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -256,6 +257,36 @@ router.post('/:id/face-enrollment', async (req, res) => {
   } catch (err) {
     console.error('POST /users/:id/face-enrollment', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/sync-compreface — envia avatar + matrícula ao CompreFace (galeria Recognition)
+router.post('/:id/sync-compreface', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await syncUserToCompreface(prisma, id);
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, error: result.error || 'Falha na sincronização.' });
+    }
+    const user = await prisma.user.findUnique({ where: { id }, select: { email: true, tenantId: true } });
+    if (user) {
+      await prisma.auditLog
+        .create({
+          data: {
+            ...auditActor(req),
+            tenantId: user.tenantId,
+            action: 'USER_COMPREFACE_SYNC',
+            resource: user.email,
+            category: 'ADMIN',
+            metadata: { userId: id, subject: result.subject, faces: result.faces },
+          },
+        })
+        .catch(() => {});
+    }
+    res.json({ ok: true, subject: result.subject, faces: result.faces, root: result.root });
+  } catch (err) {
+    console.error('POST /users/:id/sync-compreface', err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

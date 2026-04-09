@@ -1198,6 +1198,14 @@ function createNewFieldFromToolboxType(type, rawText) {
         allowTechnicianComment: false,
         allowMediaDescription: false,
         ...(type === 'section_break' ? { sectionFillMode: 'list' } : {}),
+        ...(type === 'facial_recognition'
+          ? {
+              visionProvider: 'COMPREFACE',
+              cameraMode: 'native',
+              facialAuthMode: 'self_verify',
+              requireOnlineValidation: true,
+            }
+          : {}),
     };
 }
 
@@ -1992,6 +2000,13 @@ function renderProperties() {
                 <option value="AUTO" ${(f.visionProvider||'COMPREFACE') === 'AUTO' ? 'selected' : ''}>🤖 Automático (Custo da IA Global)</option>
                 <option value="AWS" ${f.visionProvider === 'AWS' ? 'selected' : ''}>☁️ Forçar AWS Rekognition (Custos Adicionais/API)</option>
             </select>
+
+            <label class="prop-label" style="color:#e11d48; font-size:10px;">Modo de validação biométrica</label>
+            <select class="prop-input" onchange="window.handleFieldUpdate('facialAuthMode', this.value)" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
+                <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>Provar identidade do utilizador logado (ponto / OS)</option>
+                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer utilizador matriculado (só gestores no app)</option>
+            </select>
+            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», o JWT tem de ser de MANAGER, TENANT_ADMIN ou SAAS_ADMIN. O servidor devolve dados do utilizador reconhecido.</div>
 
             <label class="prop-label" style="color:#e11d48; font-size:10px;">Motor de Câmera</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('cameraMode', this.value)" style="font-size:12px; border-color:#fda4af;">

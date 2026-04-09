@@ -1,6 +1,11 @@
 'use strict';
 const https  = require('https');
 const http   = require('http');
+const {
+  normalizeComprefaceBaseUrl,
+  buildComprefaceApiRoots,
+  getComprefacePathPrefix,
+} = require('./comprefaceClient');
 
 function normEnum(v) {
   return String(v ?? '')
@@ -31,6 +36,7 @@ async function testIntegration(integration) {
     if (name === 'OpenAI') return testOpenAI(integration);
     if (name === 'Google AI (Gemini)') return testGoogleAI(integration);
     if (name === 'DeepSeek') return testDeepSeek(integration);
+    if (name === 'Exadel CompreFace') return testCompreface(integration);
   }
 
   // ── E-mail ───────────────────────────────────────────────
@@ -324,6 +330,219 @@ async function testUpcItemDb({ apiKey, baseUrl }) {
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
 }
 
+async function probeComprefaceHttp(url) {
+  try {
+    const r = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(8000),
+      redirect: 'follow',
+    });
+    return r.status;
+  } catch {
+    return 0;
+  }
+}
+
+/** JPEG mínimo para POST de teste em Detection / Verification (CompreFace exige multipart). */
+const COMPREFACE_PROBE_JPEG_B64 =
+  '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAr/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAB/9k=';
+
+function comprefaceProbeJpegBlob() {
+  const buf = Buffer.from(COMPREFACE_PROBE_JPEG_B64, 'base64');
+  return new Blob([buf], { type: 'image/jpeg' });
+}
+
+function comprefaceAuxHttpOk(status) {
+  if (status === 401 || status === 403 || status === 404) return false;
+  if (status >= 500) return false;
+  if (status === 301 || status === 302 || status === 307 || status === 308) return false;
+  return status > 0;
+}
+
+async function testComprefaceDetectionPost(root, apiKey) {
+  const url = `${String(root).replace(/\/+$/, '')}/api/v1/detection/detect`;
+  const fd = new FormData();
+  fd.append('file', comprefaceProbeJpegBlob(), 'probe.jpg');
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'x-api-key': String(apiKey).trim() },
+    body: fd,
+    signal: AbortSignal.timeout(20000),
+    redirect: 'manual',
+  });
+  return { status: r.status, url };
+}
+
+async function testComprefaceVerificationPost(root, apiKey) {
+  const url = `${String(root).replace(/\/+$/, '')}/api/v1/verification/verify`;
+  const blob = comprefaceProbeJpegBlob();
+  const fd = new FormData();
+  fd.append('source_image', blob, 'source.jpg');
+  fd.append('target_image', blob, 'target.jpg');
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'x-api-key': String(apiKey).trim() },
+    body: fd,
+    signal: AbortSignal.timeout(20000),
+    redirect: 'manual',
+  });
+  return { status: r.status, url };
+}
+
+// ── Exadel CompreFace (Recognition API) — vários GET com x-api-key ──
+async function testCompreface(integration) {
+  const { baseUrl, apiKey, description, comprefaceDetectionKey, comprefaceVerificationKey } = integration;
+  if (!baseUrl || !String(baseUrl).trim()) {
+    return { ok: false, message: 'API Base URL não configurada.' };
+  }
+  if (!apiKey || !String(apiKey).trim()) {
+    return { ok: false, message: 'Recognition API Key não configurada.' };
+  }
+
+  const apiRoots = buildComprefaceApiRoots(baseUrl, description);
+  const headers = { 'x-api-key': String(apiKey).trim() };
+  const pathQueries = [
+    '/api/v1/recognition/subjects/',
+    '/api/v1/recognition/subjects',
+    '/api/v1/recognition/faces?page=0&size=1',
+    '/api/v1/recognition/faces/?page=0&size=1',
+  ];
+
+  try {
+    let lastStatus = 0;
+    let lastBody = '';
+    let lastUrl = '';
+
+    for (const root of apiRoots) {
+      for (const pq of pathQueries) {
+        const url = `${root}${pq}`;
+        lastUrl = url;
+        const r = await fetch(url, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(15000),
+          redirect: 'manual',
+        });
+        lastStatus = r.status;
+        lastBody = await r.text().catch(() => '');
+
+        if (r.status === 200) {
+          const bits = [`Recognition ✓ (${pq.split('?')[0]})`];
+          const detKey = comprefaceDetectionKey && String(comprefaceDetectionKey).trim();
+          const verKey = comprefaceVerificationKey && String(comprefaceVerificationKey).trim();
+          if (detKey) {
+            try {
+              const d = await testComprefaceDetectionPost(root, detKey);
+              if (d.status === 401 || d.status === 403) {
+                return {
+                  ok: false,
+                  message:
+                    'Recognition OK, mas a API Key de **Detection** foi recusada (401/403). Use a chave da aplicação Detection no CompreFace.',
+                };
+              }
+              if (d.status === 404) {
+                return {
+                  ok: false,
+                  message: `Recognition OK, mas Detection devolveu 404 — ${d.url}`,
+                };
+              }
+              bits.push(comprefaceAuxHttpOk(d.status) ? 'Detection ✓' : `Detection HTTP ${d.status}`);
+            } catch (e) {
+              bits.push(`Detection: ${e.message}`);
+            }
+          }
+          if (verKey) {
+            try {
+              const v = await testComprefaceVerificationPost(root, verKey);
+              if (v.status === 401 || v.status === 403) {
+                return {
+                  ok: false,
+                  message:
+                    'Recognition OK, mas a API Key de **Verification** foi recusada (401/403). Use a chave da aplicação Verification no CompreFace.',
+                };
+              }
+              if (v.status === 404) {
+                return {
+                  ok: false,
+                  message: `Recognition OK, mas Verification devolveu 404 — ${v.url}`,
+                };
+              }
+              bits.push(comprefaceAuxHttpOk(v.status) ? 'Verification ✓' : `Verification HTTP ${v.status}`);
+            } catch (e) {
+              bits.push(`Verification: ${e.message}`);
+            }
+          }
+          return {
+            ok: true,
+            message: `Exadel CompreFace conectado — ${bits.join(' · ')}`,
+          };
+        }
+        if (r.status === 401 || r.status === 403) {
+          return {
+            ok: false,
+            message:
+              'API Key inválida ou não é do serviço **Recognition** (401/403). No CompreFace, crie/use a chave do app de reconhecimento, não a de Detection.',
+          };
+        }
+        if (r.status === 301 || r.status === 302 || r.status === 307 || r.status === 308) {
+          return {
+            ok: false,
+            message: `CompreFace respondeu redirecionamento HTTP ${r.status} em ${url} — use a URL final que abre a UI/API (ex.: http://ip:8000 sem proxy errado).`,
+          };
+        }
+        if (r.status !== 404) {
+          const hint = lastBody ? lastBody.replace(/\s+/g, ' ').slice(0, 200) : '';
+          return {
+            ok: false,
+            message: `CompreFace HTTP ${r.status} em ${url}${hint ? ` — ${hint}` : ''}`,
+          };
+        }
+      }
+    }
+
+    if (lastStatus === 404) {
+      const probeBase = apiRoots[0] || normalizeComprefaceBaseUrl(baseUrl);
+      const stRoot = await probeComprefaceHttp(`${probeBase}/`);
+      const stSwagger = await probeComprefaceHttp(`${probeBase}/api/swagger-ui.html`);
+      const looksLikeHtml = /<\s*html[\s>]/i.test(lastBody);
+      let diag = '';
+      if (stSwagger === 200 || stSwagger === 302) {
+        diag =
+          ' Diagnóstico: Swagger/UI parece acessível nessa raiz, mas `/api/v1/recognition/*` devolveu 404 — confirme o contentor **compreface-api** na stack Docker e que a porta exposta é a do **frontend** (nginx), não outro serviço.';
+      } else if (stRoot === 200 || stRoot === 302) {
+        diag =
+          ' Diagnóstico: a raiz HTTP responde, mas não encontrámos `/api/v1/recognition/*` — possível proxy com **prefixo de path** (preencha o campo no painel), instalação incompleta ou API noutra porta.';
+      } else if (stRoot === 404 && stSwagger === 404) {
+        diag = ` Diagnóstico: nem a raiz nem Swagger responderam em ${probeBase}/ — verifique IP, porta e se o tráfego chega ao CompreFace (não a outro serviço na mesma porta).`;
+      }
+      const prefixHint = getComprefacePathPrefix(description)
+        ? ''
+        : ' Se o CompreFace estiver atrás de um reverse proxy (ex.: /compreface), use o campo **Prefixo de path** ao salvar.';
+      return {
+        ok: false,
+        message:
+          'CompreFace devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do CompreFace, ex. http://192.168.85.113:8000 — sem /api/v1 no fim; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
+          prefixHint +
+          diag +
+          ' Último URL tentado: ' +
+          lastUrl +
+          (looksLikeHtml ? ' (resposta parece HTML — possível 404 genérico do proxy/nginx).' : ''),
+      };
+    }
+
+    const hint = lastBody ? lastBody.replace(/\s+/g, ' ').slice(0, 200) : '';
+    return {
+      ok: false,
+      message: `CompreFace HTTP ${lastStatus}${hint ? `: ${hint}` : ''}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: `Erro de rede ao contactar CompreFace: ${e.message}`,
+    };
+  }
+}
+
 // ── OSRM (MAPS) — testa Match (timestamps + radiuses + tidy) como telemetria/ETA ──
 async function testOsrm(integration) {
   const { normalizeOsrmBaseUrl } = require('./osrmBaseUrl');
@@ -359,4 +578,4 @@ async function testOsrm(integration) {
   }
 }
 
-module.exports = { testIntegration };
+module.exports = { testIntegration, normalizeComprefaceBaseUrl };

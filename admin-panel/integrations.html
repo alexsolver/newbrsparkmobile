@@ -338,8 +338,11 @@
           </div>
           <div class="int-desc">Motor Open-Source de reconhecimento facial gratuito para validação em backend.</div>
           <div class="int-fields" id="fields-compreface">
-            <input class="form-control" id="url-compreface" placeholder="API Base URL (ex: http://localhost:8000)" />
-            <input class="form-control" id="key-compreface" type="password" placeholder="Recognition API Key" />
+            <input class="form-control" id="url-compreface" placeholder="Raiz da API (ex: http://192.168.x.x:8000) — sem /api/v1" />
+            <input class="form-control" id="prefix-compreface" placeholder="Opcional — prefixo reverso, só o segmento (ex: compreface) se a URL pública for …/compreface/…" />
+            <input class="form-control" id="key-compreface" type="password" placeholder="Recognition API Key (aplicação Recognition no CompreFace)" />
+            <input class="form-control" id="key-compreface-detection" type="password" placeholder="Detection API Key (opcional — app Face Detection)" />
+            <input class="form-control" id="key-compreface-verification" type="password" placeholder="Verification API Key (opcional — app Face Verification)" />
           </div>
           <div class="int-actions">
             <button class="btn btn-primary btn-sm" onclick="saveVisionInt('Exadel CompreFace', 'compreface')"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
@@ -469,6 +472,15 @@
       urlOsrm.value = activeInts['OSRM']?.baseUrl || 'http://osrm.lansolver.com:5000';
     }
 
+    const urlCf = document.getElementById('url-compreface');
+    const prefixCf = document.getElementById('prefix-compreface');
+    if (urlCf && prefixCf) {
+      const cf = activeInts['Exadel CompreFace'];
+      urlCf.value = cf?.baseUrl || '';
+      const m = cf?.description && String(cf.description).match(/path_prefix:\/?(\S+)/i);
+      prefixCf.value = m ? m[1].replace(/\/+$/g, '') : '';
+    }
+
     let count = 0;
     Object.entries(CARD_MAP).forEach(([name, { slug }]) => {
       const connected = !!activeInts[name];
@@ -583,11 +595,34 @@
       body.metadata = { category: 'COMPUTER_VISION', engine: 'aws_rekognition' };
     } else {
       const url = document.getElementById('url-compreface').value.trim();
-      const key = document.getElementById('key-compreface').value.trim();
-      if (!url || !key) return alert('URL e API Key são obrigatórias.');
+      const keyRec = document.getElementById('key-compreface').value.trim();
+      const keyDet = document.getElementById('key-compreface-detection')?.value.trim() || '';
+      const keyVer = document.getElementById('key-compreface-verification')?.value.trim() || '';
+      const prefixRaw = document.getElementById('prefix-compreface')?.value.trim() || '';
+      const existingCf = activeInts['Exadel CompreFace'];
+      const metadata = { category: 'COMPUTER_VISION', engine: 'compreface' };
+      const seg = prefixRaw.replace(/^\/+|\/+$/g, '');
+      const description = seg ? `path_prefix:${seg}` : null;
+
+      if (existingCf) {
+        if (!url) return alert('URL é obrigatória.');
+        const patchBody = { baseUrl: url, metadata, description };
+        if (keyRec) patchBody.apiKey = keyRec;
+        if (keyDet) patchBody.comprefaceDetectionKey = keyDet;
+        if (keyVer) patchBody.comprefaceVerificationKey = keyVer;
+        const res = await CONFIG.patch(`/integrations/${existingCf.id}`, patchBody);
+        if (res?.id || res?.name) { loadIntegrations(); showToast('Integração CompreFace atualizada!'); }
+        else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+        return;
+      }
+
+      if (!url || !keyRec) return alert('Na primeira configuração, URL e Recognition API Key são obrigatórias.');
       body.baseUrl = url;
-      body.apiKey = key;
-      body.metadata = { category: 'COMPUTER_VISION', engine: 'compreface' };
+      body.apiKey = keyRec;
+      body.metadata = metadata;
+      body.description = description;
+      if (keyDet) body.comprefaceDetectionKey = keyDet;
+      if (keyVer) body.comprefaceVerificationKey = keyVer;
     }
     if (activeInts[name]) await CONFIG.del(`/integrations/${activeInts[name].id}`);
     const res = await CONFIG.post('/integrations', body);
