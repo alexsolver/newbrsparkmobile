@@ -13,7 +13,13 @@ async function latestGpsAgeSecondsByExecutionIds(ids) {
     const list = safe.map((id) => `'${id.replace(/'/g, "''")}'`).join(',');
     const rows = await prisma.$queryRawUnsafe(`
       SELECT DISTINCT ON ("executionId") "executionId",
-        LEAST(2147483647, GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE("deviceTimestamp", "serverTimestamp")))::int)) AS "ageSec"
+        LEAST(
+          2147483647,
+          GREATEST(
+            0,
+            FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE("deviceTimestamp", "serverTimestamp")))::double precision)
+          )
+        )::integer AS "ageSec"
       FROM "TelemetryEvent"
       WHERE "executionId" IN (${list})
         AND "lat" IS NOT NULL
