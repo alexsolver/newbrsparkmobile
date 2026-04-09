@@ -1,9 +1,28 @@
 'use strict';
 const router = require('express').Router();
 const express = require('express');
+const fs = require('fs').promises;
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const prisma = require('../db');
 const { sendExpoPushToMany } = require('../services/expoPush');
+
+const MAX_FACE_ENROLLMENT_PHOTOS = 12;
+const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
+
+function normalizeFacePhotos(raw) {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw.filter((p) => p && typeof p === 'object' && p.id && p.url);
+  return [];
+}
+
+function mimeToFaceExt(mt) {
+  const m = String(mt || '').toLowerCase();
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+  if (m.includes('png')) return 'png';
+  if (m.includes('webp')) return 'webp';
+  return null;
+}
 
 const userListSelect = {
   id: true,
@@ -153,6 +172,112 @@ router.post('/:id/disconnect', async (req, res) => {
   }
 });
 
+// POST /api/users/:id/face-enrollment — foto base para reconhecimento facial (JPEG/PNG/WebP, máx. 5 MB)
+router.post('/:id/face-enrollment', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fileBase64, mimeType } = req.body;
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+    }
+    const ext = mimeToFaceExt(mimeType);
+    if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
+
+    const b64 = String(fileBase64).replace(/\s/g, '');
+    let buf;
+    try {
+      buf = Buffer.from(b64, 'base64');
+    } catch {
+      return res.status(400).json({ error: 'Base64 inválido.' });
+    }
+    if (buf.length > MAX_FACE_ENROLLMENT_BYTES) {
+      return res.status(400).json({ error: 'Imagem muito grande (máx. 5 MB).' });
+    }
+    if (buf.length < 64) return res.status(400).json({ error: 'Arquivo inválido.' });
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
+    if (list.length >= MAX_FACE_ENROLLMENT_PHOTOS) {
+      return res.status(400).json({ error: `Limite de ${MAX_FACE_ENROLLMENT_PHOTOS} fotos base atingido.` });
+    }
+
+    const photoId = `fe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const fname = `${photoId}.${ext}`;
+    const absDir = path.join(__dirname, '../../public/uploads/face-enrollment', id);
+    await fs.mkdir(absDir, { recursive: true });
+    await fs.writeFile(path.join(absDir, fname), buf);
+
+    const publicPath = `/uploads/face-enrollment/${id}/${fname}`;
+    const createdAt = new Date().toISOString();
+    const entry = {
+      id: photoId,
+      url: publicPath,
+      mimeType: mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+      createdAt,
+    };
+    const next = [...list, entry];
+
+    await prisma.user.update({
+      where: { id },
+      data: { faceEnrollmentPhotos: next },
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          adminId: req.admin.id,
+          tenantId: user.tenantId,
+          action: 'USER_FACE_ENROLLMENT_ADD',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: id, photoId },
+        },
+      })
+      .catch(() => {});
+
+    res.status(201).json({ photo: entry, photos: next });
+  } catch (err) {
+    console.error('POST /users/:id/face-enrollment', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/users/:id/face-enrollment/:photoId
+router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
+  try {
+    const { id, photoId } = req.params;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
+    const found = list.find((p) => p.id === photoId);
+    if (!found) return res.status(404).json({ error: 'Foto não encontrada.' });
+
+    const next = list.filter((p) => p.id !== photoId);
+
+    if (found.url && typeof found.url === 'string' && found.url.startsWith('/uploads/face-enrollment/')) {
+      const rel = found.url.replace(/^\/uploads\//, '');
+      const abs = path.join(__dirname, '../../public/uploads', ...rel.split('/'));
+      try {
+        await fs.unlink(abs);
+      } catch {
+        /* ficheiro já ausente */
+      }
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { faceEnrollmentPhotos: next },
+    });
+
+    res.json({ photos: next });
+  } catch (err) {
+    console.error('DELETE /users/:id/face-enrollment/:photoId', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/users/:id — ficha completa (sem password)
 router.get('/:id', async (req, res) => {
   try {
@@ -204,9 +329,14 @@ router.patch('/:id', express.json(), async (req, res) => {
       isActive,
       addressJson,
       personalDocuments,
+      faceEnrollmentPhotos,
       isProvider,
       technician,
     } = req.body;
+
+    if (faceEnrollmentPhotos !== undefined && !Array.isArray(faceEnrollmentPhotos)) {
+      return res.status(400).json({ error: 'faceEnrollmentPhotos deve ser um array.' });
+    }
 
     if (email != null && String(email).toLowerCase().trim() !== existing.email.toLowerCase()) {
       const dup = await prisma.user.findFirst({
@@ -229,6 +359,7 @@ router.patch('/:id', express.json(), async (req, res) => {
       if (typeof isActive === 'boolean') userPatch.isActive = isActive;
       if (addressJson !== undefined) userPatch.addressJson = addressJson;
       if (personalDocuments !== undefined) userPatch.personalDocuments = personalDocuments;
+      if (faceEnrollmentPhotos !== undefined) userPatch.faceEnrollmentPhotos = faceEnrollmentPhotos;
 
       if (Object.keys(userPatch).length) {
         await tx.user.update({ where: { id }, data: userPatch });

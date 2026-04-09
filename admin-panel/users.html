@@ -124,6 +124,25 @@
     const res    = await CONFIG.get(`/users?${params}`);
     if (!res) return;
 
+    if (res.error) {
+      document.getElementById('count-badge').textContent = 'Erro';
+      ['stat-total', 'stat-active', 'stat-admins', 'stat-inactive'].forEach((id) => {
+        document.getElementById(id).textContent = '—';
+      });
+      const detail = String(res.error)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .slice(0, 1200);
+      document.getElementById('users-tbody').innerHTML =
+        `<tr><td colspan="7" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
+          <strong>Não foi possível carregar os utilizadores.</strong> Reinicie o servidor da API após <code>npx prisma generate</code> se acabou de migrar o schema.<br/>
+          <span style="display:block;margin-top:10px;font-size:11px;color:var(--text3);white-space:pre-wrap;font-weight:400">${detail}</span>
+        </td></tr>`;
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+
     const { data = [], total = 0 } = res;
     document.getElementById('count-badge').textContent = `${total} usuários`;
     document.getElementById('stat-total').textContent   = total;

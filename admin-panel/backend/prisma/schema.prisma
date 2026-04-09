@@ -193,6 +193,8 @@ model User {
   addressJson       Json?
   /// Documentos pessoais: [{ id, docType, label, identifier, validFrom, validTo, issuingBody, notes, locationIds[] }]
   personalDocuments Json?
+  /// Fotos base para reconhecimento facial (admin): [{ id, url, mimeType?, createdAt }]
+  faceEnrollmentPhotos Json?
   role       UserRole @default(USER)
   isActive   Boolean  @default(true)
   lastLogin  DateTime?
@@ -222,7 +224,7 @@ model TechnicianProfile {
   score     Float    @default(5.0)
   cft       String?  // Conselho Federal dos Técnicos
   specialty String?
-  /// Horários por dia: { mon: { enabled, start, end }, ... }
+  /// Horários: { mon: [{ id, enabled, start, end, locationIds[] }], ... } — vários turnos/dia; legado: mon: { enabled, start, end }
   workScheduleJson Json?
   /// Lista de competências / tags
   skillsJson       Json?
