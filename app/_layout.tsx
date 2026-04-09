@@ -8,6 +8,7 @@ import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/datab
 import { ApiService } from '../src/services/api';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '../src/hooks/useAuth';
+import { isTechnicianProfileActive } from '../src/services/auth';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../src/i18n';
@@ -56,7 +57,6 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
         if (!done) {
           router.replace('/auth/onboarding' as any);
         } else {
-          const isTech = user.technicianProfile || user.role === 'TECHNICIAN';
           router.replace('/(tabs)' as any);
         }
       });
@@ -135,7 +135,7 @@ function AppInitializer() {
 
   useEffect(() => {
     if (loading || !user) return;
-    const isTech = !!(user.technicianProfile || user.role === 'TECHNICIAN');
+    const isTech = isTechnicianProfileActive(user);
     if (!isTech) return;
     const stopBridge = startAppStateTelemetryBridge();
     const staleId = setInterval(() => {

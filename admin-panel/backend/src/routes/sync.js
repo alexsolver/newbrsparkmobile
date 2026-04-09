@@ -5,6 +5,7 @@ const authUser = require('../middleware/authUser');
 const { recordSync } = require('../services/cockpitMetrics');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
+const { isActiveTechnicianForEmail } = require('../lib/technicianEligibility');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -360,8 +361,20 @@ function mapChecklistExecutionToSyncTask(ex) {
 // sem depender só do AsyncStorage local do telemóvel).
 router.get('/tasks', async (req, res) => {
   try {
-    const ownerEmail = String(req.query.owner_email || req.user?.email || '').trim();
+    const jwtEmail = String(req.user?.email || '').trim();
+    const qEmail = String(req.query.owner_email || '').trim();
+    if (qEmail && qEmail.toLowerCase() !== jwtEmail.toLowerCase()) {
+      return res.status(403).json({ error: 'owner_email não coincide com o utilizador autenticado.' });
+    }
+    const ownerEmail = qEmail || jwtEmail;
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
+
+    const tenantId = String(req.user?.tenantId || '').trim();
+    const canReceiveOs = await isActiveTechnicianForEmail(prisma, ownerEmail, tenantId);
+    if (!canReceiveOs) {
+      console.log(`[sync/tasks] ${ownerEmail} — sem prestador ativo no tenant; retorno vazio.`);
+      return res.json([]);
+    }
 
     const ownerWhere = { equals: ownerEmail, mode: 'insensitive' };
 

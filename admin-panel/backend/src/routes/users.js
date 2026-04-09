@@ -45,6 +45,45 @@ router.patch('/:id/reset-password', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PATCH /api/users/:id/technician-profile — { status: 'ACTIVE' | 'PENDING' | 'INACTIVE' | 'SUSPENDED' }
+router.patch('/:id/technician-profile', async (req, res) => {
+  try {
+    const allowed = new Set(['ACTIVE', 'PENDING', 'INACTIVE', 'SUSPENDED']);
+    const st = String(req.body.status || '').toUpperCase();
+    if (!allowed.has(st)) return res.status(400).json({ error: 'status inválido.' });
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: { technicianProfile: true },
+    });
+    if (!user || !user.technicianProfile) {
+      return res.status(404).json({ error: 'Este utilizador não tem perfil de prestador.' });
+    }
+
+    const updated = await prisma.technicianProfile.update({
+      where: { id: user.technicianProfile.id },
+      data: { status: st },
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          adminId: req.admin.id,
+          tenantId: user.tenantId,
+          action: 'TECHNICIAN_PROFILE_STATUS',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: user.id, status: st },
+        },
+      })
+      .catch(() => {});
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/users/:id/toggle-active
 router.patch('/:id/toggle-active', async (req, res) => {
   try {

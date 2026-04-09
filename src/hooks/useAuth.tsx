@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import * as Notifications from 'expo-notifications';
-import { AuthService, TwoFactorRequired, User, subscribeSessionInvalidated, applySessionInvalidatedFromServer } from '../services/auth';
+import {
+  AuthService,
+  TwoFactorRequired,
+  User,
+  subscribeSessionInvalidated,
+  applySessionInvalidatedFromServer,
+  isTechnicianProfileActive,
+} from '../services/auth';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
@@ -33,6 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (next) setUser(next);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (userRole === 'TECHNICIAN' && !isTechnicianProfileActive(user)) {
+      _setUserRole('CLIENT');
+      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+      dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
+    }
+  }, [user, user?.technicianProfile?.status, userRole]);
 
   useEffect(() => {
     const unsub = subscribeSessionInvalidated(() => {
@@ -89,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.login(email, password);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = u.technicianProfile ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = isTechnicianProfileActive(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -100,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = u.technicianProfile ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = isTechnicianProfileActive(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -129,6 +145,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setUserRole = async (role: 'CLIENT' | 'TECHNICIAN') => {
+    if (role === 'TECHNICIAN' && user && !isTechnicianProfileActive(user)) {
+      return;
+    }
     _setUserRole(role);
     await AsyncStorage.setItem('@brspark_active_role', role);
     if (user) {

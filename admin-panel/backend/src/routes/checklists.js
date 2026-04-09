@@ -14,6 +14,8 @@ const {
     findActiveDuplicateInFolder,
 } = require('../lib/templateTitleUnique');
 const { computeExecutionBusinessMetrics } = require('../lib/executionBusinessMetrics');
+const { isActiveTechnicianForEmail } = require('../lib/technicianEligibility');
+const { validateChecklistTransitDisplacement } = require('../lib/checklistTransitRules');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -240,6 +242,12 @@ router.post('/templates', async (req, res) => {
             }
         }
         if (!Array.isArray(schemaData)) schemaData = [];
+
+        const transitErr = validateChecklistTransitDisplacement(schemaData);
+        if (transitErr) {
+            return res.status(400).json({ error: transitErr });
+        }
+
         let folderIdNorm =
             folderId === undefined ? undefined : folderId === '' || folderId === null ? null : String(folderId);
         if (folderIdNorm) {
@@ -770,6 +778,21 @@ router.post('/dispatch', async (req, res) => {
         // Cada dispatch cria uma OS independente — sem deduplicação automática.
         // Admin pode cancelar OS via Central de Operações se necessário.
 
+        const assigneeEmail = String(payload.ownerEmail || '').trim();
+        const scopedTenantId = loadedTemplate?.tenantId || null;
+        const assigneeOk = await isActiveTechnicianForEmail(
+          prisma,
+          assigneeEmail,
+          scopedTenantId || undefined
+        );
+        if (!assigneeOk) {
+          const scoped = scopedTenantId
+            ? ' neste inquilino/empresa'
+            : '';
+          return res.status(400).json({
+            error: `O e-mail indicado não é um prestador habilitado (ativo)${scoped}. A OS não foi criada.`,
+          });
+        }
 
         const osNumber = await allocateNextFtOsNumber(prisma);
         const execution = await prisma.checklistExecution.create({

@@ -883,6 +883,7 @@ function applySectionGroupOrderFromDom(stackEl) {
     if (next.length !== fields.length) return;
     fields.splice(0, fields.length, ...next);
     normalizeFieldsRequireSections(fields);
+    fixTransitDisplacementViolations(fields);
     renderCanvas();
 }
 
@@ -941,6 +942,7 @@ function rebuildFieldsOrderFromCanvas() {
     } else {
         normalizeFieldsRequireSections(fields);
     }
+    fixTransitDisplacementViolations(fields);
     renderCanvas();
 }
 
@@ -1128,6 +1130,13 @@ function installNativePaletteDropOnCanvas() {
             e.stopPropagation();
             const localIx = computeDropLocalIndexFromPointer(body, e.clientY);
             const globalIx = computeGlobalFieldInsertIndex(body, localIx);
+            if (type === 'transit_end') {
+                const nStart = countTransitStartsBeforeGlobalIndex(fields, globalIx);
+                if (nStart === 0) {
+                    alert(TRANSIT_MSG_END_BEFORE_START);
+                    return;
+                }
+            }
             const newField = createNewFieldFromToolboxType(type, rawText);
             fields.splice(Math.max(0, Math.min(globalIx, fields.length)), 0, newField);
             renderCanvas();
@@ -1154,6 +1163,7 @@ function absorbStrayPaletteItemsIntoFields() {
     const insertAt = computeToolboxInsertIndex(b, node, evtStub);
     const newField = createNewFieldFromToolboxType(t, rawText);
     fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
+    fixTransitDisplacementViolations(fields);
     if (node.parentNode) node.parentNode.removeChild(node);
     return true;
 }
@@ -1239,6 +1249,74 @@ function normalizeFieldsRequireSections(fieldArr) {
         rebuilt.push(seg.section, ...seg.items);
     });
     fieldArr.splice(0, fieldArr.length, ...rebuilt);
+}
+
+const TRANSIT_MSG_END_BEFORE_START =
+    'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento». Coloque primeiro o início ou arraste o fim para depois do início.';
+const TRANSIT_MSG_START_WITHOUT_END =
+    'Com «Iniciar deslocamento» no formulário, também é obrigatório incluir «Finalizar deslocamento».';
+
+/**
+ * @param {Array<{ type?: string }>} fieldArr
+ * @returns {string | null}
+ */
+function transitDisplacementSchemaErrorMessage(fieldArr) {
+    if (!fieldArr || !fieldArr.length) return null;
+    let seenStart = false;
+    for (const f of fieldArr) {
+        if (!f) continue;
+        if (f.type === 'transit_start') seenStart = true;
+        if (f.type === 'transit_end' && !seenStart) return TRANSIT_MSG_END_BEFORE_START;
+    }
+    const hasStart = fieldArr.some((f) => f && f.type === 'transit_start');
+    const hasEnd = fieldArr.some((f) => f && f.type === 'transit_end');
+    if (hasStart && !hasEnd) return TRANSIT_MSG_START_WITHOUT_END;
+    return null;
+}
+
+/**
+ * Corrige ordem: qualquer transit_end sem transit_start antes passa a ficar depois do primeiro transit_start.
+ * @param {Array<{ type?: string }>} fieldArr mutável
+ * @returns {boolean} true se alterou
+ */
+function fixTransitDisplacementViolations(fieldArr) {
+    if (!fieldArr || !fieldArr.length) return false;
+    let changed = false;
+    let guard = 0;
+    while (guard++ < 64) {
+        let seenStart = false;
+        let bad = -1;
+        for (let i = 0; i < fieldArr.length; i++) {
+            const f = fieldArr[i];
+            if (!f) continue;
+            if (f.type === 'transit_start') seenStart = true;
+            if (f.type === 'transit_end' && !seenStart) {
+                bad = i;
+                break;
+            }
+        }
+        if (bad < 0) break;
+        const [endField] = fieldArr.splice(bad, 1);
+        const firstStart = fieldArr.findIndex((f) => f && f.type === 'transit_start');
+        if (firstStart < 0) {
+            fieldArr.splice(bad, 0, endField);
+            break;
+        }
+        let ins = firstStart + 1;
+        while (ins < fieldArr.length && fieldArr[ins] && fieldArr[ins].type === 'transit_start') ins++;
+        fieldArr.splice(ins, 0, endField);
+        changed = true;
+    }
+    return changed;
+}
+
+function countTransitStartsBeforeGlobalIndex(fieldArr, globalIndex) {
+    let n = 0;
+    const lim = Math.max(0, Math.min(globalIndex, fieldArr.length));
+    for (let i = 0; i < lim; i++) {
+        if (fieldArr[i] && fieldArr[i].type === 'transit_start') n++;
+    }
+    return n;
 }
 
 function ensureCanvasSchemaHasSection() {
@@ -1701,6 +1779,7 @@ window.cloneSection = function (sectionId) {
     });
     remapCloneFieldRefs(clone, idMap);
     fields.splice(j, 0, ...clone);
+    fixTransitDisplacementViolations(fields);
     selectedFieldId = clone[0].id;
     renderCanvas();
     renderProperties();
@@ -1771,7 +1850,8 @@ window.cloneField = function(id) {
     const clone = JSON.parse(JSON.stringify(f)); // Deep copy simple
     clone.id = newId;
     fields.splice(fIndex + 1, 0, clone); // Insere logo abaixo
-    
+    fixTransitDisplacementViolations(fields);
+
     // Auto-seleciona ao clonar
     selectedFieldId = newId;
     renderCanvas();
@@ -2291,6 +2371,7 @@ window.importJSON = function() {
                     flushQuillToBoundField();
                     fields = ensureSchemaInstructionFlags(parsed.schema);
                     ensureCanvasSchemaHasSection();
+                    fixTransitDisplacementViolations(fields);
                     globalFormSettings = Object.assign(
                         {
                             requireGlobalGeofence: false,
@@ -2400,6 +2481,14 @@ window.saveChecklist = async function() {
             alert(
                 'Já existe um formulário com este nome nesta pasta (catálogo local). Escolha outro título ou pasta.'
             );
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            return;
+        }
+
+        const transitSaveErr = transitDisplacementSchemaErrorMessage(fields);
+        if (transitSaveErr) {
+            alert(transitSaveErr);
             btn.innerHTML = oldText;
             btn.disabled = false;
             return;
@@ -3234,6 +3323,7 @@ window.loadChecklist = function(id) {
         document.getElementById('tpl-icon-preview').innerHTML = currentFormIcon ? `<ion-icon name="${currentFormIcon}" style="font-size:18px;margin-right:6px;vertical-align:-3px;"></ion-icon> ${currentFormIcon}` : 'Escolher Ícone da Tarefa';
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(form.schema || [])));
         ensureCanvasSchemaHasSection();
+        fixTransitDisplacementViolations(fields);
         selectedFieldId = null;
         renderCanvas();
         renderProperties();
@@ -4793,6 +4883,7 @@ window.brsparkCopilotApplyPatch = function () {
     window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
     fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(data.schemaData)));
     ensureCanvasSchemaHasSection();
+    fixTransitDisplacementViolations(fields);
     renderCanvas();
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = false;

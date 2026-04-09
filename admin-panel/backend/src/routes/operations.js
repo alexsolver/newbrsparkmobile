@@ -9,7 +9,6 @@ const {
   stripRevisionSessionEvidenceInPlace,
 } = require('../lib/revisionSessionFields');
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
-
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
   Math.max(120, Number(process.env.TRACKING_GPS_STALE_SEC) || 600)
@@ -354,7 +353,7 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
     const { id } = req.params;
     const existing = await prisma.checklistExecution.findUnique({
       where: { id },
-      include: { template: { select: { schemaData: true } } },
+      include: { template: { select: { schemaData: true, tenantId: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'OS não encontrada.' });
 
@@ -369,15 +368,21 @@ router.post('/tasks/:id/reopen-for-revision', adminAuth, async (req, res) => {
     const rawTarget =
       req.body && typeof req.body.targetOwnerEmail === 'string' ? req.body.targetOwnerEmail.trim() : '';
     if (rawTarget && rawTarget.toLowerCase() !== previousOwner.toLowerCase()) {
+      const templateTenantId = existing.template?.tenantId || null;
       const assignee = await prisma.user.findFirst({
         where: {
           isActive: true,
           email: { equals: rawTarget, mode: 'insensitive' },
+          ...(templateTenantId ? { tenantId: templateTenantId } : {}),
+          technicianProfile: { status: 'ACTIVE' },
         },
         select: { id: true, email: true },
       });
       if (!assignee) {
-        return res.status(400).json({ error: 'Técnico não encontrado ou inativo. Use o e-mail de login do app.' });
+        return res.status(400).json({
+          error:
+            'O e-mail indicado não corresponde a um prestador habilitado (ativo). Use o e-mail de login do app.',
+        });
       }
       resolvedOwner = assignee.email;
     }

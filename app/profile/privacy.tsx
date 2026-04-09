@@ -12,7 +12,7 @@ import {
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { apiFetch } from '../../src/services/auth';
+import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 
 interface ConsentRecord {
@@ -63,7 +63,7 @@ function consentLabelForRole(
 
 export default function PrivacySettings() {
   const { user, userRole } = useAuth();
-  const isTechnician = !!(user?.technicianProfile || userRole === 'TECHNICIAN');
+  const isTechnician = userRole === 'TECHNICIAN' && isTechnicianProfileActive(user);
   const visibleConsentTypes = useMemo(
     () =>
       isTechnician

@@ -37,9 +37,17 @@ function normalizeProductionApiBase(raw: string | undefined): string | undefined
 
 const PRODUCTION_API_DEFAULT = 'https://brsparks.wstrategy.com.br';
 
-export const API_BASE = __DEV__
-  ? `http://${MAC_IP}:${DEV_API_PORT}`
-  : normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE) || PRODUCTION_API_DEFAULT;
+/**
+ * Base da API (origem sem `/api` no fim).
+ * - Se `EXPO_PUBLIC_API_BASE` estiver definido (.env / EAS), usa-se **sempre** (também em `__DEV__`),
+ *   para testar no telemóvel com Expo contra produção sem depender do IP local :3001.
+ * - Sem variável: em dev → `http://MAC_IP:porta`; em release → produção.
+ */
+const RESOLVED_API_BASE =
+  normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE) ||
+  (__DEV__ ? `http://${MAC_IP}:${DEV_API_PORT}` : PRODUCTION_API_DEFAULT);
+
+export const API_BASE = RESOLVED_API_BASE;
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface User {
@@ -65,6 +73,11 @@ export interface User {
   };
 }
 
+/** Prestador habilitado a receber OS (backend exige `TechnicianProfile.status === ACTIVE`). */
+export function isTechnicianProfileActive(user: User | null | undefined): boolean {
+  return String(user?.technicianProfile?.status || '').toUpperCase() === 'ACTIVE';
+}
+
 /** Erro especial lançado quando o backend exige 2FA */
 export class TwoFactorRequired extends Error {
   challengeToken: string;
@@ -77,6 +90,54 @@ export class TwoFactorRequired extends Error {
 
 const TOKEN_KEY = 'brspark_jwt';
 const USER_KEY  = 'brspark_user';
+/** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
+const ISOLATION_VERSION_KEY = '@brspark:isolation_v';
+
+/**
+ * Remove caches BrSpark em AsyncStorage (OS, rascunhos, filas, dados por e-mail, etc.) e SQLite local.
+ * Preserva apenas `ISOLATION_VERSION_KEY` (controlo de migração de isolamento no arranque).
+ */
+export async function purgeAllBrSparkLocalCaches(): Promise<void> {
+  let isolation: string | null = null;
+  try {
+    isolation = await AsyncStorage.getItem(ISOLATION_VERSION_KEY);
+  } catch {
+    /* ignore */
+  }
+
+  let keys: string[] = [];
+  try {
+    const all = await AsyncStorage.getAllKeys();
+    keys = all && all.length ? [...all] : [];
+  } catch {
+    keys = [];
+  }
+
+  const toRemove = keys.filter((k) => {
+    if (!k) return false;
+    if (k === ISOLATION_VERSION_KEY) return false;
+    if (k === TOKEN_KEY || k === USER_KEY) return true;
+    if (k.startsWith('@brspark')) return true;
+    if (k.startsWith('brspark_')) return true;
+    if (k.startsWith('@draft_tsk_')) return true;
+    if (k === '@user_profile' || k === '@pref_push_enabled') return true;
+    return false;
+  });
+
+  if (toRemove.length > 0) {
+    await AsyncStorage.multiRemove(toRemove);
+  }
+
+  if (isolation != null && isolation !== '') {
+    try {
+      await AsyncStorage.setItem(ISOLATION_VERSION_KEY, isolation);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  clearLocalDatabase();
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 export async function getToken(): Promise<string | null> {
@@ -85,6 +146,19 @@ export async function getToken(): Promise<string | null> {
 
 // ─── AuthService ─────────────────────────────────────────────────────────────
 export class AuthService {
+
+  /** Avatar do utilizador anterior + purge total antes de gravar nova sessão (mesmo aparelho, outra conta). */
+  static async wipeLocalDataBeforeNewSession(): Promise<void> {
+    const existing = await AuthService.getUser();
+    if (existing?.id) {
+      try {
+        await deleteAvatarCache(existing.id);
+      } catch {
+        /* ignore */
+      }
+    }
+    await purgeAllBrSparkLocalCaches();
+  }
 
   /** Login — POST /api/login */
   static async login(email: string, password: string): Promise<User> {
@@ -106,6 +180,7 @@ export class AuthService {
       throw new TwoFactorRequired(data.challengeToken);
     }
 
+    await AuthService.wipeLocalDataBeforeNewSession();
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
     return data.user as User;
@@ -142,6 +217,7 @@ export class AuthService {
       throw new Error(data.error || 'Erro ao criar conta.');
     }
 
+    await AuthService.wipeLocalDataBeforeNewSession();
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
     return data.user as User;
@@ -166,23 +242,7 @@ export class AuthService {
         /* ignore */
       }
     }
-    const keys = [
-      TOKEN_KEY, 
-      USER_KEY, 
-      '@user_profile', 
-      '@pref_push_enabled',
-      'brspark_costs_expenses',
-      'brspark_costs_budgets',
-      'brspark_costs_recurring',
-      'brspark_last_manual_sync',
-      '@brspark_cloud_tasks',
-      '@brspark_outbox',
-      '@brspark_telemetry_outbox',
-      '@brspark_active_role',
-      '@brspark_read_notifications'
-    ];
-    await AsyncStorage.multiRemove(keys);
-    clearLocalDatabase();
+    await purgeAllBrSparkLocalCaches();
   }
 
   /** Recupera usuário salvo localmente */
@@ -275,6 +335,7 @@ export class AuthService {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Código inválido.');
+    await AuthService.wipeLocalDataBeforeNewSession();
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
     return data.user as User;

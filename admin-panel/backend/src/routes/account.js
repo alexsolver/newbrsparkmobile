@@ -208,18 +208,20 @@ router.post('/me/technician', authUser, async (req, res) => {
       where: { userId: req.user.id }
     });
     if (existing) {
-      return res.status(400).json({ error: 'Você já é um prestador.' });
+      return res.status(400).json({
+        error: 'Já existe um pedido ou registo de prestador para esta conta.',
+      });
     }
 
     const profile = await prisma.technicianProfile.create({
       data: {
         userId: req.user.id,
-        status: 'ACTIVE', // Para testes, ativamos direto. Na vida real seria PENDING.
-        score: 5.0
-      }
+        status: 'PENDING',
+        score: 5.0,
+      },
     });
 
-    res.json(profile);
+    res.status(201).json(profile);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -16,7 +16,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { apiFetch } from '../../src/services/auth';
+import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -94,8 +94,8 @@ export default function OnboardingScreen() {
   const { user, userRole, loading: authLoading } = useAuth();
   const { colors: C } = useTheme();
   const isTechnician = useMemo(
-    () => !!(user?.technicianProfile || userRole === 'TECHNICIAN'),
-    [user?.technicianProfile, userRole]
+    () => userRole === 'TECHNICIAN' && isTechnicianProfileActive(user),
+    [user, userRole]
   );
 
   const slides = useMemo(() => (isTechnician ? SLIDES_TECH : SLIDES_CLIENT), [isTechnician]);

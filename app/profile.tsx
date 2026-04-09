@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../src/hooks/useResolvedAvatarUri';
-import { AuthService, API_BASE, getToken } from '../src/services/auth';
+import { AuthService, API_BASE, getToken, isTechnicianProfileActive } from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
@@ -184,16 +184,32 @@ export default function ProfileScreen() {
     try {
       setSyncing(true);
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/me/technician`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Não foi possível ativar o modo prestador.');
-      
-      setUserRole('TECHNICIAN');
-      if (user) {
-         user.technicianProfile = { id: `tech_${Date.now()}`, status: 'ACTIVE', score: 100 };
+      const res = await fetch(`${API_BASE}/api/me/technician`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Não foi possível registar o pedido de prestador.');
       }
-      
-      router.push('/auth/onboarding' as any);
-    } catch(e: any) {
+      const profile = data as { id: string; status: string; score?: number };
+      await patchUser({
+        technicianProfile: {
+          id: profile.id,
+          status: profile.status,
+          score: typeof profile.score === 'number' ? profile.score : 5,
+        },
+      });
+      if (String(profile.status || '').toUpperCase() === 'ACTIVE') {
+        await setUserRole('TECHNICIAN');
+        router.push('/auth/onboarding' as any);
+      } else {
+        Alert.alert(
+          'Pedido registado',
+          'A sua candidatura de prestador será analisada. Só após aprovação poderá receber ordens de serviço e usar o modo prestador no app.',
+        );
+      }
+    } catch (e: any) {
       Alert.alert('Erro', e.message);
     } finally {
       setSyncing(false);
@@ -414,7 +430,20 @@ export default function ProfileScreen() {
         )}
 
         {/* ─── Profile Mode Selector ─── */}
-        {user.technicianProfile ? (
+        {user.technicianProfile && !isTechnicianProfileActive(user) ? (
+          <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, marginBottom: 12, padding: 16 }]}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 6 }}>
+              Prestador — aguardando habilitação
+            </Text>
+            <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
+              {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
+                ? 'O seu pedido está em análise. Até ser aprovado, não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                : 'A sua conta de prestador não está ativa. Não receberá novas ordens de serviço até a equipa reativar o acesso.'}
+            </Text>
+          </View>
+        ) : null}
+
+        {isTechnicianProfileActive(user) ? (
           <>
             <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
               <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
@@ -437,7 +466,16 @@ export default function ProfileScreen() {
                   <Text style={{ color: userRole === 'CLIENT' ? '#fff' : '#64748B', fontWeight: '800' }}>Cliente</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setUserRole('TECHNICIAN')}
+                  onPress={() => {
+                    if (!isTechnicianProfileActive(user)) {
+                      Alert.alert(
+                        'Prestador indisponível',
+                        'A sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',
+                      );
+                      return;
+                    }
+                    setUserRole('TECHNICIAN');
+                  }}
                   style={{
                     backgroundColor: userRole === 'TECHNICIAN' ? '#D97706' : '#F1F5F9',
                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
@@ -448,13 +486,13 @@ export default function ProfileScreen() {
               </View>
             </View>
           </>
-        ) : (
+        ) : !user.technicianProfile ? (
           <View style={{ marginTop: 12, marginBottom: 12, marginHorizontal: 16 }}>
             <TouchableOpacity onPress={handleBecomeTechnician} style={{ backgroundColor: '#D97706', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Quero ser um Prestador</Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
 
         <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
           <Ionicons name="language" size={14} color="#64748B" style={{marginRight: 6}} />
