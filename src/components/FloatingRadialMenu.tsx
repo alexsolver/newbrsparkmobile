@@ -18,14 +18,6 @@ const ADMIN_MENU_ITEMS = [
 ];
 
 const PROVIDER_MENU_ITEMS = [
-  {
-    id: 'productivity',
-    labelKey: 'radialMenu.productivity',
-    labelDefault: 'Minha Produtividade',
-    icon: 'trending-up-outline',
-    color: '#7c3aed',
-    route: '/productivity',
-  },
   { id: 'mobile_stock', label: 'Estoque técnico', icon: 'cube-outline', color: '#0369a1', route: '/stock/mobile' },
   {
     id: 'tech_finance',
@@ -33,6 +25,14 @@ const PROVIDER_MENU_ITEMS = [
     icon: 'cash-outline',
     color: '#0f766e',
     route: '/finance/mobile',
+  },
+  {
+    id: 'productivity',
+    labelKey: 'radialMenu.productivity',
+    labelDefault: 'Minha Produtividade',
+    icon: 'trending-up-outline',
+    color: '#7c3aed',
+    route: '/productivity',
   },
 ];
 
