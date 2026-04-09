@@ -67,6 +67,27 @@ async function getOrCreateDefaultClientTemplate(tenantId) {
 }
 
 /**
+ * Template ativo CLIENT com evento OS_SYNCED em triggerRules (mais recente primeiro).
+ * Se nenhum corresponder, usa o template padrão (cria se necessário).
+ */
+async function resolveTemplateForOsSync(tenantId) {
+  const templates = await prisma.evaluationTemplate.findMany({
+    where: { tenantId, type: 'CLIENT', active: true },
+    include: { questions: { orderBy: { sortOrder: 'asc' } } },
+    orderBy: { updatedAt: 'desc' },
+  });
+  for (const t of templates) {
+    const rules = t.triggerRules && typeof t.triggerRules === 'object' ? t.triggerRules : {};
+    const ev = rules.events;
+    const arr = Array.isArray(ev) ? ev.map((e) => String(e).toUpperCase()) : [];
+    if (arr.includes('OS_SYNCED') && t.questions.length > 0) {
+      return t;
+    }
+  }
+  return getOrCreateDefaultClientTemplate(tenantId);
+}
+
+/**
  * Cria instância PENDING após OS SYNCED (idempotente por execução + revisão).
  * @param {string} executionId
  * @returns {Promise<import('@prisma/client').EvaluationInstance | null>}
@@ -102,7 +123,7 @@ async function onChecklistExecutionSynced(executionId) {
     return dup;
   }
 
-  const template = await getOrCreateDefaultClientTemplate(tenantId);
+  const template = await resolveTemplateForOsSync(tenantId);
 
   const instance = await prisma.evaluationInstance.create({
     data: {
@@ -123,6 +144,7 @@ async function onChecklistExecutionSynced(executionId) {
 
 module.exports = {
   getOrCreateDefaultClientTemplate,
+  resolveTemplateForOsSync,
   onChecklistExecutionSynced,
   DEFAULT_TEMPLATE_NAME,
   newPublicTokenFields,

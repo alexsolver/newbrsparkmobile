@@ -9,6 +9,66 @@ const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
 
 const router = express.Router();
 
+const QUESTION_TYPES = ['RATING', 'NPS', 'BOOLEAN', 'TEXT', 'MULTIPLE_CHOICE'];
+
+/**
+ * Sincroniza perguntas do template: atualiza por id, cria novas, remove as que saíram do payload
+ * (só remove se não existirem respostas em instâncias).
+ */
+async function syncTemplateQuestions(tx, templateId, questions) {
+  if (!Array.isArray(questions)) return;
+  const existingQs = await tx.evaluationTemplateQuestion.findMany({ where: { templateId } });
+  const byId = new Map(existingQs.map((q) => [q.id, q]));
+  const stillUsed = new Set();
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const text = String(q.text || '').trim() || 'Pergunta';
+    const type = QUESTION_TYPES.includes(String(q.type || '').toUpperCase())
+      ? String(q.type).toUpperCase()
+      : 'RATING';
+    const sortOrder = Number.isFinite(Number(q.sortOrder)) ? Number(q.sortOrder) : i;
+    const weight = Number(q.weight) > 0 ? Number(q.weight) : 1;
+    const required = q.required !== false;
+    const categoryKey =
+      q.categoryKey != null && String(q.categoryKey).trim() !== '' ? String(q.categoryKey).trim() : null;
+    const options = q.options != null && typeof q.options === 'object' ? q.options : undefined;
+
+    if (q.id && byId.has(String(q.id))) {
+      const qid = String(q.id);
+      stillUsed.add(qid);
+      await tx.evaluationTemplateQuestion.update({
+        where: { id: qid },
+        data: { text, type, weight, required, categoryKey, sortOrder, options },
+      });
+    } else {
+      await tx.evaluationTemplateQuestion.create({
+        data: {
+          templateId,
+          text,
+          type,
+          weight,
+          required,
+          categoryKey,
+          sortOrder,
+          options,
+        },
+      });
+    }
+  }
+
+  for (const eq of existingQs) {
+    if (stillUsed.has(eq.id)) continue;
+    const n = await tx.evaluationResponse.count({ where: { questionId: eq.id } });
+    if (n > 0) {
+      throw new Error(
+        `Não é possível remover a pergunta «${String(eq.text).slice(0, 48)}»: já existem respostas de clientes.`
+      );
+    }
+    await tx.evaluationTemplateQuestion.delete({ where: { id: eq.id } });
+  }
+}
+
 router.get('/templates', async (req, res) => {
   try {
     const tenantId = req.query.tenantId ? String(req.query.tenantId) : undefined;
@@ -84,20 +144,52 @@ router.post('/templates', express.json(), async (req, res) => {
   }
 });
 
+router.get('/templates/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const t = await prisma.evaluationTemplate.findUnique({
+      where: { id },
+      include: {
+        tenant: { select: { id: true, name: true, email: true } },
+        questions: { orderBy: { sortOrder: 'asc' } },
+        _count: { select: { instances: true } },
+      },
+    });
+    if (!t) return res.status(404).json({ error: 'Template não encontrado.' });
+    res.json(t);
+  } catch (err) {
+    console.error('admin GET template/:id', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.patch('/templates/:id', express.json(), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, active, triggerRules } = req.body;
+    const { name, active, triggerRules, questions } = req.body;
     const existing = await prisma.evaluationTemplate.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Template não encontrado.' });
 
-    const updated = await prisma.evaluationTemplate.update({
-      where: { id },
-      data: {
-        ...(name != null ? { name: String(name).trim() } : {}),
-        ...(active != null ? { active: !!active } : {}),
-        ...(triggerRules != null ? { triggerRules } : {}),
-      },
+    const fresh = await prisma.$transaction(async (tx) => {
+      await tx.evaluationTemplate.update({
+        where: { id },
+        data: {
+          ...(name != null ? { name: String(name).trim() } : {}),
+          ...(active != null ? { active: !!active } : {}),
+          ...(triggerRules != null ? { triggerRules } : {}),
+        },
+      });
+      if (questions !== undefined) {
+        await syncTemplateQuestions(tx, id, questions);
+      }
+      return tx.evaluationTemplate.findUnique({
+        where: { id },
+        include: {
+          tenant: { select: { id: true, name: true, email: true } },
+          questions: { orderBy: { sortOrder: 'asc' } },
+          _count: { select: { instances: true } },
+        },
+      });
     });
 
     await prisma.auditLog.create({
@@ -107,10 +199,11 @@ router.patch('/templates/:id', express.json(), async (req, res) => {
         action: 'EVALUATION_TEMPLATE_UPDATE',
         resource: id,
         category: 'DATA',
+        metadata: { questionsSynced: questions !== undefined },
       },
     });
 
-    res.json(updated);
+    res.json(fresh);
   } catch (err) {
     console.error('admin PATCH templates', err);
     res.status(500).json({ error: err.message });
@@ -194,11 +287,13 @@ router.post('/instances/:id/regenerate-token', async (req, res) => {
 router.get('/disputes', async (req, res) => {
   try {
     const tenantId = req.query.tenantId ? String(req.query.tenantId) : undefined;
-    const status = req.query.status ? String(req.query.status).toUpperCase() : 'PENDING';
+    const statusQ = req.query.status != null && String(req.query.status).trim() !== ''
+      ? String(req.query.status).toUpperCase()
+      : 'PENDING';
     const rows = await prisma.evaluationDispute.findMany({
       where: {
         ...(tenantId ? { tenantId } : {}),
-        ...(status ? { status } : {}),
+        ...(statusQ && statusQ !== 'ALL' ? { status: statusQ } : {}),
       },
       include: {
         instance: {

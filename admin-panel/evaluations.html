@@ -1,16 +1,40 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Avaliações &amp; Produtividade</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Qualidade &amp; Avaliações</title>
   <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .eval-tab-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:12px; }
+    .eval-tab { padding:8px 16px; border-radius:var(--radius-sm); font-weight:600; font-size:13px; color:var(--text3); background:transparent; }
+    .eval-tab:hover { color:var(--text2); background:var(--surface2); }
+    .eval-tab-active { color:var(--accent) !important; background:var(--accent-dim) !important; }
+    .eval-tab-panel { display:none; }
+    .eval-tab-panel.is-visible { display:block; }
+    .eval-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,0.5); z-index:300; display:none; align-items:flex-start; justify-content:center; padding:32px 16px; overflow-y:auto; }
+    .eval-modal-overlay.is-open { display:flex; }
+    .eval-modal { background:var(--surface); max-width:760px; width:100%; border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 24px 28px; max-height:calc(100vh - 64px); overflow-y:auto; border:1px solid var(--border); }
+    .eval-modal h2 { font-size:18px; margin-bottom:16px; }
+    .q-row { border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:10px; background:var(--surface2); }
+    .q-row-grid { display:grid; grid-template-columns: 1fr 118px 72px auto 40px; gap:8px; align-items:center; }
+    .q-row-grid .q-cat { grid-column: 1 / -1; }
+    @media (max-width:700px) {
+      .q-row-grid { grid-template-columns: 1fr 1fr; }
+      .q-row-grid .q-cat { grid-column: 1 / -1; }
+    }
+    .form-row { margin-bottom:12px; }
+    .form-row label { display:block; font-size:12px; font-weight:600; color:var(--text3); margin-bottom:4px; }
+    .hint-sm { font-size:12px; color:var(--text3); margin-top:6px; line-height:1.4; }
+    .eval-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  </style>
 </head>
 <body>
 <div class="admin-layout">
   <div class="main-content">
     <div class="topbar">
-      <span class="topbar-title">Avaliações (Minha Produtividade)</span>
-      <div class="topbar-actions">
+      <span class="topbar-title">Qualidade — Avaliações &amp; Minha Produtividade</span>
+      <div class="topbar-actions eval-actions">
         <select class="form-control" id="filter-tenant" style="width:220px;padding:7px 10px;font-size:12px">
           <option value="">Todos os tenants</option>
         </select>
@@ -18,37 +42,159 @@
       </div>
     </div>
     <div class="page-body">
-      <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label">Instâncias (período)</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label">Pendentes</div></div>
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label">Média 0–100</div></div>
-        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="warning-outline"></ion-icon></div><div class="stat-value" id="st-crit">—</div><div class="stat-label">Críticas</div></div>
-        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="pulse-outline"></ion-icon></div><div class="stat-value" id="st-rate">—</div><div class="stat-label">Taxa resposta %</div></div>
+      <p class="hint-sm" style="margin-bottom:16px">
+        Controlo de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o mais recentemente atualizado prevalece).
+      </p>
+
+      <div class="eval-tab-bar">
+        <button type="button" class="eval-tab eval-tab-active" data-tab="resumo">Resumo</button>
+        <button type="button" class="eval-tab" data-tab="disputas">Disputas</button>
+        <button type="button" class="eval-tab" data-tab="instancias">Instâncias</button>
+        <button type="button" class="eval-tab" data-tab="templates">Templates</button>
+        <button type="button" class="eval-tab" data-tab="ranking">Ranking técnicos</button>
       </div>
 
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-header"><span class="panel-title">Revisões pendentes (disputas)</span></div>
-        <div class="table-wrap">
-          <table><thead><tr><th>Tenant / Técnico</th><th>OS</th><th>Justificativa</th><th style="text-align:right">Ações</th></tr></thead>
-          <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+      <div class="eval-tab-panel is-visible" data-panel="resumo">
+        <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+          <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label">Instâncias (90d)</div></div>
+          <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label">Pendentes</div></div>
+          <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label">Média 0–100</div></div>
+          <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="warning-outline"></ion-icon></div><div class="stat-value" id="st-crit">—</div><div class="stat-label">Críticas</div></div>
+          <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="pulse-outline"></ion-icon></div><div class="stat-value" id="st-rate">—</div><div class="stat-label">Taxa resposta %</div></div>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
-        <div class="table-wrap">
-          <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>Link cliente</th><th style="text-align:right">Token</th></tr></thead>
-          <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+      <div class="eval-tab-panel" data-panel="disputas">
+        <div class="panel" style="margin-bottom:12px">
+          <div class="eval-actions">
+            <label style="font-size:12px;font-weight:600;color:var(--text3)">Estado</label>
+            <select class="form-control" id="dispute-status-filter" style="width:200px;padding:7px 10px;font-size:12px">
+              <option value="PENDING">Pendentes</option>
+              <option value="ALL">Todas</option>
+              <option value="MAINTAIN_EVAL">Resolvidas — manter</option>
+              <option value="ADJUSTED">Resolvidas — ajustadas</option>
+              <option value="INVALIDATED">Resolvidas — invalidadas</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">Revisões / disputas</span></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Técnico</th><th>OS / nota</th><th>Justificativa</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+          </div>
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-header"><span class="panel-title">Templates de avaliação</span></div>
-        <div class="table-wrap">
-          <table><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th></tr></thead>
-          <tbody id="tbody-tpl"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+      <div class="eval-tab-panel" data-panel="instancias">
+        <div class="panel" style="margin-bottom:12px">
+          <div class="eval-actions">
+            <label style="font-size:12px;font-weight:600;color:var(--text3)">Estado instância</label>
+            <select class="form-control" id="instance-status-filter" style="width:200px;padding:7px 10px;font-size:12px">
+              <option value="">Todos</option>
+              <option value="PENDING">PENDING</option>
+              <option value="RESPONDED">RESPONDED</option>
+              <option value="IN_REVIEW">IN_REVIEW</option>
+              <option value="FINALIZED">FINALIZED</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>Link cliente</th><th style="text-align:right">Token</th></tr></thead>
+            <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+          </div>
         </div>
       </div>
+
+      <div class="eval-tab-panel" data-panel="templates">
+        <div class="panel" style="margin-bottom:12px">
+          <button type="button" class="btn btn-primary" id="btn-new-template">+ Novo template</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">Templates de avaliação</span></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody id="tbody-tpl"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <div class="eval-tab-panel" data-panel="ranking">
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">Média por técnico (período dos KPIs)</span></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Nome</th><th>Email</th><th>Média</th><th>N avaliações</th></tr></thead>
+            <tbody id="tbody-ranking"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Abra o separador Resumo para carregar dados.</td></tr></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tpl-modal-overlay" class="eval-modal-overlay" aria-hidden="true">
+  <div class="eval-modal" role="dialog" aria-labelledby="tpl-modal-title">
+    <h2 id="tpl-modal-title">Template</h2>
+    <input type="hidden" id="tpl-edit-id" value="" />
+    <div class="form-row">
+      <label for="tpl-tenant">Tenant</label>
+      <select class="form-control" id="tpl-tenant" style="padding:8px 10px;font-size:13px"></select>
+    </div>
+    <div class="form-row">
+      <label for="tpl-name">Nome do template</label>
+      <input type="text" class="form-control" id="tpl-name" style="padding:8px 10px" placeholder="Ex.: Satisfação pós-visita" />
+    </div>
+    <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label for="tpl-type">Tipo</label>
+        <select class="form-control" id="tpl-type" style="padding:8px 10px;min-width:140px">
+          <option value="CLIENT">CLIENT (cliente)</option>
+          <option value="AUDIT">AUDIT</option>
+          <option value="INTERNAL">INTERNAL</option>
+        </select>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" id="tpl-active" checked /> Ativo
+      </label>
+    </div>
+    <div class="form-row">
+      <label>Regras de disparo</label>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text2)">
+        <input type="checkbox" id="tpl-rule-os-synced" checked /> Criar avaliação quando a OS for sincronizada (SYNCED)
+      </label>
+      <p class="hint-sm">Gravado em <code>triggerRules.events</code> (ex.: <code>OS_SYNCED</code>). Apenas templates <strong>CLIENT</strong> ativos com este evento e com perguntas são elegíveis; usa-se o mais recentemente atualizado.</p>
+    </div>
+    <p class="hint-sm" id="tpl-instances-hint"></p>
+    <div class="form-row">
+      <label>Perguntas</label>
+      <div id="tpl-questions"></div>
+      <button type="button" class="btn btn-sm" id="tpl-add-question" style="margin-top:8px">+ Pergunta</button>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button type="button" class="btn" id="tpl-modal-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="tpl-modal-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="dispute-modal-overlay" class="eval-modal-overlay" aria-hidden="true">
+  <div class="eval-modal" role="dialog" aria-labelledby="dispute-modal-title">
+    <h2 id="dispute-modal-title">Resolver disputa</h2>
+    <input type="hidden" id="dispute-modal-id" />
+    <input type="hidden" id="dispute-modal-action" />
+    <div class="form-row" id="dispute-adjust-wrap" style="display:none">
+      <label for="dispute-modal-score">Nova nota global (0–100)</label>
+      <input type="number" class="form-control" id="dispute-modal-score" min="0" max="100" step="0.1" style="padding:8px 10px;max-width:160px" />
+    </div>
+    <div class="form-row">
+      <label for="dispute-modal-note">Nota de resolução (opcional)</label>
+      <textarea class="form-control" id="dispute-modal-note" rows="3" style="padding:8px 10px" placeholder="Comentário interno"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button type="button" class="btn" id="dispute-modal-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="dispute-modal-confirm">Confirmar</button>
     </div>
   </div>
 </div>
@@ -56,127 +202,8 @@
 <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
 <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
 <script type="module">
-  import { initPage } from './js/sidebar.js';
-  import { CONFIG } from './js/config.js';
-  await initPage();
-
-  const tenantSel = document.getElementById('filter-tenant');
-  const origin = window.location.origin;
-
-  async function loadTenants() {
-    const res = await CONFIG.get('/tenants?limit=500');
-    const list = res?.data || res || [];
-    for (const t of list) {
-      const o = document.createElement('option');
-      o.value = t.id;
-      o.textContent = (t.name || t.email || t.id).slice(0, 48);
-      tenantSel.appendChild(o);
-    }
-  }
-
-  async function loadAnalytics() {
-    const p = new URLSearchParams();
-    if (tenantSel.value) p.set('tenantId', tenantSel.value);
-    const qs = p.toString();
-    const url = '/admin/evaluations/analytics' + (qs ? `?${qs}` : '');
-    const a = await CONFIG.get(url);
-    if (a?.error) return;
-    document.getElementById('st-total').textContent = a.counts?.total ?? '—';
-    document.getElementById('st-pend').textContent = a.counts?.pending ?? '—';
-    document.getElementById('st-avg').textContent = a.averageTotalScore != null ? String(a.averageTotalScore) : '—';
-    document.getElementById('st-crit').textContent = a.counts?.critical ?? '—';
-    document.getElementById('st-rate').textContent = a.responseRatePercent != null ? String(a.responseRatePercent) : '—';
-  }
-
-  async function loadDisputes() {
-    const url = '/admin/evaluations/disputes?status=PENDING' + (tenantSel.value ? '&tenantId=' + encodeURIComponent(tenantSel.value) : '');
-    const d = await CONFIG.get(url);
-    const tb = document.getElementById('tbody-disputes');
-    const items = d?.items || [];
-    if (!items.length) {
-      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma revisão pendente.</td></tr>';
-      return;
-    }
-    tb.innerHTML = items.map((x) => {
-      const tech = x.technician?.email || '';
-      const os = x.instance?.execution?.osNumber || '—';
-      const raw = String(x.justification || '').replace(/</g, '&lt;');
-      const j = raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
-      return `<tr>
-        <td>${tech}</td><td>${os}</td><td>${j}</td>
-        <td style="text-align:right;white-space:nowrap">
-          <button class="btn btn-sm btn-primary" data-d="${x.id}" data-a="MAINTAIN_EVAL">Manter</button>
-          <button class="btn btn-sm" data-d="${x.id}" data-a="INVALIDATED">Invalidar</button>
-        </td></tr>`;
-    }).join('');
-    tb.querySelectorAll('button[data-d]').forEach((btn) => {
-      btn.onclick = async () => {
-        const id = btn.getAttribute('data-d');
-        const st = btn.getAttribute('data-a');
-        if (!confirm('Confirmar decisão ' + st + '?')) return;
-        await CONFIG.patch('/admin/evaluations/disputes/' + id + '/resolve', { status: st, resolutionNote: 'Painel admin' });
-        loadDisputes();
-      };
-    });
-  }
-
-  async function loadInstances() {
-    const url = '/admin/evaluations/instances' + (tenantSel.value ? '?tenantId=' + encodeURIComponent(tenantSel.value) : '');
-    const d = await CONFIG.get(url);
-    const tb = document.getElementById('tbody-inst');
-    const items = d?.items || [];
-    if (!items.length) {
-      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem instâncias.</td></tr>';
-      return;
-    }
-    tb.innerHTML = items.map((x) => {
-      const href =
-        x.clientSurveyFullUrl ||
-        (x.publicToken ? `${origin}/evaluation-survey.html?token=${encodeURIComponent(x.publicToken)}` : '');
-      const link = href
-        ? `<a href="${String(href).replace(/"/g, '&quot;')}" target="_blank" rel="noopener">Abrir formulário</a>`
-        : '—';
-      const regen = x.status === 'PENDING'
-        ? `<button class="btn btn-sm" data-regen="${x.id}">Novo token</button>`
-        : '';
-      return `<tr><td>${x.status}</td><td>${(x.templateName || '').replace(/</g, '&lt;')}</td><td>${(x.technicianEmail || '').replace(/</g, '&lt;')}</td><td>${x.osNumber || '—'}</td><td>${link}</td><td style="text-align:right">${regen}</td></tr>`;
-    }).join('');
-    tb.querySelectorAll('button[data-regen]').forEach((btn) => {
-      btn.onclick = async () => {
-        const id = btn.getAttribute('data-regen');
-        await CONFIG.post('/admin/evaluations/instances/' + id + '/regenerate-token', {});
-        loadInstances();
-      };
-    });
-  }
-
-  async function loadTemplates() {
-    const url = '/admin/evaluations/templates' + (tenantSel.value ? '?tenantId=' + encodeURIComponent(tenantSel.value) : '');
-    const rows = await CONFIG.get(url);
-    const tb = document.getElementById('tbody-tpl');
-    const list = Array.isArray(rows) ? rows : [];
-    if (!list.length) {
-      tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Sem templates.</td></tr>';
-      return;
-    }
-    tb.innerHTML = list.map((t) => `<tr>
-      <td>${(t.name || '').replace(/</g, '&lt;')}</td>
-      <td>${t.type}</td>
-      <td>${(t.tenant?.name || t.tenantId || '').toString().replace(/</g, '&lt;')}</td>
-      <td>${t._count?.questions ?? '—'}</td>
-      <td>${t._count?.instances ?? '—'}</td>
-    </tr>`).join('');
-  }
-
-  async function refreshAll() {
-    await Promise.all([loadAnalytics(), loadDisputes(), loadInstances(), loadTemplates()]);
-  }
-
-  tenantSel.addEventListener('change', refreshAll);
-  document.getElementById('btn-refresh').addEventListener('click', refreshAll);
-
-  await loadTenants();
-  await refreshAll();
+  import { bootEvaluationsPage } from './js/evaluations-manager.js';
+  bootEvaluationsPage();
 </script>
 </body>
 </html>

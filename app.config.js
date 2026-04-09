@@ -2,6 +2,12 @@
  * Expo config — inclui Google Maps Android (obrigatório para react-native-maps).
  * Defina: EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY no .env; o Android injeta a mesma chave no manifest em compile-time (android/app/build.gradle).
  * API móvel em release: EXPO_PUBLIC_API_BASE (origem sem /api), ou fallback em src/services/auth.ts.
+ *
+ * Dev Client (iOS/Android): o URL do packager é o Metro (ex.: exp://IP-LAN:8081 ou túnel do `expo start`),
+ * NÃO o domínio HTTPS da API (ex. brsparks.wstrategy.com.br). Se vir "Could not connect to development server"
+ * com host tipo expo.*:8081, abra o menu de desenvolvimento → altere o URL do bundler para o IP do PC onde corre
+ * `npx expo start --dev-client`, ou use `expo start --tunnel`. Só use hostname remoto em :8081 se aí estiver mesmo
+ * a correr o Metro com porta acessível (e no iOS pode ser preciso exceção ATS para HTTP em Info.plist).
  */
 const path = require('path');
 try {
