@@ -1150,7 +1150,7 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Desvio máx.</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(String(p.maxDeviationM ?? '—'))} m</div></div>
         <div style="background:#fff;padding:8px;border-radius:8px;border:1px solid ${th.colorBorder}"><div style="font-size:7px;color:${th.colorMuted};font-weight:800;text-transform:uppercase">Tolerância</div><div style="font-weight:900;font-size:14px;margin-top:2px">${esc(tol)} m</div></div>
       </div>
-      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controlo ao longo da referência com amostra GPS no corredor — não corresponde a "distância no corredor ÷ referência".</div>
+      <div style="margin-top:6px;font-size:7px;color:${th.colorMuted};line-height:1.35;font-style:italic">Cobertura: % de pontos de controle ao longo da referência com amostra GPS no corredor — não corresponde a "distância no corredor ÷ referência".</div>
       <div style="margin-top:10px;padding:10px 12px;background:#fffbea;border:1px solid #fde68a;border-radius:8px">
         <div style="font-size:9px;font-weight:900;color:#9a3412;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Resumo do percurso</div>
         <table style="width:100%;font-size:10px;color:${th.colorText};line-height:1.5;border-collapse:collapse">

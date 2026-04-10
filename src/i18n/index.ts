@@ -26,20 +26,37 @@ function getDeviceLanguage(): SupportedLang {
   return 'pt-BR';
 }
 
-// Returns detected country code (BR / US / ES / AR) for region pre-selection
-export function getDeviceRegion(): string {
+const REGISTER_REGION_CODES = ['BR', 'US', 'ES', 'AR'] as const;
+export type RegisterRegionCode = (typeof REGISTER_REGION_CODES)[number];
+
+/**
+ * País pré-selecionado no cadastro a partir da região/idioma do sistema (Ajustes do telemóvel).
+ * Não usa GPS — só expo-localization (mercado costuma tratar isto como “localização” do utilizador).
+ */
+export function getDeviceRegion(): RegisterRegionCode {
   try {
     const locales = getLocales();
     if (locales.length > 0) {
-      const region = locales[0].regionCode || '';
-      const allowed = ['BR', 'US', 'ES', 'AR'];
-      if (allowed.includes(region)) return region;
-      // Fallback mapping by language
-      const tag = locales[0].languageTag;
+      const region = String(locales[0].regionCode || '').toUpperCase();
+      if (REGISTER_REGION_CODES.includes(region as RegisterRegionCode)) {
+        return region as RegisterRegionCode;
+      }
+
+      const tag = String(locales[0].languageTag || '')
+        .replace('_', '-')
+        .toLowerCase();
+
+      // Argentina: tag ou código ISO explícito
+      if (tag === 'es-ar' || region === 'AR') return 'AR';
+
+      // Português (Brasil, Portugal, etc.) → única opção lusófona na lista
       if (tag.startsWith('pt')) return 'BR';
-      if (tag === 'es-AR') return 'AR';
-      if (tag.startsWith('es')) return 'ES';
+
+      // Inglês → EUA como opção EN na lista
       if (tag.startsWith('en')) return 'US';
+
+      // Espanhol genérico / América Latina sem opção própria → Espanha como locale es-ES
+      if (tag.startsWith('es')) return 'ES';
     }
   } catch {}
   return 'BR';

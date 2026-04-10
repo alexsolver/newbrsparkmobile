@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert,
-  ActivityIndicator, Linking, Image, Modal,
+  ActivityIndicator, Linking, Image, Modal, ActionSheetIOS,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -136,19 +136,15 @@ function createLoginStyles(C: ColorPalette) {
     docContent: { fontSize: 13, color: C.textSecondary, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
     footerLinkTouch: { padding: 4 },
 
-    // Country selector (register)
-    countryRow: { marginBottom: 12, marginTop: 4 },
-    countryLabel: { fontSize: 10, fontWeight: '900', color: C.textLight, marginBottom: 8, letterSpacing: 0.5 },
-    countryPills: { flexDirection: 'row', gap: 8 },
-    countryPill: {
-      flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12,
-      backgroundColor: C.divider, borderWidth: 1, borderColor: C.border,
+    // Country / language (register) — uma linha compacta + modal
+    countryRow: { marginBottom: 4, marginTop: 2 },
+    countrySelectTitle: {
+      fontSize: 15, color: C.primary, fontWeight: '700',
+      paddingVertical: 2,
     },
-    countryPillActive: { backgroundColor: C.accent, borderColor: C.accent },
-    countryBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.border, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-    countryBadgeActive: { backgroundColor: C.cardWhite },
-    countryCode: { fontSize: 11, fontWeight: '900', color: C.textSecondary },
-    countryCodeActive: { color: C.cardWhite },
+    countrySelectSub: {
+      fontSize: 12, color: C.textLight, fontWeight: '600', marginTop: 2,
+    },
   });
 }
 
@@ -204,7 +200,7 @@ export default function LoginScreen() {
       ? params.techRegToken.trim()
       : undefined;
   const { login, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
@@ -217,7 +213,21 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [consent, setConsent] = useState(false);
-  const [country, setCountry] = useState<string>(getDeviceRegion());
+  const [country, setCountry] = useState<string>(() => getDeviceRegion());
+
+  // País: preferir valor guardado no perfil; senão região/idioma do sistema (getDeviceRegion).
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const stored = await AsyncStorage.getItem(REGION_KEY);
+      if (cancel) return;
+      const ok = ['BR', 'US', 'ES', 'AR'];
+      if (stored && ok.includes(stored)) setCountry(stored);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, []);
 
   // Compliance doc viewer
   const [docModal, setDocModal] = useState<{ title: string; content: string } | null>(null);
@@ -257,6 +267,64 @@ export default function LoginScreen() {
       params: { token: techRegToken },
     } as any);
   };
+
+  const selectedCountry = useMemo(
+    () => COUNTRIES.find((c) => c.code === country) || COUNTRIES[0],
+    [country]
+  );
+
+  const applyCountryAndLanguage = async (c: (typeof COUNTRIES)[number]) => {
+    setCountry(c.code);
+    await AsyncStorage.setItem(REGION_KEY, c.code);
+    await setLanguage(c.lang);
+  };
+
+  /** iOS: action sheet nativo. Android: Alert com lista — evita modal customizado por baixo de outras camadas. */
+  const openCountryLanguagePicker = () => {
+    const titleRaw = t('auth.selectCountryTitle');
+    const title =
+      titleRaw === 'auth.selectCountryTitle' || !titleRaw?.trim() ? 'País e idioma' : titleRaw;
+    const messageRaw = t('auth.countryHint');
+    const message =
+      messageRaw === 'auth.countryHint' || !messageRaw?.trim()
+        ? 'Define o idioma da interface e preferências regionais.'
+        : messageRaw;
+    const cancelLabel = t('common.cancel');
+
+    if (Platform.OS === 'ios') {
+      const options = [
+        ...COUNTRIES.map((c) => String(t(`auth.regions.${c.code}`, { defaultValue: c.label }))),
+        cancelLabel,
+      ];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: COUNTRIES.length,
+          title,
+          message,
+        },
+        (idx) => {
+          if (idx === undefined || idx === COUNTRIES.length) return;
+          void applyCountryAndLanguage(COUNTRIES[idx]);
+        }
+      );
+      return;
+    }
+
+    Alert.alert(title, message, [
+      ...COUNTRIES.map((c) => ({
+        text: String(t(`auth.regions.${c.code}`, { defaultValue: c.label })),
+        onPress: () => void applyCountryAndLanguage(c),
+      })),
+      { text: cancelLabel, style: 'cancel' },
+    ]);
+  };
+
+  const countryFieldLabel = useMemo(() => {
+    const raw = t('auth.countryLabel');
+    if (!raw || raw === 'auth.countryLabel') return 'País e idioma do app';
+    return raw;
+  }, [t, i18n.language]);
 
   const openDoc = async (type: 'TERMS_OF_USE' | 'PRIVACY_POLICY') => {
     setDocLoading(true);
@@ -539,30 +607,34 @@ export default function LoginScreen() {
 
 
 
-            {/* Country selector — shown in REGISTER mode */}
+            {/* País / idioma — linha única; lista no modal (padrão de apps) */}
             {mode === 'REGISTER' && (
               <View style={styles.countryRow}>
-                <Text style={styles.countryLabel}>{t('auth.country') || 'País / Region'}</Text>
-                <View style={styles.countryPills}>
-                  {COUNTRIES.map(c => {
-                    const active = country === c.code;
-                    return (
-                      <TouchableOpacity
-                        key={c.code}
-                        style={[styles.countryPill, active && styles.countryPillActive]}
-                        onPress={async () => {
-                          setCountry(c.code);
-                          await AsyncStorage.setItem(REGION_KEY, c.code);
-                          await setLanguage(c.lang);
-                        }}
-                      >
-                        <View style={[styles.countryBadge, active && styles.countryBadgeActive]}>
-                          <Ionicons name="earth" size={16} color={active ? C.accent : C.slate} />
-                        </View>
-                        <Text style={[styles.countryCode, active && styles.countryCodeActive]}>{c.code}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View style={styles.fieldG}>
+                  <Text style={styles.fieldL}>{countryFieldLabel.toUpperCase()}</Text>
+                  <TouchableOpacity
+                    style={styles.fieldRow}
+                    onPress={openCountryLanguagePicker}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={countryFieldLabel}
+                    accessibilityHint={
+                      t('auth.countryHint') === 'auth.countryHint'
+                        ? 'Define o idioma do app'
+                        : t('auth.countryHint')
+                    }
+                  >
+                    <Ionicons name="globe-outline" size={18} color={C.textLight} style={styles.fieldIcon} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.countrySelectTitle}>
+                        {t(`auth.regions.${selectedCountry.code}`, { defaultValue: selectedCountry.label })}
+                      </Text>
+                      <Text style={styles.countrySelectSub}>
+                        {selectedCountry.lang} · {selectedCountry.code}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-down" size={20} color={C.textLight} />
+                  </TouchableOpacity>
                 </View>
               </View>
             )}

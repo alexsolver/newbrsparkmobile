@@ -17,10 +17,15 @@ import {
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { API_BASE, getToken } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
+
+/** Alinhado ao backend (reconhecimento facial / CompreFace). */
+const MIN_FACE_ENROLLMENT_PHOTOS = 4;
 
 const DAYS: { key: string; label: string }[] = [
   { key: 'mon', label: 'Segunda' },
@@ -45,6 +50,8 @@ type DocRow = {
   issuingBody: string;
   notes: string;
   locationIds: string[];
+  attachmentUrl?: string | null;
+  attachmentMimeType?: string | null;
 };
 
 type Loc = { id: string; name: string; type: string };
@@ -68,6 +75,8 @@ function parseDocs(raw: unknown): DocRow[] {
     issuingBody: d.issuingBody || '',
     notes: d.notes || '',
     locationIds: Array.isArray(d.locationIds) ? d.locationIds : [],
+    attachmentUrl: d.attachmentUrl ? String(d.attachmentUrl) : '',
+    attachmentMimeType: d.attachmentMimeType ? String(d.attachmentMimeType) : '',
   }));
 }
 
@@ -252,6 +261,8 @@ export default function TechRegistrationScreen() {
         issuingBody: d.issuingBody.trim() || null,
         notes: d.notes.trim() || null,
         locationIds: d.locationIds,
+        attachmentUrl: d.attachmentUrl?.trim() || null,
+        attachmentMimeType: d.attachmentMimeType?.trim() || null,
       })),
       technician: {
         cft: cft.trim() || null,
@@ -269,6 +280,8 @@ export default function TechRegistrationScreen() {
           issuingBody: d.issuingBody.trim() || null,
           notes: d.notes.trim() || null,
           locationIds: d.locationIds,
+          attachmentUrl: d.attachmentUrl?.trim() || null,
+          attachmentMimeType: d.attachmentMimeType?.trim() || null,
         })),
       },
     };
@@ -294,6 +307,126 @@ export default function TechRegistrationScreen() {
     serviceLocIds,
   ]);
 
+  const applyResponsesDocs = useCallback((responsesJson: Record<string, unknown>) => {
+    const r = responsesJson && typeof responsesJson === 'object' ? responsesJson : {};
+    setPersonalDocs(parseDocs((r as any).personalDocuments));
+    const tech = (r as any).technician && typeof (r as any).technician === 'object' ? (r as any).technician : {};
+    setProDocs(parseDocs(tech.professionalDocuments));
+  }, []);
+
+  const uploadDocAttachment = async (
+    kind: 'personal' | 'professional',
+    rowId: string,
+    fileBase64: string,
+    mimeType: string
+  ) => {
+    const jwt = await getToken();
+    if (!jwt) {
+      Alert.alert('Sessão', 'Inicie sessão para anexar arquivos.');
+      return;
+    }
+    try {
+      const res = await fetch(`${basePath}/document-attachment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ kind, rowId, fileBase64, mimeType }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        Alert.alert('Anexo', data.error || 'Falha no envio.');
+        return;
+      }
+      if (data.responsesJson) applyResponsesDocs(data.responsesJson);
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha de rede.');
+    }
+  };
+
+  const clearDocAttachment = async (kind: 'personal' | 'professional', rowId: string) => {
+    const jwt = await getToken();
+    if (!jwt) return;
+    try {
+      const res = await fetch(`${basePath}/document-attachment/${kind}/${encodeURIComponent(rowId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        Alert.alert('Anexo', data.error || 'Falha ao remover.');
+        return;
+      }
+      if (data.responsesJson) applyResponsesDocs(data.responsesJson);
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha de rede.');
+    }
+  };
+
+  const promptDocSource = (kind: 'personal' | 'professional', rowId: string) => {
+    Alert.alert('Anexar', 'Escolha a origem do arquivo.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Câmera',
+        onPress: async () => {
+          const cam = await ImagePicker.requestCameraPermissionsAsync();
+          if (!cam.granted) {
+            Alert.alert('Permissão', 'Precisamos da câmera para fotografar o documento.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            base64: true,
+          });
+          if (result.canceled) return;
+          const camAsset = result.assets?.[0];
+          const b64Cam = camAsset?.base64;
+          if (!b64Cam) return;
+          await uploadDocAttachment(kind, rowId, b64Cam, camAsset.mimeType || 'image/jpeg');
+        },
+      },
+      {
+        text: 'Galeria',
+        onPress: async () => {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert('Permissão', 'Precisamos da galeria para escolher a imagem.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            base64: true,
+          });
+          if (result.canceled) return;
+          const galAsset = result.assets?.[0];
+          const b64Gal = galAsset?.base64;
+          if (!b64Gal) return;
+          await uploadDocAttachment(kind, rowId, b64Gal, galAsset.mimeType || 'image/jpeg');
+        },
+      },
+      {
+        text: 'PDF',
+        onPress: async () => {
+          const res = await DocumentPicker.getDocumentAsync({
+            type: 'application/pdf',
+            copyToCacheDirectory: true,
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          const asset = res.assets[0];
+          try {
+            const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+            await uploadDocAttachment(kind, rowId, b64, asset.mimeType || 'application/pdf');
+          } catch (e: any) {
+            Alert.alert('Erro', e?.message || 'Não foi possível ler o PDF.');
+          }
+        },
+      },
+    ]);
+  };
+
   const saveDraftSoon = useCallback(() => {
     if (!token || !sessionOk || status === 'SUBMITTED' || closed) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
@@ -315,7 +448,32 @@ export default function TechRegistrationScreen() {
     }, 900);
   }, [basePath, token, sessionOk, status, closed, buildResponsesJson]);
 
-  const pickFace = async () => {
+  const postFaceB64 = async (fileBase64: string, mimeType: string) => {
+    const jwt = await getToken();
+    if (!jwt) {
+      Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
+      return false;
+    }
+    const res = await fetch(`${basePath}/face-enrollment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({ fileBase64, mimeType }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      Alert.alert('Foto', data.error || 'Falha no envio.');
+      return false;
+    }
+    if (Array.isArray(data.photos)) {
+      setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
+    }
+    return true;
+  };
+
+  const addFacePhotosFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Permissão', 'Precisamos de acesso à galeria para enviar fotos.');
@@ -328,31 +486,36 @@ export default function TechRegistrationScreen() {
       base64: true,
     });
     if (result.canceled) return;
-    const jwt = await getToken();
-    if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
-      return;
-    }
     for (const asset of result.assets) {
       if (!asset.base64) continue;
-      const mime = asset.mimeType || 'image/jpeg';
-      const res = await fetch(`${basePath}/face-enrollment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({ fileBase64: asset.base64, mimeType: mime }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        Alert.alert('Foto', data.error || 'Falha no envio.');
-        break;
-      }
-      if (Array.isArray(data.photos)) {
-        setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
-      }
+      const ok = await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
+      if (!ok) break;
     }
+  };
+
+  const addFacePhotosFromCamera = async () => {
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      Alert.alert('Permissão', 'Precisamos da câmera para fotografar o rosto.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) return;
+    await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
+  };
+
+  const pickFace = () => {
+    Alert.alert('Adicionar fotos', 'Escolha a origem. Pode repetir para enviar várias fotos.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Câmera', onPress: () => void addFacePhotosFromCamera() },
+      { text: 'Galeria', onPress: () => void addFacePhotosFromGallery() },
+    ]);
   };
 
   const removeFace = async (photoId: string) => {
@@ -429,6 +592,13 @@ export default function TechRegistrationScreen() {
     }
     if (!name.trim()) {
       Alert.alert('Validação', 'Informe o nome.');
+      return;
+    }
+    if (facePhotos.length < MIN_FACE_ENROLLMENT_PHOTOS) {
+      Alert.alert(
+        'Fotos do rosto',
+        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para reconhecimento facial. Atualmente: ${facePhotos.length}.`
+      );
       return;
     }
     const jwt = await getToken();
@@ -625,7 +795,8 @@ export default function TechRegistrationScreen() {
       <View style={styles.section}>
         <Text style={styles.secTitle}>Reconhecimento facial</Text>
         <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
-          Envie fotos nítidas do rosto (JPEG/PNG). Até 12 imagens, máx. 5 MB cada.
+          Para sincronizar com o reconhecimento facial, envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto
+          (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.
         </Text>
         {!readOnly ? (
           <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 12 }]} onPress={pickFace}>
@@ -774,9 +945,44 @@ export default function TechRegistrationScreen() {
               setPersonalDocs(n);
               saveDraftSoon();
             }} />
+            {d.attachmentUrl ? (
+              <View style={{ marginTop: 10 }}>
+                {String(d.attachmentMimeType || '').toLowerCase().includes('pdf') ||
+                String(d.attachmentUrl).toLowerCase().endsWith('.pdf') ? (
+                  <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600' }}>PDF anexado</Text>
+                ) : (
+                  <Image
+                    source={{ uri: publicUrl(d.attachmentUrl) }}
+                    style={{ width: '100%', height: 160, borderRadius: 8 }}
+                    resizeMode="cover"
+                  />
+                )}
+              </View>
+            ) : null}
             {!readOnly ? (
-              <TouchableOpacity onPress={() => setPersonalDocs((x) => x.filter((_, i) => i !== idx))}>
-                <Text style={{ color: '#dc2626', marginTop: 6 }}>Remover</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+                <TouchableOpacity onPress={() => promptDocSource('personal', d.id)}>
+                  <Text style={{ color: C.accent, fontWeight: '700' }}>
+                    {d.attachmentUrl ? 'Trocar anexo' : 'Anexar (câmera, galeria ou PDF)'}
+                  </Text>
+                </TouchableOpacity>
+                {d.attachmentUrl ? (
+                  <TouchableOpacity onPress={() => void clearDocAttachment('personal', d.id)}>
+                    <Text style={{ color: '#dc2626', fontWeight: '700' }}>Remover anexo</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+            {!readOnly ? (
+              <TouchableOpacity
+                onPress={async () => {
+                  const row = personalDocs[idx];
+                  if (row.attachmentUrl) await clearDocAttachment('personal', row.id);
+                  setPersonalDocs((x) => x.filter((r) => r.id !== row.id));
+                  saveDraftSoon();
+                }}
+              >
+                <Text style={{ color: '#dc2626', marginTop: 6 }}>Remover linha</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -811,9 +1017,44 @@ export default function TechRegistrationScreen() {
               setProDocs(n);
               saveDraftSoon();
             }} />
+            {d.attachmentUrl ? (
+              <View style={{ marginTop: 10 }}>
+                {String(d.attachmentMimeType || '').toLowerCase().includes('pdf') ||
+                String(d.attachmentUrl).toLowerCase().endsWith('.pdf') ? (
+                  <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600' }}>PDF anexado</Text>
+                ) : (
+                  <Image
+                    source={{ uri: publicUrl(d.attachmentUrl) }}
+                    style={{ width: '100%', height: 160, borderRadius: 8 }}
+                    resizeMode="cover"
+                  />
+                )}
+              </View>
+            ) : null}
             {!readOnly ? (
-              <TouchableOpacity onPress={() => setProDocs((x) => x.filter((_, i) => i !== idx))}>
-                <Text style={{ color: '#dc2626', marginTop: 6 }}>Remover</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+                <TouchableOpacity onPress={() => promptDocSource('professional', d.id)}>
+                  <Text style={{ color: C.accent, fontWeight: '700' }}>
+                    {d.attachmentUrl ? 'Trocar anexo' : 'Anexar (câmera, galeria ou PDF)'}
+                  </Text>
+                </TouchableOpacity>
+                {d.attachmentUrl ? (
+                  <TouchableOpacity onPress={() => void clearDocAttachment('professional', d.id)}>
+                    <Text style={{ color: '#dc2626', fontWeight: '700' }}>Remover anexo</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+            {!readOnly ? (
+              <TouchableOpacity
+                onPress={async () => {
+                  const row = proDocs[idx];
+                  if (row.attachmentUrl) await clearDocAttachment('professional', row.id);
+                  setProDocs((x) => x.filter((r) => r.id !== row.id));
+                  saveDraftSoon();
+                }}
+              >
+                <Text style={{ color: '#dc2626', marginTop: 6 }}>Remover linha</Text>
               </TouchableOpacity>
             ) : null}
           </View>

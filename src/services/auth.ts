@@ -139,7 +139,7 @@ const ISOLATION_VERSION_KEY = '@brspark:isolation_v';
 
 /**
  * Remove caches BrSpark em AsyncStorage (OS, rascunhos, filas, dados por e-mail, etc.) e SQLite local.
- * Preserva apenas `ISOLATION_VERSION_KEY` (controlo de migração de isolamento no arranque).
+ * Preserva apenas `ISOLATION_VERSION_KEY` (controle de migração de isolamento no arranque).
  */
 export async function purgeAllBrSparkLocalCaches(): Promise<void> {
   let isolation: string | null = null;

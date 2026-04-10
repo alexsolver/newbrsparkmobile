@@ -80,6 +80,13 @@
         }
       ],
       "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app acessa suas fotos para anexar documentos e enviar imagens no cadastro e nas tarefas.",
+          "cameraPermission": "O app usa a câmera para fotografar documentos e o rosto no cadastro de prestador e nas tarefas."
+        }
+      ],
       "expo-font",
       "expo-asset",
       "@react-native-community/datetimepicker",

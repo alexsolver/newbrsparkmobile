@@ -9,7 +9,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, Image, ScrollView, TouchableOpacity, StyleSheet,
   Animated, ActivityIndicator, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
@@ -91,6 +92,7 @@ async function requestOsLocationPermissions(isTechnician: boolean, consents: Con
 }
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const { user, userRole, loading: authLoading } = useAuth();
   const { colors: C } = useTheme();
   const isTechnician = useMemo(
@@ -194,18 +196,18 @@ export default function OnboardingScreen() {
   const summaryRows: [keyof ConsentState, string, string][] = useMemo(() => {
     if (isTechnician) {
       return [
-        ['LOCATION_BACKGROUND', 'GPS em segundo plano', 'navigate-outline'],
-        ['LOCATION_FOREGROUND', 'GPS com app aberto', 'locate-outline'],
-        ['DEVICE_TELEMETRY', 'Status do dispositivo', 'hardware-chip-outline'],
-        ['DATA_RETENTION', 'Política de retenção lida', 'time-outline'],
+        ['LOCATION_BACKGROUND', t('consentFlow.sumBgGps'), 'navigate-outline'],
+        ['LOCATION_FOREGROUND', t('consentFlow.sumFgGps'), 'locate-outline'],
+        ['DEVICE_TELEMETRY', t('consentFlow.sumDevice'), 'hardware-chip-outline'],
+        ['DATA_RETENTION', t('consentFlow.sumRetention'), 'time-outline'],
       ];
     }
     return [
-      ['LOCATION_FOREGROUND', 'Localização com app aberto', 'locate-outline'],
-      ['DEVICE_TELEMETRY', 'Status do dispositivo', 'hardware-chip-outline'],
-      ['DATA_RETENTION', 'Política de retenção lida', 'time-outline'],
+      ['LOCATION_FOREGROUND', t('consentFlow.sumFgGpsClient'), 'locate-outline'],
+      ['DEVICE_TELEMETRY', t('consentFlow.sumDevice'), 'hardware-chip-outline'],
+      ['DATA_RETENTION', t('consentFlow.sumRetention'), 'time-outline'],
     ];
-  }, [isTechnician]);
+  }, [isTechnician, t]);
 
   const renderSlide = () => {
     switch (currentSlide) {
@@ -213,69 +215,68 @@ export default function OnboardingScreen() {
         if (isTechnician) {
           return (
             <View style={s.slideContent}>
-              <View style={s.heroIcon}>
-                <Ionicons name="shield-checkmark" size={56} color="#EA580C" />
+              <View style={s.heroLogoWrap}>
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={s.heroLogoImg}
+                  resizeMode="contain"
+                  accessibilityLabel={t('consentFlow.a11yLogo')}
+                />
               </View>
-              <Text style={s.heroTitle}>Bem-vindo ao BrSpark</Text>
-              <Text style={s.heroSubtitle}>
-                Para garantir a qualidade dos seus atendimentos e sua segurança, precisamos alinhar o uso de dados e
-                permissões no seu dispositivo.
-              </Text>
-              <View style={s.infoCard}>
-                <Ionicons name="information-circle-outline" size={18} color="#3b82f6" />
-                <Text style={s.infoText}>
-                  Você pode usar o app <Text style={{ fontWeight: '800' }}>sem aceitar</Text> qualquer item abaixo.
-                  Algumas funções de campo podem ficar limitadas.
-                </Text>
-              </View>
+              <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
+              <Text style={s.heroSubtitle}>{t('consentFlow.welcomeTechBody')}</Text>
               <View style={s.collectGrid}>
                 {[
-                  ['location-outline', 'Localização GPS', 'Check-in, rota e presença no local'],
-                  ['phone-portrait-outline', 'Status do dispositivo', 'Bateria e conexão'],
-                  ['shield-outline', 'Verificação antifraude', 'Protege contra uso indevido'],
-                  ['time-outline', 'Histórico de OS', `Até ${policy?.retentionEventsYears || 5} anos, conforme ${legalBasis}`],
-                ].map(([icon, t, d]) => (
-                  <View style={s.collectItem} key={t}>
-                    <Ionicons name={icon as any} size={20} color="#EA580C" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.collectTitle}>{t}</Text>
-                      <Text style={s.collectDesc}>{d}</Text>
+                  ['location-outline', 'techCollectGpsTitle', 'techCollectGpsDesc'],
+                  ['phone-portrait-outline', 'techCollectDeviceTitle', 'techCollectDeviceDesc'],
+                  ['shield-outline', 'techCollectFraudTitle', 'techCollectFraudDesc'],
+                  ['time-outline', 'techCollectHistoryTitle', '__HISTORY__'],
+                ].map(([icon, titleKey, descKey]) => {
+                  const desc =
+                    descKey === '__HISTORY__'
+                      ? t('consentFlow.techCollectHistoryDesc', {
+                          years: policy?.retentionEventsYears || 5,
+                          legal: legalBasis,
+                        })
+                      : t(`consentFlow.${descKey}`);
+                  return (
+                    <View style={s.collectItem} key={String(titleKey)}>
+                      <Ionicons name={icon as any} size={20} color="#EA580C" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.collectTitle}>{t(`consentFlow.${titleKey}`)}</Text>
+                        <Text style={s.collectDesc}>{desc}</Text>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             </View>
           );
         }
         return (
           <View style={s.slideContent}>
-            <View style={s.heroIcon}>
-              <Ionicons name="sparkles" size={56} color="#EA580C" />
+            <View style={s.heroLogoWrap}>
+              <Image
+                source={require('../../assets/logo.png')}
+                style={s.heroLogoImg}
+                resizeMode="contain"
+                accessibilityLabel={t('consentFlow.a11yLogo')}
+              />
             </View>
-            <Text style={s.heroTitle}>Bem-vindo ao BrSpark</Text>
-            <Text style={s.heroSubtitle}>
-              Gerencie seus bens, encontre serviços e acompanhe tudo num só lugar. A seguir, explicamos de forma clara o
-              que podemos coletar — sempre com o seu controlo.
-            </Text>
-            <View style={s.infoCard}>
-              <Ionicons name="information-circle-outline" size={18} color="#3b82f6" />
-              <Text style={s.infoText}>
-                Você pode usar o app <Text style={{ fontWeight: '800' }}>sem aceitar</Text> as opções opcionais. O
-                essencial da conta continua disponível.
-              </Text>
-            </View>
+            <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
+            <Text style={s.heroSubtitle}>{t('consentFlow.welcomeClientBody')}</Text>
             <View style={s.collectGrid}>
               {[
-                ['grid-outline', 'Catálogo e serviços', 'Pesquisa e solicitações'],
-                ['home-outline', 'Seus ativos', 'Cadastro e mapa dos seus bens'],
-                ['locate-outline', 'Localização (opcional)', 'Só com app aberto, para mapa e GPS no cadastro'],
-                ['hardware-chip-outline', 'Dados do dispositivo (opcional)', 'Ajuda a diagnosticar sincronização'],
-              ].map(([icon, t, d]) => (
-                <View style={s.collectItem} key={t}>
+                ['grid-outline', 'clientCollectCatalogTitle', 'clientCollectCatalogDesc'],
+                ['home-outline', 'clientCollectAssetsTitle', 'clientCollectAssetsDesc'],
+                ['locate-outline', 'clientCollectLocTitle', 'clientCollectLocDesc'],
+                ['hardware-chip-outline', 'clientCollectDeviceTitle', 'clientCollectDeviceDesc'],
+              ].map(([icon, titleKey, descKey]) => (
+                <View style={s.collectItem} key={String(titleKey)}>
                   <Ionicons name={icon as any} size={20} color="#EA580C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.collectTitle}>{t}</Text>
-                    <Text style={s.collectDesc}>{d}</Text>
+                    <Text style={s.collectTitle}>{t(`consentFlow.${titleKey}`)}</Text>
+                    <Text style={s.collectDesc}>{t(`consentFlow.${descKey}`)}</Text>
                   </View>
                 </View>
               ))}
@@ -289,29 +290,26 @@ export default function OnboardingScreen() {
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
                 <Ionicons name="location" size={36} color="#EA580C" />
-                <Text style={s.slideTitle}>Localização</Text>
-                <Text style={s.slideDesc}>
-                  GPS para confirmar chegada, calcular rotas e registar a sua presença no local de atendimento.
-                </Text>
+                <Text style={s.slideTitle}>{t('consentFlow.locTitleTech')}</Text>
+                <Text style={s.slideDesc}>{t('consentFlow.locDescTech')}</Text>
               </View>
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="LOCATION_BACKGROUND"
                 icon="navigate-outline"
-                title="Localização em segundo plano"
-                description={`GPS durante atendimentos, mesmo com o app minimizado. Amostras conforme deslocamento (~${policy?.locationDistanceFilterMeters || 200} m) e política do tenant.`}
+                title={t('consentFlow.locBgTitle')}
+                description={t('consentFlow.locBgDesc', {
+                  meters: policy?.locationDistanceFilterMeters || 200,
+                })}
               />
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="LOCATION_FOREGROUND"
                 icon="locate-outline"
-                title="Localização apenas com app aberto"
-                description="GPS só enquanto usa o app. Rastreamento de rota e check-in com funcionalidade reduzida em segundo plano."
+                title={t('consentFlow.locFgTitleTech')}
+                description={t('consentFlow.locFgDescTech')}
               />
               <View style={s.warnBox}>
                 <Ionicons name="warning-outline" size={16} color="#d97706" />
-                <Text style={s.warnText}>
-                  Sem localização, pode continuar a trabalhar. Check-in automático e acompanhamento de rota deixam de
-                  estar disponíveis.
-                </Text>
+                <Text style={s.warnText}>{t('consentFlow.locWarnTech')}</Text>
               </View>
             </View>
           );
@@ -320,24 +318,22 @@ export default function OnboardingScreen() {
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
               <Ionicons name="location" size={36} color="#EA580C" />
-              <Text style={s.slideTitle}>Localização no app</Text>
+              <Text style={s.slideTitle}>{t('consentFlow.locTitleClient')}</Text>
               <Text style={s.slideDesc}>
-                Se ativar, o GPS é usado <Text style={{ fontWeight: '800' }}>só com o app aberto</Text>: ver o mapa dos
-                seus ativos e gravar coordenadas ao registar um bem. Não usamos localização em segundo plano na sua
-                conta de cliente.
+                {t('consentFlow.locClientBefore')}
+                <Text style={{ fontWeight: '800' }}>{t('consentFlow.locClientBold')}</Text>
+                {t('consentFlow.locClientAfter')}
               </Text>
             </View>
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="LOCATION_FOREGROUND"
               icon="locate-outline"
-              title="Permitir localização com app aberto"
-              description="Mapa de ativos e captura de GPS no cadastro de bens. Pode recusar e ativar mais tarde nas configurações."
+              title={t('consentFlow.locFgTitleClient')}
+              description={t('consentFlow.locFgDescClient')}
             />
             <View style={s.warnBox}>
               <Ionicons name="information-circle-outline" size={16} color="#d97706" />
-              <Text style={s.warnText}>
-                Sem isto, o sistema pode pedir localização de novo quando abrir o mapa ou o formulário de um bem.
-              </Text>
+              <Text style={s.warnText}>{t('consentFlow.locInfoClient')}</Text>
             </View>
           </View>
         );
@@ -348,23 +344,21 @@ export default function OnboardingScreen() {
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
                 <Ionicons name="phone-portrait" size={36} color="#EA580C" />
-                <Text style={s.slideTitle}>Dispositivo e segurança</Text>
-                <Text style={s.slideDesc}>
-                  Informações do aparelho para fiabilidade dos dados e deteção de anomalias em contexto de campo.
-                </Text>
+                <Text style={s.slideTitle}>{t('consentFlow.deviceTitleTech')}</Text>
+                <Text style={s.slideDesc}>{t('consentFlow.deviceDescTech')}</Text>
               </View>
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DEVICE_TELEMETRY"
                 icon="hardware-chip-outline"
-                title="Status do dispositivo"
-                description="Bateria, tipo de ligação (Wi‑Fi/rede móvel) e modelo. Ajuda a perceber falhas de sincronização."
+                title={t('consentFlow.deviceToggleTitleTech')}
+                description={t('consentFlow.deviceToggleDescTech')}
               />
               <View style={s.infoCard}>
                 <Ionicons name="shield-half-outline" size={18} color="#10b981" />
                 <Text style={s.infoText}>
-                  Sinais de GPS simulado e relógio desajustado podem ser analisados automaticamente para proteger a
-                  operação.
-                  <Text style={{ fontWeight: '700' }}> Não exige permissão extra</Text> no celular.
+                  {t('consentFlow.deviceInfoTech')}
+                  <Text style={{ fontWeight: '700' }}>{t('consentFlow.deviceInfoTechBold')}</Text>
+                  {t('consentFlow.deviceInfoTechSuffix')}
                 </Text>
               </View>
             </View>
@@ -374,22 +368,22 @@ export default function OnboardingScreen() {
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
               <Ionicons name="phone-portrait" size={36} color="#EA580C" />
-              <Text style={s.slideTitle}>Dados do dispositivo</Text>
-              <Text style={s.slideDesc}>
-                Informações técnicas opcionais ajudam-nos a melhorar a estabilidade da app (sincronização, erros de rede).
-              </Text>
+              <Text style={s.slideTitle}>{t('consentFlow.deviceTitleClient')}</Text>
+              <Text style={s.slideDesc}>{t('consentFlow.deviceDescClient')}</Text>
             </View>
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DEVICE_TELEMETRY"
               icon="hardware-chip-outline"
-              title="Compartilhar estado do dispositivo"
-              description="Nível de bateria, tipo de rede e modelo do aparelho. Não é obrigatório para usar o BrSpark."
+              title={t('consentFlow.deviceToggleTitleClient')}
+              description={t('consentFlow.deviceToggleDescClient')}
             />
             <View style={s.infoCard}>
               <Ionicons name="shield-half-outline" size={18} color="#10b981" />
               <Text style={s.infoText}>
-                Sua conta e seus dados continuam protegidos pela {legalBasis}. Você pode alterar esta opção a qualquer
-                momento em Perfil → Minha Privacidade.
+                {t('consentFlow.deviceInfoClient', {
+                  legal: legalBasis,
+                  path: t('consentFlow.profilePrivacyPath'),
+                })}
               </Text>
             </View>
           </View>
@@ -401,22 +395,24 @@ export default function OnboardingScreen() {
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
                 <Ionicons name="time" size={36} color="#EA580C" />
-                <Text style={s.slideTitle}>Por quanto tempo guardamos</Text>
-                <Text style={s.slideDesc}>Retenção por tipo de dado, conforme a {legalBasis} e a política do tenant.</Text>
+                <Text style={s.slideTitle}>{t('consentFlow.retentionTitleTech')}</Text>
+                <Text style={s.slideDesc}>
+                  {t('consentFlow.retentionSubtitleTech', { legal: legalBasis })}
+                </Text>
               </View>
               {[
-                ['GPS em tempo real', `${policy?.retentionGpsRawDays || 15} dias`, 'Trilha bruta de deslocamento', '#f59e0b'],
-                ['Registros operacionais', `${policy?.retentionAuditDays || 180} dias`, 'Sessão e conectividade', '#3b82f6'],
-                ['Check-in/out e formulários', `${policy?.retentionEventsYears || 5} anos`, 'Provas de execução do serviço', '#10b981'],
-                ['Métricas e scores', 'Anonimizados', 'Indicadores sem identificação pessoal', '#8b5cf6'],
-              ].map(([label, period, desc, color]) => (
-                <View style={s.retentionRow} key={label}>
+                ['retRowGpsLive', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retRowGpsLiveDesc', '#f59e0b'],
+                ['retRowOps', t('consentFlow.periodDays', { count: policy?.retentionAuditDays || 180 }), 'retRowOpsDesc', '#3b82f6'],
+                ['retRowForms', t('consentFlow.periodYears', { count: policy?.retentionEventsYears || 5 }), 'retRowFormsDesc', '#10b981'],
+                ['retRowMetrics', t('consentFlow.retRowMetricsPeriod'), 'retRowMetricsDesc', '#8b5cf6'],
+              ].map(([labelKey, period, descKey, color]) => (
+                <View style={s.retentionRow} key={String(labelKey)}>
                   <View style={[s.retentionDot, { backgroundColor: color + '20' }]}>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.retentionLabel}>{label}</Text>
-                    <Text style={s.retentionDesc}>{desc}</Text>
+                    <Text style={s.retentionLabel}>{t(`consentFlow.${labelKey}`)}</Text>
+                    <Text style={s.retentionDesc}>{t(`consentFlow.${descKey}`)}</Text>
                   </View>
                   <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
                 </View>
@@ -424,8 +420,8 @@ export default function OnboardingScreen() {
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DATA_RETENTION"
                 icon="checkmark-circle-outline"
-                title={`Li e entendi a política de retenção (${legalBasis})`}
-                description="Declaro ter lido as informações sobre retenção de dados acima."
+                title={t('consentFlow.retentionToggleTitle', { legal: legalBasis })}
+                description={t('consentFlow.retentionToggleDescTech')}
               />
             </View>
           );
@@ -434,24 +430,23 @@ export default function OnboardingScreen() {
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
               <Ionicons name="time" size={36} color="#EA580C" />
-              <Text style={s.slideTitle}>Retenção dos seus dados</Text>
+              <Text style={s.slideTitle}>{t('consentFlow.retentionTitleClient')}</Text>
               <Text style={s.slideDesc}>
-                Prazos orientativos conforme a {legalBasis}. Em conta de cliente não há trilha GPS de campo; localização
-                só entra se tiver ativado o passo anterior.
+                {t('consentFlow.retentionSubtitleClient', { legal: legalBasis })}
               </Text>
             </View>
             {[
-              ['Dados de uso e suporte', `${policy?.retentionAuditDays || 180} dias`, 'Registos de sessão e diagnóstico', '#3b82f6'],
-              ['Conteúdo da sua conta', `${policy?.retentionEventsYears || 5} anos`, 'Ativos, histórico e formulários associados', '#10b981'],
-              ['Localização (se permitida)', `${policy?.retentionGpsRawDays || 15} dias`, 'Pontos enviados quando usa GPS no app', '#f59e0b'],
-            ].map(([label, period, desc, color]) => (
-              <View style={s.retentionRow} key={label}>
+              ['retClientUsage', t('consentFlow.periodDays', { count: policy?.retentionAuditDays || 180 }), 'retClientUsageDesc', '#3b82f6'],
+              ['retClientAccount', t('consentFlow.periodYears', { count: policy?.retentionEventsYears || 5 }), 'retClientAccountDesc', '#10b981'],
+              ['retClientLoc', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retClientLocDesc', '#f59e0b'],
+            ].map(([labelKey, period, descKey, color]) => (
+              <View style={s.retentionRow} key={String(labelKey)}>
                 <View style={[s.retentionDot, { backgroundColor: color + '20' }]}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.retentionLabel}>{label}</Text>
-                  <Text style={s.retentionDesc}>{desc}</Text>
+                  <Text style={s.retentionLabel}>{t(`consentFlow.${labelKey}`)}</Text>
+                  <Text style={s.retentionDesc}>{t(`consentFlow.${descKey}`)}</Text>
                 </View>
                 <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
               </View>
@@ -459,8 +454,8 @@ export default function OnboardingScreen() {
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DATA_RETENTION"
               icon="checkmark-circle-outline"
-              title={`Li e entendi a política de retenção (${legalBasis})`}
-              description="Declaro ter lido o resumo sobre prazos de armazenamento acima."
+              title={t('consentFlow.retentionToggleTitle', { legal: legalBasis })}
+              description={t('consentFlow.retentionToggleDescClient')}
             />
           </View>
         );
@@ -471,8 +466,8 @@ export default function OnboardingScreen() {
             <View style={s.heroIcon}>
               <Ionicons name="checkmark-circle" size={56} color="#10b981" />
             </View>
-            <Text style={s.heroTitle}>Quase lá!</Text>
-            <Text style={s.heroSubtitle}>Resumo das suas escolhas:</Text>
+            <Text style={s.heroTitle}>{t('consentFlow.confirmTitle')}</Text>
+            <Text style={s.heroSubtitle}>{t('consentFlow.confirmSubtitle')}</Text>
             {summaryRows.map(([key, label, icon]) => (
               <View style={s.summaryRow} key={key}>
                 <Ionicons name={icon as any} size={18} color={consents[key] ? '#10b981' : '#94a3b8'} />
@@ -487,7 +482,9 @@ export default function OnboardingScreen() {
             <View style={s.infoCard}>
               <Ionicons name="settings-outline" size={18} color="#64748b" />
               <Text style={s.infoText}>
-                Pode alterar estas opções em <Text style={{ fontWeight: '800' }}>Perfil → Minha Privacidade</Text>.
+                {t('consentFlow.confirmInfo')}
+                <Text style={{ fontWeight: '800' }}>{t('consentFlow.confirmInfoBold')}</Text>
+                {t('consentFlow.confirmInfoEnd')}
               </Text>
             </View>
           </View>
@@ -525,7 +522,7 @@ export default function OnboardingScreen() {
       </View>
 
       <TouchableOpacity style={s.skipBtn} onPress={skipAll}>
-        <Text style={[s.skipText, { color: C.textLight }]}>Pular</Text>
+        <Text style={[s.skipText, { color: C.textLight }]}>{t('consentFlow.skip')}</Text>
       </TouchableOpacity>
 
       <Animated.View style={[s.slide, { opacity: fadeAnim }]}>
@@ -558,7 +555,7 @@ export default function OnboardingScreen() {
           ) : (
             <>
               <Text style={[s.btnNextText, { color: C.cardWhite }]}>
-                {isLastSlide ? 'Confirmar e entrar' : 'Continuar'}
+                {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
               </Text>
               {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
               {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
@@ -583,6 +580,16 @@ const s = StyleSheet.create({
   slideTitle: { fontSize: 22, fontWeight: '900', color: '#1e293b', textAlign: 'center' },
   slideDesc: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22 },
 
+  /** Logo no slide «Bem-vindo» — sem caixa nem fundo (só a imagem). */
+  heroLogoWrap: {
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroLogoImg: { width: 220, height: 72 },
+  /** Ícone circular (ex.: confirmação final). */
   heroIcon: { width: 96, height: 96, borderRadius: 28, backgroundColor: '#fff7ed', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 20, marginTop: 16, shadowColor: '#EA580C', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   heroTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b', textAlign: 'center', marginBottom: 10 },
   heroSubtitle: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
