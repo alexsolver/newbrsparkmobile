@@ -203,7 +203,7 @@ export default function LoginScreen() {
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
-  const { login, register, logout, completeLoginWithOtp } = useAuth();
+  const { login, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
@@ -233,6 +233,14 @@ export default function LoginScreen() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (authBoot || !user || !techRegToken) return;
+    router.replace({
+      pathname: '/auth/tech-registration',
+      params: { token: techRegToken },
+    } as any);
+  }, [authBoot, user, techRegToken, router]);
 
   // ─── 2FA State ───────────────────────────────────────────────────────────────
   const [twoFaVisible, setTwoFaVisible] = useState(false);

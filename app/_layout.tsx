@@ -36,6 +36,9 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   const { colors: C } = useTheme();
   const router = useRouter();
   const segments = useSegments();
+  const globalParams = useGlobalSearchParams<{ techRegToken?: string }>();
+  const pendingTechRegInvite =
+    typeof globalParams.techRegToken === 'string' && globalParams.techRegToken.trim().length > 0;
 
   useEffect(() => {
     if (loading) return;
@@ -46,6 +49,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
     const inTechRegistration =
       segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
+    const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
     const isRoot       = !segments || !segments.length || !segments[0];
 
     if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile) {
@@ -54,6 +58,9 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (user && inAuthGroup && !inOnboarding && !inTechRegistration) {
+      if (inLogin && pendingTechRegInvite) {
+        return;
+      }
       // Logged-in user trying to access auth — check if onboarding is needed first
       AsyncStorage.getItem('@brspark_onboarding_done').then(done => {
         if (!done) {
@@ -63,7 +70,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
         }
       });
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, pendingTechRegInvite]);
 
   if (loading) {
     return (
