@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { materializeApprovedApplication, normalizeFacePhotos } = require('../lib/technicianRegistrationMaterialize');
+const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
@@ -47,15 +48,6 @@ function assertPanelTenantAccess(req, applicationTenantId) {
   if (!a?.panelUser) return true;
   if (!a.tenantId) return true;
   return applicationTenantId === a.tenantId;
-}
-
-function defaultEmptySchedule() {
-  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  const o = {};
-  for (const d of days) {
-    o[d] = [{ id: `s_${d}_0`, enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
-  }
-  return o;
 }
 
 function escapeHtml(s) {
@@ -462,18 +454,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
         inviteToken: token,
         invitedEmail: em,
         status: 'INVITED',
-        responsesJson: {
-          email: em,
-          name: '',
-          technician: {
-            workScheduleJson: defaultEmptySchedule(),
-            serviceLocationIds: [],
-            professionalDocuments: [],
-            skillsJson: [],
-          },
-          personalDocuments: [],
-          faceEnrollmentPhotos: [],
-        },
+        responsesJson: initialTechRegistrationResponsesJson(em),
         createdByUserId,
       },
     });

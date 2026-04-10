@@ -173,10 +173,11 @@
             <div><div class="int-name">Nylas</div><div class="int-cat">E-mail</div></div>
             <span class="int-status inactive" id="status-nylas" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc">API unificada para e-mail, calendário e contatos (OAuth hospedado, sincronização). Use a API Key v3 do painel Nylas.</div>
+          <div class="int-desc">Envio pela API v3: API Key da aplicação e Grant ID da conta de envio (OAuth no dashboard Nylas). Sem Grant ID, convites BrSpark não disparam e-mail automático.</div>
           <div class="int-fields" id="fields-nylas">
             <input class="form-control" id="key-nylas" type="password" placeholder="API Key Nylas (Bearer)" />
             <input class="form-control" id="url-nylas" placeholder="URI da API (ex: https://api.us.nylas.com ou https://api.eu.nylas.com)" value="https://api.us.nylas.com" />
+            <input class="form-control" id="grant-nylas" placeholder="Grant ID (conta de e-mail de envio — obrigatório para enviar)" />
             <input class="form-control" id="client-nylas" placeholder="Client ID da aplicação (opcional — fluxo OAuth hospedado)" />
           </div>
           <div class="int-actions">
@@ -494,14 +495,23 @@
     }
 
     const urlNylas = document.getElementById('url-nylas');
+    const grantNylas = document.getElementById('grant-nylas');
     const clientNylas = document.getElementById('client-nylas');
     if (urlNylas) {
       urlNylas.value = activeInts['Nylas']?.baseUrl || 'https://api.us.nylas.com';
     }
+    const nyMeta = activeInts['Nylas']?.metadata && typeof activeInts['Nylas'].metadata === 'object'
+      ? activeInts['Nylas'].metadata
+      : {};
+    if (grantNylas) {
+      const d = activeInts['Nylas']?.description && String(activeInts['Nylas'].description);
+      const mg = d && d.match(/grant_id:(\S+)/);
+      grantNylas.value = nyMeta.nylasGrantId || (mg ? mg[1] : '') || '';
+    }
     if (clientNylas) {
       const d = activeInts['Nylas']?.description && String(activeInts['Nylas'].description);
       const m = d && d.match(/client_id:(\S+)/);
-      clientNylas.value = m ? m[1] : '';
+      clientNylas.value = nyMeta.nylasClientId || (m ? m[1] : '') || '';
     }
 
     const urlCf = document.getElementById('url-compreface');
@@ -534,12 +544,16 @@
     else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
   };
 
-  // Nylas — API Key + URI regional + Client ID opcional (OAuth hospedado)
+  // Nylas — API Key + URI + Grant ID (envio) + Client ID opcional (OAuth hospedado)
   window.saveNylas = async () => {
     const key = document.getElementById('key-nylas').value.trim();
     const url = document.getElementById('url-nylas').value.trim() || 'https://api.us.nylas.com';
+    const grant = document.getElementById('grant-nylas')?.value.trim() || '';
     const client = document.getElementById('client-nylas').value.trim();
     if (!key) return alert('API Key da Nylas é obrigatória.');
+    const meta = {};
+    if (grant) meta.nylasGrantId = grant;
+    if (client) meta.nylasClientId = client;
     const body = {
       type: 'EMAIL',
       name: 'Nylas',
@@ -547,6 +561,7 @@
       baseUrl: url,
       apiKey: key,
       description: client ? `client_id:${client}` : null,
+      metadata: Object.keys(meta).length ? meta : null,
     };
     if (activeInts['Nylas']) await CONFIG.del(`/integrations/${activeInts['Nylas'].id}`);
     await CONFIG.post('/integrations', body);

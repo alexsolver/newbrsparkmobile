@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -87,6 +87,30 @@ export default function ProfileScreen() {
   const [tfaDisableOtp,  setTfaDisableOtp]    = useState('');
   const [tfa2Action,     setTfa2Action]       = useState<'enable' | 'disable'>('enable');
 
+  /** Candidatura em aberto — link para o formulário completo (/auth/tech-registration). */
+  const [techRegResume, setTechRegResume] = useState<{ open: boolean; inviteToken?: string } | null>(null);
+
+  const loadTechRegResume = useCallback(async () => {
+    if (!user?.technicianProfile || isTechnicianProfileActive(user)) {
+      setTechRegResume(null);
+      return;
+    }
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/api/me/technician-registration`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.open && data.inviteToken) {
+        setTechRegResume({ open: true, inviteToken: data.inviteToken });
+      } else {
+        setTechRegResume({ open: false });
+      }
+    } catch {
+      setTechRegResume({ open: false });
+    }
+  }, [user]);
+
   const [profile, setProfile] = useState({
     name: user?.name || 'User',
     email: user?.email || '',
@@ -147,6 +171,12 @@ export default function ProfileScreen() {
     }, []),
   );
 
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTechRegResume();
+    }, [loadTechRegResume]),
+  );
+
   const togglePush = async (val: boolean) => {
     if (val) {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -192,7 +222,13 @@ export default function ProfileScreen() {
       if (!res.ok) {
         throw new Error(data.error || 'Não foi possível registar o pedido de prestador.');
       }
-      const profile = data as { id: string; status: string; score?: number };
+      const profile = data as {
+        id: string;
+        status: string;
+        score?: number;
+        techRegistrationInviteToken?: string | null;
+        techRegistrationStatus?: string;
+      };
       await patchUser({
         technicianProfile: {
           id: profile.id,
@@ -203,12 +239,25 @@ export default function ProfileScreen() {
       if (String(profile.status || '').toUpperCase() === 'ACTIVE') {
         await setUserRole('TECHNICIAN');
         router.push('/auth/onboarding' as any);
-      } else {
-        Alert.alert(
-          'Pedido registrado',
-          'Sua candidatura de prestador será analisada. Só após aprovação você poderá receber ordens de serviço e usar o modo prestador no app.',
-        );
+        return;
       }
+      const invite = profile.techRegistrationInviteToken;
+      if (invite) {
+        await loadTechRegResume();
+        router.push({ pathname: '/auth/tech-registration', params: { token: invite } } as any);
+        return;
+      }
+      if (String(profile.techRegistrationStatus || '').toUpperCase() === 'SUBMITTED') {
+        Alert.alert(
+          'Candidatura enviada',
+          'Sua documentação já foi enviada para análise. Aguarde a aprovação da equipe para usar o modo prestador.',
+        );
+        return;
+      }
+      Alert.alert(
+        'Pedido registrado',
+        'Sua candidatura de prestador será analisada. Só após aprovação você poderá receber ordens de serviço e usar o modo prestador no app.',
+      );
     } catch (e: any) {
       Alert.alert('Erro', e.message);
     } finally {
@@ -437,9 +486,32 @@ export default function ProfileScreen() {
             </Text>
             <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
               {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
-                ? 'Seu pedido está em análise. Até ser aprovado, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                ? techRegResume?.open
+                  ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
+                  : 'Seu pedido ou documentação está em análise. Até ser aprovado, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
                 : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
             </Text>
+            {techRegResume?.open && techRegResume.inviteToken ? (
+              <TouchableOpacity
+                style={{
+                  marginTop: 12,
+                  backgroundColor: '#0F766E',
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                }}
+                onPress={() =>
+                  router.push({
+                    pathname: '/auth/tech-registration',
+                    params: { token: techRegResume.inviteToken },
+                  } as any)
+                }
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                  Continuar cadastro de prestador
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
 

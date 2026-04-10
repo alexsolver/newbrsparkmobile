@@ -217,7 +217,17 @@ export async function bootTechnicianApplicationsPage() {
     }
     closeModal('modal-invite');
     const hint = out.deepLinkHint || '';
-    const msg = `Convite criado.\n\nO prestador já deve ter conta no BrSpark com este e-mail (cadastro no app) antes de abrir o link.\n\nToken (guarde para o candidato):\n${out.inviteToken}\n\nSugestão de link no app:\n/auth/tech-registration?token=${out.inviteToken}\n\n${hint}`;
+    let emailLine = '';
+    if (out.email) {
+      if (out.email.sent) {
+        emailLine = '\n\nUm e-mail com o convite foi enviado ao candidato (Nylas).';
+      } else if (out.email.skipped) {
+        emailLine = `\n\nE-mail não enviado: ${out.email.detail || 'configure Nylas (API Key + Grant ID) no servidor ou em Integrações.'}`;
+      } else {
+        emailLine = `\n\nAviso: o convite foi criado, mas o envio por e-mail falhou: ${out.email.detail || 'erro desconhecido'}`;
+      }
+    }
+    const msg = `Convite criado.\n\nO prestador já deve ter conta no BrSpark com este e-mail (cadastro no app) antes de abrir o link.\n\nToken (guarde para o candidato):\n${out.inviteToken}\n\nSugestão de link no app:\n/auth/tech-registration?token=${out.inviteToken}\n\n${hint}${emailLine}`;
     alert(msg);
     loadList();
   };

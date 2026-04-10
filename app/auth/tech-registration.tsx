@@ -454,8 +454,14 @@ export default function TechRegistrationScreen() {
         Alert.alert('Envio', data.error || 'Falha.');
         return;
       }
-      Alert.alert('Enviado', 'A sua candidatura foi enviada. Aguarde a análise da equipa.', [
-        { text: 'OK', onPress: () => router.replace('/auth/login' as any) },
+      Alert.alert('Enviado', 'Sua candidatura foi enviada. Aguarde a análise da equipe.', [
+        {
+          text: 'OK',
+          onPress: () =>
+            user
+              ? router.replace('/profile' as any)
+              : router.replace('/auth/login' as any),
+        },
       ]);
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Falha de rede.');

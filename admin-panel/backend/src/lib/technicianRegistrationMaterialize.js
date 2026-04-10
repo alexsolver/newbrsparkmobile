@@ -57,6 +57,98 @@ function parseSkills(raw) {
   return [];
 }
 
+function buildTechnicianProfilePayload(technician) {
+  return {
+    status: 'ACTIVE',
+    score: Number(technician.score) >= 0 && Number(technician.score) <= 10 ? Number(technician.score) : 5,
+    cft: technician.cft ? String(technician.cft).trim() : null,
+    specialty: technician.specialty ? String(technician.specialty).trim() : null,
+    workScheduleJson:
+      technician.workScheduleJson && typeof technician.workScheduleJson === 'object'
+        ? technician.workScheduleJson
+        : {},
+    skillsJson: parseSkills(technician.skillsJson),
+    serviceLocationIds: Array.isArray(technician.serviceLocationIds) ? technician.serviceLocationIds : [],
+    professionalDocuments: Array.isArray(technician.professionalDocuments)
+      ? technician.professionalDocuments
+      : [],
+  };
+}
+
+/**
+ * Candidatura aprovada — utilizador já existia no tenant (ex.: «Quero ser prestador» no app).
+ * Atualiza perfil, documentos e TechnicianProfile; não altera a palavra-passe da conta.
+ */
+async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, ctx) {
+  const { raw, name, addressJson, personalDocuments, technician, faceBefore } = ctx;
+
+  return prisma.$transaction(async (tx) => {
+    const copiedFaces = await copyRegistrationFacePhotosToUser(app.id, existingUser.id, faceBefore);
+
+    const userData = {
+      name,
+      phone: raw.phone ? String(raw.phone).trim() : null,
+      avatarUrl: raw.avatarUrl ? String(raw.avatarUrl).trim() : null,
+      addressJson,
+      personalDocuments,
+      role: 'PROVIDER',
+      isActive: true,
+    };
+    if (copiedFaces.length) {
+      userData.faceEnrollmentPhotos = copiedFaces;
+    }
+    if (faceBefore.length) {
+      userData.comprefaceRecognitionSync = {
+        status: 'pending',
+        at: new Date().toISOString(),
+        message: 'Candidatura aprovada — a sincronizar galeria CompreFace.',
+      };
+    }
+
+    await tx.user.update({
+      where: { id: existingUser.id },
+      data: userData,
+    });
+
+    const techPayload = buildTechnicianProfilePayload(technician);
+    const existingProfile = await tx.technicianProfile.findUnique({
+      where: { userId: existingUser.id },
+    });
+    if (existingProfile) {
+      await tx.technicianProfile.update({
+        where: { id: existingProfile.id },
+        data: techPayload,
+      });
+    } else {
+      await tx.technicianProfile.create({
+        data: { userId: existingUser.id, ...techPayload },
+      });
+    }
+
+    await tx.technicianRegistrationApplication.update({
+      where: { id: app.id },
+      data: {
+        status: 'APPROVED',
+        createdUserId: existingUser.id,
+        passwordHash: null,
+        resolvedAt: new Date(),
+        revisionNote: null,
+      },
+    });
+
+    await tx.technicianRegistrationEvent.create({
+      data: {
+        applicationId: app.id,
+        type: 'APPROVED',
+        message: 'Utilizador existente — dados atualizados a partir da candidatura.',
+        actorEmail: null,
+      },
+    });
+
+    return tx.user.findUnique({ where: { id: existingUser.id } });
+  });
+}
+
 /**
  * Persiste User + TechnicianProfile a partir de responsesJson da candidatura aprovada.
  */
@@ -76,26 +168,25 @@ async function materializeApprovedApplication(prisma, applicationId) {
   const name = String(raw.name || '').trim();
   if (!email || !name) throw new Error('Nome e e-mail são obrigatórios nas respostas.');
 
-  const dup = await prisma.user.findFirst({
-    where: { tenantId: app.tenantId, email },
-  });
-  if (dup) throw new Error('Já existe um utilizador com este e-mail neste tenant.');
-
   const addressJson = raw.addressJson && typeof raw.addressJson === 'object' ? raw.addressJson : {};
   const personalDocuments = Array.isArray(raw.personalDocuments) ? raw.personalDocuments : [];
   const technician = raw.technician && typeof raw.technician === 'object' ? raw.technician : {};
-  const professionalDocuments = Array.isArray(technician.professionalDocuments)
-    ? technician.professionalDocuments
-    : [];
-  const workScheduleJson =
-    technician.workScheduleJson && typeof technician.workScheduleJson === 'object'
-      ? technician.workScheduleJson
-      : {};
-  const serviceLocationIds = Array.isArray(technician.serviceLocationIds)
-    ? technician.serviceLocationIds
-    : [];
-  const skillsJson = parseSkills(technician.skillsJson);
   const faceBefore = normalizeFacePhotos(raw.faceEnrollmentPhotos);
+
+  const existingUser = await prisma.user.findFirst({
+    where: { tenantId: app.tenantId, email },
+  });
+
+  if (existingUser) {
+    return mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, {
+      raw,
+      name,
+      addressJson,
+      personalDocuments,
+      technician,
+      faceBefore,
+    });
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
@@ -132,14 +223,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
     await tx.technicianProfile.create({
       data: {
         userId: user.id,
-        status: 'ACTIVE',
-        score: Number(technician.score) >= 0 && Number(technician.score) <= 10 ? Number(technician.score) : 5,
-        cft: technician.cft ? String(technician.cft).trim() : null,
-        specialty: technician.specialty ? String(technician.specialty).trim() : null,
-        workScheduleJson,
-        skillsJson,
-        serviceLocationIds,
-        professionalDocuments,
+        ...buildTechnicianProfilePayload(technician),
       },
     });
 

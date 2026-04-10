@@ -4,6 +4,7 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
 const crypto  = require('crypto');
+const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 
 // ─── POST /api/register ─────────────────────────────────────────────────────
@@ -225,28 +226,117 @@ router.put('/me', authUser, async (req, res) => {
   }
 });
 
+function generateTechRegInviteToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// ─── GET /api/me/technician-registration ─────────────────────────────────────
+// Candidatura em aberto (continuar formulário) — mesmo e-mail + tenant da sessão.
+router.get('/me/technician-registration', authUser, async (req, res) => {
+  try {
+    const em = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    const tenantId = req.user.tenantId;
+    const openStatuses = ['INVITED', 'DRAFT', 'NEEDS_REVISION'];
+    const app = await prisma.technicianRegistrationApplication.findFirst({
+      where: { tenantId, invitedEmail: em, status: { in: openStatuses } },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, inviteToken: true, status: true },
+    });
+    if (!app) return res.json({ open: false });
+    res.json({ open: true, inviteToken: app.inviteToken, status: app.status, id: app.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── POST /api/me/technician ─────────────────────────────────────────────────
-// Autenticado — converte usuário atual em prestador (cria TechnicianProfile)
+// Autenticado — pedido de prestador: TechnicianProfile PENDING + candidatura (token) para o formulário completo no app.
 router.post('/me/technician', authUser, async (req, res) => {
   try {
     const existing = await prisma.technicianProfile.findUnique({
-      where: { userId: req.user.id }
+      where: { userId: req.user.id },
     });
-    if (existing) {
+    if (existing && String(existing.status || '').toUpperCase() === 'ACTIVE') {
       return res.status(400).json({
-        error: 'Já existe um pedido ou registro de prestador para esta conta.',
+        error: 'Sua conta já está habilitada como prestador.',
       });
     }
 
-    const profile = await prisma.technicianProfile.create({
-      data: {
-        userId: req.user.id,
-        status: 'PENDING',
-        score: 5.0,
-      },
+    const em = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    const tenantId = req.user.tenantId;
+
+    const openStatuses = ['INVITED', 'DRAFT', 'NEEDS_REVISION'];
+    const openApp = await prisma.technicianRegistrationApplication.findFirst({
+      where: { tenantId, invitedEmail: em, status: { in: openStatuses } },
+      orderBy: { updatedAt: 'desc' },
     });
 
-    res.status(201).json(profile);
+    const submittedApp = await prisma.technicianRegistrationApplication.findFirst({
+      where: { tenantId, invitedEmail: em, status: 'SUBMITTED' },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    let profile = existing;
+    if (!profile) {
+      profile = await prisma.technicianProfile.create({
+        data: {
+          userId: req.user.id,
+          status: 'PENDING',
+          score: 5.0,
+        },
+      });
+    }
+
+    let techRegistrationInviteToken = null;
+    let techRegistrationStatus = null;
+
+    if (openApp) {
+      techRegistrationInviteToken = openApp.inviteToken;
+      techRegistrationStatus = openApp.status;
+      await prisma.technicianRegistrationApplication
+        .update({
+          where: { id: openApp.id },
+          data: { candidateUserId: req.user.id },
+        })
+        .catch(() => {});
+    } else if (submittedApp) {
+      techRegistrationStatus = 'SUBMITTED';
+      techRegistrationInviteToken = null;
+    } else {
+      const token = generateTechRegInviteToken();
+      const createdApp = await prisma.technicianRegistrationApplication.create({
+        data: {
+          tenantId,
+          inviteToken: token,
+          invitedEmail: em,
+          status: 'INVITED',
+          responsesJson: initialTechRegistrationResponsesJson(em),
+          candidateUserId: req.user.id,
+          createdByUserId: null,
+        },
+      });
+      await prisma.technicianRegistrationEvent.create({
+        data: {
+          applicationId: createdApp.id,
+          type: 'SELF_REQUESTED',
+          message: 'Pedido iniciado no app (Quero ser prestador).',
+          actorEmail: em,
+        },
+      });
+      techRegistrationInviteToken = token;
+      techRegistrationStatus = 'INVITED';
+    }
+
+    const statusCode = existing ? 200 : 201;
+    res.status(statusCode).json({
+      ...profile,
+      techRegistrationInviteToken,
+      techRegistrationStatus,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
