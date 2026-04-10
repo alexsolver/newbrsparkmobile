@@ -244,8 +244,22 @@ router.get('/me/technician-registration', authUser, async (req, res) => {
       orderBy: { updatedAt: 'desc' },
       select: { id: true, inviteToken: true, status: true },
     });
-    if (!app) return res.json({ open: false });
-    res.json({ open: true, inviteToken: app.inviteToken, status: app.status, id: app.id });
+    const submittedRow = await prisma.technicianRegistrationApplication.findFirst({
+      where: { tenantId, invitedEmail: em, status: 'SUBMITTED' },
+      orderBy: { submittedAt: 'desc' },
+      select: { id: true },
+    });
+    const submittedAwaitingReview = !!submittedRow;
+    if (!app) {
+      return res.json({ open: false, submittedAwaitingReview });
+    }
+    res.json({
+      open: true,
+      inviteToken: app.inviteToken,
+      status: app.status,
+      id: app.id,
+      submittedAwaitingReview: false,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

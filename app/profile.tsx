@@ -87,8 +87,12 @@ export default function ProfileScreen() {
   const [tfaDisableOtp,  setTfaDisableOtp]    = useState('');
   const [tfa2Action,     setTfa2Action]       = useState<'enable' | 'disable'>('enable');
 
-  /** Candidatura em aberto — link para o formulário completo (/auth/tech-registration). */
-  const [techRegResume, setTechRegResume] = useState<{ open: boolean; inviteToken?: string } | null>(null);
+  /** Estado da candidatura: em aberto (token), já enviada, ou ainda sem registo (fluxo antigo). */
+  const [techRegResume, setTechRegResume] = useState<{
+    open: boolean;
+    inviteToken?: string;
+    submittedAwaitingReview?: boolean;
+  } | null>(null);
 
   const loadTechRegResume = useCallback(async () => {
     if (!user?.technicianProfile || isTechnicianProfileActive(user)) {
@@ -102,12 +106,19 @@ export default function ProfileScreen() {
       });
       const data = await res.json().catch(() => ({}));
       if (data?.open && data.inviteToken) {
-        setTechRegResume({ open: true, inviteToken: data.inviteToken });
+        setTechRegResume({
+          open: true,
+          inviteToken: data.inviteToken,
+          submittedAwaitingReview: false,
+        });
       } else {
-        setTechRegResume({ open: false });
+        setTechRegResume({
+          open: false,
+          submittedAwaitingReview: !!(data && data.submittedAwaitingReview),
+        });
       }
     } catch {
-      setTechRegResume({ open: false });
+      setTechRegResume({ open: false, submittedAwaitingReview: false });
     }
   }, [user]);
 
@@ -486,31 +497,52 @@ export default function ProfileScreen() {
             </Text>
             <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
               {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
-                ? techRegResume?.open
-                  ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
-                  : 'Seu pedido ou documentação está em análise. Até ser aprovado, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                ? techRegResume?.submittedAwaitingReview
+                  ? 'Sua documentação já foi enviada e está em análise. Até ser aprovada, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                  : techRegResume?.open
+                    ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
+                    : 'Falta preencher o cadastro completo de prestador. Toque no botão abaixo para abrir o formulário. Depois do envio, a equipe analisa e aprova.'
                 : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
             </Text>
-            {techRegResume?.open && techRegResume.inviteToken ? (
-              <TouchableOpacity
-                style={{
-                  marginTop: 12,
-                  backgroundColor: '#0F766E',
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                }}
-                onPress={() =>
-                  router.push({
-                    pathname: '/auth/tech-registration',
-                    params: { token: techRegResume.inviteToken },
-                  } as any)
-                }
-              >
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                  Continuar cadastro de prestador
-                </Text>
-              </TouchableOpacity>
+            {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
+            !techRegResume?.submittedAwaitingReview ? (
+              techRegResume?.open && techRegResume.inviteToken ? (
+                <TouchableOpacity
+                  style={{
+                    marginTop: 12,
+                    backgroundColor: '#0F766E',
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                  }}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/auth/tech-registration',
+                      params: { token: techRegResume.inviteToken },
+                    } as any)
+                  }
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                    Continuar cadastro de prestador
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={{
+                    marginTop: 12,
+                    backgroundColor: '#D97706',
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                  }}
+                  onPress={handleBecomeTechnician}
+                  disabled={syncing}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                    {syncing ? 'A abrir…' : 'Abrir formulário de cadastro'}
+                  </Text>
+                </TouchableOpacity>
+              )
             ) : null}
           </View>
         ) : null}
