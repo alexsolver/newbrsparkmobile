@@ -642,21 +642,23 @@ export default function TechRegistrationScreen() {
 
       <View style={styles.section}>
         <Text style={styles.secTitle}>Endereço</Text>
-        {[
-          ['Linha 1 (rua, nº)', line1, setLine1],
-          ['Complemento', line2, setLine2],
-          ['Bairro', district, setDistrict],
-          ['Cidade', city, setCity],
-          ['UF', stateUf, setStateUf],
-          ['CEP', postal, setPostal],
-        ].map(([lab, val, set]) => (
-          <View key={String(lab)}>
+        {(
+          [
+            ['Linha 1 (rua, nº)', line1, setLine1],
+            ['Complemento', line2, setLine2],
+            ['Bairro', district, setDistrict],
+            ['Cidade', city, setCity],
+            ['UF', stateUf, setStateUf],
+            ['CEP', postal, setPostal],
+          ] as [string, string, (v: string) => void][]
+        ).map(([lab, val, setVal]) => (
+          <View key={lab}>
             <Text style={styles.label}>{lab}</Text>
             <TextInput
               style={styles.input}
-              value={val as string}
+              value={val}
               onChangeText={(t) => {
-                (set as (x: string) => void)(t);
+                setVal(t);
                 saveDraftSoon();
               }}
               editable={!readOnly}
