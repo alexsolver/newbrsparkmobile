@@ -47,6 +47,7 @@ const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
 } = require('./routes/technicianRegistration');
+const aiTechnicianProfilePhotoRoutes = require('./routes/aiTechnicianProfilePhoto');
 
 const path = require('path');
 
@@ -73,6 +74,8 @@ app.get('/health', (_req, res) => {
 // ── Public routes ──────────────────────────────────────────
 app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login | /tenant-login
 app.post('/api/tenant-login', authRoutes.postTenantLogin); // alias (evita 404 se o cliente omitir /auth)
+// Antes de app.use('/api', account): path específico — evita 404 «Route not found» quando o router /api não repassa subpaths em alguns deploys.
+app.use('/api/ai-technician-profile-photo', aiTechnicianProfilePhotoRoutes);
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
@@ -87,7 +90,7 @@ app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInput
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
-app.use('/api/vision',     require('./routes/vision'));     // app: biometria e IA yüz tanıma
+// /api/vision → routes/account.js (CompreFace). /api/ai-technician-profile-photo → montado acima (gate IA cadastro prestador).
 
 // Public: effective collection policy for mobile app (no auth)
 app.get('/api/collection-policy/effective', collectionPolicyRoutes.effectiveHandler);

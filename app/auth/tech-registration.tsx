@@ -1,6 +1,10 @@
 /**
- * Cadastro de prestador por convite (token) — espelha as secções do painel admin.
+ * Cadastro de prestador (token) — convite enviado por uma empresa (painel) ou inscrição pelo app (perfil).
  * Rota: /auth/tech-registration?token=...
+ *
+ * Passo 1 (foto de perfil): validação só via IA (OpenAI hoje; backend prevê Google).
+ * Ordem de validação IA: `/api/me/validate-technician-profile-photo` → `/api/technician-registration/public/:token/validate-profile-photo` → `/api/ai-technician-profile-photo/validate` (404 em cada passo tenta o próximo).
+ * Isto é independente do CompreFace / verify-face dos checklists.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -21,11 +25,15 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { API_BASE, getToken } from '../../src/services/auth';
+import { API_BASE, getToken, apiFetch } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 
-/** Alinhado ao backend (reconhecimento facial / CompreFace). */
+/** Mínimo de fotos para enrolamento no motor biométrico do tenant (ex. CompreFace) — secção à parte do passo 1 (IA). */
 const MIN_FACE_ENROLLMENT_PHOTOS = 4;
+
+function isAiProfileGateEngine(e: string | undefined): boolean {
+  return e === 'ai_llm_vision' || e === 'openai_vision';
+}
 
 const DAYS: { key: string; label: string }[] = [
   { key: 'mon', label: 'Segunda' },
@@ -55,6 +63,15 @@ type DocRow = {
 };
 
 type Loc = { id: string; name: string; type: string };
+
+/** Metadados da foto inicial (câmera + IA); ou rascunho antigo com ≥4 fotos (legacy). */
+type PrimaryProfileCapture = {
+  validatedAt: string;
+  /** Gate do passo 1: só IA (OpenAI hoje). `openai_vision` = legado gravado antes da renomeação. */
+  validationEngine: 'ai_llm_vision' | 'openai_vision' | 'legacy_enrollment_photos';
+  userMessagePtBr?: string;
+  photoId?: string;
+} | null;
 
 function defaultSchedule() {
   const o: Record<string, { id: string; enabled: boolean; start: string; end: string; locationIds: string[] }[]> = {};
@@ -103,6 +120,8 @@ export default function TechRegistrationScreen() {
   const [revisionNote, setRevisionNote] = useState<string | null>(null);
   const [locations, setLocations] = useState<Loc[]>([]);
   const [tenantName, setTenantName] = useState('');
+  /** `panel_invite` = gestor convidou; `self_service` = «Quero ser prestador» no perfil (sem convite por e-mail). */
+  const [registrationSource, setRegistrationSource] = useState<'panel_invite' | 'self_service'>('panel_invite');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -124,6 +143,9 @@ export default function TechRegistrationScreen() {
   const [schedule, setSchedule] = useState(defaultSchedule);
   const [serviceLocIds, setServiceLocIds] = useState<string[]>([]);
   const [facePhotos, setFacePhotos] = useState<{ id: string; url: string }[]>([]);
+  const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
+  const [primaryValidating, setPrimaryValidating] = useState(false);
+  const [primaryValidationError, setPrimaryValidationError] = useState<string | null>(null);
 
   const [password, setPassword] = useState('');
 
@@ -165,6 +187,9 @@ export default function TechRegistrationScreen() {
         setSessionOk(false);
         setInvitedEmailHint(String(data.invitedEmail || ''));
         setTenantName(data.tenantName || '');
+        setRegistrationSource(
+          data.registrationSource === 'self_service' ? 'self_service' : 'panel_invite'
+        );
         setStatus(data.status || '');
         setLoading(false);
         return;
@@ -173,6 +198,9 @@ export default function TechRegistrationScreen() {
       setSessionOk(true);
       setClosed(null);
       setInvitedEmailHint(String(data.invitedEmail || ''));
+      setRegistrationSource(
+        data.registrationSource === 'self_service' ? 'self_service' : 'panel_invite'
+      );
       setStatus(data.status || '');
       setRevisionNote(data.revisionNote || null);
       setTenantName(data.tenantName || '');
@@ -217,7 +245,33 @@ export default function TechRegistrationScreen() {
       } else setSchedule(defaultSchedule());
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
       const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
-      setFacePhotos(faces.filter((x: any) => x?.id && x?.url).map((x: any) => ({ id: x.id, url: x.url })));
+      const faceRows = faces.filter((x: any) => x?.id && x?.url);
+      setFacePhotos(faceRows.map((x: any) => ({ id: x.id, url: x.url })));
+      const capRaw = (r as any).techRegPrimaryProfileCapture;
+      if (capRaw && typeof capRaw === 'object' && capRaw.validatedAt) {
+        const ve = String(capRaw.validationEngine || '');
+        const validationEngine: NonNullable<PrimaryProfileCapture>['validationEngine'] =
+          ve === 'legacy_enrollment_photos'
+            ? 'legacy_enrollment_photos'
+            : ve === 'ai_llm_vision'
+              ? 'ai_llm_vision'
+              : 'openai_vision';
+        setPrimaryProfileCapture({
+          validatedAt: String(capRaw.validatedAt),
+          validationEngine,
+          userMessagePtBr: capRaw.userMessagePtBr ? String(capRaw.userMessagePtBr) : undefined,
+          photoId: capRaw.photoId ? String(capRaw.photoId) : undefined,
+        });
+      } else if (faceRows.length >= MIN_FACE_ENROLLMENT_PHOTOS) {
+        const first = faceRows[0];
+        setPrimaryProfileCapture({
+          validatedAt: String(first?.createdAt || new Date().toISOString()),
+          validationEngine: 'legacy_enrollment_photos',
+          photoId: String(first?.id || ''),
+        });
+      } else {
+        setPrimaryProfileCapture(null);
+      }
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Falha ao carregar.');
       setSessionOk(false);
@@ -284,12 +338,25 @@ export default function TechRegistrationScreen() {
           attachmentMimeType: d.attachmentMimeType?.trim() || null,
         })),
       },
+      ...(primaryProfileCapture?.validatedAt
+        ? {
+            techRegPrimaryProfileCapture: {
+              validatedAt: primaryProfileCapture.validatedAt,
+              validationEngine: primaryProfileCapture.validationEngine,
+              ...(primaryProfileCapture.userMessagePtBr
+                ? { userMessagePtBr: primaryProfileCapture.userMessagePtBr }
+                : {}),
+              ...(primaryProfileCapture.photoId ? { photoId: primaryProfileCapture.photoId } : {}),
+            },
+          }
+        : {}),
     };
   }, [
     name,
     email,
     phone,
     avatarUrl,
+    primaryProfileCapture,
     line1,
     line2,
     district,
@@ -448,11 +515,14 @@ export default function TechRegistrationScreen() {
     }, 900);
   }, [basePath, token, sessionOk, status, closed, buildResponsesJson]);
 
-  const postFaceB64 = async (fileBase64: string, mimeType: string) => {
+  const postFaceB64 = async (
+    fileBase64: string,
+    mimeType: string
+  ): Promise<{ ok: boolean; photo?: { id: string; url: string }; error?: string }> => {
     const jwt = await getToken();
     if (!jwt) {
       Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
-      return false;
+      return { ok: false, error: 'no_jwt' };
     }
     const res = await fetch(`${basePath}/face-enrollment`, {
       method: 'POST',
@@ -465,12 +535,13 @@ export default function TechRegistrationScreen() {
     const data = await res.json();
     if (!res.ok) {
       Alert.alert('Foto', data.error || 'Falha no envio.');
-      return false;
+      return { ok: false, error: data.error || 'upload_failed' };
     }
     if (Array.isArray(data.photos)) {
       setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
     }
-    return true;
+    const photo = data.photo && data.photo.id && data.photo.url ? { id: data.photo.id, url: data.photo.url } : undefined;
+    return { ok: true, photo };
   };
 
   const addFacePhotosFromGallery = async () => {
@@ -488,8 +559,8 @@ export default function TechRegistrationScreen() {
     if (result.canceled) return;
     for (const asset of result.assets) {
       if (!asset.base64) continue;
-      const ok = await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
-      if (!ok) break;
+      const out = await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
+      if (!out.ok) break;
     }
   };
 
@@ -510,6 +581,116 @@ export default function TechRegistrationScreen() {
     await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
   };
 
+  /** Validação IA do passo 1: /api/me → mesmo prefixo do convite público → rota dedicada (cada 404 tenta o seguinte). */
+  const fetchProfilePhotoAiValidation = useCallback(
+    async (imageDataUrl: string) => {
+      const body = JSON.stringify({ imageBase64: imageDataUrl });
+      let res = await apiFetch('/api/me/validate-technician-profile-photo', { method: 'POST', body });
+      if (res.status === 404 && token) {
+        res = await apiFetch(
+          `/api/technician-registration/public/${encodeURIComponent(token)}/validate-profile-photo`,
+          { method: 'POST', body },
+        );
+      }
+      if (res.status === 404) {
+        res = await apiFetch('/api/ai-technician-profile-photo/validate', { method: 'POST', body });
+      }
+      return res;
+    },
+    [token],
+  );
+
+  const capturePrimaryProfileWithCamera = async () => {
+    if (readOnly || primaryValidating) return;
+    setPrimaryValidationError(null);
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      Alert.alert('Permissão', 'Precisamos da câmera para a foto de perfil do cadastro de prestador.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.88,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) {
+      Alert.alert('Foto', 'Não foi possível ler a imagem. Tente novamente.');
+      return;
+    }
+    const mime = asset.mimeType || 'image/jpeg';
+    const dataUrl = `data:${mime};base64,${asset.base64}`;
+
+    setPrimaryValidating(true);
+    try {
+      const jwt = await getToken();
+      if (!jwt) {
+        Alert.alert('Sessão', 'Inicie sessão para validar a foto.');
+        return;
+      }
+      const valRes = await fetchProfilePhotoAiValidation(dataUrl);
+      const valData = await valRes.json().catch(() => ({}));
+      if (valRes.status === 503 && valData.code === 'NO_OPENAI_KEY') {
+        setPrimaryValidationError(
+          'Validação automática indisponível: o servidor não tem a API OpenAI configurada. Peça ao suporte para configurar a integração OpenAI.'
+        );
+        return;
+      }
+      if (!valRes.ok) {
+        setPrimaryValidationError(String(valData.error || 'Não foi possível analisar a foto. Tente de novo.'));
+        return;
+      }
+      if (!valData.approved) {
+        const reasons = Array.isArray(valData.rejectReasonsPtBr)
+          ? valData.rejectReasonsPtBr.filter(Boolean).join('\n• ')
+          : '';
+        const line = reasons ? `• ${reasons}` : String(valData.userMessagePtBr || 'Ajuste a foto e tente outra vez.');
+        setPrimaryValidationError(line);
+        return;
+      }
+
+      const posted = await postFaceB64(asset.base64, mime);
+      if (!posted.ok || !posted.photo?.url) return;
+
+      const nextCapture: NonNullable<PrimaryProfileCapture> = {
+        validatedAt: new Date().toISOString(),
+        validationEngine: 'ai_llm_vision',
+        userMessagePtBr: String(valData.userMessagePtBr || '').trim() || undefined,
+        photoId: posted.photo.id,
+      };
+      const baseResponses = buildResponsesJson();
+      const responsesJson = {
+        ...baseResponses,
+        avatarUrl: posted.photo.url,
+        techRegPrimaryProfileCapture: {
+          validatedAt: nextCapture.validatedAt,
+          validationEngine: nextCapture.validationEngine,
+          ...(nextCapture.userMessagePtBr ? { userMessagePtBr: nextCapture.userMessagePtBr } : {}),
+          photoId: nextCapture.photoId,
+        },
+      };
+      try {
+        await fetch(`${basePath}/draft`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({ responsesJson }),
+        });
+      } catch {
+        /* rascunho falha silenciosamente; saveDraftSoon recupera */
+      }
+      setAvatarUrl(posted.photo.url);
+      setPrimaryProfileCapture(nextCapture);
+    } catch (e: any) {
+      setPrimaryValidationError(e?.message || 'Erro ao processar a foto.');
+    } finally {
+      setPrimaryValidating(false);
+    }
+  };
+
   const pickFace = () => {
     Alert.alert('Adicionar fotos', 'Escolha a origem. Pode repetir para enviar várias fotos.', [
       { text: 'Cancelar', style: 'cancel' },
@@ -521,6 +702,9 @@ export default function TechRegistrationScreen() {
   const removeFace = async (photoId: string) => {
     const jwt = await getToken();
     if (!jwt) return;
+    const wasPrimaryAi =
+      isAiProfileGateEngine(primaryProfileCapture?.validationEngine) &&
+      primaryProfileCapture?.photoId === photoId;
     const res = await fetch(`${basePath}/face-enrollment/${encodeURIComponent(photoId)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${jwt}` },
@@ -528,6 +712,27 @@ export default function TechRegistrationScreen() {
     const data = await res.json();
     if (Array.isArray(data.photos)) {
       setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
+    }
+    if (wasPrimaryAi) {
+      setPrimaryProfileCapture(null);
+      setAvatarUrl('');
+      try {
+        const responsesJson = {
+          ...buildResponsesJson(),
+          techRegPrimaryProfileCapture: null,
+          avatarUrl: null,
+        };
+        await fetch(`${basePath}/draft`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({ responsesJson }),
+        });
+      } catch {
+        /* ignore */
+      }
     }
   };
 
@@ -548,6 +753,14 @@ export default function TechRegistrationScreen() {
         section: { marginHorizontal: 16, marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceLow },
         secTitle: { fontSize: 15, fontWeight: '800', color: C.slate, marginBottom: 12 },
         label: { fontSize: 12, color: C.textSecondary, marginBottom: 4 },
+        fieldHint: {
+          fontSize: 11,
+          color: C.textLight,
+          marginTop: -4,
+          marginBottom: 10,
+          lineHeight: 16,
+          fontWeight: '500',
+        },
         input: {
           borderWidth: 1,
           borderColor: C.border,
@@ -581,6 +794,25 @@ export default function TechRegistrationScreen() {
         },
         btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
         dayRow: { marginBottom: 10 },
+        primaryIntro: { fontSize: 13, color: C.textSecondary, lineHeight: 21, marginBottom: 14 },
+        primaryError: {
+          marginTop: 12,
+          padding: 12,
+          borderRadius: 10,
+          backgroundColor: '#fef2f2',
+          borderWidth: 1,
+          borderColor: '#fecaca',
+        },
+        primaryErrorText: { fontSize: 13, color: '#b91c1c', lineHeight: 20 },
+        infoCallout: {
+          marginTop: 8,
+          padding: 12,
+          borderRadius: 10,
+          backgroundColor: C.surfaceLow,
+          borderWidth: 1,
+          borderColor: C.border,
+        },
+        infoCalloutText: { fontSize: 12, color: C.textSecondary, lineHeight: 18 },
       }),
     [C]
   );
@@ -596,8 +828,8 @@ export default function TechRegistrationScreen() {
     }
     if (facePhotos.length < MIN_FACE_ENROLLMENT_PHOTOS) {
       Alert.alert(
-        'Fotos do rosto',
-        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para reconhecimento facial. Atualmente: ${facePhotos.length}.`
+        'Fotos biométricas',
+        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para o enrolamento do tenant (ex. CompreFace). Atualmente: ${facePhotos.length}.`
       );
       return;
     }
@@ -642,12 +874,18 @@ export default function TechRegistrationScreen() {
 
   /** Só bloqueia edição enquanto aguarda análise; em NEEDS_REVISION volta a editar. */
   const readOnly = status === 'SUBMITTED';
+  const isCompanyInvite = registrationSource === 'panel_invite';
 
   if (!token) {
     return (
       <View style={[styles.root, { justifyContent: 'center', padding: 24 }]}>
-        <Text style={{ color: C.textSecondary, textAlign: 'center' }}>
-          Link inválido. Abra o convite enviado pelo gestor (parâmetro token em falta).
+        <Text style={{ color: C.slate, fontSize: 17, fontWeight: '800', textAlign: 'center' }}>
+          Link incompleto
+        </Text>
+        <Text style={{ color: C.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 22 }}>
+          Falta o identificador do formulário na URL.{'\n\n'}
+          • Se você pediu cadastro no app: abra o perfil, toque em «Quero ser um Prestador» ou «Continuar cadastro de prestador».{'\n\n'}
+          • Se uma empresa lhe enviou convite: abra o link do e-mail ou mensagem (ou peça o link ao gestor).
         </Text>
         <TouchableOpacity style={[styles.btn, { marginTop: 20 }]} onPress={() => router.back()}>
           <Text style={styles.btnText}>Voltar</Text>
@@ -671,23 +909,43 @@ export default function TechRegistrationScreen() {
     return (
       <View style={[styles.root, { paddingBottom: 32 }]}>
         <View style={styles.head}>
-          <Text style={styles.title}>Convite de prestador</Text>
+          <Text style={styles.title}>{isCompanyInvite ? 'Convite de prestador' : 'Cadastro de prestador'}</Text>
           <Text style={styles.sub}>
-            {tenantName ? `Empresa: ${tenantName}` : 'É necessário iniciar sessão no app com o e-mail do convite.'}
+            {isCompanyInvite
+              ? tenantName
+                ? `Empresa convidante: ${tenantName}`
+                : 'Inicie sessão no app com o e-mail do convite.'
+              : tenantName
+                ? `Organização da sua conta: ${tenantName}`
+                : 'Inicie sessão com a mesma conta BrSpark em que pediu ser prestador.'}
           </Text>
           <View style={styles.warn}>
             <Text style={styles.warnText}>
-              O convite foi enviado para{' '}
-              <Text style={{ fontWeight: '800' }}>{invitedEmailHint || 'o e-mail indicado pelo gestor'}</Text>.
-              {'\n\n'}
-              A conta BrSpark com esse e-mail deve existir antes de aceitar o convite (cadastro no separador «Criar conta» no login, se ainda não tiver).
+              {isCompanyInvite ? (
+                <>
+                  O convite foi enviado para{' '}
+                  <Text style={{ fontWeight: '800' }}>{invitedEmailHint || 'o e-mail indicado pelo gestor'}</Text>.
+                  {'\n\n'}
+                  A conta BrSpark com esse e-mail deve existir antes de aceitar o convite (use «Criar conta» no login,
+                  se ainda não tiver).
+                </>
+              ) : (
+                <>
+                  Este formulário está associado ao e-mail{' '}
+                  <Text style={{ fontWeight: '800' }}>{invitedEmailHint || 'da sua conta'}</Text>.
+                  {'\n\n'}
+                  Você iniciou o cadastro pelo perfil (sem convite de empresa). Entre com essa conta para continuar a
+                  preencher e enviar.
+                </>
+              )}
             </Text>
           </View>
         </View>
         {wrongSession ? (
           <View style={{ paddingHorizontal: 24 }}>
             <Text style={{ fontSize: 14, color: C.textSecondary, lineHeight: 22, marginBottom: 16 }}>
-              Está ligado como <Text style={{ fontWeight: '800' }}>{user?.email}</Text>, mas este convite é para outro e-mail.
+              Está ligado como <Text style={{ fontWeight: '800' }}>{user?.email}</Text>, mas este cadastro é para outro
+              e-mail.
             </Text>
             <TouchableOpacity
               style={styles.btn}
@@ -696,7 +954,9 @@ export default function TechRegistrationScreen() {
                 router.push({ pathname: '/auth/login', params: { techRegToken: token } } as any);
               }}
             >
-              <Text style={styles.btnText}>Sair e entrar com o e-mail do convite</Text>
+              <Text style={styles.btnText}>
+                Sair e entrar com o e-mail {isCompanyInvite ? 'do convite' : 'correto'}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -727,6 +987,54 @@ export default function TechRegistrationScreen() {
     );
   }
 
+  const primaryStepDone = readOnly || !!primaryProfileCapture?.validatedAt;
+
+  if (!primaryStepDone) {
+    return (
+      <ScrollView style={styles.root} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.head}>
+          <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="chevron-back" size={22} color={C.accent} />
+            <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Passo 1 — Foto de perfil</Text>
+          <Text style={styles.sub}>Etapa obrigatória antes do formulário de cadastro.</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.secTitle}>Finalidade e conferência</Text>
+          <Text style={styles.primaryIntro}>
+            A imagem integra o seu perfil de técnico; o solicitante poderá reconhecê-lo no local. A conferência aqui é
+            feita por análise automática (IA — OpenAI no servidor; não usa o motor CompreFace das ordens de serviço).
+            Exige-se rosto humano, inteiro e nítido, sem oclusões que inviabilizem a identificação nem conteúdo
+            impróprio.
+          </Text>
+          <View style={[styles.warn, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+            <Text style={[styles.warnText, { color: '#1e40af' }]}>
+              Utilize somente a câmera (a galeria não é aceita nesta etapa). Prefira enquadramento frontal, boa
+              iluminação e ausência de óculos escuros, máscaras ou outros acessórios que ocultem o rosto.
+            </Text>
+          </View>
+          {primaryValidating ? (
+            <View style={{ alignItems: 'center', marginTop: 20 }}>
+              <ActivityIndicator size="large" color={C.accent} />
+              <Text style={{ marginTop: 12, color: C.textSecondary, fontSize: 13 }}>Validando a imagem…</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 16 }]} onPress={capturePrimaryProfileWithCamera}>
+              <Text style={styles.btnText}>Tirar foto</Text>
+            </TouchableOpacity>
+          )}
+          {primaryValidationError ? (
+            <View style={styles.primaryError}>
+              <Text style={styles.primaryErrorText}>{primaryValidationError}</Text>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView style={styles.root} keyboardShouldPersistTaps="handled">
       <View style={styles.head}>
@@ -735,7 +1043,34 @@ export default function TechRegistrationScreen() {
           <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Cadastro de prestador</Text>
-        <Text style={styles.sub}>{tenantName ? `Empresa: ${tenantName}` : ''}</Text>
+        {isCompanyInvite ? (
+          <>
+            <Text style={styles.sub}>
+              {tenantName ? `Convidado pela organização: ${tenantName}` : 'Cadastro ligado a uma organização na BrSpark'}
+            </Text>
+            <View style={styles.infoCallout}>
+              <Text style={styles.infoCalloutText}>
+                <Text style={{ fontWeight: '800', color: C.slate }}>Com convite: </Text>
+                O nome acima é a <Text style={{ fontWeight: '700' }}>empresa ou conta organizadora</Text> que criou o
+                convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite — tem de ser o mesmo da
+                sua conta BrSpark.
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.sub}>
+              {tenantName ? `Sua organização na plataforma: ${tenantName}` : 'Cadastro iniciado por você no app'}
+            </Text>
+            <View style={styles.infoCallout}>
+              <Text style={styles.infoCalloutText}>
+                <Text style={{ fontWeight: '800', color: C.slate }}>Sem convite por e-mail: </Text>
+                Você pediu para ser prestador no perfil. Não há gestor de outra empresa a convidá-lo: o e-mail fixo é só
+                o da <Text style={{ fontWeight: '700' }}>sua sessão</Text>, para bater com a candidatura.
+              </Text>
+            </View>
+          </>
+        )}
         {revisionNote ? (
           <View style={styles.warn}>
             <Text style={styles.warnText}>
@@ -764,9 +1099,14 @@ export default function TechRegistrationScreen() {
           editable={!readOnly}
           placeholder="Nome"
         />
-        <Text style={styles.label}>E-mail (convite)</Text>
+        <Text style={styles.label}>{isCompanyInvite ? 'E-mail do convite' : 'E-mail da conta'}</Text>
         <TextInput style={[styles.input, { opacity: 0.85 }]} value={email} editable={false} />
-        <Text style={styles.label}>Telefone / WhatsApp</Text>
+        <Text style={styles.fieldHint}>
+          {isCompanyInvite
+            ? 'Fixo: deve coincidir com o e-mail indicado pela empresa e com o login BrSpark.'
+            : 'Fixo: é o e-mail com que você entrou no app; usamos para validar a candidatura.'}
+        </Text>
+        <Text style={styles.label}>Telefone ou WhatsApp</Text>
         <TextInput
           style={styles.input}
           value={phone}
@@ -775,28 +1115,42 @@ export default function TechRegistrationScreen() {
             saveDraftSoon();
           }}
           editable={!readOnly}
-          placeholder="+55 …"
+          placeholder="Ex.: +55 11 99999-0000"
           keyboardType="phone-pad"
         />
-        <Text style={styles.label}>URL foto de perfil (opcional)</Text>
-        <TextInput
-          style={styles.input}
-          value={avatarUrl}
-          onChangeText={(t) => {
-            setAvatarUrl(t);
-            saveDraftSoon();
-          }}
-          editable={!readOnly}
-          placeholder="https://…"
-          autoCapitalize="none"
-        />
+        <Text style={styles.fieldHint}>Opcional neste passo — ajuda a equipe ou clientes a contatá-lo.</Text>
+        {isAiProfileGateEngine(primaryProfileCapture?.validationEngine) ? (
+          <Text style={styles.fieldHint}>
+            Foto de perfil: já definida no passo 1 (câmera + análise por IA, separada da biometria das tarefas). Use a
+            secção «Fotos para biometria do tenant» abaixo para as imagens adicionais exigidas pelo sistema.
+          </Text>
+        ) : (
+          <>
+            <Text style={styles.label}>Foto de perfil por link (opcional)</Text>
+            <TextInput
+              style={styles.input}
+              value={avatarUrl}
+              onChangeText={(t) => {
+                setAvatarUrl(t);
+                saveDraftSoon();
+              }}
+              editable={!readOnly}
+              placeholder="https://…"
+              autoCapitalize="none"
+            />
+            <Text style={styles.fieldHint}>
+              Só use se tiver URL pública. Quem entrou pelo passo 1 com câmera não precisa disto.
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.secTitle}>Reconhecimento facial</Text>
+        <Text style={styles.secTitle}>Fotos para biometria do tenant</Text>
         <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
-          Para sincronizar com o reconhecimento facial, envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto
-          (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.
+          {isAiProfileGateEngine(primaryProfileCapture?.validationEngine)
+            ? `A foto do passo 1 (perfil) foi validada só por IA e não substitui o enrolamento biométrico. Inclua mais ângulos até totalizar pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos no conjunto (câmera ou galeria). Máx. 12 imagens, 5 MB cada — alinhado ao CompreFace / política do tenant.`
+            : `Para o motor de reconhecimento facial das ordens de serviço (ex. CompreFace), envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.`}
         </Text>
         {!readOnly ? (
           <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 12 }]} onPress={pickFace}>
@@ -859,8 +1213,18 @@ export default function TechRegistrationScreen() {
       <View style={styles.section}>
         <Text style={styles.secTitle}>Tipo de acesso</Text>
         <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20 }}>
-          Após aprovação do gestor, a sua conta será criada como <Text style={{ fontWeight: '800' }}>Prestador</Text> nesta
-          empresa, com sessão ativa no app BrSpark.
+          {isCompanyInvite ? (
+            <>
+              Após aprovação do gestor da empresa, a sua conta passa a atuar como{' '}
+              <Text style={{ fontWeight: '800' }}>Prestador</Text> nessa organização, com sessão no app BrSpark.
+            </>
+          ) : (
+            <>
+              Após a análise e aprovação da equipe BrSpark, o modo{' '}
+              <Text style={{ fontWeight: '800' }}>Prestador</Text> será habilitado na organização da sua conta, para
+              receber ordens de serviço conforme as regras da plataforma.
+            </>
+          )}
         </Text>
       </View>
 

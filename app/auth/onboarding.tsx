@@ -10,15 +10,16 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, Image, ScrollView, TouchableOpacity, StyleSheet,
-  Animated, ActivityIndicator, Platform,
+  Animated, ActivityIndicator, Platform, Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
+import { getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
@@ -35,6 +36,9 @@ const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'RETENTION', 'CONFIRM'] 
 type SlideTech = typeof SLIDES_TECH[number];
 type SlideClient = typeof SLIDES_CLIENT[number];
 type Slide = SlideTech;
+
+const REGION_KEY = '@brspark_region';
+const ALLOWED_REGIONS = ['BR', 'US', 'ES', 'AR'] as const;
 
 function defaultConsents(isTechnician: boolean): ConsentState {
   return {
@@ -92,7 +96,7 @@ async function requestOsLocationPermissions(isTechnician: boolean, consents: Con
 }
 
 export default function OnboardingScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, userRole, loading: authLoading } = useAuth();
   const { colors: C } = useTheme();
   const isTechnician = useMemo(
@@ -105,6 +109,9 @@ export default function OnboardingScreen() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [consents, setConsents] = useState<ConsentState>(() => defaultConsents(false));
   const [policy, setPolicy] = useState<any>(null);
+  const [prefsRegion, setPrefsRegion] = useState<string>(() => getDeviceRegion());
+  /** true se o país veio de @brspark_region (cadastro/perfil); false = só heurística do telefone. */
+  const [regionFromStorage, setRegionFromStorage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(1));
 
@@ -122,15 +129,73 @@ export default function OnboardingScreen() {
     })();
   }, []);
 
+  const reloadRegionPreference = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(REGION_KEY);
+      if (stored && (ALLOWED_REGIONS as readonly string[]).includes(stored)) {
+        setPrefsRegion(stored);
+        setRegionFromStorage(true);
+      } else {
+        setPrefsRegion(getDeviceRegion());
+        setRegionFromStorage(false);
+      }
+    } catch {
+      setPrefsRegion(getDeviceRegion());
+      setRegionFromStorage(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadRegionPreference();
+  }, [reloadRegionPreference]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadRegionPreference();
+    }, [reloadRegionPreference])
+  );
+
+  /** Texto legal: política do tenant; senão LGPD só para PT ou BR explícito; inglês na UI não fica preso ao BR do telefone. */
+  const legalLabel = useMemo(() => {
+    const pb = String(policy?.legalBasis || '').trim();
+    if (pb && pb !== 'LGPD') return pb;
+
+    const r = prefsRegion;
+    const lang = (i18n.language || '').toLowerCase();
+
+    if (r === 'US') return t('consentFlow.legalBasisUS');
+    if (r === 'ES') return 'GDPR';
+
+    if (lang.startsWith('en')) {
+      if (regionFromStorage && r === 'BR') return 'LGPD';
+      return t('consentFlow.legalBasisUS');
+    }
+
+    if (lang.startsWith('pt')) return 'LGPD';
+    if (r === 'BR') return 'LGPD';
+    if (r === 'AR') return 'LGPD';
+    if (lang.startsWith('es')) return 'GDPR';
+
+    return 'LGPD';
+  }, [policy?.legalBasis, prefsRegion, regionFromStorage, i18n.language, t]);
+
   const currentSlide: Slide = slides[slideIndex] as Slide;
 
   const goNext = useCallback(() => {
+    const slide = slides[slideIndex];
+    if (slide === 'RETENTION' && !consents.DATA_RETENTION) {
+      Alert.alert(
+        t('consentFlow.termsRequiredTitle'),
+        t('consentFlow.termsRequiredRetention', { legal: legalLabel })
+      );
+      return;
+    }
     Animated.sequence([
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
-    setSlideIndex(i => Math.min(i + 1, slides.length - 1));
-  }, [fadeAnim, slides.length]);
+    setSlideIndex((i) => Math.min(i + 1, slides.length - 1));
+  }, [fadeAnim, slides, slideIndex, consents.DATA_RETENTION, legalLabel, t]);
 
   const goBack = useCallback(() => {
     Animated.sequence([
@@ -150,6 +215,13 @@ export default function OnboardingScreen() {
   }, [consents, isTechnician]);
 
   const confirm = useCallback(async () => {
+    if (!consents.DATA_RETENTION) {
+      Alert.alert(
+        t('consentFlow.termsRequiredTitle'),
+        t('consentFlow.termsRequiredRetention', { legal: legalLabel })
+      );
+      return;
+    }
     setLoading(true);
     try {
       const ownerEmail = await AsyncStorage.getItem('@brspark_email') || '';
@@ -184,14 +256,7 @@ export default function OnboardingScreen() {
       setLoading(false);
       router.replace('/(tabs)');
     }
-  }, [consents, policy, isTechnician, consentEntriesForApi]);
-
-  const skipAll = useCallback(async () => {
-    await AsyncStorage.setItem('@brspark_onboarding_done', '1');
-    router.replace('/(tabs)');
-  }, []);
-
-  const legalBasis = policy?.legalBasis || 'LGPD';
+  }, [consents, policy, isTechnician, consentEntriesForApi, legalLabel, t]);
 
   const summaryRows: [keyof ConsentState, string, string][] = useMemo(() => {
     if (isTechnician) {
@@ -236,7 +301,7 @@ export default function OnboardingScreen() {
                     descKey === '__HISTORY__'
                       ? t('consentFlow.techCollectHistoryDesc', {
                           years: policy?.retentionEventsYears || 5,
-                          legal: legalBasis,
+                          legal: legalLabel,
                         })
                       : t(`consentFlow.${descKey}`);
                   return (
@@ -381,7 +446,7 @@ export default function OnboardingScreen() {
               <Ionicons name="shield-half-outline" size={18} color="#10b981" />
               <Text style={s.infoText}>
                 {t('consentFlow.deviceInfoClient', {
-                  legal: legalBasis,
+                  legal: legalLabel,
                   path: t('consentFlow.profilePrivacyPath'),
                 })}
               </Text>
@@ -397,7 +462,7 @@ export default function OnboardingScreen() {
                 <Ionicons name="time" size={36} color="#EA580C" />
                 <Text style={s.slideTitle}>{t('consentFlow.retentionTitleTech')}</Text>
                 <Text style={s.slideDesc}>
-                  {t('consentFlow.retentionSubtitleTech', { legal: legalBasis })}
+                  {t('consentFlow.retentionSubtitleTech', { legal: legalLabel })}
                 </Text>
               </View>
               {[
@@ -420,7 +485,7 @@ export default function OnboardingScreen() {
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DATA_RETENTION"
                 icon="checkmark-circle-outline"
-                title={t('consentFlow.retentionToggleTitle', { legal: legalBasis })}
+                title={t('consentFlow.retentionToggleTitle', { legal: legalLabel })}
                 description={t('consentFlow.retentionToggleDescTech')}
               />
             </View>
@@ -432,7 +497,7 @@ export default function OnboardingScreen() {
               <Ionicons name="time" size={36} color="#EA580C" />
               <Text style={s.slideTitle}>{t('consentFlow.retentionTitleClient')}</Text>
               <Text style={s.slideDesc}>
-                {t('consentFlow.retentionSubtitleClient', { legal: legalBasis })}
+                {t('consentFlow.retentionSubtitleClient', { legal: legalLabel })}
               </Text>
             </View>
             {[
@@ -454,7 +519,7 @@ export default function OnboardingScreen() {
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DATA_RETENTION"
               icon="checkmark-circle-outline"
-              title={t('consentFlow.retentionToggleTitle', { legal: legalBasis })}
+              title={t('consentFlow.retentionToggleTitle', { legal: legalLabel })}
               description={t('consentFlow.retentionToggleDescClient')}
             />
           </View>
@@ -496,6 +561,8 @@ export default function OnboardingScreen() {
   };
 
   const isLastSlide = slideIndex === slides.length - 1;
+  /** Declaração obrigatória sobre política de retenção (base legal LGPD/GDPR/etc.). */
+  const retentionBlocked = !consents.DATA_RETENTION && (currentSlide === 'RETENTION' || isLastSlide);
 
   if (authLoading) {
     return (
@@ -521,10 +588,6 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
-      <TouchableOpacity style={s.skipBtn} onPress={skipAll}>
-        <Text style={[s.skipText, { color: C.textLight }]}>{t('consentFlow.skip')}</Text>
-      </TouchableOpacity>
-
       <Animated.View style={[s.slide, { opacity: fadeAnim }]}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
           {renderSlide()}
@@ -546,9 +609,11 @@ export default function OnboardingScreen() {
             s.btnNext,
             { backgroundColor: C.accent },
             isLastSlide && { backgroundColor: C.connectivity.online },
+            (loading || retentionBlocked) && { opacity: 0.45 },
           ]}
           onPress={isLastSlide ? confirm : goNext}
-          disabled={loading}
+          disabled={loading || retentionBlocked}
+          accessibilityState={{ disabled: loading || retentionBlocked }}
         >
           {loading ? (
             <ActivityIndicator color={C.cardWhite} />
@@ -572,8 +637,6 @@ const s = StyleSheet.create({
   progressBar: { flexDirection: 'row', gap: 6, justifyContent: 'center', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 12 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#e2e8f0' },
   dotActive: { width: 20, backgroundColor: '#EA580C' },
-  skipBtn: { position: 'absolute', top: Platform.OS === 'ios' ? 56 : 36, right: 20, zIndex: 10, padding: 8 },
-  skipText: { fontSize: 13, fontWeight: '700', color: '#94a3b8' },
   slide: { flex: 1 },
   slideContent: { padding: 24 },
   slideHeader: { alignItems: 'center', marginBottom: 28, gap: 10 },

@@ -161,6 +161,8 @@
   "consentFlow": {
     "a11yLogo": "BrSpark",
     "skip": "Omitir",
+    "termsRequiredTitle": "Confirmación necesaria",
+    "termsRequiredRetention": "Active la opción «He leído y entendido la política de retención ({{legal}})» para continuar. Esta declaración es obligatoria según la legislación aplicable.",
     "back": "Volver",
     "continue": "Continuar",
     "confirmEnter": "Confirmar y entrar",
@@ -243,7 +245,8 @@
     "sumRetention": "Política de retención leída",
     "sumFgGpsClient": "Ubicación con la app abierta",
     "periodDays": "{{count}} días",
-    "periodYears": "{{count}} años"
+    "periodYears": "{{count}} años",
+    "legalBasisUS": "leyes estatales de privacidad de EE. UU. y el RGPD (cuando aplique)"
   },
   "asset": {
     "title": "Gestión de Bienes",

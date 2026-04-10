@@ -16,6 +16,7 @@ const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('
 const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
+const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
 
@@ -109,6 +110,15 @@ async function bindTechRegistrationCandidate(req, res, next) {
 
 // ─── Public (candidato — sessão obrigatória para editar; GET mínimo sem sessão) ─
 
+/** Mesmo handler que POST /api/me/validate-technician-profile-photo — útil se o proxy só encaminhar bem /api/technician-registration/public/*. */
+publicRouter.post(
+  '/:token/validate-profile-photo',
+  express.json({ limit: '10mb' }),
+  authUser,
+  bindTechRegistrationCandidate,
+  handleTechnicianProfilePhotoAiValidate,
+);
+
 publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
   try {
     const { token } = req.params;
@@ -117,12 +127,15 @@ publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
       include: { tenant: { select: { id: true, name: true } } },
     });
     if (!app) return res.status(404).json({ error: 'Convite inválido ou expirado.' });
+    const registrationSource = app.createdByUserId ? 'panel_invite' : 'self_service';
+
     if (['APPROVED', 'REJECTED'].includes(app.status)) {
       return res.json({
         closed: true,
         status: app.status,
         tenantName: app.tenant?.name,
         invitedEmail: app.invitedEmail,
+        registrationSource,
       });
     }
     const u = req.appUser;
@@ -137,6 +150,7 @@ publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
         status: app.status,
         tenantName: app.tenant?.name,
         invitedEmail: app.invitedEmail,
+        registrationSource,
       });
     }
     await prisma.technicianRegistrationApplication
@@ -158,6 +172,7 @@ publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
       tenantName: app.tenant?.name,
       tenantId: app.tenantId,
       invitedEmail: app.invitedEmail,
+      registrationSource,
       revisionNote: app.revisionNote,
       responsesJson: responses,
       locations,

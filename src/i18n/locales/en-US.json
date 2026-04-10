@@ -161,6 +161,8 @@
   "consentFlow": {
     "a11yLogo": "BrSpark",
     "skip": "Skip",
+    "termsRequiredTitle": "Confirmation required",
+    "termsRequiredRetention": "Turn on «I have read and understood the retention policy ({{legal}})» to continue. This acknowledgment is required under applicable law.",
     "back": "Back",
     "continue": "Continue",
     "confirmEnter": "Confirm and continue",
@@ -243,7 +245,9 @@
     "sumRetention": "Retention policy read",
     "sumFgGpsClient": "Location with app open",
     "periodDays": "{{count}} days",
-    "periodYears": "{{count}} years"
+    "periodYears": "{{count}} years",
+    "legalFallbackShort": "U.S. and applicable privacy laws",
+    "legalBasisUS": "U.S. state privacy laws and the GDPR (where applicable)"
   },
   "asset": {
     "title": "Goods Management",

@@ -7,6 +7,10 @@ const crypto  = require('crypto');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 
+// /api/vision/* — biometria de campo / checklists (CompreFace conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
+const visionRouter = require('./vision');
+router.use('/vision', visionRouter);
+
 /**
  * Tenant onde novos utilizadores do app móvel são registados (consumidor / prestador individual).
  * Defina APP_DEFAULT_TENANT_SLUG (ex.: brspark-app) ou APP_DEFAULT_TENANT_ID.
@@ -275,6 +279,7 @@ router.post('/login', async (req, res) => {
 // ─── GET /api/me ─────────────────────────────────────────────────────────────
 // Autenticado — retorna perfil do usuário logado (para o app)
 const authUser = require('../middleware/authUser');
+const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 router.get('/me', authUser, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -315,6 +320,10 @@ router.put('/me', authUser, async (req, res) => {
 function generateTechRegInviteToken() {
   return crypto.randomBytes(32).toString('hex');
 }
+
+// ─── POST /api/me/validate-technician-profile-photo ─────────────────────────
+// Gate IA do passo 1 (cadastro prestador). Mesmo handler que /api/ai-technician-profile-photo/validate e /api/technician-registration/public/:token/validate-profile-photo.
+router.post('/me/validate-technician-profile-photo', authUser, handleTechnicianProfilePhotoAiValidate);
 
 // ─── GET /api/me/technician-registration ─────────────────────────────────────
 // Candidatura em aberto (continuar formulário) — mesmo e-mail + tenant da sessão.
