@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Cadastro de prestadores</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:6px" id="back-users">← Usuários</a>
+        <span class="topbar-title">Cadastro de prestadores</span>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Convites, revisão e aprovação (formulário global)</div>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-primary" id="btn-invite">+ Convidar por e-mail</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div id="view-list">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Candidaturas</span>
+            <select class="form-control" id="filter-status" style="max-width:200px;padding:6px 10px;font-size:12px">
+              <option value="">Todos os estados</option>
+              <option value="INVITED">Convidado</option>
+              <option value="DRAFT">Rascunho</option>
+              <option value="SUBMITTED">Submetido</option>
+              <option value="NEEDS_REVISION">Aguardando correção</option>
+              <option value="APPROVED">Aprovado</option>
+              <option value="REJECTED">Recusado</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>E-mail</th>
+                  <th>Tenant</th>
+                  <th>Estado</th>
+                  <th>Atualizado</th>
+                  <th style="text-align:right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-apps">
+                <tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Carregando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-detail" style="display:none">
+        <div class="panel">
+          <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <span class="panel-title" id="detail-title">Candidatura</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-close-detail">← Voltar à lista</button>
+          </div>
+          <div style="padding:16px 20px">
+            <div id="detail-meta" style="font-size:13px;color:var(--text3);margin-bottom:16px"></div>
+            <div id="detail-revision" style="display:none;margin-bottom:16px;padding:12px;border-radius:10px;background:var(--amber-dim);border:1px solid var(--border)"></div>
+            <pre id="detail-json" style="font-size:11px;overflow:auto;max-height:420px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)"></pre>
+            <div style="margin-top:16px">
+              <span class="panel-title" style="font-size:13px">Histórico</span>
+              <ul id="detail-events" style="margin:8px 0 0 16px;font-size:12px;color:var(--text3)"></ul>
+            </div>
+            <div id="detail-actions" style="margin-top:24px;display:flex;flex-wrap:wrap;gap:10px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-invite">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Convidar prestador</span>
+      <button type="button" class="modal-close" data-close-invite><ion-icon name="close-outline"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">E-mail do candidato *</label>
+        <input type="email" class="form-control" id="invite-email" placeholder="tecnico@exemplo.com" />
+      </div>
+      <div class="form-group" id="wrap-invite-tenant" style="display:none">
+        <label class="form-label">Tenant (conta) *</label>
+        <select class="form-control" id="invite-tenant"></select>
+        <p style="font-size:11px;color:var(--text3);margin-top:6px">Necessário no modo global da plataforma.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" data-close-invite>Cancelar</button>
+      <button type="button" class="btn btn-primary" id="invite-submit">Enviar convite</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-revision">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Pedir ajustes ao candidato</span>
+      <button type="button" class="modal-close" data-close-rev><ion-icon name="close-outline"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <textarea class="form-control" id="revision-msg" rows="5" placeholder="Descreva o que falta ou deve ser corrigido…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" data-close-rev>Cancelar</button>
+      <button type="button" class="btn btn-primary" id="revision-submit">Enviar pedido</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/technician-applications-page.js"></script>
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+</body>
+</html>

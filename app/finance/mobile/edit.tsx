@@ -492,7 +492,7 @@ export default function EditTechnicianFinanceScreen() {
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
           <Ionicons name="checkmark-circle" size={22} color="#fff" />
-          <Text style={styles.saveBtnTxt}>{valueFieldsLocked ? 'Guardar rateio' : 'Guardar alterações'}</Text>
+          <Text style={styles.saveBtnTxt}>{valueFieldsLocked ? 'Salvar rateio' : 'Salvar alterações'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

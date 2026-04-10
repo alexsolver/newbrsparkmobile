@@ -26,7 +26,7 @@ function buildCategoryConfig(C: ColorPalette): Record<string, { icon: any; color
     sync: { icon: 'cloud-done', color: MEDIA_TAG_COLORS.AFTER, label: 'Sincronismo' },
     alert: { icon: 'warning', color: C.branding, label: 'Alerta' },
     info: { icon: 'information-circle', color: MEDIA_TAG_COLORS.BEFORE, label: 'Info' },
-    evaluation: { icon: 'star-half', color: C.accent, label: 'Produtividade' },
+    evaluation: { icon: 'star-half', color: C.accent, label: 'Desempenho' },
   };
 }
 

@@ -44,6 +44,8 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inTabs       = segments[0] === '(tabs)';
     const inProfile    = segments[0] === 'profile';
     const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
+    const inTechRegistration =
+      segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
     const isRoot       = !segments || !segments.length || !segments[0];
 
     if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile) {
@@ -51,7 +53,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && inAuthGroup && !inOnboarding) {
+    if (user && inAuthGroup && !inOnboarding && !inTechRegistration) {
       // Logged-in user trying to access auth — check if onboarding is needed first
       AsyncStorage.getItem('@brspark_onboarding_done').then(done => {
         if (!done) {

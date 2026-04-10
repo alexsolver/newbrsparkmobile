@@ -1110,11 +1110,11 @@ export default function LiveRouteMapCard({
                 Toque no <Text style={styles.hintStrong}>marcador do destino</Text> (ou nos pontos A/B) para aproximar e ver melhor a rua.
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Rota KML / patrulha:</Text> linha{' '}
-                <Text style={styles.hintStrong}>laranja</Text> = trajeto planeado; linha{' '}
-                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registado; na linha de navegação (OSRM),
+                <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado; linha{' '}
+                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; na linha de navegação (OSRM),
                 o trecho já percorrido fica <Text style={styles.hintStrong}>laranja sólido</Text> e o que falta em
                 azul tracejado — útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
-                trajeto planeado foi percorrido dentro do corredor (tolerância definida no despacho).
+                trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"
                 quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
@@ -1323,8 +1323,8 @@ export default function LiveRouteMapCard({
               title="Sua posição"
               description={
                 followUser
-                  ? 'Modo navegação: o mapa alinha-se ao rumo; a foto mantém-se vertical.'
-                  : 'A sua posição no mapa (foto sempre vertical).'
+                  ? 'Modo navegação: o mapa alinha ao rumo; a foto permanece vertical.'
+                  : 'Sua posição no mapa (foto sempre vertical).'
               }
               anchor={{ x: 0.5, y: 0.5 }}
               zIndex={2000}

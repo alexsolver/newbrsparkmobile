@@ -20,15 +20,22 @@ module.exports = async function authUser(req, res, next) {
       });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: payload.id }, select: { currentSessionId: true } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { currentSessionId: true, tenantId: true, role: true, isActive: true },
+    });
     if (!user || user.currentSessionId !== payload.sessionId) {
       return res.status(401).json({
         error: 'Sessão inválida ou expirada em outro dispositivo.',
         code: 'SESSION_INVALIDATED',
       });
     }
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Conta desativada.', code: 'ACCOUNT_INACTIVE' });
+    }
 
-    req.user = payload;
+    // tenantId/role vêm sempre da BD — o JWT pode ficar desatualizado (ex.: utilizador mudou de tenant sem novo login).
+    req.user = { ...payload, tenantId: user.tenantId, role: user.role };
     next();
   } catch(err) {
     res.status(401).json({ error: 'Token inválido ou expirado.' });

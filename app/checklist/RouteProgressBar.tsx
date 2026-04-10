@@ -57,13 +57,13 @@ export default function RouteProgressBar() {
 
       {update.patrolCoveragePercent != null && (
         <Text style={styles.patrolLine}>
-          Cobertura do trajeto planeado (patrulha): ~{update.patrolCoveragePercent}%
+          Cobertura do trajeto planejado (patrulha): ~{update.patrolCoveragePercent}%
         </Text>
       )}
 
       {isDeviation && (
         <Text style={styles.alert}>
-          Apenas lembrete: aproxime-se do trajeto planeado quando possível. O trabalho continua normalmente.
+          Apenas lembrete: aproxime-se do trajeto planejado quando possível. O trabalho continua normalmente.
         </Text>
       )}
     </View>

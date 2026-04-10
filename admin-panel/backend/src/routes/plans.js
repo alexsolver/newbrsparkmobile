@@ -22,11 +22,24 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/plans/:id
+// Faz merge de `features` com o JSON existente (ex.: atualizar só facialVisionProvider sem apagar outras chaves).
 router.put('/:id', async (req, res) => {
   try {
-    const plan = await prisma.plan.update({ where: { id: req.params.id }, data: req.body });
+    const { id } = req.params;
+    const data = { ...req.body };
+    if (data.features != null && typeof data.features === 'object' && !Array.isArray(data.features)) {
+      const existing = await prisma.plan.findUnique({ where: { id }, select: { features: true } });
+      const prev =
+        existing?.features && typeof existing.features === 'object' && !Array.isArray(existing.features)
+          ? existing.features
+          : {};
+      data.features = { ...prev, ...data.features };
+    }
+    const plan = await prisma.plan.update({ where: { id }, data });
     res.json(plan);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

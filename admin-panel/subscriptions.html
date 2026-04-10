@@ -45,6 +45,37 @@
   </div>
 </div>
 
+<!-- Config facial API por plano -->
+<div class="modal-overlay" id="facial-plan-modal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title"><ion-icon name="scan-outline" style="vertical-align:-2px"></ion-icon> Biometria facial — API por plano</span>
+      <button class="modal-close" onclick="closeModal('facial-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="facial-plan-id" />
+      <p style="font-size:13px;color:var(--text2);margin:0 0 12px">Plano: <strong id="facial-plan-name">—</strong></p>
+      <p style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:12px">
+        Define qual integração de visão (em <strong>Integrações</strong>) este plano pode usar no reconhecimento facial na app.
+        O formulário já não escolhe o provedor — só o plano do tenant.
+      </p>
+      <label class="form-label">Motor de reconhecimento facial</label>
+      <select class="form-control" id="facial-provider-sel" style="margin-bottom:8px">
+        <option value="COMPREFACE">CompreFace (local) — padrão</option>
+        <option value="AUTO">Automático (prefere CompreFace, senão AWS se configurado)</option>
+        <option value="AWS">AWS Rekognition (custo API; ainda limitado no servidor)</option>
+      </select>
+      <p style="font-size:10px;color:var(--text3);line-height:1.35;margin:0">
+        Valor gravado em <code style="font-size:10px">plan.features.facialVisionProvider</code>. Tenants sem assinatura usam CompreFace.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('facial-plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-facial-plan-btn">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Assign Plan Modal -->
 <div class="modal-overlay" id="assign-plan-modal">
   <div class="modal">
@@ -76,14 +107,52 @@
   const plans = await CONFIG.get('/plans') || [];
   const plansGrid = document.getElementById('plans-grid');
   const subPlanSel = document.getElementById('sub-plan');
+
+  function facialProviderLabel(feat) {
+    const v = (feat && feat.facialVisionProvider) || 'COMPREFACE';
+    if (v === 'AUTO') return 'Automático';
+    if (v === 'AWS') return 'AWS';
+    return 'CompreFace';
+  }
+
   plansGrid.innerHTML = plans.map(p => `
     <div class="stat-card" style="--accent-color:var(--accent)">
       <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${p.name}</div>
       <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">/mês</span></div>
       <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? 'Ilimitado' : p.maxAssets} bens</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:12px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} usuários</div>
-      <span class="badge badge-accent">${p._count?.subscriptions || 0} tenants</span>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} usuários</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Facial: <span style="font-weight:700;color:var(--text2)">${facialProviderLabel(p.features)}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="badge badge-accent">${p._count?.subscriptions || 0} tenants</span>
+        <button type="button" class="btn btn-ghost btn-sm facial-plan-cfg" data-plan-id="${p.id}" title="Configurar API de reconhecimento facial">
+          <ion-icon name="settings-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> Biometria / API
+        </button>
+      </div>
     </div>`).join('') || '<div style="color:var(--text3)">Nenhum plano cadastrado.</div>';
+
+  plansGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.facial-plan-cfg');
+    if (!btn || !btn.dataset.planId) return;
+    const plan = plans.find((x) => x.id === btn.dataset.planId);
+    if (!plan) return;
+    document.getElementById('facial-plan-id').value = plan.id;
+    document.getElementById('facial-plan-name').textContent = plan.name;
+    const fv = (plan.features && plan.features.facialVisionProvider) || 'COMPREFACE';
+    document.getElementById('facial-provider-sel').value =
+      fv === 'AUTO' || fv === 'AWS' || fv === 'COMPREFACE' ? fv : 'COMPREFACE';
+    openModal('facial-plan-modal');
+  });
+
+  document.getElementById('save-facial-plan-btn').addEventListener('click', async () => {
+    const id = document.getElementById('facial-plan-id').value;
+    const val = document.getElementById('facial-provider-sel').value;
+    if (!id) return;
+    const r = await CONFIG.put(`/plans/${id}`, { features: { facialVisionProvider: val } });
+    if (r && r.error) return alert(r.error);
+    closeModal('facial-plan-modal');
+    window.location.reload();
+  });
+
   plans.forEach(p => { subPlanSel.innerHTML += `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
 
   // Load tenants for modal

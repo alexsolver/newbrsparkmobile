@@ -6,13 +6,18 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
-import { API_BASE, TwoFactorRequired } from '../../src/services/auth';
+import {
+  API_BASE,
+  TwoFactorRequired,
+  MultipleAccountsError,
+  type LoginTenantOption,
+} from '../../src/services/auth';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
@@ -193,6 +198,11 @@ function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, 
 
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ techRegToken?: string }>();
+  const techRegToken =
+    typeof params.techRegToken === 'string' && params.techRegToken.trim()
+      ? params.techRegToken.trim()
+      : undefined;
   const { login, register, logout, completeLoginWithOtp } = useAuth();
   const { t } = useTranslation();
   const { colors: C } = useTheme();
@@ -230,6 +240,16 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
 
+  const [tenantPick, setTenantPick] = useState<LoginTenantOption[] | null>(null);
+
+  const goToTechRegistrationAfterAuth = () => {
+    if (!techRegToken) return;
+    router.replace({
+      pathname: '/auth/tech-registration',
+      params: { token: techRegToken },
+    } as any);
+  };
+
   const openDoc = async (type: 'TERMS_OF_USE' | 'PRIVACY_POLICY') => {
     setDocLoading(true);
     try {
@@ -266,7 +286,8 @@ export default function LoginScreen() {
       } else {
         await register({ name, email, password, consent });
       }
-      // RouteGuard will handle onboarding redirect if needed
+      goToTechRegistrationAfterAuth();
+      // Sem convite: RouteGuard trata onboarding / tabs
     } catch (e: any) {
       if (e instanceof TwoFactorRequired) {
         setTwoFaChallenge(e.challengeToken);
@@ -274,10 +295,34 @@ export default function LoginScreen() {
         setTwoFaVisible(true);
         return;
       }
+      if (e instanceof MultipleAccountsError && e.tenants?.length) {
+        setTenantPick(e.tenants);
+        return;
+      }
       Alert.alert(
         mode === 'LOGIN' ? t('auth.errorLogin') : t('auth.errorRegister'),
         e?.message || t('auth.errorConnection')
       );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeLoginWithChosenTenant = async (tenantId: string) => {
+    setTenantPick(null);
+    if (!email || !password) return;
+    setLoading(true);
+    try {
+      await login(email, password, tenantId);
+      goToTechRegistrationAfterAuth();
+    } catch (e: any) {
+      if (e instanceof TwoFactorRequired) {
+        setTwoFaChallenge(e.challengeToken);
+        setOtp('');
+        setTwoFaVisible(true);
+        return;
+      }
+      Alert.alert(t('auth.errorLogin'), e?.message || t('auth.errorConnection'));
     } finally {
       setLoading(false);
     }
@@ -290,7 +335,8 @@ export default function LoginScreen() {
       await completeLoginWithOtp(twoFaChallenge, otp);
       await ApiService.sync(email);
       setTwoFaVisible(false);
-      // RouteGuard will handle onboarding redirect
+      goToTechRegistrationAfterAuth();
+      // Sem convite: RouteGuard trata onboarding / tabs
     } catch (e: any) {
       Alert.alert('Código inválido', e?.message || 'Tente novamente.');
       setOtp('');
@@ -315,6 +361,49 @@ export default function LoginScreen() {
             <Text style={styles.docContent}>{docModal?.content}</Text>
           </ScrollView>
         </SafeAreaView>
+      </Modal>
+
+      {/* ─── Várias organizações (mesmo e-mail) ───────────────────────────── */}
+      <Modal visible={!!tenantPick?.length} animationType="fade" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: C.cardWhite, borderRadius: 20, padding: 22, maxHeight: '70%' }}>
+            <Text style={{ fontSize: 17, fontWeight: '900', color: C.primary, marginBottom: 8 }}>
+              Escolha a organização
+            </Text>
+            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16, lineHeight: 20 }}>
+              Este e-mail está em mais de uma organização. Selecione com qual deseja entrar agora.
+            </Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {(tenantPick || []).map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={{
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    borderRadius: 12,
+                    backgroundColor: C.background,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: C.border,
+                  }}
+                  onPress={() => completeLoginWithChosenTenant(t.id)}
+                  disabled={loading}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.primary }}>
+                    {t.name || t.id}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={{ alignItems: 'center', paddingTop: 12 }}
+              onPress={() => setTenantPick(null)}
+              disabled={loading}
+            >
+              <Text style={{ fontSize: 14, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* ─── 2FA OTP Modal ─────────────────────────────────────────────────── */}

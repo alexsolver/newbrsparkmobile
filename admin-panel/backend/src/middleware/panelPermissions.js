@@ -12,6 +12,7 @@ const MANAGER_ALLOWED_PREFIXES = [
   '/api/dashboard',
   '/api/tenants',
   '/api/users',
+  '/api/technician-registration',
   '/api/plans',
   '/api/subscriptions',
   '/api/checklists',

@@ -4460,7 +4460,7 @@
         ]
       },
       "delete": {
-        "summary": "Eliminar pasta",
+        "summary": "Excluir pasta",
         "tags": [
           "Formulários & OS"
         ],
@@ -4815,7 +4815,7 @@
         ]
       },
       "delete": {
-        "summary": "Eliminar modelo",
+        "summary": "Excluir modelo",
         "tags": [
           "Formulários & OS"
         ],
@@ -5195,7 +5195,7 @@
     },
     "/api/checklists/ai/analyze-from-file": {
       "post": {
-        "summary": "Analisar arquivo (multipart: file)",
+        "summary": "Analisar ficheiro Excel/Word/JSON (multipart: file)",
         "tags": [
           "Admin — Formulários IA"
         ],
@@ -5355,7 +5355,7 @@
     },
     "/api/checklists/ai/draft-from-file": {
       "post": {
-        "summary": "Rascunho a partir de arquivo",
+        "summary": "Rascunho a partir de Excel/Word/JSON",
         "tags": [
           "Admin — Formulários IA"
         ],
@@ -5886,7 +5886,7 @@
     },
     "/api/operations/tasks/{id}": {
       "delete": {
-        "summary": "Eliminar execução",
+        "summary": "Excluir execução",
         "tags": [
           "Operações & OS"
         ],
@@ -6112,7 +6112,7 @@
     },
     "/api/vision/verify-face": {
       "post": {
-        "summary": "Verificação facial",
+        "summary": "Verificação facial (motor = plan.features.facialVisionProvider do tenant)",
         "tags": [
           "App — Visão / biometria"
         ],
@@ -9593,7 +9593,7 @@
         }
       },
       "delete": {
-        "summary": "Eliminar localização",
+        "summary": "Excluir localização",
         "tags": [
           "Admin — Localizações"
         ],
@@ -10113,7 +10113,7 @@
         }
       },
       "delete": {
-        "summary": "Eliminar metatag",
+        "summary": "Excluir metatag",
         "tags": [
           "Admin — Metatags"
         ],
@@ -10497,7 +10497,7 @@
         }
       },
       "delete": {
-        "summary": "Eliminar integração",
+        "summary": "Excluir integração",
         "tags": [
           "Admin — Integrações"
         ],
@@ -10879,7 +10879,7 @@
         }
       },
       "delete": {
-        "summary": "Eliminar documento",
+        "summary": "Excluir documento",
         "tags": [
           "Admin — Compliance"
         ],
@@ -11783,7 +11783,7 @@
         }
       },
       "delete": {
-        "summary": "Eliminar política",
+        "summary": "Excluir política",
         "tags": [
           "Admin — Política de coleta"
         ],

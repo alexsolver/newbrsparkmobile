@@ -215,7 +215,7 @@ function formatTransitPayloadHtml(o, th) {
     html += `<a href="https://www.google.com/maps?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:600;font-size:10px">Ver no mapa</a>`;
   }
   if (Array.isArray(o.traversedPath) && o.traversedPath.length > 1) {
-    html += `<div style="font-size:9px;color:${th.colorMutedLight};margin-top:8px">Percurso: ${o.traversedPath.length} pontos registados</div>`;
+    html += `<div style="font-size:9px;color:${th.colorMutedLight};margin-top:8px">Percurso: ${o.traversedPath.length} pontos registrados</div>`;
   }
   if (o.action === 'CHEGADA' && o.patrolCompliance && typeof o.patrolCompliance === 'object') {
     const pc = o.patrolCompliance;
@@ -1166,7 +1166,7 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
     const refHint =
       ref.length < 2
         ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
-        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreamento ou versão anterior do app). O mapa abaixo mostra ainda assim o trajeto planejado e a trilha registrada, se existirem.';
     const estLen = polylineLengthTraversedPdf(tr);
     const extraEst =
       estLen != null
@@ -1296,7 +1296,7 @@ function buildPdfProdBlockForPreview(th, t, responses) {
               <div style="font-size:8px;font-weight:900;color:#9A3412;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:5px">
                 <ion-icon name="git-branch-outline" style="font-size:14px;color:${th.transitAccent}"></ion-icon> Etapas no formulário
               </div>
-              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registados.</span>'}</div>
+              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registrados.</span>'}</div>
             </div>
             ${pdfPauseInProdHtml}
           </div>

@@ -6,7 +6,15 @@ Documento normativo para **novas telas**, **refactors de UI** e **paridade app �
 
 - **React Native**: [`src/theme/colors.ts`](../../src/theme/colors.ts) + `useTheme()` de [`src/theme/ThemeContext.tsx`](../../src/theme/ThemeContext.tsx).
 - **Não** usar hex solto em código novo (exceções: assets, mapas/SDKs de terceiros, previews de PDF quando inevitável).
-- Mapas partilhados: `MEDIA_TAG_COLORS`, `SERVICE_CATEGORY_COLORS`, `MODE_SEGMENT_COLORS` (exportados do mesmo ficheiro).
+- Mapas compartilhados: `MEDIA_TAG_COLORS`, `SERVICE_CATEGORY_COLORS`, `MODE_SEGMENT_COLORS` (exportados do mesmo arquivo).
+
+## Idioma (pt-BR)
+
+Todo **texto visível** no app mobile, no painel admin e em **mensagens de API** devolvidas ao usuário final deve seguir **português do Brasil** (vocabulário e ortografia), **não** português de Portugal.
+
+Evitar, entre outros: *equipa* → **equipe**; *ficheiro* → **arquivo**; *utilizador* → **usuário**; *secção* → **seção**; *acção* → **ação**; *registo/registado* → **registro/registrado**; *planeado* → **planejado**; *rastreio* → **rastreamento**; *contactar* → **contatar**; *guardar* (salvar dados) → **salvar**; *eliminar* (UI) → **excluir**; *partilhar* → **compartilhar**; *telemóvel* → **celular**; *definições* → **configurações**; *câmara* → **câmera**; *aceites* (substantivo administrativo) → **aceitas** ou **aceitações** conforme o contexto.
+
+A regra do Cursor em `.cursor/rules/language-pt-br.mdc` reforça o mesmo para respostas de agentes e novos textos.
 
 ## Semântica de estado
 
@@ -40,3 +48,4 @@ Usar `colors.status.{success|warning|danger|info}` com `{ fg, bg, border }` para
 | Data       | Notas |
 |------------|--------|
 | 2026-04-08 | Versão inicial: tokens semânticos, Button/Chip/ThemedSwitch, CSS export, legenda de tags de mídia. |
+| 2026-04-09 | Idioma (pt-BR): norma e glossário para cópias; alinhamento com regras do Cursor. |

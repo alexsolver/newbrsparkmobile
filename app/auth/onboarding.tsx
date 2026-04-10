@@ -304,7 +304,7 @@ export default function OnboardingScreen() {
                 consentKey="LOCATION_FOREGROUND"
                 icon="locate-outline"
                 title="Localização apenas com app aberto"
-                description="GPS só enquanto usa o app. Rastreio de rota e check-in com funcionalidade reduzida em segundo plano."
+                description="GPS só enquanto usa o app. Rastreamento de rota e check-in com funcionalidade reduzida em segundo plano."
               />
               <View style={s.warnBox}>
                 <Ionicons name="warning-outline" size={16} color="#d97706" />
@@ -388,7 +388,7 @@ export default function OnboardingScreen() {
             <View style={s.infoCard}>
               <Ionicons name="shield-half-outline" size={18} color="#10b981" />
               <Text style={s.infoText}>
-                A sua conta e os seus dados continuam protegidos pela {legalBasis}. Pode alterar esta opção em qualquer
+                Sua conta e seus dados continuam protegidos pela {legalBasis}. Você pode alterar esta opção a qualquer
                 momento em Perfil → Minha Privacidade.
               </Text>
             </View>

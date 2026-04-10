@@ -1,0 +1,455 @@
+'use strict';
+
+const {
+  stripDataUrlBase64,
+  recognizeWithIntegration,
+  pickTopRecognitionMatch,
+  parseComprefaceSubjectName,
+} = require('./comprefaceClient');
+
+const _envSim = process.env.COMPREFACE_MIN_SIMILARITY;
+const MIN_SIMILARITY = Math.min(
+  0.999,
+  Math.max(0.5, _envSim != null && _envSim !== '' ? Number(_envSim) : 0.88)
+);
+
+const FACIAL_GALLERY_SYNC_HINT =
+  'No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
+
+function parseMeta(raw) {
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Provedor de biometria facial definido no plano (Plan.features.facialVisionProvider).
+ */
+async function resolveFacialVisionProviderForTenant(tenantId, prisma) {
+  if (!tenantId) return 'COMPREFACE';
+  const sub = await prisma.subscription.findUnique({
+    where: { tenantId },
+    include: { plan: { select: { features: true } } },
+  });
+  const raw = sub?.plan?.features;
+  const feat = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const v = String(feat.facialVisionProvider || 'COMPREFACE')
+    .trim()
+    .toUpperCase();
+  if (v === 'AUTO' || v === 'AWS' || v === 'COMPREFACE') return v;
+  return 'COMPREFACE';
+}
+
+function pickVisionIntegration(integrations, provider) {
+  const vision = integrations.filter((i) => {
+    const meta = parseMeta(i.metadata);
+    if (!meta || meta.category !== 'COMPUTER_VISION') return false;
+    if (provider === 'AWS' && meta.engine !== 'aws_rekognition') return false;
+    if (provider === 'COMPREFACE' && meta.engine !== 'compreface') return false;
+    if (provider === 'AUTO') return i.status === 'ACTIVE';
+    return true;
+  });
+  if (provider === 'AUTO') {
+    const cf = vision.find((i) => parseMeta(i.metadata)?.engine === 'compreface');
+    if (cf) return cf;
+    return vision.find((i) => parseMeta(i.metadata)?.engine === 'aws_rekognition');
+  }
+  return vision[0] || null;
+}
+
+/**
+ * Verificação facial no servidor — usada pela sincronização de execuções e alinhada ao fluxo da API verify-face.
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ tenantId: string, sessionUserId: string, mode: 'self_verify'|'identify', imageBuffer: Buffer }} opts
+ * @returns {Promise<
+ *   | { ok: true; audit: Record<string, unknown> }
+ *   | { ok: false; audit: Record<string, unknown> }
+ *   | { ok: false; skip: true; reason: string }
+ * >}
+ */
+async function verifyFacialImageBuffer(prisma, opts) {
+  const { tenantId, sessionUserId, mode, imageBuffer } = opts;
+  const buf = imageBuffer;
+  if (!buf || buf.length < 64) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        message: 'Imagem inválida ou demasiado pequena para validação no servidor.',
+      },
+    };
+  }
+
+  const provider = await resolveFacialVisionProviderForTenant(tenantId, prisma);
+  const integrations = await prisma.integration.findMany({ where: { type: 'AI_LLM' } });
+  const visionInt = pickVisionIntegration(integrations, provider);
+
+  if (!visionInt) {
+    return {
+      ok: false,
+      skip: true,
+      reason: 'no_vision_integration',
+      audit: {
+        pending: true,
+        reason: 'server_no_integration',
+        capturedAt: new Date().toISOString(),
+        facialAuthMode: mode,
+        message:
+          provider !== 'AUTO'
+            ? 'Integração de biometria facial não configurada no servidor.'
+            : 'Nenhuma integração de biometria ativa no servidor.',
+      },
+    };
+  }
+
+  const meta = parseMeta(visionInt.metadata);
+  const engine = meta?.engine || 'unknown';
+
+  if (engine === 'aws_rekognition') {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        message:
+          'AWS Rekognition ainda não implementado para validação no servidor. Configure outro motor de biometria nas integrações.',
+      },
+    };
+  }
+
+  if (engine !== 'compreface') {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        message: 'Motor de visão não suportado para validação no servidor.',
+      },
+    };
+  }
+
+  let recog;
+  try {
+    recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
+  } catch (e) {
+    console.error('[facialRecognitionEngine] recognize', e);
+    return {
+      ok: false,
+      skip: true,
+      reason: 'facial_service_unreachable',
+      audit: {
+        pending: true,
+        reason: 'server_facial_error',
+        capturedAt: new Date().toISOString(),
+        facialAuthMode: mode,
+        message:
+          'Não foi possível contactar o serviço de reconhecimento facial no servidor. Tente mais tarde ou verifique a ligação.',
+      },
+    };
+  }
+
+  const top = pickTopRecognitionMatch(recog.data);
+  if (!top) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        message: `Rosto não reconhecido na galeria do servidor. ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  const parsed = parseComprefaceSubjectName(top.subject);
+  if (!parsed) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        confidence: top.similarity,
+        message: `Registo biométrico inválido no servidor. ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  if (top.similarity < MIN_SIMILARITY) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        confidence: top.similarity,
+        message: `Confiança abaixo do mínimo (${MIN_SIMILARITY}). ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  if (mode === 'self_verify' && String(parsed.userId) !== String(sessionUserId)) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        confidence: top.similarity,
+        message: `O rosto não corresponde ao utilizador que sincronizou a OS. ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  const identified =
+    mode === 'identify'
+      ? await prisma.user.findFirst({
+          where: { id: parsed.userId, isActive: true },
+          select: { id: true, name: true, email: true, role: true },
+        })
+      : await prisma.user.findFirst({
+          where: { id: parsed.userId, tenantId, isActive: true },
+          select: { id: true, name: true, email: true, role: true },
+        });
+
+  if (!identified) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: mode,
+        confidence: top.similarity,
+        message: `Utilizador reconhecido não encontrado ou inativo. ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  if (mode === 'identify') {
+    return {
+      ok: true,
+      audit: {
+        pending: false,
+        at: new Date().toISOString(),
+        engine: 'compreface',
+        confidence: top.similarity,
+        facialAuthMode: 'identify',
+        identifiedUser: {
+          id: identified.id,
+          name: identified.name,
+          email: identified.email,
+          role: identified.role,
+        },
+      },
+    };
+  }
+
+  const selfOk = identified.id === sessionUserId;
+  if (!selfOk) {
+    return {
+      ok: false,
+      audit: {
+        pending: false,
+        deferredValidationFailed: true,
+        at: new Date().toISOString(),
+        facialAuthMode: 'self_verify',
+        confidence: top.similarity,
+        message: `Rosto não corresponde ao técnico que submeteu a execução. ${FACIAL_GALLERY_SYNC_HINT}`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    audit: {
+      pending: false,
+      at: new Date().toISOString(),
+      engine: 'server',
+      confidence: top.similarity,
+      facialAuthMode: 'self_verify',
+      identifiedUserId: identified.id,
+      identifiedUser: {
+        id: identified.id,
+        name: identified.name,
+        email: identified.email,
+        role: identified.role,
+      },
+    },
+  };
+}
+
+/**
+ * Descarrega imagem HTTP(S) para Buffer (sincronização de execuções).
+ */
+async function fetchImageBufferFromPublicUrl(url) {
+  const u = String(url || '').trim().split('?')[0];
+  if (!u.startsWith('http://') && !u.startsWith('https://')) return null;
+  try {
+    const ctrl = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+    const res = await fetch(u, { redirect: 'follow', signal: ctrl });
+    if (!res.ok) return null;
+    const ab = await res.arrayBuffer();
+    const buf = Buffer.from(ab);
+    return buf.length >= 64 ? buf : null;
+  } catch (e) {
+    console.warn('[facialRecognitionEngine] fetch image failed', u.slice(0, 80), e.message);
+    return null;
+  }
+}
+
+function parseBiometricRaw(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const o = JSON.parse(raw);
+      return typeof o === 'object' && o ? o : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function firstHttpPhotoUri(val) {
+  if (val == null) return null;
+  if (Array.isArray(val)) {
+    for (const item of val) {
+      const s = typeof item === 'string' ? item.trim() : '';
+      if (s.startsWith('http://') || s.startsWith('https://')) return s;
+    }
+    return null;
+  }
+  const s = String(val).trim();
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  return null;
+}
+
+function cloneResponsesShallow(responses) {
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return responses;
+  const out = { ...responses };
+  for (const k of Object.keys(out)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(out[k])) {
+      out[k] = out[k].map((row) => (row && typeof row === 'object' ? { ...row } : row));
+    }
+  }
+  return out;
+}
+
+function collectResponseScopes(responses) {
+  const scopes = [];
+  if (!responses || typeof responses !== 'object') return scopes;
+  scopes.push(responses);
+  for (const k of Object.keys(responses)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(responses[k])) {
+      for (const row of responses[k]) {
+        if (row && typeof row === 'object') scopes.push(row);
+      }
+    }
+  }
+  return scopes;
+}
+
+function facialFieldModesFromSchema(schemaData) {
+  const m = new Map();
+  if (!Array.isArray(schemaData)) return m;
+  for (const f of schemaData) {
+    if (f && f.type === 'facial_recognition' && f.id) {
+      m.set(String(f.id), f.facialAuthMode === 'identify' ? 'identify' : 'self_verify');
+    }
+  }
+  return m;
+}
+
+/**
+ * Atualiza `campo__biometric` pendente usando a foto já enviada (URL pública).
+ * @returns {Promise<number>} número de campos atualizados
+ */
+async function resolvePendingFacialAuditsOnSync(prisma, { responses, templateId, tenantId, sessionUserId }) {
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return 0;
+  if (!templateId || !tenantId || !sessionUserId) return 0;
+
+  const tmpl = await prisma.checklistTemplate.findUnique({
+    where: { id: templateId },
+    select: { schemaData: true },
+  });
+  const modeByFieldId = facialFieldModesFromSchema(tmpl?.schemaData);
+
+  const scopes = collectResponseScopes(responses);
+  let updated = 0;
+
+  for (const scope of scopes) {
+    for (const key of Object.keys(scope)) {
+      if (!key.endsWith('__biometric')) continue;
+      const bio = parseBiometricRaw(scope[key]);
+      if (!bio || bio.pending !== true) continue;
+
+      const fieldId = key.slice(0, -'__biometric'.length);
+      const photoUri = firstHttpPhotoUri(scope[fieldId]);
+      if (!photoUri) {
+        console.warn(
+          '[facialRecognitionEngine] pending facial sem URL HTTP no campo',
+          fieldId,
+          '(mantém pendente até próximo sync)'
+        );
+        continue;
+      }
+
+      const mode =
+        bio.facialAuthMode === 'identify'
+          ? 'identify'
+          : modeByFieldId.get(fieldId) === 'identify'
+            ? 'identify'
+            : 'self_verify';
+
+      const buf = await fetchImageBufferFromPublicUrl(photoUri);
+      if (!buf) continue;
+
+      const result = await verifyFacialImageBuffer(prisma, {
+        tenantId,
+        sessionUserId,
+        mode,
+        imageBuffer: buf,
+      });
+
+      if (result.skip) {
+        scope[key] = JSON.stringify(result.audit);
+        updated += 1;
+        continue;
+      }
+
+      scope[key] = JSON.stringify(result.audit);
+      updated += 1;
+    }
+  }
+
+  return updated;
+}
+
+module.exports = {
+  stripDataUrlBase64,
+  MIN_SIMILARITY,
+  FACIAL_GALLERY_SYNC_HINT,
+  /** @deprecated use FACIAL_GALLERY_SYNC_HINT */
+  COMPREFACE_SYNC_HINT: FACIAL_GALLERY_SYNC_HINT,
+  parseMeta,
+  resolveFacialVisionProviderForTenant,
+  pickVisionIntegration,
+  verifyFacialImageBuffer,
+  resolvePendingFacialAuditsOnSync,
+  cloneResponsesShallow,
+};

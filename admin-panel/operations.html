@@ -1388,7 +1388,7 @@ window.submitReopenRevision = async function () {
     _reopenUsersCache = null;
     await window.loadBoard();
   } catch (e) {
-    const msg = e && e.name === 'AbortError' ? 'Tempo esgotado ao contactar a API. Verifique se o backend está no ar e a rede.' : (e.message || String(e));
+    const msg = e && e.name === 'AbortError' ? 'Tempo esgotado ao contatar a API. Verifique se o backend está no ar e a rede.' : (e.message || String(e));
     alert('Falha de rede: ' + msg);
   } finally {
     clearTimeout(abortT);
@@ -2617,7 +2617,7 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
     const refHint =
       ref.length < 2
         ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
-        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreio ou versão anterior da app). O mapa abaixo mostra ainda assim o trajeto planeado e a trilha registada, se existirem.';
+        : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreamento ou versão anterior do app). O mapa abaixo mostra ainda assim o trajeto planejado e a trilha registrada, se existirem.';
     const estLen = polylineLengthTraversedPdfOps(tr);
     const extraEst =
       estLen != null
@@ -3232,7 +3232,7 @@ function buildInfoTab(t) {
           ${revisionReopenPending
             ? '<span style="font-weight:800;color:#4338ca">OS reaberta pelo painel — aguarda nova conclusão no app (revisão em curso).</span>'
             : reopenN > 0 && lsr > 0
-              ? `<span>Foram registadas <strong>${reopenN}</strong> reabertura(s) administrativa(s); última submissão concluída no servidor: índice <strong>${lsr}</strong>${lsr === 1 ? ' (conclusão inicial)' : ''}.</span>`
+              ? `<span>Foram registradas <strong>${reopenN}</strong> reabertura(s) administrativa(s); última submissão concluída no servidor: índice <strong>${lsr}</strong>${lsr === 1 ? ' (conclusão inicial)' : ''}.</span>`
               : reopenN > 0 && lsr === 0
                 ? `<span><strong>${reopenN}</strong> reabertura(s) administrativa(s); ainda sem submissão concluída indexada nesta execução (aguarda envio do técnico).</span>`
                 : lsr > 0
@@ -3384,7 +3384,7 @@ function buildReportTab(t) {
       }
       const lines = o && Array.isArray(o.lines) ? o.lines : [];
       if (lines.length === 0) {
-        return '<em style="color:var(--text3)">(sem consumo registado)</em>';
+        return '<em style="color:var(--text3)">(sem consumo registrado)</em>';
       }
       const rows = lines
         .map((ln) => {
@@ -3424,7 +3424,7 @@ function buildReportTab(t) {
       }
       const lines = o && Array.isArray(o.lines) ? o.lines : [];
       if (lines.length === 0) {
-        return '<em style="color:var(--text3)">(sem entrada registada)</em>';
+        return '<em style="color:var(--text3)">(sem entrada registrada)</em>';
       }
       const rows = lines
         .map((ln) => {
@@ -4285,7 +4285,7 @@ window.printReport = async function() {
     if (o.capturedAt) {
       try {
         const d = new Date(o.capturedAt);
-        if (!isNaN(d.getTime())) capturedLine = '<div style="font-size:9px;color:#94a3b8;margin-top:10px">Registado: ' + d.toLocaleString('pt-BR') + '</div>';
+        if (!isNaN(d.getTime())) capturedLine = '<div style="font-size:9px;color:#94a3b8;margin-top:10px">Registrado: ' + d.toLocaleString('pt-BR') + '</div>';
       } catch (e1) {}
     }
     return (
@@ -4532,7 +4532,7 @@ window.printReport = async function() {
           }
           const mlines = mo && Array.isArray(mo.lines) ? mo.lines : [];
           if (mlines.length === 0) {
-            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem consumo registado</span>';
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem consumo registrado</span>';
           } else {
             const rowCells = mlines
               .map((ln) => {
@@ -4570,7 +4570,7 @@ window.printReport = async function() {
           }
           const mlines = mo && Array.isArray(mo.lines) ? mo.lines : [];
           if (mlines.length === 0) {
-            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem entrada registada</span>';
+            displayVal = '<span style="color:#94a3b8;font-style:italic">Sem entrada registrada</span>';
           } else {
             const rowCells = mlines
               .map((ln) => {
@@ -5126,7 +5126,7 @@ window.printReport = async function() {
               <div style="font-size:8px;font-weight:900;color:#9A3412;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:5px">
                 <ion-icon name="git-branch-outline" style="font-size:14px;color:${th.transitAccent}"></ion-icon> Etapas no formulário
               </div>
-              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registados.</span>'}</div>
+              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registrados.</span>'}</div>
             </div>
             ${pdfPauseInProdHtml}
           </div>

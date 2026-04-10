@@ -32,7 +32,7 @@
     <p class="sub" id="sub">Carregando…</p>
     <div id="form-root"></div>
     <p class="err" id="err" style="display:none"></p>
-    <div id="done" class="ok" style="display:none">Obrigado. A sua avaliação foi registada.</div>
+    <div id="done" class="ok" style="display:none">Obrigado. Sua avaliação foi registrada.</div>
   </div>
   <script>
     const API = window.location.origin + '/api';
@@ -142,7 +142,7 @@
         comment.innerHTML = '<label class="q">Comentário (opcional)</label>';
         const ta = document.createElement('textarea');
         ta.id = 'comment';
-        ta.placeholder = 'Partilhe a sua experiência';
+        ta.placeholder = 'Compartilhe sua experiência';
         comment.appendChild(ta);
         root.appendChild(comment);
         const btn = document.createElement('button');

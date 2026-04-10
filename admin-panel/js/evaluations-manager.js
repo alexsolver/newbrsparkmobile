@@ -173,7 +173,7 @@ async function loadDisputes() {
   const items = d?.items || [];
   if (!tb) return;
   if (!items.length) {
-    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registo.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro.</td></tr>';
     return;
   }
   tb.innerHTML = items

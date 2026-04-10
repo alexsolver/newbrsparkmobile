@@ -6,6 +6,7 @@ const {
   buildComprefaceApiRoots,
   getComprefacePathPrefix,
 } = require('./comprefaceClient');
+const { normalizeNylasApiUri, nylasApiHostname } = require('./nylasCredentials');
 
 function normEnum(v) {
   return String(v ?? '')
@@ -41,6 +42,7 @@ async function testIntegration(integration) {
 
   // ── E-mail ───────────────────────────────────────────────
   if (type === 'EMAIL') {
+    if (name === 'Nylas') return testNylas(integration);
     if (name === 'Gmail' || name === 'Office 365' || name === 'SMTP Genérico') {
       return testSmtp(integration);
     }
@@ -129,6 +131,31 @@ async function testDeepSeek({ apiKey, baseUrl }) {
     if (r.status === 401) return { ok: false, message: 'API Key inválida (401 Unauthorized)' };
     return { ok: false, message: `HTTP ${r.status}` };
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
+}
+
+// ── Nylas (e-mail / calendário / contatos — API v3) ───────
+async function testNylas({ apiKey, baseUrl }) {
+  if (!apiKey) return { ok: false, message: 'API Key da Nylas não configurada.' };
+  const apiUri = normalizeNylasApiUri(baseUrl);
+  const host = nylasApiHostname(apiUri);
+  try {
+    const r = await httpsGet(host, '/v3/grants?limit=1', {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+    });
+    if (r.status === 200) return { ok: true, message: 'Nylas API v3 respondeu com sucesso ✓' };
+    if (r.status === 401) return { ok: false, message: 'API Key inválida ou sem permissão (401).' };
+    let hint = '';
+    try {
+      const j = JSON.parse(r.body);
+      if (j && (j.message || j.error?.message)) hint = `: ${j.message || j.error.message}`;
+    } catch (_) {
+      if (r.body) hint = `: ${String(r.body).replace(/\s+/g, ' ').slice(0, 160)}`;
+    }
+    return { ok: false, message: `Nylas HTTP ${r.status}${hint}` };
+  } catch (e) {
+    return { ok: false, message: `Erro de rede ao contatar a Nylas: ${e.message}` };
+  }
 }
 
 // ── SMTP / Gmail / Office365 ──────────────────────────────
@@ -538,7 +565,7 @@ async function testCompreface(integration) {
   } catch (e) {
     return {
       ok: false,
-      message: `Erro de rede ao contactar CompreFace: ${e.message}`,
+      message: `Erro de rede ao contatar o CompreFace: ${e.message}`,
     };
   }
 }

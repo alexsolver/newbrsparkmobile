@@ -1,0 +1,151 @@
+'use strict';
+
+const mammoth = require('mammoth');
+const { extractWorkbookForAi, MAX_CANONICAL_CHARS } = require('./formAiExtract');
+const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
+
+/**
+ * @param {Buffer} buffer
+ * @returns {Promise<{ markdown: string, truncated: boolean, format: string, columnSignals: object[] }>}
+ */
+async function extractDocxForAi(buffer) {
+  const { value } = await mammoth.convertToMarkdown({ buffer });
+  let markdown = String(value || '').trim();
+  if (!markdown) markdown = '(Documento vazio ou sem texto extraível.)';
+  markdown = '## Documento Word\n\n' + markdown;
+  let truncated = false;
+  if (markdown.length > MAX_CANONICAL_CHARS) {
+    markdown = markdown.slice(0, MAX_CANONICAL_CHARS);
+    truncated = true;
+  }
+  return { markdown, truncated, format: 'docx', columnSignals: [] };
+}
+
+/**
+ * Array parece schemaData BrSpark (tipos conhecidos; campos com label exceto section_break).
+ * @param {unknown[]} arr
+ * @returns {boolean}
+ */
+function looksLikeBrsparkSchemaArray(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  for (const x of arr) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
+    const rawT = x.type;
+    if (rawT == null || String(rawT).trim() === '') return false;
+    const t = String(rawT)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    if (!ALLOWED_FIELD_TYPES.has(t)) return false;
+    if (t !== 'section_break') {
+      const lab = x.label != null ? String(x.label).trim() : '';
+      if (!lab) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @param {Buffer} buffer
+ * @returns {{ schemaArray: object[], title: string, description: string } | null}
+ */
+function tryBrsparkJsonImport(buffer) {
+  const text = buffer.toString('utf8').trim();
+  if (!text || (text[0] !== '{' && text[0] !== '[')) return null;
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const arr = Array.isArray(data) ? data : data && Array.isArray(data.schemaData) ? data.schemaData : null;
+  if (!arr || !looksLikeBrsparkSchemaArray(arr)) return null;
+  const envelope = Array.isArray(data) ? {} : data;
+  const title = typeof envelope.title === 'string' ? envelope.title.trim() : '';
+  const description = typeof envelope.description === 'string' ? envelope.description.trim() : '';
+  return { schemaArray: arr, title, description };
+}
+
+/**
+ * JSON genérico → markdown para o LLM.
+ * @param {Buffer} buffer
+ */
+function extractJsonDocumentForAi(buffer) {
+  const text = buffer.toString('utf8').trim();
+  if (!text) throw new Error('Ficheiro JSON vazio.');
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch (e) {
+    throw new Error('JSON inválido: ' + e.message);
+  }
+  const pretty = JSON.stringify(obj, null, 2);
+  let truncated = false;
+  let body = pretty;
+  const maxBody = MAX_CANONICAL_CHARS - 250;
+  if (body.length > maxBody) {
+    body = body.slice(0, maxBody);
+    truncated = true;
+  }
+  const markdown = `## Dados JSON\n\n\`\`\`json\n${body}\n\`\`\`\n`;
+  return { markdown, truncated, format: 'json', columnSignals: [] };
+}
+
+/**
+ * Excel | Word | JSON (schema BrSpark ou texto para IA).
+ * @param {Buffer} buffer
+ * @param {string} ext — ex.: ".docx"
+ * @param {string} [_originalName]
+ * @returns {Promise<
+ *   | ({ kind: 'tabular' } & Awaited<ReturnType<typeof extractWorkbookForAi>>)
+ *   | ({ kind: 'document' } & Awaited<ReturnType<typeof extractDocxForAi>>)
+ *   | ({ kind: 'document' } & ReturnType<typeof extractJsonDocumentForAi>)
+ *   | { kind: 'brspark_schema'; schemaArray: object[]; title: string; description: string; markdown: string; columnSignals: []; truncated: boolean; format: string }
+ * >}
+ */
+async function extractSourceForFormAi(buffer, ext, _originalName) {
+  const e = String(ext || '').toLowerCase();
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error('Ficheiro vazio.');
+  }
+
+  if (e === '.xlsx' || e === '.xlsm') {
+    const snap = await extractWorkbookForAi(buffer);
+    return { ...snap, kind: 'tabular' };
+  }
+
+  if (e === '.docx') {
+    const snap = await extractDocxForAi(buffer);
+    return { ...snap, kind: 'document' };
+  }
+
+  if (e === '.json') {
+    const br = tryBrsparkJsonImport(buffer);
+    if (br) {
+      return {
+        kind: 'brspark_schema',
+        schemaArray: br.schemaArray,
+        title: br.title,
+        description: br.description,
+        markdown: '',
+        columnSignals: [],
+        truncated: false,
+        format: 'json',
+      };
+    }
+    const snap = extractJsonDocumentForAi(buffer);
+    return { ...snap, kind: 'document' };
+  }
+
+  throw new Error(`Formato não suportado (${e || 'desconhecido'}). Use .xlsx, .xlsm, .docx ou .json.`);
+}
+
+const SUPPORTED_FORM_AI_EXTENSIONS = ['.xlsx', '.xlsm', '.docx', '.json'];
+
+module.exports = {
+  extractSourceForFormAi,
+  tryBrsparkJsonImport,
+  looksLikeBrsparkSchemaArray,
+  SUPPORTED_FORM_AI_EXTENSIONS,
+  MAX_CANONICAL_CHARS,
+};

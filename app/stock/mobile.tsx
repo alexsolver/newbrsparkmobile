@@ -510,7 +510,7 @@ export default function TechnicianStockScreen() {
                         <Ionicons name="file-tray-outline" size={48} color="#94a3b8" />
                         <Text style={styles.emptyTitle}>Nenhuma movimentação</Text>
                         <Text style={styles.emptySub}>
-                          Não há registos sincronizados neste intervalo de datas. Recue 30 dias com o botão " ou
+                          Não há registros sincronizados neste intervalo de datas. Volte 30 dias com o botão acima ou
                           sincronize.
                         </Text>
                       </View>

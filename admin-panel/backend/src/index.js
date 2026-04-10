@@ -43,6 +43,10 @@ const metricsRoutes          = require('./routes/metrics');
 const reportsRoutes          = require('./routes/reports');
 const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
 const osrmProxyRoutes        = require('./routes/osrm-proxy'); // app: geometria OSRM via backend
+const {
+  publicRouter: technicianRegistrationPublicRouter,
+  adminRouter: technicianRegistrationAdminRouter,
+} = require('./routes/technicianRegistration');
 
 const path = require('path');
 
@@ -334,6 +338,8 @@ app.use('/api/metrics',            adminAuthThenPanel, metricsRoutes);
 app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
+app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
+app.use('/api/technician-registration', adminAuthThenPanel, technicianRegistrationAdminRouter);
 
 // ── Painel estático e uploads (depois das rotas /api para não sombrear a API) ──
 app.use(express.static(path.join(__dirname, '../../')));

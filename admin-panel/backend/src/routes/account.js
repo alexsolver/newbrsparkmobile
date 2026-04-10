@@ -88,13 +88,38 @@ router.post('/login', async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
 
-    const user = await prisma.user.findFirst({
-      where: { email },
+    const emailNorm = String(email).trim().toLowerCase();
+    const candidates = await prisma.user.findMany({
+      where: { email: emailNorm },
       include: { tenant: true, technicianProfile: true },
+      orderBy: { createdAt: 'asc' },
     });
 
-    if (!user || !user.tenant)
-      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    if (!candidates.length) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    const tenantIdPick = req.body.tenantId != null && String(req.body.tenantId).trim() !== '' ? String(req.body.tenantId).trim() : null;
+
+    let user;
+    if (candidates.length === 1) {
+      user = candidates[0];
+    } else if (tenantIdPick) {
+      user = candidates.find((u) => u.tenantId === tenantIdPick);
+      if (!user) {
+        return res.status(400).json({ error: 'Organização inválida para este e-mail.' });
+      }
+    } else {
+      return res.status(409).json({
+        code: 'MULTIPLE_ACCOUNTS',
+        error:
+          'Este e-mail está em mais de uma organização. Indique qual deseja aceder (tenantId) ou escolha no ecrã.',
+        tenants: candidates.map((u) => ({
+          id: u.tenantId,
+          name: u.tenant?.name || u.tenantId,
+        })),
+      });
+    }
+
+    if (!user.tenant) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
     if (!user.isActive)
       return res.status(403).json({ error: 'Conta suspensa. Entre em contato com o suporte.' });

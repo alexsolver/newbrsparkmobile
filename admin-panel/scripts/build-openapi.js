@@ -161,7 +161,7 @@ const ROUTES = [
   ['patch', '/api/checklists/template-folders/{id}', op('Atualizar pasta', ['Formulários & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['delete', '/api/checklists/template-folders/{id}', op('Eliminar pasta', ['Formulários & OS'], false, {
+  ['delete', '/api/checklists/template-folders/{id}', op('Excluir pasta', ['Formulários & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['patch', '/api/checklists/templates/{id}/folder', op('Mover modelo de pasta', ['Formulários & OS'], false, {
@@ -174,7 +174,7 @@ const ROUTES = [
   ['post', '/api/checklists/templates', op('Criar modelo', ['Formulários & OS'], false, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['delete', '/api/checklists/templates/{id}', op('Eliminar modelo', ['Formulários & OS'], false, {
+  ['delete', '/api/checklists/templates/{id}', op('Excluir modelo', ['Formulários & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['get', '/api/checklists/executions/{taskId}', op('Execução/OS por ID (técnico)', ['App — Formulários & OS'], bearerApp, {
@@ -191,13 +191,13 @@ const ROUTES = [
   })],
 
   // ── Checklists IA (admin)
-  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar arquivo (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
+  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar ficheiro Excel/Word/JSON (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } } },
   })],
   ['post', '/api/checklists/ai/build-form', op('Construir formulário a partir de análise', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['post', '/api/checklists/ai/draft-from-file', op('Rascunho a partir de arquivo', ['Admin — Formulários IA'], bearerAdmin, {
+  ['post', '/api/checklists/ai/draft-from-file', op('Rascunho a partir de Excel/Word/JSON', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } } },
   })],
   ['post', '/api/checklists/ai/session/chat', op('Chat da sessão de construção', ['Admin — Formulários IA'], bearerAdmin, {
@@ -221,7 +221,7 @@ const ROUTES = [
   ['get', '/api/operations/tasks/{id}/revisions', op('Lista de revisões', ['Operações & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['delete', '/api/operations/tasks/{id}', op('Eliminar execução', ['Operações & OS'], false, {
+  ['delete', '/api/operations/tasks/{id}', op('Excluir execução', ['Operações & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['post', '/api/operations/tasks/{id}/reject', op('Rejeitar OS', ['Operações & OS'], false, {
@@ -232,7 +232,7 @@ const ROUTES = [
   })],
 
   // ── Vision
-  ['post', '/api/vision/verify-face', op('Verificação facial', ['App — Visão / biometria'], bearerApp, {
+  ['post', '/api/vision/verify-face', op('Verificação facial (motor = plan.features.facialVisionProvider do tenant)', ['App — Visão / biometria'], bearerApp, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
 
@@ -359,7 +359,7 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['delete', '/api/locations/{id}', op('Eliminar localização', ['Admin — Localizações'], bearerAdmin, {
+  ['delete', '/api/locations/{id}', op('Excluir localização', ['Admin — Localizações'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -377,7 +377,7 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['delete', '/api/metatags/{id}', op('Eliminar metatag', ['Admin — Metatags'], bearerAdmin, {
+  ['delete', '/api/metatags/{id}', op('Excluir metatag', ['Admin — Metatags'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -392,7 +392,7 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['delete', '/api/integrations/{id}', op('Eliminar integração', ['Admin — Integrações'], bearerAdmin, {
+  ['delete', '/api/integrations/{id}', op('Excluir integração', ['Admin — Integrações'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -410,7 +410,7 @@ const ROUTES = [
   ['patch', '/api/compliance/{id}/publish', op('Publicar documento', ['Admin — Compliance'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['delete', '/api/compliance/{id}', op('Eliminar documento', ['Admin — Compliance'], bearerAdmin, {
+  ['delete', '/api/compliance/{id}', op('Excluir documento', ['Admin — Compliance'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['get', '/api/compliance/{type}/history', op('Histórico por tipo', ['Admin — Compliance'], bearerAdmin, {
@@ -440,7 +440,7 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['delete', '/api/collection-policy/{id}', op('Eliminar política', ['Admin — Política de coleta'], bearerAdmin, {
+  ['delete', '/api/collection-policy/{id}', op('Excluir política', ['Admin — Política de coleta'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 ];

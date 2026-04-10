@@ -4,17 +4,39 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { adminAuthThenPanel } = require('../middleware/auth');
-const { extractWorkbookForAi } = require('../lib/formAiExtract');
+const { extractSourceForFormAi, SUPPORTED_FORM_AI_EXTENSIONS } = require('../lib/formAiSourceExtract');
 const {
   normalizeProposalsFromLlm,
   buildSchemaFromProposalSelections,
   sanitizeTemplateText,
+  normalizeSchemaDataFromLlm,
 } = require('../lib/formAiNormalize');
 const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('../lib/formAiLlm');
 const { runFormCopilot, suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
 
 const router = express.Router();
+
+function schemaDataToAnalyzeBlocks(schemaData) {
+  return schemaData.map((f, i) => ({
+    key: `b${i}`,
+    kind: f.type === 'section_break' ? 'section_break' : 'field',
+    label: (() => {
+      const lab = f.label != null ? String(f.label).trim() : '';
+      if (lab) return lab;
+      return f.type === 'section_break' ? `Etapa ${i + 1}` : 'Campo';
+    })(),
+    context: f.type === 'section_break' ? 'Schema JSON BrSpark' : `Schema JSON · ${f.type}`,
+  }));
+}
+
+function titleFromBrsparkImport(snapTitle, schemaData) {
+  const t = sanitizeTemplateText(snapTitle, 200);
+  if (t) return t;
+  const sec = schemaData.find((x) => x.type === 'section_break' && x.label && String(x.label).trim());
+  if (sec) return sanitizeTemplateText(String(sec.label).trim(), 200);
+  return 'Formulário importado (JSON)';
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -23,8 +45,8 @@ const upload = multer({
 
 /**
  * POST /api/checklists/ai/analyze-from-file
- * multipart: file (.xlsx), optional field "options" JSON string { hint?: string }
- * Resposta: title, description, blocks (estrutura: section_break | field), warnings, truncated, source
+ * multipart: file (.xlsx, .xlsm, .docx, .json), optional "options" JSON { hint?: string }
+ * Resposta: title, description, blocks, warnings, truncated, source
  */
 router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
   try {
@@ -33,9 +55,9 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
       return res.status(400).json({ error: 'Envie um arquivo no campo "file".' });
     }
     const ext = path.extname(file.originalname || '').toLowerCase();
-    if (ext !== '.xlsx' && ext !== '.xlsm') {
+    if (!SUPPORTED_FORM_AI_EXTENSIONS.includes(ext)) {
       return res.status(400).json({
-        error: 'Formato não suportado nesta versão. Use arquivo Excel .xlsx (MVP).',
+        error: `Formato não suportado. Use: ${SUPPORTED_FORM_AI_EXTENSIONS.join(', ')}.`,
       });
     }
 
@@ -50,14 +72,40 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
 
     let snapshot;
     try {
-      snapshot = await extractWorkbookForAi(file.buffer);
+      snapshot = await extractSourceForFormAi(file.buffer, ext, file.originalname);
     } catch (e) {
-      console.error('[checklists/ai] extract xlsx:', e);
-      return res.status(400).json({ error: 'Não foi possível ler o Excel: ' + e.message });
+      console.error('[checklists/ai] extract source:', e);
+      return res.status(400).json({ error: e.message || 'Não foi possível ler o ficheiro.' });
+    }
+
+    if (snapshot.kind === 'brspark_schema') {
+      const { schemaData, warnings: wNorm } = normalizeSchemaDataFromLlm(snapshot.schemaArray);
+      if (!schemaData.length) {
+        return res.status(400).json({ error: 'O JSON não produziu campos válidos após validação.' });
+      }
+      const title = titleFromBrsparkImport(snapshot.title, schemaData);
+      const description = sanitizeTemplateText(snapshot.description, 500);
+      const blocks = schemaDataToAnalyzeBlocks(schemaData);
+      return res.json({
+        ok: true,
+        title,
+        description,
+        blocks,
+        warnings: [
+          ...wNorm,
+          'Importação direta: ficheiro JSON reconhecido como schema BrSpark (sem chamada à IA).',
+        ],
+        truncated: false,
+        source: {
+          format: snapshot.format,
+          name: file.originalname || null,
+          importKind: 'brspark_schema',
+        },
+      });
     }
 
     if (!snapshot.markdown || snapshot.markdown.length < 3) {
-      return res.status(400).json({ error: 'A planilha parece vazia.' });
+      return res.status(400).json({ error: 'O ficheiro parece vazio ou sem texto extraível.' });
     }
 
     const formContext = parseFormContextFromOptions(options);
@@ -70,6 +118,7 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
         userHint,
         columnSignals: snapshot.columnSignals || [],
         formContext,
+        sourceFormat: snapshot.format,
       });
     } catch (e) {
       if (e.code === 'NO_OPENAI_KEY') {
@@ -79,7 +128,7 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
         });
       }
       console.error('[checklists/ai] analyze llm:', e);
-      return res.status(502).json({ error: 'Falha ao analisar planilha com IA: ' + e.message });
+      return res.status(502).json({ error: 'Falha ao analisar com IA: ' + e.message });
     }
 
     const truncWarn = snapshot.truncated ? ['Conteúdo truncado por limite de tamanho.'] : [];
@@ -131,7 +180,7 @@ router.post('/ai/build-form', adminAuthThenPanel, async (req, res) => {
 
 /**
  * POST /api/checklists/ai/draft-from-file
- * multipart: file (.xlsx), optional field "options" JSON string { hint?: string }
+ * multipart: file (.xlsx, .xlsm, .docx, .json), optional "options" JSON { hint?: string }
  */
 router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
   try {
@@ -140,9 +189,9 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
       return res.status(400).json({ error: 'Envie um arquivo no campo "file".' });
     }
     const ext = path.extname(file.originalname || '').toLowerCase();
-    if (ext !== '.xlsx' && ext !== '.xlsm') {
+    if (!SUPPORTED_FORM_AI_EXTENSIONS.includes(ext)) {
       return res.status(400).json({
-        error: 'Formato não suportado nesta versão. Use arquivo Excel .xlsx (MVP).',
+        error: `Formato não suportado. Use: ${SUPPORTED_FORM_AI_EXTENSIONS.join(', ')}.`,
       });
     }
 
@@ -157,14 +206,39 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
 
     let snapshot;
     try {
-      snapshot = await extractWorkbookForAi(file.buffer);
+      snapshot = await extractSourceForFormAi(file.buffer, ext, file.originalname);
     } catch (e) {
-      console.error('[checklists/ai] extract xlsx:', e);
-      return res.status(400).json({ error: 'Não foi possível ler o Excel: ' + e.message });
+      console.error('[checklists/ai] extract source (draft):', e);
+      return res.status(400).json({ error: e.message || 'Não foi possível ler o ficheiro.' });
+    }
+
+    if (snapshot.kind === 'brspark_schema') {
+      const { schemaData, warnings: wNorm } = normalizeSchemaDataFromLlm(snapshot.schemaArray);
+      if (!schemaData.length) {
+        return res.status(400).json({ error: 'O JSON não produziu campos válidos após validação.' });
+      }
+      const title = titleFromBrsparkImport(snapshot.title, schemaData);
+      const description = sanitizeTemplateText(snapshot.description, 500);
+      return res.json({
+        ok: true,
+        title,
+        description,
+        schemaData,
+        warnings: [
+          ...wNorm,
+          'Importação direta: schema BrSpark em JSON (sem IA).',
+        ],
+        truncated: false,
+        source: {
+          format: snapshot.format,
+          name: file.originalname || null,
+          importKind: 'brspark_schema',
+        },
+      });
     }
 
     if (!snapshot.markdown || snapshot.markdown.length < 3) {
-      return res.status(400).json({ error: 'A planilha parece vazia.' });
+      return res.status(400).json({ error: 'O ficheiro parece vazio ou sem texto extraível.' });
     }
 
     const formContext = parseFormContextFromOptions(options);
@@ -177,6 +251,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
         userHint,
         columnSignals: snapshot.columnSignals || [],
         formContext,
+        sourceFormat: snapshot.format,
       });
     } catch (e) {
       if (e.code === 'NO_OPENAI_KEY') {

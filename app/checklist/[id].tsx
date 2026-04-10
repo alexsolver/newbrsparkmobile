@@ -22,7 +22,6 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -394,7 +393,7 @@ function overlapSeconds(
   return hi > lo ? Math.floor((hi - lo) / 1000) : 0;
 }
 
-/** Duração da etapa em segundos; null se ainda não houve início registado. */
+/** Duração da etapa em segundos; null se ainda não houve início registrado. */
 function getSectionElapsedSeconds(responses: Record<string, any>, sectionId: string, nowMs: number): number | null {
   const { start, end } = getSectionTimingKeys(sectionId);
   const s = responses[start];
@@ -584,6 +583,255 @@ function formatFacialConfidencePct(c: unknown): string | null {
   if (typeof c !== 'number' || !Number.isFinite(c)) return null;
   const pct = c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, c));
   return `${pct}%`;
+}
+
+/** Remove marcas de produto fornecedor de textos vindos da API ou de relatórios antigos. */
+function sanitizeFacialUserFacingCopy(text: string | undefined | null): string {
+  if (text == null || text === '') return '';
+  let s = String(text);
+  s = s.replace(/\bexadel\s+compreface\b/gi, 'servidor');
+  s = s.replace(/\bcompreface\b/gi, 'servidor');
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  return s;
+}
+
+function normalizeFacialEngineForStorage(engine: unknown): string | undefined {
+  if (engine == null || engine === '') return undefined;
+  const e = String(engine).toLowerCase();
+  if (e === 'compreface') return 'server';
+  return String(engine);
+}
+
+/** Primeira URI de foto (campo simples ou múltiplo). */
+function firstFacialMediaUri(val: unknown): string | null {
+  if (val == null) return null;
+  if (Array.isArray(val)) {
+    const u = val.find((x) => x != null && String(x).trim() !== '');
+    return u != null ? String(u) : null;
+  }
+  const s = String(val).trim();
+  return s || null;
+}
+
+type VerifyFaceApiResult =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; kind: 'error_msg'; message: string }
+  | { ok: false; kind: 'no_match'; message?: string }
+  | { ok: false; kind: 'network' };
+
+async function postVerifyFaceForField(fieldData: any, imgBase64: string): Promise<VerifyFaceApiResult> {
+  try {
+    const rawResp = await apiFetch('/api/vision/verify-face', {
+      method: 'POST',
+      body: JSON.stringify({
+        imageBase64: imgBase64,
+        facialAuthMode: fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+      }),
+    });
+    const apiResp: any = await rawResp.json();
+    if (apiResp?.error) {
+      const msg = sanitizeFacialUserFacingCopy(String(apiResp.error));
+      return { ok: false, kind: 'error_msg', message: msg || 'Erro ao validar a biometria facial.' };
+    }
+    if (!apiResp?.match) {
+      const nm = sanitizeFacialUserFacingCopy(apiResp?.message);
+      return { ok: false, kind: 'no_match', message: nm || undefined };
+    }
+    return { ok: true, data: apiResp };
+  } catch {
+    return { ok: false, kind: 'network' };
+  }
+}
+
+function parseMediaUriQuery(uri: string): Record<string, string> {
+  const s = String(uri || '');
+  const q = s.indexOf('?');
+  if (q < 0) return {};
+  const out: Record<string, string> = {};
+  try {
+    const params = new URLSearchParams(s.slice(q + 1));
+    params.forEach((v, k) => {
+      out[k] = v;
+    });
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
+function safeDecodeUriComponent(v: string): string {
+  try {
+    return decodeURIComponent(String(v).replace(/\+/g, ' '));
+  } catch {
+    return v;
+  }
+}
+
+function formatIsoDateTimePt(iso?: string): { date: string; time: string } {
+  if (!iso) return { date: '—', time: '—' };
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { date: '—', time: '—' };
+    return {
+      date: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+  } catch {
+    return { date: '—', time: '—' };
+  }
+}
+
+function getFacialStampIdentity(
+  audit: ReturnType<typeof parseFacialBiometricAudit>,
+  sessionUser: { id?: string; name?: string; email?: string } | null | undefined
+): { fullName: string; loginEmail: string } {
+  let fullName = (audit?.identifiedUser?.name || '').trim();
+  let loginEmail = (audit?.identifiedUser?.email || '').trim();
+  const uid = audit?.identifiedUserId || audit?.identifiedUser?.id || '';
+  if (
+    sessionUser &&
+    uid &&
+    String(uid) === String(sessionUser.id) &&
+    (!fullName || !loginEmail)
+  ) {
+    if (!fullName && sessionUser.name) fullName = String(sessionUser.name).trim();
+    if (!loginEmail && sessionUser.email) loginEmail = String(sessionUser.email).trim();
+  }
+  return { fullName, loginEmail };
+}
+
+/** Metadados na URI da captura facial: live, lat, lng, addr, capturedAt (ISO). */
+async function buildFacialCaptureQuerySuffix(): Promise<string> {
+  let q = '?live=true';
+  q += `&capturedAt=${encodeURIComponent(new Date().toISOString())}`;
+  try {
+    const loc =
+      (await Location.getLastKnownPositionAsync({})) ||
+      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+    if (loc?.coords) {
+      const { latitude, longitude } = loc.coords;
+      q += `&lat=${latitude}&lng=${longitude}`;
+      try {
+        const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (rev?.length) {
+          const r = rev[0];
+          const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
+          q += `&addr=${encodeURIComponent(addr)}`;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return q;
+}
+
+/** Moldura facial: foto íntegra + rodapé com dados da captura (sem sobrepor o rosto). */
+function FacialRecognitionPhotoFrame(props: {
+  oneUri: string;
+  imageHeight: number;
+  success: boolean;
+  /** Captura guardada; validação no servidor será feita quando houver rede. */
+  pending?: boolean;
+  fullName: string;
+  loginEmail: string;
+  auditAt?: string;
+}) {
+  const q = parseMediaUriQuery(props.oneUri);
+  const lat = q.lat;
+  const lng = q.lng;
+  const addrRaw = q.addr ? safeDecodeUriComponent(q.addr) : '';
+  const capturedIso = q.capturedAt ? safeDecodeUriComponent(q.capturedAt) : '';
+  const tsIso = props.auditAt || capturedIso || '';
+  const { date, time } = formatIsoDateTimePt(tsIso);
+  const gpsLine =
+    lat && lng
+      ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+      : [lat, lng].filter(Boolean).join(' ') || '—';
+
+  const pending = !!props.pending;
+  const borderColor = props.success ? '#15803d' : pending ? '#b45309' : '#b91c1c';
+  const stampBg = props.success
+    ? 'rgba(21, 128, 61, 0.92)'
+    : pending
+      ? 'rgba(180, 83, 9, 0.92)'
+      : 'rgba(185, 28, 28, 0.9)';
+
+  const cleanUri = String(props.oneUri).split('?')[0];
+
+  const stampTitle = props.success
+    ? 'RECONHECIMENTO FACIAL — VÁLIDO'
+    : pending
+      ? 'RECONHECIMENTO FACIAL — PENDENTE'
+      : 'RECONHECIMENTO FACIAL — NÃO VALIDADO';
+
+  return (
+    <View
+      style={{
+        width: '100%',
+        borderWidth: 8,
+        borderColor: borderColor,
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginBottom: 10,
+        backgroundColor: '#0f172a',
+      }}
+    >
+      {/* Área só da imagem — nada sobreposta ao rosto */}
+      <View style={{ width: '100%', height: props.imageHeight, backgroundColor: '#e2e8f0' }}>
+        <Image source={{ uri: cleanUri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+      </View>
+      {/* Rodapé contínuo à moldura, abaixo da foto */}
+      <View
+        style={{
+          width: '100%',
+          paddingVertical: 12,
+          paddingHorizontal: 12,
+          backgroundColor: stampBg,
+          borderTopWidth: 2,
+          borderTopColor: 'rgba(255,255,255,0.35)',
+        }}
+      >
+        <Text
+          style={{
+            color: '#fff',
+            fontSize: 9,
+            fontWeight: '900',
+            letterSpacing: 0.6,
+            marginBottom: 6,
+          }}
+        >
+          {stampTitle}
+        </Text>
+        {props.success ? (
+          <>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }} numberOfLines={2}>
+              {props.fullName || '—'}
+            </Text>
+            <Text style={{ color: '#fff', fontSize: 10, marginTop: 3, fontWeight: '600' }} numberOfLines={2}>
+              Login: {props.loginEmail || '—'}
+            </Text>
+          </>
+        ) : null}
+        {pending ? (
+          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', marginBottom: 4 }} numberOfLines={3}>
+            Foto guardada. A validação biométrica corre quando o dispositivo tiver ligação ao servidor.
+          </Text>
+        ) : null}
+        <Text style={{ color: '#fff', fontSize: 10, marginTop: props.success ? 6 : 0, fontWeight: '700' }}>
+          {date} · {time}
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 9, marginTop: 3 }} numberOfLines={2}>
+          GPS: {gpsLine}
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 9, marginTop: 2, lineHeight: 13 }} numberOfLines={6}>
+          {addrRaw ? `Endereço: ${addrRaw}` : 'Endereço: —'}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 function normalizeMediaCaptions(field: any, raw: any, mediaCount: number): string[] {
@@ -887,16 +1135,10 @@ export default function ChecklistEngine() {
   const [geofenceFailMode, setGeofenceFailMode] = useState<'block'|'warn'>('warn');
   
   // Scanner Modal & Virtual Camera State
-  const [showScanner, setShowScanner] = useState(false);
-  const [scannerFieldId, setScannerFieldId] = useState<string | null>(null);
-  const [scannerScope, setScannerScope] = useState<SectionRepeatScope | null>(null);
   
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
 
-  const [isCapturing, setIsCapturing] = useState(false);
-  const cameraRef = React.useRef<any>(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
   /** Seção repetível onde foi "Iniciar deslocamento" — o mapa finaliza com o mesmo scope. */
@@ -1076,23 +1318,23 @@ export default function ChecklistEngine() {
   };
 
   const ensureOnlineValidation = async (field: any, action: () => void | Promise<void>) => {
-      if (field.requireOnlineValidation) {
-          try {
-              const netState = await Network.getNetworkStateAsync();
-              if (!netState.isConnected) {
-                  Alert.alert(
-                      "Validação Online Obrigatória",
-                      "Esta etapa da OS possui regras de segurança e não pode ser preenchida offline.\n\nPor favor, conecte-se à internet para continuar.",
-                      [{ text: "OK" }]
-                  );
-                  return;
-              }
-          } catch (e) {
-              Alert.alert("Erro de Conexão", "Não foi possível verificar a conectividade.");
-              return;
-          }
+    if (field.requireOnlineValidation) {
+      try {
+        const netState = await Network.getNetworkStateAsync();
+        if (!netState.isConnected) {
+          Alert.alert(
+            'Validação Online Obrigatória',
+            'Esta etapa da OS possui regras de segurança e não pode ser preenchida offline.\n\nPor favor, conecte-se à internet para continuar.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      } catch {
+        Alert.alert('Erro de Conexão', 'Não foi possível verificar a conectividade.');
+        return;
       }
-      await action();
+    }
+    await action();
   };
 
   const processFacialImage = async (
@@ -1101,57 +1343,102 @@ export default function ChecklistEngine() {
     imgUri: string,
     scope?: SectionRepeatScope | null
   ) => {
-      const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
-      if (fieldData?.requireOnlineValidation) {
-          try {
-              const rawResp = await apiFetch('/api/vision/verify-face', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    imageBase64: imgBase64,
-                    provider: fieldData.visionProvider || 'AUTO',
-                    facialAuthMode: fieldData.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
-                  }),
-                });
-              const apiResp = await rawResp.json();
-              if (apiResp.error) {
-                Alert.alert('Erro de Reconhecimento', apiResp.error);
-                return false;
-              }
-              if (!apiResp.match) {
-                Alert.alert(
-                  'Rosto não reconhecido',
-                  apiResp.message ||
-                    'Não houve correspondência na galeria Recognition do CompreFace. No painel BrSpark: Utilizadores → edite o utilizador → «Reconhecimento facial» → «Sincronizar com CompreFace» (avatar e fotos base). Depois tente de novo.'
-                );
-                return false;
-              }
-              const bioKey = facialBiometricStorageKey(fieldId);
-              try {
-                handleInput(
-                  bioKey,
-                  JSON.stringify({
-                    at: new Date().toISOString(),
-                    engine: apiResp.engine,
-                    confidence: apiResp.confidence,
-                    facialAuthMode: apiResp.facialAuthMode || fieldData.facialAuthMode || 'self_verify',
-                    identifiedUserId: apiResp.identifiedUserId ?? apiResp.identifiedUser?.id,
-                    identifiedUser: apiResp.identifiedUser,
-                  }),
-                  scope
-                );
-              } catch {
-                /* não bloquear captura se JSON falhar */
-              }
-          } catch (err: any) {
-              Alert.alert("Falha no Motor de IA", "Não foi possível conectar ao servidor para validação biométrica.");
-              return false;
-          }
+    const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
+    const bioKey = facialBiometricStorageKey(fieldId);
+    const strictOnline = !!fieldData?.requireOnlineValidation;
+
+    const writeSuccessAudit = (apiResp: any) => {
+      try {
+        handleInput(
+          bioKey,
+          JSON.stringify({
+            pending: false,
+            at: new Date().toISOString(),
+            engine: normalizeFacialEngineForStorage(apiResp.engine),
+            confidence: apiResp.confidence,
+            facialAuthMode: apiResp.facialAuthMode || fieldData?.facialAuthMode || 'self_verify',
+            identifiedUserId: apiResp.identifiedUserId ?? apiResp.identifiedUser?.id,
+            identifiedUser: apiResp.identifiedUser,
+          }),
+          scope
+        );
+      } catch {
+        /* não bloquear captura se JSON falhar */
       }
-      handleInput(fieldId, imgUri, scope);
-      if (fieldData?.allowMediaDescription) {
-        handleInput(mediaCaptionStorageKey(fieldId), '', scope);
+    };
+
+    const writePendingAudit = () => {
+      try {
+        handleInput(
+          bioKey,
+          JSON.stringify({
+            pending: true,
+            reason: 'offline_or_network',
+            capturedAt: new Date().toISOString(),
+            facialAuthMode: fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+          }),
+          scope
+        );
+      } catch {
+        /* ignore */
       }
-      return true;
+    };
+
+    if (strictOnline) {
+      const result = await postVerifyFaceForField(fieldData, imgBase64);
+      if (result.ok) {
+        writeSuccessAudit(result.data as any);
+      } else if (result.kind === 'error_msg') {
+        Alert.alert('Erro de Reconhecimento', sanitizeFacialUserFacingCopy(result.message) || result.message);
+        return false;
+      } else if (result.kind === 'no_match') {
+        Alert.alert(
+          'Rosto não reconhecido',
+          sanitizeFacialUserFacingCopy(result.message) ||
+            'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+        );
+        return false;
+      } else {
+        Alert.alert(
+          'Falha no Motor de IA',
+          'Não foi possível conectar ao servidor para validação biométrica.'
+        );
+        return false;
+      }
+    } else {
+      let usePending = false;
+      try {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) usePending = true;
+      } catch {
+        usePending = true;
+      }
+      if (!usePending) {
+        const result = await postVerifyFaceForField(fieldData, imgBase64);
+        if (result.ok) {
+          writeSuccessAudit(result.data as any);
+        } else if (result.kind === 'error_msg') {
+          Alert.alert('Erro de Reconhecimento', sanitizeFacialUserFacingCopy(result.message) || result.message);
+          return false;
+        } else if (result.kind === 'no_match') {
+          Alert.alert(
+            'Rosto não reconhecido',
+            sanitizeFacialUserFacingCopy(result.message) ||
+              'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+          );
+          return false;
+        } else {
+          usePending = true;
+        }
+      }
+      if (usePending) writePendingAudit();
+    }
+
+    handleInput(fieldId, imgUri, scope);
+    if (fieldData?.allowMediaDescription) {
+      handleInput(mediaCaptionStorageKey(fieldId), '', scope);
+    }
+    return true;
   };
 
   // --- Geo Engine: Haversine distance (meters) ---
@@ -1482,13 +1769,13 @@ export default function ChecklistEngine() {
         if (status !== 'granted' || lat === 0) {
           Alert.alert(
             'Deslocamento iniciado',
-            `Saída registrada às ${timeBr}, mas sem rastreio de GPS.\n\nMotivo: ${address}`
+            `Saída registrada às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`
           );
         } else {
           Alert.alert('Deslocamento iniciado', `Saída registrada com sucesso.\n\n📍 ${address}`);
         }
       } else if (status !== 'granted' || lat === 0) {
-        Alert.alert('Atenção', `${label} registrado às ${timeBr}, mas sem rastreio de GPS.\n\nMotivo: ${address}`);
+        Alert.alert('Atenção', `${label} registrado às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`);
       } else {
         Alert.alert('Sucesso', `${label} registrado com sucesso!\n\n${address}`);
       }
@@ -1809,17 +2096,43 @@ export default function ChecklistEngine() {
               const res = await apiFetch(`/api/checklists/executions/${taskId}`);
               if (res.ok) {
                 const remoteExec = await res.json();
-                initialRes =
+                const serverOnlyRes =
                   remoteExec.responses &&
                   typeof remoteExec.responses === 'object' &&
                   !Array.isArray(remoteExec.responses)
                     ? remoteExec.responses
                     : {};
                 if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
+                lastSubmittedRevForNext = Math.max(
+                  lastSubmittedRevForNext,
+                  Number(remoteExec.lastSubmittedRevision) || 0
+                );
+                initialRes = serverOnlyRes;
+                if (!executionIsViewOnly(remoteExec)) {
+                  readOnlyMode = false;
+                  const rm = remoteExec.metadata;
+                  if (rm && typeof rm === 'object') {
+                    if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
+                    if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                    if (rm.lastPauseReasonSummary)
+                      remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                  }
+                  if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+                  const draftKeyRv = `@draft_tsk_${taskId}`;
+                  const dstrRv = await AsyncStorage.getItem(draftKeyRv);
+                  let dmergeRv: Record<string, unknown> = {};
+                  try {
+                    dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
+                    if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
+                  } catch {
+                    dmergeRv = {};
+                  }
+                  initialRes = { ...serverOnlyRes, ...dmergeRv };
+                }
                 const ts = Date.now();
                 const cachePayload = {
                   ...remoteExec,
-                  responses: initialRes,
+                  responses: serverOnlyRes,
                   _cacheTime: ts,
                   _technicianViewDownloadAt: ts,
                 };
@@ -1845,6 +2158,62 @@ export default function ChecklistEngine() {
             );
             router.back();
             return;
+          }
+        }
+
+        // Lista/cache local ainda marcam a OS como "concluída", mas o painel pode tê-la reaberto (revisão → PENDING).
+        if (taskId && !outboxMatch && readOnlyMode) {
+          try {
+            const resRv = await apiFetch(`/api/checklists/executions/${taskId}`);
+            if (resRv.ok) {
+              const remoteExec = await resRv.json();
+              const serverOnlyRes =
+                remoteExec.responses &&
+                typeof remoteExec.responses === 'object' &&
+                !Array.isArray(remoteExec.responses)
+                  ? remoteExec.responses
+                  : {};
+              if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
+              lastSubmittedRevForNext = Math.max(
+                lastSubmittedRevForNext,
+                Number(remoteExec.lastSubmittedRevision) || 0
+              );
+              if (!executionIsViewOnly(remoteExec)) {
+                readOnlyMode = false;
+                const rm = remoteExec.metadata;
+                if (rm && typeof rm === 'object') {
+                  if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
+                  if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                  if (rm.lastPauseReasonSummary)
+                    remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                }
+                if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+                const draftKeyRv = `@draft_tsk_${taskId}`;
+                const dstrRv = await AsyncStorage.getItem(draftKeyRv);
+                let dmergeRv: Record<string, unknown> = {};
+                try {
+                  dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
+                  if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
+                } catch {
+                  dmergeRv = {};
+                }
+                initialRes = { ...serverOnlyRes, ...dmergeRv };
+              } else {
+                initialRes = serverOnlyRes;
+              }
+              const tsRv = Date.now();
+              await AsyncStorage.setItem(
+                `@brspark_execution_${taskId}`,
+                JSON.stringify({
+                  ...remoteExec,
+                  responses: serverOnlyRes,
+                  _cacheTime: tsRv,
+                  _technicianViewDownloadAt: tsRv,
+                })
+              );
+            }
+          } catch {
+            /* offline — mantém só leitura a partir do cache local */
           }
         }
       } else {
@@ -2503,6 +2872,117 @@ export default function ChecklistEngine() {
     }
   };
 
+  const handleInputRef = useRef(handleInput);
+  handleInputRef.current = handleInput;
+  const responsesRefForFacial = useRef(responses);
+  const templateRefForFacial = useRef(template);
+  useEffect(() => {
+    responsesRefForFacial.current = responses;
+  }, [responses]);
+  useEffect(() => {
+    templateRefForFacial.current = template;
+  }, [template]);
+  const facialFlushBusyRef = useRef(false);
+
+  const flushPendingFacialVerifications = useCallback(async () => {
+    if (isReadOnly || loading) return;
+    if (facialFlushBusyRef.current) return;
+    const tmpl = templateRefForFacial.current;
+    const res = responsesRefForFacial.current;
+    if (!tmpl?.schemaData?.length) return;
+    try {
+      const netState = await Network.getNetworkStateAsync();
+      if (netState.isConnected === false) return;
+    } catch {
+      return;
+    }
+    facialFlushBusyRef.current = true;
+    try {
+      let currentSectionId: string | null = null;
+      let curSecRepeat = false;
+      for (const f of tmpl.schemaData) {
+        if (f.type === 'section_break') {
+          currentSectionId = f.id;
+          curSecRepeat = sectionAllowsRepeat(f);
+          continue;
+        }
+        if (f.type !== 'facial_recognition') continue;
+        if (f.requireOnlineValidation) continue;
+
+        const runForScope = async (scope: SectionRepeatScope | null) => {
+          const bioRaw = getScopedFieldValue(res, scope, facialBiometricStorageKey(f.id));
+          const audit = parseFacialBiometricAudit(bioRaw);
+          if (!(audit as { pending?: boolean } | null)?.pending) return;
+          const uriRaw = getScopedFieldValue(res, scope, f.id);
+          const uri = firstFacialMediaUri(uriRaw);
+          if (!uri) return;
+          const path = uri.split('?')[0];
+          let b64: string;
+          try {
+            const info = await FileSystem.getInfoAsync(path);
+            if (!info.exists) return;
+            b64 = await FileSystem.readAsStringAsync(path, { encoding: 'base64' });
+          } catch {
+            return;
+          }
+          const result = await postVerifyFaceForField(f, b64);
+          const bioKey = facialBiometricStorageKey(f.id);
+          if (result.ok) {
+            const apiResp = result.data as any;
+            handleInputRef.current(
+              bioKey,
+              JSON.stringify({
+                pending: false,
+                at: new Date().toISOString(),
+                engine: normalizeFacialEngineForStorage(apiResp.engine),
+                confidence: apiResp.confidence,
+                facialAuthMode: apiResp.facialAuthMode || f.facialAuthMode || 'self_verify',
+                identifiedUserId: apiResp.identifiedUserId ?? apiResp.identifiedUser?.id,
+                identifiedUser: apiResp.identifiedUser,
+              }),
+              scope
+            );
+          } else if (result.kind === 'no_match') {
+            handleInputRef.current(
+              bioKey,
+              JSON.stringify({
+                pending: false,
+                deferredValidationFailed: true,
+                at: new Date().toISOString(),
+                facialAuthMode: f.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+                message:
+                  sanitizeFacialUserFacingCopy(result.message) ||
+                  'Após ligação à rede, o servidor não reconheceu este rosto. Peça ao administrador para atualizar as fotos de referência no painel (Usuários → Reconhecimento facial) ou capture de novo.',
+              }),
+              scope
+            );
+          }
+        };
+
+        if (!curSecRepeat) {
+          await runForScope(null);
+        } else if (currentSectionId) {
+          const rows = getRepeatRows(res, currentSectionId);
+          for (let ri = 0; ri < rows.length; ri++) {
+            await runForScope({ sectionId: currentSectionId, rowIndex: ri });
+          }
+        }
+      }
+    } finally {
+      facialFlushBusyRef.current = false;
+    }
+  }, [isReadOnly, loading]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (loading || isReadOnly) return undefined;
+      const t = setTimeout(() => {
+        void flushPendingFacialVerifications();
+      }, 700);
+      return () => clearTimeout(t);
+    }, [loading, isReadOnly, flushPendingFacialVerifications])
+  );
+
   const mergeMediaUriIntoField = (fieldId: string, uri: string, scope?: SectionRepeatScope | null) => {
     const fieldDef = template?.schemaData?.find((f: any) => f.id === fieldId);
     const capKey = mediaCaptionStorageKey(fieldId);
@@ -2571,25 +3051,6 @@ export default function ChecklistEngine() {
     } else {
       try {
         if (type === 'photo_stamped' || type === 'facial_recognition') {
-          if (type === 'facial_recognition') {
-            const fieldData = template?.schemaData?.find((f: any) => f.id === fieldId);
-            if (fieldData?.cameraMode === 'scanner') {
-              if (!cameraPermission?.granted) {
-                try {
-                  const p = await requestCameraPermission();
-                  if (!p.granted)
-                    return Alert.alert(t('common.attention'), t('checklistForm.permissionVirtualCameraDenied'));
-                } catch (permErr: any) {
-                  /* ignore */
-                }
-              }
-              setScannerFieldId(fieldId);
-              setScannerScope(scope ?? null);
-              setShowScanner(true);
-              return;
-            }
-          }
-
           try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted')
@@ -2619,10 +3080,11 @@ export default function ChecklistEngine() {
               } catch (e) {}
 
               if (type === 'facial_recognition') {
+                const facialQs = await buildFacialCaptureQuerySuffix();
                 const ok = await processFacialImage(
                   fieldId,
                   imgAsset.base64 || '',
-                  imgAsset.uri + gpsQuery,
+                  imgAsset.uri.split('?')[0] + facialQs,
                   scope
                 );
                 if (!ok) return;
@@ -4817,6 +5279,36 @@ export default function ChecklistEngine() {
                         ? [vv(field.id)]
                         : [];
                     if (mediaUris.length === 0) return null;
+                    const frAudit =
+                      field.type === 'facial_recognition'
+                        ? parseFacialBiometricAudit(vv(facialBiometricStorageKey(field.id)))
+                        : null;
+                    const frConfStr =
+                      field.type === 'facial_recognition'
+                        ? formatFacialConfidencePct(frAudit?.confidence)
+                        : null;
+                    const frDeferFailed =
+                      field.type === 'facial_recognition' &&
+                      !!frAudit &&
+                      (frAudit as { deferredValidationFailed?: boolean }).deferredValidationFailed === true;
+                    const frSuccess =
+                      field.type === 'facial_recognition' &&
+                      !!frAudit &&
+                      !frDeferFailed &&
+                      !!(frAudit.at || frAudit.engine || frConfStr);
+                    const frReqOnlineField = !!(field.type === 'facial_recognition' && field.requireOnlineValidation);
+                    const frExplicitPending =
+                      !!(frAudit as { pending?: boolean } | null)?.pending;
+                    /** Sem match no servidor ainda: explícito (JSON) ou modo “validar depois” (não exige online na captura). */
+                    const frPending =
+                      field.type === 'facial_recognition' &&
+                      !frSuccess &&
+                      !frDeferFailed &&
+                      (!frReqOnlineField || frExplicitPending);
+                    const frId =
+                      field.type === 'facial_recognition'
+                        ? getFacialStampIdentity(frAudit, user)
+                        : { fullName: '', loginEmail: '' };
                     return (
                     <View style={{ marginTop: 10, gap: 10 }}>
                       {field.type === 'facial_recognition' &&
@@ -4826,76 +5318,30 @@ export default function ChecklistEngine() {
                           );
                           const reqOnline = !!field.requireOnlineValidation;
                           const confStr = formatFacialConfidencePct(audit?.confidence);
-                          const uid =
-                            audit?.identifiedUserId || audit?.identifiedUser?.id || '';
-                          let fullName = (audit?.identifiedUser?.name || '').trim();
-                          let loginEmail = (audit?.identifiedUser?.email || '').trim();
-                          if (
-                            user &&
-                            uid &&
-                            String(uid) === String((user as any).id) &&
-                            (!fullName || !loginEmail)
-                          ) {
-                            if (!fullName && (user as any).name)
-                              fullName = String((user as any).name).trim();
-                            if (!loginEmail && (user as any).email)
-                              loginEmail = String((user as any).email).trim();
-                          }
-                          if (audit && (audit.at || audit.engine || confStr)) {
+                          if (audit && (audit as { deferredValidationFailed?: boolean }).deferredValidationFailed) {
                             return (
                               <View
                                 style={{
-                                  padding: 14,
+                                  padding: 12,
                                   borderRadius: 12,
-                                  backgroundColor: '#ecfdf5',
+                                  backgroundColor: '#fef2f2',
                                   borderWidth: 1,
-                                  borderColor: '#6ee7b7',
+                                  borderColor: '#fecaca',
                                 }}
                               >
-                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                                  <Ionicons name="checkmark-done-circle" size={26} color="#15803d" />
-                                  <View style={{ flex: 1 }}>
-                                    <Text
-                                      style={{
-                                        fontSize: 15,
-                                        fontWeight: '800',
-                                        color: '#14532d',
-                                      }}
-                                    >
-                                      Rosto reconhecido
-                                    </Text>
-                                    <Text style={{ fontSize: 12, color: '#166534', marginTop: 4, lineHeight: 17 }}>
-                                      A identidade foi validada no servidor para este campo.
-                                    </Text>
-                                    {fullName ? (
-                                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#14532d', marginTop: 8 }}>
-                                        Nome completo: {fullName}
-                                      </Text>
-                                    ) : null}
-                                    {loginEmail ? (
-                                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#166534', marginTop: 4 }}>
-                                        Login: {loginEmail}
-                                      </Text>
-                                    ) : null}
-                                    {!fullName && !loginEmail ? (
-                                      <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontStyle: 'italic' }}>
-                                        Dados do utilizador não incluídos na resposta — atualize a app/API.
-                                      </Text>
-                                    ) : null}
-                                    {confStr ? (
-                                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#047857', marginTop: 6 }}>
-                                        Confiança: {confStr}
-                                      </Text>
-                                    ) : null}
-                                    {audit.facialAuthMode === 'identify' ? (
-                                      <Text style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
-                                        Modo: identificação na galeria
-                                      </Text>
-                                    ) : null}
-                                  </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                                  <Ionicons name="close-circle-outline" size={22} color="#b91c1c" />
+                                  <Text style={{ flex: 1, fontSize: 12, color: '#991b1b', lineHeight: 17 }}>
+                                    {sanitizeFacialUserFacingCopy((audit as { message?: string }).message) ||
+                              'Após ligação à rede, o servidor não reconheceu este rosto. Peça ao administrador para atualizar as fotos de referência no painel (Usuários → Reconhecimento facial) ou capture de novo.'}
+                                  </Text>
                                 </View>
                               </View>
                             );
+                          }
+                          /* Sucesso biométrico: sem badge extra — nome, login e estado vêm na moldura/rodapé da foto. */
+                          if (audit && (audit.at || audit.engine || confStr)) {
+                            return null;
                           }
                           if (reqOnline) {
                             return (
@@ -4912,8 +5358,8 @@ export default function ChecklistEngine() {
                                   <Ionicons name="alert-circle-outline" size={22} color="#b45309" />
                                   <Text style={{ flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 }}>
                                     Foto registada, mas sem registo de verificação no servidor. Confirme a rede e
-                                    sincronize a galeria CompreFace no painel (utilizador → Reconhecimento facial →
-                                    Sincronizar). Depois capture de novo.
+                                    peça ao administrador para sincronizar o reconhecimento facial no painel (Usuários
+                                    → Reconhecimento facial → Sincronizar). Depois capture de novo.
                                   </Text>
                                 </View>
                               </View>
@@ -4924,16 +5370,16 @@ export default function ChecklistEngine() {
                               style={{
                                 padding: 12,
                                 borderRadius: 12,
-                                backgroundColor: '#f1f5f9',
+                                backgroundColor: '#fffbeb',
                                 borderWidth: 1,
-                                borderColor: '#cbd5e1',
+                                borderColor: '#fcd34d',
                               }}
                             >
                               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                                <Ionicons name="camera-outline" size={22} color="#64748b" />
-                                <Text style={{ flex: 1, fontSize: 12, color: '#475569', lineHeight: 17 }}>
-                                  Foto registada. A validação biométrica online está desativada neste campo — não foi
-                                  pedido reconhecimento ao servidor.
+                                <Ionicons name="time-outline" size={22} color="#b45309" />
+                                <Text style={{ flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 }}>
+                                  Validação pendente.{'\n'}
+                                  Pode concluir a atividade, pois a validação será realizada com o retorno da conexão.
                                 </Text>
                               </View>
                             </View>
@@ -4941,24 +5387,35 @@ export default function ChecklistEngine() {
                         })()}
                       {mediaUris.map((oneUri: any, midx: number) => (
                     <View key={midx} style={{padding:10, backgroundColor:'#f8fafc', borderRadius:8, borderWidth: 1, borderColor: '#e2e8f0'}}>
-                       {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') && (
-                          <View
-                            style={{
-                              width: '100%',
-                              height: field.type === 'photo_stamped' ? 280 : 240,
-                              borderRadius: 6,
-                              overflow: 'hidden',
-                              marginBottom: 10,
-                              backgroundColor: '#e2e8f0',
-                            }}
-                          >
-                            <Image
-                              source={{ uri: String(oneUri).split('?')[0] }}
-                              style={{ width: '100%', height: '100%' }}
-                              resizeMode="contain"
+                       {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition') &&
+                          (field.type === 'facial_recognition' ? (
+                            <FacialRecognitionPhotoFrame
+                              oneUri={String(oneUri)}
+                              imageHeight={300}
+                              success={!!frSuccess}
+                              pending={!!frPending}
+                              fullName={frId.fullName}
+                              loginEmail={frId.loginEmail}
+                              auditAt={frAudit?.at}
                             />
-                          </View>
-                       )}
+                          ) : (
+                            <View
+                              style={{
+                                width: '100%',
+                                height: field.type === 'photo_stamped' ? 280 : 240,
+                                borderRadius: 6,
+                                overflow: 'hidden',
+                                marginBottom: 10,
+                                backgroundColor: '#e2e8f0',
+                              }}
+                            >
+                              <Image
+                                source={{ uri: String(oneUri).split('?')[0] }}
+                                style={{ width: '100%', height: '100%' }}
+                                resizeMode="contain"
+                              />
+                            </View>
+                          ))}
                        <View style={{flexDirection:'row', alignItems:'center'}}>
                            <Ionicons
                              name={
@@ -5798,117 +6255,6 @@ export default function ChecklistEngine() {
       )}
 
       {/* Modals removed: Tracking modal was removed (handled by backoffice) */}
-
-      <Modal visible={showScanner} animationType="slide" transparent={false}>
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <CameraView style={StyleSheet.absoluteFillObject} facing="front" ref={cameraRef}>
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                    
-                    {/* The massive border trick to create a dark overlay with a transparent hole 
-                        In React Native, dimensions INCLUDE borders (border-box). 
-                        So inner width = 280 -> outer = 2280
-                        inner height = 380 -> outer = 2380
-                        inner radius = 140 -> outer = 1140
-                    */}
-                    <View style={{
-                        position: 'absolute',
-                        width: 2280, height: 2380,
-                        borderRadius: 1140,
-                        borderWidth: 1000,
-                        borderColor: 'rgba(0,0,0,0.85)',
-                    }} pointerEvents="none" />
-
-                    <Text style={{ position: 'absolute', top: 80, color: '#FFF', fontSize: 18, fontWeight: '800', textAlign: 'center', width: '80%', zIndex: 10 }}>
-                        Posicione seu rosto dentro da marcação
-                    </Text>
-
-                    {/* The actual red geometric border */}
-                    <View style={{
-                        width: 280, height: 380,
-                        backgroundColor: isCapturing ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-                        borderRadius: 140,
-                        borderWidth: 4,
-                        borderColor: isCapturing ? '#f59e0b' : '#e11d48',
-                        overflow: 'hidden',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1
-                    }}>
-                        {isCapturing && (
-                            <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 20 }}>
-                                <Text style={{ color: '#f59e0b', fontWeight: 'bold' }}>Analisando Face...</Text>
-                            </View>
-                        )}
-                    </View>
-                    <View style={{ position: 'absolute', bottom: 40, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
-                        <View style={{ position: 'absolute', left: 20 }}>
-                            <TouchableOpacity
-                              style={{ padding: 16 }}
-                              onPress={() => {
-                                setShowScanner(false);
-                                setScannerScope(null);
-                                setScannerFieldId(null);
-                              }}
-                              disabled={isCapturing}
-                            >
-                                <Text style={{ color: isCapturing ? '#94a3b8' : '#FFF', fontSize: 16, fontWeight: '700' }}>CANCELAR</Text>
-                            </TouchableOpacity>
-                        </View>
-                        
-                        <TouchableOpacity 
-                            style={{ 
-                                width: 72, height: 72, borderRadius: 36, 
-                                backgroundColor: isCapturing ? '#f59e0b' : '#e11d48', 
-                                justifyContent: 'center', alignItems: 'center', 
-                                borderWidth: 4, borderColor: '#FFF',
-                                shadowColor: isCapturing ? '#f59e0b' : '#e11d48',
-                                shadowOpacity: 0.8, shadowRadius: 15, shadowOffset: { width: 0, height: 0 }
-                            }}
-                            onPress={async () => {
-                                if (isCapturing) return;
-                                setIsCapturing(true);
-                                
-                                // Adicionamos um atraso visual sintético de 2 segundos.
-                                // Assim você pode ver a animação acontecer perfeitamente mesmo no seu simulador!
-                                await new Promise(r => setTimeout(r, 2000));
-
-                                try {
-                                    const snap = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
-                                    if (snap?.base64 && scannerFieldId) {
-                                        const ok = await processFacialImage(
-                                          scannerFieldId,
-                                          snap.base64,
-                                          snap.uri,
-                                          scannerScope
-                                        );
-                                        if (ok) {
-                                            setShowScanner(false);
-                                            setScannerScope(null);
-                                            setScannerFieldId(null);
-                                        }
-                                    } else if (!snap?.base64) {
-                                        Alert.alert(
-                                          t('common.attention'),
-                                          'Não foi possível obter a imagem. Tente de novo.'
-                                        );
-                                    }
-                                } catch (e) {
-                                    Alert.alert(
-                                      t('checklistForm.hardwareSimulatorTitle'),
-                                      t('checklistForm.hardwareSimulatorBody')
-                                    );
-                                } finally {
-                                    setIsCapturing(false);
-                                }
-                            }}
-                        >
-                            {isCapturing ? <ActivityIndicator color="#FFF" size="large" /> : <Ionicons name="camera" size={32} color="#FFF" />}
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </CameraView>
-        </View>
-      </Modal>
 
       <Modal visible={pauseReasonModalVisible} animationType="slide" onRequestClose={() => setPauseReasonModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: '#EEF2F6' }}>

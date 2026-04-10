@@ -8,6 +8,7 @@ const {
   applyColumnSignalsToSchemaData,
   normalizeStructureBlocksFromLlm,
   applyColumnSignalsToStructureBlocks,
+  applyLabelHeuristicsToStructureBlocks,
 } = require('./formAiNormalize');
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
 const { formatColumnSignalsForLlm } = require('./formAiExtract');
@@ -73,9 +74,8 @@ Regras estruturais:
  * @param {Record<string, unknown>} [_formContext] reservado (contexto já vai no user content)
  */
 function buildStructureExtractSystemPrompt(_formContext) {
-  return `Você é um assistente que lê planilhas Excel convertidas em texto e extrai apenas a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
-
-NÃO escolha tipos de campo (dropdown, número, foto, etc.) — isso será feito pelo usuário no painel. Não use "options", "recommendedOptionKey" nem "suggestedOptions".
+  const typeList = formatAnalyzeFieldTypesForPrompt(_formContext || {});
+  return `Você é um assistente que lê planilhas Excel convertidas em texto e extrai a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -87,11 +87,18 @@ Cada elemento de "blocks" tem:
 - "kind": "section_break" OU "field".
 - "label": texto em português — para field, usa o texto do cabeçalho da coluna na planilha (alinhado ao Excel).
 - "context": opcional, uma frase curta (ex.: coluna "X" na planilha "Y").
+- "suggestedType": OPCIONAL, só para kind=field, quando o rótulo for inequívoco. Use EXACTAMENTE um destes identificadores: ${typeList}
+  Ex.: rótulo "Foto" ou "Imagem" → photo; "E-mail" → email; "Data" → date; "Telefone" → phone; "Assinatura" → signature; "Quantidade" → number; "Conforme?" / "Aprovado" → yes_no; "Código de barras" → barcode_scan; "Anexo" / "PDF" → file_upload.
+  Se não tiver certeza, OMITA suggestedType (o painel aplica regras locais).
+
+Não use "options", "recommendedOptionKey" nem "suggestedOptions".
 
 Regras estruturais:
-- Quando o conteúdo tiver planilhas marcadas (## Folha:), comece cada planilha com um block kind=section_break e label = nome da planilha; em seguida, um field por coluna útil dessa planilha.
-- Se houver cabeçalho na primeira linha, um field por coluna com dados (ignora colunas vazias, totais óbvios ou índices sem significado).
-- Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita nas colunas).
+- O input pode ser planilha Excel (## Folha:), documento Word em Markdown, ou JSON textual — adapte a extração.
+- Quando houver planilhas (## Folha:), comece cada uma com section_break (label = nome da folha), depois fields por coluna útil.
+- Em listas numeradas ou títulos no Word/JSON, cada pergunta clara pode virar um field; agrupe sob section_break quando houver capítulos.
+- Se houver cabeçalho de tabela na primeira linha de uma grelha, um field por coluna (ignora vazias/totais óbvios).
+- Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita).
 `;
 }
 
@@ -114,6 +121,8 @@ Cada campo (exceto section_break) deve ter "label" claro em português (pt-BR), 
 IDs: pode omitir "id" ou usar placeholders — o servidor corrige. Não repita labels vazios.
 
 Se o input incluir "Perfil estatístico das colunas", respeita os signals: dropdown/yes_no/multiselect_hint têm prioridade sobre "text"; barcode_hint → barcode_scan; photo_hint → photo ou photo_stamped.
+
+O texto pode vir de Excel, Word (Markdown) ou JSON — adapte: listas e cabeçalhos viram campos; use section_break para capítulos ou folhas (## Folha: no Excel).
 
 Se o input tiver várias planilhas (## Folha:), comece cada planilha com um section_break com label = nome da planilha, depois os campos dessa planilha.
 Colunas onde os valores se repetem entre poucas etiquetas distintas devem ser "dropdown" ou "yes_no", não texto livre.
@@ -172,16 +181,27 @@ async function openAiJsonObjectChat(systemPrompt, userContent, temperature = 0.2
 }
 
 /**
- * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
+ * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown>, sourceFormat?: string }} input
  */
 function buildUserContentWithProfile(input) {
   const profileBlock = formatColumnSignalsForLlm(input.columnSignals || []);
   const ctxBlock = buildFormContextBlock(input.formContext || {});
+  const fmt = String(input.sourceFormat || 'xlsx').toLowerCase();
+  const contentTitle =
+    fmt === 'docx'
+      ? 'Conteúdo extraído do documento Word:'
+      : fmt === 'json'
+        ? 'Conteúdo extraído / representado a partir do JSON:'
+        : 'Conteúdo extraído da planilha:';
+  const profileHeading =
+    fmt === 'xlsx' || fmt === 'xlsm'
+      ? '### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)'
+      : '### Perfil estatístico (só aplica a Excel; em Word/JSON use o texto acima)';
   return (
     (ctxBlock ? ctxBlock + '\n\n' : '') +
-    `Conteúdo extraído da planilha:\n\n` +
+    `${contentTitle}\n\n` +
     String(input.markdown || '').slice(0, 130_000) +
-    `\n\n### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)\n` +
+    `\n\n${profileHeading}\n` +
     profileBlock +
     `\n\n---\nInstruções extra do usuário: ${String(input.userHint || '').trim() || '(nenhuma)'}\n`
   );
@@ -198,6 +218,7 @@ async function analyzeSpreadsheetProposals(input) {
     userHint: input.userHint,
     columnSignals: input.columnSignals,
     formContext,
+    sourceFormat: input.sourceFormat,
   });
 
   const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.18);
@@ -224,13 +245,15 @@ async function analyzeSpreadsheetStructure(input) {
     userHint: input.userHint,
     columnSignals: input.columnSignals,
     formContext,
+    sourceFormat: input.sourceFormat,
   });
   const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.15);
   const title = sanitizeTemplateText(parsed.title, 200) || 'Formulário (IA)';
   const description = sanitizeTemplateText(parsed.description, 500);
   const { blocks, warnings: normWarnings } = normalizeStructureBlocksFromLlm(parsed);
   const blocksHinted = applyColumnSignalsToStructureBlocks(blocks, input.columnSignals || [], formContext);
-  return { title, description, blocks: blocksHinted, warnings: normWarnings };
+  const blocksFinal = applyLabelHeuristicsToStructureBlocks(blocksHinted, formContext);
+  return { title, description, blocks: blocksFinal, warnings: normWarnings };
 }
 
 /**
@@ -245,6 +268,7 @@ async function generateSchemaFromCanonical(input) {
     userHint: input.userHint,
     columnSignals: input.columnSignals,
     formContext,
+    sourceFormat: input.sourceFormat,
   });
 
   const parsed = await openAiJsonObjectChat(systemPrompt, userContent, 0.22);

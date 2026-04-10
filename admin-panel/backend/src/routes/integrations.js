@@ -4,6 +4,7 @@ const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { testIntegration, normalizeComprefaceBaseUrl } = require('../lib/integrationTester');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
+const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
 
 function maskIntegrationSecret(v) {
   if (!v || typeof v !== 'string') return null;
@@ -69,6 +70,8 @@ router.post('/', async (req, res) => {
       resolvedBase = normalizeOsrmBaseUrl(baseUrl);
     } else if (name === 'Exadel CompreFace' && baseUrl) {
       resolvedBase = normalizeComprefaceBaseUrl(baseUrl);
+    } else if (name === 'Nylas' && baseUrl) {
+      resolvedBase = normalizeNylasApiUri(baseUrl);
     }
     const integration = await prisma.integration.create({
       data: {
@@ -108,6 +111,8 @@ router.patch('/:id', async (req, res) => {
       data = { ...data, baseUrl: normalizeOsrmBaseUrl(data.baseUrl) };
     } else if (existing.name === 'Exadel CompreFace' && data.baseUrl) {
       data = { ...data, baseUrl: normalizeComprefaceBaseUrl(data.baseUrl) };
+    } else if (existing.name === 'Nylas' && data.baseUrl) {
+      data = { ...data, baseUrl: normalizeNylasApiUri(data.baseUrl) };
     }
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({

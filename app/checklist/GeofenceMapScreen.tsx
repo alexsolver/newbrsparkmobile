@@ -114,7 +114,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       } else {
         setStatus('outside');
         setStatusMsg(
-          `AVISO: ~${dist} m do trajeto planeado (corredor ${threshold} m). Não bloqueia — pode iniciar; o percurso fica registado.`
+          `AVISO: ~${dist} m do trajeto planejado (corredor ${threshold} m). Não bloqueia — pode iniciar; o percurso fica registrado.`
         );
       }
     } else if (zoneType === 'segment') {

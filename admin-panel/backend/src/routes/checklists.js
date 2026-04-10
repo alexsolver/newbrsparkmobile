@@ -543,7 +543,8 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
 router.post('/executions', authUser, async (req, res) => {
     try {
-        const { id, taskId, templateId, ownerEmail, assetId, responses, metadata, gpsLocation, startedAt, completedAt } = req.body;
+        const { id, taskId, templateId, ownerEmail, assetId, metadata, gpsLocation, startedAt, completedAt } = req.body;
+        let responses = req.body.responses;
         const authEmail = req.user.email;
         
         let execution;
@@ -553,6 +554,35 @@ router.post('/executions', authUser, async (req, res) => {
             typeof metaIn.submissionId === 'string' && metaIn.submissionId.trim() ? metaIn.submissionId.trim() : null;
         let clientRev = parseInt(String(metaIn.submissionRevision ?? req.body.submissionRevision ?? ''), 10);
         const completedAtD = completedAt ? new Date(completedAt) : new Date();
+
+        /* Biometria facial pendente: após upload da foto (URL), completar verify no servidor antes de gravar a revisão. */
+        if (responses && typeof responses === 'object' && !Array.isArray(responses) && req.user.tenantId && req.user.id) {
+            const { cloneResponsesShallow, resolvePendingFacialAuditsOnSync } = require('../lib/facialRecognitionEngine');
+            let templateForFacial = finalTemplateId;
+            if (taskId && !templateForFacial) {
+                const exQuick = await prisma.checklistExecution.findUnique({
+                    where: { id: taskId },
+                    select: { templateId: true },
+                });
+                templateForFacial = exQuick?.templateId || null;
+            }
+            if (templateForFacial) {
+                responses = cloneResponsesShallow(responses);
+                try {
+                    const n = await resolvePendingFacialAuditsOnSync(prisma, {
+                        responses,
+                        templateId: templateForFacial,
+                        tenantId: req.user.tenantId,
+                        sessionUserId: req.user.id,
+                    });
+                    if (n > 0) {
+                        console.log(`[checklists] Biometria pendente processada no sync: ${n} campo(s)`);
+                    }
+                } catch (fe) {
+                    console.error('[checklists] resolvePendingFacialAuditsOnSync', fe);
+                }
+            }
+        }
         
         // If the task was dispatched from the cloud, the mobile app sends taskId. 
         // We update the existing PENDING execution instead of creating a new one!

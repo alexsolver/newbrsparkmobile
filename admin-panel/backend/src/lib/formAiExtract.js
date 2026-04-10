@@ -110,10 +110,40 @@ function profileColumnsFromMatrix(sheetName, matrix) {
     const vals = dataRows
       .map((r) => String(r[c] != null ? r[c] : '').trim())
       .filter((v) => v.length > 0);
-    if (vals.length < 2) continue;
-
     const normalized = vals.map((v) => v.replace(/\s+/g, ' ').trim());
     const unique = [...new Set(normalized)];
+
+    if (vals.length < 2) {
+      let sparseSignal = 'none';
+      if (/(foto|fotografia|imagem|evid[eê]ncia|captura|picture|photo)/i.test(header)) {
+        sparseSignal = 'photo_hint';
+      } else if (/(telefone|tel\.?|celular|telem[oó]vel|contacto)/i.test(header)) {
+        sparseSignal = 'phone_hint';
+      } else if (/(e-?mail|correio)/i.test(header)) {
+        sparseSignal = 'email_hint';
+      } else if (/\bdata\b|data\//i.test(header)) {
+        sparseSignal = 'date_hint';
+      } else if (
+        /(ean|gtin|sku|c[oó]digo\s*barras|barcode|serial|patrim[oô]nio|n[ºo°]?\s*ser(i[eê])?)/i.test(header)
+      ) {
+        sparseSignal = 'barcode_hint';
+      }
+      if (sparseSignal !== 'none') {
+        profiles.push({
+          sheet: sheetName,
+          colIndex: c + 1,
+          header,
+          distinctCount: unique.length,
+          filledCount: vals.length,
+          repeatRatio: 1,
+          samples: unique.slice(0, 10),
+          signal: sparseSignal,
+          suggestedOptionsLine: '',
+        });
+      }
+      continue;
+    }
+
     const distinct = unique.length;
     const filled = normalized.length;
     const repeatRatio = distinct / Math.max(filled, 1);

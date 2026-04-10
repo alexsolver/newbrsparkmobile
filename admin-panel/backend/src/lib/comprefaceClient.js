@@ -117,7 +117,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error('Falha ao contactar CompreFace.');
+  throw lastErr || new Error('Falha ao contatar o CompreFace.');
 }
 
 /**
@@ -186,6 +186,73 @@ async function deleteFacesForSubject(root, apiKey, subject) {
   throw err;
 }
 
+/**
+ * Lista nomes de subjects na app Recognition (CompreFace 0.6+).
+ * @returns {Promise<string[]>}
+ */
+async function listRecognitionSubjects(root, apiKey) {
+  const base = String(root).replace(/\/+$/, '');
+  const urls = [`${base}/api/v1/recognition/subjects`, `${base}/api/v1/recognition/subjects/`];
+  let lastErr;
+  for (const url of urls) {
+    const { ok, status, data } = await comprefaceFetchJson('GET', url, apiKey, { timeoutMs: 45000 });
+    if (ok) {
+      const d = data && typeof data === 'object' ? data : {};
+      let list = d.subjects;
+      if (!Array.isArray(list) && Array.isArray(d.content)) list = d.content;
+      if (!Array.isArray(list) && Array.isArray(d._embedded?.subjects)) list = d._embedded.subjects;
+      if (!Array.isArray(list)) list = [];
+      return list
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object') return item.subject ?? item.name ?? '';
+          return String(item);
+        })
+        .filter(Boolean);
+    }
+    lastErr = new Error(`CompreFace list subjects HTTP ${status}`);
+  }
+  throw lastErr || new Error('CompreFace list subjects failed');
+}
+
+/**
+ * Remove faces de subjects BrSpark `tenantId:userId` quando o userId coincide com o usuário
+ * mas o tenantId é diferente do atual (ex.: mudança de tenant / dados antigos no CompreFace).
+ * Não remove o subject atual nem subjects sem formato BrSpark.
+ * @returns {Promise<{ cleaned: number }>}
+ */
+async function deleteStaleBrsparkSubjectFacesForUser(root, apiKey, currentTenantId, userId) {
+  const uid = String(userId || '').trim();
+  const tid = String(currentTenantId || '').trim();
+  if (!uid || !tid) return { cleaned: 0 };
+
+  let names = [];
+  try {
+    names = await listRecognitionSubjects(root, apiKey);
+  } catch (e) {
+    console.warn('[comprefaceClient] list recognition subjects failed; orphan cleanup skipped:', e.message || e);
+    return { cleaned: 0 };
+  }
+
+  let cleaned = 0;
+  for (const raw of names) {
+    const name = String(raw || '').trim();
+    if (!name) continue;
+    const parsed = parseComprefaceSubjectName(name);
+    if (!parsed) continue;
+    if (String(parsed.userId) !== uid) continue;
+    if (String(parsed.tenantId) === tid) continue;
+    try {
+      await deleteFacesForSubject(root, apiKey, name);
+      cleaned += 1;
+      console.info('[comprefaceClient] removed CompreFace faces from stale subject:', name);
+    } catch (e) {
+      console.warn('[comprefaceClient] failed to delete stale subject faces:', name, e.message || e);
+    }
+  }
+  return { cleaned };
+}
+
 async function addFaceToSubject(root, apiKey, subject, imageBuffer, filename = 'enroll.jpg') {
   const base = String(root).replace(/\/+$/, '');
   const url = `${base}/api/v1/recognition/faces?subject=${encodeURIComponent(subject)}`;
@@ -223,5 +290,7 @@ module.exports = {
   pickTopRecognitionMatch,
   ensureSubject,
   deleteFacesForSubject,
+  listRecognitionSubjects,
+  deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
 };

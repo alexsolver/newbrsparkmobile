@@ -6,7 +6,7 @@ const prisma  = require('../db');
 
 const PANEL_TENANT_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN', 'MANAGER']);
 
-// POST /api/auth/login — conta Admin legada (equipa plataforma, sem tenant)
+// POST /api/auth/login — conta Admin legada (equipe da plataforma, sem tenant)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -73,7 +73,7 @@ async function postTenantLogin(req, res) {
 
     if (!PANEL_TENANT_ROLES.has(user.role)) {
       return res.status(403).json({
-        error: 'Este papel não tem acesso ao painel. Use um utilizador SaaS admin ou admin do tenant.',
+        error: 'Este papel não tem acesso ao painel. Use um usuário SaaS admin ou admin do tenant.',
       });
     }
 

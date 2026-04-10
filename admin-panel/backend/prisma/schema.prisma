@@ -34,7 +34,7 @@ model Plan {
   maxAssets     Int      // -1 = unlimited
   maxUsers      Int      // -1 = unlimited
   storageGb     Int
-  features      Json     // { stock: true, vault: true, ai: false, ... }
+  features      Json     // { stock, vault, ai, facialVisionProvider: COMPREFACE|AUTO|AWS, ... }
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -75,6 +75,52 @@ model Tenant {
   evaluationInstances   EvaluationInstance[]
   evaluationActionPlans EvaluationActionPlan[]
   evaluationDisputes    EvaluationDispute[]
+  technicianRegistrationApplications TechnicianRegistrationApplication[]
+}
+
+/// Candidatura de cadastro de prestador (formulário global + revisão do gestor).
+model TechnicianRegistrationApplication {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Token secreto na URL de convite (único).
+  inviteToken    String   @unique
+  invitedEmail   String
+  status         String   @default("INVITED")
+  /// Última mensagem do gestor ao pedir ajustes (visível ao candidato).
+  revisionNote   String?
+  /// Payload alinhado ao formulário admin (dados pessoais, endereço, docs, horários, regiões, fotos base…).
+  responsesJson  Json     @default("{}")
+  /// Senha definida pelo candidato na submissão (bcrypt); removida após aprovação.
+  passwordHash   String?
+  /// Utilizador criado após aprovação (1:1).
+  createdUserId  String?  @unique
+  createdUser    User?    @relation("TechRegCreatedUser", fields: [createdUserId], references: [id], onDelete: SetNull)
+  /// Quem criou o convite (painel).
+  createdByUserId String?
+  /// Utilizador da app que iniciou sessão para preencher (mesmo e-mail do convite).
+  candidateUserId String?
+  candidateUser   User?    @relation("TechRegCandidateUser", fields: [candidateUserId], references: [id], onDelete: SetNull)
+  submittedAt    DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  events         TechnicianRegistrationEvent[]
+
+  @@index([tenantId, status])
+  @@index([invitedEmail, tenantId])
+}
+
+model TechnicianRegistrationEvent {
+  id              String   @id @default(cuid())
+  applicationId   String
+  application     TechnicianRegistrationApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type            String
+  message         String?
+  actorEmail      String?
+  createdAt       DateTime @default(now())
+
+  @@index([applicationId, createdAt])
 }
 
 // ─────────────────────────────────────────────────────────
@@ -205,6 +251,9 @@ model User {
   auditLogs  AuditLog[]
   pushTokens PushToken[]
   technicianProfile TechnicianProfile?
+  /// Preenchido se o utilizador foi criado por uma candidatura de prestador aprovada.
+  techRegistrationCreatedFrom TechnicianRegistrationApplication? @relation("TechRegCreatedUser")
+  technicianRegistrationCandidacies TechnicianRegistrationApplication[] @relation("TechRegCandidateUser")
   currentSessionId String?
   currentDeviceId  String?
   materialsReceiptInputs MaterialsReceiptInput[] @relation("MaterialsReceiptConductor")

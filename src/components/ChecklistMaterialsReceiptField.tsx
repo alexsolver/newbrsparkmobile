@@ -127,7 +127,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
       {lines.length === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="arrow-down-circle-outline" size={32} color="#94a3b8" />
-          <Text style={styles.emptyText}>Nenhuma entrada registada</Text>
+          <Text style={styles.emptyText}>Nenhuma entrada registrada</Text>
         </View>
       ) : (
         <View style={{ gap: 10 }}>

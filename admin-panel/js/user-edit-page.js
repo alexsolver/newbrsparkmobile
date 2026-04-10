@@ -1,5 +1,5 @@
 /**
- * Edição completa de utilizador (admin) — dados, endereço, prestador, documentos multi-location, horários.
+ * Edição completa de usuário (admin) — dados, endereço, prestador, documentos multi-location, horários.
  */
 import { initPage } from './sidebar.js';
 import { CONFIG } from './config.js';
@@ -285,7 +285,7 @@ function applyCompreFaceSyncFromServer(sync) {
   }
 }
 
-/** Estado persistido no utilizador (lista admin + painel de edição). */
+/** Estado persistido no usuário (lista admin + painel de edição). */
 function paintComprefaceAdminPanel(sync) {
   const wrap = document.getElementById('compreface-admin-status');
   if (!wrap) return;
@@ -354,7 +354,7 @@ async function runCompreFaceSync({ manual = false } = {}) {
       if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
     }
   } catch {
-    setComprefaceSyncStatus('err', 'Erro de rede ao contactar o servidor.');
+    setComprefaceSyncStatus('err', 'Erro de rede ao contatar o servidor.');
     if (manual) alert('Erro de rede ao sincronizar.');
   } finally {
     if (btn) btn.disabled = false;
@@ -433,7 +433,7 @@ export async function bootUserEditPage() {
   const u = await CONFIG.get('/users/' + encodeURIComponent(id));
   if (!u || u.error) {
     document.getElementById('page-root').innerHTML =
-      `<p style="padding:40px;text-align:center">Utilizador não encontrado. <a href="users.html">Voltar</a></p>`;
+      `<p style="padding:40px;text-align:center">Usuário não encontrado. <a href="users.html">Voltar</a></p>`;
     return;
   }
 
@@ -473,7 +473,7 @@ export async function bootUserEditPage() {
           continue;
         }
         if (mime && !/^image\/(jpeg|png|webp)$/i.test(mime)) {
-          alert(`Formato não reconhecido (use JPEG, PNG ou WebP): ${file.name || 'ficheiro'}`);
+          alert(`Formato não reconhecido (use JPEG, PNG ou WebP): ${file.name || 'arquivo'}`);
           continue;
         }
         if (faceUploadStatus) faceUploadStatus.textContent = `A enviar ${file.name}…`;

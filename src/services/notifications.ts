@@ -30,7 +30,7 @@ export interface AppNotification {
   timestamp: number;
   assetId?: string;
   assetTitle?: string;
-  /** Navegação para detalhe em Minha Produtividade */
+  /** Navegação para detalhe em Desempenho */
   evaluationInstanceId?: string;
 }
 
@@ -301,7 +301,7 @@ export const NotificationService = {
           const txt = await res.text().catch(() => '');
           console.warn('[BrSpark] push_token HTTP', res.status, txt.slice(0, 200));
         } else {
-          console.log('[BrSpark] push_token registado no servidor (OK)');
+          console.log('[BrSpark] push_token registrado no servidor (OK)');
         }
       } catch (err) {
         console.log('[BrSpark] Falha ao sincronizar token push no backend', err);

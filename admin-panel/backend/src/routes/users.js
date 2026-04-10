@@ -8,6 +8,7 @@ const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
+const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -43,50 +44,6 @@ function detectFaceExtFromBuffer(buf) {
   return null;
 }
 
-/**
- * Persiste estado CompreFace Recognition no User (painel: lista + edição).
- * @param {{ ok: boolean, faces?: number, subject?: string, error?: string }} r — retorno de syncUserToCompreface
- */
-async function persistComprefaceRecognitionSync(prisma, userId, r) {
-  if (!userId || !r || typeof r !== 'object') return;
-  const now = new Date().toISOString();
-  if (r.ok) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        comprefaceRecognitionSync: {
-          status: 'synced',
-          at: now,
-          faces: Number(r.faces) || 0,
-          subject: r.subject || null,
-        },
-      },
-    });
-    return;
-  }
-  const errMsg = String(r.error || 'Falha na sincronização.').slice(0, 480);
-  const prev = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { comprefaceRecognitionSync: true },
-  });
-  let previous = null;
-  const s = prev?.comprefaceRecognitionSync;
-  if (s && typeof s === 'object' && !Array.isArray(s) && s.status === 'synced') {
-    previous = { at: s.at, faces: s.faces, subject: s.subject };
-  }
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      comprefaceRecognitionSync: {
-        status: 'error',
-        at: now,
-        message: errMsg,
-        previous,
-      },
-    },
-  });
-}
-
 const userListSelect = {
   id: true,
   tenantId: true,
@@ -100,7 +57,7 @@ const userListSelect = {
   createdAt: true,
   updatedAt: true,
   comprefaceRecognitionSync: true,
-  tenant: { select: { name: true } },
+  tenant: { select: { id: true, name: true, email: true } },
   technicianProfile: { select: { id: true, status: true } },
 };
 
@@ -367,7 +324,14 @@ router.post('/:id/sync-compreface', async (req, res) => {
             action: 'USER_COMPREFACE_SYNC',
             resource: row.email,
             category: 'ADMIN',
-            metadata: { userId: id, subject: result.subject, faces: result.faces },
+            metadata: {
+              userId: id,
+              subject: result.subject,
+              faces: result.faces,
+              ...(result.orphanSubjectsCleaned
+                ? { orphanSubjectsCleaned: result.orphanSubjectsCleaned }
+                : {}),
+            },
           },
         })
         .catch(() => {});
@@ -377,6 +341,9 @@ router.post('/:id/sync-compreface', async (req, res) => {
       subject: result.subject,
       faces: result.faces,
       root: result.root,
+      ...(result.orphanSubjectsCleaned != null && result.orphanSubjectsCleaned > 0
+        ? { orphanSubjectsCleaned: result.orphanSubjectsCleaned }
+        : {}),
       comprefaceRecognitionSync: syncPayload,
     });
   } catch (err) {
@@ -403,7 +370,7 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
       try {
         await fs.unlink(abs);
       } catch {
-        /* ficheiro já ausente */
+        /* arquivo já ausente */
       }
     }
 
@@ -428,7 +395,13 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
               action: 'USER_COMPREFACE_SYNC',
               resource: user.email,
               category: 'ADMIN',
-              metadata: { userId: id, subject: r.subject, faces: r.faces, trigger: 'face_enrollment_delete' },
+              metadata: {
+                userId: id,
+                subject: r.subject,
+                faces: r.faces,
+                trigger: 'face_enrollment_delete',
+                ...(r.orphanSubjectsCleaned ? { orphanSubjectsCleaned: r.orphanSubjectsCleaned } : {}),
+              },
             },
           })
           .catch(() => {});

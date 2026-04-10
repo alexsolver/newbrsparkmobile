@@ -480,6 +480,99 @@ function applyColumnSignalsToStructureBlocks(blocks, columnSignals, formContext 
   });
 }
 
+/**
+ * Infere tipo de campo a partir do rótulo (pt-BR / EN) quando não há perfil de coluna Excel.
+ * Respeita contexto do assistente (ex.: foto carimbada).
+ * @param {string} label
+ * @param {Record<string, unknown>} [formContext]
+ * @returns {string} tipo ou ''
+ */
+function inferSuggestedFieldTypeFromLabel(label, formContext = {}) {
+  const raw = String(label || '').trim();
+  if (!raw) return '';
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
+  const stamped = ctx.requireStampedPhotos === true;
+  const n = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const has = (re) => re.test(raw) || re.test(n);
+
+  if (has(/\b(biometr|reconhecimento\s*f[aá]cial|valida(c|ç)[aã]o\s*f[aá]cial|face\s*id)\b/i))
+    return 'facial_recognition';
+  if (has(/\b(cerca|geofence|validar\s*local|localiza(c|ç)[aã]o\s*\(?gps|dentro\s*da\s*zona)\b/i))
+    return 'geofence_check';
+  if (has(/\b(assinatur|firma\s*do|firma\s*digital|rubrica)\b/i)) return 'signature';
+  if (has(/\b(c[oó]digo\s*de\s*barras|\bean\b|\bgtin\b|patrim[oô]nio|n[ºo°]?\s*ser(i[eê])?|\bsku\b)\b/i))
+    return 'barcode_scan';
+
+  if (has(/\b(foto\s*carimb|gps\s*obrig|carimbo\s*gps|evid[eê]ncia\s*carimb)\b/i)) return 'photo_stamped';
+  if (has(/\bfoto(s)?\b|\bfotografia\b|\bimagem(ns)?\b|\bevid[eê]ncia(\s*fotogr[aá]fica)?\b|\bcaptura\b|\bpicture\b|\bphoto\b|\bsnapshot\b/i)) {
+    return stamped ? 'photo_stamped' : 'photo';
+  }
+
+  if (
+    has(/\b(anexo|arquivo|pdf|upload|ficheiro|documento\s*adj)\b/i) &&
+    !has(/\b(foto|imagem|fotogr)\b/i)
+  ) {
+    return 'file_upload';
+  }
+
+  if (has(/\b(e-?mail|correio\s*ele)\b/i)) return 'email';
+  if (has(/\b(telefone|telem[oó]vel|celular|whatsapp|fone|contacto\s*tel)\b/i)) return 'phone';
+  if (has(/\b(data\s|data\/|data:|dt\.|\bprazo\b|\bvenciment|\bhor[aá]rio\b|\bhora\s*d)\b/i)) return 'date';
+  if (
+    has(
+      /\b(quantidade|qtd\.?|valor\s|r\$|pre(c|ç)o|peso|km\b|metros\b|temp(eratura)?|press[aã]o|n[ºo°]\s|numero|n[uú]mero\s*de)\b/i
+    )
+  ) {
+    return 'number';
+  }
+  if (
+    has(
+      /\b(conforme|aprovad|reprovad|sim\s*\/\s*n[aã]o|cumpre|n[aã]o\s*conform|ok\s*\?|check\s*list)\b/i
+    )
+  ) {
+    return 'yes_no';
+  }
+  if (has(/\b(avalia(c|ç)[aã]o|nota\s|estrelas|satisfa(c|ç)[aã]o|\bnps\b)\b/i)) return 'rating';
+
+  return '';
+}
+
+/**
+ * Preenche ou corrige suggestedType a partir do rótulo (não sobrescreve tipos fortes vindos do perfil Excel).
+ * @param {object[]} blocks
+ * @param {Record<string, unknown>} [formContext]
+ * @returns {object[]}
+ */
+function applyLabelHeuristicsToStructureBlocks(blocks, formContext = {}) {
+  if (!Array.isArray(blocks) || !blocks.length) return blocks;
+  const ctx = formContext && typeof formContext === 'object' ? formContext : {};
+  return blocks.map((b) => {
+    if (!b || b.kind !== 'field') return b;
+    const inferred = inferSuggestedFieldTypeFromLabel(b.label, ctx);
+    if (!inferred || !ALLOWED_FIELD_TYPES.has(inferred)) return b;
+    const cur = String(b.suggestedType || '').trim();
+    if (!cur) {
+      const out = { ...b, suggestedType: inferred };
+      if (inferred === 'yes_no' && !b.suggestedListOptions) {
+        out.suggestedListOptions = 'Sim, Não';
+      }
+      return out;
+    }
+    if (cur === 'text' && inferred !== 'text') {
+      const out = { ...b, suggestedType: inferred };
+      if (inferred === 'yes_no' && !b.suggestedListOptions) {
+        out.suggestedListOptions = 'Sim, Não';
+      }
+      return out;
+    }
+    return b;
+  });
+}
+
 function normalizeProposalOption(raw, kind) {
   if (!raw || typeof raw !== 'object') return null;
   const key = typeof raw.key === 'string' && raw.key.trim() ? raw.key.trim() : null;
@@ -642,4 +735,6 @@ module.exports = {
   buildSchemaFromProposalSelections,
   applyColumnSignalsToProposals,
   applyColumnSignalsToSchemaData,
+  inferSuggestedFieldTypeFromLabel,
+  applyLabelHeuristicsToStructureBlocks,
 };

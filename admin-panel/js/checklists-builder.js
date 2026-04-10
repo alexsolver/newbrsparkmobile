@@ -381,7 +381,6 @@ const ICON_SEARCH_PT_ALIASES = {
     mapa: 'map',
     gps: 'location',
     pessoa: 'person',
-    utilizador: 'user',
     usuario: 'user',
     camera: 'camera',
     câmera: 'camera',
@@ -1200,10 +1199,8 @@ function createNewFieldFromToolboxType(type, rawText) {
         ...(type === 'section_break' ? { sectionFillMode: 'list' } : {}),
         ...(type === 'facial_recognition'
           ? {
-              visionProvider: 'COMPREFACE',
-              cameraMode: 'native',
               facialAuthMode: 'self_verify',
-              requireOnlineValidation: true,
+              requireOnlineValidation: false,
             }
           : {}),
     };
@@ -1994,25 +1991,24 @@ function renderProperties() {
             <div style="font-size:11px; font-weight:800; color:#9f1239; margin-bottom:4px">🧑‍💻 BIOMETRIA & IA OBRIGATÓRIA</div>
             <div style="font-size:10px; color:#9f1239; line-height:1.2; margin-bottom:12px;">A foto tirada será comparada com a foto de perfil do técnico usando o motor de IA selecionado nas Integrações do sistema.</div>
             
-            <label class="prop-label" style="color:#e11d48; font-size:10px;">Provedor de Visão Computacional</label>
-            <select class="prop-input" onchange="window.onChangeVisionProvider(this)" data-prev="${f.visionProvider || 'COMPREFACE'}" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
-                <option value="COMPREFACE" ${(f.visionProvider||'COMPREFACE') === 'COMPREFACE' ? 'selected' : ''}>🏢 Forçar Exadel CompreFace (Local) - PADRÃO</option>
-                <option value="AUTO" ${(f.visionProvider||'COMPREFACE') === 'AUTO' ? 'selected' : ''}>🤖 Automático (Custo da IA Global)</option>
-                <option value="AWS" ${f.visionProvider === 'AWS' ? 'selected' : ''}>☁️ Forçar AWS Rekognition (Custos Adicionais/API)</option>
-            </select>
+            <div style="font-size:9px; color:#64748b; line-height:1.35; margin-bottom:10px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
+              O motor de reconhecimento (CompreFace, automático ou AWS) é definido por <b>plano</b> em
+              <b>Planos &amp; Assinaturas</b> → botão «Biometria / API» em cada cartão de plano. Padrão: CompreFace.
+            </div>
 
             <label class="prop-label" style="color:#e11d48; font-size:10px;">Modo de validação biométrica</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('facialAuthMode', this.value)" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
-                <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>Provar identidade do utilizador logado (ponto / OS)</option>
-                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer utilizador matriculado (só gestores no app)</option>
+                <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>Provar identidade do usuário logado (ponto / OS)</option>
+                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer utilizador matriculado (mesmo tenant)</option>
             </select>
-            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», o JWT tem de ser de MANAGER, TENANT_ADMIN ou SAAS_ADMIN. O servidor devolve dados do utilizador reconhecido.</div>
+            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», qualquer utilizador com sessão na app pode preencher o campo: o rosto é comparado à galeria CompreFace e o servidor devolve nome/e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa de estar logado na app.</div>
 
-            <label class="prop-label" style="color:#e11d48; font-size:10px;">Motor de Câmera</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('cameraMode', this.value)" style="font-size:12px; border-color:#fda4af;">
-                <option value="native" ${(f.cameraMode||'native') === 'native' ? 'selected' : ''}>📷 Câmera do Sistema (Padrão/Alta Resolução)</option>
-                <option value="scanner" ${f.cameraMode === 'scanner' ? 'selected' : ''}>📱 Scanner Seguro (Máscara Redonda In-App)</option>
-            </select>
+            <div style="font-size:9px; color:#64748b; line-height:1.35; margin-top:8px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
+                📷 A captura facial na app usa sempre a <b>câmera do sistema</b> (alta resolução).
+            </div>
+            <div style="font-size:9px; color:#9f1239; line-height:1.35; margin-top:12px; padding:8px; background:#fff7ed; border-radius:6px; border:1px solid #fed7aa;">
+                <b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.
+            </div>
         </div>`;
     } else if (f.type === 'file_upload') {
         extraProps = `
@@ -2158,7 +2154,7 @@ function renderProperties() {
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
                 <label for="prop-online" style="font-size:12px; font-weight:800; color:#ca8a04; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> Exigir Validação Apenas Online?</label>
-                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo Assíncrono (validado depois).</div>
+                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">${f.type === 'facial_recognition' ? 'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.' : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'}</div>
             </div>
         </div>
         ` : ''}
@@ -2174,20 +2170,6 @@ function renderProperties() {
 // Expose pra UI HTML
 window.handleFieldUpdate = function(key, val) {
     updateField(key, val);
-};
-
-window.onChangeVisionProvider = function(selectElem) {
-    const val = selectElem.value;
-    const prev = selectElem.getAttribute('data-prev');
-    if (val === 'AWS') {
-        const confirmed = confirm("ATENÇÃO: A escolha do provedor AWS Rekognition gerará cobranças adicionais de consumo de API diretamente na nuvem da AWS.\n\nTem certeza que deseja forçar o uso da AWS de forma manual?");
-        if (!confirmed) {
-            selectElem.value = prev;
-            return;
-        }
-    }
-    selectElem.setAttribute('data-prev', val);
-    window.handleFieldUpdate('visionProvider', val);
 };
 
 window.refreshConditionalUI = function(valueId) {
@@ -2602,7 +2584,7 @@ window.saveChecklist = async function() {
         } catch (apiError) {
             console.warn('Salvamento na API falhou (rede). Rascunho está no navegador.', apiError);
             alert(
-                'Não foi possível contactar a API. O formulário ficou guardado só neste navegador.\n\n' +
+                'Não foi possível contatar a API. O formulário ficou salvo só neste navegador.\n\n' +
                 (apiError && apiError.message ? apiError.message : '')
             );
         }
@@ -3538,7 +3520,7 @@ function renderMobilePreview() {
         if(f.type === 'technician_finance') inputMock = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px; font-size:13px; color:#0f766e;"><ion-icon name="cash" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Custos do técnico</b> — despesas/receitas ligadas ao atendimento; livro separado dos bens.</div>`;
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
         
-        if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#ea580c;font-weight:800">laranja</span> (trajeto planeado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio face à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
+        if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#ea580c;font-weight:800">laranja</span> (trajeto planejado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio em relação à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
         if(f.type === 'transit_end') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button><div style="font-size:10px;color:#64748b;line-height:1.45;border-left:3px solid #ea580c;padding-left:10px">Se a OS foi despachada como <strong>Rota</strong>, o PDF pode incluir <strong>mapa estático</strong> (trajeto + GPS), <strong>cobertura %</strong>, desvio máximo e comparação com a tolerância do corredor.</div></div>`;
         if(f.type === 'geofence_check') inputMock = `<button disabled style="background:#0f172a; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="location" style="font-size:20px"></ion-icon> VALIDAR GEOLOCALIZAÇÃO<br>Raio: ${f.geofenceRadius}m</button>`;
         if(f.type === 'location_pick') inputMock = `<div style="border:1px solid #bae6fd; border-radius:10px; overflow:hidden; background:#f0f9ff;"><div style="height:120px; background:linear-gradient(135deg,#e0f2fe,#f0f9ff); display:flex; align-items:center; justify-content:center; color:#0369a1; font-size:12px; font-weight:700; flex-direction:column; gap:6px;"><ion-icon name="map" style="font-size:32px"></ion-icon>Mapa + alfinete</div><div style="padding:10px; font-size:11px; color:#0c4a6e; font-weight:600;">GPS real + posição ajustada no mapa</div></div>`;
@@ -4084,7 +4066,7 @@ window.saveFieldLogic = function() {
     window.hideLogicModal();
 };
 
-// ─── Assistente IA: Excel → extrair estrutura → tipo (toolbox) → append ao canvas ─────────
+// ─── Assistente IA: Excel/Word/JSON → extrair estrutura → tipo (toolbox) → append ao canvas ─────────
 /** @type {{ blocks: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
 window.__brsparkAiSession = null;
 /** @type {{ phase: 'intro'|'blocks'|'done', blockIndex: number } | null} */
@@ -4117,11 +4099,11 @@ function setAiFormLoading(on, phase) {
     }
     const sub = document.getElementById('ai-form-loading-sub');
     if (sub) {
-        sub.textContent = 'A ler o Excel e a extrair etapas e colunas. Pode levar até um minuto.';
+        sub.textContent = 'A ler o ficheiro e a extrair etapas e campos. Pode levar até um minuto.';
     }
     const titleEl = document.querySelector('#ai-form-loading .ai-form-loading-title');
     if (titleEl) {
-        titleEl.textContent = on ? 'A analisar a planilha…' : 'A processar…';
+        titleEl.textContent = on ? 'A analisar o ficheiro…' : 'A processar…';
     }
     [
         'ai-form-file',
@@ -4177,7 +4159,7 @@ function renderAiFormHistorySession(sess) {
     }
     if (sess.truncated) {
         meta +=
-            '<br><span style="color:#b45309;">Aviso: o conteúdo da planilha foi truncado por tamanho.</span>';
+            '<br><span style="color:#b45309;">Aviso: o conteúdo do ficheiro foi truncado por tamanho.</span>';
     }
     staticEl.innerHTML = meta;
 
@@ -4339,11 +4321,11 @@ function renderAiStructureStep() {
         if (heading) heading.textContent = 'Assistente concluído';
         if (sub) {
             sub.textContent =
-                'Percorreu todos os blocos. O canvas foi atualizado à medida — pode fechar ou analisar outro Excel.';
+                'Percorreu todos os blocos. O canvas foi atualizado à medida — pode fechar ou analisar outro ficheiro.';
         }
         if (skipBtn) {
             skipBtn.style.display = 'inline-flex';
-            skipBtn.textContent = 'Nova análise Excel';
+            skipBtn.textContent = 'Nova análise';
         }
         if (primBtn) primBtn.textContent = 'Fechar';
         const p = document.createElement('p');
@@ -4382,7 +4364,7 @@ function renderAiStructureStep() {
 
         const idf = document.createElement('div');
         idf.className = 'ai-wizard-identified';
-        idf.textContent = 'A IA identificou uma etapa / planilha';
+        idf.textContent = 'A IA identificou uma etapa (secção)';
         host.appendChild(idf);
 
         const ll = document.createElement('label');
@@ -4648,7 +4630,7 @@ window.openAiFormModal = function () {
     const genBtn = document.getElementById('ai-form-generate-btn');
     if (genBtn) {
         genBtn.disabled = false;
-        genBtn.textContent = 'Ler Excel com IA →';
+        genBtn.textContent = 'Ler ficheiro com IA →';
     }
     setAiFormLoading(false);
     m.style.display = 'flex';
@@ -4679,6 +4661,9 @@ function normalizeBlocksFromApi(data) {
     return [];
 }
 
+/** Extensões aceites pelo assistente IA (alinhado à API). */
+var BRSPARK_AI_FORM_EXT = ['.xlsx', '.xlsm', '.docx', '.json'];
+
 window.brsparkAiFormAnalyze = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
@@ -4687,13 +4672,14 @@ window.brsparkAiFormAnalyze = async function () {
     }
     const fi = document.getElementById('ai-form-file');
     if (!fi || !fi.files || !fi.files[0]) {
-        alert('Escolha um arquivo .xlsx.');
+        alert('Escolha um ficheiro Excel (.xlsx), Word (.docx) ou JSON.');
         return;
     }
     const file = fi.files[0];
     const name = (file.name || '').toLowerCase();
-    if (!name.endsWith('.xlsx') && !name.endsWith('.xlsm')) {
-        alert('Nesta versão só são aceitos arquivos Excel .xlsx.');
+    var okExt = BRSPARK_AI_FORM_EXT.some(function (ext) { return name.endsWith(ext); });
+    if (!okExt) {
+        alert('Formato não suportado. Use: .xlsx, .xlsm, .docx ou .json.');
         return;
     }
     const hintEl = document.getElementById('ai-form-hint');
@@ -4753,7 +4739,7 @@ window.brsparkAiFormAnalyze = async function () {
         setAiFormLoading(false);
         if (btn) {
             btn.disabled = false;
-            btn.textContent = 'Ler Excel com IA →';
+            btn.textContent = 'Ler ficheiro com IA →';
         }
     }
 };

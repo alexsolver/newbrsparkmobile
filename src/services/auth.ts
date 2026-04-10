@@ -121,6 +121,17 @@ export class TwoFactorRequired extends Error {
   }
 }
 
+export type LoginTenantOption = { id: string; name?: string | null; slug?: string | null };
+
+export class MultipleAccountsError extends Error {
+  tenants: LoginTenantOption[];
+  constructor(tenants: LoginTenantOption[]) {
+    super('multiple_accounts');
+    this.name = 'MultipleAccountsError';
+    this.tenants = tenants;
+  }
+}
+
 const TOKEN_KEY = 'brspark_jwt';
 const USER_KEY  = 'brspark_user';
 /** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
@@ -194,17 +205,32 @@ export class AuthService {
   }
 
   /** Login — POST /api/login */
-  static async login(email: string, password: string): Promise<User> {
+  static async login(
+    email: string,
+    password: string,
+    tenantId?: string | null,
+  ): Promise<User> {
     const deviceId = await getDeviceId();
+    const body: Record<string, unknown> = {
+      email: email.trim().toLowerCase(),
+      password,
+      deviceId,
+    };
+    if (tenantId && String(tenantId).trim()) {
+      body.tenantId = String(tenantId).trim();
+    }
     const res = await fetch(`${API_BASE}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password, deviceId }),
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
+      if (res.status === 409 && data?.code === 'MULTIPLE_ACCOUNTS' && Array.isArray(data?.tenants)) {
+        throw new MultipleAccountsError(data.tenants as LoginTenantOption[]);
+      }
       throw new Error(data.error || 'Erro ao fazer login.');
     }
 

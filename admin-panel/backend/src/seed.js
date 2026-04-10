@@ -26,15 +26,15 @@ async function main() {
   const plans = await Promise.all([
     prisma.plan.upsert({ where: { name: 'Basic' }, update: {}, create: {
       name: 'Basic', priceMonthly: 99, priceYearly: 990, maxAssets: 50, maxUsers: 5, storageGb: 5,
-      features: { stock: true, vault: false, ai: false, documents: true, insurance: false }
+      features: { stock: true, vault: false, ai: false, documents: true, insurance: false, facialVisionProvider: 'COMPREFACE' }
     }}),
     prisma.plan.upsert({ where: { name: 'Pro' }, update: {}, create: {
       name: 'Pro', priceMonthly: 399, priceYearly: 3990, maxAssets: 500, maxUsers: 20, storageGb: 50,
-      features: { stock: true, vault: true, ai: true, documents: true, insurance: true }
+      features: { stock: true, vault: true, ai: true, documents: true, insurance: true, facialVisionProvider: 'COMPREFACE' }
     }}),
     prisma.plan.upsert({ where: { name: 'Enterprise' }, update: {}, create: {
       name: 'Enterprise', priceMonthly: 2400, priceYearly: 24000, maxAssets: -1, maxUsers: -1, storageGb: 500,
-      features: { stock: true, vault: true, ai: true, documents: true, insurance: true, reports: true, realtime: true }
+      features: { stock: true, vault: true, ai: true, documents: true, insurance: true, reports: true, realtime: true, facialVisionProvider: 'COMPREFACE' }
     }}),
   ]);
   console.log(`✅ Plans: ${plans.map(p => p.name).join(', ')}`);
@@ -216,7 +216,7 @@ async function main() {
     });
     if (removedTypo.count) {
       console.log(
-        `   Removido utilizador legado asmin@brspark.com (${removedTypo.count})`
+        `   Removido usuário legado asmin@brspark.com (${removedTypo.count})`
       );
     }
     console.log(

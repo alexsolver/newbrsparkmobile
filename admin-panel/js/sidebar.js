@@ -30,6 +30,7 @@ export const NAV_ITEMS = [
   { page: 'dashboard.html',     icon: 'grid-outline',       label: 'Dashboard',           section: null },
   { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
   { page: 'users.html',         icon: 'people-outline',     label: 'Usuários',              section: null },
+  { page: 'technician-applications.html', icon: 'person-add-outline', label: 'Cadastro prestador', section: null },
   { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
   { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
@@ -66,6 +67,7 @@ export const MANAGER_PANEL_PAGES = new Set([
   'reports.html',
   'evaluations.html',
   'cockpit.html',
+  'technician-applications.html',
 ]);
 
 export function getStoredPanelRole() {
@@ -120,7 +122,7 @@ export function renderSidebar(alertCount = 3) {
     /* ignore */
   }
   const initials = (displayName || email).slice(0, 2).toUpperCase();
-  const footerTitle = displayName || (panelMode === 'tenant' ? 'Utilizador' : 'Administrador');
+  const footerTitle = displayName || (panelMode === 'tenant' ? 'Usuário' : 'Administrador');
 
   const role = getStoredPanelRole();
   const items = navItemsForRole(role);
@@ -134,7 +136,11 @@ export function renderSidebar(alertCount = 3) {
     const pageKey = currentPage.replace('.html','');
     const itemKey = item.page.replace('.html','');
     const active =
-      pageKey === itemKey || (pageKey === 'user-edit' && item.page === 'users.html') ? 'active' : '';
+      pageKey === itemKey ||
+      (pageKey === 'user-edit' && item.page === 'users.html') ||
+      (pageKey === 'technician-applications' && item.page === 'technician-applications.html')
+        ? 'active'
+        : '';
     const badge = item.page === 'audit.html' ? `<span class="nav-badge">${alertCount}</span>` : '';
     return `${sectionHtml}
       <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${item.label.replace(/"/g, '&quot;')}">

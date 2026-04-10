@@ -2,7 +2,7 @@
  * PrivacySettings — BrSpark Field Service
  *
  * Tela "Minha Privacidade" acessível pelo perfil do técnico.
- * Permite visualizar e revogar aceites de consentimento a qualquer momento.
+ * Permite visualizar e revogar consentimentos aceitos a qualquer momento.
  */
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {

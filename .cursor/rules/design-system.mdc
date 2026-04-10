@@ -6,6 +6,7 @@ alwaysApply: false
 
 Antes de alterar interface, cores, tipografia ou CSS do admin, leia e siga o spec em `docs/spec/design-system-spec.md`.
 
+- **Textos** em telas admin e mensagens associadas: **português do Brasil (pt-BR)** — ver seção «Idioma» no spec e `.cursor/rules/language-pt-br.mdc`.
 - Cores: `useTheme()` + `src/theme/colors.ts` (incl. `MEDIA_TAG_COLORS`, `SERVICE_CATEGORY_COLORS`, `status.*`).
 - Novos botões: `src/components/Button.tsx`. Chips: `src/components/Chip.tsx`. Switches: `src/components/ThemedSwitch.tsx`.
 - Após mudar `webCssVariableMap` em `colors.ts`, executar `npm run theme:export-css` e commitar `admin-panel/css/brspark-tokens.css`.

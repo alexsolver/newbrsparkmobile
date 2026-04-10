@@ -958,7 +958,7 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
 const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
 
 /**
- * OS reaberta para revisão: o mesmo id pode ainda estar em "aceites" do ciclo anterior.
+ * OS reaberta para revisão: o mesmo id pode ainda estar em "aceitos" do ciclo anterior.
  * Limpa só accepted_tasks para voltar a exigir "Aceitar".
  *
  * Não limpar @brspark_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET

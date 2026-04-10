@@ -1442,27 +1442,27 @@
     </div>
 </div>
 
-<!-- Assistente IA: Excel → formulário -->
+<!-- Assistente IA: Excel / Word / JSON → formulário -->
 <div id="ai-form-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.82); z-index:1000000; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:16px; box-sizing:border-box;">
   <div id="ai-form-modal-panel" class="ai-form-modal-panel ai-form-panel-context" style="width:min(560px,100%); max-height:92vh; overflow:auto; padding:22px; border-radius:16px;">
     <div id="ai-form-loading" aria-hidden="true">
       <div class="ai-form-spinner" role="status" aria-label="A processar"></div>
       <p class="ai-form-loading-title">A gerar o formulário…</p>
-      <p id="ai-form-loading-sub" class="ai-form-loading-sub">A ler o Excel e a pedir sugestões à IA. Isto pode levar até um minuto.</p>
+      <p id="ai-form-loading-sub" class="ai-form-loading-sub">A ler o ficheiro e a pedir sugestões à IA. Isto pode levar até um minuto.</p>
     </div>
     <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px;">
       <div>
         <h3 style="margin:0 0 8px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;">
           <ion-icon name="sparkles" style="color:#7c3aed"></ion-icon> Assistente IA
         </h3>
-        <p class="ai-form-lead">A IA <strong>só extrai</strong> etapas e cabeçalhos de coluna. O tipo de cada campo escolhe-o na <strong>lista dinâmica</strong> (igual à toolbox). Cada "Adicionar ao canvas" insere <strong>um</strong> bloco no formulário — em tempo real.</p>
+        <p class="ai-form-lead">Envie <strong>Excel</strong> (.xlsx), <strong>Word</strong> (.docx) ou <strong>JSON</strong> (schema BrSpark ou texto para a IA analisar). A IA <strong>extrai</strong> etapas e campos; o tipo de cada campo escolhe-o na <strong>lista dinâmica</strong> (igual à toolbox). Cada «Adicionar ao canvas» insere <strong>um</strong> bloco — em tempo real.</p>
       </div>
       <button type="button" id="ai-form-close-btn" class="btn btn-ghost btn-sm" onclick="window.closeAiFormModal()" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
     <div id="ai-form-upload-section">
-      <div class="ai-form-phase-pill" id="ai-form-phase-upload-label">Fase 1 · Enviar Excel</div>
-      <label class="prop-label">Arquivo Excel (.xlsx)</label>
-      <input id="ai-form-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="prop-input" style="margin-bottom:12px;" />
+      <div class="ai-form-phase-pill" id="ai-form-phase-upload-label">Fase 1 · Enviar ficheiro</div>
+      <label class="prop-label">Excel (.xlsx), Word (.docx) ou JSON</label>
+      <input id="ai-form-file" type="file" accept=".xlsx,.xlsm,.docx,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/json" class="prop-input" style="margin-bottom:12px;" />
       <details class="ai-form-upload-advanced">
         <summary>Contexto para a IA — opcional (objectivo, sector, tipos de campo…)</summary>
         <div>
@@ -1498,7 +1498,7 @@
         </div>
       </details>
       <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
-        <button type="button" id="ai-form-generate-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormAnalyze()">Ler Excel com IA →</button>
+        <button type="button" id="ai-form-generate-btn" class="btn btn-primary btn-sm" onclick="window.brsparkAiFormAnalyze()">Ler ficheiro com IA →</button>
         <button type="button" id="ai-form-cancel-btn" class="btn btn-outline btn-sm" onclick="window.closeAiFormModal()">Fechar</button>
       </div>
       <p style="font-size:11px;color:#64748b;margin:0;line-height:1.45;">A seguir confirma o título e vai <strong>colocando cada etapa/campo no canvas</strong> — um de cada vez.</p>
@@ -1506,7 +1506,7 @@
     <div id="ai-form-validate-section" style="display:none; margin-bottom:14px;">
       <div class="ai-form-phase-pill">Fase 2 · Colocar no canvas (um bloco de cada vez)</div>
       <details id="ai-form-history" class="ai-form-history">
-        <summary>O que a IA leu no Excel</summary>
+        <summary>O que a IA leu no ficheiro</summary>
         <div id="ai-form-history-static" class="ai-history-meta"></div>
         <ul class="ai-history-proposals" id="ai-form-history-proposals" style="list-style:disc;"></ul>
       </details>
@@ -1572,7 +1572,7 @@
       <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled>Desfazer</button>
     </div>
     <label class="prop-label" for="ai-copilot-logic-goal" style="margin-top:14px;">Sugerir lógica (gatilhos)</label>
-    <textarea id="ai-copilot-logic-goal" class="prop-input" rows="2" placeholder="Ex.: "Se Conforme = Não, mostrar Plano de acção"" style="font-size:12px;"></textarea>
+    <textarea id="ai-copilot-logic-goal" class="prop-input" rows="2" placeholder="Ex.: "Se Conforme = Não, mostrar Plano de ação"" style="font-size:12px;"></textarea>
     <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="window.brsparkCopilotSuggestLogic()">Pedir sugestões de regras</button>
     <p id="ai-copilot-logic-hint" style="display:none; font-size:11px; color:#0369a1; margin:8px 0 0;">Sugestões prontas — "Aplicar regras sugeridas".</p>
     <button type="button" class="btn btn-sm" style="margin-top:8px;background:#0ea5e9;color:#fff;border:none;display:none;" id="ai-copilot-apply-logic-btn" onclick="window.brsparkCopilotApplyLogic()" disabled>Aplicar regras sugeridas</button>

@@ -316,7 +316,7 @@ export function ChecklistLocationPickField({
   if (disabled && saved) {
     return (
       <View style={styles.readonlyBox}>
-        <Text style={styles.readonlyTitle}>Localização registada</Text>
+        <Text style={styles.readonlyTitle}>Localização registrada</Text>
         <Text style={styles.readonlyRow}>
           <Text style={styles.k}>GPS: </Text>
           {saved.gps.lat.toFixed(6)}, {saved.gps.lng.toFixed(6)}

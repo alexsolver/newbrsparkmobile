@@ -1,9 +1,10 @@
 ---
-description: Idioma padrão das respostas e textos gerados — português do Brasil
+description: Idioma padrão das respostas e textos gerados — português do Brasil (pt-BR)
 globs: 
 alwaysApply: true
 ---
 
 - Responda **sempre em português do Brasil (pt-BR)** — vocabulário, ortografia e convenções brasileiras (ex.: «você», tratamento neutro ou adequado ao contexto técnico).
-- Em código e UI, quando criar ou sugerir **textos visíveis ao utilizador** (labels, mensagens, `Alert`, tooltips), use **pt-BR** por defeito, salvo pedido explícito noutro idioma.
-- Não misture pt-PT e pt-BR no mesmo fluxo (ex.: «ficheiro» vs «arquivo») — prefira **pt-BR** neste projeto.
+- Em código e UI, quando criar ou sugerir **textos visíveis ao usuário** (labels, mensagens, `Alert`, tooltips, cópias do painel admin, respostas JSON de erro legíveis por humano), use **pt-BR** por defeito, salvo pedido explícito noutro idioma.
+- **Não** use português de Portugal nestes fluxos. Evite misturar pt-PT e pt-BR (ex.: «ficheiro» vs «arquivo», «equipa» vs «equipe»).
+- Referência normativa para UI e spec-driven: `docs/spec/design-system-spec.md` → secção **Idioma (pt-BR)** (glossário de substituições comuns).

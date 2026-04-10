@@ -166,6 +166,26 @@
           </div>
         </div>
 
+        <!-- Nylas -->
+        <div class="int-card" id="card-nylas">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#2563EB;color:#fff"><ion-icon name="calendar-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Nylas</div><div class="int-cat">E-mail</div></div>
+            <span class="int-status inactive" id="status-nylas" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">API unificada para e-mail, calendário e contatos (OAuth hospedado, sincronização). Use a API Key v3 do painel Nylas.</div>
+          <div class="int-fields" id="fields-nylas">
+            <input class="form-control" id="key-nylas" type="password" placeholder="API Key Nylas (Bearer)" />
+            <input class="form-control" id="url-nylas" placeholder="URI da API (ex: https://api.us.nylas.com ou https://api.eu.nylas.com)" value="https://api.us.nylas.com" />
+            <input class="form-control" id="client-nylas" placeholder="Client ID da aplicação (opcional — fluxo OAuth hospedado)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveNylas()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-nylas" style="display:none" onclick="testInt('nylas')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-nylas" style="display:none" onclick="deleteIntByName('Nylas')">Remover</button>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── Catálogos & APIs ──────────────────────────────────── -->
@@ -377,6 +397,7 @@
     'Gmail':               { slug:'gmail' },
     'Office 365':          { slug:'office365' },
     'SMTP Genérico':       { slug:'smtp' },
+    'Nylas':               { slug:'nylas' },
     'Dropbox':             { slug:'dropbox' },
     'Cloudflare R2':       { slug:'cloudflare-r2' },
     'Amazon S3':           { slug:'amazon-s3' },
@@ -472,6 +493,17 @@
       urlOsrm.value = activeInts['OSRM']?.baseUrl || 'http://osrm.lansolver.com:5000';
     }
 
+    const urlNylas = document.getElementById('url-nylas');
+    const clientNylas = document.getElementById('client-nylas');
+    if (urlNylas) {
+      urlNylas.value = activeInts['Nylas']?.baseUrl || 'https://api.us.nylas.com';
+    }
+    if (clientNylas) {
+      const d = activeInts['Nylas']?.description && String(activeInts['Nylas'].description);
+      const m = d && d.match(/client_id:(\S+)/);
+      clientNylas.value = m ? m[1] : '';
+    }
+
     const urlCf = document.getElementById('url-compreface');
     const prefixCf = document.getElementById('prefix-compreface');
     if (urlCf && prefixCf) {
@@ -500,6 +532,25 @@
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) { loadIntegrations(); }
     else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+  };
+
+  // Nylas — API Key + URI regional + Client ID opcional (OAuth hospedado)
+  window.saveNylas = async () => {
+    const key = document.getElementById('key-nylas').value.trim();
+    const url = document.getElementById('url-nylas').value.trim() || 'https://api.us.nylas.com';
+    const client = document.getElementById('client-nylas').value.trim();
+    if (!key) return alert('API Key da Nylas é obrigatória.');
+    const body = {
+      type: 'EMAIL',
+      name: 'Nylas',
+      status: 'ACTIVE',
+      baseUrl: url,
+      apiKey: key,
+      description: client ? `client_id:${client}` : null,
+    };
+    if (activeInts['Nylas']) await CONFIG.del(`/integrations/${activeInts['Nylas'].id}`);
+    await CONFIG.post('/integrations', body);
+    loadIntegrations();
   };
 
   // SMTP — salva com campos específicos no description

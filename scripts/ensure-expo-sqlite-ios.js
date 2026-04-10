@@ -1,7 +1,7 @@
 /**
  * O ExpoSQLite.podspec copia vendor/sqlite3/* → ios/ durante `pod install`.
  * Se isso não correr (ex.: só `npm install`), o Xcode falha: sqlite3.c not found.
- * Este script garante os ficheiros após instalar dependências npm.
+ * Este script garante os arquivos após instalar dependências npm.
  */
 const fs = require('fs');
 const path = require('path');

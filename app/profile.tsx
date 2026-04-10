@@ -205,8 +205,8 @@ export default function ProfileScreen() {
         router.push('/auth/onboarding' as any);
       } else {
         Alert.alert(
-          'Pedido registado',
-          'A sua candidatura de prestador será analisada. Só após aprovação poderá receber ordens de serviço e usar o modo prestador no app.',
+          'Pedido registrado',
+          'Sua candidatura de prestador será analisada. Só após aprovação você poderá receber ordens de serviço e usar o modo prestador no app.',
         );
       }
     } catch (e: any) {
@@ -437,8 +437,8 @@ export default function ProfileScreen() {
             </Text>
             <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
               {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
-                ? 'O seu pedido está em análise. Até ser aprovado, não receberá ordens de serviço e o modo prestador permanece indisponível.'
-                : 'A sua conta de prestador não está ativa. Não receberá novas ordens de serviço até a equipa reativar o acesso.'}
+                ? 'Seu pedido está em análise. Até ser aprovado, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
             </Text>
           </View>
         ) : null}
@@ -451,7 +451,7 @@ export default function ProfileScreen() {
             </View>
             <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
               <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
-                Alterne entre Cliente Regular e Prestador (Ativa política severa de rastreio).
+                Alterne entre Cliente Regular e Prestador (ativa política severa de rastreamento).
               </Text>
             </View>
             <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
@@ -470,7 +470,7 @@ export default function ProfileScreen() {
                     if (!isTechnicianProfileActive(user)) {
                       Alert.alert(
                         'Prestador indisponível',
-                        'A sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',
+                        'Sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',
                       );
                       return;
                     }

@@ -53,7 +53,7 @@
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
         <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="shield-checkmark-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-docs">—</div><div class="stat-label">Versões Totais</div></div>
         <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Docs Ativos</div></div>
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label">Aceites Registrados</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label">Aceitações registradas</div></div>
         <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="calendar-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-last">—</div><div class="stat-label">Última Publicação</div></div>
       </div>
 
@@ -116,7 +116,7 @@
           ${d.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente' : i === 0 && !d.isActive ? 'Rascunho' : 'Expirado'}
         </span>
         <span class="hist-title">${d.title}</span>
-        <span class="hist-accepts">${d._count?.acceptances || 0} aceites</span>
+        <span class="hist-accepts">${d._count?.acceptances || 0} aceitações</span>
         <span class="hist-date">${d.publishedAt ? new Date(d.publishedAt).toLocaleDateString('pt-BR') : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString('pt-BR')}</span>
         <div class="hist-actions">
           <button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="editDoc('${d.id}')">Editar</button>
@@ -171,7 +171,7 @@
               <span style="min-width:56px">Versão</span>
               <span style="min-width:64px">Status</span>
               <span style="flex:1">Título</span>
-              <span style="min-width:80px;text-align:right">Aceites</span>
+              <span style="min-width:80px;text-align:right">Aceitações</span>
               <span style="min-width:100px;text-align:right">Data</span>
               <span style="min-width:100px">Ações</span>
             </div>

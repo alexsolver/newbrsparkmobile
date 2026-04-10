@@ -17,7 +17,7 @@ import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, tenantId?: string | null) => Promise<void>;
   register: (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -180,9 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (next) setUser(next);
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, tenantId?: string | null) => {
     // TwoFactorRequired é relançado para a tela de login capturar
-    const u = await AuthService.login(email, password);
+    const u = await AuthService.login(email, password, tenantId);
     setUser(u);
     runAvatarWarm(u);
     const defaultRole = isTechnicianProfileActive(u) ? 'TECHNICIAN' : 'CLIENT';

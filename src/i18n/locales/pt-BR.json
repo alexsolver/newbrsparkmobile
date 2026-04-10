@@ -73,10 +73,10 @@
     "scanner": "Scanner"
   },
   "radialMenu": {
-    "productivity": "Minha Produtividade"
+    "productivity": "Desempenho"
   },
   "productivity": {
-    "title": "Minha Produtividade",
+    "title": "Desempenho",
     "average": "Nota média geral",
     "respondedCount": "{{count}} avaliações com resposta",
     "criticalAckBanner": "{{count}} avaliação(ões) crítica(s) exige(m) confirmação de ciência.",
@@ -1273,7 +1273,7 @@
         "other": "Outro (segurança) — especificar"
       },
       "communication": {
-        "call_supervisor": "Contactar supervisor / central",
+        "call_supervisor": "Contatar supervisor / central",
         "system_down": "Sistema / app indisponível",
         "other": "Outro (comunicação) — especificar"
       },

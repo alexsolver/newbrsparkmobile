@@ -39,7 +39,7 @@ const PROVIDER_MENU_ITEMS = [
   {
     id: 'productivity',
     labelKey: 'radialMenu.productivity',
-    labelDefault: 'Minha Produtividade',
+    labelDefault: 'Desempenho',
     icon: 'trending-up-outline',
     color: '#7c3aed',
     route: '/productivity',

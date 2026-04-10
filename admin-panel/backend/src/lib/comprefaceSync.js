@@ -6,6 +6,7 @@ const {
   comprefaceSubjectName,
   ensureSubject,
   deleteFacesForSubject,
+  deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
 } = require('./comprefaceClient');
 
@@ -58,7 +59,7 @@ async function syncUserToCompreface(prisma, userId) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return { ok: false, error: 'Utilizador não encontrado.' };
+  if (!user) return { ok: false, error: 'Usuário não encontrado.' };
 
   const publicRoot = path.join(__dirname, '../../public');
   const buffers = [];
@@ -100,18 +101,30 @@ async function syncUserToCompreface(prisma, userId) {
 
   for (const root of roots) {
     try {
+      const { cleaned: orphanSubjectsCleaned } = await deleteStaleBrsparkSubjectFacesForUser(
+        root,
+        apiKey,
+        user.tenantId,
+        user.id
+      );
       await ensureSubject(root, apiKey, subject);
       await deleteFacesForSubject(root, apiKey, subject);
       for (const { buf, name } of buffers) {
         await addFaceToSubject(root, apiKey, subject, buf, name);
       }
-      return { ok: true, subject, faces: buffers.length, root: String(root).replace(/\/+$/, '') };
+      return {
+        ok: true,
+        subject,
+        faces: buffers.length,
+        root: String(root).replace(/\/+$/, ''),
+        orphanSubjectsCleaned: orphanSubjectsCleaned || 0,
+      };
     } catch (e) {
       lastErr = e.message || String(e);
     }
   }
 
-  return { ok: false, error: lastErr || 'Falha ao contactar CompreFace em todas as URLs tentadas.' };
+  return { ok: false, error: lastErr || 'Falha ao contatar o CompreFace em todas as URLs tentadas.' };
 }
 
 module.exports = { syncUserToCompreface, findActiveCompreface };
