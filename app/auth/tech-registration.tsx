@@ -2,7 +2,7 @@
  * Cadastro de prestador (token) — convite enviado por uma empresa (painel) ou inscrição pelo app (perfil).
  * Rota: /auth/tech-registration?token=...
  *
- * Passo 1 (foto de perfil): validação só via IA (OpenAI hoje; backend prevê Google).
+ * Passo 1: foto de perfil (IA). Passo 2: ≥4 fotos biométricas validadas no CompreFace (Verification) contra a foto de perfil.
  * Ordem de validação IA: `/api/me/validate-technician-profile-photo` → `/api/technician-registration/public/:token/validate-profile-photo` → `/api/ai-technician-profile-photo/validate` (404 em cada passo tenta o próximo).
  * Isto é independente do CompreFace / verify-face dos checklists.
  */
@@ -146,6 +146,8 @@ export default function TechRegistrationScreen() {
   const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
   const [primaryValidating, setPrimaryValidating] = useState(false);
   const [primaryValidationError, setPrimaryValidationError] = useState<string | null>(null);
+  /** Passo 2 (só fluxo IA): utilizador confirmou seguir para o formulário após ≥4 fotos CompreFace. */
+  const [biometricStepConfirmed, setBiometricStepConfirmed] = useState(false);
 
   const [password, setPassword] = useState('');
 
@@ -244,10 +246,20 @@ export default function TechRegistrationScreen() {
         setSchedule(merged);
       } else setSchedule(defaultSchedule());
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
-      const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
-      const faceRows = faces.filter((x: any) => x?.id && x?.url);
-      setFacePhotos(faceRows.map((x: any) => ({ id: x.id, url: x.url })));
       const capRaw = (r as any).techRegPrimaryProfileCapture;
+      const profilePidForFilter =
+        capRaw &&
+        typeof capRaw === 'object' &&
+        capRaw.photoId &&
+        (String(capRaw.validationEngine) === 'ai_llm_vision' || String(capRaw.validationEngine) === 'openai_vision')
+          ? String(capRaw.photoId)
+          : '';
+      const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
+      let faceRows = faces.filter((x: any) => x?.id && x?.url);
+      if (profilePidForFilter) {
+        faceRows = faceRows.filter((x: any) => String(x.id) !== profilePidForFilter);
+      }
+      setFacePhotos(faceRows.map((x: any) => ({ id: x.id, url: x.url })));
       if (capRaw && typeof capRaw === 'object' && capRaw.validatedAt) {
         const ve = String(capRaw.validationEngine || '');
         const validationEngine: NonNullable<PrimaryProfileCapture>['validationEngine'] =
@@ -262,15 +274,27 @@ export default function TechRegistrationScreen() {
           userMessagePtBr: capRaw.userMessagePtBr ? String(capRaw.userMessagePtBr) : undefined,
           photoId: capRaw.photoId ? String(capRaw.photoId) : undefined,
         });
-      } else if (faceRows.length >= MIN_FACE_ENROLLMENT_PHOTOS) {
-        const first = faceRows[0];
-        setPrimaryProfileCapture({
-          validatedAt: String(first?.createdAt || new Date().toISOString()),
-          validationEngine: 'legacy_enrollment_photos',
-          photoId: String(first?.id || ''),
-        });
+        if (
+          (validationEngine === 'ai_llm_vision' || validationEngine === 'openai_vision') &&
+          faceRows.length >= MIN_FACE_ENROLLMENT_PHOTOS
+        ) {
+          setBiometricStepConfirmed(true);
+        } else if (validationEngine === 'ai_llm_vision' || validationEngine === 'openai_vision') {
+          setBiometricStepConfirmed(false);
+        }
       } else {
-        setPrimaryProfileCapture(null);
+        const allFaceRows = faces.filter((x: any) => x?.id && x?.url);
+        if (allFaceRows.length >= MIN_FACE_ENROLLMENT_PHOTOS) {
+          const first = allFaceRows[0];
+          setPrimaryProfileCapture({
+            validatedAt: String(first?.createdAt || new Date().toISOString()),
+            validationEngine: 'legacy_enrollment_photos',
+            photoId: String(first?.id || ''),
+          });
+        } else {
+          setPrimaryProfileCapture(null);
+          setBiometricStepConfirmed(false);
+        }
       }
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Falha ao carregar.');
@@ -515,6 +539,53 @@ export default function TechRegistrationScreen() {
     }, 900);
   }, [basePath, token, sessionOk, status, closed, buildResponsesJson]);
 
+  /** Passo 1 — grava só a foto de perfil (não entra em faceEnrollmentPhotos). */
+  const postProfilePhoto = async (
+    fileBase64: string,
+    mimeType: string,
+    captureMeta: Omit<NonNullable<PrimaryProfileCapture>, 'photoId'>,
+  ): Promise<{ ok: boolean; photoId?: string; url?: string; error?: string }> => {
+    const jwt = await getToken();
+    if (!jwt) {
+      Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
+      return { ok: false, error: 'no_jwt' };
+    }
+    const res = await fetch(`${basePath}/profile-photo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({
+        fileBase64,
+        mimeType,
+        techRegPrimaryProfileCapture: {
+          validatedAt: captureMeta.validatedAt,
+          validationEngine: captureMeta.validationEngine,
+          ...(captureMeta.userMessagePtBr ? { userMessagePtBr: captureMeta.userMessagePtBr } : {}),
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      Alert.alert('Foto de perfil', data.error || 'Falha ao gravar.');
+      return { ok: false, error: data.error || 'upload_failed' };
+    }
+    const cap = data.techRegPrimaryProfileCapture;
+    if (cap && typeof cap === 'object' && cap.photoId) {
+      setPrimaryProfileCapture({
+        validatedAt: String(cap.validatedAt || captureMeta.validatedAt),
+        validationEngine: cap.validationEngine === 'openai_vision' ? 'openai_vision' : 'ai_llm_vision',
+        userMessagePtBr: cap.userMessagePtBr ? String(cap.userMessagePtBr) : captureMeta.userMessagePtBr,
+        photoId: String(cap.photoId),
+      });
+    }
+    if (data.url) setAvatarUrl(String(data.url));
+    setFacePhotos([]);
+    setBiometricStepConfirmed(false);
+    return { ok: true, photoId: data.techRegPrimaryProfileCapture?.photoId, url: data.url };
+  };
+
   const postFaceB64 = async (
     fileBase64: string,
     mimeType: string
@@ -534,7 +605,11 @@ export default function TechRegistrationScreen() {
     });
     const data = await res.json();
     if (!res.ok) {
-      Alert.alert('Foto', data.error || 'Falha no envio.');
+      const title =
+        res.status === 503 || data.code === 'NO_VERIFICATION_KEY' || data.code === 'NO_VISION_INTEGRATION'
+          ? 'Biometria no servidor'
+          : 'Foto biométrica';
+      Alert.alert(title, data.error || 'Falha no envio.');
       return { ok: false, error: data.error || 'upload_failed' };
     }
     if (Array.isArray(data.photos)) {
@@ -650,40 +725,14 @@ export default function TechRegistrationScreen() {
         return;
       }
 
-      const posted = await postFaceB64(asset.base64, mime);
-      if (!posted.ok || !posted.photo?.url) return;
-
-      const nextCapture: NonNullable<PrimaryProfileCapture> = {
-        validatedAt: new Date().toISOString(),
+      const validatedAt = new Date().toISOString();
+      const posted = await postProfilePhoto(asset.base64, mime, {
+        validatedAt,
         validationEngine: 'ai_llm_vision',
         userMessagePtBr: String(valData.userMessagePtBr || '').trim() || undefined,
-        photoId: posted.photo.id,
-      };
-      const baseResponses = buildResponsesJson();
-      const responsesJson = {
-        ...baseResponses,
-        avatarUrl: posted.photo.url,
-        techRegPrimaryProfileCapture: {
-          validatedAt: nextCapture.validatedAt,
-          validationEngine: nextCapture.validationEngine,
-          ...(nextCapture.userMessagePtBr ? { userMessagePtBr: nextCapture.userMessagePtBr } : {}),
-          photoId: nextCapture.photoId,
-        },
-      };
-      try {
-        await fetch(`${basePath}/draft`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${jwt}`,
-          },
-          body: JSON.stringify({ responsesJson }),
-        });
-      } catch {
-        /* rascunho falha silenciosamente; saveDraftSoon recupera */
-      }
-      setAvatarUrl(posted.photo.url);
-      setPrimaryProfileCapture(nextCapture);
+      });
+      if (!posted.ok || !posted.url) return;
+      /* O servidor já atualizou responsesJson em POST .../profile-photo; não é preciso PATCH aqui. */
     } catch (e: any) {
       setPrimaryValidationError(e?.message || 'Erro ao processar a foto.');
     } finally {
@@ -988,6 +1037,8 @@ export default function TechRegistrationScreen() {
   }
 
   const primaryStepDone = readOnly || !!primaryProfileCapture?.validatedAt;
+  const useSplitBiometricStep =
+    !readOnly && isAiProfileGateEngine(primaryProfileCapture?.validationEngine);
 
   if (!primaryStepDone) {
     return (
@@ -998,7 +1049,7 @@ export default function TechRegistrationScreen() {
             <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Passo 1 — Foto de perfil</Text>
-          <Text style={styles.sub}>Etapa obrigatória antes do formulário de cadastro.</Text>
+          <Text style={styles.sub}>Etapa obrigatória antes da biometria CompreFace e do formulário.</Text>
         </View>
 
         <View style={styles.section}>
@@ -1006,13 +1057,14 @@ export default function TechRegistrationScreen() {
           <Text style={styles.primaryIntro}>
             A imagem integra o seu perfil de técnico; o solicitante poderá reconhecê-lo no local. A conferência aqui é
             feita por análise automática (IA — OpenAI no servidor; não usa o motor CompreFace das ordens de serviço).
-            Exige-se rosto humano, inteiro e nítido, sem oclusões que inviabilizem a identificação nem conteúdo
-            impróprio.
+            Exige-se um rosto humano claramente identificável, sem conteúdo impróprio. Não é necessária iluminação de
+            estúdio: ambiente comum com rosto visível costuma bastar.
           </Text>
           <View style={[styles.warn, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
             <Text style={[styles.warnText, { color: '#1e40af' }]}>
-              Utilize somente a câmera (a galeria não é aceita nesta etapa). Prefira enquadramento frontal, boa
-              iluminação e ausência de óculos escuros, máscaras ou outros acessórios que ocultem o rosto.
+              Utilize somente a câmera (a galeria não é aceita nesta etapa). Prefira enquadramento frontal e luz
+              suficiente para ver o rosto. Óculos de grau são permitidos; evite óculos de sol escuros, máscara em
+              boca/nariz ou acessórios que cubram testa e olhos.
             </Text>
           </View>
           {primaryValidating ? (
@@ -1030,6 +1082,57 @@ export default function TechRegistrationScreen() {
               <Text style={styles.primaryErrorText}>{primaryValidationError}</Text>
             </View>
           ) : null}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  if (primaryStepDone && useSplitBiometricStep && !biometricStepConfirmed) {
+    return (
+      <ScrollView style={styles.root} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.head}>
+          <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="chevron-back" size={22} color={C.accent} />
+            <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Passo 2 — Biometria do tenant</Text>
+          <Text style={styles.sub}>
+            Envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos do mesmo rosto da foto de perfil (passo 1). Cada imagem é
+            validada no CompreFace (serviço Verification) contra a foto de perfil antes de ser guardada.
+          </Text>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.secTitle}>Fotos para o reconhecimento facial</Text>
+          <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18, marginBottom: 10 }}>
+            Use ângulos ligeiramente diferentes (câmera ou galeria). O servidor precisa da API Key do serviço{' '}
+            <Text style={{ fontWeight: '700' }}>Verification</Text> do CompreFace configurada em Integrações. Máximo de{' '}
+            {12} imagens, 5 MB cada.
+          </Text>
+          <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 4 }]} onPress={pickFace}>
+            <Text style={styles.btnText}>Adicionar fotos</Text>
+          </TouchableOpacity>
+          <View style={styles.faceRow}>
+            {facePhotos.map((p) => (
+              <View key={p.id}>
+                <Image source={{ uri: publicUrl(p.url) }} style={styles.faceImg} />
+                <TouchableOpacity onPress={() => removeFace(p.id)} style={{ marginTop: 4 }}>
+                  <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '700' }}>Remover</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+          {facePhotos.length >= MIN_FACE_ENROLLMENT_PHOTOS ? (
+            <TouchableOpacity
+              style={[styles.btn, { marginHorizontal: 0, marginTop: 20 }]}
+              onPress={() => setBiometricStepConfirmed(true)}
+            >
+              <Text style={styles.btnText}>Continuar para o formulário</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.fieldHint, { marginTop: 16 }]}>
+              Faltam {Math.max(0, MIN_FACE_ENROLLMENT_PHOTOS - facePhotos.length)} foto(s) para continuar.
+            </Text>
+          )}
         </View>
       </ScrollView>
     );
@@ -1121,8 +1224,8 @@ export default function TechRegistrationScreen() {
         <Text style={styles.fieldHint}>Opcional neste passo — ajuda a equipe ou clientes a contatá-lo.</Text>
         {isAiProfileGateEngine(primaryProfileCapture?.validationEngine) ? (
           <Text style={styles.fieldHint}>
-            Foto de perfil: já definida no passo 1 (câmera + análise por IA, separada da biometria das tarefas). Use a
-            secção «Fotos para biometria do tenant» abaixo para as imagens adicionais exigidas pelo sistema.
+            Foto de perfil: passo 1 (IA). Fotos CompreFace validadas contra essa foto: passo 2 — já concluídos se você
+            chegou a este formulário.
           </Text>
         ) : (
           <>
@@ -1145,31 +1248,33 @@ export default function TechRegistrationScreen() {
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.secTitle}>Fotos para biometria do tenant</Text>
-        <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
-          {isAiProfileGateEngine(primaryProfileCapture?.validationEngine)
-            ? `A foto do passo 1 (perfil) foi validada só por IA e não substitui o enrolamento biométrico. Inclua mais ângulos até totalizar pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos no conjunto (câmera ou galeria). Máx. 12 imagens, 5 MB cada — alinhado ao CompreFace / política do tenant.`
-            : `Para o motor de reconhecimento facial das ordens de serviço (ex. CompreFace), envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.`}
-        </Text>
-        {!readOnly ? (
-          <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 12 }]} onPress={pickFace}>
-            <Text style={styles.btnText}>Adicionar fotos</Text>
-          </TouchableOpacity>
-        ) : null}
-        <View style={styles.faceRow}>
-          {facePhotos.map((p) => (
-            <View key={p.id}>
-              <Image source={{ uri: publicUrl(p.url) }} style={styles.faceImg} />
-              {!readOnly ? (
-                <TouchableOpacity onPress={() => removeFace(p.id)} style={{ marginTop: 4 }}>
-                  <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '700' }}>Remover</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ))}
+      {!useSplitBiometricStep || readOnly ? (
+        <View style={styles.section}>
+          <Text style={styles.secTitle}>Fotos para biometria do tenant</Text>
+          <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
+            {isAiProfileGateEngine(primaryProfileCapture?.validationEngine)
+              ? `Fluxo antigo ou revisão: inclua pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (câmera ou galeria). Máx. 12 imagens, 5 MB cada.`
+              : `Para o motor de reconhecimento facial das ordens de serviço (ex. CompreFace), envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.`}
+          </Text>
+          {!readOnly ? (
+            <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 12 }]} onPress={pickFace}>
+              <Text style={styles.btnText}>Adicionar fotos</Text>
+            </TouchableOpacity>
+          ) : null}
+          <View style={styles.faceRow}>
+            {facePhotos.map((p) => (
+              <View key={p.id}>
+                <Image source={{ uri: publicUrl(p.url) }} style={styles.faceImg} />
+                {!readOnly ? (
+                  <TouchableOpacity onPress={() => removeFace(p.id)} style={{ marginTop: 4 }}>
+                    <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '700' }}>Remover</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.secTitle}>Endereço</Text>

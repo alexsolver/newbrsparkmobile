@@ -17,6 +17,7 @@ const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
+const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
 
@@ -64,6 +65,15 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Passo 1 com gate IA (foto de perfil separada das fotos CompreFace). */
+function isAiTechRegProfileGateFromRaw(raw) {
+  const cap = raw && typeof raw === 'object' ? raw.techRegPrimaryProfileCapture : null;
+  if (!cap || typeof cap !== 'object') return false;
+  const ve = String(cap.validationEngine || '');
+  if (!(ve === 'ai_llm_vision' || ve === 'openai_vision')) return false;
+  return !!cap.validatedAt;
+}
+
 function validateSubmitPayload(app, body) {
   const merged = mergeJsonResponses(app.responsesJson, body.responsesJson || body.responses || {});
   const email = String(merged.email || app.invitedEmail || '')
@@ -75,7 +85,15 @@ function validateSubmitPayload(app, body) {
   const name = String(merged.name || '').trim();
   if (!name) return 'Nome é obrigatório.';
   const faces = normalizeFacePhotos(merged.faceEnrollmentPhotos);
-  if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
+  if (isAiTechRegProfileGateFromRaw(merged)) {
+    const av = String(merged.avatarUrl || '').trim();
+    if (!av || !av.startsWith('/uploads/tech-registration/')) {
+      return 'Conclua o passo 1 (foto de perfil) antes de enviar a candidatura.';
+    }
+    if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
+      return `No passo 2, envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos de rosto validadas pelo CompreFace contra a foto de perfil. Atualmente: ${faces.length}.`;
+    }
+  } else if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
     return `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos nítidas do rosto para reconhecimento facial. Atualmente: ${faces.length}.`;
   }
   return null;
@@ -117,6 +135,89 @@ publicRouter.post(
   authUser,
   bindTechRegistrationCandidate,
   handleTechnicianProfilePhotoAiValidate,
+);
+
+/**
+ * Passo 1 — grava só a foto de perfil (não entra em faceEnrollmentPhotos).
+ * Ao substituir a foto de perfil, remove ficheiros antigos e zera as fotos biométricas (passo 2).
+ */
+publicRouter.post(
+  '/:token/profile-photo',
+  express.json({ limit: '15mb' }),
+  authUser,
+  bindTechRegistrationCandidate,
+  async (req, res) => {
+    try {
+      const { fileBase64, mimeType, techRegPrimaryProfileCapture: capIn } = req.body || {};
+      const app = req.techRegApp;
+      if (['APPROVED', 'REJECTED'].includes(app.status)) {
+        return res.status(400).json({ error: 'Candidatura encerrada.' });
+      }
+      if (!fileBase64 || typeof fileBase64 !== 'string') {
+        return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+      }
+      const b64 = String(fileBase64).replace(/\s/g, '');
+      let buf;
+      try {
+        buf = Buffer.from(b64, 'base64');
+      } catch {
+        return res.status(400).json({ error: 'Base64 inválido.' });
+      }
+      if (buf.length > MAX_FACE_ENROLLMENT_BYTES) {
+        return res.status(400).json({ error: 'Imagem muito grande (máx. 5 MB).' });
+      }
+      let ext = mimeToFaceExt(mimeType);
+      if (!ext) ext = detectFaceExtFromBuffer(buf);
+      if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
+
+      const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+      const oldAv = String(raw.avatarUrl || '');
+      if (oldAv.startsWith(`/uploads/tech-registration/${app.id}/`)) {
+        await unlinkUploadsPublicPath(oldAv);
+      }
+      const oldList = normalizeFacePhotos(raw.faceEnrollmentPhotos);
+      for (const p of oldList) {
+        const u = String(p.url || '');
+        if (u.startsWith(`/uploads/tech-registration/${app.id}/`)) {
+          await unlinkUploadsPublicPath(u);
+        }
+      }
+
+      const photoId = `tp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const fname = `${photoId}.${ext}`;
+      const absDir = path.join(__dirname, '../../public/uploads/tech-registration', app.id);
+      await fs.mkdir(absDir, { recursive: true });
+      await fs.writeFile(path.join(absDir, fname), buf);
+      const publicPath = `/uploads/tech-registration/${app.id}/${fname}`;
+      const createdAt = new Date().toISOString();
+      const cap = {
+        validatedAt: String(capIn?.validatedAt || createdAt),
+        validationEngine: capIn?.validationEngine === 'openai_vision' ? 'openai_vision' : 'ai_llm_vision',
+        ...(capIn?.userMessagePtBr
+          ? { userMessagePtBr: String(capIn.userMessagePtBr).trim().slice(0, 2000) }
+          : {}),
+        photoId,
+      };
+      const nextJson = {
+        ...raw,
+        avatarUrl: publicPath,
+        techRegPrimaryProfileCapture: cap,
+        faceEnrollmentPhotos: [],
+      };
+      await prisma.technicianRegistrationApplication.update({
+        where: { id: app.id },
+        data: { responsesJson: nextJson },
+      });
+      res.status(201).json({
+        url: publicPath,
+        techRegPrimaryProfileCapture: cap,
+        faceEnrollmentPhotos: [],
+      });
+    } catch (err) {
+      console.error('POST tech-reg profile-photo', err);
+      res.status(500).json({ error: err.message });
+    }
+  },
 );
 
 publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
@@ -293,6 +394,26 @@ function detectFaceExtFromBuffer(buf) {
   return null;
 }
 
+async function readTechRegProfileBuffer(app) {
+  const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+  const url = String(raw.avatarUrl || '').trim();
+  const prefix = `/uploads/tech-registration/${app.id}/`;
+  if (!url.startsWith(prefix)) {
+    return { error: 'Faça primeiro o passo 1 (foto de perfil validada por IA).' };
+  }
+  const rel = url.replace(/^\/uploads\//, '');
+  const abs = path.join(__dirname, '../../public/uploads', ...rel.split('/'));
+  try {
+    const profileBuf = await fs.readFile(abs);
+    if (!profileBuf || profileBuf.length < 64) {
+      return { error: 'Ficheiro da foto de perfil em falta. Refaça o passo 1.' };
+    }
+    return { buf: profileBuf };
+  } catch {
+    return { error: 'Não foi possível ler a foto de perfil. Refaça o passo 1.' };
+  }
+}
+
 publicRouter.post(
   '/:token/face-enrollment',
   express.json({ limit: '15mb' }),
@@ -329,6 +450,24 @@ publicRouter.post(
     if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
 
     const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+
+    if (isAiTechRegProfileGateFromRaw(raw)) {
+      const prof = await readTechRegProfileBuffer(app);
+      if (prof.error) {
+        return res.status(400).json({ error: prof.error, code: 'PROFILE_REQUIRED' });
+      }
+      const v = await verifyTechRegEnrollmentAgainstProfile(prisma, app.tenantId, prof.buf, buf);
+      if (!v.ok) {
+        const st =
+          v.code === 'NO_VISION_INTEGRATION' ||
+          v.code === 'NO_VERIFICATION_KEY' ||
+          v.code === 'UNSUPPORTED_ENGINE'
+            ? 503
+            : 400;
+        return res.status(st).json({ error: v.message, code: v.code });
+      }
+    }
+
     const list = normalizeFacePhotos(raw.faceEnrollmentPhotos);
     if (list.length >= MAX_FACE_ENROLLMENT_PHOTOS) {
       return res.status(400).json({ error: `Limite de ${MAX_FACE_ENROLLMENT_PHOTOS} fotos.` });

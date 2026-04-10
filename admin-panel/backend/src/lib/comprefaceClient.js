@@ -253,6 +253,88 @@ async function deleteStaleBrsparkSubjectFacesForUser(root, apiKey, currentTenant
   return { cleaned };
 }
 
+function bufferToImageBlobPart(buf, role) {
+  const b = buf && Buffer.isBuffer(buf) ? buf : Buffer.alloc(0);
+  if (b.length < 12) {
+    return { blob: new Blob([b], { type: 'image/jpeg' }), filename: `${role}.jpg` };
+  }
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    return { blob: new Blob([b], { type: 'image/jpeg' }), filename: `${role}.jpg` };
+  }
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { blob: new Blob([b], { type: 'image/png' }), filename: `${role}.png` };
+  }
+  const head = b.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF' && head.slice(8, 12).toString('ascii') === 'WEBP') {
+    return { blob: new Blob([b], { type: 'image/webp' }), filename: `${role}.webp` };
+  }
+  return { blob: new Blob([b], { type: 'image/jpeg' }), filename: `${role}.jpg` };
+}
+
+/**
+ * Compara duas imagens no serviço **Verification** do CompreFace (não usa Recognition).
+ * `source_image` = foto nova a validar; `target_image` = referência (foto de perfil).
+ * @returns {Promise<number>} similaridade 0..1 (primeiro face_match)
+ */
+async function verifyFacePairWithIntegration(integration, probeBuffer, referenceBuffer, verificationApiKey) {
+  const apiKey = String(verificationApiKey || '').trim();
+  if (!apiKey) {
+    const err = new Error('Verification API Key não configurada.');
+    err.code = 'MISSING_VERIFICATION_KEY';
+    throw err;
+  }
+  const roots = buildComprefaceApiRoots(integration.baseUrl, integration.description);
+  if (!roots.length) {
+    const err = new Error('URL CompreFace não configurada.');
+    err.code = 'MISSING_URL';
+    throw err;
+  }
+  const probePart = bufferToImageBlobPart(probeBuffer, 'probe');
+  const refPart = bufferToImageBlobPart(referenceBuffer, 'reference');
+  const blobProbe = probePart.blob;
+  const blobRef = refPart.blob;
+  let lastErr;
+  for (const root of roots) {
+    const base = String(root).replace(/\/+$/, '');
+    const url = `${base}/api/v1/verification/verify`;
+    const fd = new FormData();
+    fd.append('source_image', blobProbe, probePart.filename);
+    fd.append('target_image', blobRef, refPart.filename);
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey },
+        body: fd,
+        signal: AbortSignal.timeout(60000),
+        redirect: 'manual',
+      });
+      const text = await r.text().catch(() => '');
+      if (r.ok) {
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          lastErr = new Error(`CompreFace verification JSON inválido: ${e.message}`);
+          continue;
+        }
+        const results = data && Array.isArray(data.result) ? data.result : [];
+        const first = results[0];
+        const matches = first && Array.isArray(first.face_matches) ? first.face_matches : [];
+        const top = matches[0];
+        const sim = top && top.similarity != null ? Number(top.similarity) : NaN;
+        if (Number.isFinite(sim)) return sim;
+        lastErr = new Error('CompreFace verification devolveu resposta sem similaridade.');
+        continue;
+      }
+      lastErr = new Error(`CompreFace verification HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
+      lastErr.status = r.status;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Falha na verificação facial.');
+}
+
 async function addFaceToSubject(root, apiKey, subject, imageBuffer, filename = 'enroll.jpg') {
   const base = String(root).replace(/\/+$/, '');
   const url = `${base}/api/v1/recognition/faces?subject=${encodeURIComponent(subject)}`;
@@ -293,4 +375,5 @@ module.exports = {
   listRecognitionSubjects,
   deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
+  verifyFacePairWithIntegration,
 };

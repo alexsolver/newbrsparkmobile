@@ -46,16 +46,20 @@ async function validateTechRegProfilePhotoOpenAi(imageBuffer) {
   const dataUrl = `data:${mime};base64,${b64}`;
 
   const systemPrompt =
-    'És um validador rigoroso de fotos para perfil profissional. Respondes APENAS com um objeto JSON válido, sem markdown nem texto fora do JSON.';
+    'És um validador equilibrado de fotos para perfil profissional: o objetivo é aceitar fotos reais e utilizáveis, sem exigir estúdio. Em dúvida razoável sobre iluminação, nitidez ou óculos de grau, favorece APROVAÇÃO. Respondes APENAS com um objeto JSON válido, sem markdown nem texto fora do JSON.';
 
-  const userText = `Analisa a imagem anexa. Contexto: cadastro de prestador de serviços numa app. Esta foto será usada como imagem de perfil do técnico e integrada no fluxo de reconhecimento facial, para o cliente ou solicitante do serviço reconhecer o profissional no local.
+  const userText = `Analisa a imagem anexa. Contexto: cadastro de prestador de serviços numa app. Esta foto será usada como imagem de perfil do técnico e no fluxo de reconhecimento facial, para o cliente reconhecer o profissional no local.
+
+Política: só rejeita quando a imagem é claramente inadequada. Não exijas iluminação de estúdio nem foco perfeito.
 
 Critérios — approved só pode ser true se TODOS os checks forem true:
-- singleClearHumanFace: exatamente um rosto humano real, bem visível (não boneco, ilustração, foto de ecrã ilegível).
-- fullFaceVisibleForRecognition: rosto de testa a queixo; ambos os olhos e nariz identificáveis; sem cortes que impeçam identificação.
-- noBlockingAccessories: sem óculos de sol escuros, sem máscara em boca/nariz, sem viseira/capuz que tape o rosto; óculos de grau claros são aceitáveis se os olhos se vêem.
-- sharpAndLit: nitidez e iluminação razoáveis (rejeitar forte desfocagem, ruído extremo ou escuridade total).
+- singleClearHumanFace: exatamente um rosto humano real (não boneco, ilustração óbvia, foto de ecrã ilegível).
+- fullFaceVisibleForRecognition: rosto suficientemente visível para identificação no dia a dia: testa, olhos e nariz reconhecíveis; pode haver leve corte de cabelo/chapéu se o rosto continua claramente identificável.
+- noBlockingAccessories: ÓCULOS DE GRAU são sempre permitidos (armação fina ou grossa, lentes com anti-reflexo, leve tonalidade — conta como grau, não como sol). Só reprova acessórios que ESCONDEM o rosto para identificação: óculos de sol escuros/espelhados tipo “óculos de sol”, máscara em boca/nariz, viseira/capuz que cubra testa e olhos. Boné fino ou chapéu que não tape os olhos: permitido.
+- sharpAndLit: aceita iluminação natural ou interior comum, sombras leves no rosto, e nitidez “boa o suficiente” para ver quem é. Reprova APENAS casos extremos: rosto quase invisível por escuridade, desfoque forte que impede ver olhos/nariz, ou tremor que torna o rosto ilegível. Se consegues identificar claramente a pessoa, sharpAndLit = true.
 - appropriateContent: sem nudez explícita, violência gráfica, símbolos de ódio ou conteúdo claramente impróprio.
+
+Regra extra: se estiveres indeciso entre reprovar por “luz baixa” ou “desfocado” mas o rosto ainda é reconhecível, marca os checks como true e approved true.
 
 Responde JSON com este formato exato:
 {"approved":boolean,"userMessagePtBr":"uma frase curta em português do Brasil para o utilizador","checks":{"singleClearHumanFace":boolean,"fullFaceVisibleForRecognition":boolean,"noBlockingAccessories":boolean,"sharpAndLit":boolean,"appropriateContent":boolean},"rejectReasonsPtBr":[]}
@@ -71,7 +75,7 @@ Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-
     },
     body: JSON.stringify({
       model,
-      temperature: 0.05,
+      temperature: 0.15,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -79,7 +83,7 @@ Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-
           role: 'user',
           content: [
             { type: 'text', text: userText },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
           ],
         },
       ],
