@@ -1,5 +1,5 @@
 import '../src/tasks/routeTrackingTask';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '../src/theme/ThemeContext';
