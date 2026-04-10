@@ -5,6 +5,9 @@ const fs = require('fs').promises;
 
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
+/** Mínimo de fotos faciais exigidas na candidatura (reconhecimento facial / CompreFace). */
+const MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT = 4;
+
 function normalizeFacePhotos(raw) {
   if (raw == null) return [];
   if (Array.isArray(raw)) return raw.filter((p) => p && typeof p === 'object' && p.id && p.url);
@@ -257,4 +260,5 @@ module.exports = {
   materializeApprovedApplication,
   copyRegistrationFacePhotosToUser,
   normalizeFacePhotos,
+  MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
 };

@@ -7,8 +7,27 @@ const crypto  = require('crypto');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 
+/**
+ * Tenant onde novos utilizadores do app móvel são registados (consumidor / prestador individual).
+ * Defina APP_DEFAULT_TENANT_SLUG (ex.: brspark-app) ou APP_DEFAULT_TENANT_ID.
+ * Se vazio, mantém o modo legado: um Tenant novo por registo (TENANT_ADMIN).
+ */
+async function resolveAppDefaultTenantId() {
+  const idRaw = (process.env.APP_DEFAULT_TENANT_ID || '').trim();
+  if (idRaw) {
+    const t = await prisma.tenant.findUnique({ where: { id: idRaw } });
+    return t ? t.id : null;
+  }
+  const slugRaw = (process.env.APP_DEFAULT_TENANT_SLUG || '').trim();
+  if (!slugRaw) return null;
+  const t = await prisma.tenant.findFirst({
+    where: { slug: { equals: slugRaw, mode: 'insensitive' } },
+  });
+  return t ? t.id : null;
+}
+
 // ─── POST /api/register ─────────────────────────────────────────────────────
-// Público — cria conta de usuário individual (Tenant + User atomicamente)
+// Público — registo no app: tenant padrão (USER) ou modo legado (Tenant + TENANT_ADMIN)
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, phone, defaultLang = 'pt-BR', deviceId } = req.body;
@@ -17,41 +36,103 @@ router.post('/register', async (req, res) => {
     if (password.length < 6)
       return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres.' });
 
-    // Verificar se já existe
-    const existing = await prisma.tenant.findUnique({ where: { email } });
-    if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
-
+    const emailNorm = String(email).trim().toLowerCase();
     const hash = await bcrypt.hash(password, 10);
+    const defaultTenantId = await resolveAppDefaultTenantId();
 
-    // Gerar slug único a partir do email
-    const baseSlug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-');
-    let slug = baseSlug;
-    let suffix = 0;
-    while (await prisma.tenant.findUnique({ where: { slug } })) {
-      suffix++;
-      slug = `${baseSlug}-${suffix}`;
+    let tenant;
+    let user;
+
+    if (defaultTenantId) {
+      tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
+      if (!tenant) {
+        return res.status(500).json({
+          error:
+            'Configuração inválida: tenant padrão do app não encontrado. Contacte o suporte.',
+        });
+      }
+      if (tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
+        return res.status(403).json({ error: 'Novos registos estão temporariamente indisponíveis.' });
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email_tenantId: { email: emailNorm, tenantId: defaultTenantId } },
+      });
+      if (existingUser) {
+        return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.create({
+          data: {
+            name: String(name).trim(),
+            email: emailNorm,
+            password: hash,
+            tenantId: defaultTenantId,
+            phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
+            role: 'USER',
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: defaultTenantId,
+            userId: u.id,
+            action: 'USER_REGISTER',
+            resource: emailNorm,
+            category: 'AUTH',
+          },
+        });
+        return u;
+      });
+      user = result;
+    } else {
+      const existing = await prisma.tenant.findUnique({ where: { email: emailNorm } });
+      if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+
+      const baseSlug = emailNorm.split('@')[0].replace(/[^a-z0-9]/g, '-') || 'conta';
+      let slug = baseSlug;
+      let suffix = 0;
+      while (await prisma.tenant.findUnique({ where: { slug } })) {
+        suffix++;
+        slug = `${baseSlug}-${suffix}`;
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const t = await tx.tenant.create({
+          data: {
+            name: String(name).trim(),
+            slug,
+            email: emailNorm,
+            ownerName: String(name).trim(),
+            phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
+            defaultLang,
+            status: 'TRIAL',
+          },
+        });
+
+        const u = await tx.user.create({
+          data: {
+            name: String(name).trim(),
+            email: emailNorm,
+            password: hash,
+            tenantId: t.id,
+            role: 'TENANT_ADMIN',
+          },
+        });
+
+        await tx.auditLog.create({
+          data: { tenantId: t.id, userId: u.id, action: 'USER_REGISTER', resource: emailNorm, category: 'AUTH' },
+        });
+
+        return { tenant: t, user: u };
+      });
+      tenant = result.tenant;
+      user = result.user;
     }
-
-    // Criar Tenant + User em transação
-    const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: { name, slug, email, ownerName: name, phone, defaultLang, status: 'TRIAL' }
-      });
-
-      const user = await tx.user.create({
-        data: { name, email, password: hash, tenantId: tenant.id, role: 'TENANT_ADMIN' }
-      });
-
-      await tx.auditLog.create({
-        data: { tenantId: tenant.id, userId: user.id, action: 'USER_REGISTER', resource: email, category: 'AUTH' }
-      });
-
-      return { tenant, user };
-    });
 
     const newSessionId = crypto.randomUUID();
     await prisma.user.update({
-      where: { id: result.user.id },
+      where: { id: user.id },
       data: {
         lastLogin: new Date(),
         currentSessionId: newSessionId,
@@ -61,10 +142,10 @@ router.post('/register', async (req, res) => {
 
     const token = jwt.sign(
       {
-        id: result.user.id,
-        tenantId: result.tenant.id,
-        email: result.user.email,
-        role: result.user.role,
+        id: user.id,
+        tenantId: user.tenantId,
+        email: user.email,
+        role: user.role,
         sessionId: newSessionId,
       },
       process.env.JWT_SECRET,
@@ -73,7 +154,12 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       token,
-      user: { id: result.user.id, name, email: result.user.email, tenantId: result.tenant.id },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        tenantId: user.tenantId,
+      },
     });
   } catch (err) {
     console.error('[register]', err);

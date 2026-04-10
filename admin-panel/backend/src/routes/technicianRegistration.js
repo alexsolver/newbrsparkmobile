@@ -7,7 +7,11 @@ const path = require('path');
 const fs = require('fs').promises;
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
-const { materializeApprovedApplication, normalizeFacePhotos } = require('../lib/technicianRegistrationMaterialize');
+const {
+  materializeApprovedApplication,
+  normalizeFacePhotos,
+  MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
+} = require('../lib/technicianRegistrationMaterialize');
 const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
@@ -17,6 +21,7 @@ const optionalAuthUser = require('../middleware/optionalAuthUser');
 
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
+const MAX_DOC_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -68,6 +73,10 @@ function validateSubmitPayload(app, body) {
   }
   const name = String(merged.name || '').trim();
   if (!name) return 'Nome é obrigatório.';
+  const faces = normalizeFacePhotos(merged.faceEnrollmentPhotos);
+  if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
+    return `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos nítidas do rosto para reconhecimento facial. Atualmente: ${faces.length}.`;
+  }
   return null;
 }
 
@@ -365,6 +374,202 @@ publicRouter.delete('/:token/face-enrollment/:photoId', authUser, bindTechRegist
     res.status(500).json({ error: err.message });
   }
 });
+
+function docMimeToExt(mt) {
+  const m = String(mt || '').toLowerCase();
+  if (m.includes('pdf')) return 'pdf';
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+  if (m.includes('png')) return 'png';
+  if (m.includes('webp')) return 'webp';
+  return null;
+}
+
+function detectDocExtFromBuffer(buf, mimeType) {
+  let ext = docMimeToExt(mimeType);
+  if (ext) return ext;
+  if (buf && buf.length > 4 && buf.slice(0, 5).toString('ascii') === '%PDF-') return 'pdf';
+  if (buf && buf.length > 12 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf && buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  return null;
+}
+
+async function unlinkUploadsPublicPath(publicPath) {
+  if (!publicPath || !String(publicPath).startsWith('/uploads/')) return;
+  const rel = String(publicPath).replace(/^\/uploads\//, '');
+  const abs = path.join(__dirname, '../../public/uploads', ...rel.split('/'));
+  try {
+    await fs.unlink(abs);
+  } catch {
+    /* ok */
+  }
+}
+
+function findDocAttachmentRow(raw, kind, rowId) {
+  const k = String(kind || '').toLowerCase();
+  const rid = String(rowId || '').trim();
+  if (k === 'personal') {
+    const arr = Array.isArray(raw?.personalDocuments) ? raw.personalDocuments : [];
+    const row = arr.find((r) => r && r.id === rid);
+    if (!row) return { error: 'Linha de documento pessoal não encontrada.' };
+    return { oldUrl: row.attachmentUrl || null };
+  }
+  if (k === 'professional') {
+    const tech = raw?.technician && typeof raw.technician === 'object' ? raw.technician : {};
+    const arr = Array.isArray(tech.professionalDocuments) ? tech.professionalDocuments : [];
+    const row = arr.find((r) => r && r.id === rid);
+    if (!row) return { error: 'Linha de documento profissional não encontrada.' };
+    return { oldUrl: row.attachmentUrl || null };
+  }
+  return { error: 'Tipo inválido (use personal ou professional).' };
+}
+
+function patchDocAttachmentInResponsesJson(raw, kind, rowId, publicPath, mimeType) {
+  const base = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw } : {};
+  if (kind === 'personal') {
+    const arr = Array.isArray(base.personalDocuments) ? base.personalDocuments.map((x) => ({ ...x })) : [];
+    const i = arr.findIndex((r) => r && r.id === rowId);
+    if (i < 0) return { error: 'Linha de documento pessoal não encontrada.' };
+    const oldUrl = arr[i].attachmentUrl;
+    arr[i] = { ...arr[i], attachmentUrl: publicPath, attachmentMimeType: mimeType || null };
+    base.personalDocuments = arr;
+    return { nextJson: base, oldUrl };
+  }
+  if (kind === 'professional') {
+    const tech = typeof base.technician === 'object' && base.technician ? { ...base.technician } : {};
+    const arr = Array.isArray(tech.professionalDocuments)
+      ? tech.professionalDocuments.map((x) => ({ ...x }))
+      : [];
+    const i = arr.findIndex((r) => r && r.id === rowId);
+    if (i < 0) return { error: 'Linha de documento profissional não encontrada.' };
+    const oldUrl = arr[i].attachmentUrl;
+    arr[i] = { ...arr[i], attachmentUrl: publicPath, attachmentMimeType: mimeType || null };
+    tech.professionalDocuments = arr;
+    base.technician = tech;
+    return { nextJson: base, oldUrl };
+  }
+  return { error: 'Tipo inválido (use personal ou professional).' };
+}
+
+publicRouter.post(
+  '/:token/document-attachment',
+  express.json({ limit: '15mb' }),
+  authUser,
+  bindTechRegistrationCandidate,
+  async (req, res) => {
+    try {
+      const { fileBase64, mimeType, kind, rowId } = req.body || {};
+      const app = req.techRegApp;
+      if (['APPROVED', 'REJECTED'].includes(app.status)) {
+        return res.status(400).json({ error: 'Candidatura encerrada.' });
+      }
+      const k = String(kind || '').toLowerCase();
+      if (k !== 'personal' && k !== 'professional') {
+        return res.status(400).json({ error: 'kind deve ser personal ou professional.' });
+      }
+      const rid = String(rowId || '').trim();
+      if (!rid) return res.status(400).json({ error: 'rowId é obrigatório.' });
+      if (!fileBase64 || typeof fileBase64 !== 'string') {
+        return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+      }
+      const b64 = String(fileBase64).replace(/\s/g, '');
+      let buf;
+      try {
+        buf = Buffer.from(b64, 'base64');
+      } catch {
+        return res.status(400).json({ error: 'Base64 inválido.' });
+      }
+      if (buf.length > MAX_DOC_ATTACHMENT_BYTES) {
+        return res.status(400).json({ error: 'Arquivo muito grande (máx. 10 MB).' });
+      }
+      const ext = detectDocExtFromBuffer(buf, mimeType);
+      if (!ext) {
+        return res.status(400).json({ error: 'Use imagem JPEG, PNG, WebP ou PDF.' });
+      }
+
+      const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+      const rowCheck = findDocAttachmentRow(raw, k, rid);
+      if (rowCheck.error) return res.status(400).json({ error: rowCheck.error });
+
+      const fname = `doc-${rid}-${Date.now().toString(36)}.${ext}`;
+      const absDir = path.join(__dirname, '../../public/uploads/tech-registration', app.id);
+      await fs.mkdir(absDir, { recursive: true });
+      await fs.writeFile(path.join(absDir, fname), buf);
+      const publicPath = `/uploads/tech-registration/${app.id}/${fname}`;
+
+      const resolvedMime =
+        mimeType || (ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`);
+      const patched2 = patchDocAttachmentInResponsesJson(raw, k, rid, publicPath, resolvedMime);
+      if (patched2.error) return res.status(400).json({ error: patched2.error });
+      if (patched2.oldUrl && String(patched2.oldUrl).includes(`/tech-registration/${app.id}/`)) {
+        await unlinkUploadsPublicPath(patched2.oldUrl);
+      }
+
+      await prisma.technicianRegistrationApplication.update({
+        where: { id: app.id },
+        data: { responsesJson: patched2.nextJson },
+      });
+      res.status(201).json({
+        attachmentUrl: publicPath,
+        responsesJson: patched2.nextJson,
+      });
+    } catch (err) {
+      console.error('POST tech-reg document-attachment', err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+publicRouter.delete(
+  '/:token/document-attachment/:kind/:rowId',
+  authUser,
+  bindTechRegistrationCandidate,
+  async (req, res) => {
+    try {
+      const app = req.techRegApp;
+      if (['APPROVED', 'REJECTED'].includes(app.status)) {
+        return res.status(400).json({ error: 'Candidatura encerrada.' });
+      }
+      const k = String(req.params.kind || '').toLowerCase();
+      const rowId = String(req.params.rowId || '').trim();
+      if (k !== 'personal' && k !== 'professional') {
+        return res.status(400).json({ error: 'Tipo inválido.' });
+      }
+      const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+      const base = { ...raw };
+      let oldUrl = null;
+      if (k === 'personal') {
+        const arr = Array.isArray(base.personalDocuments) ? base.personalDocuments.map((x) => ({ ...x })) : [];
+        const i = arr.findIndex((r) => r && r.id === rowId);
+        if (i < 0) return res.status(404).json({ error: 'Linha não encontrada.' });
+        oldUrl = arr[i].attachmentUrl;
+        arr[i] = { ...arr[i], attachmentUrl: null, attachmentMimeType: null };
+        base.personalDocuments = arr;
+      } else {
+        const tech = typeof base.technician === 'object' && base.technician ? { ...base.technician } : {};
+        const arr = Array.isArray(tech.professionalDocuments)
+          ? tech.professionalDocuments.map((x) => ({ ...x }))
+          : [];
+        const i = arr.findIndex((r) => r && r.id === rowId);
+        if (i < 0) return res.status(404).json({ error: 'Linha não encontrada.' });
+        oldUrl = arr[i].attachmentUrl;
+        arr[i] = { ...arr[i], attachmentUrl: null, attachmentMimeType: null };
+        tech.professionalDocuments = arr;
+        base.technician = tech;
+      }
+      if (oldUrl && String(oldUrl).includes(`/tech-registration/${app.id}/`)) {
+        await unlinkUploadsPublicPath(oldUrl);
+      }
+      await prisma.technicianRegistrationApplication.update({
+        where: { id: app.id },
+        data: { responsesJson: base },
+      });
+      res.json({ ok: true, responsesJson: base });
+    } catch (err) {
+      console.error('DELETE tech-reg document-attachment', err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 
 // ─── Admin / gestor ──────────────────────────────────────────────────────────
 

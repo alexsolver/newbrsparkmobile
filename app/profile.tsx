@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager, Linking } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -54,6 +54,10 @@ const REGIONS = [
 ];
 
 const { width: SCREEN_W } = Dimensions.get('window');
+
+const BRSPARK_COMPANY_SIGNUP_URL =
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_COMPANY_SIGNUP_URL) ||
+  'https://www.brspark.com/empresa';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -597,6 +601,32 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+
+        <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center', marginTop: 4 }]}>
+          <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+          <Text style={styles.sectionHeaderLabel}>{(t('profile.companySignupTitle') || 'Empresa').toUpperCase()}</Text>
+        </View>
+        <View style={{ marginHorizontal: 16, marginBottom: 14 }}>
+          <View style={[styles.listCard, { padding: 16 }]}>
+            <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20, marginBottom: 12 }}>
+              {t('profile.companySignupHint')}
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+              onPress={async () => {
+                try {
+                  const can = await Linking.canOpenURL(BRSPARK_COMPANY_SIGNUP_URL);
+                  if (can) await Linking.openURL(BRSPARK_COMPANY_SIGNUP_URL);
+                  else Alert.alert('', t('profile.companySignupOpenError'));
+                } catch {
+                  Alert.alert('', t('profile.companySignupOpenError'));
+                }
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{t('profile.companySignupCta')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
           <Ionicons name="language" size={14} color="#64748B" style={{marginRight: 6}} />

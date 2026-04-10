@@ -79,6 +79,40 @@ async function main() {
   const basicPlan = plans.find((p) => p.name === 'Basic');
   const proPlan = plans.find((p) => p.name === 'Pro');
 
+  const now = new Date();
+  const nextMonth = new Date(now);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+  // Tenant padrão do app móvel (APP_DEFAULT_TENANT_SLUG=brspark-app) — utilizadores com role USER
+  const tenantBrsparkApp = await prisma.tenant.upsert({
+    where: { slug: 'brspark-app' },
+    update: { localeId: locBr.id, status: 'ACTIVE' },
+    create: {
+      name: 'BrSpark App',
+      slug: 'brspark-app',
+      email: 'app-conta@brspark.internal',
+      ownerName: 'BrSpark',
+      localeId: locBr.id,
+      status: 'ACTIVE',
+      defaultLang: 'pt-BR',
+    },
+  });
+  if (basicPlan) {
+    await prisma.subscription.upsert({
+      where: { tenantId: tenantBrsparkApp.id },
+      update: {},
+      create: {
+        tenantId: tenantBrsparkApp.id,
+        planId: basicPlan.id,
+        billingCycle: 'MONTHLY',
+        status: 'ACTIVE',
+        currentStart: now,
+        currentEnd: nextMonth,
+      },
+    });
+  }
+  console.log(`✅ Tenant app padrão: ${tenantBrsparkApp.name} (slug brspark-app) — use APP_DEFAULT_TENANT_SLUG=brspark-app no .env`);
+
   const tenantDemo = await prisma.tenant.upsert({
     where: { email: 'conta-demo@brspark.com' },
     update: { localeId: locBr.id, status: 'ACTIVE' },
@@ -93,10 +127,6 @@ async function main() {
       defaultLang: 'pt-BR',
     },
   });
-
-  const now = new Date();
-  const nextMonth = new Date(now);
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
 
   await prisma.subscription.upsert({
     where: { tenantId: tenantDemo.id },
