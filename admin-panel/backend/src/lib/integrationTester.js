@@ -6,7 +6,11 @@ const {
   buildComprefaceApiRoots,
   getComprefacePathPrefix,
 } = require('./comprefaceClient');
-const { normalizeNylasApiUri, nylasApiHostname } = require('./nylasCredentials');
+const {
+  normalizeNylasApiUri,
+  nylasApiHostname,
+  grantIdFromIntegrationRow,
+} = require('./nylasCredentials');
 
 function normEnum(v) {
   return String(v ?? '')
@@ -134,25 +138,56 @@ async function testDeepSeek({ apiKey, baseUrl }) {
 }
 
 // ── Nylas (e-mail / calendário / contatos — API v3) ───────
-async function testNylas({ apiKey, baseUrl }) {
+async function testNylas(integration) {
+  const { apiKey, baseUrl } = integration;
   if (!apiKey) return { ok: false, message: 'API Key da Nylas não configurada.' };
   const apiUri = normalizeNylasApiUri(baseUrl);
   const host = nylasApiHostname(apiUri);
+  const grantId =
+    grantIdFromIntegrationRow(integration) || (process.env.NYLAS_GRANT_ID || '').trim();
   try {
     const r = await httpsGet(host, '/v3/grants?limit=1', {
       Authorization: `Bearer ${apiKey}`,
       Accept: 'application/json',
     });
-    if (r.status === 200) return { ok: true, message: 'Nylas API v3 respondeu com sucesso ✓' };
-    if (r.status === 401) return { ok: false, message: 'API Key inválida ou sem permissão (401).' };
-    let hint = '';
-    try {
-      const j = JSON.parse(r.body);
-      if (j && (j.message || j.error?.message)) hint = `: ${j.message || j.error.message}`;
-    } catch (_) {
-      if (r.body) hint = `: ${String(r.body).replace(/\s+/g, ' ').slice(0, 160)}`;
+    if (r.status !== 200) {
+      if (r.status === 401) return { ok: false, message: 'API Key inválida ou sem permissão (401).' };
+      let hint = '';
+      try {
+        const j = JSON.parse(r.body);
+        if (j && (j.message || j.error?.message)) hint = `: ${j.message || j.error.message}`;
+      } catch (_) {
+        if (r.body) hint = `: ${String(r.body).replace(/\s+/g, ' ').slice(0, 160)}`;
+      }
+      return { ok: false, message: `Nylas HTTP ${r.status}${hint}` };
     }
-    return { ok: false, message: `Nylas HTTP ${r.status}${hint}` };
+
+    if (grantId) {
+      const rg = await httpsGet(host, `/v3/grants/${encodeURIComponent(grantId)}`, {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      });
+      if (rg.status === 200) {
+        return { ok: true, message: 'Nylas OK — API Key e Grant ID (conta de envio) válidos ✓' };
+      }
+      let gh = '';
+      try {
+        const j = JSON.parse(rg.body);
+        if (j && (j.message || j.error?.message)) gh = `: ${j.message || j.error.message}`;
+      } catch (_) {
+        if (rg.body) gh = `: ${String(rg.body).replace(/\s+/g, ' ').slice(0, 120)}`;
+      }
+      return {
+        ok: false,
+        message: `API Key OK, mas Grant ID inválido ou sem acesso (HTTP ${rg.status})${gh}`,
+      };
+    }
+
+    return {
+      ok: true,
+      message:
+        'Nylas API v3 OK ✓ — defina o Grant ID (conta de envio OAuth) para poder enviar e-mails.',
+    };
   } catch (e) {
     return { ok: false, message: `Erro de rede ao contatar a Nylas: ${e.message}` };
   }

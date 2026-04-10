@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { materializeApprovedApplication, normalizeFacePhotos } = require('../lib/technicianRegistrationMaterialize');
+const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 const authUser = require('../middleware/authUser');
@@ -55,6 +56,14 @@ function defaultEmptySchedule() {
     o[d] = [{ id: `s_${d}_0`, enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
   }
   return o;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function validateSubmitPayload(app, body) {
@@ -490,12 +499,52 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
       })
       .catch(() => {});
 
+    const deepLinkHint = `brspark://auth/tech-registration?token=${token}`;
+    const textBody = [
+      'Olá,',
+      '',
+      `${tenant.name} convidou você a concluir o cadastro de prestador no BrSpark.`,
+      `Utilize a conta BrSpark já registada com o e-mail ${em} e abra o convite no app.`,
+      '',
+      `Abrir no app: ${deepLinkHint}`,
+      '',
+      'Se o link não abrir, abra o BrSpark, inicie sessão com este e-mail e utilize o fluxo de cadastro por convite com o token fornecido pelo gestor.',
+    ].join('\n');
+
+    const htmlBody = `<p>Olá,</p>
+<p><strong>${escapeHtml(tenant.name)}</strong> convidou você a concluir o <strong>cadastro de prestador</strong> no BrSpark.</p>
+<p>Utilize a conta já registada com o e-mail <strong>${escapeHtml(em)}</strong> e abra o convite no app.</p>
+<p><a href="${escapeHtml(deepLinkHint)}">Abrir convite no app</a></p>
+<p style="font-size:12px;color:#555">Se o botão não funcionar, copie o link acima para o navegador ou abra o app manualmente após iniciar sessão.</p>`;
+
+    let emailInfo = { sent: false, skipped: true, detail: null };
+    try {
+      const send = await sendEmailViaNylas({
+        to: { email: em },
+        subject: `Convite BrSpark — cadastro de prestador (${tenant.name})`,
+        text: textBody,
+        html: htmlBody,
+      });
+      if (send.skipped) {
+        emailInfo = { sent: false, skipped: true, detail: send.reason || null };
+      } else if (send.ok) {
+        emailInfo = { sent: true, skipped: false, detail: null };
+      } else {
+        emailInfo = { sent: false, skipped: false, detail: send.error || 'Falha no envio.' };
+        console.error('[tech-reg invite] Nylas:', send.error);
+      }
+    } catch (e) {
+      emailInfo = { sent: false, skipped: false, detail: e.message || String(e) };
+      console.error('[tech-reg invite] e-mail:', e);
+    }
+
     res.status(201).json({
       id: app.id,
       inviteToken: token,
       invitedEmail: em,
       /** Caminho relativo para o app: /auth/tech-registration?token= */
-      deepLinkHint: `brspark://auth/tech-registration?token=${token}`,
+      deepLinkHint,
+      email: emailInfo,
     });
   } catch (err) {
     console.error('POST tech-reg invite', err);
