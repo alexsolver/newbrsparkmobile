@@ -176,6 +176,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [runAvatarWarm]);
 
   const patchUser = async (partial: Partial<User>) => {
+    try {
+      if (
+        partial.avatarUrl !== undefined ||
+        partial.name !== undefined ||
+        partial.email !== undefined
+      ) {
+        const merged = await AuthService.patchMe({
+          name: partial.name,
+          email: partial.email,
+          avatarUrl: partial.avatarUrl,
+        });
+        if (merged) {
+          setUser(merged);
+          runAvatarWarm(merged);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[Auth] patchMe falhou; a gravar alterações só no armazenamento local', e);
+    }
     const next = await AuthService.patchUserInStorage(partial);
     if (next) setUser(next);
   };

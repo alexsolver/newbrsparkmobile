@@ -74,8 +74,9 @@ app.get('/health', (_req, res) => {
 // ── Public routes ──────────────────────────────────────────
 app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login | /tenant-login
 app.post('/api/tenant-login', authRoutes.postTenantLogin); // alias (evita 404 se o cliente omitir /auth)
-// Antes de app.use('/api', account): path específico — evita 404 «Route not found» quando o router /api não repassa subpaths em alguns deploys.
+// Antes de app.use('/api', account): paths específicos — evita 404 «Route not found» quando o router /api não repassa subpaths em alguns deploys.
 app.use('/api/ai-technician-profile-photo', aiTechnicianProfilePhotoRoutes);
+app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
@@ -341,7 +342,6 @@ app.use('/api/metrics',            adminAuthThenPanel, metricsRoutes);
 app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
-app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
 app.use('/api/technician-registration', adminAuthThenPanel, technicianRegistrationAdminRouter);
 
 // ── Painel estático e uploads (depois das rotas /api para não sombrear a API) ──

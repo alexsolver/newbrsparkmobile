@@ -291,6 +291,42 @@ export class AuthService {
     return next;
   }
 
+  /**
+   * Sincroniza perfil com o servidor (PUT /api/me) e persiste o utilizador fundido.
+   * Usar após cadastro prestador — passo 1 grava ficheiro no servidor, mas o avatar da sessão no app deve refletir /me.
+   */
+  static async patchMe(partial: {
+    name?: string;
+    email?: string;
+    avatarUrl?: string | null;
+  }): Promise<User | null> {
+    const u = await AuthService.getUser();
+    if (!u) return null;
+    const body: Record<string, unknown> = {};
+    if (partial.name !== undefined) body.name = partial.name;
+    if (partial.email !== undefined) body.email = partial.email;
+    if (partial.avatarUrl !== undefined) body.avatarUrl = partial.avatarUrl;
+    if (Object.keys(body).length === 0) return u;
+    const res = await apiFetch('/api/me', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = String(j.error);
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    const serverUser = (await res.json()) as User;
+    const merged = await mergeServerUserWithLocalAvatar(u, serverUser);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
+    return merged;
+  }
+
   /** Logout — limpa JWT e dados locais */
   static async logout(): Promise<void> {
     const existing = await AuthService.getUser();

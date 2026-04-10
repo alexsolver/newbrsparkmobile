@@ -14,6 +14,11 @@
         <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:6px" id="back-users">← Usuários</a>
         <span class="topbar-title">Cadastro de prestadores</span>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">Convites, revisão e aprovação (formulário global)</div>
+        <p style="font-size:12px;color:var(--text3);margin:10px 0 0;line-height:1.45;max-width:720px">
+          <strong>Nota:</strong> em <a href="users.html">Utilizadores</a>, «Prestador pendente» vem do <em>perfil técnico</em>.
+          Só aparece aqui quem tem <em>candidatura</em> (convite ou pedido pelo app). Utilizadores com perfil pendente
+          <em>sem</em> formulário surgem na lista como «Perfil sem candidatura» — use «Criar convite» para enviar o link.
+        </p>
       </div>
       <div class="topbar-actions">
         <button type="button" class="btn btn-primary" id="btn-invite">+ Convidar por e-mail</button>
@@ -24,8 +29,9 @@
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Candidaturas</span>
-            <select class="form-control" id="filter-status" style="max-width:200px;padding:6px 10px;font-size:12px">
-              <option value="">Todos os estados</option>
+            <select class="form-control" id="filter-status" style="max-width:280px;padding:6px 10px;font-size:12px">
+              <option value="">Todos (candidaturas + perfil sem formulário)</option>
+              <option value="PERFIL_SEM_CANDIDATURA">Só perfil pendente sem candidatura</option>
               <option value="INVITED">Convidado</option>
               <option value="DRAFT">Rascunho</option>
               <option value="SUBMITTED">Submetido</option>

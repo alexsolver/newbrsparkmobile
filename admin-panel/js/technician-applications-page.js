@@ -44,6 +44,28 @@ function showDetail(id) {
   loadDetail(id);
 }
 
+function statusBadgeHtml(r) {
+  if (r.kind === 'orphan_profile' || r.status === 'PERFIL_SEM_CANDIDATURA') {
+    return `<span class="badge badge-amber" title="Há TechnicianProfile PENDING mas não há candidatura de cadastro em curso">${escapeHtml('Perfil sem candidatura')}</span>`;
+  }
+  return `<span class="badge">${escapeHtml(r.status)}</span>`;
+}
+
+function actionsCellHtml(r) {
+  if (r.kind === 'orphan_profile' && r.orphanUserId) {
+    const uid = escapeHtml(r.orphanUserId);
+    const em = escapeHtml(r.invitedEmail || '');
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">
+      <a class="btn btn-sm btn-outline" href="user-edit.html?id=${uid}">Utilizador</a>
+      <button type="button" class="btn btn-sm btn-primary" data-invite-email="${em}" data-invite-tenant="${escapeHtml(r.tenantId || '')}">Criar convite</button>
+    </div>`;
+  }
+  if (r.id) {
+    return `<button type="button" class="btn btn-sm btn-outline" data-open="${escapeHtml(r.id)}">Abrir</button>`;
+  }
+  return '—';
+}
+
 async function loadList() {
   const st = document.getElementById('filter-status')?.value || '';
   const tid = panelTenantId();
@@ -61,22 +83,40 @@ async function loadList() {
   const rows = res?.data || [];
   if (!rows.length) {
     tb.innerHTML =
-      '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Nenhuma candidatura.</td></tr>';
+      '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Nenhuma linha neste filtro.</td></tr>';
     return;
   }
   tb.innerHTML = rows
-    .map(
-      (r) => `<tr>
-      <td>${escapeHtml(r.invitedEmail)}</td>
+    .map((r) => {
+      const nameHint =
+        r.candidateName && r.kind === 'orphan_profile'
+          ? `<span style="display:block;font-size:11px;color:var(--text3);margin-top:4px">${escapeHtml(r.candidateName)}</span>`
+          : '';
+      return `<tr>
+      <td>${escapeHtml(r.invitedEmail)}${nameHint}</td>
       <td>${escapeHtml(r.tenantName || r.tenantId)}</td>
-      <td><span class="badge">${escapeHtml(r.status)}</span></td>
+      <td>${statusBadgeHtml(r)}</td>
       <td style="font-size:12px;color:var(--text3)">${formatDate(r.updatedAt)}</td>
-      <td style="text-align:right"><button type="button" class="btn btn-sm btn-outline" data-open="${escapeHtml(r.id)}">Abrir</button></td>
-    </tr>`
-    )
+      <td style="text-align:right">${actionsCellHtml(r)}</td>
+    </tr>`;
+    })
     .join('');
   tb.querySelectorAll('[data-open]').forEach((btn) => {
     btn.onclick = () => showDetail(btn.getAttribute('data-open'));
+  });
+  tb.querySelectorAll('[data-invite-email]').forEach((btn) => {
+    btn.onclick = async () => {
+      const email = btn.getAttribute('data-invite-email') || '';
+      const tAttr = btn.getAttribute('data-invite-tenant') || '';
+      document.getElementById('invite-email').value = email;
+      await loadTenantsForInvite();
+      const sel = document.getElementById('invite-tenant');
+      if (sel && tAttr) {
+        const opt = Array.from(sel.options).find((o) => o.value === tAttr);
+        if (opt) sel.value = tAttr;
+      }
+      openModal('modal-invite');
+    };
   });
 }
 

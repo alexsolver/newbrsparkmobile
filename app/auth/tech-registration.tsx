@@ -2,9 +2,9 @@
  * Cadastro de prestador (token) — convite enviado por uma empresa (painel) ou inscrição pelo app (perfil).
  * Rota: /auth/tech-registration?token=...
  *
- * Passo 1: foto de perfil (IA). Passo 2: ≥4 fotos biométricas validadas no CompreFace (Verification) contra a foto de perfil.
+ * Passo 1: foto de perfil (IA). Passo 2: ≥4 fotos biométricas validadas no servidor contra a foto de perfil.
  * Ordem de validação IA: `/api/me/validate-technician-profile-photo` → `/api/technician-registration/public/:token/validate-profile-photo` → `/api/ai-technician-profile-photo/validate` (404 em cada passo tenta o próximo).
- * Isto é independente do CompreFace / verify-face dos checklists.
+ * Isto é independente da biometria operacional dos checklists.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -18,7 +18,11 @@ import {
   Alert,
   Image,
   Platform,
+  Modal,
+  Switch,
 } from 'react-native';
+import MapView, { Circle, Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -28,11 +32,282 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { API_BASE, getToken, apiFetch } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 
-/** Mínimo de fotos para enrolamento no motor biométrico do tenant (ex. CompreFace) — secção à parte do passo 1 (IA). */
+/** Mínimo de fotos para o reconhecimento facial do tenant — secção à parte do passo 1 (IA). */
 const MIN_FACE_ENROLLMENT_PHOTOS = 4;
+
+function sanitizeBiometryUserText(text: string): string {
+  return String(text || '')
+    .replace(/\bcompreface\b/gi, 'serviço de biometria')
+    .replace(/\bexadel\b/gi, '')
+    .replace(/\*{1,2}/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/** Evita mostrar JSON, códigos HTTP ou respostas brutas da API ao utilizador. */
+function looksLikeTechnicalBiometryMessage(text: string): boolean {
+  const t = String(text || '').toLowerCase();
+  if (!t) return false;
+  return (
+    /\bhttp\s*\d{3}\b/.test(t) ||
+    t.includes('{"message"') ||
+    t.includes('"code"') ||
+    t.includes('"message"') ||
+    t.includes('verification http') ||
+    t.includes('api/v1/') ||
+    t.includes('serviço de biometria verification') ||
+    /\bcode\s*[:=]\s*\d+/.test(t)
+  );
+}
+
+/** Títulos e textos ao utilizador sem citar fornecedores de biometria. */
+function userFacingFaceEnrollmentError(
+  httpStatus: number,
+  code: string | undefined,
+  rawMessage: string | undefined
+): { title: string; message: string } {
+  const c = String(code || '');
+  if (c === 'NO_VISION_INTEGRATION') {
+    return {
+      title: 'Biometria indisponível',
+      message:
+        'O reconhecimento facial ainda não está configurado para sua organização. Entre em contato com quem administra o sistema ou com o suporte.',
+    };
+  }
+  if (c === 'NO_VERIFICATION_KEY') {
+    return {
+      title: 'Configuração incompleta',
+      message:
+        'Falta uma configuração de verificação facial no servidor. Peça ao administrador para revisar as integrações de visão no painel.',
+    };
+  }
+  if (c === 'UNSUPPORTED_ENGINE') {
+    return {
+      title: 'Biometria indisponível',
+      message: 'Este tipo de verificação facial não está disponível no momento. Entre em contato com o suporte.',
+    };
+  }
+  if (c === 'FACE_MISMATCH') {
+    return {
+      title: 'Foto não aceita',
+      message:
+        'Não conseguimos confirmar que é a mesma pessoa da foto de perfil do passo 1. Tire outra foto: rosto de frente, boa luz, sem óculos escuros ou itens cobrindo o rosto.',
+    };
+  }
+  if (c === 'VERIFY_NO_SCORE' || c === 'INVALID_IMAGE') {
+    return {
+      title: 'Imagem inválida',
+      message: 'Não foi possível usar esta foto para comparação. Tente outra imagem mais nítida, só do rosto.',
+    };
+  }
+  if (c === 'NO_FACE_DETECTED') {
+    return {
+      title: 'Rosto não detectado',
+      message:
+        'Não encontramos um rosto claro nesta foto. Fique de frente, com boa luz, e evite chapéu, máscara ou óculos escuros.',
+    };
+  }
+  if (c === 'MULTIPLE_FACES') {
+    return {
+      title: 'Muitas pessoas na foto',
+      message: 'A foto precisa mostrar só você. Tire outra imagem sem outras pessoas ao fundo.',
+    };
+  }
+  if (c === 'FACE_TOO_SMALL') {
+    return {
+      title: 'Enquadramento',
+      message: 'Aproxime-se um pouco: o rosto precisa aparecer maior e nítido na foto.',
+    };
+  }
+  if (c === 'LOW_QUALITY_FACE') {
+    return {
+      title: 'Qualidade da foto',
+      message: 'A imagem ficou fraca ou tremida. Use mais luz e segure o telefone firme.',
+    };
+  }
+  if (c === 'BIOMETRY_TIMEOUT') {
+    return {
+      title: 'Tempo esgotado',
+      message:
+        'A verificação demorou demais. Tente de novo com melhor rede ou uma imagem um pouco menor.',
+    };
+  }
+  if (
+    c === 'SERVER_ERROR' ||
+    c === 'BIOMETRY_SERVICE_ERROR' ||
+    c === 'COMPREFACE_ERROR' ||
+    httpStatus >= 500
+  ) {
+    return {
+      title: 'Serviço ocupado',
+      message:
+        'A verificação facial está demorando ou ficou indisponível por um instante. Aguarde um pouco e envie a foto de novo.',
+    };
+  }
+  if (c === 'PROFILE_REQUIRED') {
+    return {
+      title: 'Conclua o passo 1',
+      message: sanitizeBiometryUserText(String(rawMessage || 'Faça primeiro a foto de perfil validada.')),
+    };
+  }
+  const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
+  if (sanitized) {
+    if (looksLikeTechnicalBiometryMessage(sanitized)) {
+      return {
+        title: 'Foto não aceita',
+        message:
+          'Não conseguimos usar esta foto na verificação. Tire outra com o rosto de frente, bem iluminado e sozinho no enquadramento.',
+      };
+    }
+    return { title: 'Não foi possível enviar', message: sanitized };
+  }
+  return {
+    title: 'Não foi possível enviar',
+    message: 'Algo deu errado ao enviar a foto. Verifique a conexão e tente novamente.',
+  };
+}
+
+function userFacingIdDocumentError(
+  httpStatus: number,
+  code: string | undefined,
+  rawMessage: string | undefined
+): { title: string; message: string } {
+  const c = String(code || '');
+  if (c === 'ID_DOC_IMAGE_REQUIRED') {
+    return {
+      title: 'Envie uma foto',
+      message:
+        'Neste passo é necessária uma imagem do documento (JPEG ou PNG). PDF não permite comparar o rosto da foto do documento com a sua foto de perfil.',
+    };
+  }
+  if (c === 'FACE_STEP_REQUIRED') {
+    return {
+      title: 'Passo 2 pendente',
+      message: 'Conclua antes as fotos biométricas do passo 2.',
+    };
+  }
+  if (c === 'ID_DOC_FLOW_MISMATCH') {
+    return {
+      title: 'Fluxo indisponível',
+      message: 'Este passo não se aplica ao seu tipo de cadastro.',
+    };
+  }
+  if (c === 'NO_OPENAI_KEY') {
+    const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
+    if (sanitized) {
+      return { title: 'Serviço indisponível', message: sanitized };
+    }
+    return {
+      title: 'Serviço indisponível',
+      message:
+        'O servidor não está configurado para este passo (OpenAI). Peça ao suporte ou ao administrador.',
+    };
+  }
+  if (c === 'FACE_VERIFY_FAILED') {
+    return {
+      title: 'Comparação do documento',
+      message:
+        sanitizeBiometryUserText(String(rawMessage || '')) ||
+        'Não foi possível comparar a foto do documento com a sua foto de perfil agora. Verifique a conexão e tente de novo em instantes.',
+    };
+  }
+  if (c === 'OCR_FAILED' || c === 'SERVER_ERROR') {
+    return {
+      title: 'Leitura do documento',
+      message:
+        sanitizeBiometryUserText(String(rawMessage || '')) ||
+        'Não foi possível extrair os dados. Tente uma foto mais nítida, sem reflexo, com o documento inteiro visível.',
+    };
+  }
+
+  /** Comparação é documento (foto do RG/CNH/etc.) vs foto de perfil — não usar textos do passo 2 (selfie). */
+  const idDocVerifyMessages: Record<
+    string,
+    { title: string; message: string }
+  > = {
+    FACE_MISMATCH: {
+      title: 'Confira a foto do documento',
+      message:
+        'Não conseguimos confirmar que a fotinha do documento é a mesma pessoa da sua foto de perfil. Tire outra foto: documento aberto na página da foto, bem iluminado, sem reflexo forte no plástico, e confira se a foto de perfil (passo 1) é sua e atual.',
+    },
+    VERIFY_NO_SCORE: {
+      title: 'Foto do documento',
+      message:
+        'A comparação entre a fotografia do documento e a sua foto de perfil não ficou clara. Tente outra foto do documento com a fotinha do RG/CNH bem visível e nítida.',
+    },
+    NO_FACE_DETECTED: {
+      title: 'Fotografia no documento',
+      message:
+        'Nesta imagem a fotinha do rosto no documento não apareceu nítida o suficiente. Enquadre o documento de frente, aumente um pouco o zoom na área da foto, use luz difusa e evite reflexo no plástico.',
+    },
+    MULTIPLE_FACES: {
+      title: 'Imagem do documento',
+      message:
+        'Há mais de um rosto visível na foto (por exemplo, você e o fundo). Enquadre só o documento ou a página com a sua fotografia.',
+    },
+    FACE_TOO_SMALL: {
+      title: 'Enquadramento do documento',
+      message:
+        'A fotografia do rosto no documento ficou pequena demais. Aproxime-se um pouco, mantendo o documento inteiro legível.',
+    },
+    LOW_QUALITY_FACE: {
+      title: 'Qualidade da imagem',
+      message:
+        'A foto do documento ficou fraca ou tremida. Use mais luz e segure o telefone firme.',
+    },
+    INVALID_IMAGE: {
+      title: 'Imagem inválida',
+      message:
+        'A imagem é inválida ou muito pequena. Envie outra foto nítida do documento (JPEG ou PNG).',
+    },
+  };
+
+  const docFb = idDocVerifyMessages[c];
+  if (docFb) {
+    const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
+    if (sanitized && !looksLikeTechnicalBiometryMessage(sanitized)) {
+      return { title: docFb.title, message: sanitized };
+    }
+    return docFb;
+  }
+
+  /** Erros 5xx ou respostas sem código: não usar texto do passo 2 (selfie/biometria). */
+  if (httpStatus >= 500) {
+    const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
+    return {
+      title: 'Comparação do documento',
+      message:
+        sanitized && !looksLikeTechnicalBiometryMessage(sanitized)
+          ? sanitized
+          : 'O servidor não conseguiu comparar a foto do documento com o seu perfil neste momento. Verifique a conexão e tente de novo em instantes.',
+    };
+  }
+
+  return userFacingFaceEnrollmentError(httpStatus, code, rawMessage);
+}
 
 function isAiProfileGateEngine(e: string | undefined): boolean {
   return e === 'ai_llm_vision' || e === 'openai_vision';
+}
+
+/** No fluxo IA, a foto de perfil (passo 1) nunca deve aparecer na lista do passo 2. */
+function enrollmentPhotosWithoutProfile(
+  rows: { id: string; url: string }[],
+  profilePhotoId: string | undefined,
+  profileAvatarUrl: string,
+  isAiFlow: boolean,
+): { id: string; url: string }[] {
+  if (!isAiFlow) return rows;
+  const pid = String(profilePhotoId || '').trim();
+  const av = String(profileAvatarUrl || '').trim();
+  return rows.filter((p) => {
+    const id = String(p.id || '');
+    const url = String(p.url || '').trim();
+    if (id.startsWith('tp_')) return false;
+    if (pid && id === pid) return false;
+    if (av && url === av) return false;
+    return true;
+  });
 }
 
 const DAYS: { key: string; label: string }[] = [
@@ -62,7 +337,39 @@ type DocRow = {
   attachmentMimeType?: string | null;
 };
 
-type Loc = { id: string; name: string; type: string };
+type Loc = {
+  id: string;
+  name: string;
+  type: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
+};
+
+const SERVICE_AREA_RADIUS_METERS = 12000;
+
+function formatBrCepInput(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+type TechRegIdDocumentPayload = {
+  attachmentUrl?: string;
+  mimeType?: string;
+  faceVerifiedAt?: string;
+  ocrAt?: string;
+  ocrProvider?: string;
+  extracted?: {
+    docType?: string;
+    documentNumber?: string;
+    issueDate?: string | null;
+    expiryDate?: string | null;
+    issuingBody?: string;
+    fullName?: string;
+    birthDate?: string | null;
+  };
+};
 
 /** Metadados da foto inicial (câmera + IA); ou rascunho antigo com ≥4 fotos (legacy). */
 type PrimaryProfileCapture = {
@@ -106,7 +413,7 @@ function publicUrl(path: string) {
 export default function TechRegistrationScreen() {
   const { colors: C } = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, patchUser } = useAuth();
   const params = useLocalSearchParams<{ token?: string }>();
   const token = typeof params.token === 'string' ? params.token : '';
 
@@ -146,8 +453,22 @@ export default function TechRegistrationScreen() {
   const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
   const [primaryValidating, setPrimaryValidating] = useState(false);
   const [primaryValidationError, setPrimaryValidationError] = useState<string | null>(null);
-  /** Passo 2 (só fluxo IA): utilizador confirmou seguir para o formulário após ≥4 fotos CompreFace. */
+  /** Passo 2 (só fluxo IA): utilizador confirmou seguir para o formulário após ≥4 fotos biométricas. */
   const [biometricStepConfirmed, setBiometricStepConfirmed] = useState(false);
+  const [faceEnrollmentSubmitting, setFaceEnrollmentSubmitting] = useState(false);
+  const [idDocumentSubmitting, setIdDocumentSubmitting] = useState(false);
+  /** Passo 3: documento com foto validado + OCR (só fluxo IA). */
+  const [techRegIdDocument, setTechRegIdDocument] = useState<TechRegIdDocumentPayload | null>(null);
+  const [birthDate, setBirthDate] = useState('');
+  const [fetchingCep, setFetchingCep] = useState(false);
+  const [regionMapVisible, setRegionMapVisible] = useState(false);
+  const [mapOpenLoading, setMapOpenLoading] = useState(false);
+  const [mapInitialRegion, setMapInitialRegion] = useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  } | null>(null);
 
   const [password, setPassword] = useState('');
 
@@ -229,6 +550,9 @@ export default function TechRegistrationScreen() {
       else setSkillsText('');
       setPersonalDocs(parseDocs(r.personalDocuments));
       setProDocs(parseDocs(tech.professionalDocuments));
+      setBirthDate(String((r as { birthDate?: string }).birthDate || '').slice(0, 10));
+      const idc = (r as { techRegIdDocument?: TechRegIdDocumentPayload }).techRegIdDocument;
+      setTechRegIdDocument(idc && typeof idc === 'object' ? idc : null);
       if (tech.workScheduleJson && typeof tech.workScheduleJson === 'object') {
         const merged = defaultSchedule();
         for (const k of Object.keys(merged)) {
@@ -247,19 +571,22 @@ export default function TechRegistrationScreen() {
       } else setSchedule(defaultSchedule());
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
       const capRaw = (r as any).techRegPrimaryProfileCapture;
-      const profilePidForFilter =
+      const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
+      const faceRowsRaw = faces
+        .filter((x: any) => x?.id && x?.url)
+        .map((x: any) => ({ id: String(x.id), url: String(x.url) }));
+      const aiFlow =
         capRaw &&
         typeof capRaw === 'object' &&
-        capRaw.photoId &&
-        (String(capRaw.validationEngine) === 'ai_llm_vision' || String(capRaw.validationEngine) === 'openai_vision')
-          ? String(capRaw.photoId)
-          : '';
-      const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
-      let faceRows = faces.filter((x: any) => x?.id && x?.url);
-      if (profilePidForFilter) {
-        faceRows = faceRows.filter((x: any) => String(x.id) !== profilePidForFilter);
-      }
-      setFacePhotos(faceRows.map((x: any) => ({ id: x.id, url: x.url })));
+        capRaw.validatedAt &&
+        isAiProfileGateEngine(String(capRaw.validationEngine || ''));
+      const enrollmentOnlyRows = enrollmentPhotosWithoutProfile(
+        faceRowsRaw,
+        capRaw && typeof capRaw === 'object' && capRaw.photoId ? String(capRaw.photoId) : undefined,
+        String(r.avatarUrl || ''),
+        !!aiFlow,
+      );
+      setFacePhotos(enrollmentOnlyRows);
       if (capRaw && typeof capRaw === 'object' && capRaw.validatedAt) {
         const ve = String(capRaw.validationEngine || '');
         const validationEngine: NonNullable<PrimaryProfileCapture>['validationEngine'] =
@@ -276,7 +603,7 @@ export default function TechRegistrationScreen() {
         });
         if (
           (validationEngine === 'ai_llm_vision' || validationEngine === 'openai_vision') &&
-          faceRows.length >= MIN_FACE_ENROLLMENT_PHOTOS
+          enrollmentOnlyRows.length >= MIN_FACE_ENROLLMENT_PHOTOS
         ) {
           setBiometricStepConfirmed(true);
         } else if (validationEngine === 'ai_llm_vision' || validationEngine === 'openai_vision') {
@@ -320,6 +647,7 @@ export default function TechRegistrationScreen() {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim() || null,
+      birthDate: birthDate.trim() ? birthDate.trim().slice(0, 10) : null,
       avatarUrl: avatarUrl.trim() || null,
       addressJson: {
         line1: line1.trim() || null,
@@ -374,13 +702,16 @@ export default function TechRegistrationScreen() {
             },
           }
         : {}),
+      ...(techRegIdDocument && techRegIdDocument.faceVerifiedAt ? { techRegIdDocument } : {}),
     };
   }, [
     name,
     email,
     phone,
+    birthDate,
     avatarUrl,
     primaryProfileCapture,
+    techRegIdDocument,
     line1,
     line2,
     district,
@@ -397,6 +728,50 @@ export default function TechRegistrationScreen() {
     schedule,
     serviceLocIds,
   ]);
+
+  const enrollmentPhotosForUi = useMemo(
+    () =>
+      enrollmentPhotosWithoutProfile(
+        facePhotos,
+        primaryProfileCapture?.photoId,
+        avatarUrl,
+        isAiProfileGateEngine(primaryProfileCapture?.validationEngine),
+      ),
+    [
+      facePhotos,
+      primaryProfileCapture?.photoId,
+      primaryProfileCapture?.validationEngine,
+      avatarUrl,
+    ],
+  );
+
+  const locsWithCoords = useMemo(
+    () =>
+      locations.filter(
+        (l) =>
+          l.latitude != null &&
+          l.longitude != null &&
+          Number.isFinite(l.latitude) &&
+          Number.isFinite(l.longitude),
+      ),
+    [locations],
+  );
+  const locsWithoutCoords = useMemo(
+    () => locations.filter((l) => !locsWithCoords.some((x) => x.id === l.id)),
+    [locations, locsWithCoords],
+  );
+
+  /** Documento principal do passo 3 — espelha `personalDocuments[0]` sem duplicar em «Docs. pessoais». */
+  const showPrimaryDocumentSection = useMemo(
+    () =>
+      isAiProfileGateEngine(primaryProfileCapture?.validationEngine) &&
+      Boolean(techRegIdDocument?.faceVerifiedAt) &&
+      personalDocs.length > 0,
+    [primaryProfileCapture?.validationEngine, techRegIdDocument?.faceVerifiedAt, personalDocs.length],
+  );
+
+  const primaryDocRow =
+    showPrimaryDocumentSection && personalDocs.length > 0 ? personalDocs[0] : null;
 
   const applyResponsesDocs = useCallback((responsesJson: Record<string, unknown>) => {
     const r = responsesJson && typeof responsesJson === 'object' ? responsesJson : {};
@@ -580,43 +955,64 @@ export default function TechRegistrationScreen() {
         photoId: String(cap.photoId),
       });
     }
-    if (data.url) setAvatarUrl(String(data.url));
+    const urlStr = data.url ? String(data.url) : '';
+    if (urlStr) {
+      setAvatarUrl(urlStr);
+      try {
+        await patchUser({ avatarUrl: urlStr });
+      } catch {
+        /* sessão local continua; /me refletirá no próximo arranque */
+      }
+    }
     setFacePhotos([]);
     setBiometricStepConfirmed(false);
+    setTechRegIdDocument(null);
+    setBirthDate('');
     return { ok: true, photoId: data.techRegPrimaryProfileCapture?.photoId, url: data.url };
   };
 
   const postFaceB64 = async (
     fileBase64: string,
-    mimeType: string
+    mimeType: string,
+    opts?: { skipLoading?: boolean }
   ): Promise<{ ok: boolean; photo?: { id: string; url: string }; error?: string }> => {
     const jwt = await getToken();
     if (!jwt) {
       Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
       return { ok: false, error: 'no_jwt' };
     }
-    const res = await fetch(`${basePath}/face-enrollment`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify({ fileBase64, mimeType }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const title =
-        res.status === 503 || data.code === 'NO_VERIFICATION_KEY' || data.code === 'NO_VISION_INTEGRATION'
-          ? 'Biometria no servidor'
-          : 'Foto biométrica';
-      Alert.alert(title, data.error || 'Falha no envio.');
-      return { ok: false, error: data.error || 'upload_failed' };
+    if (!opts?.skipLoading) setFaceEnrollmentSubmitting(true);
+    try {
+      const res = await fetch(`${basePath}/face-enrollment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ fileBase64, mimeType }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
+        Alert.alert(title, message);
+        return { ok: false, error: data.error || 'upload_failed' };
+      }
+      if (Array.isArray(data.photos)) {
+        setFacePhotos(
+          enrollmentPhotosWithoutProfile(
+            data.photos.map((x: any) => ({ id: String(x.id), url: String(x.url) })),
+            primaryProfileCapture?.photoId,
+            avatarUrl,
+            isAiProfileGateEngine(primaryProfileCapture?.validationEngine),
+          ),
+        );
+      }
+      const photo =
+        data.photo && data.photo.id && data.photo.url ? { id: data.photo.id, url: data.photo.url } : undefined;
+      return { ok: true, photo };
+    } finally {
+      if (!opts?.skipLoading) setFaceEnrollmentSubmitting(false);
     }
-    if (Array.isArray(data.photos)) {
-      setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
-    }
-    const photo = data.photo && data.photo.id && data.photo.url ? { id: data.photo.id, url: data.photo.url } : undefined;
-    return { ok: true, photo };
   };
 
   const addFacePhotosFromGallery = async () => {
@@ -632,10 +1028,15 @@ export default function TechRegistrationScreen() {
       base64: true,
     });
     if (result.canceled) return;
-    for (const asset of result.assets) {
-      if (!asset.base64) continue;
-      const out = await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
-      if (!out.ok) break;
+    setFaceEnrollmentSubmitting(true);
+    try {
+      for (const asset of result.assets) {
+        if (!asset.base64) continue;
+        const out = await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg', { skipLoading: true });
+        if (!out.ok) break;
+      }
+    } finally {
+      setFaceEnrollmentSubmitting(false);
     }
   };
 
@@ -654,6 +1055,100 @@ export default function TechRegistrationScreen() {
     const asset = result.assets[0];
     if (!asset?.base64) return;
     await postFaceB64(asset.base64, asset.mimeType || 'image/jpeg');
+  };
+
+  const applyIdDocumentServerPayload = useCallback((responsesJson: Record<string, unknown>) => {
+    const idc = responsesJson.techRegIdDocument;
+    setTechRegIdDocument(idc && typeof idc === 'object' ? (idc as TechRegIdDocumentPayload) : null);
+    setName(String(responsesJson.name || ''));
+    setBirthDate(String((responsesJson as { birthDate?: string }).birthDate || '').slice(0, 10));
+    setPersonalDocs(parseDocs((responsesJson as { personalDocuments?: unknown }).personalDocuments));
+  }, []);
+
+  const postIdDocumentB64 = async (fileBase64: string, mimeType: string) => {
+    const jwt = await getToken();
+    if (!jwt) {
+      Alert.alert('Sessão', 'Inicie sessão no app para enviar o documento.');
+      return false;
+    }
+    setIdDocumentSubmitting(true);
+    try {
+      const res = await fetch(`${basePath}/id-document`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ fileBase64, mimeType }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const { title, message } = userFacingIdDocumentError(res.status, data.code, data.error);
+        Alert.alert(title, message);
+        return false;
+      }
+      if (data.responsesJson && typeof data.responsesJson === 'object') {
+        applyIdDocumentServerPayload(data.responsesJson as Record<string, unknown>);
+      }
+      Alert.alert(
+        'Documento aceite',
+        'O rosto na imagem foi conferido com a sua foto de perfil e os dados foram lidos automaticamente. Revise os campos abaixo e corrija se algo estiver incorreto.'
+      );
+      return true;
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha de rede.');
+      return false;
+    } finally {
+      setIdDocumentSubmitting(false);
+    }
+  };
+
+  const pickIdDocumentSource = () => {
+    Alert.alert(
+      'Documento com foto',
+      'Tire ou escolha uma foto nítida do documento (RG, CNH, CPF, passaporte, etc.). O rosto na foto do documento será comparado com a sua foto de perfil.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Câmera',
+          onPress: async () => {
+            const cam = await ImagePicker.requestCameraPermissionsAsync();
+            if (!cam.granted) {
+              Alert.alert('Permissão', 'Precisamos da câmera para fotografar o documento.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.88,
+              base64: true,
+            });
+            if (result.canceled) return;
+            const asset = result.assets[0];
+            if (!asset?.base64) return;
+            await postIdDocumentB64(asset.base64, asset.mimeType || 'image/jpeg');
+          },
+        },
+        {
+          text: 'Galeria',
+          onPress: async () => {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert('Permissão', 'Precisamos da galeria para escolher a imagem.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.88,
+              base64: true,
+            });
+            if (result.canceled) return;
+            const asset = result.assets[0];
+            if (!asset?.base64) return;
+            await postIdDocumentB64(asset.base64, asset.mimeType || 'image/jpeg');
+          },
+        },
+      ]
+    );
   };
 
   /** Validação IA do passo 1: /api/me → mesmo prefixo do convite público → rota dedicada (cada 404 tenta o seguinte). */
@@ -740,6 +1235,7 @@ export default function TechRegistrationScreen() {
     }
   };
 
+  /** Fluxo legacy / secção do formulário: câmera ou galeria. */
   const pickFace = () => {
     Alert.alert('Adicionar fotos', 'Escolha a origem. Pode repetir para enviar várias fotos.', [
       { text: 'Cancelar', style: 'cancel' },
@@ -749,45 +1245,136 @@ export default function TechRegistrationScreen() {
   };
 
   const removeFace = async (photoId: string) => {
+    if (primaryProfileCapture?.photoId && String(photoId) === String(primaryProfileCapture.photoId)) {
+      Alert.alert(
+        'Foto de perfil',
+        'A foto do passo 1 não pode ser removida daqui. Para trocar, volte ao passo 1 (recomeçar o fluxo ou peça suporte).',
+      );
+      return;
+    }
     const jwt = await getToken();
     if (!jwt) return;
-    const wasPrimaryAi =
-      isAiProfileGateEngine(primaryProfileCapture?.validationEngine) &&
-      primaryProfileCapture?.photoId === photoId;
     const res = await fetch(`${basePath}/face-enrollment/${encodeURIComponent(photoId)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${jwt}` },
     });
     const data = await res.json();
-    if (Array.isArray(data.photos)) {
-      setFacePhotos(data.photos.map((x: any) => ({ id: x.id, url: x.url })));
+    if (!res.ok) {
+      const rm = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível remover esta foto.';
+      Alert.alert('Remover foto', rm);
+      return;
     }
-    if (wasPrimaryAi) {
-      setPrimaryProfileCapture(null);
-      setAvatarUrl('');
-      try {
-        const responsesJson = {
-          ...buildResponsesJson(),
-          techRegPrimaryProfileCapture: null,
-          avatarUrl: null,
-        };
-        await fetch(`${basePath}/draft`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${jwt}`,
-          },
-          body: JSON.stringify({ responsesJson }),
-        });
-      } catch {
-        /* ignore */
-      }
+    if (Array.isArray(data.photos)) {
+      setFacePhotos(
+        enrollmentPhotosWithoutProfile(
+          data.photos.map((x: any) => ({ id: String(x.id), url: String(x.url) })),
+          primaryProfileCapture?.photoId,
+          avatarUrl,
+          isAiProfileGateEngine(primaryProfileCapture?.validationEngine),
+        ),
+      );
     }
   };
 
   const toggleServiceLoc = (id: string) => {
     setServiceLocIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     saveDraftSoon();
+  };
+
+  const fetchCepAndFillAddress = async () => {
+    const cc = String(country || 'BR').trim().toUpperCase();
+    if (cc !== 'BR') {
+      Alert.alert(
+        'Código postal',
+        'A busca automática por CEP é para endereços no Brasil. Para outro país, preencha rua, cidade e estado manualmente.',
+      );
+      return;
+    }
+    const clean = postal.replace(/\D/g, '');
+    if (clean.length !== 8) {
+      Alert.alert('CEP', 'Informe o CEP com 8 dígitos.');
+      return;
+    }
+    setFetchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        Alert.alert('CEP', 'CEP não encontrado. Confira os números.');
+        return;
+      }
+      const log = String(data.logradouro || '').trim();
+      const bairro = String(data.bairro || '').trim();
+      const loc = String(data.localidade || '').trim();
+      const uf = String(data.uf || '').trim().slice(0, 2);
+      if (log) setLine1(log);
+      if (bairro) setDistrict(bairro);
+      if (loc) setCity(loc);
+      if (uf) setStateUf(uf);
+      saveDraftSoon();
+    } catch {
+      Alert.alert('Erro', 'Não foi possível consultar o CEP. Verifique a conexão e tente de novo.');
+    } finally {
+      setFetchingCep(false);
+    }
+  };
+
+  const openRegionsMap = async () => {
+    if (!locations.length) {
+      Alert.alert('Regiões', 'Não há bases cadastradas para a sua organização.');
+      return;
+    }
+    setMapOpenLoading(true);
+    try {
+      const countryLabel =
+        String(country || 'BR').trim().toUpperCase() === 'BR' || !String(country || '').trim()
+          ? 'Brasil'
+          : String(country).trim();
+      const parts = [line1, district, city, stateUf, postal.replace(/\D/g, '')].map((s) => String(s || '').trim()).filter(Boolean);
+      let lat = -14.235;
+      let lng = -51.9253;
+      let centeredOnAddress = false;
+      if (parts.length >= 2) {
+        try {
+          const geo = await Location.geocodeAsync(`${parts.join(', ')}, ${countryLabel}`);
+          if (
+            geo?.[0]?.latitude != null &&
+            geo?.[0]?.longitude != null &&
+            Number.isFinite(geo[0].latitude) &&
+            Number.isFinite(geo[0].longitude)
+          ) {
+            lat = geo[0].latitude;
+            lng = geo[0].longitude;
+            centeredOnAddress = true;
+          }
+        } catch {
+          /* continuar */
+        }
+      }
+      if (!centeredOnAddress) {
+        const withCoord = locations.find(
+          (l) =>
+            l.latitude != null &&
+            l.longitude != null &&
+            Number.isFinite(l.latitude) &&
+            Number.isFinite(l.longitude),
+        );
+        if (withCoord) {
+          lat = withCoord.latitude as number;
+          lng = withCoord.longitude as number;
+        }
+      }
+      const delta = 0.42;
+      setMapInitialRegion({
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: delta,
+        longitudeDelta: delta,
+      });
+      setRegionMapVisible(true);
+    } finally {
+      setMapOpenLoading(false);
+    }
   };
 
   const styles = useMemo(
@@ -843,6 +1430,49 @@ export default function TechRegistrationScreen() {
         },
         btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
         dayRow: { marginBottom: 10 },
+        dayCard: {
+          marginBottom: 12,
+          padding: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.cardWhite,
+        },
+        dayRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+        cepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+        cepInputWrap: { flex: 1 },
+        cepSearchBtn: {
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: C.accent,
+          justifyContent: 'center',
+          minHeight: 44,
+        },
+        cepSearchBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+        mapOpenBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 12,
+          paddingVertical: 12,
+          paddingHorizontal: 14,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.accent,
+          backgroundColor: `${C.accent}12`,
+          alignSelf: 'flex-start',
+        },
+        mapModalRoot: { flex: 1, backgroundColor: C.cardWhite },
+        mapModalHeader: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: C.border,
+        },
         primaryIntro: { fontSize: 13, color: C.textSecondary, lineHeight: 21, marginBottom: 14 },
         primaryError: {
           marginTop: 12,
@@ -875,10 +1505,10 @@ export default function TechRegistrationScreen() {
       Alert.alert('Validação', 'Informe o nome.');
       return;
     }
-    if (facePhotos.length < MIN_FACE_ENROLLMENT_PHOTOS) {
+    if (enrollmentPhotosForUi.length < MIN_FACE_ENROLLMENT_PHOTOS) {
       Alert.alert(
         'Fotos biométricas',
-        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para o enrolamento do tenant (ex. CompreFace). Atualmente: ${facePhotos.length}.`
+        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para o reconhecimento facial da organização. Atualmente: ${enrollmentPhotosForUi.length}.`
       );
       return;
     }
@@ -902,7 +1532,8 @@ export default function TechRegistrationScreen() {
       });
       const data = await res.json();
       if (!res.ok) {
-        Alert.alert('Envio', data.error || 'Falha.');
+        const errMsg = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível enviar a candidatura. Tente novamente.';
+        Alert.alert('Envio', errMsg);
         return;
       }
       Alert.alert('Enviado', 'Sua candidatura foi enviada. Aguarde a análise da equipe.', [
@@ -1049,14 +1680,14 @@ export default function TechRegistrationScreen() {
             <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Passo 1 — Foto de perfil</Text>
-          <Text style={styles.sub}>Etapa obrigatória antes da biometria CompreFace e do formulário.</Text>
+          <Text style={styles.sub}>Etapa obrigatória antes da biometria adicional e do formulário.</Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.secTitle}>Finalidade e conferência</Text>
           <Text style={styles.primaryIntro}>
             A imagem integra o seu perfil de técnico; o solicitante poderá reconhecê-lo no local. A conferência aqui é
-            feita por análise automática (IA — OpenAI no servidor; não usa o motor CompreFace das ordens de serviço).
+            feita por análise automática (IA no servidor), separada da biometria usada nas ordens de serviço.
             Exige-se um rosto humano claramente identificável, sem conteúdo impróprio. Não é necessária iluminação de
             estúdio: ambiente comum com rosto visível costuma bastar.
           </Text>
@@ -1098,21 +1729,33 @@ export default function TechRegistrationScreen() {
           <Text style={styles.title}>Passo 2 — Biometria do tenant</Text>
           <Text style={styles.sub}>
             Envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos do mesmo rosto da foto de perfil (passo 1). Cada imagem é
-            validada no CompreFace (serviço Verification) contra a foto de perfil antes de ser guardada.
+            validada no servidor em relação à foto de perfil antes de ser guardada.
           </Text>
         </View>
         <View style={styles.section}>
           <Text style={styles.secTitle}>Fotos para o reconhecimento facial</Text>
           <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18, marginBottom: 10 }}>
-            Use ângulos ligeiramente diferentes (câmera ou galeria). O servidor precisa da API Key do serviço{' '}
-            <Text style={{ fontWeight: '700' }}>Verification</Text> do CompreFace configurada em Integrações. Máximo de{' '}
-            {12} imagens, 5 MB cada.
+            Use somente a <Text style={{ fontWeight: '700' }}>câmera</Text> (a galeria não é permitida nesta etapa).
+            Cada foto é comparada automaticamente com a imagem do passo 1; rostos diferentes são rejeitados. Máximo de 12
+            imagens, 5 MB cada.
           </Text>
-          <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 4 }]} onPress={pickFace}>
-            <Text style={styles.btnText}>Adicionar fotos</Text>
+          <TouchableOpacity
+            style={[styles.btn, { marginHorizontal: 0, marginTop: 4, opacity: faceEnrollmentSubmitting ? 0.55 : 1 }]}
+            onPress={() => void addFacePhotosFromCamera()}
+            disabled={faceEnrollmentSubmitting}
+          >
+            <Text style={styles.btnText}>Tirar foto</Text>
           </TouchableOpacity>
+          {faceEnrollmentSubmitting ? (
+            <View style={{ alignItems: 'center', marginTop: 20 }}>
+              <ActivityIndicator size="large" color={C.accent} />
+              <Text style={{ marginTop: 12, color: C.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+                Validando e enviando a foto…{'\n'}Pode levar alguns segundos.
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.faceRow}>
-            {facePhotos.map((p) => (
+            {enrollmentPhotosForUi.map((p) => (
               <View key={p.id}>
                 <Image source={{ uri: publicUrl(p.url) }} style={styles.faceImg} />
                 <TouchableOpacity onPress={() => removeFace(p.id)} style={{ marginTop: 4 }}>
@@ -1121,7 +1764,7 @@ export default function TechRegistrationScreen() {
               </View>
             ))}
           </View>
-          {facePhotos.length >= MIN_FACE_ENROLLMENT_PHOTOS ? (
+          {enrollmentPhotosForUi.length >= MIN_FACE_ENROLLMENT_PHOTOS ? (
             <TouchableOpacity
               style={[styles.btn, { marginHorizontal: 0, marginTop: 20 }]}
               onPress={() => setBiometricStepConfirmed(true)}
@@ -1130,7 +1773,7 @@ export default function TechRegistrationScreen() {
             </TouchableOpacity>
           ) : (
             <Text style={[styles.fieldHint, { marginTop: 16 }]}>
-              Faltam {Math.max(0, MIN_FACE_ENROLLMENT_PHOTOS - facePhotos.length)} foto(s) para continuar.
+              Faltam {Math.max(0, MIN_FACE_ENROLLMENT_PHOTOS - enrollmentPhotosForUi.length)} foto(s) para continuar.
             </Text>
           )}
         </View>
@@ -1138,7 +1781,55 @@ export default function TechRegistrationScreen() {
     );
   }
 
+  const idDocumentStepPending =
+    primaryStepDone &&
+    useSplitBiometricStep &&
+    biometricStepConfirmed &&
+    !readOnly &&
+    !techRegIdDocument?.faceVerifiedAt;
+
+  if (idDocumentStepPending) {
+    return (
+      <ScrollView style={styles.root} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.head}>
+          <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="chevron-back" size={22} color={C.accent} />
+            <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Passo 3 — Documento com foto</Text>
+          <Text style={styles.sub}>
+            Envie uma imagem de um documento oficial com a sua fotografia. O sistema compara o rosto no documento com a
+            foto de perfil do passo 1 e, em seguida, lê os dados para preencher o formulário (OpenAI no servidor).
+          </Text>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.secTitle}>Foto ou imagem do documento</Text>
+          <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18, marginBottom: 12 }}>
+            Use JPEG ou PNG. Evite reflexos e cortes. Tipos comuns no Brasil: RG, CNH, CPF (com foto), passaporte, RNE.
+            PDF não é aceito neste passo.
+          </Text>
+          <TouchableOpacity
+            style={[styles.btn, { marginHorizontal: 0, marginTop: 4, opacity: idDocumentSubmitting ? 0.55 : 1 }]}
+            onPress={() => pickIdDocumentSource()}
+            disabled={idDocumentSubmitting}
+          >
+            <Text style={styles.btnText}>Enviar documento</Text>
+          </TouchableOpacity>
+          {idDocumentSubmitting ? (
+            <View style={{ alignItems: 'center', marginTop: 20 }}>
+              <ActivityIndicator size="large" color={C.accent} />
+              <Text style={{ marginTop: 12, color: C.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+                Conferindo o rosto e lendo o documento…{'\n'}Pode levar até um minuto.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
+    <>
     <ScrollView style={styles.root} keyboardShouldPersistTaps="handled">
       <View style={styles.head}>
         <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -1161,18 +1852,9 @@ export default function TechRegistrationScreen() {
             </View>
           </>
         ) : (
-          <>
-            <Text style={styles.sub}>
-              {tenantName ? `Sua organização na plataforma: ${tenantName}` : 'Cadastro iniciado por você no app'}
-            </Text>
-            <View style={styles.infoCallout}>
-              <Text style={styles.infoCalloutText}>
-                <Text style={{ fontWeight: '800', color: C.slate }}>Sem convite por e-mail: </Text>
-                Você pediu para ser prestador no perfil. Não há gestor de outra empresa a convidá-lo: o e-mail fixo é só
-                o da <Text style={{ fontWeight: '700' }}>sua sessão</Text>, para bater com a candidatura.
-              </Text>
-            </View>
-          </>
+          <Text style={styles.sub}>
+            {tenantName ? `Sua organização na plataforma: ${tenantName}` : 'Cadastro iniciado por você no app'}
+          </Text>
         )}
         {revisionNote ? (
           <View style={styles.warn}>
@@ -1202,6 +1884,19 @@ export default function TechRegistrationScreen() {
           editable={!readOnly}
           placeholder="Nome"
         />
+        <Text style={styles.label}>Data de nascimento</Text>
+        <TextInput
+          style={styles.input}
+          value={birthDate}
+          onChangeText={(t) => {
+            setBirthDate(t.slice(0, 10));
+            saveDraftSoon();
+          }}
+          editable={!readOnly}
+          placeholder="AAAA-MM-DD"
+          keyboardType="numbers-and-punctuation"
+        />
+        <Text style={styles.fieldHint}>Preenchida automaticamente a partir do documento quando possível; você pode corrigir.</Text>
         <Text style={styles.label}>{isCompanyInvite ? 'E-mail do convite' : 'E-mail da conta'}</Text>
         <TextInput style={[styles.input, { opacity: 0.85 }]} value={email} editable={false} />
         <Text style={styles.fieldHint}>
@@ -1224,8 +1919,8 @@ export default function TechRegistrationScreen() {
         <Text style={styles.fieldHint}>Opcional neste passo — ajuda a equipe ou clientes a contatá-lo.</Text>
         {isAiProfileGateEngine(primaryProfileCapture?.validationEngine) ? (
           <Text style={styles.fieldHint}>
-            Foto de perfil: passo 1 (IA). Fotos CompreFace validadas contra essa foto: passo 2 — já concluídos se você
-            chegou a este formulário.
+            Passo 1: foto de perfil (IA). Passo 2: biometria. Passo 3: documento com foto (validação do rosto + leitura
+            dos dados). Confira nome, data de nascimento e a secção «Dados do documento» abaixo.
           </Text>
         ) : (
           <>
@@ -1248,21 +1943,156 @@ export default function TechRegistrationScreen() {
         )}
       </View>
 
+      {primaryDocRow ? (
+        <View style={styles.section}>
+          <Text style={styles.secTitle}>Dados do documento (passo 3)</Text>
+          <Text style={styles.fieldHint}>
+            Ligado ao documento enviado no passo 3: os campos abaixo são os mesmos da primeira linha de documentos
+            pessoais (leitura automática). Ajuste se algo estiver incorreto.
+          </Text>
+          <Text style={styles.label}>Tipo de documento</Text>
+          <TextInput
+            style={styles.input}
+            value={primaryDocRow.docType}
+            editable={!readOnly}
+            onChangeText={(t) => {
+              setPersonalDocs((prev) => {
+                const p0 = prev[0];
+                if (!p0) return prev;
+                const next = [...prev];
+                next[0] = { ...p0, docType: t };
+                return next;
+              });
+              saveDraftSoon();
+            }}
+            placeholder="RG, CNH, CPF, PASSAPORTE…"
+          />
+          <Text style={styles.label}>Número</Text>
+          <TextInput
+            style={styles.input}
+            value={primaryDocRow.identifier}
+            editable={!readOnly}
+            onChangeText={(t) => {
+              setPersonalDocs((prev) => {
+                const p0 = prev[0];
+                if (!p0) return prev;
+                const next = [...prev];
+                next[0] = { ...p0, identifier: t };
+                return next;
+              });
+              saveDraftSoon();
+            }}
+          />
+          <Text style={styles.label}>Data de emissão</Text>
+          <TextInput
+            style={styles.input}
+            value={primaryDocRow.validFrom}
+            editable={!readOnly}
+            placeholder="AAAA-MM-DD"
+            onChangeText={(t) => {
+              setPersonalDocs((prev) => {
+                const p0 = prev[0];
+                if (!p0) return prev;
+                const next = [...prev];
+                next[0] = { ...p0, validFrom: t.slice(0, 10) };
+                return next;
+              });
+              saveDraftSoon();
+            }}
+            keyboardType="numbers-and-punctuation"
+          />
+          <Text style={styles.label}>Data de validade</Text>
+          <TextInput
+            style={styles.input}
+            value={primaryDocRow.validTo}
+            editable={!readOnly}
+            placeholder="AAAA-MM-DD"
+            onChangeText={(t) => {
+              setPersonalDocs((prev) => {
+                const p0 = prev[0];
+                if (!p0) return prev;
+                const next = [...prev];
+                next[0] = { ...p0, validTo: t.slice(0, 10) };
+                return next;
+              });
+              saveDraftSoon();
+            }}
+            keyboardType="numbers-and-punctuation"
+          />
+          <Text style={styles.label}>Órgão emissor</Text>
+          <TextInput
+            style={styles.input}
+            value={primaryDocRow.issuingBody}
+            editable={!readOnly}
+            onChangeText={(t) => {
+              setPersonalDocs((prev) => {
+                const p0 = prev[0];
+                if (!p0) return prev;
+                const next = [...prev];
+                next[0] = { ...p0, issuingBody: t };
+                return next;
+              });
+              saveDraftSoon();
+            }}
+          />
+          {primaryDocRow.attachmentUrl ? (
+            <View style={{ marginTop: 10 }}>
+              {String(primaryDocRow.attachmentMimeType || '').toLowerCase().includes('pdf') ||
+              String(primaryDocRow.attachmentUrl).toLowerCase().endsWith('.pdf') ? (
+                <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600' }}>PDF anexado</Text>
+              ) : (
+                <Image
+                  source={{ uri: publicUrl(primaryDocRow.attachmentUrl) }}
+                  style={{ width: '100%', maxHeight: 220, minHeight: 140, borderRadius: 8 }}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+          ) : null}
+          {!readOnly ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+              <TouchableOpacity onPress={() => promptDocSource('personal', primaryDocRow.id)}>
+                <Text style={{ color: C.accent, fontWeight: '700' }}>
+                  {primaryDocRow.attachmentUrl ? 'Trocar foto do documento' : 'Anexar foto (câmera, galeria ou PDF)'}
+                </Text>
+              </TouchableOpacity>
+              {primaryDocRow.attachmentUrl ? (
+                <TouchableOpacity onPress={() => void clearDocAttachment('personal', primaryDocRow.id)}>
+                  <Text style={{ color: '#dc2626', fontWeight: '700' }}>Remover anexo</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       {!useSplitBiometricStep || readOnly ? (
         <View style={styles.section}>
           <Text style={styles.secTitle}>Fotos para biometria do tenant</Text>
           <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
             {isAiProfileGateEngine(primaryProfileCapture?.validationEngine)
               ? `Fluxo antigo ou revisão: inclua pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (câmera ou galeria). Máx. 12 imagens, 5 MB cada.`
-              : `Para o motor de reconhecimento facial das ordens de serviço (ex. CompreFace), envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.`}
+              : `Para o reconhecimento facial nas ordens de serviço, envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto (JPEG/PNG/WebP). Até 12 imagens, máx. 5 MB cada. Use a câmera ou a galeria.`}
           </Text>
           {!readOnly ? (
-            <TouchableOpacity style={[styles.btn, { marginHorizontal: 0, marginTop: 12 }]} onPress={pickFace}>
+            <TouchableOpacity
+              style={[styles.btn, { marginHorizontal: 0, marginTop: 12, opacity: faceEnrollmentSubmitting ? 0.55 : 1 }]}
+              onPress={pickFace}
+              disabled={faceEnrollmentSubmitting}
+            >
               <Text style={styles.btnText}>Adicionar fotos</Text>
             </TouchableOpacity>
           ) : null}
+          {!readOnly && faceEnrollmentSubmitting ? (
+            <View style={{ alignItems: 'center', marginTop: 16 }}>
+              <ActivityIndicator size="small" color={C.accent} />
+              <Text style={{ marginTop: 8, color: C.textSecondary, fontSize: 12, textAlign: 'center' }}>
+                Enviando e validando… pode levar alguns segundos.
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.faceRow}>
-            {facePhotos.map((p) => (
+            {enrollmentPhotosForUi.map((p) => (
               <View key={p.id}>
                 <Image source={{ uri: publicUrl(p.url) }} style={styles.faceImg} />
                 {!readOnly ? (
@@ -1278,41 +2108,119 @@ export default function TechRegistrationScreen() {
 
       <View style={styles.section}>
         <Text style={styles.secTitle}>Endereço</Text>
-        {(
-          [
-            ['Linha 1 (rua, nº)', line1, setLine1],
-            ['Complemento', line2, setLine2],
-            ['Bairro', district, setDistrict],
-            ['Cidade', city, setCity],
-            ['UF', stateUf, setStateUf],
-            ['CEP', postal, setPostal],
-          ] as [string, string, (v: string) => void][]
-        ).map(([lab, val, setVal]) => (
-          <View key={lab}>
-            <Text style={styles.label}>{lab}</Text>
-            <TextInput
-              style={styles.input}
-              value={val}
-              onChangeText={(t) => {
-                setVal(t);
-                saveDraftSoon();
-              }}
-              editable={!readOnly}
-            />
-          </View>
-        ))}
-        <Text style={styles.label}>País (ISO)</Text>
+        <Text style={styles.fieldHint}>
+          País define se o CEP pode ser preenchido automaticamente (Brasil = ViaCEP). Organizações com várias bases usam o
+          mesmo formulário; as regiões em que você atua escolhe-se na secção «Regiões atendidas».
+        </Text>
+        <Text style={styles.label}>País (código ISO, ex.: BR)</Text>
         <TextInput
           style={styles.input}
           value={country}
           onChangeText={(t) => {
-            setCountry(t);
+            setCountry(t.slice(0, 2).toUpperCase());
             saveDraftSoon();
           }}
           editable={!readOnly}
           maxLength={2}
           autoCapitalize="characters"
+          placeholder="BR"
         />
+        <Text style={styles.label}>{String(country || 'BR').toUpperCase() === 'BR' ? 'CEP' : 'Código postal'}</Text>
+        <View style={styles.cepRow}>
+          <View style={styles.cepInputWrap}>
+            <TextInput
+              style={[styles.input, { marginBottom: 0 }]}
+              value={postal}
+              onChangeText={(t) => {
+                const next =
+                  String(country || 'BR').toUpperCase() === 'BR' ? formatBrCepInput(t) : t;
+                setPostal(next);
+                saveDraftSoon();
+              }}
+              editable={!readOnly}
+              placeholder={String(country || 'BR').toUpperCase() === 'BR' ? '00000-000' : ''}
+              keyboardType="number-pad"
+              maxLength={String(country || 'BR').toUpperCase() === 'BR' ? 9 : 24}
+            />
+          </View>
+          {!readOnly && String(country || 'BR').toUpperCase() === 'BR' ? (
+            <TouchableOpacity
+              style={[styles.cepSearchBtn, { opacity: fetchingCep ? 0.65 : 1 }]}
+              onPress={() => void fetchCepAndFillAddress()}
+              disabled={fetchingCep}
+            >
+              {fetchingCep ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.cepSearchBtnText}>Buscar</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {String(country || 'BR').toUpperCase() === 'BR' ? (
+          <Text style={styles.fieldHint}>Busca ViaCEP: preenche rua, bairro, cidade e UF. Depois complemente o número.</Text>
+        ) : (
+          <Text style={styles.fieldHint}>Fora do Brasil, preencha os campos abaixo manualmente.</Text>
+        )}
+        <Text style={styles.label}>Linha 1 (rua e número)</Text>
+        <TextInput
+          style={styles.input}
+          value={line1}
+          onChangeText={(t) => {
+            setLine1(t);
+            saveDraftSoon();
+          }}
+          editable={!readOnly}
+          placeholder="Rua e número"
+        />
+        <Text style={styles.label}>Complemento</Text>
+        <TextInput
+          style={styles.input}
+          value={line2}
+          onChangeText={(t) => {
+            setLine2(t);
+            saveDraftSoon();
+          }}
+          editable={!readOnly}
+        />
+        <Text style={styles.label}>Bairro</Text>
+        <TextInput
+          style={styles.input}
+          value={district}
+          onChangeText={(t) => {
+            setDistrict(t);
+            saveDraftSoon();
+          }}
+          editable={!readOnly}
+        />
+        <View style={styles.row2}>
+          <View style={styles.flex1}>
+            <Text style={styles.label}>Cidade</Text>
+            <TextInput
+              style={styles.input}
+              value={city}
+              onChangeText={(t) => {
+                setCity(t);
+                saveDraftSoon();
+              }}
+              editable={!readOnly}
+            />
+          </View>
+          <View style={{ width: 72 }}>
+            <Text style={styles.label}>UF</Text>
+            <TextInput
+              style={styles.input}
+              value={stateUf}
+              onChangeText={(t) => {
+                setStateUf(t.slice(0, 2).toUpperCase());
+                saveDraftSoon();
+              }}
+              editable={!readOnly}
+              maxLength={2}
+              autoCapitalize="characters"
+            />
+          </View>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -1381,6 +2289,12 @@ export default function TechRegistrationScreen() {
 
       <View style={styles.section}>
         <Text style={styles.secTitle}>Docs. pessoais</Text>
+        {showPrimaryDocumentSection ? (
+          <Text style={[styles.fieldHint, { marginBottom: 8 }]}>
+            O documento principal do passo 3 está na secção «Dados do documento» acima. Use «Adicionar linha» só para
+            outros documentos (comprovantes, etc.).
+          </Text>
+        ) : null}
         {!readOnly ? (
           <TouchableOpacity
             onPress={() =>
@@ -1390,9 +2304,12 @@ export default function TechRegistrationScreen() {
             <Text style={{ color: C.accent, fontWeight: '700' }}>+ Adicionar linha</Text>
           </TouchableOpacity>
         ) : null}
-        {personalDocs.map((d, idx) => (
+        {(showPrimaryDocumentSection ? personalDocs.slice(1) : personalDocs).map((d, sliceIdx) => {
+          const idx = showPrimaryDocumentSection ? sliceIdx + 1 : sliceIdx;
+          const displayNum = idx + 1;
+          return (
           <View key={d.id} style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border }}>
-            <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>Documento {idx + 1}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>Documento {displayNum}</Text>
             <Text style={styles.label}>Tipo</Text>
             <TextInput style={styles.input} value={d.docType} editable={!readOnly} onChangeText={(t) => {
               const n = [...personalDocs];
@@ -1455,7 +2372,8 @@ export default function TechRegistrationScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-        ))}
+        );
+        })}
       </View>
 
       <View style={styles.section}>
@@ -1531,32 +2449,40 @@ export default function TechRegistrationScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.secTitle}>Horários</Text>
+        <Text style={styles.secTitle}>Horários da semana</Text>
+        <Text style={[styles.fieldHint, { marginBottom: 12 }]}>
+          Ative os dias em que você pode receber serviços e ajuste o intervalo (formato 24 h, ex.: 08:00 e 18:00).
+        </Text>
         {DAYS.map(({ key, label }) => {
           const slot = schedule[key]?.[0] || { enabled: false, start: '08:00', end: '18:00' };
           return (
-            <View key={key} style={styles.dayRow}>
-              <Text style={{ fontWeight: '700', color: C.slate, marginBottom: 6 }}>{label}</Text>
-              <TouchableOpacity
-                disabled={readOnly}
-                onPress={() => {
-                  const n = { ...schedule };
-                  n[key] = [{ ...slot, enabled: !slot.enabled }];
-                  setSchedule(n);
-                  saveDraftSoon();
-                }}
-                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}
-              >
-                <Ionicons name={slot.enabled ? 'checkbox' : 'square-outline'} size={22} color={C.accent} />
-                <Text style={{ marginLeft: 8, color: C.textSecondary }}>Ativo neste dia</Text>
-              </TouchableOpacity>
-              <View style={styles.row2}>
+            <View key={key} style={styles.dayCard}>
+              <View style={styles.dayRowTop}>
+                <Text style={{ fontWeight: '800', fontSize: 15, color: C.slate }}>{label}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 13, color: C.textSecondary }}>Disponível</Text>
+                  <Switch
+                    value={slot.enabled}
+                    onValueChange={(v) => {
+                      if (readOnly) return;
+                      const n = { ...schedule };
+                      n[key] = [{ ...slot, enabled: v }];
+                      setSchedule(n);
+                      saveDraftSoon();
+                    }}
+                    disabled={readOnly}
+                    trackColor={{ false: C.border, true: `${C.accent}88` }}
+                    thumbColor={slot.enabled ? C.accent : '#f4f4f5'}
+                  />
+                </View>
+              </View>
+              <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
                 <View style={styles.flex1}>
                   <Text style={styles.label}>Início</Text>
                   <TextInput
                     style={styles.input}
                     value={slot.start}
-                    editable={!readOnly}
+                    editable={!readOnly && slot.enabled}
                     onChangeText={(t) => {
                       const n = { ...schedule };
                       n[key] = [{ ...slot, start: t }];
@@ -1571,7 +2497,7 @@ export default function TechRegistrationScreen() {
                   <TextInput
                     style={styles.input}
                     value={slot.end}
-                    editable={!readOnly}
+                    editable={!readOnly && slot.enabled}
                     onChangeText={(t) => {
                       const n = { ...schedule };
                       n[key] = [{ ...slot, end: t }];
@@ -1589,7 +2515,24 @@ export default function TechRegistrationScreen() {
 
       <View style={styles.section}>
         <Text style={styles.secTitle}>Regiões atendidas</Text>
-        <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>Toque para selecionar as bases onde pode atuar.</Text>
+        <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8, lineHeight: 18 }}>
+          Escolha as bases da organização em que pode atuar. Pode usar o mapa (centrado no endereço acima) ou os botões.
+        </Text>
+        {!readOnly ? (
+          <TouchableOpacity
+            style={[styles.mapOpenBtn, { opacity: mapOpenLoading ? 0.65 : 1 }]}
+            onPress={() => void openRegionsMap()}
+            disabled={mapOpenLoading}
+          >
+            {mapOpenLoading ? (
+              <ActivityIndicator color={C.accent} size="small" />
+            ) : (
+              <Ionicons name="map-outline" size={22} color={C.accent} />
+            )}
+            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 15 }}>Abrir mapa das regiões</Text>
+          </TouchableOpacity>
+        ) : null}
+        <Text style={[styles.fieldHint, { marginTop: 10 }]}>Toque num nome para marcar ou desmarcar.</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
           {locations.map((loc) => {
             const on = serviceLocIds.includes(loc.id);
@@ -1634,5 +2577,62 @@ export default function TechRegistrationScreen() {
         </TouchableOpacity>
       ) : null}
     </ScrollView>
+
+    <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
+      <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
+        <View style={styles.mapModalHeader}>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa — regiões</Text>
+          <TouchableOpacity onPress={() => setRegionMapVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 16 }}>Fechar</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={{ fontSize: 12, color: C.textSecondary, paddingHorizontal: 16, marginBottom: 8, lineHeight: 18 }}>
+          O mapa centra no endereço que você informou (se o sistema conseguir localizar). Cada círculo é uma base aproximada:
+          toque no marcador para incluir ou remover a base.
+        </Text>
+        {mapInitialRegion ? (
+          <MapView style={{ flex: 1 }} initialRegion={mapInitialRegion} showsUserLocation={false}>
+            {locsWithCoords.map((loc) => {
+              const sel = serviceLocIds.includes(loc.id);
+              return (
+                <React.Fragment key={loc.id}>
+                  <Circle
+                    center={{ latitude: loc.latitude as number, longitude: loc.longitude as number }}
+                    radius={SERVICE_AREA_RADIUS_METERS}
+                    strokeColor={sel ? C.accent : '#64748b'}
+                    fillColor={sel ? `${C.accent}40` : '#94a3b828'}
+                    strokeWidth={2}
+                  />
+                  <Marker
+                    coordinate={{ latitude: loc.latitude as number, longitude: loc.longitude as number }}
+                    title={loc.name}
+                    description={sel ? 'Selecionada — toque para remover' : 'Toque para selecionar'}
+                    tracksViewChanges={false}
+                    onPress={() => {
+                      toggleServiceLoc(loc.id);
+                    }}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </MapView>
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: C.textSecondary }}>Carregando mapa…</Text>
+          </View>
+        )}
+        {locsWithoutCoords.length > 0 ? (
+          <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.surfaceLow }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: C.slate, marginBottom: 6 }}>
+              Bases sem coordenadas no mapa — use os botões de texto:
+            </Text>
+            <Text style={{ fontSize: 12, color: C.textSecondary }}>
+              {locsWithoutCoords.map((l) => l.name).join(' · ')}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
+    </>
   );
 }

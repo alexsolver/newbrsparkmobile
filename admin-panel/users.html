@@ -182,14 +182,22 @@
       if (!tp || !tp.status) return '';
       const st = String(tp.status).toUpperCase();
       const lines = {
-        ACTIVE: { c: 'var(--green)', t: 'Prestador: pode receber OS' },
-        PENDING: { c: 'var(--amber)', t: 'Prestador: pendente (ainda não recebe OS)' },
-        INACTIVE: { c: 'var(--text3)', t: 'Prestador: inativo (não recebe OS)' },
-        SUSPENDED: { c: 'var(--red)', t: 'Prestador: suspenso' },
+        ACTIVE: { c: 'var(--green)', t: 'Prestador: pode receber OS', sub: '' },
+        PENDING: {
+          c: 'var(--amber)',
+          t: 'Prestador: pendente (ainda não recebe OS)',
+          sub:
+            'Isto é o perfil técnico. O formulário de cadastro é outra lista: <a href="technician-applications.html" style="color:inherit;text-decoration:underline;font-weight:600">Cadastro de prestadores</a> (procure «Perfil sem candidatura» se não houver convite).',
+        },
+        INACTIVE: { c: 'var(--text3)', t: 'Prestador: inativo (não recebe OS)', sub: '' },
+        SUSPENDED: { c: 'var(--red)', t: 'Prestador: suspenso', sub: '' },
       };
       const x = lines[st];
       if (!x) return '';
-      return `<span style="display:block;font-size:10px;font-weight:600;color:${x.c};margin-top:5px;line-height:1.25">${x.t}</span>`;
+      const sub = x.sub
+        ? `<span style="display:block;font-size:9px;font-weight:500;color:var(--text3);margin-top:6px;max-width:280px;line-height:1.35">${x.sub}</span>`
+        : '';
+      return `<span style="display:block;font-size:10px;font-weight:600;color:${x.c};margin-top:5px;line-height:1.25">${x.t}</span>${sub}`;
     };
 
     const escAttr = (s) =>

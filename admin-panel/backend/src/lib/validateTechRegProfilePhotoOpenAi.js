@@ -9,6 +9,7 @@
  */
 
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
+const { openAiMessageContentToString, parseOpenAiJsonObject } = require('./openAiChatParse');
 
 function detectBufferMime(buf) {
   if (!buf || buf.length < 12) return 'image/jpeg';
@@ -83,7 +84,7 @@ Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-
           role: 'user',
           content: [
             { type: 'text', text: userText },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+            { type: 'image_url', image_url: { url: dataUrl, detail: 'auto' } },
           ],
         },
       ],
@@ -108,8 +109,14 @@ Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-
     throw err;
   }
 
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== 'string') {
+  const msg0 = data?.choices?.[0]?.message;
+  if (msg0?.refusal) {
+    const err = new Error('O modelo recusou analisar a foto de perfil.');
+    err.code = 'OPENAI_REFUSAL';
+    throw err;
+  }
+  const contentStr = openAiMessageContentToString(msg0?.content);
+  if (!String(contentStr).trim()) {
     const err = new Error('Resposta da análise sem conteúdo.');
     err.code = 'OPENAI_EMPTY';
     throw err;
@@ -117,7 +124,7 @@ Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-
 
   let parsed;
   try {
-    parsed = JSON.parse(content);
+    parsed = parseOpenAiJsonObject(contentStr);
   } catch (e) {
     const err = new Error('Resultado da análise em formato inválido.');
     err.code = 'OPENAI_JSON';

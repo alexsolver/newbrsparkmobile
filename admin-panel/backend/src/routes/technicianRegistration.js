@@ -18,6 +18,10 @@ const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
+const {
+  extractIdDocumentWithOpenAi,
+  verifyDocumentFaceMatchesProfileOpenAi,
+} = require('../lib/techRegIdDocumentOpenAi');
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
 
@@ -74,6 +78,31 @@ function isAiTechRegProfileGateFromRaw(raw) {
   return !!cap.validatedAt;
 }
 
+/**
+ * Remove de `faceEnrollmentPhotos` entradas que são a foto de perfil (mesmo id, prefixo tp_, ou mesma URL que avatarUrl).
+ * Evita mostrar o passo 1 no passo 2.
+ * @returns {{ next: object, changed: boolean }}
+ */
+function sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { next: raw, changed: false };
+  if (!isAiTechRegProfileGateFromRaw(raw)) return { next: raw, changed: false };
+  const cap = raw.techRegPrimaryProfileCapture;
+  const pid = cap && cap.photoId ? String(cap.photoId) : '';
+  const av = String(raw.avatarUrl || '').trim();
+  const list = normalizeFacePhotos(raw.faceEnrollmentPhotos);
+  const filtered = list.filter((p) => {
+    const id = String(p.id || '');
+    const url = String(p.url || '').trim();
+    if (id.startsWith('tp_')) return false;
+    if (pid && id === pid) return false;
+    if (av && url === av) return false;
+    return true;
+  });
+  if (filtered.length === list.length) return { next: raw, changed: false };
+  const next = { ...raw, faceEnrollmentPhotos: filtered };
+  return { next, changed: true };
+}
+
 function validateSubmitPayload(app, body) {
   const merged = mergeJsonResponses(app.responsesJson, body.responsesJson || body.responses || {});
   const email = String(merged.email || app.invitedEmail || '')
@@ -91,7 +120,11 @@ function validateSubmitPayload(app, body) {
       return 'Conclua o passo 1 (foto de perfil) antes de enviar a candidatura.';
     }
     if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
-      return `No passo 2, envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos de rosto validadas pelo CompreFace contra a foto de perfil. Atualmente: ${faces.length}.`;
+      return `No passo 2, envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos de rosto validadas em relação à foto de perfil. Atualmente: ${faces.length}.`;
+    }
+    const idc = merged.techRegIdDocument;
+    if (!idc || typeof idc !== 'object' || !idc.faceVerifiedAt) {
+      return 'Conclua o passo 3: envie o documento com foto, aguarde a validação do rosto e o preenchimento dos dados.';
     }
   } else if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
     return `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos nítidas do rosto para reconhecimento facial. Atualmente: ${faces.length}.`;
@@ -182,6 +215,10 @@ publicRouter.post(
           await unlinkUploadsPublicPath(u);
         }
       }
+      const oldIdDoc = raw.techRegIdDocument && raw.techRegIdDocument.attachmentUrl;
+      if (oldIdDoc && String(oldIdDoc).startsWith(`/uploads/tech-registration/${app.id}/`)) {
+        await unlinkUploadsPublicPath(String(oldIdDoc));
+      }
 
       const photoId = `tp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
       const fname = `${photoId}.${ext}`;
@@ -203,13 +240,30 @@ publicRouter.post(
         avatarUrl: publicPath,
         techRegPrimaryProfileCapture: cap,
         faceEnrollmentPhotos: [],
+        birthDate: null,
       };
-      await prisma.technicianRegistrationApplication.update({
-        where: { id: app.id },
-        data: { responsesJson: nextJson },
-      });
+      delete nextJson.techRegIdDocument;
+      const pd = Array.isArray(raw.personalDocuments) ? raw.personalDocuments.map((x) => ({ ...x })) : [];
+      if (oldIdDoc && pd.length) {
+        const u0 = String(pd[0].attachmentUrl || '');
+        if (u0 === String(oldIdDoc)) {
+          pd[0] = { ...pd[0], attachmentUrl: null, attachmentMimeType: null };
+        }
+      }
+      nextJson.personalDocuments = pd;
+      await prisma.$transaction([
+        prisma.technicianRegistrationApplication.update({
+          where: { id: app.id },
+          data: { responsesJson: nextJson },
+        }),
+        prisma.user.update({
+          where: { id: req.user.id },
+          data: { avatarUrl: publicPath },
+        }),
+      ]);
       res.status(201).json({
         url: publicPath,
+        avatarUrl: publicPath,
         techRegPrimaryProfileCapture: cap,
         faceEnrollmentPhotos: [],
       });
@@ -262,11 +316,21 @@ publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
       .catch(() => {});
     const locations = await prisma.location.findMany({
       where: { tenantId: app.tenantId },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, latitude: true, longitude: true, address: true },
       orderBy: { name: 'asc' },
     });
-    const responses =
-      app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+    let responses =
+      app.responsesJson && typeof app.responsesJson === 'object' ? { ...app.responsesJson } : {};
+    const { next: cleaned, changed } = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(responses);
+    if (changed) {
+      responses = cleaned;
+      await prisma.technicianRegistrationApplication
+        .update({
+          where: { id: app.id },
+          data: { responsesJson: responses },
+        })
+        .catch((e) => console.warn('[tech-reg GET] sanitize faceEnrollmentPhotos', e.message));
+    }
     res.json({
       id: app.id,
       status: app.status,
@@ -300,7 +364,9 @@ publicRouter.patch(
       if (app.status === 'SUBMITTED') {
         return res.status(400).json({ error: 'Candidatura aguarda análise. Não é possível alterar o rascunho agora.' });
       }
-      const next = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body);
+      let next = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body);
+      const saniDraft = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(next);
+      if (saniDraft.changed) next = saniDraft.next;
       const updated = await prisma.technicianRegistrationApplication.update({
         where: { id: app.id },
         data: {
@@ -406,7 +472,7 @@ async function readTechRegProfileBuffer(app) {
   try {
     const profileBuf = await fs.readFile(abs);
     if (!profileBuf || profileBuf.length < 64) {
-      return { error: 'Ficheiro da foto de perfil em falta. Refaça o passo 1.' };
+      return { error: 'Arquivo da foto de perfil não encontrado. Refaça o passo 1.' };
     }
     return { buf: profileBuf };
   } catch {
@@ -449,14 +515,27 @@ publicRouter.post(
     }
     if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
 
-    const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+    const freshApp = await prisma.technicianRegistrationApplication.findUnique({
+      where: { id: app.id },
+    });
+    if (!freshApp) return res.status(404).json({ error: 'Candidatura não encontrada.' });
+    let workingRaw =
+      freshApp.responsesJson && typeof freshApp.responsesJson === 'object' ? freshApp.responsesJson : {};
+    const stripProf = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(workingRaw);
+    if (stripProf.changed) {
+      workingRaw = stripProf.next;
+      await prisma.technicianRegistrationApplication.update({
+        where: { id: freshApp.id },
+        data: { responsesJson: workingRaw },
+      });
+    }
 
-    if (isAiTechRegProfileGateFromRaw(raw)) {
-      const prof = await readTechRegProfileBuffer(app);
+    if (isAiTechRegProfileGateFromRaw(workingRaw)) {
+      const prof = await readTechRegProfileBuffer({ ...freshApp, responsesJson: workingRaw });
       if (prof.error) {
         return res.status(400).json({ error: prof.error, code: 'PROFILE_REQUIRED' });
       }
-      const v = await verifyTechRegEnrollmentAgainstProfile(prisma, app.tenantId, prof.buf, buf);
+      const v = await verifyTechRegEnrollmentAgainstProfile(prisma, freshApp.tenantId, prof.buf, buf);
       if (!v.ok) {
         const st =
           v.code === 'NO_VISION_INTEGRATION' ||
@@ -468,17 +547,17 @@ publicRouter.post(
       }
     }
 
-    const list = normalizeFacePhotos(raw.faceEnrollmentPhotos);
+    const list = normalizeFacePhotos(workingRaw.faceEnrollmentPhotos);
     if (list.length >= MAX_FACE_ENROLLMENT_PHOTOS) {
       return res.status(400).json({ error: `Limite de ${MAX_FACE_ENROLLMENT_PHOTOS} fotos.` });
     }
 
     const photoId = `fe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const fname = `${photoId}.${ext}`;
-    const absDir = path.join(__dirname, '../../public/uploads/tech-registration', app.id);
+    const absDir = path.join(__dirname, '../../public/uploads/tech-registration', freshApp.id);
     await fs.mkdir(absDir, { recursive: true });
     await fs.writeFile(path.join(absDir, fname), buf);
-    const publicPath = `/uploads/tech-registration/${app.id}/${fname}`;
+    const publicPath = `/uploads/tech-registration/${freshApp.id}/${fname}`;
     const createdAt = new Date().toISOString();
     const entry = {
       id: photoId,
@@ -487,15 +566,23 @@ publicRouter.post(
       createdAt,
     };
     const next = [...list, entry];
-    const nextJson = { ...raw, faceEnrollmentPhotos: next };
+    let nextJson = { ...workingRaw, faceEnrollmentPhotos: next };
+    const saniOut = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(nextJson);
+    if (saniOut.changed) nextJson = saniOut.next;
     await prisma.technicianRegistrationApplication.update({
-      where: { id: app.id },
+      where: { id: freshApp.id },
       data: { responsesJson: nextJson },
     });
-    res.status(201).json({ photo: entry, photos: next });
+    res.status(201).json({
+      photo: entry,
+      photos: normalizeFacePhotos(nextJson.faceEnrollmentPhotos),
+    });
   } catch (err) {
     console.error('POST tech-reg face', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: 'Não foi possível processar a foto neste momento. Tente de novo em instantes.',
+      code: 'SERVER_ERROR',
+    });
   }
   }
 );
@@ -505,6 +592,23 @@ publicRouter.delete('/:token/face-enrollment/:photoId', authUser, bindTechRegist
     const { photoId } = req.params;
     const app = req.techRegApp;
     const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
+    const cap = raw.techRegPrimaryProfileCapture;
+    const profilePid =
+      cap && typeof cap === 'object' && cap.photoId
+        ? String(cap.photoId)
+        : '';
+    if (profilePid && String(photoId) === profilePid) {
+      return res.status(400).json({
+        error: 'A foto de perfil do passo 1 não pode ser removida por aqui. Use o fluxo de cadastro para alterar o passo 1.',
+        code: 'PROFILE_PHOTO_PROTECTED',
+      });
+    }
+    if (String(photoId).startsWith('tp_')) {
+      return res.status(400).json({
+        error: 'A foto de perfil (passo 1) não pode ser removida por esta rota.',
+        code: 'PROFILE_PHOTO_PROTECTED',
+      });
+    }
     const list = normalizeFacePhotos(raw.faceEnrollmentPhotos);
     const found = list.find((p) => p.id === photoId);
     if (!found) return res.status(404).json({ error: 'Foto não encontrada.' });
@@ -518,16 +622,225 @@ publicRouter.delete('/:token/face-enrollment/:photoId', authUser, bindTechRegist
         /* ok */
       }
     }
+    let nextJson = { ...raw, faceEnrollmentPhotos: next };
+    const saniDel = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(nextJson);
+    if (saniDel.changed) nextJson = saniDel.next;
     await prisma.technicianRegistrationApplication.update({
       where: { id: app.id },
-      data: { responsesJson: { ...raw, faceEnrollmentPhotos: next } },
+      data: { responsesJson: nextJson },
     });
-    res.json({ photos: next });
+    res.json({ photos: normalizeFacePhotos(nextJson.faceEnrollmentPhotos) });
   } catch (err) {
     console.error('DELETE tech-reg face', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+function mergeTechRegIdDocumentResponses(raw, publicPath, mimeType, extracted, faceVerifiedAt) {
+  const ocrAt = new Date().toISOString();
+  const techRegIdDocument = {
+    attachmentUrl: publicPath,
+    mimeType: mimeType || null,
+    faceVerifiedAt,
+    faceMatchProvider: 'openai',
+    ocrAt,
+    ocrProvider: 'openai',
+    extracted: {
+      docType: extracted.docType,
+      documentNumber: extracted.documentNumber,
+      issueDate: extracted.issueDate,
+      expiryDate: extracted.expiryDate,
+      issuingBody: extracted.issuingBody,
+      fullName: extracted.fullName,
+      birthDate: extracted.birthDate,
+    },
+  };
+  const base = raw && typeof raw === 'object' ? { ...raw } : {};
+  const prev = Array.isArray(base.personalDocuments) ? base.personalDocuments.map((x) => ({ ...x })) : [];
+  let row0;
+  if (prev.length) {
+    row0 = { ...prev[0] };
+  } else {
+    row0 = {
+      id: `pd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      notes: '',
+      locationIds: [],
+    };
+  }
+  if (!row0.id) row0.id = `pd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  row0.docType = extracted.docType || row0.docType || 'OUTRO';
+  row0.identifier = extracted.documentNumber || row0.identifier || '';
+  row0.validFrom = extracted.issueDate || row0.validFrom || '';
+  row0.validTo = extracted.expiryDate || row0.validTo || '';
+  row0.issuingBody = extracted.issuingBody || row0.issuingBody || '';
+  row0.attachmentUrl = publicPath;
+  row0.attachmentMimeType = mimeType || null;
+  const nextPersonal = [row0, ...prev.slice(1)];
+  const fullName = String(extracted.fullName || '').trim();
+  return {
+    ...base,
+    techRegIdDocument,
+    ...(fullName ? { name: fullName } : {}),
+    birthDate: extracted.birthDate || base.birthDate || null,
+    personalDocuments: nextPersonal,
+  };
+}
+
+/**
+ * Passo 3 (fluxo IA): documento com foto — comparação rosto documento × perfil (OpenAI visão, mesmo motor do passo 1) + OCR e preenchimento de dados.
+ */
+publicRouter.post(
+  '/:token/id-document',
+  express.json({ limit: '15mb' }),
+  authUser,
+  bindTechRegistrationCandidate,
+  async (req, res) => {
+    try {
+      const { fileBase64, mimeType } = req.body || {};
+      const app = req.techRegApp;
+      if (['APPROVED', 'REJECTED'].includes(app.status)) {
+        return res.status(400).json({ error: 'Candidatura encerrada.' });
+      }
+      if (!fileBase64 || typeof fileBase64 !== 'string') {
+        return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+      }
+      const b64 = String(fileBase64).replace(/\s/g, '');
+      let buf;
+      try {
+        buf = Buffer.from(b64, 'base64');
+      } catch {
+        return res.status(400).json({ error: 'Base64 inválido.' });
+      }
+      if (buf.length > MAX_DOC_ATTACHMENT_BYTES) {
+        return res.status(400).json({ error: 'Arquivo muito grande (máx. 10 MB).' });
+      }
+      const ext = detectDocExtFromBuffer(buf, mimeType);
+      if (ext === 'pdf') {
+        return res.status(400).json({
+          error:
+            'Neste passo envie uma foto do documento (JPEG, PNG ou WebP). Assim conseguimos comparar o rosto na imagem com a sua foto de perfil.',
+          code: 'ID_DOC_IMAGE_REQUIRED',
+        });
+      }
+      if (!ext || ext === 'heic') {
+        return res.status(400).json({
+          error:
+            ext === 'heic'
+              ? 'HEIC não é suportado. Use JPEG ou PNG.'
+              : 'Use imagem JPEG, PNG ou WebP do documento.',
+        });
+      }
+
+      const freshApp = await prisma.technicianRegistrationApplication.findUnique({
+        where: { id: app.id },
+      });
+      if (!freshApp) return res.status(404).json({ error: 'Candidatura não encontrada.' });
+      let workingRaw =
+        freshApp.responsesJson && typeof freshApp.responsesJson === 'object' ? freshApp.responsesJson : {};
+
+      if (!isAiTechRegProfileGateFromRaw(workingRaw)) {
+        return res.status(400).json({
+          error: 'Este passo só está disponível no fluxo com foto de perfil validada por IA.',
+          code: 'ID_DOC_FLOW_MISMATCH',
+        });
+      }
+
+      const faces = normalizeFacePhotos(workingRaw.faceEnrollmentPhotos);
+      if (faces.length < MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT) {
+        return res.status(400).json({
+          error: `Conclua o passo 2 antes: envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT} fotos biométricas.`,
+          code: 'FACE_STEP_REQUIRED',
+        });
+      }
+
+      const prof = await readTechRegProfileBuffer({ ...freshApp, responsesJson: workingRaw });
+      if (prof.error) {
+        return res.status(400).json({ error: prof.error, code: 'PROFILE_REQUIRED' });
+      }
+
+      let faceCheck;
+      try {
+        faceCheck = await verifyDocumentFaceMatchesProfileOpenAi(prof.buf, buf);
+      } catch (e) {
+        console.error(
+          '[tech-reg id-document] face match OpenAI',
+          e?.code || e?.name,
+          e?.status,
+          e?.message || e
+        );
+        if (e.code === 'NO_OPENAI_KEY') {
+          return res.status(503).json({
+            error:
+              'Comparação do documento com a foto de perfil requer OpenAI configurada (integração no painel ou OPENAI_API_KEY).',
+            code: 'NO_OPENAI_KEY',
+          });
+        }
+        return res.status(503).json({
+          error:
+            'Não foi possível comparar o documento com a foto de perfil agora. Tente de novo em instantes.',
+          code: 'FACE_VERIFY_FAILED',
+        });
+      }
+      if (!faceCheck.ok) {
+        return res.status(400).json({ error: faceCheck.message, code: faceCheck.code });
+      }
+
+      let extracted;
+      try {
+        const addr = workingRaw.addressJson && typeof workingRaw.addressJson === 'object' ? workingRaw.addressJson : {};
+        const countryCode = String(addr.countryCode || 'BR').trim() || 'BR';
+        extracted = await extractIdDocumentWithOpenAi(buf, { countryCode });
+      } catch (e) {
+        console.error('[tech-reg id-document] OCR', e);
+        if (e.code === 'NO_OPENAI_KEY') {
+          return res.status(503).json({
+            error:
+              'Leitura automática do documento indisponível: configure a integração OpenAI no servidor ou OPENAI_API_KEY.',
+            code: 'NO_OPENAI_KEY',
+          });
+        }
+        return res.status(500).json({
+          error: 'Não foi possível ler os dados do documento. Tente outra foto mais nítida.',
+          code: 'OCR_FAILED',
+        });
+      }
+
+      const prefix = `/uploads/tech-registration/${freshApp.id}/`;
+      const oldId = workingRaw.techRegIdDocument && workingRaw.techRegIdDocument.attachmentUrl;
+      if (oldId && String(oldId).startsWith(prefix)) {
+        await unlinkUploadsPublicPath(String(oldId));
+      }
+
+      const fname = `idr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+      const absDir = path.join(__dirname, '../../public/uploads/tech-registration', freshApp.id);
+      await fs.mkdir(absDir, { recursive: true });
+      await fs.writeFile(path.join(absDir, fname), buf);
+      const publicPath = `/uploads/tech-registration/${freshApp.id}/${fname}`;
+      const faceVerifiedAt = new Date().toISOString();
+      const mimeOut = mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+
+      const nextJson = mergeTechRegIdDocumentResponses(workingRaw, publicPath, mimeOut, extracted, faceVerifiedAt);
+
+      await prisma.technicianRegistrationApplication.update({
+        where: { id: freshApp.id },
+        data: { responsesJson: nextJson },
+      });
+
+      res.status(201).json({
+        ok: true,
+        responsesJson: nextJson,
+        techRegIdDocument: nextJson.techRegIdDocument,
+        extracted: nextJson.techRegIdDocument.extracted,
+      });
+    } catch (err) {
+      console.error('POST tech-reg id-document', err);
+      res.status(500).json({
+        error: 'Não foi possível processar o documento. Tente novamente em instantes.',
+        code: 'SERVER_ERROR',
+      });
+    }
+  }
+);
 
 function docMimeToExt(mt) {
   const m = String(mt || '').toLowerCase();
@@ -727,16 +1040,85 @@ publicRouter.delete(
 
 // ─── Admin / gestor ──────────────────────────────────────────────────────────
 
+/**
+ * Utilizadores com TechnicianProfile PENDING mas sem candidatura de cadastro em curso
+ * (o que explica «Prestador pendente» em Utilizadores sem linha em Cadastro de prestadores).
+ */
+async function listOrphanPendingTechnicianProfiles(tenantFilter) {
+  const userWhere = {
+    technicianProfile: { status: 'PENDING' },
+    ...(tenantFilter ? { tenantId: tenantFilter } : {}),
+  };
+  const users = await prisma.user.findMany({
+    where: userWhere,
+    take: 150,
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      tenantId: true,
+      updatedAt: true,
+      tenant: { select: { id: true, name: true } },
+    },
+  });
+  if (!users.length) return [];
+
+  const tenantIds = [...new Set(users.map((u) => u.tenantId))];
+
+  const blockingStatuses = ['INVITED', 'DRAFT', 'SUBMITTED', 'NEEDS_REVISION', 'APPROVED'];
+  const existingApps = await prisma.technicianRegistrationApplication.findMany({
+    where: {
+      tenantId: { in: tenantIds },
+      status: { in: blockingStatuses },
+    },
+    select: { tenantId: true, invitedEmail: true },
+  });
+  const key = (tid, em) => `${tid}::${String(em).toLowerCase()}`;
+  const blocked = new Set(existingApps.map((a) => key(a.tenantId, a.invitedEmail)));
+
+  return users
+    .filter((u) => !blocked.has(key(u.tenantId, u.email)))
+    .map((u) => ({
+      kind: 'orphan_profile',
+      id: null,
+      applicationId: null,
+      orphanUserId: u.id,
+      tenantId: u.tenantId,
+      tenantName: u.tenant?.name,
+      invitedEmail: u.email,
+      candidateName: u.name,
+      status: 'PERFIL_SEM_CANDIDATURA',
+      submittedAt: null,
+      resolvedAt: null,
+      createdAt: null,
+      updatedAt: u.updatedAt,
+      createdUserId: null,
+      createdUserEmail: null,
+    }));
+}
+
 adminRouter.get('/', async (req, res) => {
   try {
-    const { status, tenantId: qTenant } = req.query;
+    const { status, tenantId: qTenant, includeOrphans } = req.query;
     const a = req.admin;
     let tenantFilter = qTenant || null;
     if (a?.panelUser && a.tenantId) tenantFilter = a.tenantId;
 
+    const statusStr = status ? String(status) : '';
+    /** Com filtro por estado de candidatura, não misturar filas diferentes. */
+    const wantOrphans =
+      includeOrphans !== '0' &&
+      (!statusStr || statusStr === 'PERFIL_SEM_CANDIDATURA' || statusStr === '__ORPHAN__');
+
+    if (statusStr === 'PERFIL_SEM_CANDIDATURA' || statusStr === '__ORPHAN__') {
+      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter);
+      return res.json({ data: orphans });
+    }
+
     const where = {};
     if (tenantFilter) where.tenantId = tenantFilter;
-    if (status) where.status = String(status);
+    if (statusStr) where.status = statusStr;
 
     const rows = await prisma.technicianRegistrationApplication.findMany({
       where,
@@ -747,21 +1129,31 @@ adminRouter.get('/', async (req, res) => {
         createdUser: { select: { id: true, email: true, name: true } },
       },
     });
-    res.json({
-      data: rows.map((r) => ({
-        id: r.id,
-        tenantId: r.tenantId,
-        tenantName: r.tenant?.name,
-        invitedEmail: r.invitedEmail,
-        status: r.status,
-        submittedAt: r.submittedAt,
-        resolvedAt: r.resolvedAt,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        createdUserId: r.createdUserId,
-        createdUserEmail: r.createdUser?.email,
-      })),
-    });
+    const mapped = rows.map((r) => ({
+      kind: 'application',
+      id: r.id,
+      applicationId: r.id,
+      tenantId: r.tenantId,
+      tenantName: r.tenant?.name,
+      invitedEmail: r.invitedEmail,
+      status: r.status,
+      submittedAt: r.submittedAt,
+      resolvedAt: r.resolvedAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      createdUserId: r.createdUserId,
+      createdUserEmail: r.createdUser?.email,
+      orphanUserId: null,
+      candidateName: null,
+    }));
+
+    let data = mapped;
+    if (wantOrphans && !statusStr) {
+      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter);
+      data = [...orphans, ...mapped];
+    }
+
+    res.json({ data });
   } catch (err) {
     console.error('GET tech-reg list', err);
     res.status(500).json({ error: err.message });
@@ -781,18 +1173,24 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
 
     const em = String(email).trim().toLowerCase();
-    const anyAppAccount = await prisma.user.findFirst({
-      where: { email: em },
+    /** O convite é sempre para alguém que já tem User neste tenant (preenche o formulário com a mesma sessão). */
+    const userInTenant = await prisma.user.findFirst({
+      where: { tenantId, email: em },
       select: { id: true },
     });
-    if (!anyAppAccount) {
+    if (!userInTenant) {
+      const elsewhere = await prisma.user.findFirst({ where: { email: em }, select: { id: true, tenantId: true } });
+      if (elsewhere) {
+        return res.status(400).json({
+          error:
+            'Este e-mail existe noutra organização, mas não há utilizador com este e-mail neste tenant. Confirme o tenant ou o e-mail.',
+        });
+      }
       return res.status(400).json({
         error:
-          'Este e-mail ainda não tem conta no BrSpark. O prestador deve criar conta no app (cadastro) com este e-mail antes do convite.',
+          'Este e-mail ainda não tem conta neste tenant. O prestador deve criar conta no app (nesta organização) com este e-mail antes do convite.',
       });
     }
-    const existingUser = await prisma.user.findFirst({ where: { tenantId, email: em } });
-    if (existingUser) return res.status(409).json({ error: 'Já existe utilizador com este e-mail neste tenant.' });
 
     const pending = await prisma.technicianRegistrationApplication.findFirst({
       where: {
@@ -815,6 +1213,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
         status: 'INVITED',
         responsesJson: initialTechRegistrationResponsesJson(em),
         createdByUserId,
+        candidateUserId: userInTenant.id,
       },
     });
     await prisma.technicianRegistrationEvent.create({
@@ -908,7 +1307,7 @@ adminRouter.get('/:id', async (req, res) => {
     }
     const locations = await prisma.location.findMany({
       where: { tenantId: app.tenantId },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, latitude: true, longitude: true, address: true },
       orderBy: { name: 'asc' },
     });
     const { passwordHash: _ph, inviteToken: _tok, ...rest } = app;

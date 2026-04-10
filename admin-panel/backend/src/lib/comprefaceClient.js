@@ -272,11 +272,41 @@ function bufferToImageBlobPart(buf, role) {
 }
 
 /**
+ * Melhor similaridade devolvida pelo Verification (percorre result[] e face_matches[]).
+ * @returns {number} NaN se não houver matches
+ */
+function extractVerificationBestSimilarity(parsedJson) {
+  const results = parsedJson && Array.isArray(parsedJson.result) ? parsedJson.result : [];
+  let best = NaN;
+  for (const block of results) {
+    const matches = block && Array.isArray(block.face_matches) ? block.face_matches : [];
+    for (const m of matches) {
+      if (m && m.similarity != null) {
+        const s = Number(m.similarity);
+        if (Number.isFinite(s) && (!Number.isFinite(best) || s > best)) best = s;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Compara duas imagens no serviço **Verification** do CompreFace (não usa Recognition).
  * `source_image` = foto nova a validar; `target_image` = referência (foto de perfil).
- * @returns {Promise<number>} similaridade 0..1 (primeiro face_match)
+ * Chama também na ordem inversa e usa o **mínimo** das duas similaridades (reduz falsos positivos).
+ * Com `options.idDocumentPairing`, tenta as duas direções de forma independente e usa o **máximo** das que
+ * funcionarem — fotos de RG/CNH falham muitas vezes numa direção (rosto pequeno no documento).
+ * @param {{ idDocumentPairing?: boolean }} [options]
+ * @returns {Promise<number>} similaridade 0..1 (conservadora ou, em modo documento, a melhor direção)
  */
-async function verifyFacePairWithIntegration(integration, probeBuffer, referenceBuffer, verificationApiKey) {
+async function verifyFacePairWithIntegration(
+  integration,
+  probeBuffer,
+  referenceBuffer,
+  verificationApiKey,
+  options = {}
+) {
+  const idDocumentPairing = options && options.idDocumentPairing === true;
   const apiKey = String(verificationApiKey || '').trim();
   if (!apiKey) {
     const err = new Error('Verification API Key não configurada.');
@@ -291,43 +321,91 @@ async function verifyFacePairWithIntegration(integration, probeBuffer, reference
   }
   const probePart = bufferToImageBlobPart(probeBuffer, 'probe');
   const refPart = bufferToImageBlobPart(referenceBuffer, 'reference');
-  const blobProbe = probePart.blob;
-  const blobRef = refPart.blob;
+
+  async function postVerifyPair(blobSrc, nameSrc, blobTgt, nameTgt, base) {
+    const url = `${base}/api/v1/verification/verify`;
+    const fd = new FormData();
+    fd.append('source_image', blobSrc, nameSrc);
+    fd.append('target_image', blobTgt, nameTgt);
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey },
+      body: fd,
+      signal: AbortSignal.timeout(60000),
+      redirect: 'manual',
+    });
+    const text = await r.text().catch(() => '');
+    if (!r.ok) {
+      const err = new Error(`CompreFace verification HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
+      err.status = r.status;
+      throw err;
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`CompreFace verification JSON inválido: ${e.message}`);
+    }
+    const sim = extractVerificationBestSimilarity(data);
+    if (!Number.isFinite(sim)) {
+      throw new Error('CompreFace verification devolveu resposta sem similaridade.');
+    }
+    return sim;
+  }
+
   let lastErr;
   for (const root of roots) {
     const base = String(root).replace(/\/+$/, '');
-    const url = `${base}/api/v1/verification/verify`;
-    const fd = new FormData();
-    fd.append('source_image', blobProbe, probePart.filename);
-    fd.append('target_image', blobRef, refPart.filename);
     try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'x-api-key': apiKey },
-        body: fd,
-        signal: AbortSignal.timeout(60000),
-        redirect: 'manual',
-      });
-      const text = await r.text().catch(() => '');
-      if (r.ok) {
-        let data;
+      if (idDocumentPairing) {
+        const scores = [];
+        let partialErr = null;
         try {
-          data = JSON.parse(text);
-        } catch (e) {
-          lastErr = new Error(`CompreFace verification JSON inválido: ${e.message}`);
-          continue;
+          scores.push(
+            await postVerifyPair(
+              probePart.blob,
+              probePart.filename,
+              refPart.blob,
+              refPart.filename,
+              base
+            )
+          );
+        } catch (ea) {
+          partialErr = ea;
         }
-        const results = data && Array.isArray(data.result) ? data.result : [];
-        const first = results[0];
-        const matches = first && Array.isArray(first.face_matches) ? first.face_matches : [];
-        const top = matches[0];
-        const sim = top && top.similarity != null ? Number(top.similarity) : NaN;
-        if (Number.isFinite(sim)) return sim;
-        lastErr = new Error('CompreFace verification devolveu resposta sem similaridade.');
-        continue;
+        try {
+          scores.push(
+            await postVerifyPair(
+              refPart.blob,
+              refPart.filename,
+              probePart.blob,
+              probePart.filename,
+              base
+            )
+          );
+        } catch (eb) {
+          if (!partialErr) partialErr = eb;
+        }
+        if (scores.length > 0) {
+          return Math.max.apply(null, scores);
+        }
+        throw partialErr || new Error('Falha na verificação facial.');
       }
-      lastErr = new Error(`CompreFace verification HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
-      lastErr.status = r.status;
+      const s1 = await postVerifyPair(
+        probePart.blob,
+        probePart.filename,
+        refPart.blob,
+        refPart.filename,
+        base
+      );
+      const s2 = await postVerifyPair(
+        refPart.blob,
+        refPart.filename,
+        probePart.blob,
+        probePart.filename,
+        base
+      );
+      return Math.min(s1, s2);
     } catch (e) {
       lastErr = e;
     }
@@ -376,4 +454,5 @@ module.exports = {
   deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
   verifyFacePairWithIntegration,
+  extractVerificationBestSimilarity,
 };
