@@ -47,6 +47,7 @@ const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
 } = require('./routes/technicianRegistration');
+const { fetchProvidersFromCms } = require('./lib/cmsDirectoryClient');
 const aiTechnicianProfilePhotoRoutes = require('./routes/aiTechnicianProfilePhoto');
 
 const path = require('path');
@@ -179,11 +180,35 @@ app.get('/api/compliance/consents', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Public catalog: prestadores de serviço — paginado, filtrado, máx 50 por request
+// Public catalog: prestadores — BFF para Laravel (CMS) se CMS_DIRECTORY_BASE_URL; senão PostgreSQL ServiceProvider
 app.get('/api/providers', async (req, res) => {
   try {
     const { category, q, city, page = '1', limit = '20' } = req.query;
-    const take = Math.min(parseInt(limit, 10) || 20, 50); // hard cap: 50
+    const take = Math.min(parseInt(limit, 10) || 20, 50);
+
+    const qs = new URLSearchParams();
+    if (q)        qs.set('q', String(q));
+    if (category) qs.set('category', String(category));
+    if (city)     qs.set('city', String(city));
+    qs.set('page', String(Math.max(parseInt(page, 10) || 1, 1)));
+    qs.set('limit', String(take));
+
+    if (process.env.CMS_DIRECTORY_BASE_URL) {
+      try {
+        const json = await fetchProvidersFromCms(qs);
+        res.set('Cache-Control', 'no-store');
+        return res.json({
+          data:       json.data || [],
+          total:      json.total ?? 0,
+          page:       json.page ?? parseInt(page, 10) || 1,
+          limit:      json.limit ?? take,
+          totalPages: json.totalPages ?? 1,
+        });
+      } catch (cmsErr) {
+        console.warn('[api/providers] CMS directory falhou, usando fallback PostgreSQL:', cmsErr.message);
+      }
+    }
+
     const skip = (Math.max(parseInt(page, 10) || 1, 1) - 1) * take;
 
     const where = { isActive: true };
@@ -203,7 +228,6 @@ app.get('/api/providers', async (req, res) => {
       prisma.serviceProvider.count({ where }),
     ]);
 
-    /** Stable hash: same name → same portrait every time */
     const nameHash = (str) => {
       let h = 0;
       for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
@@ -215,7 +239,7 @@ app.get('/api/providers', async (req, res) => {
       if (!photo) {
         const h      = nameHash(p.name);
         const gender = h % 2 === 0 ? 'men' : 'women';
-        const index  = h % 70;   // randomuser.me has portraits 0-99 but 0-69 are safest
+        const index  = h % 70;
         photo = `https://randomuser.me/api/portraits/${gender}/${index}.jpg`;
       }
       return {
@@ -238,7 +262,7 @@ app.get('/api/providers', async (req, res) => {
     res.json({
       data:       formatted,
       total,
-      page:       parseInt(page, 10),
+      page:       parseInt(page, 10) || 1,
       limit:      take,
       totalPages: Math.ceil(total / take),
     });
