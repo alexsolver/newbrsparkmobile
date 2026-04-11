@@ -386,7 +386,7 @@ async function main() {
     { type: 'ASSET_STATUS',     key: 'maintenance',   ptBr: 'Em Manutenção',    enUs: 'In Maintenance', esEs: 'En Mantenimiento', icon: 'ellipse-outline', color: '#F59E0B' },
     { type: 'ASSET_STATUS',     key: 'inactive',      ptBr: 'Inativo',          enUs: 'Inactive',       esEs: 'Inactivo',         icon: 'ellipse-outline', color: '#EF4444' },
 
-    // Service Categories (Aligned with app (tabs)/services.tsx)
+    // Service Categories — fallback quando o app não obtém lista do CMS Laravel (CMS_DIRECTORY_BASE_URL no BFF).
     { type: 'SERVICE_CATEGORY', key: 'eletrica',      ptBr: 'Elétrica',         enUs: 'Electrical',     esEs: 'Eléctrica',        icon: 'flash-outline', color: '#F59E0B' },
     { type: 'SERVICE_CATEGORY', key: 'hidraulica',    ptBr: 'Hidráulica',       enUs: 'Hydraulic',      esEs: 'Hidráulica',       icon: 'water-outline', color: '#3B82F6' },
     { type: 'SERVICE_CATEGORY', key: 'limpeza',       ptBr: 'Limpeza',          enUs: 'Cleaning',       esEs: 'Limpieza',         icon: 'sparkles-outline',color: '#10B981' },

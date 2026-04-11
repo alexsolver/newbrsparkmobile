@@ -50,9 +50,10 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inTechRegistration =
       segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
     const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
+    const inProviderCatalog = segments[0] === 'provider-services';
     const isRoot       = !segments || !segments.length || !segments[0];
 
-    if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile) {
+    if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile && !inProviderCatalog) {
       router.replace('/auth/login' as any);
       return;
     }
@@ -175,6 +176,7 @@ function MainLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="provider-services/[tenantId]" />
         <Stack.Screen name="+not-found" options={{ headerShown: true }} />
       </Stack>
     </RouteGuard>

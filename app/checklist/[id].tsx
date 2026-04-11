@@ -1395,7 +1395,7 @@ export default function ChecklistEngine() {
         Alert.alert(
           'Rosto não reconhecido',
           sanitizeFacialUserFacingCopy(result.message) ||
-            'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+            'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
         );
         return false;
       } else {
@@ -1424,7 +1424,7 @@ export default function ChecklistEngine() {
           Alert.alert(
             'Rosto não reconhecido',
             sanitizeFacialUserFacingCopy(result.message) ||
-              'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+              'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
           );
           return false;
         } else {
@@ -5357,7 +5357,7 @@ export default function ChecklistEngine() {
                                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                                   <Ionicons name="alert-circle-outline" size={22} color="#b45309" />
                                   <Text style={{ flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 }}>
-                                    Foto registada, mas sem registo de verificação no servidor. Confirme a rede e
+                                    Foto registrada, mas sem registro de verificação no servidor. Confirme a rede e
                                     peça ao administrador para sincronizar o reconhecimento facial no painel (Usuários
                                     → Reconhecimento facial → Sincronizar). Depois capture de novo.
                                   </Text>

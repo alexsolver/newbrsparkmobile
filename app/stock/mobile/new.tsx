@@ -165,7 +165,7 @@ export default function NewTechnicianStockScreen() {
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnT}>Guardar no estoque técnico</Text>
+          <Text style={styles.saveBtnT}>Salvar no estoque técnico</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

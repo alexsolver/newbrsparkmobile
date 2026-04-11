@@ -246,7 +246,8 @@
     "sumFgGpsClient": "Ubicación con la app abierta",
     "periodDays": "{{count}} días",
     "periodYears": "{{count}} años",
-    "legalBasisUS": "leyes estatales de privacidad de EE. UU. y el RGPD (cuando aplique)"
+    "legalBasisUS": "leyes estatales de privacidad de EE. UU. y el RGPD (cuando aplique)",
+    "legalFallbackShort": "Leyes de privacidad aplicables y RGPD cuando corresponda"
   },
   "asset": {
     "title": "Gestión de Bienes",
@@ -770,6 +771,10 @@
     "requestService": "Solicitar Servicio",
     "requestServiceMsg": "¡Solicitud para {{name}} disponible pronto!",
     "requestBtn": "Solicitar",
+    "openServiceCatalog": "Catálogo de servicios: {{name}}",
+    "expandProvider": "Ver más información de la empresa",
+    "collapseProvider": "Ocultar información de la empresa",
+    "providerNoExtraInfo": "Sin descripción ni palabras clave adicionales.",
     "searchPlaceholder": "¿Qué necesita? Ej: instalar TV",
     "allCategories": "Todas las categorías",
     "resultsFor": "Resultados para \"{{query}}\"",
@@ -834,6 +839,26 @@
     "emptyFiltered": "No se encontraron resultados.",
     "emptyDefault": "No hay empresas disponibles.",
     "reviewCount": "{{count}} valoraciones"
+  },
+  "providerCatalog": {
+    "loading": "Cargando servicios…",
+    "errorTitle": "No se pudo cargar",
+    "back": "Volver",
+    "defaultGroup": "Servicios",
+    "priceOnRequest": "Consultar",
+    "noServices": "Esta empresa aún no ha publicado servicios en el catálogo.",
+    "items": "{{count}} artículos",
+    "reviewOrder": "Revisar pedido",
+    "checkoutTitle": "Bolsa y programación",
+    "total": "Total",
+    "when": "Fecha y hora deseadas",
+    "notes": "Observaciones",
+    "notesPh": "Opcional: detalles de acceso, ubicación, etc.",
+    "cancel": "Cancelar",
+    "confirmSchedule": "Finalizar y agendar",
+    "missingProfessional": "No se pudo identificar un profesional para la reserva. Intente más tarde.",
+    "pastTime": "Elija una fecha y hora futuras.",
+    "orderSuccess": "Solicitud registrada. Le contactarán según disponibilidad."
   },
   "orders": {
     "title": "Pedidos",

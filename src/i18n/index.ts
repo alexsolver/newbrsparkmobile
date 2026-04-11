@@ -30,7 +30,7 @@ const REGISTER_REGION_CODES = ['BR', 'US', 'ES', 'AR'] as const;
 export type RegisterRegionCode = (typeof REGISTER_REGION_CODES)[number];
 
 /**
- * País pré-selecionado no cadastro a partir da região/idioma do sistema (Ajustes do telemóvel).
+ * País pré-selecionado no cadastro a partir da região/idioma do sistema (Ajustes do celular).
  * Não usa GPS — só expo-localization (mercado costuma tratar isto como “localização” do utilizador).
  */
 export function getDeviceRegion(): RegisterRegionCode {

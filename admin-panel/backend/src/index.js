@@ -48,7 +48,27 @@ const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
 } = require('./routes/technicianRegistration');
-const { fetchProvidersFromCms } = require('./lib/cmsDirectoryClient');
+const {
+  fetchProvidersFromCms,
+  fetchCategoriesFromCms,
+  fetchProviderDetailFromCms,
+} = require('./lib/cmsDirectoryClient');
+const { faToIonicons } = require('./lib/faToIonicons');
+
+/**
+ * Converte categorias globais do Laravel (nome + Fa*) para o formato do app (id = nome do filtro).
+ */
+function mapLaravelCategoriesForApp(json) {
+  const rows = json && Array.isArray(json.data) ? json.data : [];
+  return rows.map((row) => ({
+    id: row.name,
+    label: row.name,
+    icon: faToIonicons(row.icon),
+    color: row.color || '#6366F1',
+    cmsId: row.id,
+    parentId: row.parent_id || null,
+  }));
+}
 const aiTechnicianProfilePhotoRoutes = require('./routes/aiTechnicianProfilePhoto');
 
 const path = require('path');
@@ -304,6 +324,43 @@ app.get('/api/providers', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/**
+ * Detalhe público do diretório — o app chama a mesma path que no Laravel; aqui faz-se de proxy ao CMS.
+ * Sem isto, com API_BASE no Node, «Falha ao carregar empresa (404)» ao abrir o catálogo de serviços.
+ */
+app.get('/api/public/directory/providers/:id', async (req, res) => {
+  try {
+    const id = req.params.id != null ? String(req.params.id).trim() : '';
+    if (!id) {
+      return res.status(400).json({ error: 'Identificador obrigatório.' });
+    }
+    const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+    if (!cmsBase) {
+      res.set('Cache-Control', 'no-store');
+      res.set('X-BrSpark-Directory-Source', 'cms-not-configured');
+      return res.status(503).json({ error: 'CMS_DIRECTORY_BASE_URL não configurado.' });
+    }
+    const json = await fetchProviderDetailFromCms(id);
+    if (json == null) {
+      return res.status(502).json({ error: 'Resposta inválida do CMS.' });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.set('X-BrSpark-Directory-Source', 'laravel');
+    return res.json(json);
+  } catch (err) {
+    const status = Number(err.status) || 502;
+    console.warn('[api/public/directory/providers/:id]', err.message);
+    res.set('Cache-Control', 'no-store');
+    res.set('X-BrSpark-Directory-Source', 'laravel-error');
+    if (status === 404) {
+      return res.status(404).json({ error: 'Empresa não encontrada.' });
+    }
+    return res.status(status >= 400 && status < 600 ? status : 502).json({
+      error: err.message || 'Falha ao obter detalhe do diretório no CMS.',
+    });
+  }
+});
+
 /** Diagnóstico: o app usa este BFF; lista vem do Laravel salvo DIRECTORY_POSTGRES_FALLBACK=1. */
 app.get('/api/directory-status', async (_req, res) => {
   const base = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
@@ -349,6 +406,28 @@ app.get('/api/directory-status', async (_req, res) => {
   }
 });
 
+/** Catálogo de categorias do diretório — mesma fonte que o CMS Web (Laravel). */
+app.get('/api/directory/categories', async (_req, res) => {
+  try {
+    const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+    if (!cmsBase) {
+      return res.status(503).json({
+        error: 'CMS_DIRECTORY_BASE_URL não configurado.',
+        data: [],
+      });
+    }
+    const json = await fetchCategoriesFromCms();
+    const data = mapLaravelCategoriesForApp(json);
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('X-BrSpark-Category-Source', 'laravel');
+    return res.json({ data });
+  } catch (err) {
+    console.warn('[api/directory/categories]', err.message);
+    res.set('X-BrSpark-Category-Source', 'laravel-error');
+    return res.status(502).json({ error: err.message || 'Falha ao obter categorias do CMS.', data: [] });
+  }
+});
+
 
 // Public config: metatags/locales para inicializar o app (sem auth ou via tenantId)
 app.get('/api/config', async (req, res) => {
@@ -386,11 +465,24 @@ app.get('/api/config', async (req, res) => {
       color: m.color || '#6366F1',
     }));
 
-    const categories = metatags.filter(m => m.type === 'SERVICE_CATEGORY').map(m => ({
+    let categories = metatags.filter(m => m.type === 'SERVICE_CATEGORY').map(m => ({
       id: m.key,
       label: getLabel(m, lang),
       icon: m.icon || 'grid-outline',
     }));
+
+    const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+    if (cmsBase) {
+      try {
+        const cmsJson = await fetchCategoriesFromCms();
+        const fromCms = mapLaravelCategoriesForApp(cmsJson);
+        if (fromCms.length) {
+          categories = fromCms;
+        }
+      } catch (e) {
+        console.warn('[api/config] categorias CMS indisponíveis, mantém metatags:', e.message);
+      }
+    }
 
     const technicianExpenseCategories = metatags
       .filter(m => m.type === 'TECHNICIAN_EXPENSE_CATEGORY')

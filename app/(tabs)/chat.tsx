@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   ActivityIndicator, Modal, ScrollView, TextInput, Alert,
@@ -13,6 +13,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ARCHIVED_KEY = '@brspark_archived_rooms';
+/** Links públicos guardados no dispositivo (aba Contatos do chat). */
+const CHAT_PUBLIC_LINKS_KEY = '@brspark_chat_public_links';
 
 function timeAgo(ts?: number) {
   if (!ts) return '';
@@ -62,6 +64,13 @@ export default function ChatScreen() {
   const [groupName, setGroupName] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
 
+  // Aba Contatos — redes e site (local ao dispositivo)
+  const [linkInstagram, setLinkInstagram] = useState('');
+  const [linkFacebook, setLinkFacebook] = useState('');
+  const [linkWebsite, setLinkWebsite] = useState('');
+  const [savingPublicLinks, setSavingPublicLinks] = useState(false);
+  const prevModalVisibleRef = useRef(false);
+
   // Archive action swipe state
   const [longPressedRoom, setLongPressedRoom] = useState<string | null>(null);
 
@@ -109,6 +118,52 @@ export default function ChatScreen() {
     if (user) { loadData(); loadArchived(); }
     else setLoading(false);
   }, [user, loadData]));
+
+  /** Ao abrir o modal «Nova Conversa», carrega links públicos guardados. */
+  useEffect(() => {
+    const justOpened = modalVisible && !prevModalVisibleRef.current;
+    prevModalVisibleRef.current = modalVisible;
+    if (!justOpened || !user?.id) return;
+    const key = `${CHAT_PUBLIC_LINKS_KEY}:${user.id}`;
+    void AsyncStorage.getItem(key).then((raw) => {
+      if (!raw) {
+        setLinkInstagram('');
+        setLinkFacebook('');
+        setLinkWebsite('');
+        return;
+      }
+      try {
+        const j = JSON.parse(raw) as { instagram?: string; facebook?: string; website?: string };
+        setLinkInstagram(typeof j.instagram === 'string' ? j.instagram : '');
+        setLinkFacebook(typeof j.facebook === 'string' ? j.facebook : '');
+        setLinkWebsite(typeof j.website === 'string' ? j.website : '');
+      } catch {
+        setLinkInstagram('');
+        setLinkFacebook('');
+        setLinkWebsite('');
+      }
+    });
+  }, [modalVisible, user?.id]);
+
+  const savePublicLinks = async () => {
+    if (!user?.id) return;
+    setSavingPublicLinks(true);
+    try {
+      const key = `${CHAT_PUBLIC_LINKS_KEY}:${user.id}`;
+      await AsyncStorage.setItem(
+        key,
+        JSON.stringify({
+          instagram: linkInstagram.trim(),
+          facebook: linkFacebook.trim(),
+          website: linkWebsite.trim(),
+        })
+      );
+      Alert.alert('Salvo', 'Instagram, Facebook e site foram guardados neste dispositivo.');
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Não foi possível salvar.');
+    }
+    setSavingPublicLinks(false);
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -413,6 +468,55 @@ export default function ChatScreen() {
               {/* ABA CONTATOS */}
               {modalTab === 'CONTACTS' && (
                 <View>
+                  <View style={{ paddingBottom: 18, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: C.background }}>
+                    <Text style={styles.inputLabel}>Instagram</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="@usuario ou URL do perfil"
+                      placeholderTextColor={C.textLight}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={linkInstagram}
+                      onChangeText={setLinkInstagram}
+                      returnKeyType="next"
+                    />
+                    <Text style={[styles.inputLabel, { marginTop: 14 }]}>Facebook</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="URL do perfil ou página"
+                      placeholderTextColor={C.textLight}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={linkFacebook}
+                      onChangeText={setLinkFacebook}
+                      returnKeyType="next"
+                    />
+                    <Text style={[styles.inputLabel, { marginTop: 14 }]}>Website</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="https://…"
+                      placeholderTextColor={C.textLight}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      value={linkWebsite}
+                      onChangeText={setLinkWebsite}
+                      returnKeyType="done"
+                    />
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, savingPublicLinks && { opacity: 0.55 }]}
+                      disabled={savingPublicLinks}
+                      onPress={() => void savePublicLinks()}
+                    >
+                      {savingPublicLinks ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Salvar links</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={[styles.inputLabel, { marginBottom: 10 }]}>Contatos</Text>
                   {contacts.length === 0 ? (
                     <Text style={styles.emptyContacts}>Você ainda não possui contatos aprovados ou compartilhamentos de bens ativos.</Text>
                   ) : (

@@ -17,6 +17,7 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
+  FlatList,
 } from 'react-native';
 import {
   SERVICE_CATEGORY_COLORS,
@@ -29,7 +30,13 @@ import { Header } from '../../src/components/Header';
 import { AssetCard } from '../../src/components/AssetCard';
 import { Asset } from '../../src/types/asset';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getRootAssets, getLocalAssets, getServiceCategories, saveServiceCategories } from '../../src/database';
+import {
+  getRootAssets,
+  getLocalAssets,
+  getServiceCategories,
+  ensureServiceCategoriesColorColumn,
+} from '../../src/database';
+import { LEGACY_SERVICE_CATEGORY_I18N } from '../../src/services/directoryCategories';
 import { ApiService, ProviderService } from '../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -666,7 +673,9 @@ export default function DashboardScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   // Tab bar height: ~49px bar + bottom safe area inset
+  /** Área reservada para a tab bar custom (pílula + FAB) — maior que a tab nativa */
   const TAB_BAR_HEIGHT = 49 + insets.bottom;
+  const catalogScrollBottomPad = insets.bottom + 132;
   const pagerRef = useRef<ScrollView>(null);
   const mapRef = useRef<MapView>(null);
   /** Mapa modal "Rota do Dia" — ref para encaixar todas as paradas (evita zoom agressivo que some marcadores). */
@@ -1041,26 +1050,12 @@ export default function DashboardScreen() {
   };
 
 
-  const handleSolicitar = (providerName: string) => {
-    if (!user) {
-      Alert.alert(
-        t('home.createAccount'),
-        t('home.createAccountMsg'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('home.login'), onPress: () => router.push('/auth/login' as any) },
-        ]
-      );
-      return;
-    }
-    // TODO: Navigate to service request flow
-    Alert.alert(t('home.requestService'), t('home.requestServiceMsg', { name: providerName }));
-  };
-
   /** Evita corridas: vários loadData (focus + poller a cada 5s) não podem sobrescrever `inprogressIds` com leituras antigas do AsyncStorage. */
   const loadDataChainRef = useRef(Promise.resolve());
   /** `false` = último check de rede foi offline; usado para disparar sync em rajada ao voltar online. */
   const reconnectOnlineRef = useRef<boolean | null>(null);
+  /** Última vez que o diretório de empresas veio da rede com sucesso (força bust após TTL). */
+  const lastDirectoryFetchRef = useRef(0);
 
   const loadData = (triggerSync = false) => {
     const run = async () => {
@@ -1297,21 +1292,53 @@ export default function DashboardScreen() {
       setAcceptedIds(new Set());
     }
 
-    // Categorias de serviço: fixa por ora
-    setCategories([
-      { id: 'all',         label: t('home.serviceCategories.all'),        icon: 'apps' },
-      { id: 'Elétrica',   label: 'Elétrica',    icon: 'flash' },
-      { id: 'Hidráulica', label: 'Hidráulica',  icon: 'water' },
-      { id: 'Limpeza',    label: 'Limpeza',     icon: 'brush-outline' },
-      { id: 'Reformas',   label: 'Reformas',    icon: 'hammer' },
-      { id: 'Segurança',  label: 'Segurança',   icon: 'shield-checkmark' },
-      { id: 'Jardinagem', label: 'Jardinagem',  icon: 'leaf' },
-      { id: 'Climatização', label: 'Climatização', icon: 'thermometer-outline' },
-      { id: 'Tecnologia', label: 'Tecnologia',  icon: 'laptop-outline' },
-    ]);
+    ensureServiceCategoriesColorColumn();
+    const storedCats = getServiceCategories();
+    if (storedCats.length > 0) {
+      setCategories([
+        {
+          id: 'all',
+          labelKey: 'all',
+          label: t('home.serviceCategories.all'),
+          icon: 'apps',
+          color: SERVICE_CATEGORY_COLORS.all,
+        },
+        ...storedCats.map((r: any) => ({
+          id: r.id,
+          label: r.label,
+          labelKey: LEGACY_SERVICE_CATEGORY_I18N[r.id] ?? undefined,
+          icon: r.icon,
+          color: r.color || SERVICE_CATEGORY_COLORS[r.id],
+        })),
+      ]);
+    } else {
+      setCategories(
+        SERVICE_CATEGORIES.map((c) => ({
+          id: c.id,
+          labelKey: c.labelKey,
+          label:
+            c.id === 'all'
+              ? t('home.serviceCategories.all')
+              : c.id,
+          icon: c.icon,
+          color: c.color,
+          isMCI: c.isMCI,
+        }))
+      );
+    }
 
-    // Prestadores: busca paginada via ProviderService (lida com cache offline automaticamente)
-    const result = await ProviderService.search({ page: 1, limit: 20 });
+    // Diretório de empresas: rede com bust periódico: evita lista desatualizada / SQLite com IDs antigos.
+    const directoryTtlMs = 120_000;
+    const forceDirectory =
+      triggerSync || Date.now() - lastDirectoryFetchRef.current >= directoryTtlMs;
+    const result = await ProviderService.search({
+      page: 1,
+      limit: 20,
+      forceRefresh: forceDirectory,
+    });
+    if (!result.fromCache) {
+      lastDirectoryFetchRef.current = Date.now();
+    }
     setProviders(result.data);
     };
 
@@ -1852,6 +1879,45 @@ export default function DashboardScreen() {
     );
   };
 
+  /** Catálogo SERVIÇOS: só a lista de empresas rola; categorias, busca e chips ficam fixos. */
+  const catalogFilteredProviders = useMemo(
+    () =>
+      providers
+        .filter((p) => (svcFilter === 'all' ? true : p.category === svcFilter))
+        .filter((p) => smartMatch(p, searchText))
+        .sort((a, b) => {
+          if (sortMode === 'RATING') return b.rating - a.rating;
+          if (sortMode === 'VERIFIED') return (b.verified ? 1 : 0) - (a.verified ? 1 : 0);
+          if (sortMode === 'DEFAULT') return 0;
+          return a.id.localeCompare(b.id);
+        }),
+    [providers, svcFilter, searchText, sortMode]
+  );
+
+  const catalogListHeader = useMemo(
+    () => (
+      <View style={{ paddingHorizontal: 16 }}>
+        {(svcFilter !== 'all' || searchText.length > 0) && (
+          <Text style={styles.resultsLabel}>
+            {searchText
+              ? t('home.resultsFor', { query: searchText })
+              : svcFilter !== 'all'
+                ? (() => {
+                    const c = categories.find((x: any) => x.id === svcFilter);
+                    if (c?.labelKey) return t(`home.serviceCategories.${c.labelKey}`);
+                    return c?.label || c?.id || svcFilter;
+                  })()
+                : ''}
+          </Text>
+        )}
+        {svcFilter === 'all' && !searchText && (
+          <Text style={styles.sectionLabel}>{t('home.featuredProviders')}</Text>
+        )}
+      </View>
+    ),
+    [svcFilter, searchText, categories, t, styles]
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
 
@@ -1869,14 +1935,8 @@ export default function DashboardScreen() {
       >
         {/* ═══════ PAGE 1: Catálogo de Serviços ═══════ */}
         {userRole === 'CLIENT' && (
-        <ScrollView
-          style={{ width: pagerWidth }}
-          contentContainerStyle={{ paddingBottom: 100 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Premium UI Header (Services Only) */}
-          <LinearGradient 
+        <View style={{ width: pagerWidth, flex: 1, backgroundColor: C.background }}>
+          <LinearGradient
             colors={[SERVICE_CATEGORY_COLORS.all, C.branding]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
@@ -1886,26 +1946,29 @@ export default function DashboardScreen() {
               <Text style={styles.premiumHeaderText}>{t('home.searchTitle')}</Text>
             </View>
 
-            {/* Circular Categories (Scrollable) */}
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.circularCatScroll}
-             keyboardShouldPersistTaps="handled">
-              {SERVICE_CATEGORIES.map((cat: any) => (
+              keyboardShouldPersistTaps="handled"
+            >
+              {(categories.length > 0 ? categories : SERVICE_CATEGORIES).map((cat: any) => (
                 <TouchableOpacity key={cat.id} style={styles.circularCatItem} onPress={() => setSvcFilter(cat.id)}>
                   <View style={[styles.circularCatIconWrap, svcFilter === cat.id && styles.circularCatActive]}>
                     {cat.isMCI
                       ? <MaterialCommunityIcons name={cat.icon as any} size={24} color={C.cardWhite} />
                       : <Ionicons name={cat.icon as any} size={24} color={C.cardWhite} />}
                   </View>
-                  <Text style={styles.circularCatLabel} numberOfLines={1}>{t(`home.serviceCategories.${cat.labelKey}`)}</Text>
+                  <Text style={styles.circularCatLabel} numberOfLines={1}>
+                    {cat.labelKey
+                      ? t(`home.serviceCategories.${cat.labelKey}`)
+                      : (cat.label || cat.id)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </LinearGradient>
 
-          {/* Search Bar (Floating style) */}
           <View style={styles.searchWrapPremium}>
             <Ionicons name="search" size={18} color={C.textLight} style={{ marginRight: 10 }} />
             <TextInput
@@ -1913,18 +1976,28 @@ export default function DashboardScreen() {
               placeholder={t('home.searchPlaceholder')}
               placeholderTextColor={C.textLight}
               value={searchText}
-              onChangeText={(t) => setSearchText(t)}
-            returnKeyType="done"
-                      />
+              onChangeText={(txt) => setSearchText(txt)}
+              returnKeyType="done"
+            />
           </View>
 
-          {/* Filter & Sort Chips (iFood Inspired) */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, gap: 8 }}
-           keyboardShouldPersistTaps="handled">
-            <TouchableOpacity 
+          {/* Altura fixa: ScrollView horizontal dentro de coluna flex:1 esticava na vertical e inchava os chips */}
+          <View style={{ height: 48, flexGrow: 0, flexShrink: 0, justifyContent: 'center' }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingVertical: 4,
+                gap: 8,
+                alignItems: 'center',
+                flexGrow: 0,
+              }}
+              keyboardShouldPersistTaps="handled"
+            >
+            <TouchableOpacity
               style={[styles.ifoodChip, sortMode !== 'DEFAULT' && styles.ifoodChipActive]}
               onPress={() => setSortModalVisible(true)}
             >
@@ -1935,7 +2008,7 @@ export default function DashboardScreen() {
               <Ionicons name="chevron-down" size={14} color={sortMode !== 'DEFAULT' ? C.accent : C.textLight} />
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.ifoodChip, sortMode === 'VERIFIED' && styles.ifoodChipActive]}
               onPress={() => setSortMode(sortMode === 'VERIFIED' ? 'DEFAULT' : 'VERIFIED')}
             >
@@ -1944,7 +2017,7 @@ export default function DashboardScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.ifoodChip, sortMode === 'AGENDA' && styles.ifoodChipActive]}
               onPress={() => setSortMode(sortMode === 'AGENDA' ? 'DEFAULT' : 'AGENDA')}
             >
@@ -1953,7 +2026,7 @@ export default function DashboardScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.ifoodChip, sortMode === 'RATING' && styles.ifoodChipActive]}
               onPress={() => setSortMode(sortMode === 'RATING' ? 'DEFAULT' : 'RATING')}
             >
@@ -1961,63 +2034,62 @@ export default function DashboardScreen() {
                 {t('home.topRated')}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
+            </ScrollView>
+          </View>
 
-          {/* Provider List */}
-          <View style={{ paddingHorizontal: 16 }}>
-            {(svcFilter !== 'all' || searchText.length > 0) && (
-              <Text style={styles.resultsLabel}>
-                {searchText ? t('home.resultsFor', { query: searchText }) : (svcFilter !== 'all' ? t(`home.serviceCategories.${svcFilter}`) : '')}
-              </Text>
-            )}
-
-            {svcFilter === 'all' && !searchText && (
-              <Text style={styles.sectionLabel}>{t('home.featuredProviders')}</Text>
-            )}
-
-            {providers
-              .filter(p => svcFilter === 'all' ? true : p.category === svcFilter)
-              .filter(p => smartMatch(p, searchText))
-              .sort((a, b) => {
-                if (sortMode === 'RATING') return b.rating - a.rating;
-                if (sortMode === 'VERIFIED') return (b.verified ? 1 : 0) - (a.verified ? 1 : 0);
-                if (sortMode === 'DEFAULT') return 0;
-                return a.id.localeCompare(b.id);
-              })
-              .map(provider => {
-                const isExpanded = expandedProviders.has(provider.id);
-                return (
-                  <View key={provider.id} style={styles.providerCard}>
-                    <TouchableOpacity 
-                      activeOpacity={0.8}
-                      onPress={() => toggleExpand(provider.id)}
-                      style={{ flexDirection: 'row', alignItems: 'flex-start' }}
+          <FlatList
+            data={catalogFilteredProviders}
+            keyExtractor={(p) => p.id}
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              paddingBottom: catalogScrollBottomPad,
+              flexGrow: 1,
+            }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
+            ListHeaderComponent={catalogListHeader}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', paddingTop: 40, paddingHorizontal: 16 }}>
+                <Ionicons name="search-outline" size={44} color={C.textLight} />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: C.textSecondary, marginTop: 12 }}>{t('home.noProviders')}</Text>
+              </View>
+            }
+            renderItem={({ item: provider }) => {
+              const isExpanded = expandedProviders.has(provider.id);
+              const openCatalog = () => router.push(`/provider-services/${provider.id}` as any);
+              return (
+                <View style={[styles.providerCard, { marginHorizontal: 16 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={openCatalog}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start' }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('home.openServiceCatalog', { name: provider.name })}
                     >
                       <Image
                         source={{ uri: provider.logo_url || provider.photo }}
                         style={styles.providerPhoto}
                         resizeMode={provider.logo_url ? 'contain' : 'cover'}
                       />
-                      <View style={{ flex: 1, marginLeft: 16 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1, paddingRight: 8 }}>
-                            <Text style={[styles.providerName, { flexShrink: 1 }]} numberOfLines={2}>{provider.name}</Text>
-                          </View>
-                          <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={C.textLight} style={{ marginTop: 2 }} />
+                      <View style={{ flex: 1, marginLeft: 16, paddingRight: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                          <Text style={[styles.providerName, { flexShrink: 1 }]} numberOfLines={2}>{provider.name}</Text>
                         </View>
-                        
+
                         <View style={[styles.providerSubRow, { flexWrap: 'wrap', gap: 6 }]}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
                             <Ionicons name="star" size={11} color={MEDIA_TAG_COLORS.DURING} />
                             <Text style={[styles.providerRating, { fontSize: 11 }]}>{provider.rating}</Text>
                             <Text style={{ fontSize: 10, fontWeight: '600', color: C.textLight }}>({provider.reviews || 0})</Text>
                           </View>
-                          <View style={[styles.promoBadge, { 
-                            backgroundColor: C.accent + '10', 
-                            borderColor: C.accent + '30', 
+                          <View style={[styles.promoBadge, {
+                            backgroundColor: C.accent + '10',
+                            borderColor: C.accent + '30',
                             borderWidth: 0.5,
                             marginVertical: 2,
-                            flexShrink: 1
+                            flexShrink: 1,
                           }]}>
                             <Ionicons name="calendar-outline" size={10} color={C.accent} style={{ marginRight: 3 }} />
                             <Text style={[styles.promoBadgeText, { color: C.accent, fontSize: 8.5, fontWeight: '800' }]} numberOfLines={1}>
@@ -2025,65 +2097,74 @@ export default function DashboardScreen() {
                             </Text>
                           </View>
                         </View>
-
-                        {isExpanded && (
-                          <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: C.divider, paddingTop: 12 }}>
-                            {(() => {
-                              const tagStr = typeof provider.tags === 'string' ? provider.tags.trim() : '';
-                              const kwStr = provider.keywords ? String(provider.keywords).trim() : '';
-                              if (!tagStr && !kwStr) return null;
-                              return (
-                                <>
-                                  <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>{t('assetDetail.generalInfo')}</Text>
-                                  {tagStr ? (
-                                    <View style={styles.providerTagsRow}>
-                                      <View style={styles.providerHighlightPill}>
-                                        <Text style={styles.providerHighlightText}>
-                                          {tagStr.split(',').slice(0, 2).join(' · ')}
-                                        </Text>
-                                      </View>
-                                    </View>
-                                  ) : null}
-                                  {kwStr ? (
-                                    <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: tagStr ? 10 : 0 }} numberOfLines={8}>
-                                      {kwStr}
-                                    </Text>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                          </View>
-                        )}
                       </View>
                     </TouchableOpacity>
-
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                      <TouchableOpacity 
-                        style={{ backgroundColor: C.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}
-                        onPress={() => handleSolicitar(provider.name)}
-                      >
-                         <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 9.5, textTransform: 'uppercase' }}>{t('home.requestBtn')}</Text>
-                         <Ionicons name="arrow-forward" size={10} color={C.cardWhite} style={{ marginLeft: 4 }} />
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                      onPress={() => toggleExpand(provider.id)}
+                      hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
+                      style={{ padding: 4, marginTop: -2 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={isExpanded ? t('home.collapseProvider') : t('home.expandProvider')}
+                    >
+                      <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={C.textLight} />
+                    </TouchableOpacity>
                   </View>
-                );
-              })}
 
-            {providers.filter(p => svcFilter === 'all' ? p.verified : p.category === svcFilter).filter(p => smartMatch(p, searchText)).length === 0 && (
-              <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                <Ionicons name="search-outline" size={44} color={C.textLight} />
-                <Text style={{ fontSize: 14, fontWeight: '700', color: C.textSecondary, marginTop: 12 }}>{t('home.noProviders')}</Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+                  {isExpanded && (
+                    <View style={{ marginTop: 10, marginLeft: 0, borderTopWidth: 1, borderTopColor: C.divider, paddingTop: 12, paddingHorizontal: 0 }}>
+                      {(() => {
+                        const tagStr = typeof provider.tags === 'string' ? provider.tags.trim() : '';
+                        const kwStr = provider.keywords ? String(provider.keywords).trim() : '';
+                        if (!tagStr && !kwStr) {
+                          return (
+                            <Text style={{ fontSize: 12, color: C.textLight, fontStyle: 'italic' }}>
+                              {t('home.providerNoExtraInfo')}
+                            </Text>
+                          );
+                        }
+                        return (
+                          <>
+                            <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>{t('assetDetail.generalInfo')}</Text>
+                            {tagStr ? (
+                              <View style={styles.providerTagsRow}>
+                                <View style={styles.providerHighlightPill}>
+                                  <Text style={styles.providerHighlightText}>
+                                    {tagStr.split(',').slice(0, 2).join(' · ')}
+                                  </Text>
+                                </View>
+                              </View>
+                            ) : null}
+                            {kwStr ? (
+                              <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: tagStr ? 10 : 0 }} numberOfLines={8}>
+                                {kwStr}
+                              </Text>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                    </View>
+                  )}
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                    <TouchableOpacity
+                      style={{ backgroundColor: C.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}
+                      onPress={openCatalog}
+                    >
+                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 9.5, textTransform: 'uppercase' }}>{t('home.requestBtn')}</Text>
+                      <Ionicons name="arrow-forward" size={10} color={C.cardWhite} style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            }}
+          />
+        </View>
         )}
 
         {/* ═══════ PAGE 2: Dashboard de Ativos ═══════ */}
         <ScrollView
           style={{ width: pagerWidth }}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: catalogScrollBottomPad }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           showsVerticalScrollIndicator={false}
         >

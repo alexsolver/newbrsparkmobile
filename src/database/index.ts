@@ -71,7 +71,8 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS service_categories (
       id TEXT PRIMARY KEY NOT NULL,
       label TEXT NOT NULL,
-      icon TEXT
+      icon TEXT,
+      color TEXT
     );
 
     CREATE TABLE IF NOT EXISTS technician_expense_categories (
@@ -297,6 +298,9 @@ export function initDatabase() {
   } catch (_) {}
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN category_key TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE service_categories ADD COLUMN color TEXT`);
   } catch (_) {}
 }
 
@@ -761,6 +765,17 @@ export function saveProviders(providers: any[]) {
   });
 }
 
+/**
+ * Substitui o cache local do diretório pela lista atual do servidor (aba Serviços).
+ * Evita empresas removidas/deslistadas permanecerem após fusão com dados antigos.
+ */
+export function replaceDirectoryProvidersCache(providers: any[]) {
+  db.execSync('DELETE FROM providers');
+  if (providers.length > 0) {
+    saveProviders(providers);
+  }
+}
+
 /** saveProvidersLocal — substitui providers do backend (fonte da verdade: PostgreSQL) */
 export function saveProvidersLocal(providers: any[]) {
   if (!providers?.length) return;
@@ -772,12 +787,27 @@ export function getServiceCategories(): any[] {
   return db.getAllSync('SELECT * FROM service_categories');
 }
 
+/** Migração leve: coluna color (categorias vindas do CMS Web). */
+export function ensureServiceCategoriesColorColumn() {
+  try {
+    db.execSync('ALTER TABLE service_categories ADD COLUMN color TEXT');
+  } catch {
+    /* coluna já existe */
+  }
+}
+
 export function saveServiceCategories(categories: any[]) {
+  ensureServiceCategoriesColorColumn();
   const stmt = db.prepareSync(`
-    INSERT INTO service_categories (id, label, icon) VALUES (?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET label = excluded.label, icon = excluded.icon
+    INSERT INTO service_categories (id, label, icon, color) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      label = excluded.label,
+      icon = excluded.icon,
+      color = COALESCE(excluded.color, color)
   `);
-  categories.forEach(c => stmt.executeSync([c.id, c.label, c.icon]));
+  categories.forEach((c) =>
+    stmt.executeSync([c.id, c.label, c.icon, c.color ?? null])
+  );
 }
 
 export function getTechnicianExpenseCategories(): { id: string; label: string; icon: string | null; color: string | null }[] {

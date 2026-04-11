@@ -159,6 +159,16 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
+        tabBarStyle: {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          elevation: 100,
+          zIndex: 100,
+          borderTopWidth: 0,
+          backgroundColor: 'transparent',
+        },
       }}>
 
       <Tabs.Screen

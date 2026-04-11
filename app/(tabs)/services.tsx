@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, ActivityIndicator, RefreshControl, Linking,
@@ -17,25 +18,17 @@ import { useTheme } from '../../src/theme/ThemeContext';
 /** Verde oficial do WhatsApp (marca), fora da paleta semântica */
 const BRAND_WHATSAPP = '#25D366';
 import { ProviderService } from '../../src/services/api';
+import {
+  fetchDirectoryCategoryChips,
+  FALLBACK_DIRECTORY_CATEGORY_CHIPS,
+  LEGACY_SERVICE_CATEGORY_I18N,
+  type DirectoryCategoryChip,
+} from '../../src/services/directoryCategories';
 
-/** Valor `category` vindo da API (pt-BR) → sufixo de `home.serviceCategories.*` */
-const CATEGORY_I18N_KEY: Record<string, string> = {
-  Elétrica: 'electrical',
-  Hidráulica: 'plumbing',
-  Limpeza: 'cleaning',
-  Reformas: 'renovation',
-  Jardinagem: 'garden',
-  Segurança: 'security',
-  Climatização: 'climatization',
-  Tecnologia: 'technology',
-  Dedetização: 'pestControl',
-  Mudança: 'moving',
-  Gás: 'gas',
-  Pintura: 'painting',
-};
-
-function providerCategoryLabel(t: TFunction, category: string): string {
-  const suffix = CATEGORY_I18N_KEY[category];
+function providerCategoryLabel(t: TFunction, category: string, chips: DirectoryCategoryChip[]): string {
+  const chip = chips.find((c) => c.id === category);
+  if (chip?.label) return chip.label;
+  const suffix = LEGACY_SERVICE_CATEGORY_I18N[category];
   return suffix ? t(`home.serviceCategories.${suffix}`) : category;
 }
 
@@ -45,23 +38,6 @@ function numberLocaleForApp(lang: string): string {
   if (l.startsWith('en')) return 'en-US';
   return 'pt-BR';
 }
-
-// ── Chips de categoria (id = valor enviado à API) ─────────────────────────────
-const CATEGORY_CHIPS: { id: string; i18nKey: string; icon: string }[] = [
-  { id: '', i18nKey: 'common.all', icon: 'grid-outline' },
-  { id: 'Elétrica', i18nKey: 'home.serviceCategories.electrical', icon: 'flash-outline' },
-  { id: 'Hidráulica', i18nKey: 'home.serviceCategories.plumbing', icon: 'water-outline' },
-  { id: 'Limpeza', i18nKey: 'home.serviceCategories.cleaning', icon: 'sparkles-outline' },
-  { id: 'Reformas', i18nKey: 'home.serviceCategories.renovation', icon: 'hammer-outline' },
-  { id: 'Jardinagem', i18nKey: 'home.serviceCategories.garden', icon: 'leaf-outline' },
-  { id: 'Segurança', i18nKey: 'home.serviceCategories.security', icon: 'shield-checkmark-outline' },
-  { id: 'Climatização', i18nKey: 'home.serviceCategories.climatization', icon: 'thermometer-outline' },
-  { id: 'Tecnologia', i18nKey: 'home.serviceCategories.technology', icon: 'laptop-outline' },
-  { id: 'Dedetização', i18nKey: 'home.serviceCategories.pestControl', icon: 'bug-outline' },
-  { id: 'Mudança', i18nKey: 'home.serviceCategories.moving', icon: 'cube-outline' },
-  { id: 'Gás', i18nKey: 'home.serviceCategories.gas', icon: 'flame-outline' },
-  { id: 'Pintura', i18nKey: 'home.serviceCategories.painting', icon: 'color-palette-outline' },
-];
 
 function StarRating({ rating, C }: { rating: number; C: ColorPalette }) {
   return (
@@ -83,9 +59,25 @@ function StarRating({ rating, C }: { rating: number; C: ColorPalette }) {
 
 type ServicesStyles = ReturnType<typeof createServicesStyles>;
 
-function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles: ServicesStyles }) {
+function ProviderCard({
+  item,
+  C,
+  styles,
+  chips,
+  onPressCard,
+}: {
+  item: any;
+  C: ColorPalette;
+  styles: ServicesStyles;
+  chips: DirectoryCategoryChip[];
+  onPressCard: () => void;
+}) {
   const { t } = useTranslation();
-  const catColor = SERVICE_CATEGORY_COLORS[item.category] || C.accent;
+  const chip = chips.find((c) => c.id === item.category);
+  const catColor =
+    chip?.color ||
+    SERVICE_CATEGORY_COLORS[item.category] ||
+    C.accent;
   const tags: string[] = typeof item.tags === 'string'
     ? item.tags.split(',').filter(Boolean)
     : (item.tags || []);
@@ -102,7 +94,7 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
   };
 
   return (
-    <View style={styles.cardOuter}>
+    <TouchableOpacity style={styles.cardOuter} activeOpacity={0.92} onPress={onPressCard} accessibilityRole="button">
       {item.hero_image_url ? (
         <Image
           source={{ uri: item.hero_image_url }}
@@ -115,7 +107,7 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
       {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: catColor + '20' }]}>
         <Ionicons
-          name={(CATEGORY_CHIPS.find(c => c.id === item.category)?.icon || 'construct-outline') as any}
+          name={(chip?.icon || 'construct-outline') as any}
           size={26}
           color={catColor}
         />
@@ -133,7 +125,7 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
         {/* Categoria + cidade */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
           <View style={[styles.catBadge, { backgroundColor: catColor + '18' }]}>
-            <Text style={[styles.catText, { color: catColor }]}>{providerCategoryLabel(t, item.category)}</Text>
+            <Text style={[styles.catText, { color: catColor }]}>{providerCategoryLabel(t, item.category, chips)}</Text>
           </View>
           {item.city && (
             <Text style={styles.city}>
@@ -177,11 +169,12 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
         )}
       </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 export default function ServicesScreen() {
+  const router = useRouter();
   const { t, i18n } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createServicesStyles(C), [C]);
@@ -197,6 +190,18 @@ export default function ServicesScreen() {
   const [total, setTotal]       = useState(0);
   const [fromCache, setFromCache] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [categoryChips, setCategoryChips] = useState<DirectoryCategoryChip[]>(FALLBACK_DIRECTORY_CATEGORY_CHIPS);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const chips = await fetchDirectoryCategoryChips();
+      if (!cancelled) setCategoryChips(chips);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const doSearch = useCallback(async (q: string, cat: string, pg: number, append = false, isRefresh = false) => {
     if (pg === 1 && !append) {
@@ -206,7 +211,13 @@ export default function ServicesScreen() {
       setLoadingMore(true);
     }
 
-    const result = await ProviderService.search({ q, category: cat, page: pg, limit: 20 });
+    const result = await ProviderService.search({
+      q,
+      category: cat,
+      page: pg,
+      limit: 20,
+      forceRefresh: isRefresh,
+    });
 
     setFromCache(result.fromCache);
     setTotal(result.total);
@@ -241,6 +252,8 @@ export default function ServicesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
+      {/* Bloco superior fixo: título, atalhos, busca e categorias (não rolam com os cards) */}
+      <View style={{ flexShrink: 0 }}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: C.primary }]}>{t('services.title')}</Text>
@@ -320,10 +333,11 @@ export default function ServicesScreen() {
 
       {/* Categorias */}
       <FlatList
-        data={CATEGORY_CHIPS}
+        data={categoryChips}
         horizontal
         showsHorizontalScrollIndicator={false}
-        keyExtractor={c => c.id}
+        keyExtractor={(c) => c.id || '__all__'}
+        style={{ height: 52, flexGrow: 0 }}
         contentContainerStyle={styles.catRow}
         renderItem={({ item: cat }) => (
           <TouchableOpacity
@@ -339,15 +353,16 @@ export default function ServicesScreen() {
               color={category === cat.id ? C.cardWhite : C.textSecondary}
             />
             <Text style={[styles.catChipTxt, category === cat.id && { color: C.cardWhite }]}>
-              {t(cat.i18nKey)}
+              {cat.i18nKey ? t(cat.i18nKey) : (cat.label || cat.id)}
             </Text>
           </TouchableOpacity>
         )}
       />
+      </View>
 
-      {/* Lista */}
+      {/* Lista: só esta área rola verticalmente */}
       {loading ? (
-        <View style={styles.center}>
+        <View style={[styles.center, { flex: 1 }]}>
           <ActivityIndicator size="large" color={C.accent} />
           <Text style={{ color: C.textSecondary, marginTop: 12 }}>{t('services.searching')}</Text>
         </View>
@@ -355,6 +370,7 @@ export default function ServicesScreen() {
         <FlatList
           data={providers}
           keyExtractor={p => p.id}
+          style={{ flex: 1 }}
           contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           onEndReached={onEndReached}
@@ -377,7 +393,15 @@ export default function ServicesScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => <ProviderCard item={item} C={C} styles={styles} />}
+          renderItem={({ item }) => (
+            <ProviderCard
+              item={item}
+              C={C}
+              styles={styles}
+              chips={categoryChips}
+              onPressCard={() => router.push(`/provider-services/${item.id}` as any)}
+            />
+          )}
         />
       )}
     </View>

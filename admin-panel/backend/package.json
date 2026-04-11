@@ -16,6 +16,7 @@
     "dropbox:exchange": "node scripts/exchange_dbx.js",
     "dropbox:test-token": "node scripts/test_dbx.js",
     "openapi": "node ../scripts/build-openapi.js",
+    "directory:clear-legacy": "node scripts/clear-service-providers.js",
     "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'"
   },
   "dependencies": {

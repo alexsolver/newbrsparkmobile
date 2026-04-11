@@ -1,5 +1,12 @@
 import { Asset } from '../types/asset';
-import { getSyncQueue, clearSyncQueueItem, saveAssetsLocal, saveConfigLocal, saveProviders, getProviders } from '../database';
+import {
+  getSyncQueue,
+  clearSyncQueueItem,
+  saveAssetsLocal,
+  saveConfigLocal,
+  getProviders,
+  replaceDirectoryProvidersCache,
+} from '../database';
 import { primeOsrmBaseFromConfig } from './osrmConfig';
 import { apiFetch, API_BASE } from './auth';
 import { fullSync } from './syncService';
@@ -13,6 +20,20 @@ const PROVIDERS_CACHE_MAX = 50;
  * Mantém o nome ProviderService por compatibilidade; cada item é uma empresa (tenant).
  * Caches the last PROVIDERS_CACHE_MAX entries in SQLite for offline fallback.
  */
+function filterProvidersLocal(
+  rows: any[],
+  q: string,
+  category: string,
+  city: string
+): any[] {
+  return rows.filter((p) => {
+    const matchQ = !q || p.name.toLowerCase().includes(q.toLowerCase());
+    const matchCat = !category || p.category === category;
+    const matchCity = !city || (p.city || '').toLowerCase().includes(city.toLowerCase());
+    return matchQ && matchCat && matchCity;
+  });
+}
+
 export const ProviderService = {
   async search(params: {
     q?: string;
@@ -20,48 +41,66 @@ export const ProviderService = {
     city?: string;
     page?: number;
     limit?: number;
+    /** Ignora cache HTTP / evita 304; bust de proxy. Usar após pull-to-refresh ou TTL de diretório. */
+    forceRefresh?: boolean;
   }): Promise<{ data: any[]; total: number; totalPages: number; fromCache: boolean }> {
-    const { q = '', category = '', city = '', page = 1, limit = 20 } = params;
+    const { q = '', category = '', city = '', page = 1, limit = 20, forceRefresh = false } = params;
     const qs = new URLSearchParams();
-    if (q)        qs.set('q', q);
+    if (q) qs.set('q', q);
     if (category) qs.set('category', category);
-    if (city)     qs.set('city', city);
-    qs.set('page',  String(page));
+    if (city) qs.set('city', city);
+    qs.set('page', String(page));
     qs.set('limit', String(Math.min(limit, 50)));
+    if (forceRefresh) {
+      qs.set('_', String(Date.now()));
+    }
+
+    const url = `${API_BASE}/api/providers?${qs.toString()}`;
+    const fetchOpts: RequestInit = {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    };
+
+    const applyFilteredCache = () => {
+      const cached = getProviders();
+      const filtered = filterProvidersLocal(cached, q, category, city);
+      return {
+        data: filtered,
+        total: filtered.length,
+        totalPages: 1,
+        fromCache: true as const,
+      };
+    };
 
     try {
-      const res = await fetch(`${API_BASE}/api/providers?${qs.toString()}`);
+      let res = await fetch(url, fetchOpts);
 
-      // 304 Not Modified = server says data unchanged, use local cache
+      // 304 sem corpo: não reutilizar lista completa ignorando filtros — força nova ida ao servidor.
       if (res.status === 304) {
-        const cached = getProviders();
-        return { data: cached, total: cached.length, totalPages: 1, fromCache: true };
+        const retryUrl = `${API_BASE}/api/providers?${qs.toString()}&_r=${Date.now()}`;
+        res = await fetch(retryUrl, fetchOpts);
       }
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
       const results: any[] = json.data || [];
 
-      // Cache only the first page of unfiltered results (likely "all / recent")
-      if (!q && !category && !city && page === 1 && results.length > 0) {
-        const existing = getProviders();
-        const merged = [...results, ...existing]
-          .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i)
-          .slice(0, PROVIDERS_CACHE_MAX);
-        saveProviders(merged);
+      // Snapshot da 1.ª página sem filtros = espelho do servidor (remove empresas deslistadas do SQLite).
+      if (!q && !category && !city && page === 1) {
+        replaceDirectoryProvidersCache(results.slice(0, PROVIDERS_CACHE_MAX));
       }
 
-      return { data: results, total: json.total ?? results.length, totalPages: json.totalPages ?? 1, fromCache: false };
+      return {
+        data: results,
+        total: json.total ?? results.length,
+        totalPages: json.totalPages ?? 1,
+        fromCache: false,
+      };
     } catch {
-      // Offline fallback — return local cache filtered client-side
-      const cached = getProviders();
-      const filtered = cached.filter(p => {
-        const matchQ    = !q        || p.name.toLowerCase().includes(q.toLowerCase());
-        const matchCat  = !category || p.category === category;
-        const matchCity = !city     || (p.city || '').toLowerCase().includes(city.toLowerCase());
-        return matchQ && matchCat && matchCity;
-      });
-      return { data: filtered, total: filtered.length, totalPages: 1, fromCache: true };
+      return applyFilteredCache();
     }
   },
 };
@@ -72,8 +111,8 @@ export const ProviderService = {
  * Estratégia:
  * - Assets:    pull autenticado (dados do tenant do usuário)
  * - Config:    pull PÚBLICO (metatags/tipos de ativo, sem auth)
- * - Providers: NÃO sincronizado em massa — buscado sob demanda via ProviderService
- * - SQLite local = cache offline de bens + config + últimos 50 prestadores vistos
+ * - Providers: NÃO puxados aqui em massa — use ProviderService.search (substitui snapshot local na 1.ª página sem filtros).
+ * - SQLite local = cache offline do diretório + bens + config
  */
 export class ApiService {
 
