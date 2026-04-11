@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,9 @@ import {
   TextInput,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -19,7 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ColorPalette } from '../../src/theme/colors';
 import { fetchPublicProviderDetail } from '../../src/services/directoryCatalog';
-import { apiFetch, API_BASE } from '../../src/services/auth';
+import { apiFetch } from '../../src/services/auth';
+import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 
 type CatalogService = {
   id: string;
@@ -30,16 +32,22 @@ type CatalogService = {
   unit?: string | null;
   catalog_group?: string | null;
   duration_minutes?: number | null;
+  /** Destaque (CMS): moldura e ordem no catálogo do app */
+  featured?: boolean | number | null;
 };
+
+function isServiceFeatured(s: CatalogService): boolean {
+  const f = s.featured as unknown;
+  if (f === true || f === 1) return true;
+  if (f === '1' || f === 'true' || f === 'TRUE') return true;
+  return false;
+}
 
 type CartLine = { service: CatalogService; qty: number };
 
 function resolveImageUrl(raw: string | null | undefined): string | null {
-  if (!raw || typeof raw !== 'string') return null;
-  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-  const base = API_BASE.replace(/\/$/, '');
-  const path = raw.startsWith('/') ? raw : `/${raw}`;
-  return `${base}${path}`;
+  const u = resolveDirectoryMediaUri(raw);
+  return u || null;
 }
 
 function formatMoney(n: number, locale: string): string {
@@ -60,10 +68,10 @@ export default function ProviderCatalogScreen() {
   const locale = i18n.language?.startsWith('en') ? 'en-US' : 'pt-BR';
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [when, setWhen] = useState(() => {
     const d = new Date();
@@ -73,27 +81,51 @@ export default function ProviderCatalogScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  /** IDs de serviços com a descrição expandida no card */
+  const [expandedDescriptionIds, setExpandedDescriptionIds] = useState<Set<string>>(() => new Set());
+  /** Evita refetch ao focar na primeira abertura (o useEffect já carrega). */
+  const skipFocusRefetchRef = useRef(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!tenantId || typeof tenantId !== 'string') return;
-    setLoading(true);
+    const silent = Boolean(opts?.silent);
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const d = await fetchPublicProviderDetail(tenantId);
+      const d = await fetchPublicProviderDetail(tenantId, { bustCache: silent });
       setDetail(d);
-      const services = (Array.isArray(d.services) ? d.services : []) as CatalogService[];
-      const groups = [...new Set(services.map((s) => (s.catalog_group || '').trim() || '__default'))];
-      setActiveGroup(groups[0] || '__default');
     } catch (e: any) {
       setError(e?.message || 'Erro');
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
+  }, [tenantId]);
+
+  useEffect(() => {
+    skipFocusRefetchRef.current = true;
   }, [tenantId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (skipFocusRefetchRef.current) {
+        skipFocusRefetchRef.current = false;
+        return;
+      }
+      void load({ silent: true });
+    }, [load])
+  );
 
   const services: CatalogService[] = useMemo(() => {
     if (!detail || !Array.isArray(detail.services)) return [];
@@ -107,15 +139,44 @@ export default function ProviderCatalogScreen() {
       if (!m.has(g)) m.set(g, []);
       m.get(g)!.push(s);
     }
+    const featuredFirst = (a: CatalogService, b: CatalogService) => {
+      const fa = isServiceFeatured(a) ? 1 : 0;
+      const fb = isServiceFeatured(b) ? 1 : 0;
+      if (fb !== fa) return fb - fa;
+      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    };
+    for (const arr of m.values()) {
+      arr.sort(featuredFirst);
+    }
     return m;
   }, [services]);
 
-  const groupKeys = useMemo(() => [...grouped.keys()], [grouped]);
+  const groupKeys = useMemo(() => {
+    const keys = [...grouped.keys()];
+    const groupHasFeatured = (k: string) => (grouped.get(k) ?? []).some(isServiceFeatured);
+    keys.sort((a, b) => {
+      const ha = groupHasFeatured(a) ? 1 : 0;
+      const hb = groupHasFeatured(b) ? 1 : 0;
+      // Grupos com pelo menos um serviço em destaque sobem no ecrã (evita «destaque» só na última faixa).
+      if (hb !== ha) return hb - ha;
+      if (a === '__default') return -1;
+      if (b === '__default') return 1;
+      return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+    });
+    return keys;
+  }, [grouped]);
 
   const professionalId = (detail?.representative_professional_id as string) || '';
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, line) => sum + (Number(line.service.price) || 0) * line.qty, 0),
+    [cart]
+  );
+
+  const cartItemCount = useMemo(() => cart.reduce((a, l) => a + l.qty, 0), [cart]);
+
+  const qtyInCart = useCallback(
+    (serviceId: string) => cart.find((l) => l.service.id === serviceId)?.qty ?? 0,
     [cart]
   );
 
@@ -128,6 +189,15 @@ export default function ProviderCatalogScreen() {
         return next;
       }
       return [...prev, { service: s, qty: 1 }];
+    });
+  };
+
+  const toggleServiceDescription = (serviceId: string) => {
+    setExpandedDescriptionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(serviceId)) next.delete(serviceId);
+      else next.add(serviceId);
+      return next;
     });
   };
 
@@ -184,6 +254,15 @@ export default function ProviderCatalogScreen() {
 
   const companyName = (detail?.name as string) || '';
 
+  const companyLogoUri = useMemo(() => {
+    if (!detail) return null;
+    const logo =
+      typeof detail.logo_url === 'string' && detail.logo_url.trim() !== '' ? detail.logo_url.trim() : null;
+    const photo =
+      typeof detail.photo === 'string' && detail.photo.trim() !== '' ? detail.photo.trim() : null;
+    return resolveImageUrl(logo || photo);
+  }, [detail]);
+
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top + 40 }]}>
@@ -211,34 +290,45 @@ export default function ProviderCatalogScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityLabel={t('providerCatalog.back')}>
           <Ionicons name="chevron-back" size={24} color={C.accent} />
         </TouchableOpacity>
-        <Text style={[styles.screenTitle, { color: C.primary }]} numberOfLines={1}>
-          {companyName}
-        </Text>
+        <View style={styles.topBarTitleCluster}>
+          {companyLogoUri ? (
+            <View style={[styles.companyLogoRing, { backgroundColor: C.divider, borderColor: C.border }]}>
+              <Image
+                source={{ uri: companyLogoUri }}
+                style={styles.companyLogoImg}
+                resizeMode="cover"
+                accessibilityIgnoresInvertColors
+                accessibilityLabel={companyName ? `${t('providerCatalog.companyLogoA11y')}: ${companyName}` : t('providerCatalog.companyLogoA11y')}
+              />
+            </View>
+          ) : null}
+          <Text style={[styles.screenTitle, { color: C.primary }]} numberOfLines={1}>
+            {companyName}
+          </Text>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll} contentContainerStyle={styles.tabRow}>
-        {groupKeys.map((key) => {
-          const label = key === '__default' ? t('providerCatalog.defaultGroup') : key;
-          const active = activeGroup === key;
-          return (
-            <TouchableOpacity key={key} onPress={() => setActiveGroup(key)} style={styles.tabItem}>
-              <Text style={[styles.tabTxt, active && { color: C.accent, fontWeight: '900' }]}>{label}</Text>
-              {active ? <View style={[styles.tabUnderline, { backgroundColor: C.accent }]} /> : null}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
-        {(() => {
-          const gk = activeGroup && grouped.has(activeGroup) ? activeGroup : groupKeys[0];
-          if (!gk) return null;
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load({ silent: true })}
+            tintColor={C.accent}
+            colors={[C.accent]}
+          />
+        }
+      >
+        {groupKeys.map((gk, stripeIndex) => {
           const list = grouped.get(gk) || [];
           if (list.length === 0) return null;
           const label = gk === '__default' ? t('providerCatalog.defaultGroup') : gk;
           return (
-            <View key={gk} style={{ marginTop: 16 }}>
+            <View
+              key={gk}
+              style={[styles.categoryStripe, stripeIndex === 0 && styles.categoryStripeFirst]}
+            >
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionTitle}>{label}</Text>
               </View>
@@ -247,31 +337,104 @@ export default function ProviderCatalogScreen() {
                   const img = resolveImageUrl(item.photo_url);
                   const price = Number(item.price);
                   const hasPrice = Number.isFinite(price) && price > 0;
+                  const inCart = qtyInCart(item.id);
+                  const descriptionText = (item.description ?? '').trim();
+                  const hasDescription = descriptionText.length > 0;
+                  const descriptionOpen = expandedDescriptionIds.has(item.id);
+                  const featured = isServiceFeatured(item);
                   return (
-                    <View key={item.id} style={[styles.card, { backgroundColor: C.cardWhite, borderColor: C.border }]}>
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.card,
+                        { backgroundColor: C.cardWhite, borderColor: C.border },
+                        featured && styles.cardFeatured,
+                        featured && {
+                          borderTopColor: C.accent,
+                          shadowColor: C.accent,
+                        },
+                      ]}
+                    >
                       <View style={[styles.imgBox, { backgroundColor: C.divider }]}>
                         {img ? (
-                          <Image source={{ uri: img }} style={styles.img} resizeMode="contain" />
+                          <Image source={{ uri: img }} style={styles.img} resizeMode="cover" />
                         ) : (
                           <Ionicons name="image-outline" size={40} color={C.textLight} style={{ alignSelf: 'center', marginTop: 28 }} />
                         )}
-                        <TouchableOpacity style={[styles.plusBtn, { backgroundColor: C.cardWhite }]} onPress={() => addToCart(item)}>
-                          <Ionicons name="add" size={22} color={C.accent} />
-                        </TouchableOpacity>
+                        <View style={styles.cardQtyBar} pointerEvents="box-none">
+                          <TouchableOpacity
+                            style={[
+                              styles.cardQtyBtn,
+                              { backgroundColor: C.cardWhite },
+                              inCart <= 0 && styles.cardQtyBtnDisabled,
+                            ]}
+                            disabled={inCart <= 0}
+                            onPress={() => removeFromCart(item.id)}
+                            accessibilityLabel={t('providerCatalog.decreaseQty')}
+                          >
+                            <Ionicons name="remove" size={22} color={C.accent} />
+                          </TouchableOpacity>
+                          {inCart > 0 ? (
+                            <View style={[styles.cardQtyPill, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+                              <Text style={styles.cardQtyPillTxt}>{inCart}</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.cardQtySpacer} />
+                          )}
+                          <TouchableOpacity
+                            style={[styles.cardQtyBtn, { backgroundColor: C.cardWhite }]}
+                            onPress={() => addToCart(item)}
+                            accessibilityLabel={t('providerCatalog.increaseQty')}
+                          >
+                            <Ionicons name="add" size={22} color={C.accent} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
+                      {featured ? (
+                        <Text style={[styles.featuredTag, { color: C.accent }]} accessibilityRole="text">
+                          {t('providerCatalog.featuredShort')}
+                        </Text>
+                      ) : null}
                       <Text style={[styles.price, { color: C.primary }]}>
                         {hasPrice ? formatMoney(price, locale) : t('providerCatalog.priceOnRequest')}
                       </Text>
                       <Text style={[styles.cardTitle, { color: C.primary }]} numberOfLines={2}>
                         {item.name}
                       </Text>
+                      {hasDescription ? (
+                        <View style={styles.cardDescFooter}>
+                          <TouchableOpacity
+                            style={[styles.descToggleRow, { borderTopColor: C.border }]}
+                            onPress={() => toggleServiceDescription(item.id)}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: descriptionOpen }}
+                            accessibilityLabel={
+                              descriptionOpen
+                                ? t('providerCatalog.descriptionCollapseA11y')
+                                : t('providerCatalog.descriptionExpandA11y')
+                            }
+                          >
+                            <Text style={[styles.descToggleLabel, { color: C.accent }]}>
+                              {t('providerCatalog.description')}
+                            </Text>
+                            <Ionicons
+                              name={descriptionOpen ? 'chevron-up' : 'chevron-down'}
+                              size={18}
+                              color={C.accent}
+                            />
+                          </TouchableOpacity>
+                          {descriptionOpen ? (
+                            <Text style={[styles.descBody, { color: C.textSecondary }]}>{descriptionText}</Text>
+                          ) : null}
+                        </View>
+                      ) : null}
                     </View>
                   );
                 })}
               </ScrollView>
             </View>
           );
-        })()}
+        })}
 
         {services.length === 0 ? (
           <View style={{ padding: 32, alignItems: 'center' }}>
@@ -284,7 +447,14 @@ export default function ProviderCatalogScreen() {
         <View style={[styles.cartBar, { paddingBottom: insets.bottom + 8, borderTopColor: C.border, backgroundColor: C.cardWhite }]}>
           <TouchableOpacity style={styles.cartSummary} onPress={() => setCheckoutOpen(true)}>
             <View>
-              <Text style={styles.cartCount}>{t('providerCatalog.items', { count: cart.reduce((a, l) => a + l.qty, 0) })}</Text>
+              <View style={styles.cartCountRow}>
+                <Text style={[styles.cartCountNumber, { color: C.accent }]}>{cartItemCount}</Text>
+                <Text style={[styles.cartCountSuffix, { color: C.textSecondary }]}>
+                  {cartItemCount === 1
+                    ? t('providerCatalog.itemWordSingular')
+                    : t('providerCatalog.itemWordPlural')}
+                </Text>
+              </View>
               <Text style={[styles.cartTotal, { color: C.accent }]}>{formatMoney(cartTotal, locale)}</Text>
             </View>
             <Text style={[styles.cartCta, { color: C.accent }]}>{t('providerCatalog.reviewOrder')}</Text>
@@ -381,33 +551,69 @@ function createStyles(C: ColorPalette) {
       gap: 8,
     },
     iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-    screenTitle: { flex: 1, fontSize: 16, fontWeight: '900', textAlign: 'center' },
-    tabScroll: { maxHeight: 48 },
-    tabRow: { paddingHorizontal: 12, gap: 16, alignItems: 'center' },
-    tabItem: { paddingVertical: 8, paddingHorizontal: 4 },
-    tabTxt: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
-    tabUnderline: { height: 3, borderRadius: 2, marginTop: 4 },
+    topBarTitleCluster: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      minWidth: 0,
+      paddingRight: 4,
+    },
+    companyLogoRing: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+    },
+    companyLogoImg: { width: '100%', height: '100%' },
+    screenTitle: { flex: 1, fontSize: 16, fontWeight: '900', textAlign: 'left', minWidth: 0 },
+    /** Uma linha por categoria: título + carrossel horizontal de cards */
+    categoryStripe: { marginTop: 22 },
+    categoryStripeFirst: { marginTop: 10 },
     sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
     sectionTitle: { fontSize: 16, fontWeight: '900', color: C.primary },
     card: {
-      width: 148,
+      width: 296,
       borderRadius: 14,
       borderWidth: 1,
-      padding: 10,
+      padding: 12,
       marginRight: 4,
     },
+    /** Serviços marcados como destaque no CMS: faixa superior + leve brilho */
+    cardFeatured: {
+      borderTopWidth: 5,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.22,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    featuredTag: {
+      fontSize: 11,
+      fontWeight: '900',
+      marginTop: 6,
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+    // Área da foto: mesma proporção da prévia em `BrsparkWeb/.../ServiceListPage.tsx` (SERVICE_CATALOG_APP_IMAGE_ASPECT).
     imgBox: {
-      height: 120,
+      height: 144,
       borderRadius: 12,
       overflow: 'hidden',
       position: 'relative',
       justifyContent: 'center',
     },
     img: { width: '100%', height: '100%' },
-    plusBtn: {
+    cardQtyBar: {
       position: 'absolute',
+      left: 8,
       right: 8,
       bottom: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    cardQtyBtn: {
       width: 34,
       height: 34,
       borderRadius: 17,
@@ -418,8 +624,38 @@ function createStyles(C: ColorPalette) {
       shadowRadius: 4,
       elevation: 3,
     },
-    price: { fontSize: 15, fontWeight: '900', marginTop: 8 },
-    cardTitle: { fontSize: 13, fontWeight: '700', marginTop: 4, minHeight: 36 },
+    cardQtyBtnDisabled: {
+      opacity: 0.38,
+    },
+    cardQtyPill: {
+      minWidth: 28,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    cardQtyPillTxt: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '900',
+    },
+    cardQtySpacer: {
+      minWidth: 28,
+    },
+    price: { fontSize: 15, fontWeight: '900', marginTop: 10 },
+    cardTitle: { fontSize: 13, fontWeight: '700', marginTop: 5, minHeight: 45 },
+    cardDescFooter: { marginTop: 4 },
+    descToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingTop: 8,
+      marginTop: 4,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    descToggleLabel: { fontSize: 12, fontWeight: '800' },
+    descBody: { fontSize: 12, lineHeight: 18, marginTop: 8 },
     cartBar: {
       position: 'absolute',
       left: 0,
@@ -430,7 +666,9 @@ function createStyles(C: ColorPalette) {
       paddingTop: 10,
     },
     cartSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cartCount: { fontSize: 12, color: C.textSecondary, fontWeight: '600' },
+    cartCountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 2 },
+    cartCountNumber: { fontSize: 26, fontWeight: '900', lineHeight: 30 },
+    cartCountSuffix: { fontSize: 14, fontWeight: '700', lineHeight: 22 },
     cartTotal: { fontSize: 20, fontWeight: '900' },
     cartCta: { fontSize: 15, fontWeight: '800' },
     modalOverlay: {

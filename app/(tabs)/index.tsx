@@ -37,6 +37,7 @@ import {
   ensureServiceCategoriesColorColumn,
 } from '../../src/database';
 import { LEGACY_SERVICE_CATEGORY_I18N } from '../../src/services/directoryCategories';
+import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 import { ApiService, ProviderService } from '../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -2069,7 +2070,11 @@ export default function DashboardScreen() {
                       accessibilityLabel={t('home.openServiceCatalog', { name: provider.name })}
                     >
                       <Image
-                        source={{ uri: provider.logo_url || provider.photo }}
+                        source={{
+                          uri: resolveDirectoryMediaUri(
+                            String(provider.logo_url || provider.photo || '')
+                          ),
+                        }}
                         style={styles.providerPhoto}
                         resizeMode={provider.logo_url ? 'contain' : 'cover'}
                       />

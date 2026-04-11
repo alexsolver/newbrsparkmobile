@@ -24,6 +24,7 @@ import {
   LEGACY_SERVICE_CATEGORY_I18N,
   type DirectoryCategoryChip,
 } from '../../src/services/directoryCategories';
+import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 
 function providerCategoryLabel(t: TFunction, category: string, chips: DirectoryCategoryChip[]): string {
   const chip = chips.find((c) => c.id === category);
@@ -93,13 +94,24 @@ function ProviderCard({
     Linking.openURL(`https://wa.me/55${num}`);
   };
 
+  /** Faixa superior: imagem de capa do CMS (`hero_image_url`); se não houver, usa o logo da marca (`logo_url`). */
+  const hasDedicatedHero =
+    typeof item.hero_image_url === 'string' && item.hero_image_url.trim() !== '';
+  const cardHeroUri = hasDedicatedHero
+    ? item.hero_image_url.trim()
+    : typeof item.logo_url === 'string' && item.logo_url.trim() !== ''
+      ? item.logo_url.trim()
+      : null;
+  const cardHeroFromLogoOnly = Boolean(cardHeroUri) && !hasDedicatedHero;
+  const cardHeroAbsoluteUri = cardHeroUri ? resolveDirectoryMediaUri(cardHeroUri) : '';
+
   return (
     <TouchableOpacity style={styles.cardOuter} activeOpacity={0.92} onPress={onPressCard} accessibilityRole="button">
-      {item.hero_image_url ? (
+      {cardHeroAbsoluteUri ? (
         <Image
-          source={{ uri: item.hero_image_url }}
+          source={{ uri: cardHeroAbsoluteUri }}
           style={styles.cardHero}
-          resizeMode="cover"
+          resizeMode={cardHeroFromLogoOnly ? 'contain' : 'cover'}
           accessibilityRole="image"
         />
       ) : null}

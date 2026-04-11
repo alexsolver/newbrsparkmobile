@@ -848,6 +848,10 @@
     "priceOnRequest": "Consultar",
     "noServices": "Esta empresa aún no ha publicado servicios en el catálogo.",
     "items": "{{count}} artículos",
+    "itemWordSingular": "artículo",
+    "itemWordPlural": "artículos",
+    "decreaseQty": "Quitar una unidad",
+    "increaseQty": "Añadir una unidad",
     "reviewOrder": "Revisar pedido",
     "checkoutTitle": "Bolsa y programación",
     "total": "Total",
@@ -858,7 +862,12 @@
     "confirmSchedule": "Finalizar y agendar",
     "missingProfessional": "No se pudo identificar un profesional para la reserva. Intente más tarde.",
     "pastTime": "Elija una fecha y hora futuras.",
-    "orderSuccess": "Solicitud registrada. Le contactarán según disponibilidad."
+    "orderSuccess": "Solicitud registrada. Le contactarán según disponibilidad.",
+    "description": "Descripción",
+    "descriptionExpandA11y": "Mostrar descripción del servicio",
+    "descriptionCollapseA11y": "Ocultar descripción del servicio",
+    "featuredShort": "Destacado",
+    "companyLogoA11y": "Logotipo de la empresa"
   },
   "orders": {
     "title": "Pedidos",

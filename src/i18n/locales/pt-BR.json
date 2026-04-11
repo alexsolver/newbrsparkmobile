@@ -848,6 +848,10 @@
     "priceOnRequest": "Sob consulta",
     "noServices": "Esta empresa ainda não publicou serviços no catálogo.",
     "items": "{{count}} itens",
+    "itemWordSingular": "item",
+    "itemWordPlural": "itens",
+    "decreaseQty": "Remover uma unidade",
+    "increaseQty": "Adicionar uma unidade",
     "reviewOrder": "Revisar pedido",
     "checkoutTitle": "Sacola e agendamento",
     "total": "Total",
@@ -858,7 +862,12 @@
     "confirmSchedule": "Concluir e agendar",
     "missingProfessional": "Não foi possível identificar o profissional para agendamento. Tente mais tarde.",
     "pastTime": "Escolha uma data e hora no futuro.",
-    "orderSuccess": "Pedido registrado. Você será contatado conforme a disponibilidade."
+    "orderSuccess": "Pedido registrado. Você será contatado conforme a disponibilidade.",
+    "description": "Descrição",
+    "descriptionExpandA11y": "Mostrar descrição do serviço",
+    "descriptionCollapseA11y": "Ocultar descrição do serviço",
+    "featuredShort": "Destaque",
+    "companyLogoA11y": "Logo da empresa"
   },
   "orders": {
     "title": "Pedidos",

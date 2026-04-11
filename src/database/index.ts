@@ -262,6 +262,8 @@ export function initDatabase() {
   try { db.execSync(`ALTER TABLE providers ADD COLUMN phone TEXT`); } catch (_) {}
   try { db.execSync(`ALTER TABLE providers ADD COLUMN city TEXT`); } catch (_) {}
   try { db.execSync(`ALTER TABLE providers ADD COLUMN state TEXT DEFAULT 'SP'`); } catch (_) {}
+  try { db.execSync(`ALTER TABLE providers ADD COLUMN logo_url TEXT`); } catch (_) {}
+  try { db.execSync(`ALTER TABLE providers ADD COLUMN hero_image_url TEXT`); } catch (_) {}
 
   // Adiciona coluna owner_email em sync_queue caso não exista (migração)
   try {
@@ -739,14 +741,16 @@ function safeParseStringOrArray(val: string | null): string[] {
 
 export function saveProviders(providers: any[]) {
   const stmt = db.prepareSync(`
-    INSERT INTO providers (id, name, category, rating, reviews, photo, tags, verified, keywords, phone, city, state)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO providers (id, name, category, rating, reviews, photo, logo_url, hero_image_url, tags, verified, keywords, phone, city, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       category = excluded.category,
       rating = excluded.rating,
       reviews = excluded.reviews,
       photo = excluded.photo,
+      logo_url = excluded.logo_url,
+      hero_image_url = excluded.hero_image_url,
       tags = excluded.tags,
       verified = excluded.verified,
       keywords = excluded.keywords,
@@ -756,11 +760,20 @@ export function saveProviders(providers: any[]) {
   `);
   providers.forEach(p => {
     stmt.executeSync([
-      p.id, p.name, p.category, p.rating, p.reviews, p.photo,
+      p.id,
+      p.name,
+      p.category,
+      p.rating,
+      p.reviews,
+      p.photo ?? null,
+      p.logo_url ?? null,
+      p.hero_image_url ?? null,
       Array.isArray(p.tags) ? p.tags.join(',') : (p.tags || ''),
       p.verified ? 1 : 0,
       p.keywords || '',
-      p.phone || null, p.city || null, p.state || 'SP',
+      p.phone || null,
+      p.city || null,
+      p.state || 'SP',
     ]);
   });
 }

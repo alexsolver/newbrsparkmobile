@@ -848,6 +848,10 @@
     "priceOnRequest": "On request",
     "noServices": "This company has not published any services yet.",
     "items": "{{count}} items",
+    "itemWordSingular": "item",
+    "itemWordPlural": "items",
+    "decreaseQty": "Remove one unit",
+    "increaseQty": "Add one unit",
     "reviewOrder": "Review order",
     "checkoutTitle": "Bag and scheduling",
     "total": "Total",
@@ -858,7 +862,12 @@
     "confirmSchedule": "Complete and schedule",
     "missingProfessional": "We could not identify a professional for booking. Please try again later.",
     "pastTime": "Please choose a future date and time.",
-    "orderSuccess": "Your request was submitted. You will be contacted according to availability."
+    "orderSuccess": "Your request was submitted. You will be contacted according to availability.",
+    "description": "Description",
+    "descriptionExpandA11y": "Show service description",
+    "descriptionCollapseA11y": "Hide service description",
+    "featuredShort": "Featured",
+    "companyLogoA11y": "Company logo"
   },
   "orders": {
     "title": "Orders",

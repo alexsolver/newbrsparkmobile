@@ -207,6 +207,47 @@ app.get('/api/compliance/consents', async (req, res) => {
 const directoryPostgresFallbackEnabled = () =>
   String(process.env.DIRECTORY_POSTGRES_FALLBACK || '') === '1';
 
+/**
+ * Proxy público de ficheiros `/storage/...` do Laravel — o app móvel carrega da mesma origem que a API (evita ATS iOS em HTTP LAN).
+ * Query: path — obrigatoriamente começa por `/storage/` (sem `..`).
+ */
+app.get('/api/directory-media', async (req, res) => {
+  try {
+    const rawPath = String(req.query.path || '').trim();
+    if (!rawPath.startsWith('/storage/') || rawPath.includes('..')) {
+      return res.status(400).type('text/plain').send('Caminho inválido.');
+    }
+    const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+    if (!cmsBase) {
+      return res.status(503).type('text/plain').send('CMS não configurado.');
+    }
+    const upstream = `${cmsBase}${rawPath}`;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15_000);
+    let upstreamRes;
+    try {
+      upstreamRes = await fetch(upstream, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!upstreamRes.ok) {
+      return res.sendStatus(upstreamRes.status === 404 ? 404 : 502);
+    }
+    const ct = upstreamRes.headers.get('content-type') || 'application/octet-stream';
+    const buf = Buffer.from(await upstreamRes.arrayBuffer());
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.status(200).send(buf);
+  } catch (e) {
+    console.warn('[api/directory-media]', e.message);
+    return res.status(502).type('text/plain').send('Falha ao obter imagem.');
+  }
+});
+
 // Public catalog: empresas — fonte oficial Laravel (CMS). PostgreSQL só com DIRECTORY_POSTGRES_FALLBACK=1.
 app.get('/api/providers', async (req, res) => {
   try {

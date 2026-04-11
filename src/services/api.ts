@@ -26,8 +26,13 @@ function filterProvidersLocal(
   category: string,
   city: string
 ): any[] {
+  const needle = q.trim().toLowerCase();
   return rows.filter((p) => {
-    const matchQ = !q || p.name.toLowerCase().includes(q.toLowerCase());
+    const matchQ =
+      !needle ||
+      (typeof p.name === 'string' && p.name.toLowerCase().includes(needle)) ||
+      (typeof p.keywords === 'string' && p.keywords.toLowerCase().includes(needle)) ||
+      (typeof p.tags === 'string' && p.tags.toLowerCase().includes(needle));
     const matchCat = !category || p.category === category;
     const matchCity = !city || (p.city || '').toLowerCase().includes(city.toLowerCase());
     return matchQ && matchCat && matchCity;

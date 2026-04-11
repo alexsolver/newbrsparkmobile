@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
           "NSExceptionDomains": {
             "osrm.lansolver.com": {
               "NSIncludesSubdomains": true,
