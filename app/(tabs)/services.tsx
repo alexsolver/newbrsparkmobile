@@ -2,8 +2,11 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, ActivityIndicator, RefreshControl, Linking,
-  KeyboardAvoidingView, Platform, ScrollView} from 'react-native';
+  ScrollView, Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   ColorPalette,
   MEDIA_TAG_COLORS,
@@ -15,21 +18,49 @@ import { useTheme } from '../../src/theme/ThemeContext';
 const BRAND_WHATSAPP = '#25D366';
 import { ProviderService } from '../../src/services/api';
 
-// ── Categoria chips ────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: '', label: 'Todos', icon: 'grid-outline' },
-  { id: 'Elétrica', label: 'Elétrica', icon: 'flash-outline' },
-  { id: 'Hidráulica', label: 'Hidráulica', icon: 'water-outline' },
-  { id: 'Limpeza', label: 'Limpeza', icon: 'sparkles-outline' },
-  { id: 'Reformas', label: 'Reformas', icon: 'hammer-outline' },
-  { id: 'Jardinagem', label: 'Jardinagem', icon: 'leaf-outline' },
-  { id: 'Segurança', label: 'Segurança', icon: 'shield-checkmark-outline' },
-  { id: 'Climatização', label: 'Climatização', icon: 'thermometer-outline' },
-  { id: 'Tecnologia', label: 'Tecnologia', icon: 'laptop-outline' },
-  { id: 'Dedetização', label: 'Dedetização', icon: 'bug-outline' },
-  { id: 'Mudança', label: 'Mudança', icon: 'cube-outline' },
-  { id: 'Gás', label: 'Gás', icon: 'flame-outline' },
-  { id: 'Pintura', label: 'Pintura', icon: 'color-palette-outline' },
+/** Valor `category` vindo da API (pt-BR) → sufixo de `home.serviceCategories.*` */
+const CATEGORY_I18N_KEY: Record<string, string> = {
+  Elétrica: 'electrical',
+  Hidráulica: 'plumbing',
+  Limpeza: 'cleaning',
+  Reformas: 'renovation',
+  Jardinagem: 'garden',
+  Segurança: 'security',
+  Climatização: 'climatization',
+  Tecnologia: 'technology',
+  Dedetização: 'pestControl',
+  Mudança: 'moving',
+  Gás: 'gas',
+  Pintura: 'painting',
+};
+
+function providerCategoryLabel(t: TFunction, category: string): string {
+  const suffix = CATEGORY_I18N_KEY[category];
+  return suffix ? t(`home.serviceCategories.${suffix}`) : category;
+}
+
+function numberLocaleForApp(lang: string): string {
+  const l = (lang || '').toLowerCase();
+  if (l.startsWith('es')) return 'es-ES';
+  if (l.startsWith('en')) return 'en-US';
+  return 'pt-BR';
+}
+
+// ── Chips de categoria (id = valor enviado à API) ─────────────────────────────
+const CATEGORY_CHIPS: { id: string; i18nKey: string; icon: string }[] = [
+  { id: '', i18nKey: 'common.all', icon: 'grid-outline' },
+  { id: 'Elétrica', i18nKey: 'home.serviceCategories.electrical', icon: 'flash-outline' },
+  { id: 'Hidráulica', i18nKey: 'home.serviceCategories.plumbing', icon: 'water-outline' },
+  { id: 'Limpeza', i18nKey: 'home.serviceCategories.cleaning', icon: 'sparkles-outline' },
+  { id: 'Reformas', i18nKey: 'home.serviceCategories.renovation', icon: 'hammer-outline' },
+  { id: 'Jardinagem', i18nKey: 'home.serviceCategories.garden', icon: 'leaf-outline' },
+  { id: 'Segurança', i18nKey: 'home.serviceCategories.security', icon: 'shield-checkmark-outline' },
+  { id: 'Climatização', i18nKey: 'home.serviceCategories.climatization', icon: 'thermometer-outline' },
+  { id: 'Tecnologia', i18nKey: 'home.serviceCategories.technology', icon: 'laptop-outline' },
+  { id: 'Dedetização', i18nKey: 'home.serviceCategories.pestControl', icon: 'bug-outline' },
+  { id: 'Mudança', i18nKey: 'home.serviceCategories.moving', icon: 'cube-outline' },
+  { id: 'Gás', i18nKey: 'home.serviceCategories.gas', icon: 'flame-outline' },
+  { id: 'Pintura', i18nKey: 'home.serviceCategories.painting', icon: 'color-palette-outline' },
 ];
 
 function StarRating({ rating, C }: { rating: number; C: ColorPalette }) {
@@ -53,6 +84,7 @@ function StarRating({ rating, C }: { rating: number; C: ColorPalette }) {
 type ServicesStyles = ReturnType<typeof createServicesStyles>;
 
 function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles: ServicesStyles }) {
+  const { t } = useTranslation();
   const catColor = SERVICE_CATEGORY_COLORS[item.category] || C.accent;
   const tags: string[] = typeof item.tags === 'string'
     ? item.tags.split(',').filter(Boolean)
@@ -70,11 +102,20 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
   };
 
   return (
-    <View style={styles.card}>
+    <View style={styles.cardOuter}>
+      {item.hero_image_url ? (
+        <Image
+          source={{ uri: item.hero_image_url }}
+          style={styles.cardHero}
+          resizeMode="cover"
+          accessibilityRole="image"
+        />
+      ) : null}
+      <View style={styles.card}>
       {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: catColor + '20' }]}>
         <Ionicons
-          name={(CATEGORIES.find(c => c.id === item.category)?.icon || 'construct-outline') as any}
+          name={(CATEGORY_CHIPS.find(c => c.id === item.category)?.icon || 'construct-outline') as any}
           size={26}
           color={catColor}
         />
@@ -92,7 +133,7 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
         {/* Categoria + cidade */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
           <View style={[styles.catBadge, { backgroundColor: catColor + '18' }]}>
-            <Text style={[styles.catText, { color: catColor }]}>{item.category}</Text>
+            <Text style={[styles.catText, { color: catColor }]}>{providerCategoryLabel(t, item.category)}</Text>
           </View>
           {item.city && (
             <Text style={styles.city}>
@@ -104,7 +145,7 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
         {/* Rating */}
         <View style={{ marginTop: 6 }}>
           <StarRating rating={item.rating || 0} C={C} />
-          <Text style={styles.reviews}>{item.reviews || 0} avaliações</Text>
+          <Text style={styles.reviews}>{t('services.reviewCount', { count: item.reviews || 0 })}</Text>
         </View>
 
         {/* Tags */}
@@ -135,13 +176,16 @@ function ProviderCard({ item, C, styles }: { item: any; C: ColorPalette; styles:
           </>
         )}
       </View>
+      </View>
     </View>
   );
 }
 
 export default function ServicesScreen() {
+  const { t, i18n } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createServicesStyles(C), [C]);
+  const numLocale = useMemo(() => numberLocaleForApp(i18n.language), [i18n.language]);
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -199,14 +243,16 @@ export default function ServicesScreen() {
     <View style={[styles.container, { backgroundColor: C.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: C.primary }]}>Prestadores</Text>
+        <Text style={[styles.title, { color: C.primary }]}>{t('services.title')}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={styles.subtitle}>
-            {fromCache ? '📵 cache local' : `${total.toLocaleString('pt-BR')} profissionais`}
+            {fromCache
+              ? t('services.localCacheHint')
+              : t('services.companiesCount', { count: total.toLocaleString(numLocale) })}
           </Text>
           {fromCache && (
             <View style={{ backgroundColor: C.status.warning.bg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
-              <Text style={{ fontSize: 10, fontWeight: '800', color: C.status.warning.fg }}>OFFLINE</Text>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: C.status.warning.fg }}>{t('services.offlineBadge')}</Text>
             </View>
           )}
         </View>
@@ -222,35 +268,35 @@ export default function ServicesScreen() {
            <View style={[styles.quickActionIcon, { backgroundColor: C.status.info.bg }]}>
              <Ionicons name="person-add" size={22} color={MEDIA_TAG_COLORS.BEFORE} />
            </View>
-           <Text style={styles.quickActionText}>Indicar{'\n'}Profissional</Text>
+           <Text style={styles.quickActionText}>{t('services.quickRefer')}</Text>
          </TouchableOpacity>
 
          <TouchableOpacity style={styles.quickActionCard}>
            <View style={[styles.quickActionIcon, { backgroundColor: C.status.danger.bg }]}>
              <Ionicons name="document-text" size={22} color={MEDIA_TAG_COLORS.DAMAGE} />
            </View>
-           <Text style={styles.quickActionText}>Meus{'\n'}Contratos</Text>
+           <Text style={styles.quickActionText}>{t('services.quickContracts')}</Text>
          </TouchableOpacity>
 
          <TouchableOpacity style={styles.quickActionCard}>
            <View style={[styles.quickActionIcon, { backgroundColor: C.status.success.bg }]}>
              <Ionicons name="wallet" size={22} color={C.success.text} />
            </View>
-           <Text style={styles.quickActionText}>Pagamentos{'\n'}Pendentes</Text>
+           <Text style={styles.quickActionText}>{t('services.quickPayments')}</Text>
          </TouchableOpacity>
 
          <TouchableOpacity style={styles.quickActionCard}>
            <View style={[styles.quickActionIcon, { backgroundColor: `${SERVICE_CATEGORY_COLORS.Pintura}22` }]}>
              <Ionicons name="star-half" size={22} color={SERVICE_CATEGORY_COLORS.Pintura} />
            </View>
-           <Text style={styles.quickActionText}>Avaliar{'\n'}Serviços</Text>
+           <Text style={styles.quickActionText}>{t('services.quickRate')}</Text>
          </TouchableOpacity>
 
          <TouchableOpacity style={styles.quickActionCard}>
            <View style={[styles.quickActionIcon, { backgroundColor: C.status.warning.bg }]}>
              <Ionicons name="shield-checkmark" size={22} color={C.branding} />
            </View>
-           <Text style={styles.quickActionText}>Regras de{'\n'}Acesso</Text>
+           <Text style={styles.quickActionText}>{t('services.quickAccessRules')}</Text>
          </TouchableOpacity>
       </ScrollView>
 
@@ -259,7 +305,7 @@ export default function ServicesScreen() {
         <Ionicons name="search-outline" size={18} color={C.textLight} />
         <TextInput
           style={[styles.searchInput, { color: C.primary }]}
-          placeholder="Buscar por nome, serviço ou cidade..."
+          placeholder={t('services.searchPlaceholder')}
           placeholderTextColor={C.textLight}
           value={search}
           onChangeText={setSearch}
@@ -274,7 +320,7 @@ export default function ServicesScreen() {
 
       {/* Categorias */}
       <FlatList
-        data={CATEGORIES}
+        data={CATEGORY_CHIPS}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyExtractor={c => c.id}
@@ -293,7 +339,7 @@ export default function ServicesScreen() {
               color={category === cat.id ? C.cardWhite : C.textSecondary}
             />
             <Text style={[styles.catChipTxt, category === cat.id && { color: C.cardWhite }]}>
-              {cat.label}
+              {t(cat.i18nKey)}
             </Text>
           </TouchableOpacity>
         )}
@@ -303,7 +349,7 @@ export default function ServicesScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={C.accent} />
-          <Text style={{ color: C.textSecondary, marginTop: 12 }}>Buscando prestadores...</Text>
+          <Text style={{ color: C.textSecondary, marginTop: 12 }}>{t('services.searching')}</Text>
         </View>
       ) : (
         <FlatList
@@ -318,9 +364,9 @@ export default function ServicesScreen() {
           }
           ListEmptyComponent={
             <View style={styles.center}>
-              <Ionicons name="people-outline" size={52} color={C.textLight} />
+              <Ionicons name="business-outline" size={52} color={C.textLight} />
               <Text style={styles.emptyTxt}>
-                {search || category ? 'Nenhum resultado encontrado.' : 'Nenhum prestador disponível.'}
+                {search || category ? t('services.emptyFiltered') : t('services.emptyDefault')}
               </Text>
             </View>
           }
@@ -373,19 +419,27 @@ function createServicesStyles(C: ColorPalette) {
     },
     catChipTxt: { fontSize: 12, fontWeight: '700', color: C.textSecondary },
 
-    card: {
-      flexDirection: 'row',
-      backgroundColor: C.cardWhite,
-      borderRadius: 18,
-      padding: 14,
+    cardOuter: {
       marginBottom: 10,
+      borderRadius: 18,
+      overflow: 'hidden',
       borderWidth: 1,
       borderColor: C.divider,
+      backgroundColor: C.cardWhite,
       shadowColor: C.slate,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
       shadowRadius: 8,
       elevation: 3,
+    },
+    cardHero: {
+      width: '100%',
+      height: 96,
+      backgroundColor: C.divider,
+    },
+    card: {
+      flexDirection: 'row',
+      padding: 14,
       gap: 12,
     },
     avatar: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },

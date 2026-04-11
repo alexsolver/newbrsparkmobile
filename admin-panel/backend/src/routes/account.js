@@ -280,6 +280,139 @@ router.post('/login', async (req, res) => {
 // Autenticado — retorna perfil do usuário logado (para o app)
 const authUser = require('../middleware/authUser');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
+const {
+  configured: cmsDirectoryHeroConfigured,
+  getDirectoryHero,
+  putDirectoryHero,
+} = require('../lib/cmsInternalDirectoryHero');
+
+function requireTenantDirectoryManager(req, res, next) {
+  const r = req.user.role;
+  if (r !== 'TENANT_ADMIN' && r !== 'MANAGER') {
+    return res.status(403).json({
+      error:
+        'Apenas administrador ou gestor da organização pode gerir o banner do diretório público.',
+    });
+  }
+  next();
+}
+// ─── GET /api/me/directory-hero ───────────────────────────────────────────────
+// Banner público (diretório CMS) — pré-visualização no app; mesmo e-mail que o painel web.
+router.get('/me/directory-hero', authUser, requireTenantDirectoryManager, async (req, res) => {
+  try {
+    const email = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    if (!email) return res.status(400).json({ error: 'E-mail do utilizador em falta.' });
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.user.tenantId },
+      select: { name: true },
+    });
+
+    if (!cmsDirectoryHeroConfigured()) {
+      return res.json({
+        skipped: true,
+        linked: false,
+        hero_image_url: null,
+        logo_url: null,
+        company_name: tenant?.name || null,
+        hint:
+          'O servidor não está ligado ao diretório web (CMS_DIRECTORY_BASE_URL / CMS_INTERNAL_API_TOKEN).',
+      });
+    }
+
+    const result = await getDirectoryHero(email);
+    if (!result.ok) {
+      if (result.reason === 'not_configured') {
+        return res.json({
+          skipped: true,
+          linked: false,
+          hero_image_url: null,
+          logo_url: null,
+          company_name: tenant?.name || null,
+          hint:
+            'O servidor não está ligado ao diretório web (CMS_DIRECTORY_BASE_URL / CMS_INTERNAL_API_TOKEN).',
+        });
+      }
+      if (result.status === 404 && result.body?.code === 'CMS_USER_NOT_FOUND') {
+        return res.json({
+          skipped: false,
+          linked: false,
+          hero_image_url: null,
+          logo_url: null,
+          company_name: tenant?.name || null,
+          hint:
+            'Não encontramos conta do painel web com este e-mail. Use o mesmo e-mail da empresa no portal BrSpark para sincronizar o banner.',
+        });
+      }
+      return res.status(result.status >= 400 ? result.status : 502).json({
+        error: result.body?.message || 'Falha ao consultar o CMS.',
+        code: result.body?.code,
+      });
+    }
+
+    res.json({
+      skipped: false,
+      linked: true,
+      hero_image_url: result.data.hero_image_url ?? null,
+      logo_url: result.data.logo_url ?? null,
+      company_name: result.data.company_name || tenant?.name || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── PUT /api/me/directory-hero ───────────────────────────────────────────────
+router.put('/me/directory-hero', authUser, requireTenantDirectoryManager, async (req, res) => {
+  try {
+    const email = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    if (!email) return res.status(400).json({ error: 'E-mail do utilizador em falta.' });
+
+    const raw = req.body?.heroImageUrl;
+    const heroImageUrl =
+      raw === undefined || raw === null || String(raw).trim() === '' ? null : String(raw).trim();
+
+    if (!cmsDirectoryHeroConfigured()) {
+      return res.status(503).json({
+        error:
+          'Integração com o diretório web não configurada (CMS_DIRECTORY_BASE_URL / CMS_INTERNAL_API_TOKEN).',
+      });
+    }
+
+    const result = await putDirectoryHero(email, heroImageUrl);
+    if (!result.ok) {
+      if (result.reason === 'not_configured') {
+        return res.status(503).json({
+          error:
+            'Integração com o diretório web não configurada (CMS_DIRECTORY_BASE_URL / CMS_INTERNAL_API_TOKEN).',
+        });
+      }
+      if (result.status === 404 && result.body?.code === 'CMS_USER_NOT_FOUND') {
+        return res.status(409).json({
+          error:
+            'Não encontramos conta do painel web com este e-mail. Cadastre a empresa no portal BrSpark com o mesmo e-mail ou contacte o suporte.',
+          code: 'CMS_USER_NOT_FOUND',
+        });
+      }
+      return res.status(result.status >= 400 ? result.status : 502).json({
+        error: result.body?.message || 'Falha ao atualizar o CMS.',
+        code: result.body?.code,
+      });
+    }
+
+    res.json({
+      hero_image_url: result.data.hero_image_url ?? null,
+      company_name: result.data.company_name ?? null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/me', authUser, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({

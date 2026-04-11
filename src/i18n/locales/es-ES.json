@@ -788,40 +788,6 @@
       "distance": "Distancia",
       "price": "Mejor relación calidad-precio"
     },
-    "mock": {
-      "boatName": "Embarcación Brspark",
-      "beachHouse": "Casa de playa",
-      "p1": {
-        "name": "CoolTech HVAC | Central",
-        "next": "Mañana, 09:00",
-        "h1": "Mejor valorados"
-      },
-      "p2": {
-        "name": "EngVist Consulting | Siniestros",
-        "next": "25 mar, 14:00",
-        "h1": "Experto senior"
-      },
-      "p3": {
-        "name": "LimpClean Pro | Unidad sur",
-        "next": "Mañana, 08:30",
-        "h1": "Equipo propio"
-      },
-      "p4": {
-        "name": "Forte Security | Central 24h",
-        "next": "Hoy, 19:30",
-        "h1": "Respuesta inmediata"
-      },
-      "p5": {
-        "name": "Express Renovation | SP",
-        "next": "28 mar, 10:00",
-        "h1": "Pago en 12 plazos"
-      },
-      "p6": {
-        "name": "Electro Master | Instalación",
-        "next": "Hoy, 20:00",
-        "h1": "Certificado NR10"
-      }
-    },
     "serviceCategories": {
       "all": "Ver todos",
       "maintenance": "Mantenimiento",
@@ -832,6 +798,12 @@
       "electrical": "Eléctrica",
       "plumbing": "Fontanería",
       "garden": "Jardinería",
+      "climatization": "Climatización",
+      "technology": "Tecnología",
+      "pestControl": "Desinsectación / fumigación",
+      "moving": "Mudanzas",
+      "gas": "Gas",
+      "painting": "Pintura",
       "poupe": "Ahorre",
       "save": "Ahorre más",
       "seeMore": "Mas Info"
@@ -844,9 +816,24 @@
     },
     "availableNow": "Disponible ahora",
     "providerDescription": "Descripción del proveedor",
-    "providerCardBio": "Especialista en reparaciones y mantenimiento preventivo con garantía de 90 días.",
     "topRated": "Mejor valorado",
     "verifiedProviders": "Proveedores verificados"
+  },
+  "services": {
+    "title": "Empresas",
+    "companiesCount": "{{count}} empresas",
+    "localCacheHint": "Datos en caché en el dispositivo",
+    "offlineBadge": "SIN CONEXIÓN",
+    "quickRefer": "Recomendar\nempresa",
+    "quickContracts": "Mis\ncontratos",
+    "quickPayments": "Pagos\npendientes",
+    "quickRate": "Valorar\nservicios",
+    "quickAccessRules": "Normas de\nacceso",
+    "searchPlaceholder": "Buscar por nombre, servicio o ciudad...",
+    "searching": "Buscando empresas...",
+    "emptyFiltered": "No se encontraron resultados.",
+    "emptyDefault": "No hay empresas disponibles.",
+    "reviewCount": "{{count}} valoraciones"
   },
   "orders": {
     "title": "Pedidos",
@@ -861,12 +848,7 @@
     "noOrders": "No se encontraron pedidos",
     "noOrdersSub": "¡Solicite un servicio desde la pestaña Inicio!",
     "createAccountHint": "Cree una cuenta para solicitar servicios y seguir sus pedidos.",
-    "createOrLogin": "Crear Cuenta o Ingresar",
-    "mock": {
-      "airSplit": "Mantenimiento de split",
-      "inspection": "Inspección de edificio",
-      "cleaning": "Limpieza residencial"
-    }
+    "createOrLogin": "Crear Cuenta o Ingresar"
   },
   "assetDetail": {
     "mock": {

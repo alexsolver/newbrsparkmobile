@@ -774,9 +774,9 @@
     "searchPlaceholder": "O que você precisa? Ex: instalar tv",
     "allCategories": "Todas as categorias",
     "resultsFor": "Resultados para \"{{query}}\"",
-    "featuredProviders": "Prestadores em destaque",
+    "featuredProviders": "Empresas em destaque",
     "searchTitle": "O que você está procurando?",
-    "noProviders": "Nenhum prestador encontrado",
+    "noProviders": "Nenhuma empresa encontrada",
     "activePortfolio": "Portfólio",
     "revisionBadge": "Revisão",
     "nextAgenda": "Agenda",
@@ -789,40 +789,6 @@
       "distance": "Proximidade",
       "price": "Custo Benefício"
     },
-    "mock": {
-      "boatName": "Barco Brspark",
-      "beachHouse": "Casa de Praia",
-      "p1": {
-        "name": "CoolTech Climatização | Central",
-        "next": "Amanhã, 09:00",
-        "h1": "Melhor avaliado"
-      },
-      "p2": {
-        "name": "EngVist Consultoria | Sinistros",
-        "next": "25 Mar, 14:00",
-        "h1": "Especialista Senior"
-      },
-      "p3": {
-        "name": "LimpClean Pro | Unidade Sul",
-        "next": "Amanhã, 08:30",
-        "h1": "Equipamento Próprio"
-      },
-      "p4": {
-        "name": "Forte Segurança | Central 24h",
-        "next": "Hoje, 19:30",
-        "h1": "Atendimento Imediato"
-      },
-      "p5": {
-        "name": "Reforma Express | São Paulo",
-        "next": "28 Mar, 10:00",
-        "h1": "Parcelamento 12x"
-      },
-      "p6": {
-        "name": "Eletro Master | Instalações",
-        "next": "Hoje, 20:00",
-        "h1": "Certificado NR10"
-      }
-    },
     "serviceCategories": {
       "all": "Ver todos",
       "maintenance": "Manutenção",
@@ -833,6 +799,12 @@
       "electrical": "Elétrica",
       "plumbing": "Hidráulica",
       "garden": "Jardinagem",
+      "climatization": "Climatização",
+      "technology": "Tecnologia",
+      "pestControl": "Dedetização",
+      "moving": "Mudança",
+      "gas": "Gás",
+      "painting": "Pintura",
       "poupe": "Poupe",
       "save": "Economize",
       "seeMore": "Saiba Mais"
@@ -845,9 +817,24 @@
     },
     "availableNow": "Disponível agora",
     "providerDescription": "Descrição do prestador",
-    "providerCardBio": "Especialista em reparos e manutenções preventivas com garantia de 90 dias.",
     "topRated": "Melhor avaliado",
-    "verifiedProviders": "Prestadores verificados"
+    "verifiedProviders": "Empresas verificadas"
+  },
+  "services": {
+    "title": "Empresas",
+    "companiesCount": "{{count}} empresas",
+    "localCacheHint": "Dados em cache no dispositivo",
+    "offlineBadge": "OFFLINE",
+    "quickRefer": "Indicar\nEmpresa",
+    "quickContracts": "Meus\nContratos",
+    "quickPayments": "Pagamentos\nPendentes",
+    "quickRate": "Avaliar\nServiços",
+    "quickAccessRules": "Regras de\nAcesso",
+    "searchPlaceholder": "Buscar por nome, serviço ou cidade...",
+    "searching": "Buscando empresas...",
+    "emptyFiltered": "Nenhum resultado encontrado.",
+    "emptyDefault": "Nenhuma empresa disponível.",
+    "reviewCount": "{{count}} avaliações"
   },
   "orders": {
     "title": "Pedidos",
@@ -862,12 +849,7 @@
     "noOrders": "Nenhum pedido encontrado",
     "noOrdersSub": "Solicite um serviço na aba Início!",
     "createAccountHint": "Crie uma conta para solicitar serviços e acompanhar seus pedidos.",
-    "createOrLogin": "Criar Conta ou Entrar",
-    "mock": {
-      "airSplit": "Manutenção de Ar Split",
-      "inspection": "Vistoria Predial",
-      "cleaning": "Limpeza Residencial"
-    }
+    "createOrLogin": "Criar Conta ou Entrar"
   },
   "assetDetail": {
     "mock": {

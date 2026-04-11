@@ -38,14 +38,6 @@ function orderUiStatus(e: any, executedIds: Set<string>): 'em_andamento' | 'agen
   return 'em_andamento';
 }
 
-function buildMockOrders(t: (k: string) => string, C: ColorPalette) {
-  return [
-    { id: 'o1', service: t('orders.mock.airSplit'), status: 'em_andamento' as const, date: '18/03/2026', provider: t('home.mock.coolTech'), color: MEDIA_TAG_COLORS.BEFORE },
-    { id: 'o2', service: t('orders.mock.inspection'), status: 'agendado' as const, date: '25/03/2026', provider: t('home.mock.engVist'), color: SERVICE_CATEGORY_COLORS.Reformas },
-    { id: 'o3', service: t('orders.mock.cleaning'), status: 'concluido' as const, date: '10/03/2026', provider: t('home.mock.limpClean'), color: C.success.text },
-  ];
-}
-
 function buildStatusMap(C: ColorPalette): Record<string, { labelKey: string; color: string; bg: string; icon: string }> {
   const purple = SERVICE_CATEGORY_COLORS.Reformas;
   return {
@@ -108,7 +100,7 @@ export default function OrdersScreen() {
     }, [user])
   );
 
-  const orders = React.useMemo(() => [...realTasks, ...buildMockOrders(t, C)], [t, realTasks, C]);
+  const orders = React.useMemo(() => realTasks, [realTasks]);
   const orderFilterCounts = React.useMemo(
     () => ({
       all: orders.length,

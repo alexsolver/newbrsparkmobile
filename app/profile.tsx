@@ -98,6 +98,182 @@ export default function ProfileScreen() {
     submittedAwaitingReview?: boolean;
   } | null>(null);
 
+  const canManageDirectoryHero =
+    user?.role === 'TENANT_ADMIN' || user?.role === 'MANAGER';
+
+  const [dirHeroLoading, setDirHeroLoading] = useState(false);
+  const [dirHeroSaving, setDirHeroSaving] = useState(false);
+  const [dirHero, setDirHero] = useState<{
+    skipped?: boolean;
+    linked?: boolean;
+    hero_image_url: string | null;
+    logo_url: string | null;
+    company_name: string | null;
+    hint?: string | null;
+  } | null>(null);
+  const [heroUrlDraft, setHeroUrlDraft] = useState('');
+
+  const applyDirectoryHeroPutResponse = (data: {
+    hero_image_url?: string | null;
+    company_name?: string | null;
+  }) => {
+    setDirHero((prev) =>
+      prev
+        ? {
+            ...prev,
+            linked: true,
+            skipped: false,
+            hero_image_url: data.hero_image_url ?? null,
+            company_name: data.company_name ?? prev.company_name,
+          }
+        : {
+            linked: true,
+            skipped: false,
+            hero_image_url: data.hero_image_url ?? null,
+            logo_url: null,
+            company_name: data.company_name ?? null,
+          },
+    );
+    setHeroUrlDraft(
+      typeof data.hero_image_url === 'string' ? data.hero_image_url : '',
+    );
+  };
+
+  const putDirectoryHeroRemote = async (heroImageUrl: string | null) => {
+    const token = await getToken();
+    const res = await fetch(`${API_BASE}/api/me/directory-hero`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ heroImageUrl: heroImageUrl }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || t('profile.directoryHeroSaveError'));
+    }
+    return data as { hero_image_url?: string | null; company_name?: string | null };
+  };
+
+  const loadDirectoryHero = useCallback(async () => {
+    if (!user || !(user.role === 'TENANT_ADMIN' || user.role === 'MANAGER')) return;
+    setDirHeroLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/api/me/directory-hero`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t('profile.directoryHeroLoadError'));
+      }
+      setDirHero({
+        skipped: data.skipped,
+        linked: data.linked,
+        hero_image_url: data.hero_image_url ?? null,
+        logo_url: data.logo_url ?? null,
+        company_name: data.company_name ?? null,
+        hint: data.hint ?? null,
+      });
+      setHeroUrlDraft(
+        typeof data.hero_image_url === 'string' ? data.hero_image_url : '',
+      );
+    } catch {
+      setDirHero(null);
+      setHeroUrlDraft('');
+    } finally {
+      setDirHeroLoading(false);
+    }
+  }, [user, t]);
+
+  const saveDirectoryHeroUrl = async (url: string | null) => {
+    if (!user) return;
+    setDirHeroSaving(true);
+    try {
+      const data = await putDirectoryHeroRemote(url);
+      applyDirectoryHeroPutResponse(data);
+      Alert.alert(t('common.success'), t('profile.directoryHeroSaved'));
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e.message || t('profile.directoryHeroSaveError'));
+    } finally {
+      setDirHeroSaving(false);
+    }
+  };
+
+  const uploadDirectoryHeroFromAsset = async (asset: {
+    uri?: string;
+    base64?: string | null;
+  }) => {
+    if (!user) return;
+    setDirHeroSaving(true);
+    try {
+      let fileBase64 = asset.base64 as string | undefined;
+      if (!fileBase64 && asset.uri) {
+        try {
+          fileBase64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: 'base64',
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!fileBase64) {
+        throw new Error(t('profile.directoryHeroReadError'));
+      }
+      const ext =
+        asset.uri?.split('.').pop()?.toLowerCase() === 'png' ? 'png' : 'jpg';
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const remotePath = `directory-hero/${user.id}_${Date.now()}.${ext}`;
+      const token = await getToken();
+      const storageRes = await fetch(`${API_BASE}/api/storage/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fileBase64,
+          mimeType: mime,
+          name: `banner.${ext}`,
+          path: remotePath,
+        }),
+      });
+      if (!storageRes.ok) {
+        throw new Error(`Storage HTTP ${storageRes.status}`);
+      }
+      const storageData = await storageRes.json();
+      const finalUrl = storageData.url;
+      if (!finalUrl) {
+        throw new Error(t('profile.directoryHeroUploadError'));
+      }
+      const putData = await putDirectoryHeroRemote(finalUrl);
+      applyDirectoryHeroPutResponse(putData);
+      Alert.alert(t('common.success'), t('profile.directoryHeroSaved'));
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e.message || t('profile.directoryHeroUploadError'));
+    } finally {
+      setDirHeroSaving(false);
+    }
+  };
+
+  const pickDirectoryHeroImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('profile.permDenied'), t('profile.cameraPermDenied'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 6],
+      quality: 0.85,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadDirectoryHeroFromAsset(result.assets[0]);
+  };
+
   const loadTechRegResume = useCallback(async () => {
     if (!user?.technicianProfile || isTechnicianProfileActive(user)) {
       setTechRegResume(null);
@@ -190,6 +366,14 @@ export default function ProfileScreen() {
     React.useCallback(() => {
       loadTechRegResume();
     }, [loadTechRegResume]),
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (canManageDirectoryHero && user) {
+        void loadDirectoryHero();
+      }
+    }, [canManageDirectoryHero, user, loadDirectoryHero]),
   );
 
   const togglePush = async (val: boolean) => {

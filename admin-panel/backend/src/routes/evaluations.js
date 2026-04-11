@@ -177,16 +177,21 @@ router.get('/me/instances', authUser, async (req, res) => {
 router.get('/instances/:id', authUser, async (req, res) => {
   try {
     const { id } = req.params;
+    const isManager = isManagerRole(req.user.role);
     const inst = await prisma.evaluationInstance.findFirst({
       where: {
         id,
         tenantId: req.user.tenantId,
-        technicianUserId: req.user.id,
+        ...(isManager ? {} : { technicianUserId: req.user.id }),
       },
       include: {
         template: { select: { id: true, name: true, type: true } },
         score: true,
-        acknowledgements: { where: { userId: req.user.id } },
+        acknowledgements: {
+          ...(isManager ? {} : { where: { userId: req.user.id } }),
+          orderBy: { createdAt: 'desc' },
+          ...(isManager ? { take: 20 } : {}),
+        },
         internalNotes: { orderBy: { createdAt: 'desc' }, take: 50 },
         actionPlans: { orderBy: { createdAt: 'desc' } },
         disputes: { orderBy: { createdAt: 'desc' } },
@@ -205,8 +210,10 @@ router.get('/instances/:id', authUser, async (req, res) => {
       durationMinutes = Math.round((new Date(ex.completedAt) - new Date(ex.startedAt)) / 60000);
     }
 
-    const needsAck =
-      inst.score?.classification === 'CRITICAL' && inst.acknowledgements.length === 0;
+    const techAcked = (inst.acknowledgements || []).some(
+      (a) => a.userId === inst.technicianUserId
+    );
+    const needsAck = inst.score?.classification === 'CRITICAL' && !techAcked;
 
     const insights =
       inst.insights ||
@@ -231,6 +238,7 @@ router.get('/instances/:id', authUser, async (req, res) => {
         displayText: inst.displayText,
         template: inst.template,
         targetType: inst.targetType,
+        technicianUserId: inst.technicianUserId,
         insights,
         clientSurveyRelativePath: surveyLinks.relativePath,
         clientSurveyFullUrl: surveyLinks.fullUrl,

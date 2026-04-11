@@ -9,8 +9,9 @@ export { API_BASE, apiFetch };
 const PROVIDERS_CACHE_MAX = 50;
 
 /**
- * On-demand provider search — paginated, server-side.
- * Caches the last PROVIDERS_CACHE_MAX viewed providers in SQLite for offline fallback.
+ * Catálogo do diretório (empresas do CMS web), paginado no servidor.
+ * Mantém o nome ProviderService por compatibilidade; cada item é uma empresa (tenant).
+ * Caches the last PROVIDERS_CACHE_MAX entries in SQLite for offline fallback.
  */
 export const ProviderService = {
   async search(params: {

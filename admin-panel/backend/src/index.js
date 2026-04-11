@@ -35,6 +35,7 @@ const checklistsRoutes    = require('./routes/checklists');
 const evaluationsRoutes       = require('./routes/evaluations');
 const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
 const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
+const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
@@ -60,6 +61,9 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+/** Bridge servidor-a-servidor: Laravel → tokens JWT para o módulo de avaliações no BrsparkWeb */
+app.use('/api/internal', evaluationsWebBridgeRoutes);
 
 // ── Health ─────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -180,36 +184,64 @@ app.get('/api/compliance/consents', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Public catalog: prestadores — BFF para Laravel (CMS) se CMS_DIRECTORY_BASE_URL; senão PostgreSQL ServiceProvider
+const directoryPostgresFallbackEnabled = () =>
+  String(process.env.DIRECTORY_POSTGRES_FALLBACK || '') === '1';
+
+// Public catalog: empresas — fonte oficial Laravel (CMS). PostgreSQL só com DIRECTORY_POSTGRES_FALLBACK=1.
 app.get('/api/providers', async (req, res) => {
   try {
     const { category, q, city, page = '1', limit = '20' } = req.query;
     const take = Math.min(parseInt(limit, 10) || 20, 50);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 
     const qs = new URLSearchParams();
     if (q)        qs.set('q', String(q));
     if (category) qs.set('category', String(category));
     if (city)     qs.set('city', String(city));
-    qs.set('page', String(Math.max(parseInt(page, 10) || 1, 1)));
+    qs.set('page', String(pageNum));
     qs.set('limit', String(take));
 
-    if (process.env.CMS_DIRECTORY_BASE_URL) {
+    const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+    const pgFallback = directoryPostgresFallbackEnabled();
+
+    const emptyPayload = () => ({
+      data: [],
+      total: 0,
+      page: pageNum,
+      limit: take,
+      totalPages: 0,
+    });
+
+    if (cmsBase) {
       try {
         const json = await fetchProvidersFromCms(qs);
         res.set('Cache-Control', 'no-store');
+        res.set('X-BrSpark-Directory-Source', 'laravel');
         return res.json({
           data:       json.data || [],
           total:      json.total ?? 0,
-          page:       json.page ?? parseInt(page, 10) || 1,
+          page:       json.page ?? pageNum,
           limit:      json.limit ?? take,
           totalPages: json.totalPages ?? 1,
         });
       } catch (cmsErr) {
-        console.warn('[api/providers] CMS directory falhou, usando fallback PostgreSQL:', cmsErr.message);
+        console.warn('[api/providers] CMS directory falhou:', cmsErr.message);
+        if (!pgFallback) {
+          res.set('Cache-Control', 'no-store');
+          res.set('X-BrSpark-Directory-Source', 'laravel-error');
+          return res.json(emptyPayload());
+        }
+        console.warn('[api/providers] Fallback PostgreSQL (DIRECTORY_POSTGRES_FALLBACK=1).');
+        res.set('X-BrSpark-Directory-Fallback', '1');
+        res.set('X-BrSpark-Directory-Source', 'laravel-error-postgres');
       }
+    } else if (!pgFallback) {
+      res.set('Cache-Control', 'no-store');
+      res.set('X-BrSpark-Directory-Source', 'cms-not-configured');
+      return res.json(emptyPayload());
     }
 
-    const skip = (Math.max(parseInt(page, 10) || 1, 1) - 1) * take;
+    const skip = (pageNum - 1) * take;
 
     const where = { isActive: true };
     if (category) where.category = category;
@@ -259,14 +291,62 @@ app.get('/api/providers', async (req, res) => {
     });
 
     res.set('Cache-Control', 'no-store');
+    if (!res.get('X-BrSpark-Directory-Source')) {
+      res.set('X-BrSpark-Directory-Source', 'postgresql');
+    }
     res.json({
       data:       formatted,
       total,
-      page:       parseInt(page, 10) || 1,
+      page:       pageNum,
       limit:      take,
       totalPages: Math.ceil(total / take),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/** Diagnóstico: o app usa este BFF; lista vem do Laravel salvo DIRECTORY_POSTGRES_FALLBACK=1. */
+app.get('/api/directory-status', async (_req, res) => {
+  const base = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
+  const pgFallback = directoryPostgresFallbackEnabled();
+  if (!base) {
+    return res.json({
+      ok: false,
+      cmsConfigured: false,
+      postgresFallbackEnabled: pgFallback,
+      source: pgFallback ? 'postgresql' : 'empty',
+      hint: 'Defina CMS_DIRECTORY_BASE_URL no .env do admin-panel/backend (URL base do Laravel, ex.: http://127.0.0.1:8000). Sem CMS e sem DIRECTORY_POSTGRES_FALLBACK=1, o diretório fica vazio.',
+    });
+  }
+  const url = `${base}/api/public/directory/providers?limit=1&page=1`;
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 8000);
+    const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: ac.signal });
+    clearTimeout(t);
+    const body = r.ok ? await r.json().catch(() => ({})) : null;
+    return res.json({
+      ok: r.ok,
+      cmsConfigured: true,
+      cmsBaseUrl: base,
+      probeUrl: url,
+      cmsHttpStatus: r.status,
+      source: r.ok ? 'laravel' : 'laravel-unreachable',
+      sampleTotal: body && typeof body.total === 'number' ? body.total : null,
+      hint: r.ok
+        ? null
+        : 'Laravel não respondeu OK. Confirme php artisan serve (ou URL de produção) e que a rota /api/public/directory/providers existe.',
+    });
+  } catch (e) {
+    return res.json({
+      ok: false,
+      cmsConfigured: true,
+      cmsBaseUrl: base,
+      probeUrl: url,
+      source: 'laravel-error',
+      error: e.message,
+      hint: 'Erro de rede até o Laravel (firewall, host errado, Laravel parado).',
+    });
+  }
 });
 
 

@@ -789,40 +789,6 @@
       "distance": "Distance",
       "price": "Best Value"
     },
-    "mock": {
-      "boatName": "Brspark Boat",
-      "beachHouse": "Beach House",
-      "p1": {
-        "name": "CoolTech HVAC | Central",
-        "next": "Tomorrow, 09:00 AM",
-        "h1": "Top Rated"
-      },
-      "p2": {
-        "name": "EngVist Consulting | Claims",
-        "next": "Mar 25, 02:00 PM",
-        "h1": "Senior Expert"
-      },
-      "p3": {
-        "name": "LimpClean Pro | South Unit",
-        "next": "Tomorrow, 08:30 AM",
-        "h1": "Own Equipment"
-      },
-      "p4": {
-        "name": "Forte Security | 24h Central",
-        "next": "Today, 07:30 PM",
-        "h1": "Immediate Response"
-      },
-      "p5": {
-        "name": "Express Renovation | SP",
-        "next": "Mar 28, 10:00 AM",
-        "h1": "12x Payment"
-      },
-      "p6": {
-        "name": "Electro Master | Install",
-        "next": "Today, 08:00 PM",
-        "h1": "NR10 Certified"
-      }
-    },
     "serviceCategories": {
       "all": "See all",
       "maintenance": "Maintenance",
@@ -833,6 +799,12 @@
       "electrical": "Electrical",
       "plumbing": "Plumbing",
       "garden": "Gardening",
+      "climatization": "HVAC",
+      "technology": "Technology",
+      "pestControl": "Pest control",
+      "moving": "Moving",
+      "gas": "Gas",
+      "painting": "Painting",
       "poupe": "Save",
       "save": "Save More",
       "seeMore": "Details"
@@ -845,9 +817,24 @@
     },
     "availableNow": "Available now",
     "providerDescription": "Provider description",
-    "providerCardBio": "Repairs and preventive maintenance specialist with a 90-day warranty.",
     "topRated": "Top rated",
     "verifiedProviders": "Verified providers"
+  },
+  "services": {
+    "title": "Companies",
+    "companiesCount": "{{count}} companies",
+    "localCacheHint": "Data cached on device",
+    "offlineBadge": "OFFLINE",
+    "quickRefer": "Refer a\ncompany",
+    "quickContracts": "My\ncontracts",
+    "quickPayments": "Pending\npayments",
+    "quickRate": "Rate\nservices",
+    "quickAccessRules": "Access\nrules",
+    "searchPlaceholder": "Search by name, service, or city...",
+    "searching": "Searching companies...",
+    "emptyFiltered": "No results found.",
+    "emptyDefault": "No companies available.",
+    "reviewCount": "{{count}} reviews"
   },
   "orders": {
     "title": "Orders",
@@ -862,12 +849,7 @@
     "noOrders": "No orders found",
     "noOrdersSub": "Request a service from the Home tab!",
     "createAccountHint": "Create an account to request services and track your orders.",
-    "createOrLogin": "Create Account or Sign In",
-    "mock": {
-      "airSplit": "Air Split Maintenance",
-      "inspection": "Building Inspection",
-      "cleaning": "Residential Cleaning"
-    }
+    "createOrLogin": "Create Account or Sign In"
   },
   "assetDetail": {
     "mock": {

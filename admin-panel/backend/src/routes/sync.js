@@ -246,10 +246,13 @@ router.post('/asset', async (req, res) => {
 });
 
 // ─── GET /api/sync/providers ──────────────────────────────────────────────────
-// Retorna catálogo global de prestadores de serviço (fonte: PostgreSQL)
-// O app salva no SQLite local para uso offline
+// Catálogo offline: só PostgreSQL se DIRECTORY_POSTGRES_FALLBACK=1 (legado). Caso contrário [] — diretório vem do CMS via /api/providers.
 router.get('/providers', async (_req, res) => {
   try {
+    if (String(process.env.DIRECTORY_POSTGRES_FALLBACK || '') !== '1') {
+      res.set('X-BrSpark-Sync-Providers-Source', 'disabled');
+      return res.json([]);
+    }
     const providers = await prisma.serviceProvider.findMany({
       where: { isActive: true },
       orderBy: [{ category: 'asc' }, { rating: 'desc' }],

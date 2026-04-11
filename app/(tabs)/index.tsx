@@ -1981,7 +1981,6 @@ export default function DashboardScreen() {
               .sort((a, b) => {
                 if (sortMode === 'RATING') return b.rating - a.rating;
                 if (sortMode === 'VERIFIED') return (b.verified ? 1 : 0) - (a.verified ? 1 : 0);
-                // Simple alphabetic for others in this mock
                 if (sortMode === 'DEFAULT') return 0;
                 return a.id.localeCompare(b.id);
               })
@@ -1994,7 +1993,11 @@ export default function DashboardScreen() {
                       onPress={() => toggleExpand(provider.id)}
                       style={{ flexDirection: 'row', alignItems: 'flex-start' }}
                     >
-                      <Image source={{ uri: provider.photo }} style={styles.providerPhoto} />
+                      <Image
+                        source={{ uri: provider.logo_url || provider.photo }}
+                        style={styles.providerPhoto}
+                        resizeMode={provider.logo_url ? 'contain' : 'cover'}
+                      />
                       <View style={{ flex: 1, marginLeft: 16 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                           <View style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1, paddingRight: 8 }}>
@@ -2025,13 +2028,30 @@ export default function DashboardScreen() {
 
                         {isExpanded && (
                           <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: C.divider, paddingTop: 12 }}>
-                            <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>{t('assetDetail.generalInfo')}</Text>
-                            <View style={styles.providerTagsRow}>
-                                <View style={styles.providerHighlightPill}>
-                                  <Text style={styles.providerHighlightText}>{typeof provider.tags === 'string' ? provider.tags.split(',').slice(0,2).join(' · ') : ''}</Text>
-                                </View>
-                            </View>
-                            <Text style={{ fontSize: 11, color: C.textLight, marginTop: 10 }}>{t('home.providerCardBio')}</Text>
+                            {(() => {
+                              const tagStr = typeof provider.tags === 'string' ? provider.tags.trim() : '';
+                              const kwStr = provider.keywords ? String(provider.keywords).trim() : '';
+                              if (!tagStr && !kwStr) return null;
+                              return (
+                                <>
+                                  <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>{t('assetDetail.generalInfo')}</Text>
+                                  {tagStr ? (
+                                    <View style={styles.providerTagsRow}>
+                                      <View style={styles.providerHighlightPill}>
+                                        <Text style={styles.providerHighlightText}>
+                                          {tagStr.split(',').slice(0, 2).join(' · ')}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  ) : null}
+                                  {kwStr ? (
+                                    <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: tagStr ? 10 : 0 }} numberOfLines={8}>
+                                      {kwStr}
+                                    </Text>
+                                  ) : null}
+                                </>
+                              );
+                            })()}
                           </View>
                         )}
                       </View>
