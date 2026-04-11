@@ -22,6 +22,15 @@ export interface AgendaEvent {
 
   /** Tipo de local de atendimento (execução checklist na nuvem): radius, segment, route, polygon, none. */
   locationZoneType?: string | null;
+
+  /** ISO — início do bloco na agenda (OS com despacho planeado). */
+  agendaStartAt?: string | null;
+  /** ISO — fim do bloco (início + duração prevista do formulário). */
+  agendaEndAt?: string | null;
+  /** Snapshot: minutos previstos só do formulário (sem deslocamento). */
+  expectedFormDurationMinutes?: number | null;
+  /** Sobreposição com outra OS do mesmo utilizador no mesmo intervalo. */
+  agendaOverlap?: boolean;
 }
 
 // Visual helpers for the UI mapping

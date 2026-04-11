@@ -789,6 +789,19 @@
         <textarea class="form-control" id="d-desc" placeholder="Instruções adicionais para o técnico..." rows="2"></textarea>
       </div>
 
+      <div style="border-top:1px solid var(--border); margin:18px 0 14px;"></div>
+      <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Agenda (bloco horário)</div>
+      <div class="form-group">
+        <label class="form-label" for="d-scheduled-start">Início na agenda *</label>
+        <input class="form-control" id="d-scheduled-start" type="datetime-local" required />
+        <div style="font-size:10px; color:var(--text3); margin-top:4px;">Define quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="d-expected-duration-override">Tempo previsto do formulário (min) — opcional</label>
+        <input class="form-control" id="d-expected-duration-override" type="number" min="5" step="5" placeholder="Usar valor do formulário (ou 60 min se vazio)" />
+        <div style="font-size:10px; color:var(--text3); margin-top:4px;">Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.</div>
+      </div>
+
       <!-- BLOCO 2: LOCALIZAÇÃO -->
       <div style="border-top:1px solid var(--border); margin:18px 0 14px;"></div>
       <div style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de Serviço (Cerca Eletrônica)</div>
@@ -1594,6 +1607,13 @@ function buildCard(task, colClass) {
   const titleHtml = refTitle
     ? String(refTitle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     : `OS <strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>`;
+  const formDisplayName = String(task.metadata?.templateTitle || task.template?.title || '').trim();
+  const formNameHtml = formDisplayName
+    ? `<div style="font-size:10px;color:var(--text2);margin-top:5px;line-height:1.35;word-break:break-word"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.3px">Formulário · </span>${String(formDisplayName)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')}</div>`
+    : '';
   const refId  = task.refId || task.metadata?.refId || '—';
   
   let subBadge = '';
@@ -1613,8 +1633,9 @@ function buildCard(task, colClass) {
         etaBadge = `<span class="badge" style="background:#fee2e2;color:#dc2626;font-size:9px;margin-left:4px;border:1px solid #fecaca;"><ion-icon name="pause-circle-outline" style="vertical-align:-1px"></ion-icon> Pausado</span>`;
      } else if (task.trackingSignalLost) {
         etaBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:9px;margin-left:4px;border:1px solid #fde68a;"><ion-icon name="cloud-offline-outline" style="vertical-align:-1px"></ion-icon> Sem sinal GPS</span>`;
-     } else if (task.etaMinutes !== null && task.etaMinutes !== undefined) {
-        etaBadge = `<span class="badge" style="background:#dcfce7;color:#166534;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="time-outline" style="vertical-align:-1px"></ion-icon> ETA: ${task.etaMinutes} min</span>`;
+     } else if (task.etaMinutes != null && task.etaMinutes !== '' && Number.isFinite(Number(task.etaMinutes))) {
+        const em = Math.floor(Number(task.etaMinutes));
+        etaBadge = `<span class="badge" style="background:#f0fdf4;color:#15803d;font-size:9px;margin-left:4px;border:1px solid #bbf7d0;"><ion-icon name="time-outline" style="vertical-align:-1px"></ion-icon> ETA ${em} min</span>`;
      }
 
      if (task.status === 'ACCEPTED') {
@@ -1642,6 +1663,7 @@ function buildCard(task, colClass) {
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
       ${subBadge}
       <div class="task-card-title" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
+      ${formNameHtml}
       ${
         (() => {
           const loc = formatServiceLocationPlainLine(task);
@@ -3508,6 +3530,16 @@ function buildReportTab(t) {
       try { fname = decodeURIComponent(fname); } catch (e) {}
       return `<div><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download — ${escHtml(fname)}</a>${capHtml}</div>`;
     }
+    /** Foto / reconhecimento facial guardados como string URI (não só array). */
+    if (
+      (fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') &&
+      (str.startsWith('http') || str.startsWith('file://'))
+    ) {
+      const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
+      const clean = str.split('?')[0];
+      const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      return `<div style="margin-top:8px"><img src="${clean.replace(/"/g,'%22')}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}</div>`;
+    }
     // Signature: SIG_V1|meta:{...}|path1|path2|...
     if (str.startsWith('SIG_V1|')) {
       const allParts = str.replace('SIG_V1|', '').split('|').filter(Boolean);
@@ -3644,6 +3676,41 @@ function buildReportTab(t) {
     Object.entries(responses).forEach(([key, val]) => {
       if (key.startsWith('__')) return;
       if (!templateFieldIds.includes(key)) {
+         /** Chave auxiliar do app: `{campo}__biometric` — mostrar foto do campo base + auditoria JSON. */
+         if (typeof key === 'string' && key.endsWith('__biometric')) {
+           const baseFieldId = key.slice(0, -'__biometric'.length);
+           const photoRaw = responses[baseFieldId];
+           const baseInTemplate = templateFieldIds.includes(baseFieldId);
+           let photoHtml = '';
+           if (!baseInTemplate) {
+             if (photoRaw != null && String(photoRaw).trim() !== '') {
+               photoHtml = renderFieldValue(photoRaw, 'facial_recognition', responses, baseFieldId, null);
+             } else {
+               photoHtml = '<em style="color:var(--text3)">(sem imagem no campo principal — só auditoria)</em>';
+             }
+           } else {
+             photoHtml =
+               '<div style="font-size:11px;color:#64748b;margin-bottom:8px">A foto desta captura aparece no campo do formulário acima. Abaixo: dados técnicos da validação biométrica.</div>';
+           }
+           let auditText = '';
+           try {
+             const o = typeof val === 'string' ? JSON.parse(val) : val;
+             auditText = escHtml(JSON.stringify(o, null, 2));
+           } catch (e2) {
+             auditText = escHtml(String(val));
+           }
+           const auditBlock =
+             '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (Compreface)</div>' +
+             '<pre style="margin-top:6px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word">' +
+             auditText +
+             '</pre>';
+           const qLabel = (baseFieldId || key) + ' · reconhecimento facial';
+           items += `<div class="report-response-item">
+             <div class="report-response-q" style="color:var(--text3)">${escHtml(qLabel)} <span style="font-size:9px;font-weight:400;opacity:0.6">(Orfão)</span></div>
+             <div class="report-response-a">${photoHtml}${auditBlock}</div>
+           </div>`;
+           return;
+         }
          const displayHtml = renderFieldValue(val, null, responses, key);
          if (displayHtml.includes('não respondido')) return;
          let qLabel = key;
@@ -4249,6 +4316,12 @@ window.printReport = async function() {
   let qNum = 1;
 
   const escPdf = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const escUrlAttrPdf = (s) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
 
   const cfg = window.__reportActivePresetConfig || mergePresetConfig(null);
   const mod = cfg.modules;
@@ -4439,6 +4512,256 @@ window.printReport = async function() {
     );
   };
 
+  function parseCapturedAtFromPhotoUriPdf(uri) {
+    try {
+      const s = String(uri);
+      const q = s.indexOf('?');
+      if (q === -1) return null;
+      const cap = new URLSearchParams(s.slice(q)).get('capturedAt');
+      if (!cap) return null;
+      const d = new Date(decodeURIComponent(cap));
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toLocaleString('pt-BR');
+    } catch (e) {
+      return null;
+    }
+  }
+  function formatFieldTimeIsoPdf(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-BR');
+  }
+
+  function safeDecodeUriFacialPdf(v) {
+    try {
+      return decodeURIComponent(String(v).replace(/\+/g, ' '));
+    } catch (e) {
+      return String(v ?? '');
+    }
+  }
+  function parseFacialUriQueryFacialPdf(uri) {
+    const s = String(uri);
+    const q = s.indexOf('?');
+    const out = { capturedAt: '', lat: '', lng: '', addr: '' };
+    if (q < 0) return out;
+    try {
+      const sp = new URLSearchParams(s.slice(q + 1));
+      const cap = sp.get('capturedAt');
+      out.capturedAt = cap ? safeDecodeUriFacialPdf(cap) : '';
+      out.lat = sp.get('lat') || '';
+      out.lng = sp.get('lng') || '';
+      const ad = sp.get('addr');
+      out.addr = ad ? safeDecodeUriFacialPdf(ad) : '';
+    } catch (e) {}
+    return out;
+  }
+  function formatPtDateTimeDotFacialPdf(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return date + ' · ' + time;
+  }
+  function parseBiometricAuditFacialPdf(raw) {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const o = JSON.parse(raw);
+        return typeof o === 'object' && o ? o : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+  function resolveBiometricRawFacialPdf(responsesObj, rowScope, fieldId) {
+    const key = fieldId + '__biometric';
+    if (rowScope && typeof rowScope === 'object' && rowScope[key] != null) return rowScope[key];
+    return responsesObj && typeof responsesObj === 'object' ? responsesObj[key] : null;
+  }
+  function formatConfidencePctFacialPdf(c) {
+    if (typeof c !== 'number' || !Number.isFinite(c)) return null;
+    const pct = c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, c));
+    return pct + '%';
+  }
+  function schemaFieldRequiresOnlineFacialPdf(field) {
+    if (!field || typeof field !== 'object') return false;
+    const v = field.requireOnlineValidation;
+    if (v === true || v === 1) return true;
+    if (v === false || v == null || v === '') return false;
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase();
+      return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+    }
+    return false;
+  }
+  var FACIAL_NO_FACE_IN_IMAGE_MSG_OPS =
+    'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+  function humanizeFacialAuditMessageForOpsPdf(audit) {
+    if (!audit || typeof audit !== 'object') return '';
+    if (audit.reason === 'compreface_no_face_in_image' && typeof audit.message === 'string' && audit.message.trim()) {
+      return audit.message;
+    }
+    var code = audit.comprefaceCode;
+    if (code === 28 || code === '28' || Number(code) === 28) return FACIAL_NO_FACE_IN_IMAGE_MSG_OPS;
+    var m = typeof audit.message === 'string' ? audit.message : '';
+    if (/no face is found in the given image/i.test(m) || /"code"\s*:\s*28\b/i.test(m)) return FACIAL_NO_FACE_IN_IMAGE_MSG_OPS;
+    return m;
+  }
+  function classifyFacialAuditFacialPdf(audit, field) {
+    if (!audit || typeof audit !== 'object') {
+      return {
+        kind: 'pending',
+        border: '#b45309',
+        footer: '#c2410c',
+        title: 'RECONHECIMENTO FACIAL — PENDENTE',
+        message: '',
+      };
+    }
+    const deferFailed = audit.deferredValidationFailed === true;
+    const confStr = formatConfidencePctFacialPdf(audit.confidence);
+    const success = !deferFailed && !!(audit.at || audit.engine || confStr);
+    const reqOnline = schemaFieldRequiresOnlineFacialPdf(field);
+    const explicitPending = audit.pending === true;
+    const pending = !success && !deferFailed && (!reqOnline || explicitPending);
+    if (deferFailed || (!success && !pending)) {
+      return {
+        kind: 'failed',
+        border: '#b91c1c',
+        footer: '#b91c1c',
+        title: 'RECONHECIMENTO FACIAL — NÃO VALIDADO',
+        message: humanizeFacialAuditMessageForOpsPdf(audit),
+      };
+    }
+    if (pending) {
+      return {
+        kind: 'pending',
+        border: '#b45309',
+        footer: '#c2410c',
+        title: 'RECONHECIMENTO FACIAL — PENDENTE',
+        message: '',
+      };
+    }
+    return {
+      kind: 'ok',
+      border: '#15803d',
+      footer: '#15803d',
+      title: 'RECONHECIMENTO FACIAL — VÁLIDO',
+      message: '',
+    };
+  }
+  function buildFacialRecognitionCardHtmlFacialPdf(opts) {
+    const singleVal = opts.singleVal;
+    const imgInnerHtml = opts.imgInnerHtml;
+    const field = opts.fieldDef;
+    const rowScope = opts.row;
+    const fotoIndexLabel = opts.fotoIndexLabel || '';
+    const fieldTimeIsoFac = opts.fieldTimeIso || '';
+    const fieldId = field && field.id ? field.id : '';
+    const audit = parseBiometricAuditFacialPdf(resolveBiometricRawFacialPdf(responses, rowScope, fieldId));
+    const cls = classifyFacialAuditFacialPdf(audit, field);
+    const qMeta = parseFacialUriQueryFacialPdf(singleVal);
+    const fromFieldTime =
+      fieldTimeIsoFac && typeof fieldTimeIsoFac === 'string' && String(fieldTimeIsoFac).trim()
+        ? String(fieldTimeIsoFac).trim()
+        : '';
+    const captureIso =
+      qMeta.capturedAt ||
+      (audit && typeof audit.capturedAt === 'string' ? audit.capturedAt : '') ||
+      fromFieldTime ||
+      '';
+    const captureDisp = formatPtDateTimeDotFacialPdf(captureIso);
+    let validationLine = '';
+    if (cls.kind === 'ok') {
+      validationLine = audit && audit.at ? 'Validação: ' + formatPtDateTimeDotFacialPdf(audit.at) : 'Validação: —';
+    } else if (cls.kind === 'pending') {
+      validationLine = 'Validação: pendente (assíncrona no servidor)';
+    } else {
+      validationLine =
+        audit && audit.at ? 'Validação: ' + formatPtDateTimeDotFacialPdf(audit.at) : 'Validação: não concluída';
+    }
+    const identifiedName = (audit && audit.identifiedUser && audit.identifiedUser.name
+      ? String(audit.identifiedUser.name)
+      : ''
+    ).trim();
+    const identifiedEmail = (audit && audit.identifiedUser && audit.identifiedUser.email
+      ? String(audit.identifiedUser.email)
+      : ''
+    ).trim();
+    var latFromQ = qMeta.lat && qMeta.lng ? String(qMeta.lat) : '';
+    var lngFromQ = qMeta.lat && qMeta.lng ? String(qMeta.lng) : '';
+    var latFromA = audit && audit.captureLat != null ? String(audit.captureLat) : '';
+    var lngFromA = audit && audit.captureLng != null ? String(audit.captureLng) : '';
+    var latUse = latFromQ || latFromA;
+    var lngUse = lngFromQ || lngFromA;
+    var gpsLine =
+      latUse && lngUse && isFinite(Number(latUse)) && isFinite(Number(lngUse))
+        ? Number(latUse).toFixed(5) + ', ' + Number(lngUse).toFixed(5)
+        : '—';
+    var addrRaw =
+      qMeta.addr ||
+      (audit && typeof audit.captureAddr === 'string' && audit.captureAddr.trim() ? audit.captureAddr.trim() : '');
+    var addrLine = addrRaw ? 'Endereço: ' + addrRaw : 'Endereço: —';
+    const confStr = audit ? formatConfidencePctFacialPdf(audit.confidence) : null;
+    const confHtml =
+      cls.kind === 'ok' && confStr
+        ? '<div style="font-size:9px;margin-top:5px;opacity:0.95;font-weight:600">Confiança: ' +
+          escPdf(confStr) +
+          '</div>'
+        : '';
+    const failMsg =
+      cls.kind === 'failed' && cls.message
+        ? '<div style="font-size:9px;margin-top:6px;line-height:1.35;opacity:0.95">' + escPdf(cls.message) + '</div>'
+        : cls.kind === 'pending'
+          ? '<div style="font-size:9px;margin-top:6px;line-height:1.35;opacity:0.95">Foto guardada. A validação biométrica conclui quando o servidor processar o envio.</div>'
+          : '';
+    const identityBlock =
+      cls.kind === 'ok'
+        ? '<div style="font-size:12px;font-weight:800;margin-top:2px;color:#fff">' +
+          escPdf(identifiedName || '—') +
+          '</div><div style="font-size:10px;margin-top:3px;font-weight:600;color:#fff">Login: ' +
+          escPdf(identifiedEmail || '—') +
+          '</div>'
+        : '';
+    const mt = cls.kind === 'ok' ? 8 : 4;
+    return (
+      '<div style="margin-top:10px;max-width:300px;margin-left:auto;margin-right:auto;border:8px solid ' +
+      cls.border +
+      ';border-radius:12px;overflow:hidden;box-sizing:border-box;background:#0f172a">' +
+      '<div style="background:#e2e8f0;min-height:220px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:4px">' +
+      imgInnerHtml +
+      '</div>' +
+      '<div style="background:' +
+      cls.footer +
+      ';color:#fff;padding:12px 12px 14px;border-top:2px solid rgba(255,255,255,0.35);box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,sans-serif">' +
+      '<div style="font-size:9px;font-weight:900;letter-spacing:0.5px;margin-bottom:6px;text-transform:uppercase">' +
+      escPdf(cls.title) +
+      escPdf(fotoIndexLabel) +
+      '</div>' +
+      identityBlock +
+      failMsg +
+      '<div style="font-size:10px;margin-top:' +
+      mt +
+      'px;font-weight:700">Captura: ' +
+      escPdf(captureDisp) +
+      '</div>' +
+      '<div style="font-size:10px;margin-top:4px;font-weight:700">' +
+      escPdf(validationLine) +
+      '</div>' +
+      '<div style="font-size:9px;margin-top:5px;font-weight:600">GPS: ' +
+      escPdf(gpsLine) +
+      '</div>' +
+      '<div style="font-size:9px;margin-top:3px;line-height:1.35;font-weight:600">' +
+      escPdf(addrLine) +
+      '</div>' +
+      confHtml +
+      '</div></div>'
+    );
+  }
+
   pdfEntries.forEach((entry) => {
       if (!mod.formResponses) return;
       if (entry.kind === '__repeat_hdr') {
@@ -4451,6 +4774,11 @@ window.printReport = async function() {
         return;
       }
       const { id, fieldDef, row, rowIdx, repeatSid } = entry;
+      let fieldTimeIsoPdf = null;
+      if (repeatSid != null && rowIdx != null) {
+        fieldTimeIsoPdf = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
+      }
+      if (!fieldTimeIsoPdf) fieldTimeIsoPdf = responses[`__time_${id}`];
       if (fieldDef && fieldDef.id && !isFieldVisible(cfg, fieldDef.id, fieldDef.type)) return;
       const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
       if (fieldDef && pTypes.includes(fieldDef.type) && !mod.photoGallery) return;
@@ -4691,10 +5019,66 @@ window.printReport = async function() {
           }
     
           if (isPhoto) {
-              const timestamp = t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : fd(t.createdAt);
+              const fallbackTaskTs = t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : fd(t.createdAt);
               const stampTypes = fieldDef?.type === 'photo_stamped' || fieldDef?.type === 'facial_recognition';
+              const isFacial = fieldDef?.type === 'facial_recognition';
+              const resolveStampTs = (singleVal) =>
+                parseCapturedAtFromPhotoUriPdf(singleVal) || formatFieldTimeIsoPdf(fieldTimeIsoPdf) || fallbackTaskTs;
               const onePhotoCard = (singleVal, fotoIndex, capIdx) => {
+                if (isFacial) {
+                  let imgInnerHtml;
+                  if (singleVal.startsWith('file://')) {
+                    imgInnerHtml =
+                      '<div style="padding:20px;text-align:center;color:#78350f;font-size:10px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local. Sincronize para incluir a imagem no PDF.</div>';
+                  } else if (
+                    singleVal.startsWith('http://') ||
+                    singleVal.startsWith('https://') ||
+                    singleVal.startsWith('data:image')
+                  ) {
+                    const imgSrc = escUrlAttrPdf(singleVal);
+                    imgInnerHtml =
+                      '<img src="' +
+                      imgSrc +
+                      '" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src=\'https://placehold.co/400x300?text=Foto\'"/>';
+                  } else if (singleVal) {
+                    imgInnerHtml =
+                      '<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este ficheiro.</div>';
+                  } else {
+                    imgInnerHtml =
+                      '<img src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" style="max-width:100%;max-height:220px;object-fit:contain;display:block"/>';
+                  }
+                  const idxLine = photoUris.length > 1 ? ' · Foto ' + fotoIndex : '';
+                  return (
+                    buildFacialRecognitionCardHtmlFacialPdf({
+                      singleVal: singleVal,
+                      imgInnerHtml: imgInnerHtml,
+                      fieldDef: fieldDef,
+                      row: row,
+                      fotoIndexLabel: idxLine,
+                      fieldTimeIso: fieldTimeIsoPdf,
+                    }) + pdfMediaCapHtml(id, capIdx, row)
+                  );
+                }
+                const stampTs = resolveStampTs(singleVal);
                 if (singleVal.startsWith('file://')) {
+                  if (stampTypes) {
+                    const showFooter = !!(stampTypes || singleVal.includes('live'));
+                    const idxLine = photoUris.length > 1 ? ` · Foto ${fotoIndex}` : '';
+                    const body = `<div style="min-height:180px;background:#fff7ed;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+                        <div style="text-align:center;color:#9a3412;font-size:10px;font-weight:700">Mídia ainda em arquivo local — após sincronizar, a imagem aparece aqui no PDF.</div>
+                      </div>`;
+                    return (
+                      `
+                    <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border-radius:8px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;">
+                      ${body}
+                      ${
+                        showFooter
+                          ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${stampTs}${idxLine}</div>`
+                          : ''
+                      }
+                    </div>` + pdfMediaCapHtml(id, capIdx, row)
+                    );
+                  }
                   return (
                     `
                     <div style="margin-top: 8px; max-width: 350px; background:#f8fafc; padding:20px; text-align:center; border:2px dashed #cbd5e1; border-radius:8px;">
@@ -4733,13 +5117,15 @@ window.printReport = async function() {
                 }
                 const showFooter = !!(gpsComplement || singleVal.includes('live') || stampTypes);
                 const idxLine = photoUris.length > 1 ? ` · Foto ${fotoIndex}` : '';
+                const imgSrc = escUrlAttrPdf(singleVal);
+                const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>`;
                 return (
                   `
-                <div class="pdf-photo-card" style="margin-top: 8px; max-width: 350px; background: #EA580C; border-radius: 8px; border: 1px solid #c2410c; overflow: hidden; display: flex; flex-direction: column;">
-                   <img src="${singleVal.split('?')[0]}" class="pdf-photo-img" style="border-radius: 0; width: 100%; height: auto; min-height: 180px; object-fit: cover; display: block;" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>
+                <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border-radius:8px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;">
+                   ${imgInner}
                    ${showFooter ? `
                    <div style="background: #EA580C; color: #fff; padding: 10px 12px; font-size: 8px; font-weight: 700; line-height: 1.4; box-sizing: border-box; font-family: monospace;">
-                      🕒 ${timestamp}${idxLine}
+                      🕒 ${stampTs}${idxLine}
                       ${gpsComplement}
                    </div>` : ''}
                 </div>` + pdfMediaCapHtml(id, capIdx, row)
@@ -4806,13 +5192,8 @@ window.printReport = async function() {
       }
       
       let timeHtml = '';
-      let tIso = null;
-      if (repeatSid != null && rowIdx != null) {
-        tIso = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
-      }
-      if (!tIso) tIso = responses[`__time_${id}`];
-      if (tIso) {
-          const humanTime = new Date(tIso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+      if (fieldTimeIsoPdf) {
+          const humanTime = new Date(fieldTimeIsoPdf).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
           timeHtml = `<span style="font-size:9px; color:#94a3b8; margin-left:8px; font-weight:600; text-transform:none;"><ion-icon name="time-outline" style="vertical-align:-2px; margin-right:2px;"></ion-icon>${humanTime}</span>`;
       }
 
@@ -5591,6 +5972,17 @@ window.openDispatchModal = async function() {
   document.getElementById('d-email').value = '';
   document.getElementById('d-title').value = '';
   document.getElementById('d-desc').value  = '';
+  const dSched = document.getElementById('d-scheduled-start');
+  const dDurOv = document.getElementById('d-expected-duration-override');
+  if (dDurOv) dDurOv.value = '';
+  if (dSched) {
+    const d = new Date();
+    const step = 5 * 60000;
+    const t = Math.ceil(d.getTime() / step) * step;
+    const x = new Date(t);
+    const p = function(n) { return String(n).padStart(2, '0'); };
+    dSched.value = x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate()) + 'T' + p(x.getHours()) + ':' + p(x.getMinutes());
+  }
   document.getElementById('d-address').value = '';
   document.getElementById('d-lat').value = '';
   document.getElementById('d-lng').value = '';
@@ -6011,6 +6403,21 @@ window.renderPolygonPreview = function() {
 };
 
 // ── confirmDispatch (Updated) ───────────────────────────────────
+/** Interpreta valor de `<input type="datetime-local">` como hora local (evita ambiguidade entre browsers). */
+function parseDispatchDatetimeLocal(raw) {
+  const s = String(raw || '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  const h = Number(m[4]);
+  const mi = Number(m[5]);
+  const dt = new Date(y, mo, d, h, mi, 0, 0);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) return null;
+  return dt;
+}
+
 window.closeDispatchModal = () => {
   hideDispatchTechSuggestions();
   document.getElementById('dispatch-modal').style.display = 'none';
@@ -6031,6 +6438,24 @@ window.confirmDispatch = async function() {
   }
 
   if (!refId) { alert('Selecione um formulário.'); return; }
+
+  const schedEl = document.getElementById('d-scheduled-start');
+  const schedRaw = schedEl && schedEl.value ? String(schedEl.value).trim() : '';
+  if (!schedRaw) { alert('Informe o início na agenda (data e hora).'); return; }
+  let schedDt = parseDispatchDatetimeLocal(schedRaw);
+  if (!schedDt) {
+    const fallback = new Date(schedRaw);
+    schedDt = Number.isFinite(fallback.getTime()) ? fallback : null;
+  }
+  if (!schedDt || !Number.isFinite(schedDt.getTime())) { alert('Data/hora de início inválida.'); return; }
+  let expectedOverride = null;
+  const durEl = document.getElementById('d-expected-duration-override');
+  if (durEl && String(durEl.value).trim() !== '') {
+    const dm = parseInt(String(durEl.value).trim(), 10);
+    if (!Number.isFinite(dm) || dm < 5) { alert('Tempo previsto do formulário: mínimo 5 minutos.'); return; }
+    if (dm % 5 !== 0) { alert('Use múltiplos de 5 minutos.'); return; }
+    expectedOverride = dm;
+  }
 
   // ── Build location payload baseado na aba ativa ─────────────────
   const geoMode = window._geoMode || 'none';
@@ -6099,11 +6524,18 @@ window.confirmDispatch = async function() {
   }
 
   try {
-    const res = await CONFIG.post('/checklists/dispatch', {
+    const dispatchBody = {
       ownerEmail: email, refId, title: title || 'Nova OS Designada', description: desc,
       metadata: { icon: 'build-outline' },
+      scheduledStartAt: schedDt.toISOString(),
       ...locationPayload
-    });
+    };
+    if (expectedOverride != null) dispatchBody.expectedFormDurationMinutes = expectedOverride;
+    const res = await CONFIG.post('/checklists/dispatch', dispatchBody);
+    if (res == null) {
+      /* 401: CONFIG já redireciona para login */
+      return;
+    }
     if (res.success) {
       closeDispatchModal();
       loadBoard();
@@ -6117,7 +6549,10 @@ window.confirmDispatch = async function() {
     } else {
       alert('Erro: ' + (res.error || 'desconhecido'));
     }
-  } catch(e) { alert('Erro de rede ao despachar OS.'); }
+  } catch (e) {
+    console.error(e);
+    alert('Erro ao despachar OS: ' + (e && e.message ? e.message : 'tente novamente.'));
+  }
 };
 
 // ── Escolha de submissão: sincronizar estado ao fechar com Escape ou programaticamente ──

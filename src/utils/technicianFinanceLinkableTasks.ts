@@ -62,15 +62,14 @@ export function effectiveProviderTaskStatus(
   acceptedIds: Set<string> = new Set()
 ): string {
   const raw = String(t.status || 'PENDING').toUpperCase();
-  const serverActive = ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(raw);
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
-  if (completedIds.has(String(t.id)) && !serverActive) return 'COMPLETED';
   const meta = taskMetadataRecord(t);
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
     if (inprogressIds.has(String(t.id)) || acceptedIds.has(String(t.id))) return 'IN_PROGRESS';
     return 'PENDING';
   }
+  if (completedIds.has(String(t.id))) return 'COMPLETED';
   const pausedByMeta =
     meta.executionPaused === true ||
     meta.executionPaused === 'true' ||

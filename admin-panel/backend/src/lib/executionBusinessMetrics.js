@@ -5,7 +5,7 @@
  * `schemaVersion` incrementar quando o significado dos campos mudar.
  */
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const a1 = Number(lat1);
@@ -187,7 +187,7 @@ function wallSeconds(startedAt, completedAt) {
  * @param {object} opts
  * @param {object} [opts.responses]
  * @param {object} [opts.metadata]
- * @param {object} opts.execution — etaMinutes, locationLat, locationLng, startedAt, completedAt
+ * @param {object} opts.execution — etaMinutes, locationLat, locationLng, startedAt, completedAt, expectedFormDurationMinutes
  * @param {number|null} [opts.revision] — índice da submissão (1, 2, …)
  * @returns {object}
  */
@@ -239,6 +239,14 @@ function computeExecutionBusinessMetrics(opts) {
   );
   const activeSec = Number(metadata.formActiveSeconds ?? responses.__form_active_seconds_final);
 
+  const plannedFormMinRaw = ex.expectedFormDurationMinutes;
+  const plannedFormMin =
+    plannedFormMinRaw != null && Number.isFinite(Number(plannedFormMinRaw)) && Number(plannedFormMinRaw) > 0
+      ? Math.floor(Number(plannedFormMinRaw))
+      : null;
+  const plannedFormSec = plannedFormMin != null ? plannedFormMin * 60 : null;
+  const fillSecFloor = Number.isFinite(fillSec) && fillSec >= 0 ? Math.floor(fillSec) : null;
+
   return {
     schemaVersion: SCHEMA_VERSION,
     computedAt: new Date().toISOString(),
@@ -269,6 +277,13 @@ function computeExecutionBusinessMetrics(opts) {
       exTransitSec,
       formFillSec: Number.isFinite(fillSec) && fillSec >= 0 ? Math.floor(fillSec) : null,
       formActiveSec: Number.isFinite(activeSec) && activeSec >= 0 ? Math.floor(activeSec) : null,
+    },
+    /** Formulário: previsto (despacho) vs tempo real de preenchimento (sem deslocamento). */
+    formExecution: {
+      plannedDurationMinutes: plannedFormMin,
+      plannedDurationSec: plannedFormSec,
+      actualFillSec: fillSecFloor,
+      pctFillVsPlanned: pctDeltaVsPlanned(plannedFormSec, fillSecFloor),
     },
   };
 }

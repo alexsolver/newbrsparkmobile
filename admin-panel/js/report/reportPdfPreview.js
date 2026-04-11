@@ -15,6 +15,7 @@ import {
   fmtDurationPtBr,
   transitPctDeltaVsPlanned,
   normalizeTraversedPathForReport,
+  resolveProductivityFromTask,
 } from './previewExecutionMetrics.js';
 import {
   collectSectionTimingRowsForPreview,
@@ -1257,6 +1258,20 @@ function buildPdfProdBlockForPreview(th, t, responses) {
   const activeSecPdf = Number(t.metadata?.formActiveSeconds ?? responses.__form_active_seconds_final);
   const formFillStrPdf = fmtDurationPtBr(fillSecPdf);
   const formActiveStrPdf = fmtDurationPtBr(activeSecPdf);
+  const prodSnap = resolveProductivityFromTask(t);
+  const plannedFormMinPdf = prodSnap.plannedFormDurationMinutes;
+  const formPrevVsRealLine =
+    plannedFormMinPdf != null && Number.isFinite(Number(plannedFormMinPdf))
+      ? `<div style="font-size:9px;color:#475569;padding:8px 12px 0;font-weight:600">Formulário: <strong>${esc(
+          String(Math.floor(Number(plannedFormMinPdf))),
+        )} min</strong> previstos · real (preenchimento) <strong>${esc(formFillStrPdf)}</strong>${
+          prodSnap.pctFormFillVsPlanned != null && Number.isFinite(Number(prodSnap.pctFormFillVsPlanned))
+            ? ` · ${Number(prodSnap.pctFormFillVsPlanned) > 0 ? '+' : ''}${esc(
+                String(prodSnap.pctFormFillVsPlanned),
+              )}% vs previsto`
+            : ''
+        }.</div>`
+      : '';
 
   const sectionRowsProd = collectSectionTimingRowsForPreview(t.template?.sectionBreaks, responses);
   let sectionLineProd = sectionRowsProd
@@ -1290,6 +1305,7 @@ function buildPdfProdBlockForPreview(th, t, responses) {
               ${pdfProdMetricCell('No form.', formFillStrPdf, false)}
               ${pdfProdMetricCell('App foco', formActiveStrPdf, true)}
             </div>
+            ${formPrevVsRealLine}
           </div>
           <div style="padding:10px 12px 12px;background:#fff;">
             <div style="padding:10px 12px;background:#FFF7ED;border:1px solid #FFEDD5;border-radius:8px;box-sizing:border-box">
@@ -1304,41 +1320,335 @@ function buildPdfProdBlockForPreview(th, t, responses) {
       </div>`;
 }
 
+/** Data/hora da captura embutida na query (`capturedAt`), igual ao app. */
+function parseCapturedAtFromPhotoUri(uri) {
+  try {
+    const s = String(uri);
+    const q = s.indexOf('?');
+    if (q === -1) return null;
+    const cap = new URLSearchParams(s.slice(q)).get('capturedAt');
+    if (!cap) return null;
+    const d = new Date(decodeURIComponent(cap));
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString('pt-BR');
+  } catch {
+    return null;
+  }
+}
+
+function formatFieldTimeIso(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR');
+}
+
+function safeDecodeUriComponentPdf(v) {
+  try {
+    return decodeURIComponent(String(v).replace(/\+/g, ' '));
+  } catch {
+    return String(v ?? '');
+  }
+}
+
+function parseFacialUriQueryPdf(uri) {
+  const s = String(uri);
+  const q = s.indexOf('?');
+  const out = { capturedAt: '', lat: '', lng: '', addr: '' };
+  if (q < 0) return out;
+  try {
+    const sp = new URLSearchParams(s.slice(q + 1));
+    const cap = sp.get('capturedAt');
+    out.capturedAt = cap ? safeDecodeUriComponentPdf(cap) : '';
+    out.lat = sp.get('lat') || '';
+    out.lng = sp.get('lng') || '';
+    const ad = sp.get('addr');
+    out.addr = ad ? safeDecodeUriComponentPdf(ad) : '';
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
+function formatPtDateTimeDotPdf(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return `${date} · ${time}`;
+}
+
+function parseBiometricAuditPdf(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const o = JSON.parse(raw);
+      return typeof o === 'object' && o ? o : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function resolveBiometricRawPdf(responses, row, fieldId) {
+  const key = `${fieldId}__biometric`;
+  if (row && typeof row === 'object' && row[key] != null) return row[key];
+  return responses && typeof responses === 'object' ? responses[key] : null;
+}
+
+function formatConfidencePctPdf(c) {
+  if (typeof c !== 'number' || !Number.isFinite(c)) return null;
+  const pct = c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, c));
+  return `${pct}%`;
+}
+
+function schemaFieldRequiresOnlineValidationPdf(field) {
+  if (!field || typeof field !== 'object') return false;
+  const v = field.requireOnlineValidation;
+  if (v === true || v === 1) return true;
+  if (v === false || v == null || v === '') return false;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+  }
+  return false;
+}
+
+const FACIAL_NO_FACE_IN_IMAGE_MSG_PDF =
+  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+
+/** Mensagem legível em pt-BR para PDF (inclui auditorias antigas com texto em inglês da API). */
+function humanizeFacialAuditMessageForReportPdf(audit) {
+  if (!audit || typeof audit !== 'object') return '';
+  if (audit.reason === 'compreface_no_face_in_image' && typeof audit.message === 'string' && audit.message.trim()) {
+    return audit.message;
+  }
+  const code = audit.comprefaceCode;
+  if (code === 28 || code === '28' || Number(code) === 28) return FACIAL_NO_FACE_IN_IMAGE_MSG_PDF;
+  const m = typeof audit.message === 'string' ? audit.message : '';
+  if (/no face is found in the given image/i.test(m) || /"code"\s*:\s*28\b/i.test(m)) return FACIAL_NO_FACE_IN_IMAGE_MSG_PDF;
+  return m;
+}
+
+/**
+ * @returns {{ kind: 'ok'|'pending'|'failed'; border: string; footer: string; title: string; message?: string }}
+ */
+function classifyFacialAuditForPdf(audit, field) {
+  if (!audit || typeof audit !== 'object') {
+    return {
+      kind: 'pending',
+      border: '#b45309',
+      footer: '#c2410c',
+      title: 'RECONHECIMENTO FACIAL — PENDENTE',
+      message: '',
+    };
+  }
+  const deferFailed = audit.deferredValidationFailed === true;
+  const confStr = formatConfidencePctPdf(audit.confidence);
+  const success =
+    !deferFailed && !!(audit.at || audit.engine || confStr);
+  const reqOnline = schemaFieldRequiresOnlineValidationPdf(field);
+  const explicitPending = audit.pending === true;
+  const pending = !success && !deferFailed && (!reqOnline || explicitPending);
+
+  if (deferFailed || (!success && !pending)) {
+    return {
+      kind: 'failed',
+      border: '#b91c1c',
+      footer: '#b91c1c',
+      title: 'RECONHECIMENTO FACIAL — NÃO VALIDADO',
+      message: humanizeFacialAuditMessageForReportPdf(audit),
+    };
+  }
+  if (pending) {
+    return {
+      kind: 'pending',
+      border: '#b45309',
+      footer: '#c2410c',
+      title: 'RECONHECIMENTO FACIAL — PENDENTE',
+      message: '',
+    };
+  }
+  return {
+    kind: 'ok',
+    border: '#15803d',
+    footer: '#15803d',
+    title: 'RECONHECIMENTO FACIAL — VÁLIDO',
+    message: '',
+  };
+}
+
+function buildFacialRecognitionPdfCard(opts) {
+  const { singleVal, imgInnerHtml, field, responses, row, esc: escFn, fotoIndexLabel, fieldTimeIso } = opts;
+  const id = field.id;
+  const audit = parseBiometricAuditPdf(resolveBiometricRawPdf(responses, row, id));
+  const cls = classifyFacialAuditForPdf(audit, field);
+  const qMeta = parseFacialUriQueryPdf(singleVal);
+  const fromFieldTime =
+    fieldTimeIso && typeof fieldTimeIso === 'string' && String(fieldTimeIso).trim()
+      ? String(fieldTimeIso).trim()
+      : '';
+  const captureIso =
+    qMeta.capturedAt ||
+    (audit && typeof audit.capturedAt === 'string' ? audit.capturedAt : '') ||
+    fromFieldTime ||
+    '';
+  const captureDisp = formatPtDateTimeDotPdf(captureIso);
+
+  let validationLine = '';
+  if (cls.kind === 'ok') {
+    validationLine = audit?.at ? `Validação: ${formatPtDateTimeDotPdf(audit.at)}` : 'Validação: —';
+  } else if (cls.kind === 'pending') {
+    validationLine = 'Validação: pendente (assíncrona no servidor)';
+  } else {
+    validationLine =
+      audit && audit.at ? `Validação: ${formatPtDateTimeDotPdf(audit.at)}` : 'Validação: não concluída';
+  }
+
+  const identifiedName = (audit?.identifiedUser?.name || '').trim();
+  const identifiedEmail = (audit?.identifiedUser?.email || '').trim();
+  const latFromQ = qMeta.lat && qMeta.lng ? String(qMeta.lat) : '';
+  const lngFromQ = qMeta.lat && qMeta.lng ? String(qMeta.lng) : '';
+  const latFromA = audit && audit.captureLat != null ? String(audit.captureLat) : '';
+  const lngFromA = audit && audit.captureLng != null ? String(audit.captureLng) : '';
+  const latUse = latFromQ || latFromA;
+  const lngUse = lngFromQ || lngFromA;
+  const gpsLine =
+    latUse && lngUse && Number.isFinite(Number(latUse)) && Number.isFinite(Number(lngUse))
+      ? `${Number(latUse).toFixed(5)}, ${Number(lngUse).toFixed(5)}`
+      : '—';
+  const addrRaw =
+    qMeta.addr ||
+    (audit && typeof audit.captureAddr === 'string' && audit.captureAddr.trim() ? audit.captureAddr.trim() : '');
+  const addrLine = addrRaw ? `Endereço: ${addrRaw}` : 'Endereço: —';
+
+  const confStr = formatConfidencePctPdf(audit?.confidence);
+  const confHtml =
+    cls.kind === 'ok' && confStr
+      ? `<div style="font-size:9px;margin-top:5px;opacity:0.95;font-weight:600">Confiança: ${escFn(confStr)}</div>`
+      : '';
+
+  const failMsg =
+    cls.kind === 'failed' && cls.message
+      ? `<div style="font-size:9px;margin-top:6px;line-height:1.35;opacity:0.95">${escFn(cls.message)}</div>`
+      : cls.kind === 'pending'
+        ? `<div style="font-size:9px;margin-top:6px;line-height:1.35;opacity:0.95">Foto guardada. A validação biométrica conclui quando o servidor processar o envio.</div>`
+        : '';
+
+  const identityBlock =
+    cls.kind === 'ok'
+      ? `<div style="font-size:12px;font-weight:800;margin-top:2px;color:#fff">${escFn(identifiedName || '—')}</div>
+         <div style="font-size:10px;margin-top:3px;font-weight:600;color:#fff">Login: ${escFn(identifiedEmail || '—')}</div>`
+      : '';
+
+  return `
+  <div style="margin-top:10px;max-width:300px;margin-left:auto;margin-right:auto;border:8px solid ${cls.border};border-radius:12px;overflow:hidden;box-sizing:border-box;background:#0f172a">
+    <div style="background:#e2e8f0;min-height:220px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:4px">
+      ${imgInnerHtml}
+    </div>
+    <div style="background:${cls.footer};color:#fff;padding:12px 12px 14px;border-top:2px solid rgba(255,255,255,0.35);box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,sans-serif">
+      <div style="font-size:9px;font-weight:900;letter-spacing:0.5px;margin-bottom:6px;text-transform:uppercase">${escFn(cls.title)}${escFn(fotoIndexLabel)}</div>
+      ${identityBlock}
+      ${failMsg}
+      <div style="font-size:10px;margin-top:${cls.kind === 'ok' ? 8 : 4}px;font-weight:700">Captura: ${escFn(captureDisp)}</div>
+      <div style="font-size:10px;margin-top:4px;font-weight:700">${escFn(validationLine)}</div>
+      <div style="font-size:9px;margin-top:5px;font-weight:600">GPS: ${escFn(gpsLine)}</div>
+      <div style="font-size:9px;margin-top:3px;line-height:1.35;font-weight:600">${escFn(addrLine)}</div>
+      ${confHtml}
+    </div>
+  </div>`;
+}
+
 /** Todas as fotos do campo + legenda `__media_cap_` por índice (como no PDF da Central). */
-function renderPhotoPdfBlock(val, f, th, t, responses, row) {
+function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
   const id = f.id;
   const urls = Array.isArray(val) ? val : val != null ? [val] : [];
   const stampTypes = f.type === 'photo_stamped' || f.type === 'facial_recognition';
-  const timestamp = t.completedAt
+  const isFacial = f.type === 'facial_recognition';
+  const fallbackTaskTs = t.completedAt
     ? new Date(t.completedAt).toLocaleString('pt-BR')
     : fd(t.createdAt);
+  const resolveStampTs = (singleVal) =>
+    parseCapturedAtFromPhotoUri(singleVal) || formatFieldTimeIso(fieldTimeIso) || fallbackTaskTs;
+
   return urls
     .map((rawU, i) => {
       const singleVal = String(rawU);
+      const stampTs = resolveStampTs(singleVal);
+      const idxLine = urls.length > 1 ? ` · Foto ${i + 1}` : '';
+
+      if (isFacial) {
+        let imgInnerHtml;
+        if (
+          singleVal.startsWith('http://') ||
+          singleVal.startsWith('https://') ||
+          singleVal.startsWith('data:image')
+        ) {
+          const imgSrc = esc(singleVal);
+          imgInnerHtml = `<img src="${imgSrc}" alt="" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
+        } else if (singleVal.startsWith('file://')) {
+          imgInnerHtml = `<div style="padding:20px;text-align:center;color:#78350f;font-size:10px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local. Sincronize para incluir a imagem no PDF.</div>`;
+        } else if (singleVal) {
+          imgInnerHtml = `<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este ficheiro.</div>`;
+        } else {
+          imgInnerHtml = `<img src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" alt="" style="max-width:100%;max-height:220px;object-fit:contain;display:block" />`;
+        }
+        const block = buildFacialRecognitionPdfCard({
+          singleVal,
+          imgInnerHtml,
+          field: f,
+          responses,
+          row,
+          esc,
+          fotoIndexLabel: idxLine,
+          fieldTimeIso,
+        });
+        return block + pdfMediaCapPreview(id, i, responses, row);
+      }
+
       let block;
       if (
         singleVal.startsWith('http://') ||
         singleVal.startsWith('https://') ||
         singleVal.startsWith('data:image')
       ) {
-        const baseSrc = esc(singleVal.split('?')[0]);
+        const imgSrc = esc(singleVal);
         const showFooter = !!(stampTypes || singleVal.includes('live'));
-        const idxLine = urls.length > 1 ? ` · Foto ${i + 1}` : '';
+        const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
         block = `
-          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
-            <img src="${baseSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />
+          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+            ${imgInner}
             ${
               showFooter
-                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(timestamp)}${esc(idxLine)}</div>`
+                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
                 : ''
             }
           </div>`;
       } else if (singleVal.startsWith('file://')) {
-        block = `<div style="margin-top:8px;padding:20px;max-width:350px;background:#f8fafc;text-align:center;border:2px dashed #cbd5e1;border-radius:8px;">
+        if (stampTypes) {
+          const showFooter = !!(stampTypes || singleVal.includes('live'));
+          const body = `<div style="min-height:180px;background:#fff7ed;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+              <div style="text-align:center;color:#9a3412;font-size:10px;font-weight:700">Mídia ainda em arquivo local — após sincronizar, a imagem aparece aqui no PDF.</div>
+            </div>`;
+          block = `
+          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+            ${body}
+            ${
+              showFooter
+                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
+                : ''
+            }
+          </div>`;
+        } else {
+          block = `<div style="margin-top:8px;padding:20px;max-width:350px;background:#f8fafc;text-align:center;border:2px dashed #cbd5e1;border-radius:8px;">
           <ion-icon name="cloud-offline-outline" style="font-size:32px;color:#94a3b8;margin-bottom:8px;"></ion-icon>
           <div style="font-size:12px;color:#475569;font-weight:800;">MÍDIA PENDENTE${urls.length > 1 ? ' (' + (i + 1) + ')' : ''}</div>
           <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Aguardando sincronização para pré-visualizar a foto.</div>
         </div>`;
+        }
       } else if (singleVal) {
         block = `<div style="padding:12px;border:1px solid ${th.colorBorder};border-radius:8px;font-size:10px;color:${th.colorMuted}">Pré-visualização indisponível para este arquivo</div>`;
       } else {
@@ -1456,7 +1766,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     }
 
     if (f.type === 'photo' || f.type === 'photo_stamped' || f.type === 'facial_recognition') {
-      const inner = renderPhotoPdfBlock(val, f, th, t, responses, row);
+      const inner = renderPhotoPdfBlock(val, f, th, t, responses, row, tIso);
       formHtml += `
         <div class="pdf-form-item" style="position:relative;">
            <div class="pdf-form-num" style="background:${th.formNumBg}">${qNum++}</div>

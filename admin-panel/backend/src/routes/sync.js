@@ -318,6 +318,12 @@ router.get('/config', async (_req, res) => {
   }
 });
 
+function toYmd(d) {
+  const x = d instanceof Date ? d : new Date(d);
+  if (!Number.isFinite(x.getTime())) return new Date().toISOString().split('T')[0];
+  return x.toISOString().split('T')[0];
+}
+
 function mapChecklistExecutionToSyncTask(ex) {
   let meta = ex.metadata || {};
   if (typeof meta === 'string') {
@@ -339,6 +345,42 @@ function mapChecklistExecutionToSyncTask(ex) {
   const isDone = ['COMPLETED', 'SYNCED'].includes(String(ex.status || '').toUpperCase());
   const anchorDate = isDone && ex.completedAt ? ex.completedAt : ex.createdAt;
 
+  const hasAgendaSlot =
+    ex.scheduledStartAt &&
+    ex.expectedFormDurationMinutes != null &&
+    Number.isFinite(Number(ex.expectedFormDurationMinutes)) &&
+    Number(ex.expectedFormDurationMinutes) > 0;
+
+  let startDate;
+  let endDate;
+  let isAllDay = true;
+  let scheduledStartAt = null;
+  let agendaStartAt = null;
+  let agendaEndAt = null;
+  let expectedFormDurationMinutes = null;
+
+  if (hasAgendaSlot) {
+    const start = new Date(ex.scheduledStartAt);
+    const dur = Math.floor(Number(ex.expectedFormDurationMinutes));
+    const endMs = start.getTime() + dur * 60000;
+    const end = new Date(endMs);
+    startDate = toYmd(start);
+    endDate = toYmd(new Date(endMs - 1));
+    isAllDay = false;
+    scheduledStartAt = start.toISOString();
+    agendaStartAt = scheduledStartAt;
+    agendaEndAt = end.toISOString();
+    expectedFormDurationMinutes = dur;
+  } else {
+    const anchor = anchorDate instanceof Date ? anchorDate : new Date(anchorDate);
+    startDate = toYmd(anchor);
+    endDate = toYmd(new Date(anchor.getTime() + 86400000));
+    const snapMin = ex.expectedFormDurationMinutes;
+    if (snapMin != null && Number.isFinite(Number(snapMin)) && Number(snapMin) > 0) {
+      expectedFormDurationMinutes = Math.floor(Number(snapMin));
+    }
+  }
+
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
@@ -349,9 +391,9 @@ function mapChecklistExecutionToSyncTask(ex) {
     refId,
     ownerEmail: ex.ownerEmail,
     category: 'TASK',
-    startDate: anchorDate,
-    endDate: new Date(new Date(anchorDate).getTime() + 86400000),
-    isAllDay: true,
+    startDate,
+    endDate,
+    isAllDay,
     source: 'CHECKLIST',
     metadata: meta,
     title,
@@ -365,6 +407,10 @@ function mapChecklistExecutionToSyncTask(ex) {
     locationZoneType: ex.locationZoneType || null,
     locationPolygon: ex.locationPolygon || null,
     etaMinutes: ex.etaMinutes || null,
+    scheduledStartAt,
+    agendaStartAt,
+    agendaEndAt,
+    expectedFormDurationMinutes,
   };
 }
 

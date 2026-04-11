@@ -3,6 +3,7 @@
 const {
   stripDataUrlBase64,
   recognizeWithIntegration,
+  isCompreFaceNoFaceInImageError,
   pickTopRecognitionMatch,
   parseComprefaceSubjectName,
 } = require('./comprefaceClient');
@@ -15,6 +16,22 @@ const MIN_SIMILARITY = Math.min(
 
 const FACIAL_GALLERY_SYNC_HINT =
   'No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
+
+const NO_FACE_IN_IMAGE_PT_BR =
+  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+
+function auditNoFaceInImage(mode, engine) {
+  return {
+    pending: false,
+    deferredValidationFailed: true,
+    at: new Date().toISOString(),
+    facialAuthMode: mode,
+    engine,
+    reason: 'compreface_no_face_in_image',
+    comprefaceCode: 28,
+    message: NO_FACE_IN_IMAGE_PT_BR,
+  };
+}
 
 function parseMeta(raw) {
   try {
@@ -97,7 +114,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
       audit: {
         pending: true,
         reason: 'server_no_integration',
-        capturedAt: new Date().toISOString(),
+        /** Sem `capturedAt` aqui — `resolvePendingFacialAuditsOnSync` reaproveita `bio.capturedAt`. */
         facialAuthMode: mode,
         message:
           provider !== 'AUTO'
@@ -140,21 +157,46 @@ async function verifyFacialImageBuffer(prisma, opts) {
   let recog;
   try {
     recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
-  } catch (e) {
-    console.error('[facialRecognitionEngine] recognize', e);
-    return {
-      ok: false,
-      skip: true,
-      reason: 'facial_service_unreachable',
-      audit: {
-        pending: true,
-        reason: 'server_facial_error',
-        capturedAt: new Date().toISOString(),
-        facialAuthMode: mode,
-        message:
-          'Não foi possível contactar o serviço de reconhecimento facial no servidor. Tente mais tarde ou verifique a ligação.',
-      },
-    };
+  } catch (e1) {
+    if (isCompreFaceNoFaceInImageError(e1)) {
+      return { ok: false, audit: auditNoFaceInImage(mode, engine) };
+    }
+    try {
+      recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
+    } catch (e) {
+      if (isCompreFaceNoFaceInImageError(e)) {
+        return { ok: false, audit: auditNoFaceInImage(mode, engine) };
+      }
+      console.error('[facialRecognitionEngine] recognize', e);
+      // #region agent log
+      try {
+        require('fs').appendFileSync(
+          '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-fd3da5.log',
+          `${JSON.stringify({
+            sessionId: 'fd3da5',
+            hypothesisId: 'facial-unreachable',
+            location: 'facialRecognitionEngine.js:recognize-fail',
+            message: String(e && e.message ? e.message : e).slice(0, 200),
+            data: { code: e && e.code, status: e && e.status },
+            timestamp: Date.now(),
+          })}\n`
+        );
+      } catch (_) {}
+      // #endregion
+      return {
+        ok: false,
+        skip: true,
+        reason: 'facial_service_unreachable',
+        audit: {
+          pending: true,
+          reason: 'server_facial_error',
+          /** Sem `capturedAt` — merge com auditoria pendente preserva a hora real da captura. */
+          facialAuthMode: mode,
+          message:
+            'Não foi possível contactar o serviço de reconhecimento facial no servidor. Tente mais tarde ou verifique a ligação.',
+        },
+      };
+    }
   }
 
   const top = pickTopRecognitionMatch(recog.data);
@@ -401,6 +443,21 @@ async function resolvePendingFacialAuditsOnSync(prisma, { responses, templateId,
       const fieldId = key.slice(0, -'__biometric'.length);
       const photoUri = firstHttpPhotoUri(scope[fieldId]);
       if (!photoUri) {
+        // #region agent log
+        try {
+          require('fs').appendFileSync(
+            '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-fd3da5.log',
+            `${JSON.stringify({
+              sessionId: 'fd3da5',
+              hypothesisId: 'H1',
+              location: 'facialRecognitionEngine.js:noPhotoUri',
+              message: 'pending facial sem URL HTTP',
+              data: { fieldId },
+              timestamp: Date.now(),
+            })}\n`
+          );
+        } catch (_) {}
+        // #endregion
         console.warn(
           '[facialRecognitionEngine] pending facial sem URL HTTP no campo',
           fieldId,
@@ -426,13 +483,45 @@ async function resolvePendingFacialAuditsOnSync(prisma, { responses, templateId,
         imageBuffer: buf,
       });
 
+      const parseCapturedAtFromHttpUrl = (u) => {
+        try {
+          const s = String(u || '');
+          const qi = s.indexOf('?');
+          if (qi < 0) return null;
+          const sp = new URLSearchParams(s.slice(qi + 1));
+          const raw = sp.get('capturedAt');
+          if (!raw) return null;
+          const d = new Date(decodeURIComponent(raw));
+          return Number.isNaN(d.getTime()) ? null : d.toISOString();
+        } catch {
+          return null;
+        }
+      };
+
+      const mergeCapture = (audit) => {
+        const a = audit && typeof audit === 'object' ? { ...audit } : {};
+        /** Pendência original traz a hora de obturador; não deixar `capturedAt` de erros transitórios substituir. */
+        if (bio.capturedAt) {
+          a.capturedAt = bio.capturedAt;
+        } else if (!a.capturedAt && photoUri) {
+          const fromUrl = parseCapturedAtFromHttpUrl(photoUri);
+          if (fromUrl) a.capturedAt = fromUrl;
+        }
+        for (const gk of ['captureLat', 'captureLng', 'captureAddr']) {
+          if (bio[gk] != null && String(bio[gk]).trim() !== '') {
+            a[gk] = bio[gk];
+          }
+        }
+        return a;
+      };
+
       if (result.skip) {
-        scope[key] = JSON.stringify(result.audit);
+        scope[key] = JSON.stringify(mergeCapture(result.audit));
         updated += 1;
         continue;
       }
 
-      scope[key] = JSON.stringify(result.audit);
+      scope[key] = JSON.stringify(mergeCapture(result.audit));
       updated += 1;
     }
   }

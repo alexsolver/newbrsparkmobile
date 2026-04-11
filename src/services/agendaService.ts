@@ -4,6 +4,52 @@ import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
 import { overlayExecutionStatusOutboxOnTasks } from './syncService';
+import { NotificationService } from './notifications';
+import i18n from '../i18n';
+
+const AGENDA_OVERLAP_SIG_KEY = '@brspark_agenda_overlap_sig';
+
+function parseChecklistAgendaInterval(ev: AgendaEvent): { start: number; end: number } | null {
+  if (ev.source !== 'CHECKLIST' || !ev.agendaStartAt || !ev.agendaEndAt) return null;
+  const s = new Date(ev.agendaStartAt).getTime();
+  const e = new Date(ev.agendaEndAt).getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+  return { start: s, end: e };
+}
+
+/** Marca `agendaOverlap` quando duas OS com bloco horário intersectam no tempo. */
+function markAgendaOverlaps(events: AgendaEvent[]) {
+  const rows = events
+    .map((ev) => ({ ev, iv: parseChecklistAgendaInterval(ev) }))
+    .filter((x): x is { ev: AgendaEvent; iv: { start: number; end: number } } => x.iv != null);
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i].iv;
+      const b = rows[j].iv;
+      if (a.start < b.end && b.start < a.end) {
+        rows[i].ev.agendaOverlap = true;
+        rows[j].ev.agendaOverlap = true;
+      }
+    }
+  }
+}
+
+async function notifyAgendaOverlapIfNeeded(overlapIds: string[]) {
+  const sig = overlapIds.slice().sort().join('|');
+  if (!sig) return;
+  try {
+    const prev = await AsyncStorage.getItem(AGENDA_OVERLAP_SIG_KEY);
+    if (prev === sig) return;
+    await AsyncStorage.setItem(AGENDA_OVERLAP_SIG_KEY, sig);
+    NotificationService.addNotification({
+      title: i18n.t('agenda.overlapNotificationTitle'),
+      body: i18n.t('agenda.overlapNotificationBody'),
+      category: 'alert',
+    });
+  } catch {
+    /* ignore */
+  }
+}
 
 const KEY = (email: string) => AuthService.getUserKey('agenda_events', email);
 
@@ -114,7 +160,12 @@ export const AgendaService = {
         ownerEmail
       }));
 
-    // Join all
-    return [...localEvents, ...financeEvents, ...insuranceEvents];
+    const mergedAll = [...localEvents, ...financeEvents, ...insuranceEvents];
+    markAgendaOverlaps(mergedAll);
+    const overlapIds = mergedAll.filter((e) => e.agendaOverlap).map((e) => e.id);
+    if (overlapIds.length > 0) {
+      void notifyAgendaOverlapIfNeeded(overlapIds);
+    }
+    return mergedAll;
   }
 };

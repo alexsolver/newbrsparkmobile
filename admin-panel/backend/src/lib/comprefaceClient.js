@@ -110,8 +110,18 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
           lastErr = new Error(`Resposta CompreFace inválida: ${e.message}`);
         }
       } else {
+        let parsedBody = null;
+        try {
+          parsedBody = text ? JSON.parse(text) : null;
+        } catch {
+          parsedBody = null;
+        }
         lastErr = new Error(`CompreFace recognize HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
         lastErr.status = r.status;
+        if (parsedBody && typeof parsedBody === 'object') {
+          if (parsedBody.code != null) lastErr.comprefaceCode = parsedBody.code;
+          if (parsedBody.message != null) lastErr.comprefaceMessage = String(parsedBody.message);
+        }
       }
     } catch (e) {
       lastErr = e;
@@ -124,6 +134,20 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
  * Melhor previsão: primeiro rosto na imagem, melhor subject por similaridade.
  * @returns {{ subject: string, similarity: number } | null}
  */
+/** HTTP 400 código 28 — «No face is found in the given image» (imagem sem rosto detetável). */
+function isCompreFaceNoFaceInImageError(err) {
+  if (!err) return false;
+  const st = Number(err.status);
+  if (st !== 400) return false;
+  const c = err.comprefaceCode;
+  if (c === 28 || c === '28' || Number(c) === 28) return true;
+  const sub = String(err.comprefaceMessage || '');
+  if (/no face is found/i.test(sub)) return true;
+  const msg = String(err.message || '');
+  if (/no face is found/i.test(msg)) return true;
+  return /"code"\s*:\s*28\b/.test(msg);
+}
+
 function pickTopRecognitionMatch(recognizeJson) {
   const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
   if (!results.length) return null;
@@ -447,6 +471,7 @@ module.exports = {
   parseComprefaceSubjectName,
   stripDataUrlBase64,
   recognizeWithIntegration,
+  isCompreFaceNoFaceInImageError,
   pickTopRecognitionMatch,
   ensureSubject,
   deleteFacesForSubject,

@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getLocationZoneTypeVisual } from '../utils/locationZoneTypeDisplay';
+import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../utils/locationZoneTypeDisplay';
 import { useTheme } from '../theme/ThemeContext';
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
 };
 
 /**
- * Ícone compacto do tipo de local de atendimento (independente do estado da OS).
+ * Ícone compacto do tipo de local de atendimento — chip semântico (cores status / tema).
  */
 export function LocationZoneTypeBadge({
   zoneType,
@@ -20,8 +20,10 @@ export function LocationZoneTypeBadge({
   containerSize = 24,
   style,
 }: Props) {
-  const { colors: C } = useTheme();
+  const { colors: C, dark } = useTheme();
   const { icon, label } = getLocationZoneTypeVisual(zoneType);
+  const chrome = resolveLocationZoneChrome(zoneType, C, dark);
+  const r = containerSize / 2;
 
   return (
     <View
@@ -30,16 +32,26 @@ export function LocationZoneTypeBadge({
         {
           width: containerSize,
           height: containerSize,
-          borderRadius: containerSize / 2,
-          backgroundColor: C.surfaceLow,
-          borderColor: C.border,
+          borderRadius: r,
+          backgroundColor: chrome.backgroundColor,
+          borderColor: chrome.borderColor,
+          ...Platform.select({
+            ios: {
+              shadowColor: '#0f172a',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+            },
+            android: { elevation: 2 },
+            default: {},
+          }),
         },
         style,
       ]}
       accessibilityLabel={label}
       accessibilityRole="image"
     >
-      <Ionicons name={icon} size={iconSize} color={C.textSecondary} />
+      <Ionicons name={icon} size={iconSize} color={chrome.iconColor} />
     </View>
   );
 }
@@ -48,6 +60,6 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
 });

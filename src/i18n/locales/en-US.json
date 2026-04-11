@@ -60,6 +60,8 @@
   },
   "tabs": {
     "home": "Home",
+    "agenda": "Agenda",
+    "moreActions": "More",
     "assets": "Properties",
     "costs": "Financial",
     "chat": "Chat",
@@ -74,6 +76,12 @@
   },
   "radialMenu": {
     "productivity": "My productivity"
+  },
+  "agenda": {
+    "expectedFormMinutes": "Duration: {{count}} min",
+    "overlapWarning": "Time overlap with another work order.",
+    "overlapNotificationTitle": "Agenda: overlapping times",
+    "overlapNotificationBody": "Some work orders overlap in your schedule."
   },
   "productivity": {
     "title": "My productivity",
@@ -783,6 +791,7 @@
     "noProviders": "No providers found",
     "activePortfolio": "Portfolio",
     "revisionBadge": "Revision",
+    "expectedFormScheduleLabel": "Planned time (form only)",
     "nextAgenda": "Availability",
     "sort": {
       "open": "Sort",

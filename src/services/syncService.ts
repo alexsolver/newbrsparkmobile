@@ -11,6 +11,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
+import * as Network from 'expo-network';
 import { apiFetch, getToken } from './auth';
 import { 
   getSyncQueue, clearSyncQueueItem, 
@@ -223,6 +225,8 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
              clearSyncQueueItem((item as any).id);
            }
         }
+      } else {
+        console.warn(`[SYNC] Push genérico não-OK (${res.status}), fila com ${queue.length} itens.`);
       }
     } catch (e) {
       console.warn('[SYNC] Falha de conexão durante o push genérico.', e);
@@ -233,6 +237,9 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
 }
 
 // ── Helpers genéricos ─────────────────────────────────────────────────────────
+
+/** Linhas de secção repetível — mídia aqui estava fora do upload (só a raiz era percorrida). */
+const SECTION_REPEAT_KEY_PREFIX = '__section_repeat_';
 
 /** URIs locais que precisam de upload antes do POST da execução (não enviar file:// / content:// ao servidor). */
 function isLocalMediaUri(val: unknown): val is string {
@@ -271,6 +278,29 @@ async function ensureUploadableFileUri(uri: string): Promise<string> {
   return withoutQuery;
 }
 
+/** Reanexa à URL pública os parâmetros úteis da URI local (captura/GPS) perdidos no upload. */
+function appendPreservedMediaQuery(publicUrl: string, originalLocalUri: string): string {
+  if (!publicUrl || typeof originalLocalUri !== 'string') return publicUrl;
+  const qi = originalLocalUri.indexOf('?');
+  if (qi < 0) return publicUrl;
+  const rawQ = originalLocalUri.slice(qi + 1);
+  if (!rawQ.trim()) return publicUrl;
+  try {
+    const sp = new URLSearchParams(rawQ);
+    const qp = new URLSearchParams();
+    for (const k of ['live', 'capturedAt', 'lat', 'lng', 'addr']) {
+      const v = sp.get(k);
+      if (v != null && String(v).trim() !== '') qp.set(k, v);
+    }
+    if ([...qp.keys()].length === 0) return publicUrl;
+    const frag = qp.toString();
+    const sep = publicUrl.includes('?') ? '&' : '?';
+    return `${publicUrl}${sep}${frag}`;
+  } catch {
+    return publicUrl;
+  }
+}
+
 async function uploadOneLocalMediaField(
   localUriWithMaybeQuery: string,
   payload: { taskId?: string; templateId?: string; ownerEmail?: string },
@@ -286,21 +316,21 @@ async function uploadOneLocalMediaField(
   return upRes?.url || null;
 }
 
-/** Substitui file:// / content:// / arrays de URIs por URLs públicas antes de POST /executions. */
-async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
-  if (!payload?.responses || typeof payload.responses !== 'object') return;
-  const responses = payload.responses as Record<string, unknown>;
-
-  for (const key of Object.keys(responses)) {
+/** Upload de mídia local num mapa plano de respostas (raiz ou uma linha de secção repetível). */
+async function uploadLocalMediaInFlatResponseRecord(
+  record: Record<string, unknown>,
+  payload: { taskId?: string; templateId?: string; ownerEmail?: string }
+): Promise<void> {
+  for (const key of Object.keys(record)) {
     if (key.startsWith('__')) continue;
 
-    const val = responses[key];
+    const val = record[key];
 
     if (typeof val === 'string' && isLocalMediaUri(val)) {
       try {
         const url = await uploadOneLocalMediaField(val, payload, key, '');
         if (url) {
-          responses[key] = url;
+          record[key] = appendPreservedMediaQuery(url, val);
           console.log(`[SYNC] Campo ${key} → URL remota`);
         }
       } catch (e: any) {
@@ -318,7 +348,7 @@ async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
           try {
             const url = await uploadOneLocalMediaField(item, payload, key, `_i${i}`);
             if (url) {
-              next.push(url);
+              next.push(appendPreservedMediaQuery(url, item));
               anyChange = true;
               continue;
             }
@@ -328,9 +358,347 @@ async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
         }
         next.push(item);
       }
-      if (anyChange) responses[key] = next;
+      if (anyChange) record[key] = next;
     }
   }
+}
+
+/** Conta URIs de mídia local na raiz e em todas as linhas `__section_repeat_*`. */
+function countLocalMediaUrisInResponsesTree(responses: Record<string, unknown>): number {
+  let n = 0;
+  const bump = (flat: Record<string, unknown>) => {
+    for (const key of Object.keys(flat)) {
+      if (key.startsWith('__')) continue;
+      const v = flat[key];
+      if (typeof v === 'string' && isLocalMediaUri(v)) n += 1;
+      else if (Array.isArray(v)) {
+        for (const item of v) {
+          if (typeof item === 'string' && isLocalMediaUri(item)) n += 1;
+        }
+      }
+    }
+  };
+  bump(responses);
+  for (const k of Object.keys(responses)) {
+    if (!k.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
+    const rows = responses[k];
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (row && typeof row === 'object' && !Array.isArray(row)) bump(row as Record<string, unknown>);
+    }
+  }
+  return n;
+}
+
+/** Substitui file:// / content:// / arrays de URIs por URLs públicas antes de POST /executions (raiz + secções repetíveis). */
+async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
+  if (!payload?.responses || typeof payload.responses !== 'object') return;
+  const responses = payload.responses as Record<string, unknown>;
+
+  await uploadLocalMediaInFlatResponseRecord(responses, payload);
+
+  for (const key of Object.keys(responses)) {
+    if (!key.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
+    const rows = responses[key];
+    if (!Array.isArray(rows)) continue;
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri];
+      if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+      await uploadLocalMediaInFlatResponseRecord(row as Record<string, unknown>, payload);
+    }
+  }
+}
+
+function formatReverseGeocodeLine(p: Location.LocationGeocodedAddress): string {
+  return `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`;
+}
+
+function transitNeedsOfflineAddressFill(o: Record<string, unknown>): boolean {
+  const action = String(o.action || '');
+  if (action !== 'SAIDA' && action !== 'CHEGADA') return false;
+  if (o.geofence != null) return false;
+  const c = o.coordinates as { lat?: unknown; lng?: unknown } | undefined;
+  const lat = Number(c?.lat);
+  const lng = Number(c?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return false;
+  const addr = String(o.address || '').trim();
+  if (addr === 'A obter endereço…' || addr === 'A obter endereço...') return true;
+  if (!addr) return true;
+  return false;
+}
+
+/**
+ * Antes do POST da outbox (com rede): preenche moradas de SAIDA/CHEGADA que ficaram em «A obter endereço…»
+ * quando a conclusão foi offline — mesmo raciocínio do IIFE no checklist, mas aplicado ao payload em fila.
+ */
+async function maybeEnrichTransitJsonString(raw: string): Promise<string | null> {
+  const t = raw.trim();
+  if (!t.startsWith('{')) return null;
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(t) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (!transitNeedsOfflineAddressFill(o)) return null;
+  const c = o.coordinates as { lat?: unknown; lng?: unknown };
+  const lat = Number(c?.lat);
+  const lng = Number(c?.lng);
+  try {
+    const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+    if (rev?.length) {
+      const line = formatReverseGeocodeLine(rev[0]).trim();
+      if (!line) return null;
+      return JSON.stringify({ ...o, address: line });
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function locationPickNeedsAddressFill(o: Record<string, unknown>): boolean {
+  if (o.version !== 1) return false;
+  const gps = o.gps as { lat?: unknown; lng?: unknown } | undefined;
+  const pin = o.pin as { lat?: unknown; lng?: unknown } | undefined;
+  if (!gps || !pin) return false;
+  const gl = Number(gps.lat);
+  const gg = Number(gps.lng);
+  const pl = Number(pin.lat);
+  const pg = Number(pin.lng);
+  if (![gl, gg, pl, pg].every((n) => Number.isFinite(n))) return false;
+  const pend = (s: string) =>
+    !s.trim() || s.trim() === 'A obter endereço…' || s.trim() === 'A obter endereço...';
+  return pend(String(o.addressGps ?? '')) || pend(String(o.addressPin ?? ''));
+}
+
+async function maybeEnrichLocationPickJsonString(raw: string): Promise<string | null> {
+  const t = raw.trim();
+  if (!t.startsWith('{')) return null;
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(t) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (!locationPickNeedsAddressFill(o)) return null;
+  const gps = o.gps as { lat: number; lng: number };
+  const pin = o.pin as { lat: number; lng: number };
+  const prevG = String(o.addressGps ?? '').trim();
+  const prevP = String(o.addressPin ?? '').trim();
+  const pend = (s: string) =>
+    !s || s === 'A obter endereço…' || s === 'A obter endereço...';
+  const fallback = 'Endereço indisponível (rede ou mapas).';
+  let lineG: string | null = null;
+  let lineP: string | null = null;
+  try {
+    const [r1, r2] = await Promise.all([
+      pend(prevG) ? Location.reverseGeocodeAsync({ latitude: gps.lat, longitude: gps.lng }) : Promise.resolve(null),
+      pend(prevP) ? Location.reverseGeocodeAsync({ latitude: pin.lat, longitude: pin.lng }) : Promise.resolve(null),
+    ]);
+    if (r1?.length) {
+      const ln = formatReverseGeocodeLine(r1[0]).trim();
+      if (ln) lineG = ln;
+    }
+    if (r2?.length) {
+      const ln = formatReverseGeocodeLine(r2[0]).trim();
+      if (ln) lineP = ln;
+    }
+  } catch {
+    /* mantém nulls */
+  }
+  const nextG = pend(prevG) ? lineG || fallback : prevG;
+  const nextP = pend(prevP) ? lineP || fallback : prevP;
+  return JSON.stringify({ ...o, addressGps: nextG, addressPin: nextP });
+}
+
+async function maybeEnrichGpsBackedJsonString(raw: string): Promise<string | null> {
+  const t = await maybeEnrichTransitJsonString(raw);
+  if (t != null) return t;
+  return maybeEnrichLocationPickJsonString(raw);
+}
+
+async function enrichGpsDerivedAddressesInResponsesTree(responses: Record<string, unknown>): Promise<number> {
+  let n = 0;
+  for (const k of Object.keys(responses)) {
+    if (k.startsWith('__') && !k.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
+    const v = responses[k];
+    if (typeof v === 'string') {
+      const next = await maybeEnrichGpsBackedJsonString(v);
+      if (next != null) {
+        responses[k] = next;
+        n++;
+      }
+    } else if (Array.isArray(v)) {
+      for (let i = 0; i < v.length; i++) {
+        const row = v[i];
+        if (row && typeof row === 'object' && !Array.isArray(row)) {
+          n += await enrichGpsDerivedAddressesInResponsesTree(row as Record<string, unknown>);
+        }
+      }
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      n += await enrichGpsDerivedAddressesInResponsesTree(v as Record<string, unknown>);
+    }
+  }
+  return n;
+}
+
+async function enrichPendingGpsDerivedAddressesInOutbox(outbox: any[]): Promise<number> {
+  try {
+    const netState = await Network.getNetworkStateAsync();
+    if (netState.isConnected !== true) return 0;
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  for (const payload of outbox) {
+    const r = payload?.responses;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    total += await enrichGpsDerivedAddressesInResponsesTree(r as Record<string, unknown>);
+  }
+  return total;
+}
+
+const FACIAL_BIOMETRIC_KEY_SUFFIX = '__biometric';
+const FACIAL_ADDR_FALLBACK_SYNC = 'Endereço indisponível (rede ou mapas).';
+
+function parseLatLngFromUriQueryForFacialSync(uri: string): { lat: number; lng: number } | null {
+  const qi = uri.indexOf('?');
+  if (qi < 0) return null;
+  try {
+    const sp = new URLSearchParams(uri.slice(qi + 1));
+    const lat = Number(sp.get('lat'));
+    const lng = Number(sp.get('lng'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}
+
+function facialLineFromGeocodeEntry(r: Location.LocationGeocodedAddress): string {
+  return `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`.trim();
+}
+
+function applyFacialAddrToLocalMediaUri(uri: string, line: string, lat: number, lng: number): string {
+  const qi = uri.indexOf('?');
+  const base = qi >= 0 ? uri.slice(0, qi) : uri;
+  let params: URLSearchParams;
+  try {
+    params = qi >= 0 ? new URLSearchParams(uri.slice(qi + 1)) : new URLSearchParams();
+  } catch {
+    return uri;
+  }
+  params.set('addr', line);
+  const curLat = params.get('lat');
+  const curLng = params.get('lng');
+  if (curLat == null || String(curLat).trim() === '') params.set('lat', String(lat));
+  if (curLng == null || String(curLng).trim() === '') params.set('lng', String(lng));
+  return `${base}?${params.toString()}`;
+}
+
+/**
+ * Antes do upload: preenche `captureAddr` em `{campo}__biometric` e `addr=` na URI local quando há lat/lng
+ * (corrida com `mergeAddrIntoMediaUriIfStillCurrent` ou falha silenciosa do reverse geocode na UI).
+ */
+async function enrichFacialBiometricAddressesInFlatRecord(record: Record<string, unknown>): Promise<number> {
+  let n = 0;
+  for (const key of Object.keys(record)) {
+    if (key.startsWith('__') && !key.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
+    if (!key.endsWith(FACIAL_BIOMETRIC_KEY_SUFFIX)) continue;
+    const raw = record[key];
+    if (typeof raw !== 'string' || !raw.trim().startsWith('{')) continue;
+    let bio: Record<string, unknown>;
+    try {
+      bio = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!bio || typeof bio !== 'object' || Array.isArray(bio)) continue;
+    if (bio.captureAddr != null && String(bio.captureAddr).trim() !== '') continue;
+
+    let lat = Number(bio.captureLat);
+    let lng = Number(bio.captureLng);
+    const fieldId = key.slice(0, -FACIAL_BIOMETRIC_KEY_SUFFIX.length);
+    const mediaVal = record[fieldId];
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const candidates: string[] = [];
+      if (typeof mediaVal === 'string' && mediaVal) candidates.push(mediaVal);
+      else if (Array.isArray(mediaVal)) {
+        for (const it of mediaVal) {
+          if (typeof it === 'string' && it) candidates.push(it);
+        }
+      }
+      let parsed: { lat: number; lng: number } | null = null;
+      for (const u of candidates) {
+        parsed = parseLatLngFromUriQueryForFacialSync(u);
+        if (parsed) break;
+      }
+      if (!parsed) continue;
+      lat = parsed.lat;
+      lng = parsed.lng;
+    }
+
+    let line = '';
+    try {
+      const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      if (rev?.length) line = facialLineFromGeocodeEntry(rev[0]!);
+    } catch {
+      line = '';
+    }
+    if (!line) line = FACIAL_ADDR_FALLBACK_SYNC;
+
+    record[key] = JSON.stringify({
+      ...bio,
+      captureLat: String(lat),
+      captureLng: String(lng),
+      captureAddr: line,
+    });
+
+    if (typeof mediaVal === 'string' && isLocalMediaUri(mediaVal)) {
+      record[fieldId] = applyFacialAddrToLocalMediaUri(mediaVal, line, lat, lng);
+    } else if (Array.isArray(mediaVal)) {
+      record[fieldId] = mediaVal.map((it) =>
+        typeof it === 'string' && isLocalMediaUri(it) ? applyFacialAddrToLocalMediaUri(it, line, lat, lng) : it
+      );
+    }
+    n += 1;
+  }
+  return n;
+}
+
+async function enrichFacialBiometricAddressesInResponsesTree(responses: Record<string, unknown>): Promise<number> {
+  let n = await enrichFacialBiometricAddressesInFlatRecord(responses);
+  for (const k of Object.keys(responses)) {
+    if (!k.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
+    const rows = responses[k];
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (row && typeof row === 'object' && !Array.isArray(row)) {
+        n += await enrichFacialBiometricAddressesInFlatRecord(row as Record<string, unknown>);
+      }
+    }
+  }
+  return n;
+}
+
+async function enrichFacialBiometricAddressesInOutbox(outbox: any[]): Promise<number> {
+  try {
+    const netState = await Network.getNetworkStateAsync();
+    if (netState.isConnected !== true) return 0;
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  for (const payload of outbox) {
+    const r = payload?.responses;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    total += await enrichFacialBiometricAddressesInResponsesTree(r as Record<string, unknown>);
+  }
+  return total;
 }
 
 async function pushChecklistOutbox() {
@@ -360,10 +728,62 @@ async function pushChecklistOutbox() {
 
      if (outbox.length === 0) return;
 
+     const gpsAddrFilled = await enrichPendingGpsDerivedAddressesInOutbox(outbox);
+     const facialAddrFilled = await enrichFacialBiometricAddressesInOutbox(outbox);
+     if (gpsAddrFilled > 0 || facialAddrFilled > 0) {
+       await AsyncStorage.setItem('@brspark_outbox', JSON.stringify(outbox));
+       for (const p of outbox) {
+         if (p?.taskId) {
+           try {
+             await AsyncStorage.setItem(`@brspark_execution_${p.taskId}`, JSON.stringify(p));
+           } catch {
+             /* ignore */
+           }
+         }
+       }
+       if (gpsAddrFilled > 0) {
+         console.log(
+           `[SYNC] Moradas (deslocamento / mapa) pendentes enriquecidas na outbox (${gpsAddrFilled}) antes do POST (rede disponível).`
+         );
+       }
+       if (facialAddrFilled > 0) {
+         console.log(
+           `[SYNC] Moradas faciais (biometria + URI local) enriquecidas na outbox (${facialAddrFilled}) antes do POST.`
+         );
+       }
+     }
+
      const syncedIds: any[] = [];
      for (const payload of outbox) {
          try {
              await uploadLocalMediaInChecklistPayload(payload);
+             // #region agent log
+             void (() => {
+               try {
+                 const r = payload?.responses;
+                 if (!r || typeof r !== 'object') return;
+                 const left = countLocalMediaUrisInResponsesTree(r as Record<string, unknown>);
+                 fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fd3da5' },
+                   body: JSON.stringify({
+                     sessionId: 'fd3da5',
+                     hypothesisId: 'H1-H6-repeat-upload',
+                     location: 'syncService.ts:pushChecklistOutbox',
+                     message: 'after uploadLocalMediaInChecklistPayload',
+                     data: {
+                       taskId: payload.taskId,
+                       localMediaRemaining: left,
+                       facialAddrPrefill: facialAddrFilled,
+                     },
+                     timestamp: Date.now(),
+                   }),
+                 }).catch(() => {});
+               } catch {
+                 /* ignore */
+               }
+             })();
+             // #endregion
 
              const res = await apiFetch('/api/checklists/executions', {
                  method: 'POST',
@@ -395,8 +815,6 @@ async function pushChecklistOutbox() {
      console.warn('[SYNC] Erro critico lendo outbox', e);
   }
 }
-
-// ── Helpers genéricos ─────────────────────────────────────────────────────────
 
 /** Faz push dos dados locais para o servidor */
 async function pushModule(endpoint: string, storageKey: string): Promise<void> {
@@ -826,6 +1244,26 @@ function stripStaleReopenFromMergedMetadata(
   if (!remoteHasRevisionVisitActive(rMeta)) delete merged.revisionVisitActive;
 }
 
+function pickExpectedFormDurationFromTask(task: any): number | null {
+  const v = task?.expectedFormDurationMinutes;
+  if (v == null || !Number.isFinite(Number(v)) || Number(v) <= 0) return null;
+  return Math.floor(Number(v));
+}
+
+function mergeDurationEtaPreserve(remote: any, prev: any, base: Record<string, unknown>): Record<string, unknown> {
+  const expPrev = pickExpectedFormDurationFromTask(prev);
+  const expRemote = pickExpectedFormDurationFromTask(remote);
+  const etaR = remote?.etaMinutes;
+  const etaP = prev?.etaMinutes;
+  const hasEtaRemote = etaR != null && Number.isFinite(Number(etaR));
+  const hasEtaPrev = etaP != null && Number.isFinite(Number(etaP));
+  return {
+    ...base,
+    ...(expRemote == null && expPrev != null ? { expectedFormDurationMinutes: expPrev } : {}),
+    ...(!hasEtaRemote && hasEtaPrev ? { etaMinutes: Math.floor(Number(etaP)) } : {}),
+  };
+}
+
 function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): any {
   const rMeta = parseTaskMetadata(remote?.metadata);
   const lsr = pickLastSubmittedRevision(remote, prev);
@@ -841,13 +1279,13 @@ function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): a
       executionPaused: false,
     };
     stripStaleReopenFromMergedMetadata(rMeta, mergedMeta);
-    return {
+    return mergeDurationEtaPreserve(remote, prev, {
       ...remote,
       osNumber: pickOsNumber(remote, prev),
       lastSubmittedRevision: lsr,
       status: 'IN_PROGRESS',
       metadata: mergedMeta,
-    };
+    });
   }
 
   if (isPausedLikeTask(prev) && !isPausedLikeTask(remote)) {
@@ -860,22 +1298,22 @@ function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): a
         lastPauseReasonSummary: pMeta.lastPauseReasonSummary ?? rMeta.lastPauseReasonSummary,
       };
       stripStaleReopenFromMergedMetadata(rMeta, mergedMeta);
-      return {
+      return mergeDurationEtaPreserve(remote, prev, {
         ...remote,
         osNumber: pickOsNumber(remote, prev),
         lastSubmittedRevision: lsr,
         status: 'PAUSED',
         metadata: mergedMeta,
-      };
+      });
     }
   }
 
-  return {
+  return mergeDurationEtaPreserve(remote, prev, {
     ...remote,
     metadata: { ...rMeta },
     osNumber: pickOsNumber(remote, prev),
     lastSubmittedRevision: lsr,
-  };
+  });
 }
 
 /** PATCH de execução ainda na fila (offline ou falha): deve vencer sobre o GET /tasks até sincronizar. */
@@ -953,6 +1391,53 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
   } catch {
     return [];
   }
+}
+
+/**
+ * OS com itens na fila que o `pushSyncQueue` envia: `@brspark_outbox` e `@brspark_execution_status_outbox`.
+ *
+ * **Não** inclui `@draft_tsk_*`: rascunho do checklist só sobe após conclusão (entra na outbox);
+ * marcar rascunho aqui deixava a nuvem “pendente” para sempre com rede boa, sem sync automático possível.
+ */
+export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<string>> {
+  const ids = new Set<string>();
+
+  try {
+    const outboxRaw = await AsyncStorage.getItem('@brspark_outbox');
+    let outbox: unknown[] = [];
+    try {
+      outbox = outboxRaw ? JSON.parse(outboxRaw) : [];
+    } catch {
+      outbox = [];
+    }
+    if (Array.isArray(outbox)) {
+      for (const o of outbox) {
+        const tid = (o as { taskId?: unknown })?.taskId;
+        if (tid != null && String(tid).trim()) ids.add(String(tid));
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] getTaskIdsWithPendingLocalSyncOverlay outbox:', e);
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    let arr: { taskId?: string; body?: unknown }[] = [];
+    try {
+      arr = raw ? JSON.parse(raw) : [];
+    } catch {
+      arr = [];
+    }
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        if (item?.taskId != null && String(item.taskId).trim()) ids.add(String(item.taskId));
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC] getTaskIdsWithPendingLocalSyncOverlay execution status:', e);
+  }
+
+  return ids;
 }
 
 const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);

@@ -790,6 +790,11 @@ model ChecklistExecution {
   locationPolygon  Json?    // [[lat,lng],...] — polígono de área ou pontos do trajeto
   etaMinutes       Int?     // Tempo estimado de chegada atualizado via telemetria
 
+  /// Início do bloco na agenda do técnico (planejado no despacho).
+  scheduledStartAt DateTime? @map("scheduled_start_at")
+  /// Snapshot: minutos previstos para preencher o formulário (sem deslocamento); múltiplos de 5; imutável após despacho.
+  expectedFormDurationMinutes Int? @map("expected_form_duration_minutes")
+
   // Auditoria (Provas WFM)
   gpsLocation Json?    // {lat, lng, radius} coletado ao concluir
   startedAt   DateTime?

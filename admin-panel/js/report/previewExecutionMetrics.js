@@ -212,12 +212,21 @@ export function resolveProductivityFromTask(t) {
   const bm = t && t.businessMetrics;
   if (bm && bm.productivity && typeof bm.productivity === 'object') {
     const p = bm.productivity;
+    const fe = bm.formExecution && typeof bm.formExecution === 'object' ? bm.formExecution : null;
     return {
       osWallSec: p.osWallSec != null ? Number(p.osWallSec) : null,
       transitSec: p.transitSec != null ? Number(p.transitSec) : null,
       exTransitSec: p.exTransitSec != null ? Number(p.exTransitSec) : null,
       formFillSec: p.formFillSec != null ? Number(p.formFillSec) : null,
       formActiveSec: p.formActiveSec != null ? Number(p.formActiveSec) : null,
+      plannedFormDurationMinutes:
+        fe && fe.plannedDurationMinutes != null ? Number(fe.plannedDurationMinutes) : null,
+      plannedFormDurationSec:
+        fe && fe.plannedDurationSec != null ? Number(fe.plannedDurationSec) : null,
+      pctFormFillVsPlanned:
+        fe && fe.pctFillVsPlanned != null && Number.isFinite(Number(fe.pctFillVsPlanned))
+          ? Number(fe.pctFillVsPlanned)
+          : null,
     };
   }
   const responses = (t && t.responses) || {};
@@ -235,12 +244,27 @@ export function resolveProductivityFromTask(t) {
     osWallSec != null && transitSec != null ? Math.max(0, osWallSec - transitSec) : null;
   const fillSec = Number(meta.formFillDurationSeconds ?? meta.durationSeconds ?? responses.__form_fill_duration_sec);
   const activeSec = Number(meta.formActiveSeconds ?? responses.__form_active_seconds_final);
+  const plannedMinRaw = t && t.expectedFormDurationMinutes;
+  const plannedFormDurationMinutes =
+    plannedMinRaw != null && Number.isFinite(Number(plannedMinRaw)) && Number(plannedMinRaw) > 0
+      ? Math.floor(Number(plannedMinRaw))
+      : null;
+  const plannedFormDurationSec =
+    plannedFormDurationMinutes != null ? plannedFormDurationMinutes * 60 : null;
+  const fillSecFloor = Number.isFinite(fillSec) && fillSec >= 0 ? Math.floor(fillSec) : null;
+  const pctFormFillVsPlanned =
+    plannedFormDurationSec != null && plannedFormDurationSec > 0 && fillSecFloor != null
+      ? Math.round(((fillSecFloor - plannedFormDurationSec) / plannedFormDurationSec) * 1000) / 10
+      : null;
   return {
     osWallSec: Number.isFinite(osWallSec) ? osWallSec : null,
     transitSec,
     exTransitSec,
     formFillSec: Number.isFinite(fillSec) && fillSec >= 0 ? Math.floor(fillSec) : null,
     formActiveSec: Number.isFinite(activeSec) && activeSec >= 0 ? Math.floor(activeSec) : null,
+    plannedFormDurationMinutes,
+    plannedFormDurationSec,
+    pctFormFillVsPlanned,
   };
 }
 

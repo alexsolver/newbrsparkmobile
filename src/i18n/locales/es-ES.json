@@ -60,6 +60,8 @@
   },
   "tabs": {
     "home": "Inicio",
+    "agenda": "Agenda",
+    "moreActions": "Más",
     "assets": "Bienes",
     "costs": "Finanzas",
     "chat": "Chat",
@@ -74,6 +76,12 @@
   },
   "radialMenu": {
     "productivity": "Mi productividad"
+  },
+  "agenda": {
+    "expectedFormMinutes": "Duración: {{count}} min",
+    "overlapWarning": "Superposición horaria con otra orden de trabajo.",
+    "overlapNotificationTitle": "Agenda: horarios superpuestos",
+    "overlapNotificationBody": "Hay órdenes de trabajo con intervalos superpuestos en tu agenda."
   },
   "productivity": {
     "title": "Mi productividad",
@@ -783,6 +791,7 @@
     "noProviders": "Ningún proveedor encontrado",
     "activePortfolio": "Portafolio",
     "revisionBadge": "Revisión",
+    "expectedFormScheduleLabel": "Tiempo previsto (formulario)",
     "nextAgenda": "Disponibilidad",
     "sort": {
       "open": "Ordenar",

@@ -27,6 +27,14 @@ const ADMIN_MENU_ITEMS = [
   { id: 'docs', label: 'Arquivos', icon: 'folder-open-outline', color: '#3B82F6', route: '/documents/new' },
 ];
 
+/**
+ * Altura total da barra inferior custom (deve coincidir com `(tabs)/_layout.tsx`):
+ * paddingTop da linha + minHeight + paddingBottom da barra.
+ */
+export function tabBarOuterHeight(insetsBottom: number): number {
+  return 6 + 52 + Math.max(insetsBottom, 8);
+}
+
 const PROVIDER_MENU_ITEMS = [
   { id: 'mobile_stock', label: 'Estoque técnico', icon: 'cube-outline', color: '#0369a1', route: '/stock/mobile' },
   {
@@ -73,6 +81,9 @@ function AdminRadialFan({
   insetsBottom,
   textSecondary,
   onItemPress,
+  tabBarSlot,
+  triggerColor,
+  triggerLabel,
 }: {
   isOpen: boolean;
   closeMenu: () => void;
@@ -80,6 +91,11 @@ function AdminRadialFan({
   insetsBottom: number;
   textSecondary: string;
   onItemPress: (item: (typeof ADMIN_MENU_ITEMS)[number]) => void;
+  /** Gatilho como item da barra inferior (estilo iFood) em vez do botão circular flutuante */
+  tabBarSlot?: boolean;
+  /** Cor do ícone e do rótulo do gatilho (ex.: ativo escuro / inativo cinza) */
+  triggerColor: string;
+  triggerLabel: string;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -105,20 +121,39 @@ function AdminRadialFan({
   const n = ADMIN_MENU_ITEMS.length;
   const denom = Math.max(1, n - 1);
 
+  const anchorBottom = tabBarSlot ? tabBarOuterHeight(insetsBottom) : insetsBottom + 16;
+
   return (
     <>
-      <TouchableOpacity style={radialStyles.addBtn} activeOpacity={0.8} onPress={onToggle}>
-        <Animated.View style={{ transform: [{ rotate: spin }] }}>
-          <Ionicons name="add" size={32} color={textSecondary} />
-        </Animated.View>
-      </TouchableOpacity>
+      {tabBarSlot ? (
+        <TouchableOpacity
+          style={radialStyles.tabBarTrigger}
+          activeOpacity={0.75}
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityLabel={triggerLabel}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="add" size={24} color={triggerColor} />
+          </Animated.View>
+          <Text style={[radialStyles.tabBarTriggerLabel, { color: triggerColor }]} numberOfLines={1}>
+            {triggerLabel}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity style={radialStyles.addBtn} activeOpacity={0.8} onPress={onToggle}>
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="add" size={32} color={textSecondary} />
+          </Animated.View>
+        </TouchableOpacity>
+      )}
 
       <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeMenu}>
         <TouchableWithoutFeedback onPress={closeMenu}>
           <View style={radialStyles.overlay}>
             <Animated.View style={[radialStyles.backdrop, { opacity: backdropOpacity }]} />
 
-            <View style={[radialStyles.menuAnchor, { bottom: insetsBottom + 16 }]}>
+            <View style={[radialStyles.menuAnchor, { bottom: anchorBottom }]}>
               <Animated.View style={StyleSheet.absoluteFillObject}>
                 {ADMIN_MENU_ITEMS.map((item, index) => {
                   const progress = n === 1 ? 0.5 : index / denom;
@@ -181,7 +216,7 @@ function AdminRadialFan({
   );
 }
 
-export function FloatingRadialMenu() {
+export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolean }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
@@ -200,11 +235,27 @@ export function FloatingRadialMenu() {
   };
 
   if (mode === 'PROVIDER') {
+    const triggerColor = isOpen ? C.slate : C.textSecondary;
     return (
-      <View style={listStyles.container}>
-        <TouchableOpacity style={listStyles.addBtn} activeOpacity={0.8} onPress={() => setIsOpen(true)}>
-          <Ionicons name="add" size={32} color={C.textSecondary} />
-        </TouchableOpacity>
+      <View style={tabBarSlot ? listStyles.tabBarSlotRoot : listStyles.container}>
+        {tabBarSlot ? (
+          <TouchableOpacity
+            style={listStyles.tabBarTrigger}
+            activeOpacity={0.75}
+            onPress={() => setIsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('tabs.moreActions')}
+          >
+            <Ionicons name="add" size={24} color={triggerColor} />
+            <Text style={[listStyles.tabBarTriggerLabel, { color: triggerColor }]} numberOfLines={1}>
+              {t('tabs.moreActions')}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={listStyles.addBtn} activeOpacity={0.8} onPress={() => setIsOpen(true)}>
+            <Ionicons name="add" size={32} color={C.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         <Modal visible={isOpen} animationType="slide" onRequestClose={closeMenu}>
           <View style={listStyles.modalRoot}>
@@ -267,7 +318,7 @@ export function FloatingRadialMenu() {
   }
 
   return (
-    <View style={radialStyles.container}>
+    <View style={tabBarSlot ? radialStyles.tabBarSlotRoot : radialStyles.container}>
       <AdminRadialFan
         isOpen={isOpen}
         closeMenu={closeMenu}
@@ -275,6 +326,9 @@ export function FloatingRadialMenu() {
         insetsBottom={insets.bottom}
         textSecondary={C.textSecondary}
         onItemPress={handlePress}
+        tabBarSlot={tabBarSlot}
+        triggerColor={isOpen ? C.slate : C.textSecondary}
+        triggerLabel={t('tabs.moreActions')}
       />
     </View>
   );
@@ -284,6 +338,25 @@ const radialStyles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  tabBarSlotRoot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
+  tabBarTrigger: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    minHeight: 48,
+  },
+  tabBarTriggerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
   },
   addBtn: {
     width: 64,
@@ -354,6 +427,25 @@ const listStyles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  tabBarSlotRoot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
+  tabBarTrigger: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    minHeight: 48,
+  },
+  tabBarTriggerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
   },
   addBtn: {
     width: 64,

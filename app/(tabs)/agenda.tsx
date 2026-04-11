@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SectionList, LayoutAnimation, UIManager, Platform, ScrollView } from 'react-native';
 
 // Enable LayoutAnimation on Android
@@ -12,11 +12,13 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useAppContext } from '../../src/context/AppContext';
 import { AgendaService } from '../../src/services/agendaService';
-import { AgendaEvent } from '../../src/types/agenda';
+import type { AgendaEvent } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database/index';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import { computeTimedAgendaSegments } from '../../src/utils/agendaSlotLayout';
 
 // Configura idioma do calendário para Português
 LocaleConfig.locales['pt-br'] = {
@@ -31,9 +33,36 @@ LocaleConfig.defaultLocale = 'pt-br';
 const toDateString = (d: Date) => d.toISOString().split('T')[0];
 const getTodayString = () => toDateString(new Date());
 
+/** Dias de calendário cobertos pelo evento (bloco horário ou legado por data). */
+function collectAgendaDayKeys(ev: AgendaEvent): string[] {
+  if (ev.agendaStartAt && ev.agendaEndAt) {
+    const s = new Date(ev.agendaStartAt);
+    const e = new Date(ev.agendaEndAt);
+    if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) return [];
+    const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const endD = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+    const days: string[] = [];
+    while (cur.getTime() <= endD.getTime()) {
+      days.push(toDateString(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return days.length ? days : [toDateString(s)];
+  }
+  const start = new Date(ev.startDate);
+  const end = new Date(ev.endDate);
+  const days: string[] = [];
+  let current = new Date(start);
+  while (current <= end) {
+    days.push(toDateString(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
+
 export default function AgendaScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createAgendaStyles(C), [C]);
   
@@ -71,16 +100,8 @@ export default function AgendaScreen() {
     const marks: Record<string, any> = {};
 
     events.forEach(ev => {
-      const start = new Date(ev.startDate);
-      const end = new Date(ev.endDate);
       const col = ev.color || MEDIA_TAG_COLORS.BEFORE;
-      
-      const days = [];
-      let current = new Date(start);
-      while (current <= end) {
-        days.push(toDateString(current));
-        current.setDate(current.getDate() + 1);
-      }
+      const days = collectAgendaDayKeys(ev);
 
       if (days.length === 1) {
         const d = days[0];
@@ -113,16 +134,11 @@ export default function AgendaScreen() {
   const listData = useMemo(() => {
     const map: Record<string, AgendaEvent[]> = {};
     events.forEach(ev => {
-      const start = new Date(ev.startDate);
-      const end = new Date(ev.endDate);
-      let current = new Date(start);
-      while (current <= end) {
-        const dStr = toDateString(current);
+      const dayKeys = collectAgendaDayKeys(ev);
+      dayKeys.forEach((dStr) => {
         if (!map[dStr]) map[dStr] = [];
-        // Prevent duplicate refs if same event has multiple categories? No, just push.
         map[dStr].push(ev);
-        current.setDate(current.getDate() + 1);
-      }
+      });
     });
 
     const dayEvents = map[selectedDate] || [];
@@ -139,9 +155,11 @@ export default function AgendaScreen() {
     const ev = item as AgendaEvent;
     const asset = assets.find(a => a.id === ev.assetId);
     
+    const cardBorder = ev.agendaOverlap ? '#EF4444' : ev.color || C.border;
+
     return (
       <TouchableOpacity 
-        style={[styles.itemCard, { borderLeftColor: ev.color || C.border }]}
+        style={[styles.itemCard, { borderLeftColor: cardBorder }]}
         activeOpacity={0.7}
         onPress={() => {
            // Se a fonte for CHECKLIST, abre o motor dinâmico
@@ -165,6 +183,14 @@ export default function AgendaScreen() {
           </View>
         </View>
         {ev.description && <Text style={styles.itemDesc}>{ev.description}</Text>}
+        {ev.expectedFormDurationMinutes != null && Number.isFinite(Number(ev.expectedFormDurationMinutes)) ? (
+          <Text style={[styles.itemDesc, { fontWeight: '700', color: C.accent }]}>
+            {t('agenda.expectedFormMinutes', { count: Math.floor(Number(ev.expectedFormDurationMinutes)) })}
+          </Text>
+        ) : null}
+        {ev.agendaOverlap ? (
+          <Text style={[styles.itemDesc, { color: '#DC2626', fontWeight: '700' }]}>{t('agenda.overlapWarning')}</Text>
+        ) : null}
         {asset && (
           <View style={styles.itemMeta}>
             <Ionicons name="home-outline" size={12} color={C.textLight} />
@@ -210,8 +236,8 @@ export default function AgendaScreen() {
     const rws = assets.map((a) => ({ id: a.id, title: a.title, events: [] as AgendaEvent[] }));
     const others = { id: 'other', title: 'Geral', events: [] as AgendaEvent[] };
     events.forEach((ev) => {
-      const eEnd = new Date(ev.endDate);
-      eEnd.setHours(23, 59, 59, 999);
+      const eEnd = ev.agendaEndAt ? new Date(ev.agendaEndAt) : new Date(ev.endDate);
+      if (!ev.agendaEndAt) eEnd.setHours(23, 59, 59, 999);
       if (eEnd.getTime() < TODAY.getTime()) return;
       const r = rws.find((x) => x.id === ev.assetId);
       if (r) r.events.push(ev);
@@ -331,44 +357,116 @@ export default function AgendaScreen() {
                   ))}
 
                   {r.events.map((ev, evIndex) => {
-                    const sDate = new Date(ev.startDate); sDate.setHours(0,0,0,0);
-                    const eDate = new Date(ev.endDate); eDate.setHours(0,0,0,0);
-                    
-                    const leftDays = Math.round((sDate.getTime() - TODAY.getTime()) / (1000*60*60*24));
-                    const durationDays = Math.round((eDate.getTime() - sDate.getTime()) / (1000*60*60*24)) + 1;
+                    const topPos = 6 + (Math.floor(evIndex / 2) % 2) * 26 + (evIndex % 2) * 6;
+
+                    const onBarPress = () => {
+                      if (ev.source === 'CHECKLIST' && ev.refId) {
+                        router.push({
+                          pathname: '/checklist/[id]',
+                          params: { id: String(ev.refId), taskId: String(ev.id) },
+                        } as any);
+                      } else {
+                        Alert.alert(ev.title, `${ev.description || ''}\nAtivo: ${r.title}`);
+                      }
+                    };
+
+                    const barBg = ev.color || MEDIA_TAG_COLORS.BEFORE;
+                    const overlapOutline = ev.agendaOverlap
+                      ? { borderWidth: 2, borderColor: '#FECACA' as const }
+                      : {};
+
+                    if (ev.agendaStartAt && ev.agendaEndAt) {
+                      const segs = computeTimedAgendaSegments(
+                        ev.agendaStartAt,
+                        ev.agendaEndAt,
+                        TODAY,
+                        DAYS_TO_SHOW
+                      );
+                      if (!segs.length) return null;
+                      return (
+                        <Fragment key={ev.id}>
+                          {segs.map((seg, si) => {
+                            const leftPx = Math.max(0, seg.dayIndex * COL_WIDTH + seg.leftFrac * COL_WIDTH + 2);
+                            const wPx = Math.max(8, seg.widthFrac * COL_WIDTH - 4);
+                            if (leftPx > DAYS_TO_SHOW * COL_WIDTH) return null;
+                            return (
+                              <TouchableOpacity
+                                key={`${ev.id}_s${si}`}
+                                activeOpacity={0.8}
+                                onPress={onBarPress}
+                                style={{
+                                  position: 'absolute',
+                                  left: leftPx,
+                                  top: topPos,
+                                  width: Math.min(wPx, DAYS_TO_SHOW * COL_WIDTH - leftPx),
+                                  height: 22,
+                                  backgroundColor: barBg,
+                                  borderRadius: 6,
+                                  justifyContent: 'center',
+                                  paddingHorizontal: 4,
+                                  shadowColor: barBg,
+                                  shadowOffset: { width: 0, height: 2 },
+                                  shadowOpacity: 0.2,
+                                  shadowRadius: 3,
+                                  ...overlapOutline,
+                                }}
+                              >
+                                <Text
+                                  style={{ fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }}
+                                  numberOfLines={1}
+                                >
+                                  {ev.title}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    }
+
+                    const sDate = new Date(ev.startDate);
+                    sDate.setHours(0, 0, 0, 0);
+                    const eDate = new Date(ev.endDate);
+                    eDate.setHours(0, 0, 0, 0);
+
+                    const leftDays = Math.round((sDate.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24));
+                    const durationDays = Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
                     const leftPx = Math.max(0, leftDays * COL_WIDTH);
                     const cutoff = leftDays < 0 ? Math.abs(leftDays) : 0;
                     const finalWidthPx = (durationDays - cutoff) * COL_WIDTH;
 
                     if (finalWidthPx <= 0 || leftPx > DAYS_TO_SHOW * COL_WIDTH) return null;
-                    const w = Math.min(finalWidthPx, (DAYS_TO_SHOW * COL_WIDTH) - leftPx);
-                    
-                    // Alterna altura para eventos que sobrepõem no mesmo dia (ex: início um, fim outro)
-                    const topPos = 6 + (Math.floor(evIndex/2) % 2) * 26 + (evIndex % 2) * 6; // Simple staggering
+                    const w = Math.min(finalWidthPx, DAYS_TO_SHOW * COL_WIDTH - leftPx);
 
                     return (
                       <TouchableOpacity
-                        key={ev.id || Math.random().toString()}
+                        key={ev.id || String(evIndex)}
                         activeOpacity={0.8}
-                        onPress={() => {
-                           if (ev.source === 'CHECKLIST' && ev.refId) {
-                              router.push({
-                                pathname: '/checklist/[id]',
-                                params: { id: String(ev.refId), taskId: String(ev.id) },
-                              } as any);
-                           } else {
-                              Alert.alert(ev.title, `${ev.description || ''}\nAtivo: ${r.title}`);
-                           }
-                        }}
+                        onPress={onBarPress}
                         style={{
-                          position: 'absolute', left: leftPx + 4, top: topPos, width: Math.max(10, w - 8), height: 22,
-                          backgroundColor: ev.color || MEDIA_TAG_COLORS.BEFORE, borderRadius: 6,
-                          justifyContent: 'center', paddingHorizontal: 6,
-                          shadowColor: ev.color || MEDIA_TAG_COLORS.BEFORE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3,
+                          position: 'absolute',
+                          left: leftPx + 4,
+                          top: topPos,
+                          width: Math.max(10, w - 8),
+                          height: 22,
+                          backgroundColor: barBg,
+                          borderRadius: 6,
+                          justifyContent: 'center',
+                          paddingHorizontal: 6,
+                          shadowColor: barBg,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 3,
+                          ...overlapOutline,
                         }}
                       >
-                         <Text style={{ fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }} numberOfLines={1}>{ev.title}</Text>
+                        <Text
+                          style={{ fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }}
+                          numberOfLines={1}
+                        >
+                          {ev.title}
+                        </Text>
                       </TouchableOpacity>
                     );
                   })}

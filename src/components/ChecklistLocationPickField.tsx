@@ -13,6 +13,9 @@ import * as Location from 'expo-location';
 import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 
+/** Igual ao deslocamento no checklist: moradas completam em segundo plano quando não há «validação online obrigatória». */
+const ASYNC_ADDRESS_PENDING = 'A obter endereço…';
+
 async function assertConnectedWhenOnlineRequired(): Promise<boolean> {
   try {
     const netState = await Network.getNetworkStateAsync();
@@ -265,27 +268,64 @@ export function ChecklistLocationPickField({
       if (!ok) return;
     }
     const capturedAt = new Date().toISOString();
-    let addressGps: string | undefined;
-    let addressPin: string | undefined;
-    try {
-      const pair = await Promise.all([
-        withTimeout(reverseLabel(gps.lat, gps.lng), 8000),
-        withTimeout(reverseLabel(pin.lat, pin.lng), 8000),
-      ]);
-      addressGps = pair[0];
-      addressPin = pair[1];
-    } catch {
-      /* endereços são opcionais — coordenadas gravam na mesma */
+    if (requireOnlineValidation) {
+      let addressGps: string | undefined;
+      let addressPin: string | undefined;
+      try {
+        const pair = await Promise.all([
+          withTimeout(reverseLabel(gps.lat, gps.lng), 8000),
+          withTimeout(reverseLabel(pin.lat, pin.lng), 8000),
+        ]);
+        addressGps = pair[0];
+        addressPin = pair[1];
+      } catch {
+        /* endereços são opcionais — coordenadas gravam na mesma */
+      }
+      const payload: LocationPickPayloadV1 = {
+        version: 1,
+        capturedAt,
+        gps: { lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy ?? null },
+        pin: { lat: pin.lat, lng: pin.lng },
+        ...(addressGps ? { addressGps } : {}),
+        ...(addressPin ? { addressPin } : {}),
+      };
+      onChange(JSON.stringify(payload));
+      return;
     }
-    const payload: LocationPickPayloadV1 = {
+
+    const basePayload: LocationPickPayloadV1 = {
       version: 1,
       capturedAt,
       gps: { lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy ?? null },
       pin: { lat: pin.lat, lng: pin.lng },
-      ...(addressGps ? { addressGps } : {}),
-      ...(addressPin ? { addressPin } : {}),
+      addressGps: ASYNC_ADDRESS_PENDING,
+      addressPin: ASYNC_ADDRESS_PENDING,
     };
-    onChange(JSON.stringify(payload));
+    onChange(JSON.stringify(basePayload));
+    const tsCommit = capturedAt;
+    void (async () => {
+      let addressGps: string | undefined;
+      let addressPin: string | undefined;
+      try {
+        const pair = await Promise.all([
+          withTimeout(reverseLabel(gps.lat, gps.lng), 8000),
+          withTimeout(reverseLabel(pin.lat, pin.lng), 8000),
+        ]);
+        addressGps = pair[0];
+        addressPin = pair[1];
+      } catch {
+        /* ignore */
+      }
+      const cur = parsePayload(valueRef.current);
+      if (!cur || cur.capturedAt !== tsCommit) return;
+      const fallback = 'Endereço indisponível (rede ou mapas).';
+      const merged: LocationPickPayloadV1 = {
+        ...cur,
+        addressGps: addressGps?.trim() || (cur.addressGps === ASYNC_ADDRESS_PENDING ? fallback : cur.addressGps),
+        addressPin: addressPin?.trim() || (cur.addressPin === ASYNC_ADDRESS_PENDING ? fallback : cur.addressPin),
+      };
+      onChange(JSON.stringify(merged));
+    })();
   }, [gps, pin, disabled, onChange, requireOnlineValidation]);
 
   const clearPick = useCallback(async () => {

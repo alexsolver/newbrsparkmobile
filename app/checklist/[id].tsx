@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -560,6 +560,12 @@ function facialBiometricStorageKey(fieldId: string) {
 
 function parseFacialBiometricAudit(raw: unknown): {
   at?: string;
+  /** Momento do obturador (ISO); persiste quando a URL pública já não traz `?capturedAt=`. */
+  capturedAt?: string;
+  /** GPS/morada da captura (a URL pública após upload perde a query). */
+  captureLat?: string;
+  captureLng?: string;
+  captureAddr?: string;
   engine?: string;
   confidence?: number;
   facialAuthMode?: string;
@@ -585,10 +591,16 @@ function formatFacialConfidencePct(c: unknown): string | null {
   return `${pct}%`;
 }
 
+const FACIAL_NO_FACE_IN_IMAGE_MSG =
+  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+
 /** Remove marcas de produto fornecedor de textos vindos da API ou de relatórios antigos. */
 function sanitizeFacialUserFacingCopy(text: string | undefined | null): string {
   if (text == null || text === '') return '';
   let s = String(text);
+  if (/no face is found in the given image/i.test(s) || /"code"\s*:\s*28\b/i.test(s)) {
+    return FACIAL_NO_FACE_IN_IMAGE_MSG;
+  }
   s = s.replace(/\bexadel\s+compreface\b/gi, 'servidor');
   s = s.replace(/\bcompreface\b/gi, 'servidor');
   s = s.replace(/\s{2,}/g, ' ').trim();
@@ -611,6 +623,143 @@ function firstFacialMediaUri(val: unknown): string | null {
   }
   const s = String(val).trim();
   return s || null;
+}
+
+/** Foto com `?live=true&lat=&lng=` mas ainda sem `addr=` — completa morada em segundo plano. */
+function parseLatLngFromUriQueryForAddrFill(u: string): { base: string; lat: number; lng: number; search: string } | null {
+  const qi = u.indexOf('?');
+  if (qi < 0) return null;
+  const search = u.slice(qi + 1);
+  const params = new URLSearchParams(search);
+  const addr = params.get('addr');
+  if (addr != null && String(addr).trim() !== '') return null;
+  const lat = Number(params.get('lat'));
+  const lng = Number(params.get('lng'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { base: u.slice(0, qi), lat, lng, search };
+}
+
+async function mergeAddrIntoMediaUriIfStillCurrent(args: {
+  getResponses: () => Record<string, any>;
+  applyInput: (fieldId: string, value: any, scope?: SectionRepeatScope | null) => void;
+  fieldId: string;
+  scope: SectionRepeatScope | null | undefined;
+  uriAtCommit: string;
+}): Promise<void> {
+  const { getResponses, applyInput, fieldId, scope, uriAtCommit } = args;
+  try {
+    const net = await Network.getNetworkStateAsync();
+    if (net.isConnected === false) return;
+  } catch {
+    return;
+  }
+  const parsed = parseLatLngFromUriQueryForAddrFill(uriAtCommit);
+  if (!parsed) return;
+  let line = '';
+  try {
+    const rev = await Location.reverseGeocodeAsync({ latitude: parsed.lat, longitude: parsed.lng });
+    if (rev?.length) {
+      const r = rev[0];
+      line = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`.trim();
+    }
+  } catch {
+    /* Não abortar: sem isto o GPS fica na URI mas o endereço nunca entra no relatório. */
+    line = '';
+  }
+  if (!line) line = 'Endereço indisponível (rede ou mapas).';
+  const params = new URLSearchParams(parsed.search);
+  params.set('addr', line);
+  const newUri = `${parsed.base}?${params.toString()}`;
+  const snap = getResponses();
+  const cur = getScopedFieldValue(snap, scope ?? null, fieldId);
+  let nextVal: unknown = null;
+  if (Array.isArray(cur)) {
+    const idx = cur.findIndex((x) => String(x) === uriAtCommit);
+    if (idx < 0) return;
+    const copy = [...cur];
+    copy[idx] = newUri;
+    nextVal = copy;
+  } else if (String(cur) === uriAtCommit) {
+    nextVal = newUri;
+  } else {
+    return;
+  }
+  applyInput(fieldId, nextVal as string | string[], scope);
+  try {
+    const bioKey = facialBiometricStorageKey(fieldId);
+    const snap2 = getResponses();
+    const bioRaw = getScopedFieldValue(snap2, scope ?? null, bioKey);
+    const aud = parseFacialBiometricAudit(bioRaw);
+    /** Morada assíncrona: gravar em `__biometric` sempre que existir auditoria facial (não só `pending`), senão após validação o PDF perde o endereço quando a URL pública perde a query. */
+    if (aud && typeof aud === 'object') {
+      const nextBio = {
+        ...(aud as Record<string, unknown>),
+        captureAddr: line,
+      };
+      applyInput(bioKey, JSON.stringify(nextBio), scope);
+    }
+  } catch {
+    /* não bloquear morada na URI se o patch da biometria falhar */
+  }
+}
+
+/**
+ * Template/admin pode gravar `requireOnlineValidation` como boolean ou string (`"false"` é truthy em JS — não usar `!!campo` cru).
+ * Só exige rede/servidor quando o valor é explicitamente afirmativo.
+ */
+function schemaFieldRequiresOnlineValidation(field: { requireOnlineValidation?: unknown }): boolean {
+  const v = field.requireOnlineValidation;
+  if (v === true || v === 1) return true;
+  if (v === false || v == null || v === '') return false;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+  }
+  return false;
+}
+
+/**
+ * Há foto facial guardada mas a auditoria `{id}__biometric` ainda está `pending` **e** o campo exige validação online.
+ * Com `requireOnlineValidation === false` (padrão offline-first), pending não bloqueia conclusão — alinhado ao aviso
+ * na UI («validação com o retorno da conexão») e ao flush em `pushSyncQueue` / ecrã do checklist.
+ */
+function getFirstBlockingPendingFacialFieldLabel(
+  res: Record<string, any>,
+  schema: any[]
+): string | null {
+  if (!Array.isArray(schema)) return null;
+  let currentSectionId: string | null = null;
+  let curSecRepeat = false;
+  for (const f of schema) {
+    if (f.type === 'section_break') {
+      currentSectionId = f.id;
+      curSecRepeat = sectionAllowsRepeat(f);
+      continue;
+    }
+    if (f.type !== 'facial_recognition') continue;
+    if (!schemaFieldRequiresOnlineValidation(f)) continue;
+
+    const checkScope = (scope: SectionRepeatScope | null): string | null => {
+      const bioRaw = getScopedFieldValue(res, scope, facialBiometricStorageKey(f.id));
+      const audit = parseFacialBiometricAudit(bioRaw);
+      if (!(audit as { pending?: boolean } | null)?.pending) return null;
+      const uriRaw = getScopedFieldValue(res, scope, f.id);
+      if (!firstFacialMediaUri(uriRaw)) return null;
+      return String(f.label || f.id);
+    };
+
+    if (!curSecRepeat) {
+      const hit = checkScope(null);
+      if (hit) return hit;
+    } else if (currentSectionId) {
+      const rows = getRepeatRows(res, currentSectionId);
+      for (let ri = 0; ri < rows.length; ri++) {
+        const hit = checkScope({ sectionId: currentSectionId, rowIndex: ri });
+        if (hit) return hit;
+      }
+    }
+  }
+  return null;
 }
 
 type VerifyFaceApiResult =
@@ -700,7 +849,35 @@ function getFacialStampIdentity(
   return { fullName, loginEmail };
 }
 
-/** Metadados na URI da captura facial: live, lat, lng, addr, capturedAt (ISO). */
+/** Metadados da URI de captura para gravar em `{id}__biometric` (sobrevivem ao upload sem query na URL). */
+function facialAuditSnapshotFromCaptureUri(imgUri: string): {
+  capturedAt: string;
+  captureLat?: string;
+  captureLng?: string;
+  captureAddr?: string;
+} {
+  const q = parseMediaUriQuery(imgUri);
+  const cap = q.capturedAt ? safeDecodeUriComponent(q.capturedAt) : '';
+  const lat = q.lat ? String(q.lat).trim() : '';
+  const lng = q.lng ? String(q.lng).trim() : '';
+  const addr = q.addr ? safeDecodeUriComponent(q.addr) : '';
+  const out: {
+    capturedAt: string;
+    captureLat?: string;
+    captureLng?: string;
+    captureAddr?: string;
+  } = {
+    capturedAt: cap || new Date().toISOString(),
+  };
+  if (lat && lng) {
+    out.captureLat = lat;
+    out.captureLng = lng;
+  }
+  if (addr) out.captureAddr = addr;
+  return out;
+}
+
+/** Metadados na URI da captura facial: live, lat, lng, capturedAt (ISO). Morada (`addr`) em segundo plano. */
 async function buildFacialCaptureQuerySuffix(): Promise<string> {
   let q = '?live=true';
   q += `&capturedAt=${encodeURIComponent(new Date().toISOString())}`;
@@ -711,21 +888,43 @@ async function buildFacialCaptureQuerySuffix(): Promise<string> {
     if (loc?.coords) {
       const { latitude, longitude } = loc.coords;
       q += `&lat=${latitude}&lng=${longitude}`;
-      try {
-        const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
-        if (rev?.length) {
-          const r = rev[0];
-          const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
-          q += `&addr=${encodeURIComponent(addr)}`;
-        }
-      } catch {
-        /* ignore */
-      }
     }
   } catch {
     /* ignore */
   }
   return q;
+}
+
+/**
+ * A câmara do ImagePicker grava em cache temporário; ao sair do formulário o SO pode apagar o ficheiro
+ * e o rascunho fica com URI morta. Copiamos para `documentDirectory/brspark_facial/` antes de gravar nas respostas.
+ */
+async function persistFacialCapturePathForDraft(imageUriWithOptionalQuery: string, hintId: string): Promise<string> {
+  const full = String(imageUriWithOptionalQuery || '');
+  const qIdx = full.indexOf('?');
+  const base = qIdx >= 0 ? full.slice(0, qIdx) : full;
+  const query = qIdx >= 0 ? full.slice(qIdx) : '';
+  if (!base) return full;
+  if (base.includes('/brspark_facial/')) return full;
+
+  const root = FileSystem.documentDirectory;
+  if (!root) return full;
+
+  const dir = `${root}brspark_facial/`;
+  try {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  } catch {
+    /* já existe */
+  }
+  const safe = String(hintId || 'chk').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
+  const dest = `${dir}${safe}_${Date.now()}.jpg`;
+  try {
+    await FileSystem.copyAsync({ from: base, to: dest });
+    return dest + query;
+  } catch (e) {
+    console.warn('[checklist] persistFacialCapturePathForDraft: copy falhou, mantém URI original', e);
+    return full;
+  }
 }
 
 /** Moldura facial: foto íntegra + rodapé com dados da captura (sem sobrepor o rosto). */
@@ -738,14 +937,25 @@ function FacialRecognitionPhotoFrame(props: {
   fullName: string;
   loginEmail: string;
   auditAt?: string;
+  /** ISO gravado em `{campo}__biometric` quando a URL da foto perde a query `capturedAt`. */
+  capturedAtStored?: string;
+  /** GPS/morada vindos do JSON `{campo}__biometric` quando a URL já não tem query. */
+  captureLat?: string;
+  captureLng?: string;
+  captureAddr?: string;
 }) {
   const q = parseMediaUriQuery(props.oneUri);
-  const lat = q.lat;
-  const lng = q.lng;
-  const addrRaw = q.addr ? safeDecodeUriComponent(q.addr) : '';
-  const capturedIso = q.capturedAt ? safeDecodeUriComponent(q.capturedAt) : '';
-  const tsIso = props.auditAt || capturedIso || '';
-  const { date, time } = formatIsoDateTimePt(tsIso);
+  const lat = (props.captureLat && String(props.captureLat).trim()) || q.lat;
+  const lng = (props.captureLng && String(props.captureLng).trim()) || q.lng;
+  const addrRaw =
+    (props.captureAddr && String(props.captureAddr).trim()) ||
+    (q.addr ? safeDecodeUriComponent(q.addr) : '');
+  const fromUri = q.capturedAt ? safeDecodeUriComponent(q.capturedAt) : '';
+  const fromAudit = (props.capturedAtStored && String(props.capturedAtStored).trim()) || '';
+  const capturedIso = fromUri || fromAudit;
+  const validationIso = props.auditAt ? String(props.auditAt) : '';
+  const capFmt = formatIsoDateTimePt(capturedIso);
+  const valFmt = formatIsoDateTimePt(validationIso);
   const gpsLine =
     lat && lng
       ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
@@ -821,7 +1031,15 @@ function FacialRecognitionPhotoFrame(props: {
           </Text>
         ) : null}
         <Text style={{ color: '#fff', fontSize: 10, marginTop: props.success ? 6 : 0, fontWeight: '700' }}>
-          {date} · {time}
+          Captura:{' '}
+          {capturedIso ? `${capFmt.date} · ${capFmt.time}` : '—'}
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 10, marginTop: 4, fontWeight: '700' }}>
+          {pending && !validationIso
+            ? 'Validação: pendente (assíncrona no servidor)'
+            : validationIso
+              ? `Validação: ${valFmt.date} · ${valFmt.time}`
+              : 'Validação: —'}
         </Text>
         <Text style={{ color: '#fff', fontSize: 9, marginTop: 3 }} numberOfLines={2}>
           GPS: {gpsLine}
@@ -1111,6 +1329,15 @@ export default function ChecklistEngine() {
   const [responses, setResponses] = useState<any>({});
   const responsesForPauseExitRef = useRef(responses);
   responsesForPauseExitRef.current = responses;
+  /** Atualizado a cada render e de forma síncrona em `handleInput` — usado por flush facial e por `submitExecution`. */
+  const responsesRefForFacial = useRef(responses);
+  const templateRefForFacial = useRef(template);
+  /** Preenchimento assíncrono de morada em URIs de foto (`processFacialImage` vem antes da definição de `handleInput`). */
+  const handleInputRef = useRef<
+    ((fieldId: string, value: any, scope?: SectionRepeatScope | null) => void) | null
+  >(null);
+  responsesRefForFacial.current = responses;
+  templateRefForFacial.current = template;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   /** Campo em que está a correr captura GPS (transit / geofence) — UI de loading e anti duplo toque. */
@@ -1281,6 +1508,7 @@ export default function ChecklistEngine() {
       try {
           const allStrk = [...completedStrokes];
           if(currentStrokeRef.current !== '') allStrk.push(currentStrokeRef.current);
+          const strokesJoined = allStrk.join('|');
           
           let meta = { lat: 0, lng: 0, address: "Localização Desconhecida", ip: "Desconhecido" };
           try {
@@ -1291,19 +1519,50 @@ export default function ChecklistEngine() {
              if (ipJson.ip) meta.ip = ipJson.ip;
           } catch(e) {}
 
+          const sigField = currentSigField as string;
+          const sigScope = currentSigScope;
+
           const { status } = await Location.requestForegroundPermissionsAsync();
           if (status === 'granted') {
              try {
                 const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                meta.lat = loc.coords.latitude;
-                meta.lng = loc.coords.longitude;
-                const geocoded = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-                if (geocoded.length > 0) meta.address = `${geocoded[0].street || ''}, ${geocoded[0].streetNumber || ''} - ${geocoded[0].city || ''}, ${geocoded[0].region || ''}`;
-             } catch(e) {}
+                const lat = loc.coords.latitude;
+                const lng = loc.coords.longitude;
+                const metaPending = { ...meta, lat, lng, address: 'A obter endereço…' };
+                const committedFull =
+                  'SIG_V1|' + `meta:${JSON.stringify(metaPending)}` + '|' + strokesJoined;
+                handleInput(sigField, committedFull, sigScope);
+                void (async () => {
+                  let line = '';
+                  try {
+                    const geocoded = await Location.reverseGeocodeAsync({
+                      latitude: lat,
+                      longitude: lng,
+                    });
+                    if (geocoded.length > 0) {
+                      const g = geocoded[0];
+                      line = `${g.street || ''}, ${g.streetNumber || ''} - ${g.city || ''}, ${g.region || ''}`.trim();
+                    }
+                  } catch {
+                    /* ignore */
+                  }
+                  if (!line) line = 'Endereço indisponível (rede ou mapas).';
+                  const hi = handleInputRef.current;
+                  if (typeof hi !== 'function') return;
+                  const snap = responsesRefForFacial.current;
+                  const cur = getScopedFieldValue(snap, sigScope, sigField);
+                  if (String(cur) !== committedFull) return;
+                  const metaDone = { ...metaPending, address: line };
+                  hi(sigField, 'SIG_V1|' + `meta:${JSON.stringify(metaDone)}` + '|' + strokesJoined, sigScope);
+                })();
+             } catch(e) {
+                const metaStr = `meta:${JSON.stringify(meta)}`;
+                handleInput(sigField, "SIG_V1|" + metaStr + "|" + strokesJoined, sigScope);
+             }
+          } else {
+            const metaStr = `meta:${JSON.stringify(meta)}`;
+            handleInput(sigField, 'SIG_V1|' + metaStr + '|' + strokesJoined, sigScope);
           }
-          
-          const metaStr = `meta:${JSON.stringify(meta)}`;
-          handleInput(currentSigField as string, "SIG_V1|" + metaStr + "|" + allStrk.join('|'), currentSigScope);
       } catch(e) {
           Alert.alert("Aviso", "A assinatura foi salva sem todos os metadados ativos (GPS lento ou sem rede offline).");
           // Fallback just in case
@@ -1318,7 +1577,7 @@ export default function ChecklistEngine() {
   };
 
   const ensureOnlineValidation = async (field: any, action: () => void | Promise<void>) => {
-    if (field.requireOnlineValidation) {
+    if (schemaFieldRequiresOnlineValidation(field)) {
       try {
         const netState = await Network.getNetworkStateAsync();
         if (!netState.isConnected) {
@@ -1345,15 +1604,21 @@ export default function ChecklistEngine() {
   ) => {
     const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
     const bioKey = facialBiometricStorageKey(fieldId);
-    const strictOnline = !!fieldData?.requireOnlineValidation;
+    const strictOnline = fieldData ? schemaFieldRequiresOnlineValidation(fieldData) : false;
 
     const writeSuccessAudit = (apiResp: any) => {
       try {
+        const snap = facialAuditSnapshotFromCaptureUri(imgUri);
         handleInput(
           bioKey,
           JSON.stringify({
             pending: false,
             at: new Date().toISOString(),
+            capturedAt: snap.capturedAt,
+            ...(snap.captureLat && snap.captureLng
+              ? { captureLat: snap.captureLat, captureLng: snap.captureLng }
+              : {}),
+            ...(snap.captureAddr ? { captureAddr: snap.captureAddr } : {}),
             engine: normalizeFacialEngineForStorage(apiResp.engine),
             confidence: apiResp.confidence,
             facialAuthMode: apiResp.facialAuthMode || fieldData?.facialAuthMode || 'self_verify',
@@ -1369,12 +1634,17 @@ export default function ChecklistEngine() {
 
     const writePendingAudit = () => {
       try {
+        const snap = facialAuditSnapshotFromCaptureUri(imgUri);
         handleInput(
           bioKey,
           JSON.stringify({
             pending: true,
             reason: 'offline_or_network',
-            capturedAt: new Date().toISOString(),
+            capturedAt: snap.capturedAt,
+            ...(snap.captureLat && snap.captureLng
+              ? { captureLat: snap.captureLat, captureLng: snap.captureLng }
+              : {}),
+            ...(snap.captureAddr ? { captureAddr: snap.captureAddr } : {}),
             facialAuthMode: fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
           }),
           scope
@@ -1434,10 +1704,24 @@ export default function ChecklistEngine() {
       if (usePending) writePendingAudit();
     }
 
-    handleInput(fieldId, imgUri, scope);
+    const persistedUri = await persistFacialCapturePathForDraft(
+      imgUri,
+      String(resolvedTaskId || (Array.isArray(id) ? id[0] : id) || '')
+    );
+    handleInput(fieldId, persistedUri, scope);
     if (fieldData?.allowMediaDescription) {
       handleInput(mediaCaptionStorageKey(fieldId), '', scope);
     }
+    void mergeAddrIntoMediaUriIfStillCurrent({
+      getResponses: () => responsesRefForFacial.current,
+      applyInput: (fid, val, sc) => {
+        const hi = handleInputRef.current;
+        if (typeof hi === 'function') hi(fid, val, sc);
+      },
+      fieldId,
+      scope,
+      uriAtCommit: persistedUri,
+    });
     return true;
   };
 
@@ -1518,14 +1802,21 @@ export default function ChecklistEngine() {
               if (acc != null && Number.isFinite(acc) && acc > 0) {
                 accuracyMeters = acc;
               }
-              
-              try {
-                 const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-                 if (rev && rev.length > 0) {
+              /** Geocodificação reversa síncrona só na cerca; início/fim de deslocamento enriquece em segundo plano. */
+              if (isGeofenceCheck) {
+                try {
+                  const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+                  if (rev && rev.length > 0) {
                     const p = rev[0];
                     address = `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`;
-                 }
-              } catch (e) {}
+                  }
+                } catch {
+                  /* mantém fallback */
+                }
+              } else {
+                address =
+                  lat !== 0 && lng !== 0 ? 'A obter endereço…' : 'Localização não capturada';
+              }
           } catch(e) {
               address = "Falha ao obter coordenadas do GPS";
           }
@@ -1630,48 +1921,7 @@ export default function ChecklistEngine() {
           payload.traversedPath = traversedPath;
       }
 
-      if (label === 'SAIDA' && lat !== 0 && lng !== 0) {
-        try {
-          const routeCoords = buildRouteCoordsFromTask(currentTask);
-          const tl = getDestFromTaskLike(currentTask);
-          const dest = pickDestinationForOsrm(
-            tl ? { lat: tl.lat, lng: tl.lng } : {},
-            routeCoords,
-          );
-          if (dest) {
-            const osrm = await fetchDrivingLegMetrics(lat, lng, dest.lat, dest.lng);
-            const straightDist = Math.round(haversineMeters(lat, lng, dest.lat, dest.lng));
-            if (osrm.ok && osrm.durationSeconds != null) {
-              const dm =
-                osrm.distanceMeters != null && Number.isFinite(osrm.distanceMeters)
-                  ? Math.round(osrm.distanceMeters)
-                  : straightDist;
-              payload.plannedMetrics = {
-                durationSeconds: Math.round(osrm.durationSeconds),
-                distanceMeters: dm,
-                source: 'osrm',
-              };
-            } else {
-              const etaMin = normalizeEtaMinutes(currentTask?.etaMinutes);
-              if (etaMin != null && etaMin > 0) {
-                payload.plannedMetrics = {
-                  durationSeconds: Math.round(etaMin * 60),
-                  distanceMeters: straightDist,
-                  source: 'task_eta',
-                };
-              } else {
-                payload.plannedMetrics = {
-                  durationSeconds: null,
-                  distanceMeters: straightDist,
-                  source: 'straight_line',
-                };
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('[transit] plannedMetrics', e);
-        }
-      }
+      /** Métricas de rota (OSRM) e morada exacta: em segundo plano após gravar o GPS (ver IIFE no fim). */
 
       if (label === 'CHEGADA') {
         try {
@@ -1753,6 +2003,11 @@ export default function ChecklistEngine() {
       }
 
       const timeBr = new Date().toLocaleTimeString('pt-BR');
+      const tailMoradaAsync =
+        address === 'A obter endereço…'
+          ? '\n\nGPS já guardado. O endereço (e, na saída, a estimativa de rota) completa em seguida quando houver rede.'
+          : `\n\n📍 ${address}`;
+
       if (label === 'CHEGADA') {
         if (status !== 'granted' || lat === 0) {
           Alert.alert(
@@ -1762,7 +2017,7 @@ export default function ChecklistEngine() {
         } else {
           Alert.alert(
             'Deslocamento finalizado',
-            `O trecho de deslocamento foi encerrado (não indica chegada ao local de serviço).\n\n📍 ${address}`
+            `O trecho de deslocamento foi encerrado (não indica chegada ao local de serviço).${tailMoradaAsync}`
           );
         }
       } else if (label === 'SAIDA') {
@@ -1772,12 +2027,109 @@ export default function ChecklistEngine() {
             `Saída registrada às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`
           );
         } else {
-          Alert.alert('Deslocamento iniciado', `Saída registrada com sucesso.\n\n📍 ${address}`);
+          Alert.alert(
+            'Deslocamento iniciado',
+            `Saída registrada com sucesso às ${timeBr}.${tailMoradaAsync}`
+          );
         }
       } else if (status !== 'granted' || lat === 0) {
         Alert.alert('Atenção', `${label} registrado às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`);
       } else {
         Alert.alert('Sucesso', `${label} registrado com sucesso!\n\n${address}`);
+      }
+
+      /** Morada + OSRM: não bloqueiam o loading do GPS (início/fim de deslocamento). */
+      if (
+        (label === 'SAIDA' || label === 'CHEGADA') &&
+        status === 'granted' &&
+        lat !== 0 &&
+        lng !== 0 &&
+        !isGeofenceCheck
+      ) {
+        const tsCommit = payload.timestamp;
+        void (async () => {
+          let nextAddress = 'Localização não capturada';
+          try {
+            const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+            if (rev && rev.length > 0) {
+              const p = rev[0];
+              nextAddress = `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`;
+            }
+          } catch {
+            nextAddress = 'Endereço indisponível (rede ou serviço de mapas).';
+          }
+
+          let plannedMetrics: {
+            durationSeconds?: number | null;
+            distanceMeters?: number | null;
+            source?: string;
+          } | undefined;
+          if (label === 'SAIDA') {
+            try {
+              const task = currentTaskRef.current;
+              const routeCoords = buildRouteCoordsFromTask(task);
+              const tl = getDestFromTaskLike(task);
+              const dest = pickDestinationForOsrm(
+                tl ? { lat: tl.lat, lng: tl.lng } : {},
+                routeCoords
+              );
+              if (dest) {
+                const osrm = await fetchDrivingLegMetrics(lat, lng, dest.lat, dest.lng);
+                const straightDist = Math.round(haversineMeters(lat, lng, dest.lat, dest.lng));
+                if (osrm.ok && osrm.durationSeconds != null) {
+                  const dm =
+                    osrm.distanceMeters != null && Number.isFinite(osrm.distanceMeters)
+                      ? Math.round(osrm.distanceMeters)
+                      : straightDist;
+                  plannedMetrics = {
+                    durationSeconds: Math.round(osrm.durationSeconds),
+                    distanceMeters: dm,
+                    source: 'osrm',
+                  };
+                } else {
+                  const etaMin = normalizeEtaMinutes(task?.etaMinutes);
+                  if (etaMin != null && etaMin > 0) {
+                    plannedMetrics = {
+                      durationSeconds: Math.round(etaMin * 60),
+                      distanceMeters: straightDist,
+                      source: 'task_eta',
+                    };
+                  } else {
+                    plannedMetrics = {
+                      durationSeconds: null,
+                      distanceMeters: straightDist,
+                      source: 'straight_line',
+                    };
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[transit] plannedMetrics async', e);
+            }
+          }
+
+          const hi = handleInputRef.current;
+          if (typeof hi !== 'function') return;
+          const resSnap = responsesRefForFacial.current;
+          const raw = getScopedFieldValue(resSnap, scope ?? null, fieldId);
+          if (raw == null || String(raw).trim() === '') return;
+          let base: any;
+          try {
+            base = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          } catch {
+            return;
+          }
+          if (base?.timestamp !== tsCommit) return;
+
+          const merged: Record<string, unknown> = {
+            ...base,
+            address: nextAddress,
+          };
+          if (label === 'SAIDA' && plannedMetrics != null) {
+            merged.plannedMetrics = plannedMetrics;
+          }
+          hi(fieldId, JSON.stringify(merged), scope);
+        })();
       }
     } catch (e) {
       Alert.alert("Erro Inesperado", "Ocorreu um erro ao tentar processar a operação.");
@@ -2854,6 +3206,7 @@ export default function ChecklistEngine() {
           ...(!isMetaField ? { [tkey]: new Date().toISOString() } : {}),
         };
         void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+        responsesRefForFacial.current = newRes;
         return newRes;
       }
 
@@ -2864,6 +3217,7 @@ export default function ChecklistEngine() {
         ...(isMetaField ? {} : { [timeKey]: new Date().toISOString() }),
       };
       void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+      responsesRefForFacial.current = newRes;
       return newRes;
     });
 
@@ -2872,23 +3226,13 @@ export default function ChecklistEngine() {
     }
   };
 
-  const handleInputRef = useRef(handleInput);
   handleInputRef.current = handleInput;
-  const responsesRefForFacial = useRef(responses);
-  const templateRefForFacial = useRef(template);
-  useEffect(() => {
-    responsesRefForFacial.current = responses;
-  }, [responses]);
-  useEffect(() => {
-    templateRefForFacial.current = template;
-  }, [template]);
   const facialFlushBusyRef = useRef(false);
 
   const flushPendingFacialVerifications = useCallback(async () => {
     if (isReadOnly || loading) return;
     if (facialFlushBusyRef.current) return;
     const tmpl = templateRefForFacial.current;
-    const res = responsesRefForFacial.current;
     if (!tmpl?.schemaData?.length) return;
     try {
       const netState = await Network.getNetworkStateAsync();
@@ -2896,6 +3240,8 @@ export default function ChecklistEngine() {
     } catch {
       return;
     }
+    /** Só depois do await: snapshot antigo antes da rede fazia o flush ignorar ou desalinhar com o rascunho atual. */
+    const res = responsesRefForFacial.current;
     facialFlushBusyRef.current = true;
     try {
       let currentSectionId: string | null = null;
@@ -2907,7 +3253,7 @@ export default function ChecklistEngine() {
           continue;
         }
         if (f.type !== 'facial_recognition') continue;
-        if (f.requireOnlineValidation) continue;
+        if (schemaFieldRequiresOnlineValidation(f)) continue;
 
         const runForScope = async (scope: SectionRepeatScope | null) => {
           const bioRaw = getScopedFieldValue(res, scope, facialBiometricStorageKey(f.id));
@@ -2927,13 +3273,30 @@ export default function ChecklistEngine() {
           }
           const result = await postVerifyFaceForField(f, b64);
           const bioKey = facialBiometricStorageKey(f.id);
+          const hiFlush = handleInputRef.current;
+          if (typeof hiFlush !== 'function') return;
           if (result.ok) {
             const apiResp = result.data as any;
-            handleInputRef.current(
+            const prevCap = (audit as { capturedAt?: string })?.capturedAt;
+            const prevGeo = audit as {
+              captureLat?: string;
+              captureLng?: string;
+              captureAddr?: string;
+            };
+            hiFlush(
               bioKey,
               JSON.stringify({
                 pending: false,
                 at: new Date().toISOString(),
+                ...(typeof prevCap === 'string' && prevCap.trim()
+                  ? { capturedAt: prevCap.trim() }
+                  : {}),
+                ...(prevGeo.captureLat && prevGeo.captureLng
+                  ? { captureLat: String(prevGeo.captureLat), captureLng: String(prevGeo.captureLng) }
+                  : {}),
+                ...(prevGeo.captureAddr && String(prevGeo.captureAddr).trim()
+                  ? { captureAddr: String(prevGeo.captureAddr).trim() }
+                  : {}),
                 engine: normalizeFacialEngineForStorage(apiResp.engine),
                 confidence: apiResp.confidence,
                 facialAuthMode: apiResp.facialAuthMode || f.facialAuthMode || 'self_verify',
@@ -2943,12 +3306,27 @@ export default function ChecklistEngine() {
               scope
             );
           } else if (result.kind === 'no_match') {
-            handleInputRef.current(
+            const prevCapNm = (audit as { capturedAt?: string })?.capturedAt;
+            const prevGeoNm = audit as {
+              captureLat?: string;
+              captureLng?: string;
+              captureAddr?: string;
+            };
+            hiFlush(
               bioKey,
               JSON.stringify({
                 pending: false,
                 deferredValidationFailed: true,
                 at: new Date().toISOString(),
+                ...(typeof prevCapNm === 'string' && prevCapNm.trim()
+                  ? { capturedAt: prevCapNm.trim() }
+                  : {}),
+                ...(prevGeoNm.captureLat && prevGeoNm.captureLng
+                  ? { captureLat: String(prevGeoNm.captureLat), captureLng: String(prevGeoNm.captureLng) }
+                  : {}),
+                ...(prevGeoNm.captureAddr && String(prevGeoNm.captureAddr).trim()
+                  ? { captureAddr: String(prevGeoNm.captureAddr).trim() }
+                  : {}),
                 facialAuthMode: f.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
                 message:
                   sanitizeFacialUserFacingCopy(result.message) ||
@@ -3068,14 +3446,6 @@ export default function ChecklistEngine() {
                 if (loc && loc.coords) {
                   const { latitude, longitude } = loc.coords;
                   gpsQuery += `&lat=${latitude}&lng=${longitude}`;
-                  try {
-                    const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
-                    if (rev && rev.length > 0) {
-                      const r = rev[0];
-                      const addr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`;
-                      gpsQuery += `&addr=${encodeURIComponent(addr)}`;
-                    }
-                  } catch (e) {}
                 }
               } catch (e) {}
 
@@ -3089,7 +3459,18 @@ export default function ChecklistEngine() {
                 );
                 if (!ok) return;
               } else {
-                mergeMediaUriIntoField(fieldId, imgAsset.uri + gpsQuery, scope);
+                const uriCommitted = imgAsset.uri + gpsQuery;
+                mergeMediaUriIntoField(fieldId, uriCommitted, scope);
+                void mergeAddrIntoMediaUriIfStillCurrent({
+                  getResponses: () => responsesRefForFacial.current,
+                  applyInput: (fid, val, sc) => {
+                    const hi = handleInputRef.current;
+                    if (typeof hi === 'function') hi(fid, val, sc);
+                  },
+                  fieldId,
+                  scope,
+                  uriAtCommit: uriCommitted,
+                });
               }
             }
           } catch (err: any) {
@@ -3156,6 +3537,33 @@ export default function ChecklistEngine() {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
     }
+    await flushPendingFacialVerifications();
+    // Dar tempo ao React aplicar os `setResponses` do flush antes de ler o ref (batching).
+    await new Promise<void>((r) => setTimeout(r, 120));
+    try {
+      const pendingFacialLabel = getFirstBlockingPendingFacialFieldLabel(
+        responsesRefForFacial.current,
+        template?.schemaData || []
+      );
+      if (pendingFacialLabel) {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) {
+          Alert.alert(
+            'Reconhecimento facial pendente',
+            `O campo «${pendingFacialLabel}» ainda não foi validado no servidor (captura sem rede ou validação incompleta). Conecte-se à internet, aguarde a validação na própria tela ou capture de novo antes de concluir a OS.`
+          );
+        } else {
+          Alert.alert(
+            'Reconhecimento facial pendente',
+            `O campo «${pendingFacialLabel}» ainda não foi validado no servidor. Aguarde alguns segundos na tela do formulário, verifique a conexão ou capture de novo. Se o problema continuar, contacte o suporte.`
+          );
+        }
+        return;
+      }
+    } catch {
+      /* se a checagem de rede falhar, segue o fluxo legado */
+    }
+
     const schemaAll = template?.schemaData || [];
     const bySection: Record<string, any[]> = {};
     const sectionHeaders: Record<string, any> = {};
@@ -5296,7 +5704,8 @@ export default function ChecklistEngine() {
                       !!frAudit &&
                       !frDeferFailed &&
                       !!(frAudit.at || frAudit.engine || frConfStr);
-                    const frReqOnlineField = !!(field.type === 'facial_recognition' && field.requireOnlineValidation);
+                    const frReqOnlineField =
+                      field.type === 'facial_recognition' && schemaFieldRequiresOnlineValidation(field);
                     const frExplicitPending =
                       !!(frAudit as { pending?: boolean } | null)?.pending;
                     /** Sem match no servidor ainda: explícito (JSON) ou modo “validar depois” (não exige online na captura). */
@@ -5316,7 +5725,7 @@ export default function ChecklistEngine() {
                           const audit = parseFacialBiometricAudit(
                             vv(facialBiometricStorageKey(field.id))
                           );
-                          const reqOnline = !!field.requireOnlineValidation;
+                          const reqOnline = schemaFieldRequiresOnlineValidation(field);
                           const confStr = formatFacialConfidencePct(audit?.confidence);
                           if (audit && (audit as { deferredValidationFailed?: boolean }).deferredValidationFailed) {
                             return (
@@ -5397,6 +5806,10 @@ export default function ChecklistEngine() {
                               fullName={frId.fullName}
                               loginEmail={frId.loginEmail}
                               auditAt={frAudit?.at}
+                              capturedAtStored={frAudit?.capturedAt}
+                              captureLat={frAudit?.captureLat != null ? String(frAudit.captureLat) : undefined}
+                              captureLng={frAudit?.captureLng != null ? String(frAudit.captureLng) : undefined}
+                              captureAddr={frAudit?.captureAddr != null ? String(frAudit.captureAddr) : undefined}
                             />
                           ) : (
                             <View
@@ -5654,7 +6067,7 @@ export default function ChecklistEngine() {
                   onChange={(json) => hi(field.id, json || '')}
                   disabled={isReadOnly}
                   primaryColor={C.primary}
-                  requireOnlineValidation={!!field.requireOnlineValidation}
+                  requireOnlineValidation={schemaFieldRequiresOnlineValidation(field)}
                 />
               )}
               {field.type === 'geofence_check' && (() => {

@@ -2186,6 +2186,8 @@ let globalFormSettings = {
     appSectionStart: 'direct',
     /** free | sequential — só com appSectionStart hub */
     appHubSectionOrder: 'free',
+    /** Opcional: minutos previstos só do formulário (sem deslocamento); múltiplos de 5; ≥5 */
+    expectedFormDurationMinutes: undefined,
 };
 
 function normalizeAppFillMode(v) {
@@ -2316,6 +2318,18 @@ window.applyGlobalGeofenceModal = function () {
     if (r > 50000) r = 50000;
     globalFormSettings.globalGeofenceRadius = r;
     if (radEl) radEl.value = String(r);
+    const durEl = document.getElementById('expected-form-duration-minutes');
+    if (durEl) {
+        const raw = String(durEl.value || '').trim();
+        if (raw === '') {
+            delete globalFormSettings.expectedFormDurationMinutes;
+        } else {
+            let dm = parseInt(raw, 10);
+            if (!Number.isFinite(dm) || dm < 5) dm = 5;
+            dm = Math.floor(dm / 5) * 5;
+            globalFormSettings.expectedFormDurationMinutes = dm;
+        }
+    }
     window.closeGlobalGeofenceModal();
     if (typeof renderMobilePreview === 'function') renderMobilePreview();
 };
@@ -2334,6 +2348,12 @@ window.configureGlobalSettings = function () {
             ? globalFormSettings.globalGeofenceRadius
             : 200
     );
+    const durEl = document.getElementById('expected-form-duration-minutes');
+    if (durEl) {
+        const v = globalFormSettings.expectedFormDurationMinutes;
+        durEl.value =
+            v != null && Number.isFinite(Number(v)) && Number(v) >= 5 ? String(Math.floor(Number(v))) : '';
+    }
     m.style.display = 'flex';
 };
 
@@ -2380,6 +2400,7 @@ window.importJSON = function() {
                             appFillMode: 'full',
                             appSectionStart: 'direct',
                             appHubSectionOrder: 'free',
+                            expectedFormDurationMinutes: undefined,
                         },
                         parsed.settings || {}
                     );
@@ -3305,6 +3326,7 @@ window.loadChecklist = function(id) {
                 appFillMode: 'full',
                 appSectionStart: 'direct',
                 appHubSectionOrder: 'free',
+                expectedFormDurationMinutes: undefined,
             },
             form.settings || {}
         );
@@ -3607,18 +3629,17 @@ window.confirmTestDispatch = async function() {
         await window.saveChecklist();
 
         const payload = {
-            id: "os_" + Math.floor(Math.random() * 99999),
-            title: `Checklist Novo (${new Date().toLocaleTimeString('pt-BR')})`,
-            description: "Enviado de forma manual para vistoria.",
-            category: "TASK",
-            startDate: new Date().toISOString(),
-            endDate: new Date().toISOString(),
-            isAllDay: true,
-            source: "CHECKLIST",
+            ownerEmail: email,
             refId: currentFormId,
+            title: `Checklist Novo (${new Date().toLocaleTimeString('pt-BR')})`,
+            description: 'Enviado de forma manual para vistoria.',
+            scheduledStartAt: new Date().toISOString(),
             metadata: { icon: currentFormIcon || document.getElementById('tpl-icon').value },
-            ownerEmail: email
         };
+        const ef = globalFormSettings && globalFormSettings.expectedFormDurationMinutes;
+        if (ef != null && Number.isFinite(Number(ef)) && Number(ef) >= 5) {
+            payload.expectedFormDurationMinutes = Math.floor(Number(ef));
+        }
 
         const res = await fetch(`${brsparkApiBase()}/checklists/dispatch`, {
             method: 'POST',
@@ -3626,10 +3647,31 @@ window.confirmTestDispatch = async function() {
             body: JSON.stringify(payload)
         });
 
-        if(!res.ok) throw new Error("Servidor Node.js (Backend) não respondeu OK.");
+        const raw = await res.text();
+        let data = {};
+        try {
+            data = raw ? JSON.parse(raw) : {};
+        } catch (parseErr) {
+            console.error('Resposta não-JSON do despacho:', res.status, raw?.slice?.(0, 300));
+            alert(
+                `O servidor respondeu com erro (HTTP ${res.status}). Verifique se o backend está atualizado e a base migrada.`,
+            );
+            return;
+        }
+
+        if (!res.ok || !data.success) {
+            const msg =
+                (data && typeof data.error === 'string' && data.error) ||
+                (data && data.error && String(data.error)) ||
+                `Pedido falhou (HTTP ${res.status}).`;
+            alert(msg);
+            return;
+        }
 
         console.log("🚀 PAYLOAD ENVIADO AO BACKEND:", payload);
-        alert(`Envio Concluído!\n\nO servidor despachou a OS [${payload.id}] contendo o Formulário [${currentFormId}] para [${email}].\n\nAbra o App na aba Agenda parverificação!`);
+        alert(
+            `Envio concluído.\n\nO servidor despachou uma OS com o formulário [${currentFormId}] para [${email}].\n\nAbra o app na aba Agenda para verificar.`
+        );
 
     } catch(err) {
         console.error("Erro no envio local de teste:", err);

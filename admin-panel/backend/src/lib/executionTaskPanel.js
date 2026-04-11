@@ -101,6 +101,8 @@ function mapExecutionToPanelTask(ex, opts = {}) {
     startedAt: ex.startedAt,
     completedAt: ex.completedAt,
     syncedAt: ex.syncedAt,
+    scheduledStartAt: ex.scheduledStartAt || null,
+    expectedFormDurationMinutes: ex.expectedFormDurationMinutes ?? null,
     etaMinutes: ex.etaMinutes,
     businessMetrics: ex.businessMetrics ?? null,
     trackingGpsAgeSeconds: opts.trackingGpsAgeSeconds ?? null,

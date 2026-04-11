@@ -16,6 +16,11 @@ const {
 const { computeExecutionBusinessMetrics } = require('../lib/executionBusinessMetrics');
 const { isActiveTechnicianForEmail } = require('../lib/technicianEligibility');
 const { validateChecklistTransitDisplacement } = require('../lib/checklistTransitRules');
+const {
+    resolveSnapshotExpectedFormDurationMinutes,
+    parseScheduledStartAt,
+    normalizeExpectedFormDurationMinutes,
+} = require('../lib/formDurationPolicy');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -232,8 +237,8 @@ router.get('/templates/:id', async (req, res) => {
 // POST /api/checklists/templates (Admin Panel salva um schema)
 router.post('/templates', async (req, res) => {
     try {
-        const { id, title, description, settings, metadata } = req.body;
-        let { schemaData, folderId } = req.body;
+        const { id, title, description, metadata } = req.body;
+        let { settings, schemaData, folderId } = req.body;
         if (typeof schemaData === 'string') {
             try {
                 schemaData = JSON.parse(schemaData);
@@ -242,6 +247,17 @@ router.post('/templates', async (req, res) => {
             }
         }
         if (!Array.isArray(schemaData)) schemaData = [];
+
+        if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+            settings = { ...settings };
+            if (Object.prototype.hasOwnProperty.call(settings, 'expectedFormDurationMinutes')) {
+                const n = normalizeExpectedFormDurationMinutes(settings.expectedFormDurationMinutes, {
+                    allowNull: true,
+                });
+                if (n == null) delete settings.expectedFormDurationMinutes;
+                else settings.expectedFormDurationMinutes = n;
+            }
+        }
 
         const transitErr = validateChecklistTransitDisplacement(schemaData);
         if (transitErr) {
@@ -512,6 +528,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
                     locationLng: existing.locationLng,
                     startedAt: updateData.startedAt ?? existing.startedAt,
                     completedAt: existing.completedAt,
+                    expectedFormDurationMinutes: existing.expectedFormDurationMinutes,
                 },
                 revision: existing.lastSubmittedRevision,
             });
@@ -665,6 +682,7 @@ router.post('/executions', authUser, async (req, res) => {
                         locationLng: existing.locationLng,
                         startedAt: finalStartedAt,
                         completedAt: completedAtD,
+                        expectedFormDurationMinutes: existing.expectedFormDurationMinutes,
                     },
                     revision: clientRev,
                 });
@@ -726,6 +744,7 @@ router.post('/executions', authUser, async (req, res) => {
                     locationLng: null,
                     startedAt: startedAt ? new Date(startedAt) : null,
                     completedAt: completedAtD,
+                    expectedFormDurationMinutes: null,
                 },
                 revision: 1,
             });
@@ -836,6 +855,21 @@ router.post('/dispatch', async (req, res) => {
           });
         }
 
+        const scheduledStart = parseScheduledStartAt(payload.scheduledStartAt);
+        if (!scheduledStart) {
+            return res.status(400).json({
+                error: 'Informe scheduledStartAt (data e hora de início na agenda do técnico), em ISO 8601.',
+            });
+        }
+        const tplSettings =
+            loadedTemplate && loadedTemplate.settings && typeof loadedTemplate.settings === 'object'
+                ? loadedTemplate.settings
+                : {};
+        const snapExpectedMin = resolveSnapshotExpectedFormDurationMinutes(
+            tplSettings.expectedFormDurationMinutes,
+            payload.expectedFormDurationMinutes,
+        );
+
         const osNumber = await allocateNextFtOsNumber(prisma);
         const execution = await prisma.checklistExecution.create({
             data: {
@@ -844,6 +878,8 @@ router.post('/dispatch', async (req, res) => {
                 ownerEmail: payload.ownerEmail,
                 status: 'PENDING',
                 responses: null,               // deliberately empty until tech fills it
+                scheduledStartAt: scheduledStart,
+                expectedFormDurationMinutes: snapExpectedMin,
                 // Geofencing Location
                 locationLat:      payload.locationLat      ? parseFloat(payload.locationLat)  : null,
                 locationLng:      payload.locationLng      ? parseFloat(payload.locationLng)  : null,

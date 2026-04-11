@@ -60,6 +60,8 @@
   },
   "tabs": {
     "home": "Início",
+    "agenda": "Agenda",
+    "moreActions": "Mais",
     "assets": "Bens",
     "costs": "Financeiro",
     "chat": "Conversas",
@@ -74,6 +76,12 @@
   },
   "radialMenu": {
     "productivity": "Desempenho"
+  },
+  "agenda": {
+    "expectedFormMinutes": "Duração: {{count}} min",
+    "overlapWarning": "Sobreposição de horário com outra OS.",
+    "overlapNotificationTitle": "Agenda: horários sobrepostos",
+    "overlapNotificationBody": "Existem OS com intervalos sobrepostos na sua agenda."
   },
   "productivity": {
     "title": "Desempenho",
@@ -783,6 +791,7 @@
     "noProviders": "Nenhuma empresa encontrada",
     "activePortfolio": "Portfólio",
     "revisionBadge": "Revisão",
+    "expectedFormScheduleLabel": "Tempo previsto (formulário)",
     "nextAgenda": "Agenda",
     "sort": {
       "open": "Ordenar",
