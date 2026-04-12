@@ -1,7 +1,7 @@
 import '../src/tasks/routeTrackingTask';
 import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
@@ -162,12 +162,15 @@ function AppInitializer() {
 
 function MainLayout() {
   const segments = useSegments();
-  const inAuth = segments[0] === 'auth';
+  const { width, height } = useWindowDimensions();
+  const segs: string[] = Array.isArray(segments) ? (segments as string[]) : [];
+  const inAuth = segs[0] === 'auth';
+  const isAgendaLandscape = width > height && segs.includes('agenda');
 
   return (
     <RouteGuard>
       <AppInitializer />
-      {!inAuth && <Header />}
+      {!inAuth && !isAgendaLandscape && <Header />}
       <Stack screenOptions={{ 
         headerShown: false,
         gestureEnabled: true, 

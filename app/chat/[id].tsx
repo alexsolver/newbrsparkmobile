@@ -5,24 +5,68 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
 import { ChatService, ChatMessage, ChatRoom, ChatMessagingState } from '../../src/services/chat';
+import {
+  appendOutboxItem,
+  flushChatOutboxForRoom,
+  loadMessagesCache,
+  loadOutbox,
+  saveMessagesCache,
+  type ChatOutboxItem,
+} from '../../src/services/chatOfflineStorage';
 import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useConnectivity } from '../../src/hooks/useConnectivity';
+import { useTranslation } from 'react-i18next';
 
 function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-type MediaAttach = { type: 'audio' | 'video' | 'image'; uri: string } | null;
+function isLikelyNetworkFailure(e: unknown): boolean {
+  if (e == null) return true;
+  if (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError') return true;
+  const msg = String((e as Error)?.message || e);
+  return /aborted|abort|network|Network request failed|Failed to fetch|timeout|internet|unreachable/i.test(msg);
+}
+
+function mergeRemoteWithPending(remote: ChatMessage[], prev: ChatMessage[]): ChatMessage[] {
+  const remoteIds = new Set(remote.map((m) => m.id));
+  const pendingLocal = prev.filter(
+    (m) => m.pending && String(m.id).startsWith('local-') && !remoteIds.has(m.id),
+  );
+  const byId = new Map<string, ChatMessage>();
+  for (const m of remote) byId.set(m.id, { ...m, pending: false });
+  for (const m of pendingLocal) byId.set(m.id, m);
+  return [...byId.values()].sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function outboxToMessage(item: ChatOutboxItem, email: string, displayName: string): ChatMessage {
+  return {
+    id: item.localId,
+    roomId: item.roomId,
+    senderId: email,
+    senderName: displayName,
+    type: item.type,
+    content: item.content,
+    mediaUrl: item.mediaUrl,
+    timestamp: item.createdAt,
+    pending: true,
+  };
+}
+
+type MediaAttach = { type: 'image'; uri: string } | null;
 
 export default function ChatRoomScreen() {
   const { id: roomId, name, color, avatarUrl } = useLocalSearchParams<{ id: string; name: string; color: string; avatarUrl?: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { t } = useTranslation();
+  const { user, patchUser } = useAuth();
+  const { isOnline } = useConnectivity(6000);
   const { colors: C } = useTheme();
   const styles = useMemo(() => createChatRoomStyles(C), [C]);
   const insets = useSafeAreaInsets();
@@ -41,6 +85,7 @@ export default function ChatRoomScreen() {
 
   // Modal Settings
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [localeModalVisible, setLocaleModalVisible] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [savingMembers, setSavingMembers] = useState(false);
@@ -62,36 +107,110 @@ export default function ChatRoomScreen() {
     setContacts(c || []);
   }, [roomId]);
 
-  const loadMessages = useCallback(async (since = 0) => {
-    const msgs = await ChatService.getMessages(roomId!, since);
-    if (msgs.length > 0) {
-      setMessages(prev => {
-        const ids = new Set(prev.map(m => m.id));
-        const fresh = msgs.filter(m => !ids.has(m.id));
-        return [...prev, ...fresh];
+  const loadMessages = useCallback(
+    async (since = 0) => {
+      if (isOnline === false) return;
+      const msgs = await ChatService.getMessages(roomId!, since);
+      if (msgs.length > 0) {
+        setMessages((prev) => {
+          const ids = new Set(prev.map((m) => m.id));
+          const fresh = msgs.filter((m) => !ids.has(m.id));
+          const next = [...prev, ...fresh];
+          if (user?.id) void saveMessagesCache(user.id, roomId!, next);
+          return next;
+        });
+        lastTs.current = msgs[msgs.length - 1].timestamp;
+      }
+    },
+    [roomId, user?.id, isOnline],
+  );
+
+  const runFlush = useCallback(async () => {
+    if (!user?.id || !roomId || isOnline !== true) return;
+    try {
+      const flushed = await flushChatOutboxForRoom(user.id, roomId, (rid, payload) =>
+        ChatService.sendMessage(rid, payload as { type: 'text' | 'image'; content?: string; mediaUrl?: string }),
+      );
+      if (!flushed.length) return;
+      setMessages((prev) => {
+        let next = [...prev];
+        for (const { localId, message } of flushed) {
+          next = next.map((m) => (m.id === localId ? { ...message, pending: false } : m));
+        }
+        void saveMessagesCache(user.id, roomId, next);
+        lastTs.current = flushed[flushed.length - 1]!.message.timestamp;
+        return next;
       });
-      lastTs.current = msgs[msgs.length - 1].timestamp;
+    } catch {
+      /* ignore */
     }
-  }, [roomId]);
+  }, [user?.id, roomId, isOnline]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void runFlush();
+    }, [runFlush]),
+  );
 
   useEffect(() => {
-    loadRoomInfo();
-    loadMessagingState();
-    ChatService.getMessages(roomId!, 0).then(msgs => {
-      setMessages(msgs);
-      if (msgs.length > 0) lastTs.current = msgs[msgs.length - 1].timestamp;
-      ChatService.markAsRead(roomId!).catch(() => {});
-    });
-  }, [roomId, loadRoomInfo, loadMessagingState]);
+    if (isOnline === true) void runFlush();
+  }, [isOnline, runFlush]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!roomId || !user?.id) return;
+      const [cached, outboxAll] = await Promise.all([
+        loadMessagesCache(user.id, roomId),
+        loadOutbox(user.id),
+      ]);
+      const pendingMsgs = outboxAll
+        .filter((o) => o.roomId === roomId)
+        .map((o) => outboxToMessage(o, user.email, user.name));
+      const byId = new Map<string, ChatMessage>();
+      for (const m of cached) byId.set(m.id, m);
+      for (const m of pendingMsgs) {
+        if (!byId.has(m.id)) byId.set(m.id, m);
+      }
+      const initial = [...byId.values()].sort((a, b) => a.timestamp - b.timestamp);
+      if (!cancelled && initial.length > 0) {
+        setMessages(initial);
+        lastTs.current = initial[initial.length - 1]!.timestamp;
+      }
+
+      loadRoomInfo();
+      loadMessagingState();
+
+      try {
+        const remote = await ChatService.getMessages(roomId, 0);
+        if (cancelled) return;
+        if (remote.length > 0) {
+          setMessages((prev) => {
+            const merged = mergeRemoteWithPending(remote, prev.length ? prev : initial);
+            void saveMessagesCache(user.id, roomId, merged);
+            lastTs.current = merged[merged.length - 1]!.timestamp;
+            return merged;
+          });
+        }
+        ChatService.markAsRead(roomId).catch(() => {});
+      } catch {
+        /* mantém cache e mensagens pendentes locais */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, user?.id, user?.email, user?.name, loadRoomInfo, loadMessagingState]);
 
   useEffect(() => {
     pollRef.current = setInterval(() => {
+      if (isOnline === false) return;
       loadMessagingState();
-      if (lastTs.current > 0) loadMessages(lastTs.current);
-      else loadMessages(0);
+      if (lastTs.current > 0) void loadMessages(lastTs.current);
+      else void loadMessages(0);
     }, 3000);
     return () => clearInterval(pollRef.current);
-  }, [loadMessages, loadMessagingState]);
+  }, [loadMessages, loadMessagingState, isOnline]);
 
   // Track whether initial messages have been loaded to control scroll animation
   const initialScrollDone = useRef(false);
@@ -122,29 +241,68 @@ export default function ChatRoomScreen() {
     const trimmed = text.trim();
     if (!trimmed && !attach) return;
     if (chatInputLocked) {
+      Alert.alert(t('chat.chatInactiveTitle'), t('chat.chatInactiveBody'));
+      return;
+    }
+
+    if (attach && isOnline === false) {
       Alert.alert(
-        'Chat inativo',
-        'Só é possível enviar mensagens durante o início ou a conclusão da atividade (enquanto a OS estiver em andamento ou concluída aguardando sincronização).',
+        'Sem conexão',
+        'Anexos e mídia precisam de internet. Envie uma mensagem de texto; ela ficará na fila até reconectar.',
       );
       return;
     }
+
+    const persistLocalTextMessage = async () => {
+      if (!user?.id || !roomId || !trimmed) return;
+      const localId = `local-${Date.now()}`;
+      const localMsg: ChatMessage = {
+        id: localId,
+        roomId,
+        senderId: user.email,
+        senderName: user.name,
+        type: 'text',
+        content: trimmed,
+        timestamp: Date.now(),
+        pending: true,
+      };
+      await appendOutboxItem(user.id, {
+        localId,
+        roomId,
+        type: 'text',
+        content: trimmed,
+        createdAt: localMsg.timestamp,
+      });
+      setMessages((prev) => {
+        const next = [...prev, localMsg];
+        void saveMessagesCache(user.id, roomId, next);
+        return next;
+      });
+      lastTs.current = localMsg.timestamp;
+      setText('');
+      setAttach(null);
+      setShowAttach(false);
+    };
+
+    if (!attach && trimmed && isOnline === false) {
+      await persistLocalTextMessage();
+      return;
+    }
+
     setSending(true);
 
     try {
       let resolvedMediaUrl: string | undefined = undefined;
 
-      // Upload media to server first so the URL is public (accessible by recipient)
       if (attach) {
         setUploading(true);
-        const mimeMap: Record<string, string> = { image: 'image/jpeg', video: 'video/mp4', audio: 'audio/m4a' };
-        const mimeType = mimeMap[attach.type] || 'application/octet-stream';
+        const mimeType = 'image/jpeg';
         const uploaded = await ChatService.uploadChatMedia(attach.uri, mimeType);
         setUploading(false);
 
         if (uploaded) {
           resolvedMediaUrl = uploaded;
         } else {
-          // Fallback: use local URI (sender sees it, but recipient won't — warn)
           console.warn('[Chat] Upload falhou, usando URI local como fallback');
           resolvedMediaUrl = attach.uri;
         }
@@ -155,26 +313,27 @@ export default function ChatRoomScreen() {
         : { type: 'text' as const, content: trimmed };
 
       const msg = await ChatService.sendMessage(roomId!, payload as any);
-      setMessages(prev => [...prev, msg]);
+      setMessages((prev) => {
+        const next = [...prev, msg];
+        if (user?.id) void saveMessagesCache(user.id, roomId!, next);
+        return next;
+      });
       lastTs.current = msg.timestamp;
+      setText('');
+      setAttach(null);
+      setShowAttach(false);
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Falha ao enviar mensagem');
+      if (!attach && trimmed && isLikelyNetworkFailure(e)) {
+        await persistLocalTextMessage();
+      } else {
+        Alert.alert('Erro', e?.message || 'Falha ao enviar mensagem');
+      }
+    } finally {
+      setSending(false);
+      setUploading(false);
     }
-
-    setText('');
-    setAttach(null);
-    setShowAttach(false);
-    setSending(false);
-    setUploading(false);
   };
 
-
-  const pickVideo = async () => {
-    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) return Alert.alert('Permissão negada');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.7, videoMaxDuration: 60 });
-    if (!result.canceled && result.assets[0]) { setAttach({ type: 'video', uri: result.assets[0].uri }); setShowAttach(false); }
-  };
 
   const pickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -191,12 +350,11 @@ export default function ChatRoomScreen() {
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images', 'videos'],
+        mediaTypes: ['images'],
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        const isVideo = result.assets[0].type === 'video';
-        setAttach({ type: isVideo ? 'video' : 'image', uri: result.assets[0].uri });
+        setAttach({ type: 'image', uri: result.assets[0].uri });
         setShowAttach(false);
       }
     } catch (e: any) {
@@ -223,21 +381,17 @@ export default function ChatRoomScreen() {
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isMe = item.senderId === user?.email;
+    const textBody = item.displayContent ?? item.content ?? '';
 
     const bubble = () => {
-      if (item.type === 'audio') return (
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          <Ionicons name="mic" size={18} color={isMe ? '#fff' : C.primary} />
-          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Mensagem de áudio</Text>
-        </View>
-      );
-      if (item.type === 'video') return (
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          <Ionicons name="videocam" size={18} color={isMe ? '#fff' : C.primary} />
-          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>Vídeo enviado</Text>
-        </View>
-      );
-      // Image: render actual thumbnail
+      if (item.type === 'audio' || item.type === 'video') {
+        return (
+          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="alert-circle-outline" size={18} color={isMe ? '#fff' : C.primary} />
+            <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>{t('chat.legacyMediaUnsupported')}</Text>
+          </View>
+        );
+      }
       if (item.type === 'image') {
         const imageUri = item.mediaUrl || (item as any).content;
         if (imageUri) {
@@ -249,8 +403,8 @@ export default function ChatRoomScreen() {
                 style={{ width: 220, height: 160, borderRadius: 14 }}
                 resizeMode="cover"
               />
-              {item.content ? (
-                <Text style={[styles.bubbleText, isMe && { color: '#fff' }, { marginTop: 6, marginHorizontal: 4 }]}>{item.content}</Text>
+              {textBody.trim() ? (
+                <Text style={[styles.bubbleText, isMe && { color: '#fff' }, { marginTop: 6, marginHorizontal: 4 }]}>{textBody}</Text>
               ) : null}
             </View>
           );
@@ -265,7 +419,7 @@ export default function ChatRoomScreen() {
       return (
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
           {!isMe && <Text style={styles.senderName}>{item.senderName || item.senderId}</Text>}
-          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>{item.content}</Text>
+          <Text style={[styles.bubbleText, isMe && { color: '#fff' }]}>{textBody}</Text>
         </View>
       );
     };
@@ -283,6 +437,9 @@ export default function ChatRoomScreen() {
         )}
         <View style={{ maxWidth: '75%' }}>
           {bubble()}
+          {item.pending && isMe && (
+            <Text style={styles.pendingHint}>Será enviada quando a conexão voltar…</Text>
+          )}
           <Text style={[styles.msgTime, isMe && { textAlign: 'right' }]}>{formatTime(item.timestamp)}</Text>
         </View>
       </View>
@@ -291,11 +448,32 @@ export default function ChatRoomScreen() {
 
   const isCreator = roomInfo?.creatorId === user?.email;
 
+  const applyChatLocale = async (loc: string | null) => {
+    setLocaleModalVisible(false);
+    try {
+      await patchUser({ preferredChatLocale: loc });
+      if (!roomId || isOnline === false) {
+        Alert.alert('', t('chat.localeSaved'));
+        return;
+      }
+      const remote = await ChatService.getMessages(roomId, 0);
+      setMessages((prev) => {
+        const merged = mergeRemoteWithPending(remote, prev);
+        if (user?.id) void saveMessagesCache(user.id, roomId, merged);
+        return merged;
+      });
+      if (remote.length) lastTs.current = remote[remote.length - 1]!.timestamp;
+      Alert.alert('', t('chat.localeSaved'));
+    } catch (e: unknown) {
+      Alert.alert('Erro', (e as Error)?.message || 'Falha ao guardar idioma');
+    }
+  };
+
   const headerSubtitle = roomInfo
     ? roomInfo.isGroup
       ? `${roomInfo.memberCount} membros`
       : chatInputLocked
-        ? 'Chat inativo (fora da atividade)'
+        ? t('chat.headerInactive')
         : 'Chat privado'
     : 'Carregando...';
 
@@ -319,12 +497,24 @@ export default function ChatRoomScreen() {
           <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
           <Text style={styles.headerSub}>{headerSubtitle}</Text>
         </View>
+        <TouchableOpacity onPress={() => setLocaleModalVisible(true)} style={styles.settingsBtn} accessibilityLabel={t('chat.localeTitle')}>
+          <Ionicons name="language-outline" size={22} color={C.primary} />
+        </TouchableOpacity>
         {roomInfo?.isGroup && (
           <TouchableOpacity onPress={() => setSettingsVisible(true)} style={styles.settingsBtn}>
             <Ionicons name="settings-outline" size={22} color={C.primary} />
           </TouchableOpacity>
         )}
       </View>
+
+      {isOnline === false && (
+        <View style={styles.offlineBannerRoom}>
+          <Ionicons name="cloud-offline-outline" size={18} color={C.status.warning.fg} />
+          <Text style={styles.offlineBannerRoomText}>
+            Sem conexão. Mostramos o histórico salvo neste aparelho; mensagens de texto ficam na fila até a internet voltar.
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: C.background }}
@@ -362,9 +552,7 @@ export default function ChatRoomScreen() {
         {chatInputLocked && (
           <View style={styles.lockedBanner}>
             <Ionicons name="lock-closed-outline" size={18} color={C.status.warning.fg} />
-            <Text style={styles.lockedBannerText}>
-              Mensagens só durante a atividade: quando a OS estiver em andamento ou em conclusão (antes da sincronização final).
-            </Text>
+            <Text style={styles.lockedBannerText}>{t('chat.lockedBanner')}</Text>
           </View>
         )}
 
@@ -378,12 +566,8 @@ export default function ChatRoomScreen() {
                 </>
               ) : (
                 <>
-                  <Ionicons name={attach.type === 'image' ? 'image' : attach.type === 'video' ? 'videocam' : 'mic'} size={24} color={C.primary} />
-                  {attach.type === 'image' ? (
-                    <Image source={{ uri: attach.uri }} style={{ width: 44, height: 44, borderRadius: 8, marginLeft: 8 }} />
-                  ) : (
-                    <Text style={{ marginLeft: 8, fontWeight: '600', color: C.slate }}>Arquivo anexado</Text>
-                  )}
+                  <Ionicons name="image" size={24} color={C.primary} />
+                  <Image source={{ uri: attach.uri }} style={{ width: 44, height: 44, borderRadius: 8, marginLeft: 8 }} />
                 </>
               )}
             </View>
@@ -409,7 +593,7 @@ export default function ChatRoomScreen() {
           
           <TextInput
             style={[styles.input, chatInputLocked && { opacity: 0.55 }]}
-            placeholder={chatInputLocked ? 'Chat inativo…' : 'Digite algo...'}
+            placeholder={chatInputLocked ? t('chat.placeholderLocked') : t('chat.typeMessage')}
             value={text}
             onChangeText={setText}
             multiline
@@ -439,13 +623,36 @@ export default function ChatRoomScreen() {
               <View style={[styles.attachIconBg, { backgroundColor: C.status.danger.bg }]}><Ionicons name="image" size={22} color={C.destructive} /></View>
               <Text style={styles.attachMenuText}>Foto</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.attachMenuItem} onPress={pickVideo}>
-              <View style={[styles.attachIconBg, { backgroundColor: C.status.warning.bg }]}><Ionicons name="videocam" size={22} color={C.warning.text} /></View>
-              <Text style={styles.attachMenuText}>Vídeo</Text>
-            </TouchableOpacity>
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <Modal visible={localeModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxWidth: 360 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('chat.localeTitle')}</Text>
+              <TouchableOpacity onPress={() => setLocaleModalVisible(false)}>
+                <Ionicons name="close" size={26} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 14 }}>{t('chat.localeHint')}</Text>
+            <TouchableOpacity style={styles.contactItem} onPress={() => applyChatLocale(null)}>
+              <Ionicons name="globe-outline" size={20} color={C.primary} />
+              <Text style={{ flex: 1, marginLeft: 10, fontWeight: '600' }}>{t('chat.localeAuto')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.contactItem} onPress={() => applyChatLocale('pt-BR')}>
+              <Text style={{ flex: 1, fontWeight: '600' }}>{t('chat.localePt')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.contactItem} onPress={() => applyChatLocale('en-US')}>
+              <Text style={{ flex: 1, fontWeight: '600' }}>{t('chat.localeEn')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.contactItem} onPress={() => applyChatLocale('es-ES')}>
+              <Text style={{ flex: 1, fontWeight: '600' }}>{t('chat.localeEs')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* MODAL GROUP SETTINGS */}
       <Modal visible={settingsVisible} transparent animationType="slide">
@@ -545,7 +752,32 @@ function createChatRoomStyles(C: ColorPalette) {
   headerAvatarText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   headerName: { fontSize: 17, fontWeight: '800', color: C.slate },
   headerSub: { fontSize: 12, color: C.textSecondary, fontWeight: '500' },
-  
+
+  offlineBannerRoom: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: C.status.warning.bg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.status.warning.border,
+  },
+  offlineBannerRoomText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.status.warning.fg,
+    lineHeight: 17,
+  },
+  pendingHint: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.textLight,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+
   messageList: { padding: 16, paddingBottom: 32 },
   empty: { alignItems: 'center', marginTop: 100 },
   emptyText: { fontSize: 15, color: C.textLight, textAlign: 'center', marginTop: 12, lineHeight: 22 },

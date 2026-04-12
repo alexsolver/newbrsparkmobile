@@ -305,6 +305,74 @@ function formatSignaturePdfHtml(str, th) {
   </div>`;
 }
 
+function normalizeSignatureSummaryPdfIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x || '').trim()).filter(Boolean);
+}
+
+/**
+ * Resumo só leitura + assinatura (campo `signature_summary`).
+ * @param {any} val
+ * @param {any} f
+ * @param {ReturnType<mergeTheme>} th
+ * @param {Record<string, unknown>} responses
+ * @param {object|null|undefined} row
+ * @param {Array<{id:string,label?:string,type?:string}>} schemaFields
+ */
+function formatSignatureSummaryPdfBlock(val, f, th, responses, row, schemaFields) {
+  const ids = normalizeSignatureSummaryPdfIds(f.summarySourceFieldIds);
+  const byId = new Map((schemaFields || []).map((x) => [x.id, x]));
+  const parts = [];
+  parts.push(
+    `<div style="margin-bottom:12px;padding:12px;border:1px solid ${th.colorBorder};border-radius:10px;background:${th.colorSurface}">`,
+    `<div style="font-size:9px;font-weight:900;color:${th.colorMuted};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Resumo para assinatura</div>`,
+  );
+  if (!ids.length) {
+    parts.push(
+      `<div style="font-size:11px;color:${th.colorMutedLight};font-style:italic">Nenhum campo selecionado no modelo.</div>`,
+    );
+  } else {
+    for (const sid of ids) {
+      const sf = byId.get(sid);
+      const srcVal = row && typeof row === 'object' ? row[sid] : responses[sid];
+      const lab = esc(sf?.label || sid);
+      let inner;
+      const special = sf ? formatSpecialFieldHtml(srcVal, sf, th, responses, row) : null;
+      if (special != null) {
+        inner = special;
+      } else if (srcVal === undefined || srcVal === null || srcVal === '') {
+        inner = `<span style="color:${th.colorMutedLight};font-style:italic">Não preenchido</span>`;
+      } else if (typeof srcVal === 'boolean') {
+        inner = srcVal
+          ? `<span class="pdf-pill" style="background:${th.pillYesBg}">Sim</span>`
+          : `<span class="pdf-pill" style="background:${th.pillNoBg}">Não</span>`;
+      } else if (typeof srcVal === 'object') {
+        inner = `<pre style="margin:0;font-size:9px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:${th.colorMuted};line-height:1.35">${esc(JSON.stringify(srcVal))}</pre>`;
+      } else {
+        inner = `<span>${esc(String(srcVal))}</span>`;
+      }
+      parts.push(
+        `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed ${th.colorBorder}">`,
+        `<div style="font-size:10px;font-weight:800;color:${th.colorText};margin-bottom:4px">${lab}</div>`,
+        `<div style="font-size:11px;color:${th.colorText};line-height:1.45">${inner}</div>`,
+        `</div>`,
+      );
+    }
+  }
+  parts.push('</div>');
+  let sigPart;
+  if (typeof val === 'string' && val.startsWith('SIG_V1|')) {
+    sigPart = formatSignaturePdfHtml(val, th);
+  } else {
+    sigPart = `<span style="color:${th.colorMutedLight};font-style:italic">Assinatura ainda não registada</span>`;
+  }
+  parts.push(
+    `<div style="margin-top:10px;font-size:10px;font-weight:800;color:${th.colorMuted};margin-bottom:6px">Assinatura</div>`,
+  );
+  parts.push(`<div>${sigPart}</div>`);
+  return parts.join('');
+}
+
 /** Comentários por anexo/foto (`__media_cap_<fieldId>`) — raiz ou linha repetível. */
 function pdfMediaCapPreview(fieldId, index, responses, row) {
   if (!fieldId || !responses || typeof responses !== 'object') return '';
@@ -1260,15 +1328,32 @@ function buildPdfProdBlockForPreview(th, t, responses) {
   const formActiveStrPdf = fmtDurationPtBr(activeSecPdf);
   const prodSnap = resolveProductivityFromTask(t);
   const plannedFormMinPdf = prodSnap.plannedFormDurationMinutes;
+  const schedStartPdf = t.scheduledStartAt;
+  const efMinPdf = t.expectedFormDurationMinutes;
+  let agendaWindowLinePdf = '';
+  if (
+    schedStartPdf &&
+    efMinPdf != null &&
+    Number.isFinite(Number(efMinPdf)) &&
+    Number(efMinPdf) > 0
+  ) {
+    const startMs = new Date(schedStartPdf).getTime();
+    const endMs = startMs + Math.floor(Number(efMinPdf)) * 60000;
+    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+      const sStr = formatPtDateTimeDotPdf(new Date(startMs).toISOString());
+      const eStr = formatPtDateTimeDotPdf(new Date(endMs).toISOString());
+      agendaWindowLinePdf = `<div style="font-size:9px;color:#334155;padding:8px 12px 0;font-weight:700;border-top:1px dashed ${th.colorBorder}">Janela prevista (formulário, sem deslocamento): ${esc(sStr)} → ${esc(eStr)}</div>`;
+    }
+  }
   const formPrevVsRealLine =
     plannedFormMinPdf != null && Number.isFinite(Number(plannedFormMinPdf))
-      ? `<div style="font-size:9px;color:#475569;padding:8px 12px 0;font-weight:600">Formulário: <strong>${esc(
+      ? `<div style="font-size:9px;color:#475569;padding:8px 12px 0;font-weight:600">Meta de preenchimento (min): <strong>${esc(
           String(Math.floor(Number(plannedFormMinPdf))),
-        )} min</strong> previstos · real (preenchimento) <strong>${esc(formFillStrPdf)}</strong>${
+        )}</strong> · tempo real de preenchimento <strong>${esc(formFillStrPdf)}</strong>${
           prodSnap.pctFormFillVsPlanned != null && Number.isFinite(Number(prodSnap.pctFormFillVsPlanned))
             ? ` · ${Number(prodSnap.pctFormFillVsPlanned) > 0 ? '+' : ''}${esc(
                 String(prodSnap.pctFormFillVsPlanned),
-              )}% vs previsto`
+              )}% vs meta`
             : ''
         }.</div>`
       : '';
@@ -1305,6 +1390,7 @@ function buildPdfProdBlockForPreview(th, t, responses) {
               ${pdfProdMetricCell('No form.', formFillStrPdf, false)}
               ${pdfProdMetricCell('App foco', formActiveStrPdf, true)}
             </div>
+            ${agendaWindowLinePdf}
             ${formPrevVsRealLine}
           </div>
           <div style="padding:10px 12px 12px;background:#fff;">
@@ -1762,6 +1848,21 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
                </div>
             </div>
           `;
+      continue;
+    }
+
+    if (f.type === 'signature_summary') {
+      const inner = formatSignatureSummaryPdfBlock(val, f, th, responses, row, schemaFields || []);
+      formHtml += `
+        <div class="pdf-form-item" style="position:relative;">
+           <div class="pdf-form-num" style="background:${th.formNumBg}">${qNum++}</div>
+           <div class="pdf-q" style="display:flex; justify-content:space-between; align-items:center;">
+             <span>${esc(lab)}</span>
+             ${timeHtml}
+           </div>
+           <div class="pdf-a">${inner}</div>
+           ${techCommentBlockHtml(f, responses, row)}
+        </div>`;
       continue;
     }
 

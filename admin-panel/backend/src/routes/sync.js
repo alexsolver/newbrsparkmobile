@@ -381,9 +381,20 @@ function mapChecklistExecutionToSyncTask(ex) {
     }
   }
 
+  /** Fim da janela prevista só do formulário — espelho semântico de agendaEndAt quando há slot na agenda. */
+  const plannedFormEndAt = hasAgendaSlot ? agendaEndAt : null;
+  const startedAtIso = ex.startedAt ? new Date(ex.startedAt).toISOString() : null;
+  const completedAtIso = ex.completedAt ? new Date(ex.completedAt).toISOString() : null;
+
+  const executionCreatedIso = ex.createdAt
+    ? new Date(ex.createdAt).toISOString()
+    : null;
+
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
+    /** Criação da execução no servidor (ordenar / portabilidade no app). */
+    executionCreatedAt: executionCreatedIso,
     lastSubmittedRevision: effectiveLastSubmittedRevision(
       ex.lastSubmittedRevision,
       ex.revisions?.[0]?.revision
@@ -411,10 +422,16 @@ function mapChecklistExecutionToSyncTask(ex) {
     agendaStartAt,
     agendaEndAt,
     expectedFormDurationMinutes,
+    /** Mesmo instante que agendaEndAt quando há slot — nome explícito para clientes (só formulário, sem deslocamento). */
+    plannedFormEndAt,
+    startedAt: startedAtIso,
+    completedAt: completedAtIso,
   };
 }
 
 // ─── GET /api/sync/tasks ──────────────────────────────────────────────────────
+// Campos de tempo: scheduledStartAt + expectedFormDurationMinutes definem a janela prevista do
+// formulário (agendaStartAt/agendaEndAt/plannedFormEndAt); startedAt/completedAt são tempos reais da execução.
 // OS ativas (pendentes / em campo) + concluídas recentes no servidor (para aba "Concluídas"
 // sem depender só do AsyncStorage local do celular).
 router.get('/tasks', async (req, res) => {

@@ -31,11 +31,15 @@ export interface ChatMessage {
   senderAvatarUrl?: string;
   type: 'text' | 'audio' | 'video' | 'image';
   content?: string;
+  /** Texto a mostrar (traduzido para o seu idioma quando aplicável). */
+  displayContent?: string;
   mediaUrl?: string;
   timestamp: number;
+  /** Mensagem na fila offline — ainda não confirmada pelo servidor */
+  pending?: boolean;
 }
 
-/** Sala técnico–cliente: envio só permitido com OS em andamento ou em conclusão (servidor). */
+/** Sala técnico–cliente: envio só permitido após início do deslocamento, com OS em atendimento (servidor). */
 export interface ChatMessagingState {
   technicianClientGated: boolean;
   messagingActive: boolean;
@@ -55,8 +59,13 @@ export const ChatService = {
   },
 
   async getPendingContacts(): Promise<ChatContact[]> {
-    const res = await apiFetch('/api/chat/contacts/pending');
-    return res.json();
+    try {
+      const res = await apiFetch('/api/chat/contacts/pending');
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
   },
 
   async updateContactStatus(id: string, status: 'ACCEPTED' | 'REJECTED'): Promise<any> {
@@ -69,8 +78,13 @@ export const ChatService = {
   },
 
   async getAvailableContacts(): Promise<any[]> {
-    const res = await apiFetch('/api/chat/contacts');
-    return res.json();
+    try {
+      const res = await apiFetch('/api/chat/contacts');
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
   },
 
   // ---- SALAS ----
@@ -122,9 +136,14 @@ export const ChatService = {
 
   // ---- MENSAGENS ----
 
-  async getMessages(roomId: string, since: number = 0): Promise<ChatMessage[]> {
+  async getMessages(roomId: string, since: number = 0, viewerLocale?: string | null): Promise<ChatMessage[]> {
     try {
-      const res = await apiFetch(`/api/chat/rooms/${roomId}/messages?since=${since}`);
+      const q = new URLSearchParams();
+      q.set('since', String(since));
+      if (viewerLocale != null && String(viewerLocale).trim() !== '') {
+        q.set('viewerLocale', String(viewerLocale).trim());
+      }
+      const res = await apiFetch(`/api/chat/rooms/${roomId}/messages?${q.toString()}`);
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -133,7 +152,7 @@ export const ChatService = {
   },
 
   async sendMessage(roomId: string, payload: {
-    type: 'text' | 'audio' | 'video' | 'image';
+    type: 'text' | 'image';
     content?: string;
     mediaUrl?: string;
   }): Promise<ChatMessage> {

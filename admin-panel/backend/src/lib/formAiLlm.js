@@ -15,8 +15,11 @@ const { formatColumnSignalsForLlm } = require('./formAiExtract');
 const {
   formatAnalyzeFieldTypesForPrompt,
   formatSchemaTypeDocBlock,
+  formatTransitDisplacementRulesForPrompt,
+  formatAutomaticIconRulesForPrompt,
   buildFormContextBlock,
 } = require('./formAiFieldCatalog');
+const { sanitizeTaskIconName } = require('./formAiTemplateMetadataPatch');
 
 /**
  * @param {Record<string, unknown>} [formContext]
@@ -66,6 +69,8 @@ Regras estruturais:
 - Comece cada planilha (## Folha:) com um section_break com label = nome da planilha, depois os campos dessa planilha.
 - Se a primeira linha de cada planilha for cabeçalho, um campo por coluna relevante (ignora colunas vazias ou totais óbvios).
 - Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o usuário os pediu explicitamente no contexto.
+
+${formatTransitDisplacementRulesForPrompt()}
 `;
 }
 
@@ -99,13 +104,15 @@ Regras estruturais:
 - Em listas numeradas ou títulos no Word/JSON, cada pergunta clara pode virar um field; agrupe sob section_break quando houver capítulos.
 - Se houver cabeçalho de tabela na primeira linha de uma grelha, um field por coluna (ignora vazias/totais óbvios).
 - Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita).
+
+${formatTransitDisplacementRulesForPrompt()}
 `;
 }
 
 function buildCanonicalSystemPrompt() {
   const typeDoc = formatSchemaTypeDocBlock();
   return `Você é um assistente que gera formulários para a plataforma BrSpark (checklist no celular).
-Retorne APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData".
+Retorne APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData" e opcionalmente "metadata".
 
 schemaData é um array ordenado de objetos. Cada objeto representa um campo OU um separador de etapa.
 
@@ -126,6 +133,12 @@ O texto pode vir de Excel, Word (Markdown) ou JSON — adapte: listas e cabeçal
 
 Se o input tiver várias planilhas (## Folha:), comece cada planilha com um section_break com label = nome da planilha, depois os campos dessa planilha.
 Colunas onde os valores se repetem entre poucas etiquetas distintas devem ser "dropdown" ou "yes_no", não texto livre.
+
+${formatAutomaticIconRulesForPrompt()}
+
+"metadata" (opcional): objeto \`{ "icon": "<Ionicons kebab-case>" }\` — ícone da tarefa na lista do painel; alinhe ao "title".
+
+${formatTransitDisplacementRulesForPrompt()}
 `;
 }
 
@@ -258,7 +271,7 @@ async function analyzeSpreadsheetStructure(input) {
 
 /**
  * @param {{ markdown: string, userHint?: string, columnSignals?: object[], formContext?: Record<string, unknown> }} input
- * @returns {Promise<{ title: string, description: string, schemaData: object[], warnings: string[] }>}
+ * @returns {Promise<{ title: string, description: string, schemaData: object[], metadata?: { icon: string }, warnings: string[] }>}
  */
 async function generateSchemaFromCanonical(input) {
   const formContext = input.formContext && typeof input.formContext === 'object' ? input.formContext : {};
@@ -280,7 +293,23 @@ async function generateSchemaFromCanonical(input) {
     input.columnSignals || [],
     formContext
   );
-  return { title, description, schemaData: schemaPatched, warnings: [...warnings, ...patchWarn] };
+  let metadata = {};
+  const rawMeta = parsed.metadata;
+  if (rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)) {
+    const ic = sanitizeTaskIconName(rawMeta.icon);
+    if (ic) metadata = { icon: ic };
+  }
+  if (!metadata.icon) {
+    const fb = sanitizeTaskIconName('clipboard-outline');
+    if (fb) metadata = { icon: fb };
+  }
+  return {
+    title,
+    description,
+    schemaData: schemaPatched,
+    metadata,
+    warnings: [...warnings, ...patchWarn],
+  };
 }
 
 module.exports = {

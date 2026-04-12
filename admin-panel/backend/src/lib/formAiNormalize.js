@@ -1,6 +1,10 @@
 'use strict';
 
-const { ALLOWED_FIELD_TYPES, buildDefaultAnalyzeProposalOptions } = require('./formAiFieldCatalog');
+const {
+  ALLOWED_FIELD_TYPES,
+  buildDefaultAnalyzeProposalOptions,
+  applyDefaultTypeIconsToSchemaItems,
+} = require('./formAiFieldCatalog');
 
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
@@ -74,6 +78,8 @@ function defaultFieldShell(type, label) {
     showFieldInstructions: false,
     defaultValue: '',
     icon: '',
+    iconLibrary: 'Ionicons',
+    iconColor: '',
     allowTechnicianComment: false,
     allowMediaDescription: false,
     ...(t === 'section_break' ? { sectionFillMode: 'list' } : {}),
@@ -116,6 +122,18 @@ function normalizeSchemaItem(raw, usedIds) {
     base.defaultValue = String(raw.defaultValue).trim();
   }
   if (raw.allowTechnicianComment === true) base.allowTechnicianComment = true;
+  if (raw.icon != null && String(raw.icon).trim()) {
+    base.icon = String(raw.icon).trim();
+    base.iconLibrary = raw.iconLibrary != null ? String(raw.iconLibrary).trim() || 'Ionicons' : 'Ionicons';
+    if (raw.iconColor != null && String(raw.iconColor).trim()) base.iconColor = String(raw.iconColor).trim();
+  } else if (raw.iconLibrary != null && String(raw.iconLibrary).trim()) {
+    base.iconLibrary = String(raw.iconLibrary).trim();
+  }
+  if (type === 'signature_summary') {
+    base.summarySourceFieldIds = Array.isArray(raw.summarySourceFieldIds)
+      ? raw.summarySourceFieldIds.map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
+  }
   return base;
 }
 
@@ -137,6 +155,8 @@ function normalizeSchemaDataFromLlm(arr) {
   }
   if (schemaData.length === 0) {
     warnings.push('Nenhum campo válido após normalização.');
+  } else {
+    applyDefaultTypeIconsToSchemaItems(schemaData);
   }
   return { schemaData, warnings };
 }
@@ -503,6 +523,8 @@ function inferSuggestedFieldTypeFromLabel(label, formContext = {}) {
     return 'facial_recognition';
   if (has(/\b(cerca|geofence|validar\s*local|localiza(c|ç)[aã]o\s*\(?gps|dentro\s*da\s*zona)\b/i))
     return 'geofence_check';
+  if (has(/\b(resumo\s*para\s*assinatura|assinatura\s*com\s*resumo|confer[eê]ncia\s*e\s*assinatura)\b/i))
+    return 'signature_summary';
   if (has(/\b(assinatur|firma\s*do|firma\s*digital|rubrica)\b/i)) return 'signature';
   if (has(/\b(c[oó]digo\s*de\s*barras|\bean\b|\bgtin\b|patrim[oô]nio|n[ºo°]?\s*ser(i[eê])?|\bsku\b)\b/i))
     return 'barcode_scan';
@@ -719,6 +741,8 @@ function buildSchemaFromProposalSelections(items, selections) {
   }
   if (schemaData.length === 0) {
     warnings.push('Nenhum campo no formulário após confirmação.');
+  } else {
+    applyDefaultTypeIconsToSchemaItems(schemaData);
   }
   return { schemaData, warnings };
 }

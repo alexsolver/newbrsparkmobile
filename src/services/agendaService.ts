@@ -3,6 +3,20 @@ import { AuthService } from './auth';
 import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
+
+/** Quem consome a agenda unificada: compromissos do cliente vs OS de execução do prestador. */
+export type AgendaScope = 'CLIENT' | 'PROVIDER' | 'ALL';
+
+/**
+ * Itens da agenda ligados à execução de OS (checklist / nuvem), não a reservas/manuais/financeiro do cliente.
+ */
+export function isProviderScopeAgendaEvent(ev: AgendaEvent): boolean {
+  if (ev.source === 'CHECKLIST') return true;
+  const src = ev.source as string | undefined;
+  if (src === 'MANUAL' || src === 'COST' || src === 'INSURANCE') return false;
+  if (ev.category === 'TASK' && ev.refId) return true;
+  return false;
+}
 import { overlayExecutionStatusOutboxOnTasks } from './syncService';
 import { NotificationService } from './notifications';
 import i18n from '../i18n';
@@ -94,7 +108,7 @@ export const AgendaService = {
   },
 
   // ─── 2. Unified Aggregator (Passivo + Ativo) ───
-  async getUnifiedAgenda(ownerEmail?: string): Promise<AgendaEvent[]> {
+  async getUnifiedAgenda(ownerEmail?: string, scope: AgendaScope = 'ALL'): Promise<AgendaEvent[]> {
     if (!ownerEmail) return [];
     
     // 1. Get manually added events (Bookings, Maintenance, Tasks)
@@ -160,7 +174,12 @@ export const AgendaService = {
         ownerEmail
       }));
 
-    const mergedAll = [...localEvents, ...financeEvents, ...insuranceEvents];
+    let mergedAll = [...localEvents, ...financeEvents, ...insuranceEvents];
+    if (scope === 'CLIENT') {
+      mergedAll = mergedAll.filter((e) => !isProviderScopeAgendaEvent(e));
+    } else if (scope === 'PROVIDER') {
+      mergedAll = mergedAll.filter((e) => isProviderScopeAgendaEvent(e));
+    }
     markAgendaOverlaps(mergedAll);
     const overlapIds = mergedAll.filter((e) => e.agendaOverlap).map((e) => e.id);
     if (overlapIds.length > 0) {

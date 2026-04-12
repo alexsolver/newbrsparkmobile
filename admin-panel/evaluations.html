@@ -31,6 +31,7 @@
     .eval-survey-preview[hidden] { display:none !important; }
     .eval-survey-preview-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
     .inst-url-input { width:100%; font-size:11px; padding:6px 8px; margin-bottom:8px; font-family:ui-monospace,monospace; word-break:break-all; }
+    .chat-transcript-pre { white-space:pre-wrap; word-break:break-word; max-height:min(52vh,560px); overflow:auto; font-size:12px; line-height:1.45; font-family:ui-monospace,monospace; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 14px; margin:0; }
   </style>
 </head>
 <body>
@@ -83,6 +84,7 @@
         </div>
         <div class="panel">
           <div class="panel-header"><span class="panel-title">Revisões / disputas</span></div>
+          <p class="hint-sm" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.</p>
           <div class="table-wrap">
             <table><thead><tr><th>Técnico</th><th>OS / nota</th><th>Justificativa</th><th style="text-align:right">Ações</th></tr></thead>
             <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
@@ -188,6 +190,19 @@
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
       <button type="button" class="btn" id="tpl-modal-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="tpl-modal-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="chat-transcript-overlay" class="eval-modal-overlay" aria-hidden="true">
+  <div class="eval-modal" role="dialog" aria-labelledby="chat-transcript-title" style="max-width:720px">
+    <h2 id="chat-transcript-title" style="margin-top:0">Chat técnico — cliente (auditoria)</h2>
+    <div id="chat-transcript-meta" class="hint-sm" style="margin-bottom:10px"></div>
+    <div id="chat-transcript-warn" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--amber-dim);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text2)"></div>
+    <pre id="chat-transcript-body" class="chat-transcript-pre"></pre>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn" id="chat-transcript-close">Fechar</button>
+      <button type="button" class="btn btn-primary" id="chat-transcript-json">Descarregar JSON</button>
     </div>
   </div>
 </div>

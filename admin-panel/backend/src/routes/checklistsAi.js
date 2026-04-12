@@ -14,6 +14,7 @@ const {
 const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('../lib/formAiLlm');
 const { runFormCopilot, suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
+const { buildFilledFormsRagContext } = require('../lib/formAiExecutionRag');
 
 const router = express.Router();
 
@@ -269,6 +270,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
       title: generated.title,
       description: generated.description,
       schemaData: generated.schemaData,
+      metadata: generated.metadata && typeof generated.metadata === 'object' ? generated.metadata : {},
       warnings: [...(generated.warnings || []), ...(snapshot.truncated ? ['Conteúdo truncado por limite de tamanho.'] : [])],
       truncated: !!snapshot.truncated,
       source: { format: snapshot.format, name: file.originalname || null },
@@ -281,7 +283,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
 
 /**
  * POST /api/checklists/ai/session/chat
- * JSON: { messages: [{role, content}], schemaData?: [], formContext?: {}, spreadsheetSummary?: string }
+ * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId? (RAG: execuções do mesmo modelo) }
  */
 router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
   try {
@@ -294,14 +296,40 @@ router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
     const formContext = parseFormContextFromOptions(body.formContext || {});
     const spreadsheetSummary =
       typeof body.spreadsheetSummary === 'string' ? body.spreadsheetSummary : '';
+    const templateId = typeof body.templateId === 'string' ? body.templateId.trim() : '';
+
+    let ragFilledFormsSummary = '';
+    let ragMeta = { revisionCount: 0, skipped: 'no_template_id' };
+    if (templateId) {
+      const rag = await buildFilledFormsRagContext({
+        templateId,
+        schemaData,
+        maxRevisions: 10,
+        maxChars: 14_000,
+      });
+      ragFilledFormsSummary = rag.text || '';
+      ragMeta = rag.meta || { revisionCount: 0 };
+    }
+
+    const templateSettings =
+      body.templateSettings && typeof body.templateSettings === 'object' && !Array.isArray(body.templateSettings)
+        ? body.templateSettings
+        : {};
+    const templateMetadata =
+      body.templateMetadata && typeof body.templateMetadata === 'object' && !Array.isArray(body.templateMetadata)
+        ? body.templateMetadata
+        : {};
 
     const out = await runFormCopilot({
       messages,
       schemaData,
       formContext,
       spreadsheetSummary,
+      ragFilledFormsSummary,
+      templateSettings,
+      templateMetadata,
     });
-    res.json({ ok: true, ...out });
+    res.json({ ok: true, ...out, ragMeta });
   } catch (e) {
     if (e.code === 'NO_OPENAI_KEY') {
       return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });

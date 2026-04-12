@@ -267,6 +267,8 @@ export default function TechnicianFinanceScreen() {
   const [expenseCatCatalog, setExpenseCatCatalog] = useState<TechnicianExpenseCategoryRow[]>(() =>
     loadTechnicianExpenseCategoryCatalog()
   );
+  /** Detalhes do rateio por grupo (cartão principal compacto; rateio em menu retrátil). */
+  const [splitRateioOpen, setSplitRateioOpen] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -349,6 +351,9 @@ export default function TechnicianFinanceScreen() {
       const splitEditable = isManualSplitRateioEditableInMemory(parts, cloudTasksRaw);
       const splitUnlocked = parts.length > 0 && parts.every((p) => p.financeValueUnlocked === true);
       const splitIds = parts.map((p) => encodeURIComponent(p.id)).join(',');
+      const rateioOpen = splitRateioOpen[row.groupId] === true;
+      const toggleRateio = () =>
+        setSplitRateioOpen((m) => ({ ...m, [row.groupId]: !m[row.groupId] }));
       const splitInner = (
         <>
           <View style={styles.cardTop}>
@@ -361,28 +366,44 @@ export default function TechnicianFinanceScreen() {
             </View>
           </View>
           <ExpenseCategoryRow catalog={expenseCatCatalog} categoryKey={parts[0]?.categoryKey} />
-          <Text style={styles.desc} numberOfLines={2}>
+          <Text style={styles.desc} numberOfLines={3}>
             {title}
           </Text>
-          <View style={styles.detailsSection}>
-            <Text style={styles.detailsSectionTitle}>Detalhes do rateio</Text>
-            <Text style={styles.detailsSectionSub}>{parts.length} OS · valor por ordem abaixo</Text>
-            {parts.map((p, si) => {
-              const tid = p.taskId ? String(p.taskId) : '';
-              if (!tid) {
+          <Text style={styles.rateioPrincipalHint}>
+            Despesa principal · rateio em {parts.length} {parts.length === 1 ? 'ordem' : 'ordens'} de serviço
+          </Text>
+          <TouchableOpacity
+            style={styles.rateioToggle}
+            onPress={toggleRateio}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: rateioOpen }}
+            accessibilityLabel={rateioOpen ? 'Ocultar detalhes do rateio' : 'Ver detalhes do rateio'}
+          >
+            <Text style={styles.rateioToggleTxt}>{rateioOpen ? 'Ocultar rateio' : 'Ver rateio'}</Text>
+            <Ionicons name={rateioOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#475569" />
+          </TouchableOpacity>
+          {rateioOpen ? (
+            <View style={styles.detailsSection}>
+              <Text style={styles.detailsSectionTitle}>Detalhes do rateio</Text>
+              <Text style={styles.detailsSectionSub}>{parts.length} OS · valor por ordem abaixo</Text>
+              {parts.map((p, si) => {
+                const tid = p.taskId ? String(p.taskId) : '';
+                if (!tid) {
+                  return (
+                    <View key={p.id} style={[si === parts.length - 1 && { marginBottom: 0 }]}>
+                      <Text style={styles.splitLineAmt}>{formatBrl(p.amount)}</Text>
+                    </View>
+                  );
+                }
                 return (
-                  <View key={p.id} style={[si === parts.length - 1 && { marginBottom: 0 }]}>
-                    <Text style={styles.splitLineAmt}>{formatBrl(p.amount)}</Text>
+                  <View key={p.id} style={{ marginBottom: si === parts.length - 1 ? 0 : 12 }}>
+                    <OsLinkedDetailsBlock taskId={tid} taskById={taskById} amountRight={formatBrl(p.amount)} />
                   </View>
                 );
-              }
-              return (
-                <View key={p.id} style={{ marginBottom: si === parts.length - 1 ? 0 : 12 }}>
-                  <OsLinkedDetailsBlock taskId={tid} taskById={taskById} amountRight={formatBrl(p.amount)} />
-                </View>
-              );
-            })}
-          </View>
+              })}
+            </View>
+          ) : null}
           {attachCount > 0 ? (
             <View style={styles.attachRow}>
               <Ionicons name="attach-outline" size={14} color="#64748b" />
@@ -686,6 +707,26 @@ const styles = StyleSheet.create({
   },
   expenseCatTxt: { fontSize: 12, fontWeight: '800', flexShrink: 1 },
   desc: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 20 },
+  rateioPrincipalHint: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    marginTop: 6,
+    lineHeight: 17,
+  },
+  rateioToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  rateioToggleTxt: { fontSize: 13, fontWeight: '800', color: '#334155' },
   osDetailsWrap: { marginTop: 10 },
   osDetailCard: {
     padding: 10,

@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { setLanguage, getDeviceRegion } from '../src/i18n';
 import { clearLocalDatabase } from '../src/database';
 import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
+import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -1043,7 +1044,18 @@ export default function ProfileScreen() {
             onPress={() => {
               Alert.alert(t('profile.exportData'), t('profile.exportDataConfirm'), [
                 { text: t('common.cancel'), style: 'cancel' },
-                { text: t('profile.exportBtn'), onPress: () => Alert.alert("Success", "Data exported.") }
+                {
+                  text: t('profile.exportBtn'),
+                  onPress: async () => {
+                    try {
+                      await shareUserLocalDataJson({ dialogTitle: t('profile.exportShareTitle') });
+                      Alert.alert(t('profile.exportSuccess'), t('profile.exportSuccessMsg'));
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : String(e);
+                      Alert.alert(t('common.exportError'), `${t('profile.exportFailedMsg')}\n\n${msg}`);
+                    }
+                  },
+                },
               ]);
             }}
           >

@@ -14,6 +14,94 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Última transcrição carregada (para descarregar JSON). */
+let lastChatTranscriptPayload = null;
+
+function formatChatTranscriptText(data) {
+  if (!data || typeof data !== 'object') return '';
+  const lines = [];
+  lines.push(`Instância de avaliação: ${data.evaluationInstanceId || '—'}`);
+  lines.push(`OS: ${data.osNumber || '—'} | Execução: ${data.executionId || '—'}`);
+  lines.push(`Técnico: ${data.techEmail || '—'} | Cliente (metadata): ${data.clientEmail || '—'}`);
+  lines.push(`Sala de chat: ${data.roomId || '—'}`);
+  lines.push(`Janela temporal: ${data.windowFrom || '—'} → ${data.windowTo || '—'}`);
+  lines.push('');
+  if (Array.isArray(data.warnings) && data.warnings.length) {
+    lines.push('AVISOS:', ...data.warnings.map((w) => `  • ${w}`), '');
+  }
+  const msgs = data.messages || [];
+  if (!msgs.length) {
+    lines.push('(Sem mensagens de texto/foto nesta janela.)');
+  } else {
+    lines.push(`Mensagens (${msgs.length}):`, '');
+    msgs.forEach((m) => {
+      const head = `[${m.createdAt}] ${m.senderName} <${m.senderId}> (${m.type})`;
+      const body = m.content ? String(m.content) : '';
+      const media = m.mediaUrl ? `\n  [ficheiro] ${m.mediaUrl}` : '';
+      lines.push(head + (body ? `\n  ${body.replace(/\n/g, '\n  ')}` : '') + media, '');
+    });
+  }
+  return lines.join('\n');
+}
+
+function renderChatTranscriptModal(data) {
+  lastChatTranscriptPayload = data;
+  const meta = document.getElementById('chat-transcript-meta');
+  const warn = document.getElementById('chat-transcript-warn');
+  const body = document.getElementById('chat-transcript-body');
+  if (meta) {
+    meta.innerHTML = `<strong>OS</strong> ${esc(data.osNumber || '—')} · <strong>Sala</strong> ${esc(data.roomId || '—')} · <strong>${esc((data.messages || []).length)}</strong> mensagem(ns)`;
+  }
+  if (warn) {
+    const w = data.warnings || [];
+    if (w.length) {
+      warn.style.display = 'block';
+      warn.textContent = w.join(' ');
+    } else {
+      warn.style.display = 'none';
+      warn.textContent = '';
+    }
+  }
+  if (body) {
+    body.textContent = formatChatTranscriptText(data);
+  }
+}
+
+function downloadChatTranscriptJson() {
+  if (!lastChatTranscriptPayload) return;
+  const slug = String(lastChatTranscriptPayload.osNumber || lastChatTranscriptPayload.evaluationInstanceId || 'transcript').replace(/[^\w.-]+/g, '_');
+  const blob = new Blob([JSON.stringify(lastChatTranscriptPayload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `chat-auditoria-${slug}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function openChatTranscriptFromDispute(disputeId) {
+  const data = await CONFIG.get(
+    '/admin/evaluations/disputes/' + encodeURIComponent(disputeId) + '/chat-transcript'
+  );
+  if (!data || data.error) {
+    alert(data?.error || 'Não foi possível carregar a transcrição.');
+    return;
+  }
+  renderChatTranscriptModal(data);
+  openModal('chat-transcript-overlay');
+}
+
+async function openChatTranscriptFromInstance(instanceId) {
+  const data = await CONFIG.get(
+    '/admin/evaluations/instances/' + encodeURIComponent(instanceId) + '/chat-transcript'
+  );
+  if (!data || data.error) {
+    alert(data?.error || 'Não foi possível carregar a transcrição.');
+    return;
+  }
+  renderChatTranscriptModal(data);
+  openModal('chat-transcript-overlay');
+}
+
 function tenantQuery() {
   const v = document.getElementById('filter-tenant')?.value || '';
   return v ? `?tenantId=${encodeURIComponent(v)}` : '';
@@ -187,12 +275,21 @@ async function loadDisputes() {
         <td>${tech}</td><td>${os}${sc}</td>
         <td style="max-width:400px"><details><summary style="cursor:pointer;color:var(--accent)">Ver justificativa</summary><div style="margin-top:8px;white-space:pre-wrap;font-size:12px;color:var(--text2)">${full}</div></details></td>
         <td style="text-align:right;white-space:nowrap">
+          <button type="button" class="btn btn-sm btn-chat-trans" style="margin-right:6px">Ver conversa</button>
           <button type="button" class="btn btn-sm btn-primary btn-disp" data-a="MAINTAIN_EVAL">Manter</button>
           <button type="button" class="btn btn-sm btn-disp" data-a="ADJUSTED">Ajustar nota</button>
           <button type="button" class="btn btn-sm btn-disp" style="color:var(--red)" data-a="INVALIDATED">Invalidar</button>
         </td></tr>`;
     })
     .join('');
+
+  tb.querySelectorAll('tr[data-dispute-id] .btn-chat-trans').forEach((btn) => {
+    btn.onclick = () => {
+      const tr = btn.closest('tr');
+      const disputeId = tr?.dataset.disputeId;
+      if (disputeId) void openChatTranscriptFromDispute(disputeId);
+    };
+  });
 
   tb.querySelectorAll('tr[data-dispute-id] .btn-disp').forEach((btn) => {
     btn.onclick = () => {
@@ -282,7 +379,7 @@ async function loadInstances() {
         x.status === 'PENDING'
           ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">Novo token</button>`
           : '—';
-      return `<tr><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen}</td></tr>`;
+      return `<tr data-instance-id="${esc(x.id)}"><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen} <button type="button" class="btn btn-sm btn-inst-chat" style="margin-left:6px">Ver conversa</button></td></tr>`;
     })
     .join('');
   tb.querySelectorAll('button[data-regen]').forEach((btn) => {
@@ -448,7 +545,20 @@ export async function bootEvaluationsPage() {
     if (e.target.id === 'dispute-modal-overlay') closeModal('dispute-modal-overlay');
   });
 
+  document.getElementById('chat-transcript-close')?.addEventListener('click', () => closeModal('chat-transcript-overlay'));
+  document.getElementById('chat-transcript-json')?.addEventListener('click', downloadChatTranscriptJson);
+  document.getElementById('chat-transcript-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'chat-transcript-overlay') closeModal('chat-transcript-overlay');
+  });
+
   document.getElementById('tbody-inst')?.addEventListener('click', (e) => {
+    const chatInst = e.target.closest('.btn-inst-chat');
+    if (chatInst) {
+      const tr = chatInst.closest('tr');
+      const iid = tr?.dataset.instanceId;
+      if (iid) void openChatTranscriptFromInstance(iid);
+      return;
+    }
     const copyBtn = e.target.closest('.btn-survey-copy');
     const prevBtn = e.target.closest('.btn-survey-preview');
     if (copyBtn?.getAttribute('data-enc')) {

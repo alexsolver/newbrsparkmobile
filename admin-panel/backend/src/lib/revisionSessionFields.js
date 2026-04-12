@@ -6,6 +6,7 @@
  */
 const REVISION_SESSION_FIELD_TYPES = new Set([
   'signature',
+  'signature_summary',
   'transit_start',
   'transit_end',
   'geofence_check',

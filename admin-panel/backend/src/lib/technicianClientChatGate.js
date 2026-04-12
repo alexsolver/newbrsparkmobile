@@ -15,6 +15,9 @@ const META_CLIENT_EMAIL_KEYS = [
 
 const ACTIVITY_CHAT_STATUSES = ['IN_PROGRESS', 'PAUSED', 'COMPLETED'];
 
+/** Só salas técnico (com perfil) ↔ cliente final (`USER` sem perfil) aplicam o gate. */
+const CLIENT_USER_ROLE = 'USER';
+
 function normalizeExecutionMetadata(raw) {
   if (raw == null) return {};
   if (typeof raw === 'string') {
@@ -41,7 +44,64 @@ function extractClientEmailFromMetadata(meta) {
 }
 
 /**
- * Sala 1:1 com exatamente um usuário com TechnicianProfile e outro sem.
+ * Deslocamento iniciado: token de tracking no metadata OU evidência `action: SAIDA` nas respostas.
+ */
+function hasDisplacementStarted(metadata, responses) {
+  const m = normalizeExecutionMetadata(metadata);
+  if (m.trackingStartedAt != null && String(m.trackingStartedAt).trim() !== '') {
+    return true;
+  }
+  return responsesHaveTransitSaida(responses);
+}
+
+/**
+ * Procura em profundidade JSON de respostas por objeto de início de deslocamento (compatível com o app).
+ */
+function responsesHaveTransitSaida(responses) {
+  if (responses == null) return false;
+  let root = responses;
+  if (typeof root === 'string') {
+    try {
+      root = JSON.parse(root);
+    } catch {
+      return false;
+    }
+  }
+  if (!root || typeof root !== 'object') return false;
+  const stack = [root];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur == null) continue;
+    if (typeof cur === 'string') {
+      const t = cur.trim();
+      if (t.length > 2 && (t.startsWith('{') || t.startsWith('['))) {
+        try {
+          stack.push(JSON.parse(t));
+        } catch {
+          /* ignore */
+        }
+      }
+      continue;
+    }
+    if (typeof cur !== 'object') continue;
+    if (Array.isArray(cur)) {
+      for (const x of cur) stack.push(x);
+      continue;
+    }
+    if (cur.action === 'SAIDA' && cur.timestamp && cur.coordinates) {
+      return true;
+    }
+    for (const k of Object.keys(cur)) {
+      if (k.startsWith('__')) continue;
+      stack.push(cur[k]);
+    }
+  }
+  return false;
+}
+
+/**
+ * Sala 1:1 com exatamente um usuário com TechnicianProfile e outro sem, sendo o sem perfil
+ * um cliente final (`USER`). Gestores e staff interno não entram no gate.
  * @returns {{ techEmail: string, clientEmail: string } | null}
  */
 async function resolveTechnicianClientPair(roomId) {
@@ -66,15 +126,33 @@ async function resolveTechnicianClientPair(roomId) {
   const withoutTech = users.filter((u) => u.technicianProfile == null);
   if (withTech.length !== 1 || withoutTech.length !== 1) return null;
 
+  const nonTechUser = withoutTech[0];
+  if (String(nonTechUser.role || '').toUpperCase() !== CLIENT_USER_ROLE) {
+    return null;
+  }
+
   return {
     techEmail: String(withTech[0].email).trim().toLowerCase(),
-    clientEmail: String(withoutTech[0].email).trim().toLowerCase(),
+    clientEmail: String(nonTechUser.email).trim().toLowerCase(),
   };
 }
 
+/** OS com metadata explícita apontando para este cliente + deslocamento iniciado. */
+function rowExplicitlyLinksClient(row, client) {
+  if (!hasDisplacementStarted(row.metadata, row.responses)) return false;
+  const spec = extractClientEmailFromMetadata(row.metadata);
+  return !!(spec && spec === client);
+}
+
+/** Uma única OS ativa sem email na metadata: o cliente do chat é o implícito (legado). */
+function rowImplicitLegacySingleClient(row) {
+  if (!hasDisplacementStarted(row.metadata, row.responses)) return false;
+  return extractClientEmailFromMetadata(row.metadata) == null;
+}
+
 /**
- * Chat técnico–cliente ativo só com OS do técnico em andamento ou em conclusão (ainda não SYNCED).
- * Vínculo ao cliente: metadata com email do cliente, ou uma única OS ativa sem email em metadata (legado).
+ * Chat técnico–cliente ativo só com OS do técnico em andamento ou em conclusão (ainda não SYNCED)
+ * e **após início do deslocamento** (tracking ou evidência SAIDA nas respostas).
  */
 async function isTechnicianClientMessagingActive(techEmail, clientEmail) {
   const tech = String(techEmail || '').trim().toLowerCase();
@@ -86,14 +164,13 @@ async function isTechnicianClientMessagingActive(techEmail, clientEmail) {
       ownerEmail: { equals: tech, mode: 'insensitive' },
       status: { in: ACTIVITY_CHAT_STATUSES },
     },
-    select: { id: true, metadata: true },
+    select: { id: true, metadata: true, responses: true },
   });
 
   if (rows.length === 0) return false;
 
   for (const row of rows) {
-    const spec = extractClientEmailFromMetadata(row.metadata);
-    if (spec && spec === client) return true;
+    if (rowExplicitlyLinksClient(row, client)) return true;
   }
 
   const hasExplicitOtherClient = rows.some((row) => {
@@ -103,7 +180,9 @@ async function isTechnicianClientMessagingActive(techEmail, clientEmail) {
   if (hasExplicitOtherClient) return false;
 
   const allUnspecified = rows.every((row) => extractClientEmailFromMetadata(row.metadata) == null);
-  if (allUnspecified && rows.length === 1) return true;
+  if (allUnspecified && rows.length === 1) {
+    return rowImplicitLegacySingleClient(rows[0]);
+  }
 
   return false;
 }
@@ -122,13 +201,12 @@ async function evaluationBlocksTechClientChat(techEmail, clientEmail) {
       ownerEmail: { equals: tech, mode: 'insensitive' },
       status: { in: ACTIVITY_CHAT_STATUSES },
     },
-    select: { id: true, metadata: true },
+    select: { id: true, metadata: true, responses: true },
   });
 
   const linkedIds = [];
   for (const row of rows) {
-    const spec = extractClientEmailFromMetadata(row.metadata);
-    if (spec && spec === client) linkedIds.push(row.id);
+    if (rowExplicitlyLinksClient(row, client)) linkedIds.push(row.id);
   }
 
   const hasExplicitOther = rows.some((row) => {
@@ -136,8 +214,9 @@ async function evaluationBlocksTechClientChat(techEmail, clientEmail) {
     return spec != null && spec !== client;
   });
   if (!hasExplicitOther && rows.length === 1 && linkedIds.length === 0) {
-    const spec0 = extractClientEmailFromMetadata(rows[0].metadata);
-    if (spec0 == null) linkedIds.push(rows[0].id);
+    if (rowImplicitLegacySingleClient(rows[0])) {
+      linkedIds.push(rows[0].id);
+    }
   }
 
   if (linkedIds.length === 0) return false;
@@ -177,5 +256,6 @@ module.exports = {
   evaluationBlocksTechClientChat,
   getRoomMessagingState,
   extractClientEmailFromMetadata,
+  hasDisplacementStarted,
   ACTIVITY_CHAT_STATUSES,
 };

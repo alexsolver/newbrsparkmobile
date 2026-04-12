@@ -87,6 +87,25 @@ const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
 /** Alinhado ao builder do painel — condição “cronômetro geral”. */
 const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
+/** Extrai valor de objecto JSON por caminho com pontos (ex.: current.temp_c); suporta índices numéricos em arrays. */
+function brsparkJsonPathLookup(obj: unknown, path: string): unknown {
+  if (!path || typeof path !== 'string') return undefined;
+  const parts = path
+    .split('.')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let cur: any = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    if (/^\d+$/.test(p) && Array.isArray(cur)) {
+      cur = cur[parseInt(p, 10)];
+    } else if (typeof cur === 'object' && p in cur) {
+      cur = (cur as Record<string, unknown>)[p];
+    } else return undefined;
+  }
+  return cur;
+}
+
 function formatDurationClock(totalSec: number) {
   const s = Math.max(0, Math.floor(totalSec));
   const m = Math.floor(s / 60);
@@ -249,18 +268,36 @@ function executionIsViewOnly(exec: unknown): boolean {
 
 const REVISION_SESSION_FIELD_TYPES = new Set([
   'signature',
+  'signature_summary',
   'transit_start',
   'transit_end',
   'geofence_check',
   'facial_recognition',
 ]);
 
+/**
+ * Tipo canónico do campo no schema.
+ * Importante: alguns fluxos legados / exportações podem guardar o tipo semântico em `fieldType`
+ * enquanto `type` fica genérico (ex.: `text`) — nesse caso o 1.º `??` quebrava widgets como
+ * `signature_summary` (cartão só com rótulo, sem controlo).
+ */
 function effectiveSchemaFieldType(f: any): string {
-  const raw = f?.type ?? f?.fieldType ?? f?.kind ?? f?.component ?? f?.controlType;
-  return String(raw ?? '')
-    .trim()
-    .replace(/[\s-]+/g, '_')
-    .toLowerCase();
+  const keys = ['type', 'fieldType', 'kind', 'component', 'controlType'] as const;
+  const normalized: string[] = [];
+  for (const k of keys) {
+    const raw = f?.[k];
+    if (raw == null || raw === '') continue;
+    const t = String(raw)
+      .trim()
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase();
+    if (t) normalized.push(t);
+  }
+  const preferFirst = ['signature_summary', 'signature'] as const;
+  for (const p of preferFirst) {
+    if (normalized.includes(p)) return p;
+  }
+  return normalized[0] || '';
 }
 
 /** Assinatura, deslocamento, geofence facial, etc. — não reaproveitar na nova sessão de revisão. */
@@ -456,10 +493,13 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'materials_consumption',
   'materials_receipt',
   'technician_finance',
+  'signature',
+  'signature_summary',
 ]);
 
 function fieldAllowsMultiple(field: any) {
-  return !!(field?.multiple && field?.type && !MULTIPLE_EXCLUDED_FIELD_TYPES.has(field.type));
+  const t = effectiveSchemaFieldType(field);
+  return !!(field?.multiple && t && !MULTIPLE_EXCLUDED_FIELD_TYPES.has(t));
 }
 
 function sectionAllowsRepeat(sectionField: any) {
@@ -533,6 +573,112 @@ function findFieldValueInResponses(
     }
   }
   return undefined;
+}
+
+/** IDs de campos incluídos no bloco «resumo para assinatura» (schema). */
+function normalizeSignatureSummarySourceIds(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x || '').trim()).filter(Boolean);
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const j = JSON.parse(raw);
+      if (Array.isArray(j)) return j.map((x) => String(x || '').trim()).filter(Boolean);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
+/** Valor para o resumo: mesmo âmbito; na raiz tenta também localizar em linhas repetíveis. */
+function resolveSummarySourceValue(
+  responses: Record<string, any>,
+  scope: SectionRepeatScope | null | undefined,
+  sourceFieldId: string,
+  schemaData: any[] | undefined
+): unknown {
+  const direct = getScopedFieldValue(responses, scope ?? null, sourceFieldId);
+  if (direct !== undefined && direct !== null && String(direct).trim() !== '') return direct;
+  if (!scope) {
+    const found = findFieldValueInResponses(responses, sourceFieldId, schemaData);
+    if (found !== undefined && found !== null && String(found).trim() !== '') return found;
+  }
+  return direct;
+}
+
+/** Texto só leitura para o resumo (evita HTML e URLs longas). */
+function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unknown): string {
+  if (!fieldDef) {
+    if (raw === undefined || raw === null) return '—';
+    return String(raw);
+  }
+  const t = effectiveSchemaFieldType(fieldDef);
+  if (raw === undefined || raw === null) return '—';
+  if (typeof raw === 'string' && raw.trim() === '') return '—';
+  if (t === 'hidden' || t === 'section_break') return '—';
+  if (t === 'checkbox' || t === 'yes_no') {
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return 'Sim';
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return 'Não';
+    return String(raw);
+  }
+  if (t === 'rating') {
+    const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+    if (!Number.isFinite(n) || n <= 0) return String(raw);
+    return `${n} estrela(s)`;
+  }
+  if (t === 'multiselect') {
+    const s = Array.isArray(raw) ? raw.join(', ') : String(raw);
+    const parts = s.split(',').map((x) => x.trim()).filter(Boolean);
+    return parts.length ? parts.join(', ') : '—';
+  }
+  if (t === 'photo' || t === 'photo_stamped' || t === 'facial_recognition' || t === 'file_upload') {
+    return 'Mídia ou anexo registado (ver relatório completo)';
+  }
+  if (t === 'signature' || t === 'signature_summary') {
+    const s = String(raw);
+    if (s.startsWith('SIG_V1|')) return 'Assinatura registada';
+    return s.trim() ? 'Assinatura registada' : '—';
+  }
+  if (t === 'location_pick' || t === 'geofence_check') {
+    try {
+      const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (j && typeof j === 'object') {
+        const addr = (j as any).address || (j as any).addr || (j as any).formattedAddress;
+        if (addr) return String(addr);
+      }
+    } catch {
+      /* ignore */
+    }
+    return 'Registo de localização';
+  }
+  if (t === 'materials_consumption' || t === 'materials_receipt') {
+    const p = parseMaterialsValue(raw);
+    const n = p.lines.filter((l) => l.qty > 0).length;
+    return `${n} linha(s) de materiais`;
+  }
+  if (t === 'technician_finance') {
+    const p = parseTechnicianFinanceValue(raw);
+    const n = p.lines.filter((l) => l.amount > 0).length;
+    return `${n} lançamento(s) financeiros`;
+  }
+  if (t === 'transit_start' || t === 'transit_end') {
+    return 'Registo de deslocamento';
+  }
+  if (t === 'barcode_scan') return String(raw).trim() || '—';
+  if (t === 'calculated') return String(raw);
+  if (Array.isArray(raw)) {
+    const parts = raw.map((x) => String(x)).filter((x) => x.trim());
+    return parts.length ? parts.join(' · ') : '—';
+  }
+  if (typeof raw === 'object') {
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return '—';
+    }
+  }
+  return String(raw);
 }
 
 function getScopedTechComment(
@@ -1153,7 +1299,7 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
   if (fieldType === 'multiselect' && typeof val === 'string') {
     return val.split(',').some((s) => s.trim() !== '');
   }
-  if (fieldType === 'signature' && typeof val === 'string') {
+  if ((fieldType === 'signature' || fieldType === 'signature_summary') && typeof val === 'string') {
     return val.trim() !== '' && (val.startsWith('SIG_V1|') || val.length > 8);
   }
   if (typeof val === 'string') return val.trim() !== '';
@@ -1164,19 +1310,39 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
 
 /** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
 function isFieldAnswerFilled(field: any, raw: any): boolean {
+  const ft = effectiveSchemaFieldType(field);
   if (!fieldAllowsMultiple(field)) {
-    if (field.type === 'location_pick') return isLocationPickAnswerValid(raw);
-    if (field.type === 'materials_consumption' || field.type === 'materials_receipt') {
+    if (ft === 'geofence_check') {
+      if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+        return false;
+      }
+      try {
+        const j = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw;
+        const inside = !!(j && (j.insideZone === true || j.geofence?.insideZone === true));
+        if (inside) return true;
+        const mode = String(field?.geofenceFailMode || 'block').toLowerCase();
+        if (mode === 'warn' && j?.geofence?.validated === true) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    }
+    if (ft === 'location_pick') return isLocationPickAnswerValid(raw);
+    if (ft === 'materials_consumption' || ft === 'materials_receipt') {
       const p = parseMaterialsValue(raw);
       const hasQty = p.lines.some((l) => l.qty > 0);
       if (field.required) return hasQty;
       return true;
     }
-    if (field.type === 'technician_finance') {
+    if (ft === 'technician_finance') {
       const p = parseTechnicianFinanceValue(raw);
       const hasAmt = p.lines.some((l) => l.amount > 0);
       if (field.required) return hasAmt;
       return true;
+    }
+    if (ft === 'signature' || ft === 'signature_summary') {
+      if (typeof raw !== 'string') return false;
+      return raw.trim() !== '' && (raw.startsWith('SIG_V1|') || raw.length > 8);
     }
     if (raw === undefined || raw === null) return false;
     if (typeof raw === 'string') return raw.trim() !== '';
@@ -1185,7 +1351,7 @@ function isFieldAnswerFilled(field: any, raw: any): boolean {
   }
   const arr = normalizeResponseArray(raw);
   const min = multiMinItems(field);
-  const filled = arr.filter((x) => isMultiItemFilled(x, field.type));
+  const filled = arr.filter((x) => isMultiItemFilled(x, ft));
   if (filled.length < min) return false;
   const max = multiMaxItems(field);
   if (max != null && arr.length > max) return false;
@@ -1315,6 +1481,94 @@ function computeEffectiveFillModeFromTemplate(
   return breaks.some((f: any) => f.sectionFillMode === 'wizard') ? 'hybrid' : 'full';
 }
 
+/** Raio da cerca global (builder / painel: típico 10–50000 m). */
+function clampGlobalGeofenceRadiusMeters(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 10) return 200;
+  return Math.min(Math.floor(n), 50000);
+}
+
+/** Geometria na OS suficiente para o mapa de cerca global (ponto, polígono, trecho ou rota). */
+function taskHasServiceLocationForGlobalGate(t: any): boolean {
+  if (!t || typeof t !== 'object') return false;
+  const lat = t.locationLat;
+  const lng = t.locationLng;
+  if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+    return true;
+  }
+  if (t.locationPolygon == null) return false;
+  try {
+    const parsed =
+      typeof t.locationPolygon === 'string' ? JSON.parse(t.locationPolygon) : t.locationPolygon;
+    return Array.isArray(parsed) && parsed.length >= 2;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clona a OS para o GeofenceMapScreen com `locationRadius` = raio global (tolerância única da cerca global).
+ * Rota/trecho: o ecrã de mapa não bloqueia fora da linha em modo `route`; para a cerca global usamos disco
+ * no ponto de referência (início da rota ou meio do trecho) para o bloqueio fazer efeito.
+ */
+function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any {
+  const r = clampGlobalGeofenceRadiusMeters(globalRadiusMeters);
+  let poly: any = null;
+  try {
+    if (task?.locationPolygon != null) {
+      poly = typeof task.locationPolygon === 'string' ? JSON.parse(task.locationPolygon) : task.locationPolygon;
+    }
+  } catch {
+    poly = null;
+  }
+  const ztRaw = String(task?.locationZoneType || '').toLowerCase();
+  let zone: string =
+    ztRaw === 'route' || ztRaw === 'segment' || ztRaw === 'polygon' ? ztRaw : 'radius';
+  if (!ztRaw || ztRaw === 'none') {
+    if (Array.isArray(poly) && poly.length >= 3) zone = 'polygon';
+    else if (Array.isArray(poly) && poly.length === 2) zone = 'segment';
+    else if (task?.locationLat != null && task?.locationLng != null) zone = 'radius';
+    else zone = 'radius';
+  }
+
+  if (zone === 'route' && Array.isArray(poly) && poly.length >= 1) {
+    const lat0 = Number(poly[0][0]);
+    const lng0 = Number(poly[0][1]);
+    if (Number.isFinite(lat0) && Number.isFinite(lng0)) {
+      return {
+        ...task,
+        locationLat: lat0,
+        locationLng: lng0,
+        locationZoneType: 'radius',
+        locationRadius: r,
+        locationPolygon: null,
+      };
+    }
+  }
+  if (zone === 'segment' && Array.isArray(poly) && poly.length >= 2) {
+    const a0 = Number(poly[0][0]);
+    const a1 = Number(poly[0][1]);
+    const b0 = Number(poly[1][0]);
+    const b1 = Number(poly[1][1]);
+    if ([a0, a1, b0, b1].every((x) => Number.isFinite(x))) {
+      return {
+        ...task,
+        locationLat: (a0 + b0) / 2,
+        locationLng: (a1 + b1) / 2,
+        locationZoneType: 'radius',
+        locationRadius: r,
+        locationPolygon: null,
+      };
+    }
+  }
+
+  if (zone === 'polygon' && Array.isArray(poly) && poly.length >= 3) {
+    return { ...task, locationRadius: r, locationZoneType: 'polygon' };
+  }
+
+  return { ...task, locationRadius: r, locationZoneType: 'radius' };
+}
+
 export default function ChecklistEngine() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -1354,6 +1608,11 @@ export default function ChecklistEngine() {
 
   // Geofence map state (Opção B)
   const [showGeoMap, setShowGeoMap]         = useState(false);
+  /** Segunda etapa: cerca global do template (sempre failMode block no ecrã). */
+  const [showGlobalGeofenceMap, setShowGlobalGeofenceMap] = useState(false);
+  const [globalGeofenceMapTask, setGlobalGeofenceMapTask] = useState<any>(null);
+  const pendingGlobalGeofenceAfterRouteRef = useRef(false);
+  const globalGeofenceRadiusForNextGateRef = useRef(200);
   const [currentTask, setCurrentTask]       = useState<any>(null);
   /** ETA mostrado no mapa — independente de currentTask, para não ficar preso a `if (!prev) return prev` */
   const [mapEtaMinutes, setMapEtaMinutes]   = useState<number | null>(null);
@@ -2339,6 +2598,10 @@ export default function ChecklistEngine() {
 
   const loadTemplate = async () => {
     try {
+      setShowGlobalGeofenceMap(false);
+      setGlobalGeofenceMapTask(null);
+      pendingGlobalGeofenceAfterRouteRef.current = false;
+
       const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
       let execs = [];
       try { execs = JSON.parse(executedStr); } catch(e){}
@@ -2730,6 +2993,7 @@ export default function ChecklistEngine() {
         'facial_recognition',
         'file_upload',
         'signature',
+        'signature_summary',
         'geofence_check',
         'location_pick',
         'transit_start',
@@ -2739,7 +3003,8 @@ export default function ChecklistEngine() {
       ]);
       if (!readOnlyMode && tmpl.schemaData) {
         tmpl.schemaData.forEach((f: any) => {
-          if (!initialRes[f.id] && f.defaultValue && !skipDefaultValueTypes.has(f.type)) {
+          const dvT = effectiveSchemaFieldType(f);
+          if (!initialRes[f.id] && f.defaultValue && !skipDefaultValueTypes.has(dvT)) {
              let auto = String(f.defaultValue);
              auto = auto.replace(/{{date}}/g, new Date().toLocaleDateString('pt-BR'));
              auto = auto.replace(/{{time}}/g, new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
@@ -2814,8 +3079,12 @@ export default function ChecklistEngine() {
         setStartTime(Date.now());
       }
 
-      // ── Opção B: Carregar task e mostrar mapa de confirmação ──────
-      let shouldShowMap = false;
+      // ── Opção B: mapa rota/trecho + cerca global do template (raio em settings) ──────
+      const wantGlobalFence =
+        !!tmpl?.settings?.requireGlobalGeofence && !!taskId && !readOnlyMode;
+      const globalRad = clampGlobalGeofenceRadiusMeters(tmpl?.settings?.globalGeofenceRadius);
+      globalGeofenceRadiusForNextGateRef.current = globalRad;
+
       if (taskId && !readOnlyMode) {
         try {
           const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
@@ -2827,17 +3096,50 @@ export default function ChecklistEngine() {
             const geoField = tmpl.schemaData?.find((f: any) => f.type === 'geofence_check');
             const fm = geoField?.geofenceFailMode || 'warn';
             setGeofenceFailMode(fm as 'block' | 'warn');
-            if (thisTask.locationZoneType === 'route' || thisTask.locationZoneType === 'segment') {
-              shouldShowMap = true;
+
+            if (wantGlobalFence && !taskHasServiceLocationForGlobalGate(thisTask)) {
+              Alert.alert(
+                'Cerca global',
+                'Este formulário exige validação de localização, mas esta OS não tem coordenadas ou zona no mapa. Peça um despacho com local ou desative a cerca global no builder.',
+                [{ text: 'OK', onPress: () => router.back() }],
+              );
+              setLoading(false);
+              return;
+            }
+
+            const isRouteOrSeg =
+              thisTask.locationZoneType === 'route' || thisTask.locationZoneType === 'segment';
+
+            if (isRouteOrSeg) {
               setShowGeoMap(true);
+              pendingGlobalGeofenceAfterRouteRef.current =
+                !!(wantGlobalFence && taskHasServiceLocationForGlobalGate(thisTask));
               console.log('[GeoMap] ✅ Mostrando mapa para zona (ROTA/SEGMENTO):', thisTask.locationZoneType);
             } else {
-              console.log('[GeoMap] ⏭ Tarefa não é rota. Pulando mapa de aceite. locationZoneType=', thisTask?.locationZoneType);
+              pendingGlobalGeofenceAfterRouteRef.current = false;
+              console.log(
+                '[GeoMap] ⏭ Tarefa não é rota. Pulando mapa de aceite. locationZoneType=',
+                thisTask?.locationZoneType,
+              );
+              if (wantGlobalFence && taskHasServiceLocationForGlobalGate(thisTask)) {
+                setGlobalGeofenceMapTask(buildGlobalGeofenceMapTask(thisTask, globalRad));
+                setShowGlobalGeofenceMap(true);
+              }
             }
+          } else if (wantGlobalFence) {
+            Alert.alert(
+              'Cerca global',
+              'Não encontramos esta OS no cache do aparelho. Sincronize e tente novamente, ou desative a cerca global no formulário.',
+              [{ text: 'OK', onPress: () => router.back() }],
+            );
+            setLoading(false);
+            return;
           } else {
             console.log('[GeoMap] ⚠️ Task não encontrada no cache. Total no cache:', cloudTasks.length);
           }
-        } catch(e) { console.error('[GeoMap] erro:', e); }
+        } catch (e) {
+          console.error('[GeoMap] erro:', e);
+        }
       } else {
         console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'readOnlyMode=', readOnlyMode);
       }
@@ -2882,18 +3184,10 @@ export default function ChecklistEngine() {
 
       // Only mark loading done after geo state is set — prevents form flash
       setLoading(false);
-
-      if (tmpl.settings?.requireGlobalGeofence) {
-        verifyGlobalGeofence(tmpl.settings.globalGeofenceRadius);
-      }
     } catch (err) {
       console.error(err);
       setLoading(false);
     }
-  };
-
-  const verifyGlobalGeofence = async (radius: number) => {
-    console.log(`[WFM] Validando Geofence de ${radius}m...`);
   };
 
   const applyMask = (rawValue: string, mask?: string) => {
@@ -3581,10 +3875,15 @@ export default function ChecklistEngine() {
     const validateFlatFields = (fields: any[]) => {
       for (const f of fields) {
         if (!isFieldVisible(f)) continue;
-        if (isFieldRequired(f)) {
+        if (fieldMustAnswerForProgress(f)) {
           const ans = responses[f.id];
           if (!isFieldAnswerFilled(f, ans)) {
-            Alert.alert('Atenção', `O campo '${f.label || f.id}' é obrigatório antes de concluir.`);
+            Alert.alert(
+              'Atenção',
+              f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+                ? `Valide a localização em «${f.label || f.id}» (dentro da área) antes de concluir.`
+                : `O campo '${f.label || f.id}' é obrigatório antes de concluir.`,
+            );
             return false;
           }
         }
@@ -3621,10 +3920,12 @@ export default function ChecklistEngine() {
           if (!isFieldVisible(f)) continue;
           for (let ri = 0; ri < n; ri++) {
             const ans = rows[ri]?.[f.id];
-            if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) {
+            if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) {
               Alert.alert(
                 'Atenção',
-                `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório antes de concluir.`
+                f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+                  ? `Valide a localização em «${f.label || f.id}» (instância ${ri + 1}, dentro da área) antes de concluir.`
+                  : `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório antes de concluir.`,
               );
               return;
             }
@@ -3918,43 +4219,128 @@ export default function ChecklistEngine() {
 
   const handleApiValidation = async (fieldId: string) => {
       const rules = getAllRules();
-      // Encontra regras engatilhadas por este campo que são do tipo API_VALIDATION e cuja condição é verdadeira
-      const triggeredRules = rules.filter((r: any) => 
-          r.condFieldId === fieldId && 
-          evaluateCondition(r.condFieldId, r.condOperator, r.condValue, responses) &&
-          r.actions && 
-          r.actions.some((a:any) => a.type === 'API_VALIDATION')
+      const ruleMatchesMonitor = (r: any) =>
+          r.condFieldId === fieldId &&
+          evaluateCondition(r.condFieldId, r.condOperator, r.condValue, responses);
+
+      const validationRules = rules.filter(
+          (r: any) => ruleMatchesMonitor(r) && r.actions?.some((a: any) => a.type === 'API_VALIDATION'),
       );
-
-      if (triggeredRules.length === 0) return;
-
-      for (const rule of triggeredRules) {
-          const apiActions = rule.actions.filter((a:any) => a.type === 'API_VALIDATION');
+      for (const rule of validationRules) {
+          const apiActions = rule.actions.filter((a: any) => a.type === 'API_VALIDATION');
           for (const action of apiActions) {
               setValidatingFieldId(fieldId);
               try {
                   const netState = await Network.getNetworkStateAsync();
-                  // Se marcado para ignorar offline e o app estiver offline, passa direto
                   if (action.apiAllowOffline && !netState.isConnected) {
-                     continue;
+                      continue;
                   }
-                  
-                  const apiRes = await fetch(action.apiUrl, {
+
+                  const apiRes = await fetch(String(action.apiUrl || '').trim(), {
                       method: 'POST',
-                      headers: {'Content-Type': 'application/json'},
-                      body: JSON.stringify({ checklist_id: template?.id, task_id: taskId, responses }) // Payload completo com contexto
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          checklist_id: template?.id,
+                          task_id: taskId,
+                          responses,
+                      }),
                   });
                   const text = await apiRes.text();
-                  
-                  // Sucesso se o regex ou a string bater na resposta do servidor
+
                   const expected = action.apiExpectedReturn || '';
                   if (expected && !text.includes(expected) && !new RegExp(expected).test(text)) {
-                      throw new Error(action.apiErrorMsg || 'Consulta bloqueada. Verifique os dados e a conexão com a API Externa.');
+                      throw new Error(
+                          action.apiErrorMsg || 'Consulta bloqueada. Verifique os dados e a conexão com a API externa.',
+                      );
                   }
               } catch (err: any) {
-                  Alert.alert('Bloqueio no Sistema Externo', err.message);
+                  Alert.alert('Bloqueio no sistema externo', err.message);
                   const fd = template?.schemaData?.find((f: any) => f.id === fieldId);
                   handleInput(fieldId, fieldAllowsMultiple(fd) ? [] : '');
+              } finally {
+                  setValidatingFieldId(null);
+              }
+          }
+      }
+
+      const fetchRules = rules.filter(
+          (r: any) => ruleMatchesMonitor(r) && r.actions?.some((a: any) => a.type === 'API_FETCH'),
+      );
+      for (const rule of fetchRules) {
+          const fetchActions = rule.actions.filter((a: any) => a.type === 'API_FETCH');
+          for (const action of fetchActions) {
+              const targetId = String(action.targetId || '').trim();
+              const url = String(action.apiUrl || '').trim();
+              if (!targetId || !url) continue;
+
+              const targetDef = template?.schemaData?.find((f: any) => f.id === targetId);
+              setValidatingFieldId(targetId);
+              try {
+                  const netState = await Network.getNetworkStateAsync();
+                  if (action.apiAllowOffline && !netState.isConnected) {
+                      continue;
+                  }
+
+                  const method = String(action.apiMethod || 'POST').toUpperCase() === 'GET' ? 'GET' : 'POST';
+                  let text: string;
+                  let ok: boolean;
+                  if (method === 'GET') {
+                      const apiRes = await fetch(url, {
+                          method: 'GET',
+                          headers: { Accept: 'application/json, text/plain, */*' },
+                      });
+                      ok = apiRes.ok;
+                      text = await apiRes.text();
+                  } else {
+                      const apiRes = await fetch(url, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                              checklist_id: template?.id,
+                              task_id: taskId,
+                              responses,
+                          }),
+                      });
+                      ok = apiRes.ok;
+                      text = await apiRes.text();
+                  }
+
+                  if (!ok) {
+                      throw new Error(action.apiErrorMsg || `A API devolveu erro (HTTP).`);
+                  }
+
+                  const pathRaw = String(action.apiResponsePath || '').trim();
+                  let extracted: string;
+                  if (pathRaw) {
+                      try {
+                          const json = JSON.parse(text);
+                          const picked = brsparkJsonPathLookup(json, pathRaw);
+                          if (picked == null || picked === undefined) {
+                              extracted = '';
+                          } else if (typeof picked === 'object') {
+                              extracted = JSON.stringify(picked).slice(0, 8000);
+                          } else {
+                              extracted = String(picked).slice(0, 8000);
+                          }
+                      } catch {
+                          extracted = text.trim().slice(0, 8000);
+                      }
+                  } else {
+                      extracted = text.trim().slice(0, 8000);
+                  }
+
+                  let outVal: any = extracted;
+                  if (targetDef?.type === 'number') {
+                      const n = parseFloat(String(extracted).replace(',', '.'));
+                      outVal = Number.isFinite(n) ? String(n) : extracted;
+                  }
+
+                  handleInput(targetId, outVal);
+              } catch (err: any) {
+                  Alert.alert(
+                      'Não foi possível obter dados externos',
+                      String(err?.message || err || 'Falha na chamada à API.'),
+                  );
               } finally {
                   setValidatingFieldId(null);
               }
@@ -3996,10 +4382,11 @@ export default function ChecklistEngine() {
   }, [responses, template, ruleTick]);
 
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
-      if (field.type === 'section_break' && !checkSectionBreak) return false; 
-      if (field.type === 'hidden') return false;
+      const visT = effectiveSchemaFieldType(field);
+      if (visT === 'section_break' && !checkSectionBreak) return false;
+      if (visT === 'hidden') return false;
       /** Custos do técnico: só por API/rascunho/sync — nunca na tela de execução. */
-      if (field.type === 'technician_finance') return false;
+      if (visT === 'technician_finance') return false;
       
       const rules = getAllRules();
       
@@ -4045,6 +4432,14 @@ export default function ChecklistEngine() {
       return isReq;
   };
 
+  /** Cerca com modo «bloquear»: exige validação com sucesso antes de avançar, mesmo se o campo não estiver marcado como obrigatório. */
+  const geofenceCheckEnforcesProgressGate = (field: any) =>
+    effectiveSchemaFieldType(field) === 'geofence_check' &&
+    String(field?.geofenceFailMode || 'block').toLowerCase() !== 'warn';
+
+  const fieldMustAnswerForProgress = (field: any) =>
+    isFieldRequired(field) || geofenceCheckEnforcesProgressGate(field);
+
   // --- Paginator Chunking Engine ---
   const schema = template?.schemaData || [];
   let rawPages: {
@@ -4063,7 +4458,8 @@ export default function ChecklistEngine() {
   let _openingSectionBreak: any = null;
 
   schema.forEach((f: any) => {
-    if (f.type === 'section_break') {
+    const schT = effectiveSchemaFieldType(f);
+    if (schT === 'section_break') {
       if (_curFields.length > 0 || rawPages.length > 0) {
         rawPages.push({
           fields: _curFields,
@@ -4079,7 +4475,7 @@ export default function ChecklistEngine() {
       _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
-    } else if (f.type !== 'technician_finance') {
+    } else if (schT !== 'technician_finance') {
       _curFields.push({ ...f, _globalIdx: _globalIndex++ });
     }
   });
@@ -4251,14 +4647,14 @@ export default function ChecklistEngine() {
         if (!isFieldVisible(f)) continue;
         for (let ri = 0; ri < n; ri++) {
           const ans = rows[ri]?.[f.id];
-          if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) return false;
+          if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) return false;
         }
       }
       return true;
     }
     for (const f of p.fields || []) {
       if (!isFieldVisible(f)) continue;
-      if (isFieldRequired(f)) {
+      if (fieldMustAnswerForProgress(f)) {
         const ans = responses[f.id];
         if (!isFieldAnswerFilled(f, ans)) return false;
       }
@@ -4282,13 +4678,13 @@ export default function ChecklistEngine() {
           if (!isFieldVisible(f)) continue;
           for (let ri = 0; ri < n; ri++) {
             const ans = rows[ri]?.[f.id];
-            if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) return false;
+            if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) return false;
           }
         }
       } else {
         for (const f of step.fields) {
           if (!isFieldVisible(f)) continue;
-          if (isFieldRequired(f)) {
+          if (fieldMustAnswerForProgress(f)) {
             const ans = responses[f.id];
             if (!isFieldAnswerFilled(f, ans)) return false;
           }
@@ -4390,11 +4786,16 @@ export default function ChecklistEngine() {
      let isValid = true;
      for (const f of currentPageData.fields) {
          if (!isFieldVisible(f)) continue;
-         if (isFieldRequired(f)) {
+         if (fieldMustAnswerForProgress(f)) {
              const ans = responses[f.id];
              if (!isFieldAnswerFilled(f, ans)) {
                  isValid = false;
-                 Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
+                 Alert.alert(
+                   'Atenção',
+                   f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+                     ? `Valide a localização em «${f.label}» (dentro da área) antes de avançar.`
+                     : `O campo '${f.label}' é obrigatório.`,
+                 );
                  break;
              }
          }
@@ -4440,10 +4841,12 @@ export default function ChecklistEngine() {
         if (!isFieldVisible(f)) continue;
         for (let ri = 0; ri < n; ri++) {
           const ans = rows[ri]?.[f.id];
-          if (isFieldRequired(f) && !isFieldAnswerFilled(f, ans)) {
+          if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) {
             Alert.alert(
               'Atenção',
-              `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório.`
+              f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+                ? `Valide a localização em «${f.label || f.id}» (instância ${ri + 1}, dentro da área) antes de avançar.`
+                : `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório.`,
             );
             return;
           }
@@ -4452,10 +4855,15 @@ export default function ChecklistEngine() {
     } else {
       for (const f of step.fields) {
         if (!isFieldVisible(f)) continue;
-        if (isFieldRequired(f)) {
+        if (fieldMustAnswerForProgress(f)) {
           const ans = responses[f.id];
           if (!isFieldAnswerFilled(f, ans)) {
-            Alert.alert('Atenção', `O campo '${f.label}' é obrigatório.`);
+            Alert.alert(
+              'Atenção',
+              f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+                ? `Valide a localização em «${f.label}» (dentro da área) antes de avançar.`
+                : `O campo '${f.label}' é obrigatório.`,
+            );
             return;
           }
         }
@@ -4476,10 +4884,15 @@ export default function ChecklistEngine() {
     const vis = (page.fields || []).filter((x: any) => isFieldVisible(x));
     const cur = vis[hybridInnerWizardIndex];
     if (!cur) return;
-    if (isFieldRequired(cur)) {
+    if (fieldMustAnswerForProgress(cur)) {
       const ans = responses[cur.id];
       if (!isFieldAnswerFilled(cur, ans)) {
-        Alert.alert('Atenção', `O campo '${cur.label}' é obrigatório.`);
+        Alert.alert(
+          'Atenção',
+          cur.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(cur)
+            ? `Valide a localização em «${cur.label}» (dentro da área) antes de avançar.`
+            : `O campo '${cur.label}' é obrigatório.`,
+        );
         return;
       }
     }
@@ -4512,7 +4925,30 @@ export default function ChecklistEngine() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>;
 
-  // ── Opção B: Tela de Mapa de Confirmação ───────────────────────
+  // ── Cerca global (template): raio `globalGeofenceRadius`, sempre bloqueia fora da zona (exc. tipo rota no mapa). ──
+  if (showGlobalGeofenceMap && globalGeofenceMapTask) {
+    return (
+      <GeofenceMapScreen
+        task={globalGeofenceMapTask}
+        failMode="block"
+        onCancel={() => router.back()}
+        onProceed={async () => {
+          setShowGlobalGeofenceMap(false);
+          setGlobalGeofenceMapTask(null);
+          setGeoMapChecked(true);
+          const t = currentTaskRef.current;
+          if (t?.locationZoneType === 'route' && t?.locationPolygon) {
+            const poly =
+              typeof t.locationPolygon === 'string' ? JSON.parse(t.locationPolygon) : t.locationPolygon;
+            const tolerance = t.locationRadius || 100;
+            routeTracker.start(poly, tolerance).catch(() => {});
+          }
+        }}
+      />
+    );
+  }
+
+  // ── Opção B: Tela de Mapa de Confirmação (rota/trecho) ───────────────────────
   if (showGeoMap && currentTask) {
     return (
       <GeofenceMapScreen
@@ -4521,6 +4957,18 @@ export default function ChecklistEngine() {
         onCancel={() => router.back()}
         onProceed={async () => {
           setShowGeoMap(false);
+          if (
+            pendingGlobalGeofenceAfterRouteRef.current &&
+            currentTaskRef.current &&
+            taskHasServiceLocationForGlobalGate(currentTaskRef.current)
+          ) {
+            pendingGlobalGeofenceAfterRouteRef.current = false;
+            const gr = globalGeofenceRadiusForNextGateRef.current;
+            setGlobalGeofenceMapTask(buildGlobalGeofenceMapTask(currentTaskRef.current, gr));
+            setShowGlobalGeofenceMap(true);
+            return;
+          }
+          pendingGlobalGeofenceAfterRouteRef.current = false;
           setGeoMapChecked(true);
           // Start route tracking if it's a route (Opção D)
           if (currentTask?.locationZoneType === 'route' && currentTask?.locationPolygon) {
@@ -4937,7 +5385,9 @@ export default function ChecklistEngine() {
         {!(useSectionHub && hubPicking && pages.length > 1)
           ? (() => {
           const renderFieldList = (fields: any[], scope: SectionRepeatScope | null) =>
-            fields.map((field: any) => {
+            fields.map((fieldArg: any) => {
+          const effFormT = effectiveSchemaFieldType(fieldArg);
+          const field = effFormT ? { ...fieldArg, type: effFormT } : fieldArg;
           const vv = (fid: string) => getScopedFieldValue(responses, scope, fid);
           const hi = (fid: string, v: any) => handleInput(fid, v, scope);
           if (!isFieldVisible(field)) return null;
@@ -4987,7 +5437,10 @@ export default function ChecklistEngine() {
                       },
                     ]}
                   >
-                      {field.icon ? '' : `${field._globalIdx}. `}{field.label}{isFieldRequired(field) ? <Text style={{color: '#EF4444'}}> *</Text> : null}
+                      {field.icon ? '' : `${field._globalIdx}. `}{field.label}
+                      {fieldMustAnswerForProgress(field) ? (
+                        <Text style={{ color: '#EF4444' }}> *</Text>
+                      ) : null}
                   </Text>
                   {isFieldInstructionsVisible(field) ? (
                     <FieldHelpInstructions
@@ -6172,6 +6625,159 @@ export default function ChecklistEngine() {
                    )}
                  </TouchableOpacity>
               )}
+              {field.type === 'signature_summary' && (() => {
+                const summaryIds = normalizeSignatureSummarySourceIds(field.summarySourceFieldIds);
+                const schemaList = template?.schemaData || [];
+                const byId = new Map<string, any>(schemaList.map((x: any) => [x.id, x]));
+                const openSig = () =>
+                  ensureOnlineValidation(field, () => {
+                    setCurrentSigField(field.id);
+                    setCurrentSigScope(scope);
+                    const existingVal = vv(field.id);
+                    if (existingVal && existingVal.startsWith('SIG_V1|')) {
+                      const strokes = existingVal
+                        .replace('SIG_V1|', '')
+                        .split('|')
+                        .filter((s: string) => !s.startsWith('meta:') && s.trim().length > 0);
+                      setCompletedStrokes(strokes);
+                    } else {
+                      setCompletedStrokes([]);
+                    }
+                    currentStrokeRef.current = '';
+                    setCurrentStrokeState('');
+                    setSigModalVisible(true);
+                  });
+                return (
+                  <View style={{ gap: 14 }}>
+                    <View
+                      style={{
+                        backgroundColor: '#fff',
+                        borderRadius: 12,
+                        padding: 14,
+                        borderWidth: 1,
+                        borderColor: '#e2e8f0',
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 10 }}>
+                        Conteúdo para conferência antes de assinar
+                      </Text>
+                      {summaryIds.length === 0 ? (
+                        <Text style={{ color: '#94a3b8', fontSize: 14, lineHeight: 20 }}>
+                          Nenhum campo foi selecionado para este resumo. Configure no painel de formulários
+                          (propriedades do bloco «Resumo para assinatura»).
+                        </Text>
+                      ) : (
+                        summaryIds.map((sid, sidx) => {
+                          const def = byId.get(sid);
+                          const raw = resolveSummarySourceValue(responses, scope, sid, schemaList);
+                          const line = formatFieldValueForSignatureSummary(def, raw);
+                          const isLast = sidx === summaryIds.length - 1;
+                          return (
+                            <View
+                              key={sid}
+                              style={{
+                                marginBottom: isLast ? 0 : 12,
+                                paddingBottom: isLast ? 0 : 12,
+                                borderBottomWidth: isLast ? 0 : 1,
+                                borderBottomColor: '#f1f5f9',
+                              }}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>
+                                {def?.label || sid}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 15,
+                                  color: '#0f172a',
+                                  marginTop: 6,
+                                  lineHeight: 22,
+                                  fontWeight: '600',
+                                }}
+                              >
+                                {line}
+                              </Text>
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => openSig()}
+                      disabled={isReadOnly}
+                      style={{
+                        height: vv(field.id) ? 160 : 120,
+                        borderWidth: 2,
+                        borderColor: vv(field.id) ? '#10b981' : '#cbd5e1',
+                        borderRadius: 12,
+                        borderStyle: vv(field.id) ? 'solid' : 'dashed',
+                        backgroundColor: vv(field.id) ? '#fff' : '#f8fafc',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        overflow: 'hidden',
+                        opacity: isReadOnly ? 0.65 : 1,
+                      }}
+                    >
+                      {vv(field.id) && vv(field.id).startsWith('SIG_V1|') ? (
+                        <View style={{ flex: 1, width: '100%', padding: 8 }}>
+                          <Svg
+                            style={StyleSheet.absoluteFillObject}
+                            viewBox="0 0 350 400"
+                            preserveAspectRatio="xMidYMid meet"
+                          >
+                            {vv(field.id)
+                              .replace('SIG_V1|', '')
+                              .split('|')
+                              .filter((path: string) => !path.startsWith('meta:') && path.trim().length > 0)
+                              .map((path: string, index: number) => (
+                                <Path
+                                  key={index}
+                                  d={path}
+                                  stroke="#0f172a"
+                                  strokeWidth={5}
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              ))}
+                          </Svg>
+                          <View
+                            style={{
+                              position: 'absolute',
+                              bottom: 8,
+                              right: 8,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: '#dcfce7',
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                              borderRadius: 4,
+                            }}
+                          >
+                            <Ionicons name="checkmark" size={12} color="#15803d" />
+                            <Text style={{ color: '#15803d', fontSize: 10, fontWeight: '700', marginLeft: 4 }}>
+                              Assinado
+                            </Text>
+                          </View>
+                        </View>
+                      ) : vv(field.id) ? (
+                        <>
+                          <Ionicons name="checkmark-circle" size={32} color="#10b981" />
+                          <Text style={{ color: '#10b981', fontWeight: '700', marginTop: 8 }}>
+                            Assinado digitalmente
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Ionicons name="pencil" size={32} color="#94a3b8" />
+                          <Text style={{ color: '#94a3b8', marginTop: 8, fontWeight: '600' }}>
+                            Toque para assinar (após ler o resumo acima)
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
               {field.type === 'materials_consumption' && (
                 <ChecklistMaterialsConsumptionField
                   value={vv(field.id)}

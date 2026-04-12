@@ -89,6 +89,8 @@ export interface User {
   email: string;
   tenantId: string;
   role: string;
+  /** Idioma preferido para ver traduções no chat (BCP-47); null = automático (tenant / app). */
+  preferredChatLocale?: string | null;
   avatarUrl?: string;
   /** file:// após cache local (offline) */
   avatarLocalUri?: string;
@@ -299,6 +301,7 @@ export class AuthService {
     name?: string;
     email?: string;
     avatarUrl?: string | null;
+    preferredChatLocale?: string | null;
   }): Promise<User | null> {
     const u = await AuthService.getUser();
     if (!u) return null;
@@ -306,6 +309,10 @@ export class AuthService {
     if (partial.name !== undefined) body.name = partial.name;
     if (partial.email !== undefined) body.email = partial.email;
     if (partial.avatarUrl !== undefined) body.avatarUrl = partial.avatarUrl;
+    if (partial.preferredChatLocale !== undefined) {
+      body.preferredChatLocale =
+        partial.preferredChatLocale === '' ? null : partial.preferredChatLocale;
+    }
     if (Object.keys(body).length === 0) return u;
     const res = await apiFetch('/api/me', {
       method: 'PUT',
@@ -521,27 +528,49 @@ export async function handleUnauthorizedMaybeSessionInvalidated(res: Response): 
   }
 }
 
-/** Fetch autenticado — adiciona JWT automaticamente */
-export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 401) {
-    console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
-    try {
-      const body = await res.clone().json();
-      if (body?.code === 'SESSION_INVALIDATED') {
-        await applySessionInvalidatedFromServer();
-      }
-    } catch {
-      /* ignore */
+/** Timeout por defeito em pedidos autenticados (evita ecrã preso em «Conectando…» sem rede). */
+const DEFAULT_API_FETCH_TIMEOUT_MS = 18_000;
+
+export type ApiFetchOptions = RequestInit & { timeoutMs?: number };
+
+/** Fetch autenticado — adiciona JWT automaticamente e aborta após `timeoutMs` (AbortError sem rede). */
+export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
+  const { timeoutMs = DEFAULT_API_FETCH_TIMEOUT_MS, signal: userSignal, ...rest } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (userSignal) {
+    if (userSignal.aborted) {
+      clearTimeout(timer);
+      throw new DOMException('The operation was aborted.', 'AbortError');
     }
+    userSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
-  return res;
+
+  try {
+    const token = await getToken();
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...rest,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...rest.headers,
+      },
+    });
+    if (res.status === 401) {
+      console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
+      try {
+        const body = await res.clone().json();
+        if (body?.code === 'SESSION_INVALIDATED') {
+          await applySessionInvalidatedFromServer();
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
 }

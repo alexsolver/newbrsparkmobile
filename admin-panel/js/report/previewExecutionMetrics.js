@@ -244,6 +244,7 @@ export function resolveProductivityFromTask(t) {
     osWallSec != null && transitSec != null ? Math.max(0, osWallSec - transitSec) : null;
   const fillSec = Number(meta.formFillDurationSeconds ?? meta.durationSeconds ?? responses.__form_fill_duration_sec);
   const activeSec = Number(meta.formActiveSeconds ?? responses.__form_active_seconds_final);
+  /** Snapshot na OS (despacho); com `scheduledStartAt` define o fim previsto da janela do formulário na agenda. */
   const plannedMinRaw = t && t.expectedFormDurationMinutes;
   const plannedFormDurationMinutes =
     plannedMinRaw != null && Number.isFinite(Number(plannedMinRaw)) && Number(plannedMinRaw) > 0

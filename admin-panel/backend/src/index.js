@@ -7,6 +7,7 @@ const morgan  = require('morgan');
 const { adminAuthThenPanel } = require('./middleware/auth');
 const prisma          = require('./db');
 const { runBackfillOsNumbers } = require('./lib/backfillOsNumbersLib');
+const { ensureChatLocaleSchema } = require('./lib/ensureChatLocaleSchema');
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('./lib/osrmBaseUrl');
 
 // Routes
@@ -595,47 +596,66 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── Start ─────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀 BrSpark Admin API running on http://localhost:${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Database:    ${process.env.DATABASE_URL?.split('@')[1] || 'Not configured'}\n`);
-
-  // ── Backup automático ao iniciar (1× por hora no máximo) ──
-  const { execFile } = require('child_process');
-  const fs = require('fs');
-  const backupDir = path.join(__dirname, '../../backups');
-  const flagFile  = path.join(backupDir, '.last_auto_backup');
-
-  const oneHour = 60 * 60 * 1000;
-  let shouldBackup = true;
-
-  if (fs.existsSync(flagFile)) {
-    const lastTs = parseInt(fs.readFileSync(flagFile, 'utf8').trim(), 10) || 0;
-    if (Date.now() - lastTs < oneHour) shouldBackup = false;
-  }
-
-  if (shouldBackup) {
-    const backupScript = path.join(__dirname, '../scripts/backup.sh');
-    if (fs.existsSync(backupScript)) {
-      execFile('bash', [backupScript, 'auto-start'], { timeout: 60000 }, (err, stdout) => {
-        if (err) { console.warn('[BACKUP] Falhou no startup:', err.message); return; }
-        console.log('[BACKUP]', stdout.trim().split('\n').pop());
-        fs.mkdirSync(backupDir, { recursive: true });
-        fs.writeFileSync(flagFile, String(Date.now()));
-      });
+(async function startServer() {
+  if (String(process.env.SKIP_CHAT_LOCALE_SCHEMA_ENSURE || '').trim() !== '1') {
+    try {
+      await ensureChatLocaleSchema(prisma);
+    } catch (e) {
+      console.warn(
+        '[schema] Colunas de chat (preferred_chat_locale / translations) não puderam ser garantidas — execute `npm run db:migrate` no backend. Detalhe:',
+        e?.message || e,
+      );
     }
   }
 
-  // Garante FT-AAAA-MM-NNNNNNN em execuções antigas (idempotente; desligar com SKIP_OS_NUMBER_BACKFILL_ON_START=1).
-  if (String(process.env.SKIP_OS_NUMBER_BACKFILL_ON_START || '').trim() !== '1') {
-    setImmediate(() => {
-      runBackfillOsNumbers(prisma)
-        .then((r) => {
-          if (!r.skipped) {
-            console.log(`[osNumber] Backfill no arranque: ${r.updated} OS(s) numeradas (FT).`);
+  app.listen(PORT, () => {
+    console.log(`\n🚀 BrSpark Admin API running on http://localhost:${PORT}`);
+    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Database:    ${process.env.DATABASE_URL?.split('@')[1] || 'Not configured'}\n`);
+
+    // ── Backup automático ao iniciar (1× por hora no máximo) ──
+    const { execFile } = require('child_process');
+    const fs = require('fs');
+    const backupDir = path.join(__dirname, '../../backups');
+    const flagFile = path.join(backupDir, '.last_auto_backup');
+
+    const oneHour = 60 * 60 * 1000;
+    let shouldBackup = true;
+
+    if (fs.existsSync(flagFile)) {
+      const lastTs = parseInt(fs.readFileSync(flagFile, 'utf8').trim(), 10) || 0;
+      if (Date.now() - lastTs < oneHour) shouldBackup = false;
+    }
+
+    if (shouldBackup) {
+      const backupScript = path.join(__dirname, '../scripts/backup.sh');
+      if (fs.existsSync(backupScript)) {
+        execFile('bash', [backupScript, 'auto-start'], { timeout: 60000 }, (err, stdout) => {
+          if (err) {
+            console.warn('[BACKUP] Falhou no startup:', err.message);
+            return;
           }
-        })
-        .catch((e) => console.warn('[osNumber] Backfill no arranque falhou (BD indisponível?):', e.message));
-    });
-  }
+          console.log('[BACKUP]', stdout.trim().split('\n').pop());
+          fs.mkdirSync(backupDir, { recursive: true });
+          fs.writeFileSync(flagFile, String(Date.now()));
+        });
+      }
+    }
+
+    // Garante FT-AAAA-MM-NNNNNNN em execuções antigas (idempotente; desligar com SKIP_OS_NUMBER_BACKFILL_ON_START=1).
+    if (String(process.env.SKIP_OS_NUMBER_BACKFILL_ON_START || '').trim() !== '1') {
+      setImmediate(() => {
+        runBackfillOsNumbers(prisma)
+          .then((r) => {
+            if (!r.skipped) {
+              console.log(`[osNumber] Backfill no arranque: ${r.updated} OS(s) numeradas (FT).`);
+            }
+          })
+          .catch((e) => console.warn('[osNumber] Backfill no arranque falhou (BD indisponível?):', e.message));
+      });
+    }
+  });
+})().catch((e) => {
+  console.error('Falha crítica ao iniciar API:', e);
+  process.exit(1);
 });

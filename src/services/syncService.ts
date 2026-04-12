@@ -363,33 +363,6 @@ async function uploadLocalMediaInFlatResponseRecord(
   }
 }
 
-/** Conta URIs de mídia local na raiz e em todas as linhas `__section_repeat_*`. */
-function countLocalMediaUrisInResponsesTree(responses: Record<string, unknown>): number {
-  let n = 0;
-  const bump = (flat: Record<string, unknown>) => {
-    for (const key of Object.keys(flat)) {
-      if (key.startsWith('__')) continue;
-      const v = flat[key];
-      if (typeof v === 'string' && isLocalMediaUri(v)) n += 1;
-      else if (Array.isArray(v)) {
-        for (const item of v) {
-          if (typeof item === 'string' && isLocalMediaUri(item)) n += 1;
-        }
-      }
-    }
-  };
-  bump(responses);
-  for (const k of Object.keys(responses)) {
-    if (!k.startsWith(SECTION_REPEAT_KEY_PREFIX)) continue;
-    const rows = responses[k];
-    if (!Array.isArray(rows)) continue;
-    for (const row of rows) {
-      if (row && typeof row === 'object' && !Array.isArray(row)) bump(row as Record<string, unknown>);
-    }
-  }
-  return n;
-}
-
 /** Substitui file:// / content:// / arrays de URIs por URLs públicas antes de POST /executions (raiz + secções repetíveis). */
 async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
   if (!payload?.responses || typeof payload.responses !== 'object') return;
@@ -757,33 +730,6 @@ async function pushChecklistOutbox() {
      for (const payload of outbox) {
          try {
              await uploadLocalMediaInChecklistPayload(payload);
-             // #region agent log
-             void (() => {
-               try {
-                 const r = payload?.responses;
-                 if (!r || typeof r !== 'object') return;
-                 const left = countLocalMediaUrisInResponsesTree(r as Record<string, unknown>);
-                 fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fd3da5' },
-                   body: JSON.stringify({
-                     sessionId: 'fd3da5',
-                     hypothesisId: 'H1-H6-repeat-upload',
-                     location: 'syncService.ts:pushChecklistOutbox',
-                     message: 'after uploadLocalMediaInChecklistPayload',
-                     data: {
-                       taskId: payload.taskId,
-                       localMediaRemaining: left,
-                       facialAddrPrefill: facialAddrFilled,
-                     },
-                     timestamp: Date.now(),
-                   }),
-                 }).catch(() => {});
-               } catch {
-                 /* ignore */
-               }
-             })();
-             // #endregion
 
              const res = await apiFetch('/api/checklists/executions', {
                  method: 'POST',
@@ -1250,6 +1196,13 @@ function pickExpectedFormDurationFromTask(task: any): number | null {
   return Math.floor(Number(v));
 }
 
+/** Preserva ISO não vazio do remoto; se ausente, mantém o anterior (útil entre pulls ou API sem o campo). */
+function mergeOptionalTaskIso(remoteVal: unknown, prevVal: unknown): string | null {
+  if (remoteVal != null && String(remoteVal).trim() !== '') return String(remoteVal).trim();
+  if (prevVal != null && String(prevVal).trim() !== '') return String(prevVal).trim();
+  return null;
+}
+
 function mergeDurationEtaPreserve(remote: any, prev: any, base: Record<string, unknown>): Record<string, unknown> {
   const expPrev = pickExpectedFormDurationFromTask(prev);
   const expRemote = pickExpectedFormDurationFromTask(remote);
@@ -1257,10 +1210,22 @@ function mergeDurationEtaPreserve(remote: any, prev: any, base: Record<string, u
   const etaP = prev?.etaMinutes;
   const hasEtaRemote = etaR != null && Number.isFinite(Number(etaR));
   const hasEtaPrev = etaP != null && Number.isFinite(Number(etaP));
+  const startedAt = mergeOptionalTaskIso(remote?.startedAt, prev?.startedAt);
+  const completedAt = mergeOptionalTaskIso(remote?.completedAt, prev?.completedAt);
+  const plannedFormEndAt = mergeOptionalTaskIso(remote?.plannedFormEndAt, prev?.plannedFormEndAt);
+  const agendaEndAt = mergeOptionalTaskIso(remote?.agendaEndAt, prev?.agendaEndAt);
+  const agendaStartAt = mergeOptionalTaskIso(remote?.agendaStartAt, prev?.agendaStartAt);
+  const scheduledStartAt = mergeOptionalTaskIso(remote?.scheduledStartAt, prev?.scheduledStartAt);
   return {
     ...base,
     ...(expRemote == null && expPrev != null ? { expectedFormDurationMinutes: expPrev } : {}),
     ...(!hasEtaRemote && hasEtaPrev ? { etaMinutes: Math.floor(Number(etaP)) } : {}),
+    startedAt,
+    completedAt,
+    plannedFormEndAt,
+    agendaEndAt,
+    agendaStartAt,
+    scheduledStartAt,
   };
 }
 

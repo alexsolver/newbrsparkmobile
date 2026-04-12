@@ -1,6 +1,6 @@
 /**
  * checklists-builder.js
- * Lógica do Criador de Checklists Drag & Drop com Vanilla JS e SortableJS
+ * Lógica do Criador de Formulários Drag & Drop com Vanilla JS e SortableJS
  */
 
 function brsparkApiBase() {
@@ -344,7 +344,7 @@ window.initFieldHelpEditor = function (field) {
 let fields = [];
 let selectedFieldId = null;
 let currentFormId = null;
-let currentFormTitle = 'Novo Checklist';
+let currentFormTitle = 'Novo formulário';
 let currentFormDesc = '';
 let currentFormIcon = '';
 /** Pasta do modelo em edição (null = raiz) — persistida na API como folderId */
@@ -528,9 +528,10 @@ window.updateIconGridColors = function() {
     });
 };
 
-window.renderWebIcon = function(lib, name, hexColor, sizePx) {
+window.renderWebIcon = function(lib, name, hexColor, sizePx, compact) {
     const s = sizePx || 24;
-    const style = `text-align:center; font-size:${s}px; margin-bottom:6px; color:${hexColor||'inherit'}`;
+    const mb = compact ? '0' : '6px';
+    const style = `text-align:center; font-size:${s}px; margin-bottom:${mb}; line-height:1; color:${hexColor||'inherit'}`;
     
     // Native Universal Expo Vector Icons Mapping Generated!
     return `<i class="icon-render rnvi-${lib} rnvi-${lib}-${name}" style="${style}"></i>`;
@@ -771,7 +772,8 @@ const iconMap = {
     'materials_consumption': '<ion-icon name="cube-outline"></ion-icon>',
     'materials_receipt': '<ion-icon name="arrow-down-circle-outline"></ion-icon>',
     'technician_finance': '<ion-icon name="cash-outline"></ion-icon>',
-    'signature': '<ion-icon name="create-outline"></ion-icon>'
+    'signature': '<ion-icon name="create-outline"></ion-icon>',
+    'signature_summary': '<ion-icon name="reader-outline"></ion-icon>'
 };
 
 /** Estado de seções colapsadas no canvas (id do grupo: __preamble__ ou id do section_break). */
@@ -1203,6 +1205,7 @@ function createNewFieldFromToolboxType(type, rawText) {
               requireOnlineValidation: false,
             }
           : {}),
+        ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
     };
 }
 
@@ -1361,7 +1364,18 @@ function buildCanvasFieldElement(f) {
         f.rules && f.rules.length > 0
             ? `<div style="display:flex; align-items:center; background:var(--accent-dim); color:var(--accent); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;"><ion-icon name="git-network-outline" style="margin-right:2px; font-size:12px;"></ion-icon> ${f.rules.length} Gatilhos</div>`
             : '';
-    const multiFieldExcluded = new Set(['section_break', 'hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance']);
+    const multiFieldExcluded = new Set([
+        'section_break',
+        'hidden',
+        'calculated',
+        'transit_start',
+        'transit_end',
+        'materials_consumption',
+        'materials_receipt',
+        'technician_finance',
+        'signature',
+        'signature_summary',
+    ]);
     const multiTag =
         f.multiple && !multiFieldExcluded.has(f.type)
             ? `<div style="display:flex; align-items:center; background:#f3e8ff; color:#6b21a8; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;" title="Várias respostas">M×</div>`
@@ -1733,10 +1747,22 @@ window.selectField = function(id, opts) {
     if (sf && sf.type === 'section_break') {
         renderCanvas();
     }
+    function applyCopilotCanvasFollow() {
+        try {
+            const followEl = document.getElementById('copilot-follow-canvas');
+            if (followEl && followEl.checked && id) {
+                window.brsparkCopilotPinFieldFromCanvas(id, { skipSelect: true, skipOpenPanel: true });
+            }
+        } catch (eFollow) {
+            /* ignore */
+        }
+    }
     if (opts.skipPropertiesIfSame && prevSelected === id) {
+        applyCopilotCanvasFollow();
         return;
     }
     renderProperties();
+    applyCopilotCanvasFollow();
 };
 
 window.triggerIconPickerForField = function(evt, id) {
@@ -1751,6 +1777,18 @@ window.triggerIconPickerForField = function(evt, id) {
             renderCanvas();
             renderProperties();
         }
+    });
+};
+
+/** Ícone do modelo (metadata.icon) — ao lado do título, como nos cartões do canvas. */
+window.openTemplateFormIconPicker = function (evt) {
+    if (evt) evt.preventDefault();
+    window.openIconPicker((iconName) => {
+        const v = iconName != null ? String(iconName).trim() : '';
+        currentFormIcon = v;
+        const ti = document.getElementById('tpl-icon');
+        if (ti) ti.value = v;
+        syncBuilderTaskIconDom();
     });
 };
 
@@ -1962,7 +2000,7 @@ function renderProperties() {
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">Modo de Falha</label>
                 <select class="prop-input" onchange="window.handleFieldUpdate('geofenceFailMode', this.value)" style="font-size:12px;">
-                    <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 Bloquear — Impede avanço do checklist</option>
+                    <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 Bloquear — Impede avanço do formulário</option>
                     <option value="warn" ${f.geofenceFailMode === 'warn' ? 'selected' : ''}>⚠️ Apenas Alertar — Registra desvio e continua</option>
                 </select>
             </div>
@@ -2028,6 +2066,40 @@ function renderProperties() {
             <label class="prop-label" style="color:#7c3aed;"><ion-icon name="calculator"></ion-icon> Expressão Matemática do Sistema</label>
             <input class="prop-input" type="text" placeholder="Ex: field_123 + field_456" value="${f.calcFormula || ''}" onkeyup="window.handleFieldUpdate('calcFormula', this.value)" />
             <div style="font-size:10px; color:#7c3aed; margin-top:4px; line-height:1.2;">Variáveis: Use o ID sublinhado de outros blocos (Ex: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.</div>
+        </div>`;
+    } else if (f.type === 'signature_summary') {
+        const ids = new Set(Array.isArray(f.summarySourceFieldIds) ? f.summarySourceFieldIds : []);
+        const pickRows = fields
+            .filter(
+                (o) =>
+                    o &&
+                    o.id !== f.id &&
+                    o.type !== 'section_break' &&
+                    o.type !== 'signature_summary' &&
+                    o.type !== 'hidden',
+            )
+            .map((o) => {
+                const ck = ids.has(o.id) ? 'checked' : '';
+                const lab = escapeHtmlLogic(o.label || o.id);
+                const typ = escapeHtmlLogic(o.type || '');
+                const oid = escapeHtmlAttr(o.id);
+                return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid #e2e8f0;margin-bottom:4px;background:#fff;">
+                  <input type="checkbox" ${ck} onchange="window.toggleSignatureSummarySource('${oid}', this.checked)" style="margin-top:2px;flex-shrink:0;accent-color:var(--primary);" />
+                  <span style="font-size:12px;line-height:1.35;"><span style="font-weight:700;color:#0f172a;">${lab}</span> <span style="color:#94a3b8;font-size:10px;">(${typ} · ${escapeHtmlLogic(o.id)})</span></span>
+                </label>`;
+            })
+            .join('');
+        extraProps += `
+        <div class="prop-group" style="background:#ecfeff; border:1px solid #67e8f9; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:12px; font-weight:800; color:#0e7490; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                <ion-icon name="reader-outline"></ion-icon> Campos no resumo (ordem = ordem no formulário)
+            </div>
+            <div style="font-size:10px; color:#155e75; line-height:1.4; margin-bottom:10px;">
+                No app, estes valores aparecem num único bloco <b>acima</b> da zona de assinatura. Na raiz, o app também procura valores em secções repetíveis (primeira ocorrência com texto). Dentro de uma linha repetível, usa-se o contexto dessa linha.
+            </div>
+            <div style="max-height:220px; overflow-y:auto;">${
+                pickRows || '<span style="font-size:11px;color:#94a3b8">Nenhum campo disponível.</span>'
+            }</div>
         </div>`;
     }
 
@@ -2096,7 +2168,7 @@ function renderProperties() {
             </div>
         </div>
         
-        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
+        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
         <div class="prop-group">
             <label class="prop-label">Auto-Preenchimento / Valor Padrão (Opcional)</label>
             <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="Use tags como {{user.name}}, {{date}}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
@@ -2109,13 +2181,13 @@ function renderProperties() {
         </div>
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
                 <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Várias respostas (lista)</label>
             </div>
-            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com checklists antigos (valor único continua a ser string ou valor único).</div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com formulários antigos (valor único continua a ser string ou valor único).</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <div style="flex:1; min-width:110px;">
                     <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. itens (vazio = padrão)</label>
@@ -2149,7 +2221,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'signature', 'barcode_scan'].includes(f.type) ? `
+        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'signature', 'signature_summary', 'barcode_scan'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
@@ -2170,6 +2242,24 @@ function renderProperties() {
 // Expose pra UI HTML
 window.handleFieldUpdate = function(key, val) {
     updateField(key, val);
+};
+
+/** Inclui/remove um campo no resumo para assinatura (mantém ordem do canvas). */
+window.toggleSignatureSummarySource = function (sourceId, checked) {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'signature_summary') return;
+    let arr = Array.isArray(f.summarySourceFieldIds) ? f.summarySourceFieldIds.slice() : [];
+    if (checked) {
+        if (!arr.includes(sourceId)) arr.push(sourceId);
+    } else {
+        arr = arr.filter((x) => x !== sourceId);
+    }
+    const order = new Map(fields.map((x, i) => [x.id, i]));
+    arr.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    f.summarySourceFieldIds = arr;
+    renderCanvas();
+    renderProperties();
 };
 
 window.refreshConditionalUI = function(valueId) {
@@ -2318,18 +2408,6 @@ window.applyGlobalGeofenceModal = function () {
     if (r > 50000) r = 50000;
     globalFormSettings.globalGeofenceRadius = r;
     if (radEl) radEl.value = String(r);
-    const durEl = document.getElementById('expected-form-duration-minutes');
-    if (durEl) {
-        const raw = String(durEl.value || '').trim();
-        if (raw === '') {
-            delete globalFormSettings.expectedFormDurationMinutes;
-        } else {
-            let dm = parseInt(raw, 10);
-            if (!Number.isFinite(dm) || dm < 5) dm = 5;
-            dm = Math.floor(dm / 5) * 5;
-            globalFormSettings.expectedFormDurationMinutes = dm;
-        }
-    }
     window.closeGlobalGeofenceModal();
     if (typeof renderMobilePreview === 'function') renderMobilePreview();
 };
@@ -2348,12 +2426,41 @@ window.configureGlobalSettings = function () {
             ? globalFormSettings.globalGeofenceRadius
             : 200
     );
+    m.style.display = 'flex';
+};
+
+window.closeExpectedFormDurationModal = function () {
+    const m = document.getElementById('expected-form-duration-modal');
+    if (m) m.style.display = 'none';
+};
+
+window.applyExpectedFormDurationModal = function () {
     const durEl = document.getElementById('expected-form-duration-minutes');
     if (durEl) {
-        const v = globalFormSettings.expectedFormDurationMinutes;
-        durEl.value =
-            v != null && Number.isFinite(Number(v)) && Number(v) >= 5 ? String(Math.floor(Number(v))) : '';
+        const raw = String(durEl.value || '').trim();
+        if (raw === '') {
+            delete globalFormSettings.expectedFormDurationMinutes;
+        } else {
+            let dm = parseInt(raw, 10);
+            if (!Number.isFinite(dm) || dm < 5) dm = 5;
+            dm = Math.floor(dm / 5) * 5;
+            globalFormSettings.expectedFormDurationMinutes = dm;
+        }
     }
+    window.closeExpectedFormDurationModal();
+    if (typeof renderMobilePreview === 'function') renderMobilePreview();
+};
+
+window.openExpectedFormDurationModal = function () {
+    const m = document.getElementById('expected-form-duration-modal');
+    const durEl = document.getElementById('expected-form-duration-minutes');
+    if (!m || !durEl) {
+        console.warn('[checklists-builder] Modal de tempo do formulário em falta no HTML.');
+        return;
+    }
+    const v = globalFormSettings.expectedFormDurationMinutes;
+    durEl.value =
+        v != null && Number.isFinite(Number(v)) && Number(v) >= 5 ? String(Math.floor(Number(v))) : '';
     m.style.display = 'flex';
 };
 
@@ -2480,7 +2587,7 @@ window.saveChecklist = async function() {
 
     try {
         if(!currentFormId || currentFormId === 'temp_new') {
-            if (!currentFormTitle || currentFormTitle === 'Novo Checklist') {
+            if (!currentFormTitle || currentFormTitle === 'Novo formulário' || currentFormTitle === 'Novo Checklist') {
                 currentFormTitle = 'FSM ' + new Date().toLocaleString('pt-BR');
             }
             currentFormId = 'chk_' + Date.now().toString(36);
@@ -2674,12 +2781,18 @@ window.previewPDF = function() {
              doc.text("[ Placeholder onde a imagem do S3 é impressa no Backend Node.js ]", 25, currentY + 30);
              currentY += 60;
          } 
-         else if(f.type === 'signature') {
+         else if(f.type === 'signature' || f.type === 'signature_summary') {
              // Linha de Assinatura com SVG futuro
              doc.setDrawColor(0);
              doc.line(20, currentY + 20, 120, currentY + 20);
              doc.setFontSize(9).setFont("helvetica", "normal");
-             doc.text("Assinatura do Técnico / Cliente Responsável", 20, currentY + 26);
+             doc.text(
+                 f.type === 'signature_summary'
+                     ? 'Resumo + assinatura (ver app / PDF completo)'
+                     : 'Assinatura do Técnico / Cliente Responsável',
+                 20,
+                 currentY + 26,
+             );
              currentY += 40;
          } 
          else if(f.type === 'checkbox') {
@@ -3103,7 +3216,7 @@ window.duplicateChecklist = async function(id) {
             return;
         }
     } catch(e) {
-        console.warn('Erro ao clonar checklist na API', e);
+        console.warn('Erro ao clonar formulário na API', e);
         const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
         delete db2[newForm.id];
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
@@ -3341,8 +3454,7 @@ window.loadChecklist = function(id) {
         // Fix: Restore inputs correctly
         document.getElementById('tpl-title').value = currentFormTitle;
         document.getElementById('tpl-desc').value = currentFormDesc;
-        document.getElementById('tpl-icon').value = currentFormIcon;
-        document.getElementById('tpl-icon-preview').innerHTML = currentFormIcon ? `<ion-icon name="${currentFormIcon}" style="font-size:18px;margin-right:6px;vertical-align:-3px;"></ion-icon> ${currentFormIcon}` : 'Escolher Ícone da Tarefa';
+        syncBuilderTaskIconDom();
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(form.schema || [])));
         ensureCanvasSchemaHasSection();
         fixTransitDisplacementViolations(fields);
@@ -3359,13 +3471,13 @@ window.createNewChecklist = function (fromBrowseFolder) {
     const modal = document.getElementById('new-checklist-modal');
     if (modal) {
         modal.style.display = 'flex';
-        document.getElementById('new-form-name-input').value = 'Novo Checklist';
+        document.getElementById('new-form-name-input').value = 'Novo formulário';
         setTimeout(() => document.getElementById('new-form-name-input').focus(), 100);
     }
 };
 
 window.confirmCreateNewChecklist = function () {
-    const title = document.getElementById('new-form-name-input').value.trim() || 'Novo Checklist';
+    const title = document.getElementById('new-form-name-input').value.trim() || 'Novo formulário';
     document.getElementById('new-checklist-modal').style.display = 'none';
 
     if (window.__newFormFolderId !== undefined) {
@@ -3393,6 +3505,10 @@ window.confirmCreateNewChecklist = function () {
     // Update the title input so saveChecklist reads the correct name
     document.getElementById('tpl-title').value = title;
     document.getElementById('tpl-desc').value = '';
+    currentFormIcon = '';
+    const tiNew = document.getElementById('tpl-icon');
+    if (tiNew) tiNew.value = '';
+    syncBuilderTaskIconDom();
 
     renderCanvas();
     renderProperties();
@@ -3427,6 +3543,24 @@ window.toggleMobilePreview = function() {
     }
 };
 
+/** Ícone do campo no simulador (paridade com o app: só ícone personalizado). */
+function mobilePreviewFieldIconHtml(f) {
+    if (!f) return '';
+    const ic = String(f.icon || '').trim();
+    if (!ic || typeof window.renderWebIcon !== 'function') return '';
+    try {
+        return window.renderWebIcon(
+            f.iconLibrary || 'Ionicons',
+            ic,
+            f.iconColor || '#0F172A',
+            24,
+            true
+        );
+    } catch (e) {
+        return '';
+    }
+}
+
 function renderMobilePreview() {
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
@@ -3435,8 +3569,20 @@ function renderMobilePreview() {
     const titleEl = document.getElementById('mobile-preview-title');
     const contentEl = document.getElementById('mobile-preview-content');
     if(!titleEl || !contentEl) return;
-    
-    titleEl.textContent = currentFormTitle || 'Preview Mobile';
+
+    const rawFormIcon = String(currentFormIcon || '').trim();
+    if (rawFormIcon) {
+        titleEl.innerHTML =
+            '<span style="display:inline-flex;align-items:center;justify-content:center;gap:8px;max-width:100%;">' +
+            '<ion-icon name="' +
+            escapeHtmlAttr(rawFormIcon) +
+            '" style="font-size:22px;flex-shrink:0;vertical-align:middle;"></ion-icon>' +
+            '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            escapeHtmlLogic(currentFormTitle || 'Preview mobile') +
+            '</span></span>';
+    } else {
+        titleEl.textContent = currentFormTitle || 'Preview mobile';
+    }
     
     if(fields.length === 0) {
         contentEl.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8; font-size:14px; margin-top:40px;">Arraste campos no lado esquerdo do seu PC para vê-los nascer instântaneamente aqui!</div>';
@@ -3503,10 +3649,17 @@ function renderMobilePreview() {
         const num = fi >= 0 ? fi + 1 : idx + 1;
         let relatedRules = globalFormSettings.rules ? globalFormSettings.rules.filter(r => r.actions && r.actions.some(a => a.targetId === f.id)) : [];
         let isCond = relatedRules.length > 0;
-        let wrapperStyle = `background:white; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:8px;`;
+        let wrapperStyle = `background:#ffffff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:10px;`;
         if(isCond) wrapperStyle += ` border: 2px dashed #c084fc; opacity:0.9; `;
-        
-        let labelTag = `<label style="font-size:14.5px; font-weight:700; color:#1e293b; line-height:1.2;">${num}. ${f.label}${f.required ? '<span style="color:#ef4444; margin-left:4px; font-size:16px;">*</span>' : ''}</label>`;
+
+        let hasCustomIcon = !!(f.icon && String(f.icon).trim());
+        const iconHtml = hasCustomIcon ? mobilePreviewFieldIconHtml(f) : '';
+        if (hasCustomIcon && !iconHtml) hasCustomIcon = false;
+        const iconCol = hasCustomIcon
+            ? `<div style="width:44px;height:44px;flex-shrink:0;border-radius:10px;background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;margin-right:12px;margin-top:2px;">${iconHtml}</div>`
+            : '';
+        const labelText = hasCustomIcon ? String(f.label || '') : `${num}. ${String(f.label || '')}`;
+        const labelHtml = `<div style="font-size:15px;font-weight:800;color:#0F172A;line-height:1.3;">${escapeHtmlLogic(labelText)}${f.required ? '<span style="color:#EF4444"> *</span>' : ''}</div>`;
         let condBadge = isCond ? `<div style="font-size:10px; background:#f3e8ff; color:#7e22ce; font-weight:700; padding:4px 8px; border-radius:6px; align-self:flex-start;"><ion-icon name="color-wand-outline"></ion-icon> Ativado por ${relatedRules.length} Regra(s)</div>` : '';
         const helpPlain = (f.description || '').replace(/<[^>]+>/g, '').trim();
         const helpHtmlStr = f.helpHtml || '';
@@ -3519,14 +3672,16 @@ function renderMobilePreview() {
           : '';
         
         let inputMock = '';
-        if(f.type === 'text') inputMock = `<input type="text" placeholder="Sua resposta..." disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
-        if(f.type === 'email') inputMock = `<input type="email" placeholder="usuario@email.com" disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
-        if(f.type === 'phone') inputMock = `<input type="tel" placeholder="(11) 99999-9999" disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
-        if(f.type === 'number') inputMock = `<input type="number" placeholder="123" disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
-        if(f.type === 'date') inputMock = `<input type="date" disabled style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px;">`;
+        if(f.type === 'text') inputMock = `<input type="text" placeholder="Sua resposta..." disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
+        if(f.type === 'email') inputMock = `<input type="email" placeholder="usuario@email.com" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
+        if(f.type === 'phone') inputMock = `<input type="tel" placeholder="(11) 99999-9999" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
+        if(f.type === 'number') inputMock = `<input type="number" placeholder="123" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
+        if(f.type === 'date') inputMock = `<input type="date" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
         if(f.type === 'checkbox') inputMock = `<div style="display:flex; gap:12px;"><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled checked> Sim</label><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled> Não</label></div>`;
-        
-        if(f.type === 'dropdown') inputMock = `<div style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:14px; color:#475569; display:flex; justify-content:space-between"><span>Selecione uma opção...</span><ion-icon name="chevron-down"></ion-icon></div>`;
+        if(f.type === 'yes_no') inputMock = `<div style="display:flex; gap:12px;"><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled checked> Sim</label><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled> Não</label></div>`;
+
+        if(f.type === 'dropdown') inputMock = `<div style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#475569; display:flex; justify-content:space-between; align-items:center;"><span>Selecione uma opção...</span><ion-icon name="chevron-down"></ion-icon></div>`;
+        if(f.type === 'multiselect') inputMock = `<div style="border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#475569; display:flex; justify-content:space-between; align-items:center;"><span>Selecione uma ou mais opções...</span><ion-icon name="chevron-down"></ion-icon></div>`;
         if(f.type === 'rating') inputMock = `<div style="display:flex; gap:8px; font-size:26px; color:#cbd5e1; justify-content:center"><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star-outline"></ion-icon><ion-icon name="star-outline"></ion-icon></div>`;
         if(f.type === 'calculated') inputMock = `<div style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px; font-size:14px; color:#7c3aed; font-family:monospace; text-align:right">R$ 0,00 [Cálculo Auto]</div>`;
         if(f.type === 'hidden') inputMock = `<div style="background:#f1f5f9; border:1px dashed #94a3b8; border-radius:8px; padding:12px; font-size:12px; color:#64748b; text-align:center;"><ion-icon name="eye-off"></ion-icon> Este campo ficará invisível no Celular</div>`;
@@ -3541,22 +3696,42 @@ function renderMobilePreview() {
         if(f.type === 'materials_receipt') inputMock = `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; font-size:13px; color:#15803d;"><ion-icon name="arrow-down-circle" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Entrada de materiais</b> — estoque técnico; aumenta o saldo ao concluir.</div>`;
         if(f.type === 'technician_finance') inputMock = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px; font-size:13px; color:#0f766e;"><ion-icon name="cash" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Custos do técnico</b> — despesas/receitas ligadas ao atendimento; livro separado dos bens.</div>`;
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
+        if(f.type === 'signature_summary') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><div style="background:#ecfeff;border:1px solid #67e8f9;border-radius:10px;padding:12px;font-size:11px;color:#155e75;line-height:1.45"><b>Resumo</b> — valores só leitura dos campos marcados no painel; depois <b>assinatura</b> no fim do bloco.</div><div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:72px; display:flex; align-items:flex-end; padding:10px; color:#94a3b8; font-size:11px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Zona de assinatura</div></div>`;
         
         if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#ea580c;font-weight:800">laranja</span> (trajeto planejado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio em relação à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
         if(f.type === 'transit_end') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button><div style="font-size:10px;color:#64748b;line-height:1.45;border-left:3px solid #ea580c;padding-left:10px">Se a OS foi despachada como <strong>Rota</strong>, o PDF pode incluir <strong>mapa estático</strong> (trajeto + GPS), <strong>cobertura %</strong>, desvio máximo e comparação com a tolerância do corredor.</div></div>`;
-        if(f.type === 'geofence_check') inputMock = `<button disabled style="background:#0f172a; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="location" style="font-size:20px"></ion-icon> VALIDAR GEOLOCALIZAÇÃO<br>Raio: ${f.geofenceRadius}m</button>`;
+        if(f.type === 'geofence_check') inputMock = `<button disabled style="background:#0f172a; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="location" style="font-size:20px"></ion-icon> VALIDAR GEOLOCALIZAÇÃO<br>Raio: ${escapeHtmlLogic(String(f.geofenceRadius != null ? f.geofenceRadius : '?'))}m</button>`;
         if(f.type === 'location_pick') inputMock = `<div style="border:1px solid #bae6fd; border-radius:10px; overflow:hidden; background:#f0f9ff;"><div style="height:120px; background:linear-gradient(135deg,#e0f2fe,#f0f9ff); display:flex; align-items:center; justify-content:center; color:#0369a1; font-size:12px; font-weight:700; flex-direction:column; gap:6px;"><ion-icon name="map" style="font-size:32px"></ion-icon>Mapa + alfinete</div><div style="padding:10px; font-size:11px; color:#0c4a6e; font-weight:600;">GPS real + posição ajustada no mapa</div></div>`;
-        
-        html += `<div style="${wrapperStyle}">${condBadge}${labelTag}${helpMock}${inputMock}</div>`;
+
+        if (!inputMock) {
+            inputMock =
+                '<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:12px;font-size:13px;color:#64748b;background:#f8fafc;">Pré-visualização simplificada — tipo <strong>' +
+                escapeHtmlLogic(f.type) +
+                '</strong>.</div>';
+        }
+
+        const stackInner = `${labelHtml}${helpMock}${inputMock}`;
+        const mainBlock = iconCol
+            ? `<div style="display:flex;flex-direction:row;align-items:flex-start;width:100%;">${iconCol}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;">${stackInner}</div></div>`
+            : `<div style="display:flex;flex-direction:column;gap:10px;width:100%;">${stackInner}</div>`;
+
+        html += `<div style="${wrapperStyle}">${condBadge}${mainBlock}</div>`;
     });
     
-    html += `<button disabled style="background:var(--primary); color:white; font-weight:800; border:none; padding:18px; border-radius:12px; font-size:16px; margin-top:10px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">✅ SALVAR CHECKLIST EM OFFLINE-FIRST</button>`;
+    html += `<button disabled style="background:var(--primary); color:white; font-weight:800; border:none; padding:18px; border-radius:12px; font-size:16px; margin-top:10px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">✅ SALVAR FORMULÁRIO EM OFFLINE-FIRST</button>`;
     
     contentEl.innerHTML = html;
 }
 
 // Boot Local DB listener
 setTimeout(() => window.loadSavedFormsList(), 100);  // let dom settle
+setTimeout(function () {
+    try {
+        syncBuilderTaskIconDom();
+    } catch (eBootIcon) {
+        /* DOM ainda não tem o gatilho do ícone */
+    }
+}, 180);
 
 window.bindAppSectionNavRadios = function () {
     if (window.bindAppSectionNavRadios.__done) return;
@@ -3631,7 +3806,7 @@ window.confirmTestDispatch = async function() {
         const payload = {
             ownerEmail: email,
             refId: currentFormId,
-            title: `Checklist Novo (${new Date().toLocaleTimeString('pt-BR')})`,
+            title: `Formulário novo (${new Date().toLocaleTimeString('pt-BR')})`,
             description: 'Enviado de forma manual para vistoria.',
             scheduledStartAt: new Date().toISOString(),
             metadata: { icon: currentFormIcon || document.getElementById('tpl-icon').value },
@@ -3893,7 +4068,7 @@ window.openLogicModal = function(evt, fieldId) {
     tail.style.lineHeight = '1.45';
     tail.style.opacity = '0.92';
     tail.innerHTML =
-        'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>.';
+        'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>. Ações «Buscar na API e preencher campo» disparam ao <strong>sair do campo monitorizado</strong> (teclado), em geral com o mesmo timing que «Validar na API externa» — GET sem corpo ou POST com JSON do formulário.';
     sub.appendChild(tail);
     
     // Initialize rules array if it doesn't exist
@@ -3959,8 +4134,42 @@ function renderLogicRules() {
         let actionsHTML = '';
         rule.actions.forEach((act, actionIndex) => {
             const fieldOptions = buildLogicActionTargetOptions(act.type || 'SHOW', act.targetId);
-            
-            if (act.type === 'API_VALIDATION') {
+            const fieldOptsFetch = buildLogicActionTargetOptions('SET_VALUE', act.targetId);
+
+            if (act.type === 'API_FETCH') {
+                actionsHTML += `
+                <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#ecfdf5; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #86efac;">
+                    <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
+                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
+                            <option value="SHOW">Exibir o Campo</option>
+                            <option value="HIDE">Ocultar o Campo</option>
+                            <option value="REQUIRE">Tornar Obrigatório</option>
+                            <option value="OPTIONAL">Tornar Opcional</option>
+                            <option value="SET_VALUE">Definir Valor</option>
+                            <option value="API_VALIDATION">Validar na API Externa</option>
+                            <option value="API_FETCH" selected>Buscar na API e preencher campo</option>
+                        </select>
+                        <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
+                    </div>
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">Campo destino (recebe o texto extraído)</label>
+                    <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'targetId', this.value)">${fieldOptsFetch}</select>
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">Método HTTP</label>
+                    <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiMethod', this.value)">
+                        <option value="POST" ${(act.apiMethod || 'POST') === 'POST' ? 'selected' : ''}>POST (JSON com formulário, tarefa e respostas)</option>
+                        <option value="GET" ${String(act.apiMethod || '').toUpperCase() === 'GET' ? 'selected' : ''}>GET (URL completa; sem corpo)</option>
+                    </select>
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">URL do endpoint</label>
+                    <input type="text" class="prop-input" placeholder="https://… (GET: inclua query na URL)" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">Caminho no JSON da resposta (opcional)</label>
+                    <input type="text" class="prop-input" placeholder="Ex.: current.temp_c (vazio = corpo inteiro como texto)" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiResponsePath', this.value)" />
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">Mensagem se falhar a chamada</label>
+                    <input type="text" class="prop-input" placeholder="Ex.: Serviço indisponível." value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
+                    <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                        <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiAllowOffline', this.checked)" />
+                        <label for="api_fetch_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#166534; cursor:pointer;">Se offline, não buscar nem alterar o campo</label>
+                    </div>
+                </div>`;
+            } else if (act.type === 'API_VALIDATION') {
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#f0f9ff; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #bae6fd;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
@@ -3971,6 +4180,7 @@ function renderLogicRules() {
                             <option value="OPTIONAL">Tornar Opcional</option>
                             <option value="SET_VALUE">Definir Valor</option>
                             <option value="API_VALIDATION" selected>Validar na API Externa</option>
+                            <option value="API_FETCH">Buscar na API e preencher campo</option>
                         </select>
                         <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
                     </div>
@@ -3996,6 +4206,7 @@ function renderLogicRules() {
                             <option value="OPTIONAL" ${act.type==='OPTIONAL'?'selected':''}>Tornar Opcional</option>
                             <option value="SET_VALUE" ${act.type==='SET_VALUE'?'selected':''}>Definir Valor</option>
                             <option value="API_VALIDATION" ${act.type==='API_VALIDATION'?'selected':''}>Validar na API Externa</option>
+                            <option value="API_FETCH" ${act.type==='API_FETCH'?'selected':''}>Buscar na API e preencher campo</option>
                         </select>
                         <select class="prop-input" style="flex:1">
                             ${fieldOptions}
@@ -4095,6 +4306,12 @@ window.updateLogicAction = function(rIndex, aIndex, key, val) {
         field.rules[rIndex].actions[aIndex][key] = val;
         if (key === 'type') {
             const act = field.rules[rIndex].actions[aIndex];
+            if (val === 'API_FETCH') {
+                if (!act.apiMethod) act.apiMethod = 'POST';
+                if (act.apiUrl == null) act.apiUrl = '';
+                if (act.apiResponsePath == null) act.apiResponsePath = '';
+                if (act.apiErrorMsg == null) act.apiErrorMsg = '';
+            }
             if (val !== 'SHOW' && val !== 'HIDE' && act.targetId) {
                 const tgt = fields.find((x) => x.id === act.targetId);
                 if (tgt && tgt.type === 'section_break') act.targetId = '';
@@ -4108,19 +4325,6 @@ window.saveFieldLogic = function() {
     window.hideLogicModal();
 };
 
-// ─── Assistente IA: Excel/Word/JSON → extrair estrutura → tipo (toolbox) → append ao canvas ─────────
-/** @type {{ blocks: object[], title: string, description: string, hint: string, sourceFileName?: string, analyzedAt?: string, truncated?: boolean } | null} */
-window.__brsparkAiSession = null;
-/** @type {{ phase: 'intro'|'blocks'|'done', blockIndex: number } | null} */
-window.__brsparkAiQueueState = null;
-
-function escapeHtmlAi(s) {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/"/g, '&quot;');
-}
-
 function brsparkAdminBearerToken() {
     try {
         return sessionStorage.getItem('brspark_admin_token') || '';
@@ -4129,613 +4333,742 @@ function brsparkAdminBearerToken() {
     }
 }
 
-/**
- * @param {boolean} on
- * @param {''|'analyze'} [phase]
- */
-function setAiFormLoading(on, phase) {
-    const el = document.getElementById('ai-form-loading');
-    if (el) {
-        el.classList.toggle('is-visible', !!on);
-        el.setAttribute('aria-hidden', on ? 'false' : 'true');
-    }
-    const sub = document.getElementById('ai-form-loading-sub');
-    if (sub) {
-        sub.textContent = 'A ler o ficheiro e a extrair etapas e campos. Pode levar até um minuto.';
-    }
-    const titleEl = document.querySelector('#ai-form-loading .ai-form-loading-title');
-    if (titleEl) {
-        titleEl.textContent = on ? 'A analisar o ficheiro…' : 'A processar…';
-    }
-    [
-        'ai-form-file',
-        'ai-form-hint',
-        'ai-form-generate-btn',
-        'ai-form-back-btn',
-        'ai-form-session-title',
-        'ai-form-session-desc',
-        'ai-structure-skip-btn',
-        'ai-structure-primary-btn',
-    ].forEach(function (id) {
-        const n = document.getElementById(id);
-        if (n) n.disabled = !!on;
-    });
-}
-
-function aiFormSetWizardStep(step) {
-    const upload = document.getElementById('ai-form-upload-section');
-    const validate = document.getElementById('ai-form-validate-section');
-    const panel = document.getElementById('ai-form-modal-panel');
-    if (upload) upload.style.display = step === 'upload' ? 'block' : 'none';
-    if (validate) validate.style.display = step === 'validate' ? 'block' : 'none';
-    if (panel) {
-        panel.classList.toggle('ai-form-panel-wide', step === 'validate');
-    }
-}
-
-function clearAiFormHistoryDom() {
-    const hs = document.getElementById('ai-form-history-static');
-    if (hs) hs.innerHTML = '';
-    const hp = document.getElementById('ai-form-history-proposals');
-    if (hp) hp.innerHTML = '';
-    const hist = document.getElementById('ai-form-history');
-    if (hist) hist.open = false;
-}
-
-function renderAiFormHistorySession(sess) {
-    if (!sess) return;
-    const staticEl = document.getElementById('ai-form-history-static');
-    const propEl = document.getElementById('ai-form-history-proposals');
-    if (!staticEl || !propEl) return;
-
-    const when = sess.analyzedAt
-        ? new Date(sess.analyzedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-        : '—';
-    let meta =
-        '<strong>Arquivo:</strong> ' +
-        escapeHtmlAi(sess.sourceFileName || '(sem nome)') +
-        '<br><strong>Analisado:</strong> ' +
-        escapeHtmlAi(when);
-    if (sess.hint) {
-        meta += '<br><strong>Instruções que enviou:</strong> ' + escapeHtmlAi(sess.hint);
-    }
-    if (sess.truncated) {
-        meta +=
-            '<br><span style="color:#b45309;">Aviso: o conteúdo do ficheiro foi truncado por tamanho.</span>';
-    }
-    staticEl.innerHTML = meta;
-
-    propEl.innerHTML = '';
-    const blocks = sess.blocks || sess.items || [];
-    blocks.forEach(function (b) {
-        const li = document.createElement('li');
-        const kind = b.kind === 'section_break' ? 'Etapa' : 'Campo';
-        li.innerHTML =
-            '<strong>' +
-            escapeHtmlAi(kind) +
-            ':</strong> ' +
-            escapeHtmlAi(b.label || '') +
-            (b.context ? ' <em style="color:#64748b;">(' + escapeHtmlAi(b.context) + ')</em>' : '');
-        propEl.appendChild(li);
-    });
-
-    const hist = document.getElementById('ai-form-history');
-    if (hist) hist.open = false;
-}
-
-function collectToolboxTypesForAiSelect() {
-    const root = document.getElementById('toolbox');
-    const fallback = [
-        { type: 'text', label: 'Texto livre' },
-        { type: 'number', label: 'Número' },
-        { type: 'email', label: 'E-mail' },
-        { type: 'phone', label: 'Telefone' },
-        { type: 'date', label: 'Data / Hora' },
-        { type: 'yes_no', label: 'Sim / Não' },
-        { type: 'dropdown', label: 'Lista (dropdown)' },
-        { type: 'multiselect', label: 'Múltipla escolha' },
-        { type: 'photo', label: 'Fotografia' },
-        { type: 'signature', label: 'Assinatura' },
-    ];
-    if (!root) return fallback;
-    const fromDom = Array.from(root.querySelectorAll('.toolbox-item[data-type]'))
-        .map(function (el) {
-            const t = el.getAttribute('data-type');
-            if (!t || t === 'section_break') return null;
-            return {
-                type: t,
-                label: el.textContent.replace(/\s+/g, ' ').trim() || t,
-            };
-        })
-        .filter(Boolean);
-    return fromDom.length ? fromDom : fallback;
-}
-
-function aiStructureToggleFieldTypeExtras() {
-    const sel = document.getElementById('ai-structure-field-type');
-    const row = document.getElementById('ai-structure-list-options-row');
-    if (!sel || !row) return;
-    const v = sel.value;
-    row.style.display = v === 'dropdown' || v === 'multiselect' ? 'block' : 'none';
-}
-
-function aiPushOneFieldToCanvas(fieldObj) {
-    ensureCanvasSchemaHasSection();
-    const out = ensureSchemaInstructionFlags([fieldObj])[0];
-    fields.push(out);
-    normalizeFieldsRequireSections(fields);
-    renderCanvas();
-    window.selectField(out.id);
-}
-
-function aiStructureAdvanceAfterBlockAction() {
-    const st = window.__brsparkAiQueueState;
-    const sess = window.__brsparkAiSession;
-    if (!st || !sess) return;
-    const blocks = sess.blocks || [];
-    st.blockIndex += 1;
-    if (st.blockIndex >= blocks.length) st.phase = 'done';
-    renderAiStructureStep();
-}
-
-function renderAiStructureStep() {
-    const sess = window.__brsparkAiSession;
-    const st = window.__brsparkAiQueueState;
-    const host = document.getElementById('ai-structure-host');
-    const stepLabel = document.getElementById('ai-wizard-step-label');
-    const badge = document.getElementById('ai-wizard-step-kind-badge');
-    const fill = document.getElementById('ai-wizard-progress-fill');
-    const heading = document.getElementById('ai-wizard-heading');
-    const sub = document.getElementById('ai-wizard-sub');
-    const skipBtn = document.getElementById('ai-structure-skip-btn');
-    const primBtn = document.getElementById('ai-structure-primary-btn');
-    if (!host) return;
-    host.innerHTML = '';
-
-    if (!sess || !st) return;
-
-    const blocks = sess.blocks || [];
-    const nBl = blocks.length;
-
-    if (st.phase === 'intro') {
-        if (stepLabel) stepLabel.textContent = 'Introdução';
-        if (badge) badge.textContent = 'Documento';
-        if (fill) fill.style.width = nBl ? '8%' : '100%';
-        if (heading) heading.textContent = 'Título do formulário';
-        if (sub) {
-            sub.textContent =
-                'A IA extraiu etapas e colunas. Confirme o título; a seguir cada bloco é adicionado ao canvas quando carregar em "Adicionar ao canvas".';
-        }
-        if (skipBtn) skipBtn.style.display = 'none';
-        if (primBtn) primBtn.textContent = 'Começar →';
-
-        let sec = 0;
-        let fld = 0;
-        blocks.forEach(function (b) {
-            if (b.kind === 'section_break') sec++;
-            else fld++;
-        });
-        const stats = document.createElement('div');
-        stats.className = 'ai-wizard-meta-stats';
-        stats.innerHTML =
-            '<span>' +
-            nBl +
-            ' blocos</span><span>' +
-            sec +
-            ' etapas</span><span>' +
-            fld +
-            ' campos</span>';
-        host.appendChild(stats);
-
-        const lt = document.createElement('label');
-        lt.className = 'prop-label';
-        lt.setAttribute('for', 'ai-form-session-title');
-        lt.textContent = 'Título do formulário';
-        host.appendChild(lt);
-        const tit = document.createElement('input');
-        tit.type = 'text';
-        tit.id = 'ai-form-session-title';
-        tit.className = 'prop-input';
-        tit.style.marginBottom = '10px';
-        tit.value = sess.title || '';
-        tit.placeholder = 'Ex.: Inspeção de campo';
-        host.appendChild(tit);
-
-        const ld = document.createElement('label');
-        ld.className = 'prop-label';
-        ld.setAttribute('for', 'ai-form-session-desc');
-        ld.textContent = 'Descrição pública (opcional)';
-        host.appendChild(ld);
-        const td = document.createElement('textarea');
-        td.id = 'ai-form-session-desc';
-        td.className = 'prop-input';
-        td.rows = 2;
-        td.style.resize = 'vertical';
-        td.value = sess.description || '';
-        host.appendChild(td);
-        return;
-    }
-
-    if (st.phase === 'done') {
-        if (stepLabel) stepLabel.textContent = 'Concluído';
-        if (badge) badge.textContent = 'Fim';
-        if (fill) fill.style.width = '100%';
-        if (heading) heading.textContent = 'Assistente concluído';
-        if (sub) {
-            sub.textContent =
-                'Percorreu todos os blocos. O canvas foi atualizado à medida — pode fechar ou analisar outro ficheiro.';
-        }
-        if (skipBtn) {
-            skipBtn.style.display = 'inline-flex';
-            skipBtn.textContent = 'Nova análise';
-        }
-        if (primBtn) primBtn.textContent = 'Fechar';
-        const p = document.createElement('p');
-        p.style.fontSize = '13px';
-        p.style.color = '#475569';
-        p.style.marginTop = '10px';
-        p.textContent = 'Blocos que saltou não foram adicionados.';
-        host.appendChild(p);
-        return;
-    }
-
-    const idx = st.blockIndex;
-    const b = blocks[idx];
-    if (!b) {
-        st.phase = 'done';
-        renderAiStructureStep();
-        return;
-    }
-
-    const totalSteps = 1 + nBl;
-    const curStep = 1 + idx;
-    const pct = Math.round((curStep / totalSteps) * 100);
-    if (stepLabel) stepLabel.textContent = 'Bloco ' + (idx + 1) + ' de ' + nBl;
-    if (fill) fill.style.width = pct + '%';
-
-    if (skipBtn) {
-        skipBtn.style.display = 'inline-flex';
-        skipBtn.textContent = 'Saltar';
-    }
-    if (primBtn) primBtn.textContent = 'Adicionar ao canvas →';
-
-    if (b.kind === 'section_break') {
-        if (badge) badge.textContent = 'Etapa';
-        if (heading) heading.textContent = 'Etapa (seção)';
-        if (sub) sub.textContent = 'Defina o título e o modo da etapa; depois adicione ao canvas.';
-
-        const idf = document.createElement('div');
-        idf.className = 'ai-wizard-identified';
-        idf.textContent = 'A IA identificou uma etapa (secção)';
-        host.appendChild(idf);
-
-        const ll = document.createElement('label');
-        ll.className = 'prop-label';
-        ll.setAttribute('for', 'ai-structure-label');
-        ll.textContent = 'Título da etapa';
-        host.appendChild(ll);
-        const li = document.createElement('input');
-        li.type = 'text';
-        li.id = 'ai-structure-label';
-        li.className = 'prop-input';
-        li.value = b.label || '';
-        host.appendChild(li);
-
-        if (b.context) {
-            const cx = document.createElement('p');
-            cx.className = 'ai-item-context';
-            cx.textContent = b.context;
-            host.appendChild(cx);
-        }
-
-        const leg = document.createElement('div');
-        leg.style.marginTop = '12px';
-        leg.style.fontSize = '12px';
-        leg.style.fontWeight = '700';
-        leg.style.color = '#475569';
-        leg.textContent = 'Modo no app';
-        host.appendChild(leg);
-        const r0 = document.createElement('label');
-        r0.style.display = 'block';
-        r0.style.marginBottom = '6px';
-        r0.style.fontSize = '12px';
-        r0.innerHTML =
-            '<input type="radio" name="ai-structure-section-multiple" value="0" checked style="margin-right:8px;accent-color:#7c3aed;"/> Etapa única';
-        host.appendChild(r0);
-        const r1 = document.createElement('label');
-        r1.style.display = 'block';
-        r1.style.fontSize = '12px';
-        r1.innerHTML =
-            '<input type="radio" name="ai-structure-section-multiple" value="1" style="margin-right:8px;accent-color:#7c3aed;"/> Lista repetível';
-        host.appendChild(r1);
-    } else {
-        if (badge) badge.textContent = 'Campo';
-        if (heading) heading.textContent = 'Campo';
-        if (sub) sub.textContent = 'Escolha o tipo na lista (a mesma da toolbox). Cada clique em "Adicionar" coloca um campo no canvas.';
-
-        const idf = document.createElement('div');
-        idf.className = 'ai-wizard-identified';
-        idf.textContent = 'A IA extraiu este cabeçalho de coluna';
-        host.appendChild(idf);
-
-        const ll = document.createElement('label');
-        ll.className = 'prop-label';
-        ll.setAttribute('for', 'ai-structure-label');
-        ll.textContent = 'Rótulo';
-        host.appendChild(ll);
-        const li = document.createElement('input');
-        li.type = 'text';
-        li.id = 'ai-structure-label';
-        li.className = 'prop-input';
-        li.value = b.label || '';
-        host.appendChild(li);
-
-        if (b.context) {
-            const cx = document.createElement('p');
-            cx.className = 'ai-item-context';
-            cx.textContent = b.context;
-            host.appendChild(cx);
-        }
-
-        const types = collectToolboxTypesForAiSelect();
-        const tl = document.createElement('label');
-        tl.className = 'prop-label';
-        tl.setAttribute('for', 'ai-structure-field-type');
-        tl.textContent = 'Tipo de campo (dinâmico — toolbox)';
-        host.appendChild(tl);
-        const sel = document.createElement('select');
-        sel.id = 'ai-structure-field-type';
-        sel.className = 'prop-input';
-        const defT =
-            b.suggestedType && types.some(function (x) { return x.type === b.suggestedType; })
-                ? b.suggestedType
-                : 'text';
-        types.forEach(function (opt) {
-            const o = document.createElement('option');
-            o.value = opt.type;
-            o.textContent = opt.label;
-            if (opt.type === defT) o.selected = true;
-            sel.appendChild(o);
-        });
-        sel.addEventListener('change', aiStructureToggleFieldTypeExtras);
-        host.appendChild(sel);
-
-        const row = document.createElement('div');
-        row.id = 'ai-structure-list-options-row';
-        row.style.marginTop = '10px';
-        row.style.display = defT === 'dropdown' || defT === 'multiselect' ? 'block' : 'none';
-        const olp = document.createElement('label');
-        olp.className = 'prop-label';
-        olp.setAttribute('for', 'ai-structure-list-options');
-        olp.textContent = 'Opções da lista (vírgulas)';
-        row.appendChild(olp);
-        const ta = document.createElement('textarea');
-        ta.id = 'ai-structure-list-options';
-        ta.className = 'prop-input';
-        ta.rows = 2;
-        ta.style.resize = 'vertical';
-        ta.placeholder = 'Ex.: Sim, Não, N/A';
-        if (b.suggestedListOptions) ta.value = b.suggestedListOptions;
-        row.appendChild(ta);
-        host.appendChild(row);
-
-        const req = document.createElement('label');
-        req.style.display = 'flex';
-        req.style.alignItems = 'center';
-        req.style.gap = '8px';
-        req.style.marginTop = '12px';
-        req.style.fontSize = '12px';
-        req.style.color = '#475569';
-        req.innerHTML =
-            '<input type="checkbox" id="ai-structure-required" style="accent-color:#7c3aed;"/> Obrigatório no app';
-        host.appendChild(req);
-    }
-}
-
-function initAiStructureAfterAnalyze() {
-    window.__brsparkAiQueueState = { phase: 'intro', blockIndex: 0 };
-    renderAiStructureStep();
-}
-
-window.brsparkAiStructureIntroContinue = function () {
-    const sess = window.__brsparkAiSession;
-    const st = window.__brsparkAiQueueState;
-    if (!sess || !st) return;
-    const stIn = document.getElementById('ai-form-session-title');
-    const sdIn = document.getElementById('ai-form-session-desc');
-    if (stIn) sess.title = String(stIn.value || '').trim();
-    if (sdIn) sess.description = String(sdIn.value || '').trim();
-    const ti = document.getElementById('tpl-title');
-    const de = document.getElementById('tpl-desc');
-    if (ti && sess.title) ti.value = sess.title;
-    if (de && sess.description != null) de.value = sess.description;
-    st.phase = 'blocks';
-    st.blockIndex = 0;
-    renderAiStructureStep();
-};
-
-window.brsparkAiStructureAddAndNext = function () {
-    const sess = window.__brsparkAiSession;
-    const st = window.__brsparkAiQueueState;
-    if (!sess || !st || st.phase !== 'blocks') return;
-    const blocks = sess.blocks || [];
-    const b = blocks[st.blockIndex];
-    if (!b) return;
-    if (b.kind === 'section_break') {
-        const labelInp = document.getElementById('ai-structure-label');
-        const label = labelInp ? String(labelInp.value || '').trim() : '';
-        const multEl = document.querySelector('input[name="ai-structure-section-multiple"]:checked');
-        const multiple = multEl && multEl.value === '1';
-        const sec = createNewFieldFromToolboxType('section_break', label || b.label || 'Etapa');
-        if (multiple) sec.multiple = true;
-        aiPushOneFieldToCanvas(sec);
-    } else {
-        const labelInp = document.getElementById('ai-structure-label');
-        const label = labelInp ? String(labelInp.value || '').trim() : '';
-        const typeSel = document.getElementById('ai-structure-field-type');
-        const type = typeSel ? String(typeSel.value || 'text').trim() : 'text';
-        const reqCb = document.getElementById('ai-structure-required');
-        const optTa = document.getElementById('ai-structure-list-options');
-        const f = createNewFieldFromToolboxType(type, label || b.label || 'Campo');
-        f.required = !!(reqCb && reqCb.checked);
-        if ((type === 'dropdown' || type === 'multiselect') && optTa && optTa.value.trim()) {
-            f.options = optTa.value.trim();
-        }
-        aiPushOneFieldToCanvas(f);
-    }
-    aiStructureAdvanceAfterBlockAction();
-};
-
-window.brsparkAiStructurePrimaryAction = function () {
-    const st = window.__brsparkAiQueueState;
-    if (!st) return;
-    if (st.phase === 'intro') window.brsparkAiStructureIntroContinue();
-    else if (st.phase === 'blocks') window.brsparkAiStructureAddAndNext();
-    else if (st.phase === 'done') window.closeAiFormModal();
-};
-
-window.brsparkAiStructureSkipAction = function () {
-    const st = window.__brsparkAiQueueState;
-    if (!st) return;
-    if (st.phase === 'blocks') aiStructureAdvanceAfterBlockAction();
-    else if (st.phase === 'done') window.brsparkAiFormWizardReset();
-};
-
-function collectAiFormExcelOptions(hintText) {
-    const g = function (id) {
-        return document.getElementById(id);
-    };
-    const kindEl = g('ai-form-kind');
-    return {
-        hint: hintText || '',
-        objective: g('ai-form-objective') ? String(g('ai-form-objective').value || '').trim() : '',
-        sector: g('ai-form-sector') ? String(g('ai-form-sector').value || '').trim() : '',
-        formKind: kindEl ? String(kindEl.value || 'checklist') : 'checklist',
-        requireStampedPhotos: !!(g('ai-ctx-stamped') && g('ai-ctx-stamped').checked),
-        allowBarcode: !!(g('ai-ctx-barcode') && g('ai-ctx-barcode').checked),
-        requireGps: !!(g('ai-ctx-gps') && g('ai-ctx-gps').checked),
-        allowGeofence: !!(g('ai-ctx-geofence') && g('ai-ctx-geofence').checked),
-        allowTransit: !!(g('ai-ctx-transit') && g('ai-ctx-transit').checked),
-        allowFacial: !!(g('ai-ctx-facial') && g('ai-ctx-facial').checked),
-        allowSignature: !!(g('ai-ctx-signature') && g('ai-ctx-signature').checked),
-        allowCalculated: !!(g('ai-ctx-calc') && g('ai-ctx-calc').checked),
-    };
-}
-
 function collectCopilotFormContext() {
     const g = function (id) {
         return document.getElementById(id);
     };
-    return {
+    const out = {
         objective: g('copilot-ctx-objective') ? String(g('copilot-ctx-objective').value || '').trim().slice(0, 800) : '',
         sector: '',
-        formKind: 'checklist',
+        formKind: 'formulario',
         requireStampedPhotos: !!(g('copilot-ctx-stamped') && g('copilot-ctx-stamped').checked),
         allowBarcode: !!(g('copilot-ctx-barcode') && g('copilot-ctx-barcode').checked),
         requireGps: !!(g('copilot-ctx-gps') && g('copilot-ctx-gps').checked),
         allowGeofence: !!(g('copilot-ctx-geofence') && g('copilot-ctx-geofence').checked),
         allowTransit: !!(g('copilot-ctx-transit') && g('copilot-ctx-transit').checked),
     };
-}
-
-window.brsparkAiFormWizardReset = function () {
-    window.__brsparkAiSession = null;
-    window.__brsparkAiQueueState = null;
-    const host = document.getElementById('ai-structure-host');
-    if (host) host.innerHTML = '';
-    const status = document.getElementById('ai-form-status');
-    if (status) status.textContent = '';
-    const fi = document.getElementById('ai-form-file');
-    if (fi) fi.value = '';
-    const obj = document.getElementById('ai-form-objective');
-    if (obj) obj.value = '';
-    const sec = document.getElementById('ai-form-sector');
-    if (sec) sec.value = '';
-    const kind = document.getElementById('ai-form-kind');
-    if (kind) kind.value = 'checklist';
-    ['ai-ctx-stamped', 'ai-ctx-barcode', 'ai-ctx-gps', 'ai-ctx-geofence', 'ai-ctx-transit', 'ai-ctx-facial', 'ai-ctx-signature', 'ai-ctx-calc'].forEach(function (id) {
-        const el = document.getElementById(id);
-        if (el) el.checked = false;
-    });
-    clearAiFormHistoryDom();
-    const adv = document.querySelector('#ai-form-upload-section .ai-form-upload-advanced');
-    if (adv) adv.open = false;
-    aiFormSetWizardStep('upload');
-};
-
-window.openAiFormModal = function () {
-    const m = document.getElementById('ai-form-modal');
-    if (!m) return;
-    window.brsparkAiFormWizardReset();
-    const hintEl = document.getElementById('ai-form-hint');
-    if (hintEl) hintEl.value = '';
-    const genBtn = document.getElementById('ai-form-generate-btn');
-    if (genBtn) {
-        genBtn.disabled = false;
-        genBtn.textContent = 'Ler ficheiro com IA →';
-    }
-    setAiFormLoading(false);
-    m.style.display = 'flex';
-};
-
-window.closeAiFormModal = function () {
-    setAiFormLoading(false);
-    const m = document.getElementById('ai-form-modal');
-    if (m) m.style.display = 'none';
-};
-
-function normalizeBlocksFromApi(data) {
-    if (data.blocks && Array.isArray(data.blocks) && data.blocks.length) return data.blocks;
-    if (data.items && Array.isArray(data.items) && data.items.length) {
-        return data.items.map(function (it, i) {
-            const k = String(it.kind || '').toLowerCase();
-            const kind = k === 'section_break' || k === 'section' ? 'section_break' : 'field';
-            return {
-                key: it.key || 'b' + i,
-                kind: kind,
-                label: it.label || '',
-                context: it.context || '',
-                suggestedType: it.suggestedType,
-                suggestedListOptions: it.suggestedListOptions,
-            };
+    const fc = window.__brsparkCopilotFocusedField;
+    if (fc && fc.id) {
+        const still = fields.find(function (x) {
+            return x.id === fc.id;
         });
+        if (still) {
+            out.focusedCanvasField = {
+                id: still.id,
+                label: still.label != null ? String(still.label).trim().slice(0, 240) : '',
+                type: still.type != null ? String(still.type).trim().slice(0, 64) : '',
+                icon: still.icon != null ? String(still.icon).trim().slice(0, 120) : '',
+                iconLibrary:
+                    still.iconLibrary != null ? String(still.iconLibrary).trim().slice(0, 40) : '',
+            };
+        } else {
+            window.__brsparkCopilotFocusedField = null;
+            if (typeof window.refreshCopilotCanvasFocusChip === 'function') {
+                window.refreshCopilotCanvasFocusChip();
+            }
+        }
     }
-    return [];
+    return out;
 }
 
-/** Extensões aceites pelo assistente IA (alinhado à API). */
-var BRSPARK_AI_FORM_EXT = ['.xlsx', '.xlsm', '.docx', '.json'];
+if (typeof window.__brsparkCopilotFocusedField === 'undefined') window.__brsparkCopilotFocusedField = null;
 
-window.brsparkAiFormAnalyze = async function () {
+window.refreshCopilotCanvasFocusChip = function () {
+    const chip = document.getElementById('copilot-focus-chip');
+    const clr = document.getElementById('copilot-clear-focus-btn');
+    const f = window.__brsparkCopilotFocusedField;
+    if (!chip) return;
+    if (!f || !f.id) {
+        chip.style.display = 'none';
+        chip.textContent = '';
+        if (clr) clr.style.display = 'none';
+        return;
+    }
+    const lab = f.label != null ? String(f.label) : '';
+    const typ = f.type != null ? String(f.type) : '';
+    chip.style.display = 'block';
+    chip.textContent =
+        (lab.trim() || '(sem rótulo)') + ' · tipo: ' + (typ || '—') + ' · id: ' + String(f.id);
+    if (clr) clr.style.display = 'inline-flex';
+};
+
+window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
+    opts = opts || {};
+    const f = fields.find(function (x) {
+        return x.id === id;
+    });
+    if (!f) return;
+    if (!opts.skipSelect) {
+        window.selectField(id);
+    }
+    window.__brsparkCopilotFocusedField = {
+        id: f.id,
+        label: f.label != null ? String(f.label) : '',
+        type: f.type != null ? String(f.type) : '',
+    };
+    window.refreshCopilotCanvasFocusChip();
+    if (!opts.skipOpenPanel) {
+        const p = document.getElementById('ai-copilot-panel');
+        if (p && !p.classList.contains('is-open')) {
+            window.toggleAiCopilotPanel();
+        }
+    }
+};
+
+window.brsparkCopilotSyncFocusFromCanvasSelection = function () {
+    if (!selectedFieldId) {
+        alert('Selecione um campo no canvas (clique num cartão).');
+        return;
+    }
+    window.brsparkCopilotPinFieldFromCanvas(selectedFieldId, { skipSelect: true, skipOpenPanel: true });
+};
+
+window.brsparkCopilotClearFocusedField = function () {
+    window.__brsparkCopilotFocusedField = null;
+    window.refreshCopilotCanvasFocusChip();
+};
+
+function syncBuilderTaskIconDom() {
+    const ti = document.getElementById('tpl-icon');
+    const trigger = document.getElementById('tpl-form-icon-trigger');
+    const raw = currentFormIcon != null ? String(currentFormIcon) : '';
+    const ic = raw.trim();
+    if (ti) ti.value = ic;
+    if (!trigger) return;
+    const has = !!ic;
+    trigger.style.background = has ? '#eff6ff' : '#f8fafc';
+    trigger.style.border = has ? '1px solid #3b82f6' : '1px dashed #cbd5e1';
+    if (has) {
+        try {
+            trigger.innerHTML = window.renderWebIcon('Ionicons', ic, lastIconPickerColor, 22);
+        } catch (eR) {
+            trigger.innerHTML =
+                '<ion-icon name="' +
+                escapeHtmlAttr(ic) +
+                '" style="font-size:22px;color:' +
+                escapeHtmlAttr(lastIconPickerColor || '#1d4ed8') +
+                ';"></ion-icon>';
+        }
+    } else {
+        trigger.innerHTML =
+            '<ion-icon name="images-outline" style="font-size:22px;color:#94a3b8;"></ion-icon>';
+    }
+}
+
+function mergeGlobalFormSettingsFromCopilot(incoming) {
+    const base = Object.assign(
+        {
+            requireGlobalGeofence: false,
+            globalGeofenceRadius: 200,
+            rules: [],
+            appFillMode: 'full',
+            appSectionStart: 'direct',
+            appHubSectionOrder: 'free',
+            expectedFormDurationMinutes: undefined,
+        },
+        incoming && typeof incoming === 'object' ? incoming : {},
+    );
+    if (!base.rules) base.rules = [];
+    base.appFillMode = normalizeAppFillMode(base.appFillMode);
+    base.appSectionStart = normalizeAppSectionStart(base.appSectionStart);
+    base.appHubSectionOrder = normalizeAppHubSectionOrder(base.appHubSectionOrder);
+    return base;
+}
+
+function pushCopilotUndoSnapshot() {
+    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
+    try {
+        window.__brsparkSchemaUndoStack.push(
+            JSON.stringify({
+                v: 3,
+                fields: JSON.parse(JSON.stringify(fields)),
+                settings: JSON.parse(JSON.stringify(globalFormSettings || {})),
+                taskIcon: typeof currentFormIcon === 'string' ? currentFormIcon : '',
+            }),
+        );
+    } catch (eSnap) {
+        try {
+            window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
+        } catch (e2) {
+            /* ignore */
+        }
+    }
+}
+
+function parseCopilotUndoEntry(raw) {
+    try {
+        const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (o && o.v === 3 && Array.isArray(o.fields)) {
+            return {
+                fields: o.fields,
+                settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
+                taskIcon: o.taskIcon != null ? String(o.taskIcon) : '',
+            };
+        }
+        if (o && o.v === 2 && Array.isArray(o.fields)) {
+            return {
+                fields: o.fields,
+                settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
+                taskIconSkip: true,
+            };
+        }
+        if (Array.isArray(o)) return { fields: o, settings: null, taskIconSkip: true };
+    } catch (eP) {
+        /* ignore */
+    }
+    return null;
+}
+
+/* ---------- Copiloto IA (chat + patch + lógica) ---------- */
+if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];
+if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
+if (typeof window.__brsparkCopilotSpreadsheetSummary === 'undefined') window.__brsparkCopilotSpreadsheetSummary = '';
+if (typeof window.__brsparkCopilotSpreadsheetFileName === 'undefined') window.__brsparkCopilotSpreadsheetFileName = '';
+if (typeof window.__brsparkCopilotThinkingCount === 'undefined') window.__brsparkCopilotThinkingCount = 0;
+if (typeof window.__brsparkCopilotClarifyOptions === 'undefined') window.__brsparkCopilotClarifyOptions = [];
+/** @type {Record<string, { cid: string, label: string }[]>} seleções por id de pergunta (copiloto — multi-opção). */
+if (typeof window.__brsparkCopilotClarifySelections === 'undefined') window.__brsparkCopilotClarifySelections = {};
+
+function beginCopilotThinking(label) {
+    window.__brsparkCopilotThinkingCount = (window.__brsparkCopilotThinkingCount || 0) + 1;
+    if (label && String(label).trim()) {
+        window.__brsparkCopilotThinkingLabel = String(label).trim();
+    }
+    refreshCopilotThinkingDom();
+}
+
+function endCopilotThinking() {
+    window.__brsparkCopilotThinkingCount = Math.max(0, (window.__brsparkCopilotThinkingCount || 0) - 1);
+    if (!window.__brsparkCopilotThinkingCount) {
+        delete window.__brsparkCopilotThinkingLabel;
+    }
+    refreshCopilotThinkingDom();
+}
+
+function refreshCopilotThinkingDom() {
+    const n = window.__brsparkCopilotThinkingCount || 0;
+    const on = n > 0;
+    const strip = document.getElementById('ai-copilot-thinking');
+    if (strip) {
+        strip.classList.toggle('is-visible', on);
+        strip.setAttribute('aria-busy', on ? 'true' : 'false');
+    }
+    const lab = document.getElementById('ai-copilot-thinking-label');
+    if (lab) {
+        lab.textContent = window.__brsparkCopilotThinkingLabel || 'A IA está pensando…';
+    }
+    const dis = on;
+    const send = document.getElementById('ai-copilot-send-fab');
+    if (send) send.disabled = dis;
+    const clearB = document.getElementById('ai-copilot-clear-btn');
+    if (clearB) clearB.disabled = dis;
+    const inp = document.getElementById('ai-copilot-input');
+    if (inp) inp.disabled = dis;
+    const sug = document.getElementById('ai-copilot-suggest-logic-btn');
+    if (sug) sug.disabled = dis;
+    const clarifyBtns = document.querySelectorAll('.ai-copilot-clarify-choice');
+    clarifyBtns.forEach(function (b) {
+        b.disabled = dis;
+    });
+    const clarifySend = document.getElementById('ai-copilot-clarify-send-btn');
+    if (clarifySend) clarifySend.disabled = dis;
+    const pick = document.getElementById('copilot-excel-pick-btn');
+    if (pick) pick.disabled = dis || !!window.__brsparkCopilotExcelBusy;
+    const clrSheet = document.getElementById('copilot-excel-clear-btn');
+    if (clrSheet) clrSheet.disabled = dis;
+    const panel = document.getElementById('ai-copilot-panel');
+    if (panel) panel.setAttribute('aria-busy', on ? 'true' : 'false');
+    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-scroll');
+    if (scrollHost && on) {
+        try {
+            scrollHost.scrollTop = scrollHost.scrollHeight;
+        } catch (eScroll) {
+            /* ignore */
+        }
+    }
+    const pinSel = document.getElementById('copilot-pin-selection-btn');
+    if (pinSel) pinSel.disabled = dis;
+    const fol = document.getElementById('copilot-follow-canvas');
+    if (fol) fol.disabled = dis;
+    const cfc = document.getElementById('copilot-clear-focus-btn');
+    if (cfc) cfc.disabled = dis;
+    updateCopilotExcelUi();
+}
+
+function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
+    const parts = [];
+    parts.push('### Análise do arquivo (anexo do Copiloto)');
+    parts.push('Arquivo: ' + String(fileName || '—'));
+    if (data && data.title) parts.push('Título sugerido pela IA: ' + String(data.title).trim());
+    if (data && data.description) parts.push('Descrição sugerida: ' + String(data.description).trim());
+    const blocks = data && Array.isArray(data.blocks) ? data.blocks : [];
+    parts.push('Estrutura extraída (' + blocks.length + ' blocos):');
+    blocks.forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        const kind = b.kind === 'section_break' ? 'Etapa' : 'Campo';
+        let line = '- ' + kind + ': ' + String(b.label || '').trim();
+        if (b.context) line += ' — ' + String(b.context).slice(0, 160);
+        if (b.kind !== 'section_break' && b.suggestedType) line += ' [tipo sugerido: ' + String(b.suggestedType) + ']';
+        parts.push(line);
+    });
+    if (data && data.truncated) parts.push('Aviso: conteúdo da planilha foi truncado no servidor antes da análise.');
+    const w = data && data.warnings;
+    if (Array.isArray(w) && w.length) parts.push('Avisos da análise: ' + w.filter(Boolean).join(' | '));
+    let s = parts.join('\n');
+    if (s.length > 11800) s = s.slice(0, 11800) + '\n…[resumo truncado para o limite do copiloto]';
+    return s;
+}
+
+function copilotSetContextDetailsOpen(shouldOpen) {
+    const d = document.getElementById('copilot-context-details');
+    if (d) d.open = !!shouldOpen;
+}
+
+function copilotSetLogicDetailsOpen(shouldOpen) {
+    const d = document.getElementById('copilot-logic-details');
+    if (d) d.open = !!shouldOpen;
+}
+
+window.brsparkCopilotPickExcelFile = function () {
+    copilotSetContextDetailsOpen(true);
+    const fi = document.getElementById('copilot-excel-file');
+    if (fi) fi.click();
+};
+
+function updateCopilotExcelUi() {
+    const btn = document.getElementById('copilot-excel-clear-btn');
+    const pick = document.getElementById('copilot-excel-pick-btn');
+    const has = !!(window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim());
+    if (btn) btn.style.display = has ? 'inline-flex' : 'none';
+    if (pick) {
+        pick.disabled = !!(window.__brsparkCopilotExcelBusy || (window.__brsparkCopilotThinkingCount || 0) > 0);
+    }
+}
+
+function renderCopilotMessages() {
+    const root = document.getElementById('ai-copilot-messages');
+    if (!root) return;
+    root.innerHTML = '';
+    const msgs = window.__brsparkCopilotMessages || [];
+    if (!msgs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'ai-copilot-empty';
+        const t1 = document.createElement('strong');
+        t1.textContent = 'Conversa com o Copiloto';
+        empty.appendChild(t1);
+        const t2 = document.createElement('span');
+        t2.textContent =
+            'Clique num campo no canvas para o focar, descreva o que quer e responda às opções do Copiloto quando ele tiver dúvidas. As alterações aplicam-se logo no formulário; use «Desfazer última alteração» se precisar reverter. Opcional: planilha Excel em «Avançado».';
+        empty.appendChild(t2);
+        root.appendChild(empty);
+        return;
+    }
+    msgs.forEach(function (m) {
+        if (!m || (m.role !== 'user' && m.role !== 'assistant')) return;
+        const row = document.createElement('div');
+        row.className = 'ai-copilot-msg-row ' + (m.role === 'user' ? 'user' : 'assistant');
+        const meta = document.createElement('div');
+        meta.className = 'ai-copilot-msg-meta';
+        meta.textContent = m.role === 'user' ? 'Você' : 'Copiloto';
+        const div = document.createElement('div');
+        div.className = 'ai-copilot-bubble ' + (m.role === 'user' ? 'user' : 'assistant');
+        div.textContent = String(m.content || '');
+        row.appendChild(meta);
+        row.appendChild(div);
+        root.appendChild(row);
+    });
+    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-scroll');
+    if (scrollHost) {
+        try {
+            scrollHost.scrollTop = scrollHost.scrollHeight;
+        } catch (eSc) {
+            /* ignore */
+        }
+    }
+}
+
+window.toggleAiCopilotPanel = function () {
+    const p = document.getElementById('ai-copilot-panel');
+    if (!p) return;
+    const open = !p.classList.contains('is-open');
+    p.classList.toggle('is-open', open);
+    p.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) {
+        renderCopilotMessages();
+        updateCopilotExcelUi();
+        refreshCopilotThinkingDom();
+        window.refreshCopilotCanvasFocusChip();
+        const inpFocus = document.getElementById('ai-copilot-input');
+        if (inpFocus) {
+            try {
+                requestAnimationFrame(function () {
+                    inpFocus.focus();
+                });
+            } catch (eF) {
+                /* ignore */
+            }
+        }
+    }
+};
+
+window.brsparkCopilotInputKeydown = function (e) {
+    if (!e || e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    window.brsparkCopilotSend();
+};
+
+window.brsparkCopilotClear = function () {
+    window.__brsparkCopilotMessages = [];
+    renderCopilotMessages();
+    window.__brsparkCopilotLast = null;
+    window.__brsparkCopilotLogicLast = null;
+    window.__brsparkCopilotSpreadsheetSummary = '';
+    window.__brsparkCopilotSpreadsheetFileName = '';
+    window.__brsparkCopilotThinkingCount = 0;
+    delete window.__brsparkCopilotThinkingLabel;
+    refreshCopilotThinkingDom();
+    const fi = document.getElementById('copilot-excel-file');
+    if (fi) fi.value = '';
+    const st = document.getElementById('copilot-excel-status');
+    if (st) st.textContent = '';
+    updateCopilotExcelUi();
+    window.__brsparkCopilotClarifyOptions = [];
+    renderCopilotClarifyCards();
+    const ch = document.getElementById('ai-copilot-clarify-hint');
+    if (ch) ch.style.display = 'none';
+    const ragFoot = document.getElementById('copilot-rag-footnote');
+    if (ragFoot) ragFoot.textContent = '';
+};
+
+window.brsparkCopilotClearSpreadsheet = function () {
+    window.__brsparkCopilotSpreadsheetSummary = '';
+    window.__brsparkCopilotSpreadsheetFileName = '';
+    const fi = document.getElementById('copilot-excel-file');
+    if (fi) fi.value = '';
+    const st = document.getElementById('copilot-excel-status');
+    if (st) st.textContent = 'Planilha removida do contexto.';
+    updateCopilotExcelUi();
+};
+
+function renderCopilotClarifyCards() {
+    const host = document.getElementById('ai-copilot-clarify');
+    if (!host) return;
+    host.innerHTML = '';
+    window.__brsparkCopilotClarifySelections = {};
+    const list = window.__brsparkCopilotClarifyOptions || [];
+    if (!list.length) return;
+    list.forEach(function (block) {
+        if (!block || !block.question) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'ai-copilot-clarify-block';
+        const q = document.createElement('p');
+        q.className = 'ai-copilot-clarify-q';
+        q.textContent = block.question;
+        wrap.appendChild(q);
+        const row = document.createElement('div');
+        row.className = 'ai-copilot-clarify-choices';
+        const qid = String(block.id || '');
+        (block.choices || []).forEach(function (ch) {
+            if (!ch || !ch.label) return;
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn btn-outline btn-sm ai-copilot-clarify-choice';
+            b.textContent = ch.label;
+            b.setAttribute('aria-pressed', 'false');
+            const cid = String(ch.id || '');
+            const lab = String(ch.label || '');
+            b.addEventListener('click', function () {
+                window.brsparkCopilotToggleClarifyChoice(qid, cid, lab, b);
+            });
+            row.appendChild(b);
+        });
+        wrap.appendChild(row);
+        host.appendChild(wrap);
+    });
+    const foot = document.createElement('div');
+    foot.className = 'ai-copilot-clarify-footer';
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.id = 'ai-copilot-clarify-send-btn';
+    sendBtn.className = 'btn btn-primary btn-sm';
+    sendBtn.textContent = 'Enviar escolhas';
+    sendBtn.addEventListener('click', function () {
+        window.brsparkCopilotSendClarifySelections();
+    });
+    foot.appendChild(sendBtn);
+    host.appendChild(foot);
+}
+
+/** Alterna opção nas perguntas de clarificação (várias por pergunta). */
+window.brsparkCopilotToggleClarifyChoice = function (questionId, choiceId, choiceLabel, btnEl) {
+    const qid = String(questionId || '').trim();
+    const cid = String(choiceId || '').trim();
+    const lab = String(choiceLabel || '').trim();
+    if (!qid || !cid || !lab) return;
+    window.__brsparkCopilotClarifySelections = window.__brsparkCopilotClarifySelections || {};
+    if (!window.__brsparkCopilotClarifySelections[qid]) window.__brsparkCopilotClarifySelections[qid] = [];
+    const arr = window.__brsparkCopilotClarifySelections[qid];
+    const ix = arr.findIndex(function (x) {
+        return x && x.cid === cid;
+    });
+    if (ix >= 0) {
+        arr.splice(ix, 1);
+        if (btnEl) {
+            btnEl.classList.remove('is-selected');
+            btnEl.setAttribute('aria-pressed', 'false');
+        }
+    } else {
+        arr.push({ cid: cid, label: lab });
+        if (btnEl) {
+            btnEl.classList.add('is-selected');
+            btnEl.setAttribute('aria-pressed', 'true');
+        }
+    }
+};
+
+/** Monta mensagem com todas as perguntas respondidas e envia o chat. */
+window.brsparkCopilotSendClarifySelections = function () {
+    window.__brsparkCopilotClarifySelections = window.__brsparkCopilotClarifySelections || {};
+    const list = window.__brsparkCopilotClarifyOptions || [];
+    const lines = [];
+    list.forEach(function (block) {
+        if (!block) return;
+        const qid = String(block.id || '').trim();
+        if (!qid) return;
+        const sel = window.__brsparkCopilotClarifySelections[qid];
+        if (!sel || !sel.length) return;
+        const labels = sel
+            .map(function (s) {
+                return s && s.label ? String(s.label).trim() : '';
+            })
+            .filter(Boolean);
+        if (!labels.length) return;
+        lines.push('[Pergunta ' + qid + '] ' + labels.join(', '));
+    });
+    if (!lines.length) {
+        alert('Marque pelo menos uma opção em alguma pergunta, ou escreva na caixa de texto.');
+        return;
+    }
+    const inp = document.getElementById('ai-copilot-input');
+    if (inp) inp.value = lines.join('\n');
+    window.brsparkCopilotSend();
+};
+
+function brsparkCopilotApplyChatResponse(data) {
+    window.__brsparkCopilotClarifyOptions = Array.isArray(data.clarifyOptions) ? data.clarifyOptions : [];
+    renderCopilotClarifyCards();
+
+    window.__brsparkCopilotMessages.push({ role: 'assistant', content: data.replyText || '(sem texto)' });
+    window.__brsparkCopilotLast = data;
+    renderCopilotMessages();
+
+    const hasClarify = window.__brsparkCopilotClarifyOptions.length > 0;
+    const ch = document.getElementById('ai-copilot-clarify-hint');
+    if (ch) ch.style.display = hasClarify ? 'block' : 'none';
+
+    const hasPatch =
+        !hasClarify &&
+        data.schemaPatch &&
+        data.schemaPatch.operations &&
+        data.schemaPatch.operations.length > 0;
+    let schemaChanged = false;
+    if (hasPatch && Array.isArray(data.schemaData)) {
+        try {
+            schemaChanged = JSON.stringify(data.schemaData) !== JSON.stringify(fields);
+        } catch (e3) {
+            schemaChanged = true;
+        }
+    }
+    let settingsChanged = false;
+    if (!hasClarify && data.templateSettings && typeof data.templateSettings === 'object') {
+        try {
+            settingsChanged = JSON.stringify(data.templateSettings) !== JSON.stringify(globalFormSettings);
+        } catch (eSet) {
+            settingsChanged = true;
+        }
+    }
+    let metadataChanged = false;
+    if (
+        !hasClarify &&
+        data.templateMetadata &&
+        typeof data.templateMetadata === 'object' &&
+        Object.prototype.hasOwnProperty.call(data.templateMetadata, 'icon')
+    ) {
+        try {
+            metadataChanged =
+                String(data.templateMetadata.icon || '').trim() !== String(currentFormIcon || '').trim();
+        } catch (eMeta) {
+            metadataChanged = true;
+        }
+    }
+    const changed = schemaChanged || settingsChanged || metadataChanged;
+
+    window.__brsparkCopilotLogicLast = hasClarify ? [] : data.logicSuggestions || [];
+    const hasLog = !hasClarify && window.__brsparkCopilotLogicLast.length > 0;
+
+    if (!hasClarify && (changed || hasLog)) {
+        pushCopilotUndoSnapshot();
+        if (changed) window.brsparkCopilotApplyPatch({ skipUndoPush: true });
+        if (hasLog) window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+    }
+    const ub = document.getElementById('ai-copilot-undo-btn');
+    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+
+    const foot = document.getElementById('copilot-rag-footnote');
+    if (foot && data.ragMeta) {
+        const m = data.ragMeta;
+        if (m.revisionCount > 0) {
+            foot.textContent =
+                'Nesta resposta, a IA usou ' +
+                m.revisionCount +
+                ' exemplo(s) de preenchimentos concluídos deste modelo (RAG).';
+        } else if (m.skipped === 'no_completed_revisions') {
+            foot.textContent =
+                'Ainda não há preenchimentos concluídos na base para este modelo — o RAG veio vazio.';
+        } else if (m.skipped === 'template_not_found') {
+            foot.textContent =
+                'Modelo não encontrado na base — guarde o formulário na API para o RAG funcionar.';
+        } else if (m.skipped === 'invalid_template_id') {
+            foot.textContent = '';
+        } else if (m.skipped === 'no_template_id') {
+            foot.textContent =
+                'Guarde e abra um modelo com ID na nuvem para incluir histórico de preenchimentos (RAG).';
+        } else {
+            foot.textContent = '';
+        }
+    }
+}
+
+async function brsparkCopilotPostChatRound(userText) {
     const token = brsparkAdminBearerToken();
     if (!token) {
         alert('Inicie sessão no painel admin (token em falta).');
         return;
     }
-    const fi = document.getElementById('ai-form-file');
-    if (!fi || !fi.files || !fi.files[0]) {
-        alert('Escolha um ficheiro Excel (.xlsx), Word (.docx) ou JSON.');
+    const trimmed = String(userText || '').trim();
+    if (!trimmed) return;
+    window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
+    window.__brsparkCopilotMessages.push({ role: 'user', content: trimmed });
+    window.__brsparkCopilotClarifyOptions = [];
+    renderCopilotClarifyCards();
+    const ch = document.getElementById('ai-copilot-clarify-hint');
+    if (ch) ch.style.display = 'none';
+    renderCopilotMessages();
+
+    const summary = String(window.__brsparkCopilotSpreadsheetSummary || '').slice(0, 12000);
+
+    const tid =
+        typeof currentFormId === 'string' &&
+        currentFormId &&
+        currentFormId !== 'temp_new' &&
+        currentFormId.trim().length > 0
+            ? currentFormId.trim()
+            : '';
+    const chatPayload = {
+        messages: window.__brsparkCopilotMessages,
+        schemaData: fields,
+        formContext: collectCopilotFormContext(),
+        spreadsheetSummary: summary,
+        templateSettings: JSON.parse(JSON.stringify(globalFormSettings || {})),
+        templateMetadata: { icon: typeof currentFormIcon === 'string' ? currentFormIcon : '' },
+    };
+    if (tid) chatPayload.templateId = tid;
+
+    beginCopilotThinking('A IA está pensando…');
+    try {
+        const res = await fetch(brsparkApiBase() + '/checklists/ai/session/chat', {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer ' + token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(chatPayload),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (e2) {
+            data = {};
+        }
+        if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
+
+        brsparkCopilotApplyChatResponse(data);
+    } catch (e) {
+        console.error(e);
+        const ragFootErr = document.getElementById('copilot-rag-footnote');
+        if (ragFootErr) ragFootErr.textContent = '';
+        window.__brsparkCopilotMessages.push({
+            role: 'assistant',
+            content: 'Erro: ' + (e.message || e),
+        });
+        renderCopilotMessages();
+    } finally {
+        endCopilotThinking();
+    }
+}
+
+window.brsparkCopilotSend = async function () {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
         return;
     }
-    const file = fi.files[0];
-    const name = (file.name || '').toLowerCase();
-    var okExt = BRSPARK_AI_FORM_EXT.some(function (ext) { return name.endsWith(ext); });
-    if (!okExt) {
-        alert('Formato não suportado. Use: .xlsx, .xlsm, .docx ou .json.');
+    const inp = document.getElementById('ai-copilot-input');
+    let text = inp ? String(inp.value || '').trim() : '';
+    if (!text) {
+        if (window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim()) {
+            text =
+                'Com base na planilha em contexto e no formulário atual no canvas, sugira próximos passos e melhorias úteis.';
+        } else {
+            alert('Escreva uma mensagem ou carregue uma planilha Excel para obter sugestões automáticas.');
+            return;
+        }
+    }
+    if (inp) inp.value = '';
+    await brsparkCopilotPostChatRound(text);
+    const inpAfter = document.getElementById('ai-copilot-input');
+    if (inpAfter) {
+        try {
+            inpAfter.focus();
+        } catch (eFa) {
+            /* ignore */
+        }
+    }
+};
+
+window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
+    const token = brsparkAdminBearerToken();
+    if (!token) {
+        alert('Inicie sessão no painel admin (token em falta).');
+        if (inputEl) inputEl.value = '';
         return;
     }
-    const hintEl = document.getElementById('ai-form-hint');
+    const file = inputEl && inputEl.files && inputEl.files[0];
+    if (!file) return;
+    const name = String(file.name || '').toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xlsm')) {
+        alert('Use um ficheiro Excel .xlsx ou .xlsm.');
+        inputEl.value = '';
+        return;
+    }
+
+    copilotSetContextDetailsOpen(true);
+
+    const statusEl = document.getElementById('copilot-excel-status');
+    beginCopilotThinking('Lendo e analisando a planilha com IA…');
+    window.__brsparkCopilotExcelBusy = true;
+    updateCopilotExcelUi();
+    if (statusEl) statusEl.textContent = 'A ler e a analisar a planilha com IA…';
+
+    const hintEl = document.getElementById('copilot-excel-hint');
     const hint = hintEl ? String(hintEl.value || '').trim() : '';
-    const status = document.getElementById('ai-form-status');
-    const btn = document.getElementById('ai-form-generate-btn');
-    if (status) status.textContent = '';
-    setAiFormLoading(true, 'analyze');
-    if (btn) btn.textContent = 'A analisar…';
+    const opts = Object.assign({}, collectCopilotFormContext(), { hint: hint });
+
     try {
         const fd = new FormData();
         fd.append('file', file);
-        fd.append('options', JSON.stringify(collectAiFormExcelOptions(hint)));
-        const res = await fetch(`${brsparkApiBase()}/checklists/ai/analyze-from-file`, {
+        fd.append('options', JSON.stringify(opts));
+        const res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token },
             body: fd,
@@ -4747,203 +5080,88 @@ window.brsparkAiFormAnalyze = async function () {
             data = {};
         }
         if (!res.ok) {
-            throw new Error(data.error || res.statusText || 'Pedido falhou');
+            throw new Error(data.error || res.statusText || 'Falha ao analisar o ficheiro');
         }
-        const blocks = normalizeBlocksFromApi(data);
+        const blocks = Array.isArray(data.blocks) ? data.blocks : [];
         if (!blocks.length) {
-            throw new Error('A IA não devolveu etapas/campos. Tente outro arquivo ou instruções.');
+            throw new Error('A análise não devolveu etapas ou campos. Tente outro ficheiro ou ajuste as dicas.');
         }
-        window.__brsparkAiSession = {
-            blocks: blocks,
-            title: data.title || '',
-            description: data.description || '',
-            hint: hint,
-            sourceFileName: (data.source && data.source.name) || file.name || '',
-            analyzedAt: new Date().toISOString(),
-            truncated: !!data.truncated,
-        };
-        initAiStructureAfterAnalyze();
-        renderAiFormHistorySession(window.__brsparkAiSession);
-        aiFormSetWizardStep('validate');
-        if (status) {
-            const w = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).join(' ') : '';
-            status.textContent =
-                (data.truncated ? 'Aviso: conteúdo truncado. ' : '') +
-                (w || 'Confirme o título e vá adicionando cada bloco ao canvas.');
+        window.__brsparkCopilotSpreadsheetSummary = buildCopilotSpreadsheetSummaryFromAnalyze(
+            data,
+            file.name || 'planilha.xlsx',
+        );
+        window.__brsparkCopilotSpreadsheetFileName = file.name || '';
+        if (statusEl) {
+            statusEl.textContent =
+                'Planilha «' +
+                (file.name || 'Excel') +
+                '» carregada (' +
+                blocks.length +
+                ' blocos). A iniciar a conversa…';
         }
+        updateCopilotExcelUi();
+
+        await brsparkCopilotPostChatRound(
+            'Acabei de enviar uma planilha Excel para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos e sugira três passos práticos para montar o formulário no canvas.',
+        );
     } catch (e) {
         console.error(e);
-        if (status) status.textContent = 'Erro: ' + (e.message || e);
-        window.__brsparkAiSession = null;
-        window.__brsparkAiQueueState = null;
-        aiFormSetWizardStep('upload');
+        if (statusEl) statusEl.textContent = 'Erro: ' + (e.message || e);
+        alert(e.message || String(e));
     } finally {
-        setAiFormLoading(false);
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Ler ficheiro com IA →';
-        }
+        window.__brsparkCopilotExcelBusy = false;
+        endCopilotThinking();
+        updateCopilotExcelUi();
+        inputEl.value = '';
     }
 };
 
-/** @deprecated */
-window.brsparkAiFormGenerate = window.brsparkAiFormAnalyze;
-
-
-/* ---------- Copiloto IA (chat + patch + lógica) ---------- */
-if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];
-if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
-
-function renderCopilotMessages() {
-    const root = document.getElementById('ai-copilot-messages');
-    if (!root) return;
-    root.innerHTML = '';
-    (window.__brsparkCopilotMessages || []).forEach(function (m) {
-        if (!m || (m.role !== 'user' && m.role !== 'assistant')) return;
-        const div = document.createElement('div');
-        div.className = 'ai-copilot-bubble ' + (m.role === 'user' ? 'user' : 'assistant');
-        div.textContent = String(m.content || '');
-        root.appendChild(div);
-    });
-    root.scrollTop = root.scrollHeight;
-}
-
-window.toggleAiCopilotPanel = function () {
-    const p = document.getElementById('ai-copilot-panel');
-    if (!p) return;
-    const open = !p.classList.contains('is-open');
-    p.classList.toggle('is-open', open);
-    p.setAttribute('aria-hidden', open ? 'false' : 'true');
-    if (open) renderCopilotMessages();
-};
-
-window.brsparkCopilotClear = function () {
-    window.__brsparkCopilotMessages = [];
-    renderCopilotMessages();
-    window.__brsparkCopilotLast = null;
-    window.__brsparkCopilotLogicLast = null;
-    const ab = document.getElementById('ai-copilot-apply-btn');
-    if (ab) ab.disabled = true;
-    const lb = document.getElementById('ai-copilot-apply-logic-btn');
-    if (lb) {
-        lb.disabled = true;
-        lb.style.display = 'none';
-    }
-    const ph = document.getElementById('ai-copilot-patch-hint');
-    if (ph) ph.style.display = 'none';
-    const lh = document.getElementById('ai-copilot-logic-hint');
-    if (lh) lh.style.display = 'none';
-};
-
-window.brsparkCopilotSend = async function () {
-    const token = brsparkAdminBearerToken();
-    if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
-        return;
-    }
-    const inp = document.getElementById('ai-copilot-input');
-    const text = inp ? String(inp.value || '').trim() : '';
-    if (!text) {
-        alert('Escreva uma mensagem.');
-        return;
-    }
-    window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
-    window.__brsparkCopilotMessages.push({ role: 'user', content: text });
-    if (inp) inp.value = '';
-    renderCopilotMessages();
-
-    let summary = '';
-    if (window.__brsparkAiSession) {
-        summary =
-            'Arquivo analisado: ' +
-            (window.__brsparkAiSession.sourceFileName || '') +
-            (window.__brsparkAiSession.hint ? '\nNotas: ' + window.__brsparkAiSession.hint : '');
-    }
-
-    try {
-        const res = await fetch(brsparkApiBase() + '/checklists/ai/session/chat', {
-            method: 'POST',
-            headers: {
-                Authorization: 'Bearer ' + token,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                messages: window.__brsparkCopilotMessages,
-                schemaData: fields,
-                formContext: collectCopilotFormContext(),
-                spreadsheetSummary: summary.slice(0, 12000),
-            }),
-        });
-        let data = {};
-        try {
-            data = await res.json();
-        } catch (e2) {
-            data = {};
-        }
-        if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
-
-        window.__brsparkCopilotMessages.push({ role: 'assistant', content: data.replyText || '(sem texto)' });
-        window.__brsparkCopilotLast = data;
-        renderCopilotMessages();
-
-        const hasPatch =
-            data.schemaPatch &&
-            data.schemaPatch.operations &&
-            data.schemaPatch.operations.length > 0;
-        let changed = false;
-        if (hasPatch && Array.isArray(data.schemaData)) {
-            try {
-                changed = JSON.stringify(data.schemaData) !== JSON.stringify(fields);
-            } catch (e3) {
-                changed = true;
-            }
-        }
-        const applyBtn = document.getElementById('ai-copilot-apply-btn');
-        if (applyBtn) applyBtn.disabled = !changed;
-        const ph = document.getElementById('ai-copilot-patch-hint');
-        if (ph) ph.style.display = changed ? 'block' : 'none';
-
-        window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
-        const hasLog = window.__brsparkCopilotLogicLast.length > 0;
-        const lb = document.getElementById('ai-copilot-apply-logic-btn');
-        if (lb) {
-            lb.style.display = hasLog ? 'inline-flex' : 'none';
-            lb.disabled = !hasLog;
-        }
-        const lh = document.getElementById('ai-copilot-logic-hint');
-        if (lh) lh.style.display = hasLog ? 'block' : 'none';
-    } catch (e) {
-        console.error(e);
-        window.__brsparkCopilotMessages.push({
-            role: 'assistant',
-            content: 'Erro: ' + (e.message || e),
-        });
-        renderCopilotMessages();
-    }
-};
-
-window.brsparkCopilotApplyPatch = function () {
+window.brsparkCopilotApplyPatch = function (opts) {
+    opts = opts || {};
     const data = window.__brsparkCopilotLast;
-    if (!data || !Array.isArray(data.schemaData)) return;
-    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
-    window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
-    fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(data.schemaData)));
-    ensureCanvasSchemaHasSection();
-    fixTransitDisplacementViolations(fields);
+    if (!data) return;
+    const hasSchema = Array.isArray(data.schemaData);
+    const hasSettings = data.templateSettings && typeof data.templateSettings === 'object';
+    const hasMeta =
+        data.templateMetadata && typeof data.templateMetadata === 'object' && !Array.isArray(data.templateMetadata);
+    if (!hasSchema && !hasSettings && !hasMeta) return;
+    if (!opts.skipUndoPush) pushCopilotUndoSnapshot();
+    if (hasSchema) {
+        fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(data.schemaData)));
+        ensureCanvasSchemaHasSection();
+        fixTransitDisplacementViolations(fields);
+    }
+    if (hasSettings) {
+        globalFormSettings = mergeGlobalFormSettingsFromCopilot(data.templateSettings);
+        if (window.syncAppSectionNavRadios) window.syncAppSectionNavRadios();
+    }
+    if (hasMeta && Object.prototype.hasOwnProperty.call(data.templateMetadata, 'icon')) {
+        currentFormIcon =
+            data.templateMetadata.icon != null ? String(data.templateMetadata.icon).trim() : '';
+        syncBuilderTaskIconDom();
+    }
     renderCanvas();
+    renderProperties();
     const ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = false;
-    const ab = document.getElementById('ai-copilot-apply-btn');
-    if (ab) ab.disabled = true;
-    const ph = document.getElementById('ai-copilot-patch-hint');
-    if (ph) ph.style.display = 'none';
+    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
 };
 
 window.brsparkCopilotUndo = function () {
     const st = window.__brsparkSchemaUndoStack;
     if (!st || !st.length) return;
-    fields = JSON.parse(st.pop());
+    const entry = parseCopilotUndoEntry(st.pop());
+    if (!entry) return;
+    fields = entry.fields;
+    if (entry.settings) {
+        globalFormSettings = mergeGlobalFormSettingsFromCopilot(entry.settings);
+        if (window.syncAppSectionNavRadios) window.syncAppSectionNavRadios();
+    }
+    if (!entry.taskIconSkip) {
+        currentFormIcon = entry.taskIcon != null ? String(entry.taskIcon) : '';
+        syncBuilderTaskIconDom();
+    }
     renderCanvas();
+    renderProperties();
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = st.length === 0;
 };
@@ -4960,6 +5178,7 @@ window.brsparkCopilotSuggestLogic = async function () {
         alert('Descreva o que a lógica deve fazer.');
         return;
     }
+    beginCopilotThinking('A IA está elaborando sugestões de regras…');
     try {
         const res = await fetch(brsparkApiBase() + '/checklists/ai/suggest-logic', {
             method: 'POST',
@@ -4992,24 +5211,25 @@ window.brsparkCopilotSuggestLogic = async function () {
 
         window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
         const hasLog = window.__brsparkCopilotLogicLast.length > 0;
-        const lb = document.getElementById('ai-copilot-apply-logic-btn');
-        if (lb) {
-            lb.style.display = hasLog ? 'inline-flex' : 'none';
-            lb.disabled = !hasLog;
+        if (hasLog) {
+            pushCopilotUndoSnapshot();
+            window.brsparkCopilotApplyLogic({ skipUndoPush: true });
         }
-        const lh = document.getElementById('ai-copilot-logic-hint');
-        if (lh) lh.style.display = hasLog ? 'block' : 'none';
+        const ub = document.getElementById('ai-copilot-undo-btn');
+        if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
     } catch (e) {
         console.error(e);
         alert(e.message || String(e));
+    } finally {
+        endCopilotThinking();
     }
 };
 
-window.brsparkCopilotApplyLogic = function () {
+window.brsparkCopilotApplyLogic = function (opts) {
+    opts = opts || {};
     const list = window.__brsparkCopilotLogicLast;
     if (!list || !list.length) return;
-    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
-    window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
+    if (!opts.skipUndoPush) pushCopilotUndoSnapshot();
     list.forEach(function (s) {
         const mon = fields.find(function (f) {
             return f.id === s.monitorFieldId;
@@ -5023,16 +5243,11 @@ window.brsparkCopilotApplyLogic = function () {
             actions: [{ type: s.actionType || 'SHOW', targetId: s.targetFieldId, value: '' }],
         });
     });
+    window.__brsparkCopilotLogicLast = [];
     renderCanvas();
+    renderProperties();
     const ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = false;
-    const lb = document.getElementById('ai-copilot-apply-logic-btn');
-    if (lb) {
-        lb.disabled = true;
-        lb.style.display = 'none';
-    }
-    const lh = document.getElementById('ai-copilot-logic-hint');
-    if (lh) lh.style.display = 'none';
+    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
 };
 
 /**

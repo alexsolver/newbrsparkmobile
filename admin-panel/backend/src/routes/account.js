@@ -6,6 +6,7 @@ const prisma  = require('../db');
 const crypto  = require('crypto');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
 
 // /api/vision/* — biometria de campo / checklists (CompreFace conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
 const visionRouter = require('./vision');
@@ -265,6 +266,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         avatarUrl: user.avatarUrl,
+        preferredChatLocale: user.preferredChatLocale ?? null,
         tenantId: user.tenantId,
         tenant: { id: user.tenant.id, name: user.tenant.name, status: user.tenant.status },
         technicianProfile: user.technicianProfile,
@@ -432,15 +434,31 @@ router.get('/me', authUser, async (req, res) => {
 // Autenticado — atualiza perfil do usuário logado
 router.put('/me', authUser, async (req, res) => {
   try {
-    const { name, email, avatarUrl } = req.body;
-    
+    const { name, email, avatarUrl, preferredChatLocale } = req.body;
+
+    let localeUpdate = undefined;
+    if (preferredChatLocale !== undefined) {
+      if (preferredChatLocale === null || String(preferredChatLocale).trim() === '') {
+        localeUpdate = null;
+      } else {
+        const n = normalizeChatLocale(preferredChatLocale);
+        if (!CANON_LOCALES.includes(n)) {
+          return res.status(400).json({
+            error: `Idioma inválido. Use: ${CANON_LOCALES.join(', ')} ou deixe vazio para automático.`,
+          });
+        }
+        localeUpdate = n;
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data: { 
-        ...(name && { name }), 
-        ...(email && { email }), 
-        ...(avatarUrl !== undefined && { avatarUrl }) 
-      }
+      data: {
+        ...(name && { name }),
+        ...(email && { email }),
+        ...(avatarUrl !== undefined && { avatarUrl }),
+        ...(localeUpdate !== undefined && { preferredChatLocale: localeUpdate }),
+      },
     });
 
     const { password: _, ...safe } = updated;

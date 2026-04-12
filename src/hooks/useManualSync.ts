@@ -33,7 +33,10 @@ export function useManualSync(onSuccess?: () => Promise<void> | void) {
         await AsyncStorage.setItem(LAST_SYNC_KEY, now.toString());
         if (onSuccess) await onSuccess();
       } else {
-        Alert.alert('Sincronização', 'Ocorreu um erro ao sincronizar. Verifique sua conexão.');
+        Alert.alert(
+          'Sincronização em espera',
+          'Não foi possível conectar agora. Seus dados continuam no aparelho e tentaremos novamente em instantes (ou quando a internet melhorar).',
+        );
       }
     } catch (error) {
       console.error('[SYNC] Erro manual:', error);

@@ -7,6 +7,7 @@ const { classifyTotal } = require('../lib/evaluationConstants');
 const { pushToUserById } = require('../lib/evaluationPush');
 const { newPublicTokenFields } = require('../lib/evaluationTrigger');
 const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
+const { buildChatTranscriptForEvaluationInstance } = require('../lib/disputeChatTranscript');
 
 const router = express.Router();
 
@@ -486,6 +487,64 @@ router.get('/analytics', async (req, res) => {
     });
   } catch (err) {
     console.error('admin GET analytics', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Transcrição do chat técnico–cliente para auditoria de disputas (painel admin). */
+router.get('/disputes/:disputeId/chat-transcript', async (req, res) => {
+  try {
+    const dispute = await prisma.evaluationDispute.findUnique({
+      where: { id: req.params.disputeId },
+      select: { id: true, tenantId: true, instanceId: true },
+    });
+    if (!dispute) return res.status(404).json({ error: 'Disputa não encontrada.' });
+    const data = await buildChatTranscriptForEvaluationInstance(dispute.instanceId);
+    await prisma.auditLog.create({
+      data: {
+        ...auditActor(req),
+        tenantId: dispute.tenantId,
+        action: 'EVALUATION_DISPUTE_CHAT_TRANSCRIPT',
+        resource: dispute.instanceId,
+        category: 'DATA',
+        metadata: {
+          disputeId: dispute.id,
+          messageCount: data.messages.length,
+          roomId: data.roomId,
+        },
+      },
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+    console.error('admin GET disputes/:id/chat-transcript', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Mesmo conteúdo que por disputa, mas a partir da instância (ex.: separador Instâncias). */
+router.get('/instances/:instanceId/chat-transcript', async (req, res) => {
+  try {
+    const inst = await prisma.evaluationInstance.findUnique({
+      where: { id: req.params.instanceId },
+      select: { id: true, tenantId: true },
+    });
+    if (!inst) return res.status(404).json({ error: 'Instância não encontrada.' });
+    const data = await buildChatTranscriptForEvaluationInstance(inst.id);
+    await prisma.auditLog.create({
+      data: {
+        ...auditActor(req),
+        tenantId: inst.tenantId,
+        action: 'EVALUATION_INSTANCE_CHAT_TRANSCRIPT',
+        resource: inst.id,
+        category: 'DATA',
+        metadata: { messageCount: data.messages.length, roomId: data.roomId },
+      },
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+    console.error('admin GET instances/:id/chat-transcript', err);
     res.status(500).json({ error: err.message });
   }
 });

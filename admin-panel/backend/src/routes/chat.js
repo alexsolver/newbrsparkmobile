@@ -4,8 +4,120 @@ const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { getRoomMessagingState } = require('../lib/technicianClientChatGate');
+const {
+  translateChatText,
+  normalizeChatLocale,
+  parseTranslationsJson,
+  chatTranslationEnabled,
+} = require('../lib/chatTranslation');
 
 router.use(authUser);
+
+/**
+ * @param {string} roomId
+ * @param {string} senderEmail
+ * @returns {Promise<string|null>}
+ */
+async function getOtherMemberEmail(roomId, senderEmail) {
+  const members = await prisma.chatRoomMember.findMany({
+    where: { roomId },
+    select: { userId: true },
+  });
+  if (members.length !== 2) return null;
+  const se = String(senderEmail || '').trim().toLowerCase();
+  const other = members.find((m) => String(m.userId || '').trim().toLowerCase() !== se);
+  return other ? String(other.userId).trim().toLowerCase() : null;
+}
+
+/**
+ * @param {string} recipientEmail
+ * @returns {Promise<string>}
+ */
+async function resolvePreferredLocaleForEmail(recipientEmail) {
+  const u = await prisma.user.findFirst({
+    where: { email: { equals: recipientEmail, mode: 'insensitive' } },
+    select: { preferredChatLocale: true, tenantId: true },
+  });
+  if (!u) return 'pt-BR';
+  if (u.preferredChatLocale && String(u.preferredChatLocale).trim()) {
+    return normalizeChatLocale(u.preferredChatLocale);
+  }
+  const t = await prisma.tenant.findUnique({
+    where: { id: u.tenantId },
+    select: { defaultLang: true },
+  });
+  return normalizeChatLocale(t?.defaultLang || 'pt-BR');
+}
+
+/**
+ * @param {{ id: string, senderId: string, type: string, content: string|null, translations?: unknown }} msg
+ * @param {string} viewerEmail
+ * @param {string} viewerLocaleHint
+ * @returns {Promise<string>}
+ */
+async function resolveDisplayContent(msg, viewerEmail, viewerLocaleHint) {
+  const raw = msg.content != null ? String(msg.content) : '';
+  const viewer = String(viewerEmail || '').trim().toLowerCase();
+  const sender = String(msg.senderId || '').trim().toLowerCase();
+  if (sender === viewer) return raw;
+
+  if (msg.type !== 'text' && msg.type !== 'image') return raw;
+
+  const locale = normalizeChatLocale(viewerLocaleHint);
+  const trans = parseTranslationsJson(msg.translations);
+  if (trans[locale]) return trans[locale];
+
+  if (!raw.trim() || !chatTranslationEnabled()) return raw;
+
+  const translated = await translateChatText(raw, locale);
+  if (!translated) return raw;
+
+  const merged = { ...trans, [locale]: translated };
+  try {
+    await prisma.chatMessage.update({
+      where: { id: msg.id },
+      data: { translations: merged },
+    });
+  } catch (e) {
+    console.warn('[CHAT] Falha ao gravar tradução em cache:', e.message);
+  }
+  return translated;
+}
+
+/**
+ * Após criar mensagem de texto (ou legenda), pré-calcula tradução para o locale preferido do destinatário (sala 1:1).
+ */
+async function maybePrefetchTranslationForRecipient(roomId, msg, senderEmail) {
+  if (!chatTranslationEnabled()) return;
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    include: { members: true },
+  });
+  if (!room || room.isGroup || room.members?.length !== 2) return;
+  const text = msg.content != null ? String(msg.content).trim() : '';
+  if (!text) return;
+  if (msg.type !== 'text' && msg.type !== 'image') return;
+
+  const other = await getOtherMemberEmail(roomId, senderEmail);
+  if (!other) return;
+
+  const target = await resolvePreferredLocaleForEmail(other);
+  const trans = parseTranslationsJson(msg.translations);
+  if (trans[target]) return;
+
+  const translated = await translateChatText(text, target);
+  if (!translated) return;
+
+  const merged = { ...trans, [target]: translated };
+  try {
+    await prisma.chatMessage.update({
+      where: { id: msg.id },
+      data: { translations: merged },
+    });
+  } catch (e) {
+    console.warn('[CHAT] Falha ao pré-traduzir para destinatário:', e.message);
+  }
+}
 
 // =========================================================================
 // CONTATOS (1 a 1 via Email)
@@ -429,9 +541,20 @@ router.post('/rooms/:roomId/messages', async (req, res) => {
     if (technicianClientGated && !messagingActive) {
       return res.status(403).json({
         error:
-          'O chat com o cliente só está disponível durante o início e a conclusão da atividade (OS em andamento ou concluída aguardando sincronização).',
+          'O chat com o cliente só fica disponível após o início do deslocamento, enquanto a OS estiver em andamento ou concluída aguardando sincronização.',
         code: 'CHAT_ACTIVITY_INACTIVE',
       });
+    }
+
+    const msgType = type || 'text';
+    if (msgType !== 'text' && msgType !== 'image') {
+      return res.status(400).json({
+        error: 'Apenas mensagens de texto ou fotos são permitidas no chat.',
+        code: 'CHAT_MEDIA_NOT_ALLOWED',
+      });
+    }
+    if (msgType === 'image' && (!mediaUrl || !String(mediaUrl).trim())) {
+      return res.status(400).json({ error: 'Envio de foto requer mediaUrl.', code: 'CHAT_IMAGE_NO_URL' });
     }
 
     const msg = await prisma.chatMessage.create({
@@ -439,19 +562,37 @@ router.post('/rooms/:roomId/messages', async (req, res) => {
         roomId,
         senderId: email,
         senderName: name || 'Usuário',
-        type: type || 'text',
-        content,
-        mediaUrl
-      }
+        type: msgType,
+        content: content != null ? content : null,
+        mediaUrl: mediaUrl != null ? mediaUrl : null,
+      },
     });
+
+    await maybePrefetchTranslationForRecipient(roomId, msg, email).catch(() => {});
+
+    const fresh = await prisma.chatMessage.findUnique({ where: { id: msg.id } });
+    const out = fresh || msg;
+    const displayContent = await resolveDisplayContent(out, email, null);
 
     // Empurra a sala para cima (updatedAt)
     await prisma.chatRoom.update({
       where: { id: roomId },
-      data: { updatedAt: new Date() }
+      data: { updatedAt: new Date() },
     });
 
-    res.json(msg);
+    res.json({
+      id: out.id,
+      roomId: out.roomId,
+      senderId: out.senderId,
+      senderName: out.senderName,
+      type: out.type,
+      content: out.content,
+      mediaUrl: out.mediaUrl,
+      translations: out.translations,
+      displayContent,
+      createdAt: out.createdAt,
+      timestamp: out.createdAt.getTime(),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -463,44 +604,71 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
     const { email: rawEmail } = req.user;
     const email = rawEmail.toLowerCase();
     const { roomId } = req.params;
-    const { since = 0 } = req.query;
+    const { since = 0, viewerLocale: rawViewerLocale } = req.query;
 
     const member = await prisma.chatRoomMember.findUnique({
-      where: { roomId_userId: { roomId, userId: email } }
+      where: { roomId_userId: { roomId, userId: email } },
     });
 
     if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
 
+    const meRow = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { preferredChatLocale: true, tenantId: true },
+    });
+    let viewerLocale = rawViewerLocale != null && String(rawViewerLocale).trim()
+      ? normalizeChatLocale(String(rawViewerLocale))
+      : null;
+    if (!viewerLocale && meRow?.preferredChatLocale && String(meRow.preferredChatLocale).trim()) {
+      viewerLocale = normalizeChatLocale(meRow.preferredChatLocale);
+    }
+    if (!viewerLocale && meRow?.tenantId) {
+      const t = await prisma.tenant.findUnique({
+        where: { id: meRow.tenantId },
+        select: { defaultLang: true },
+      });
+      viewerLocale = normalizeChatLocale(t?.defaultLang || 'pt-BR');
+    }
+    if (!viewerLocale) viewerLocale = 'pt-BR';
+
     const condition = { roomId };
-    if (since > 0) {
-      condition.createdAt = { gt: new Date(parseInt(since, 10)) };
+    const sinceMs = parseInt(String(since), 10);
+    if (Number.isFinite(sinceMs) && sinceMs > 0) {
+      condition.createdAt = { gt: new Date(sinceMs) };
     }
 
     const messages = await prisma.chatMessage.findMany({
       where: condition,
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
 
-    const senderEmails = Array.from(new Set(messages.map(m => m.senderId)));
+    const senderEmails = Array.from(new Set(messages.map((m) => m.senderId)));
     const senders = await prisma.user.findMany({
       where: { email: { in: senderEmails } },
-      select: { email: true, avatarUrl: true }
+      select: { email: true, avatarUrl: true },
     });
     const senderDict = {};
-    senders.forEach(s => senderDict[s.email] = s.avatarUrl);
+    senders.forEach((s) => {
+      senderDict[s.email] = s.avatarUrl;
+    });
 
-    // Converter para formato do App
-    const mapped = messages.map(m => ({
-      id: m.id,
-      roomId: m.roomId,
-      senderId: m.senderId,
-      senderName: m.senderName,
-      senderAvatarUrl: senderDict[m.senderId],
-      type: m.type,
-      content: m.content,
-      mediaUrl: m.mediaUrl,
-      timestamp: m.createdAt.getTime()
-    }));
+    const mapped = await Promise.all(
+      messages.map(async (m) => {
+        const displayContent = await resolveDisplayContent(m, email, viewerLocale);
+        return {
+          id: m.id,
+          roomId: m.roomId,
+          senderId: m.senderId,
+          senderName: m.senderName,
+          senderAvatarUrl: senderDict[m.senderId],
+          type: m.type,
+          content: m.content,
+          displayContent,
+          mediaUrl: m.mediaUrl,
+          timestamp: m.createdAt.getTime(),
+        };
+      }),
+    );
 
     res.json(mapped);
   } catch (err) {

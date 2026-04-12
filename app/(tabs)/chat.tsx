@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   ActivityIndicator, Modal, ScrollView, TextInput, Alert,
@@ -7,14 +7,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ChatService, ChatRoom, ChatContact } from '../../src/services/chat';
+import { loadRoomListCache, saveRoomListCache } from '../../src/services/chatOfflineStorage';
+import { useConnectivity } from '../../src/hooks/useConnectivity';
 import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ARCHIVED_KEY = '@brspark_archived_rooms';
-/** Links públicos guardados no dispositivo (aba Contatos do chat). */
-const CHAT_PUBLIC_LINKS_KEY = '@brspark_chat_public_links';
 
 function timeAgo(ts?: number) {
   if (!ts) return '';
@@ -41,6 +41,7 @@ const FILTERS: { id: FilterTab; label: string }[] = [
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isOnline } = useConnectivity(8000);
   const { colors: C } = useTheme();
   const styles = useMemo(() => createChatStyles(C), [C]);
 
@@ -54,7 +55,7 @@ export default function ChatScreen() {
 
   // Modals state
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalTab, setModalTab] = useState<'CONTACTS' | 'GROUP' | 'ADD'>('CONTACTS');
+  const [modalTab, setModalTab] = useState<'GROUP' | 'ADD'>('GROUP');
 
   // New Contact
   const [newEmail, setNewEmail] = useState('');
@@ -63,13 +64,6 @@ export default function ChatScreen() {
   // New Group
   const [groupName, setGroupName] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-
-  // Aba Contatos — redes e site (local ao dispositivo)
-  const [linkInstagram, setLinkInstagram] = useState('');
-  const [linkFacebook, setLinkFacebook] = useState('');
-  const [linkWebsite, setLinkWebsite] = useState('');
-  const [savingPublicLinks, setSavingPublicLinks] = useState(false);
-  const prevModalVisibleRef = useRef(false);
 
   // Archive action swipe state
   const [longPressedRoom, setLongPressedRoom] = useState<string | null>(null);
@@ -99,6 +93,15 @@ export default function ChatScreen() {
   };
 
   const loadData = useCallback(async () => {
+    if (user?.id) {
+      try {
+        const cachedRooms = await loadRoomListCache(user.id);
+        if (cachedRooms.length) setRooms(cachedRooms);
+      } catch {
+        /* ignore */
+      }
+    }
+    setLoading(false);
     try {
       const [r, p, c] = await Promise.all([
         ChatService.getRooms(),
@@ -108,62 +111,18 @@ export default function ChatScreen() {
       setRooms(Array.isArray(r) ? r : []);
       setPending(Array.isArray(p) ? p : []);
       setContacts(Array.isArray(c) ? c : []);
+      if (user?.id && Array.isArray(r) && r.length > 0) {
+        await saveRoomListCache(user.id, r);
+      }
     } catch (e) {
       console.error(e);
     }
-    setLoading(false);
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(useCallback(() => {
     if (user) { loadData(); loadArchived(); }
     else setLoading(false);
   }, [user, loadData]));
-
-  /** Ao abrir o modal «Nova Conversa», carrega links públicos guardados. */
-  useEffect(() => {
-    const justOpened = modalVisible && !prevModalVisibleRef.current;
-    prevModalVisibleRef.current = modalVisible;
-    if (!justOpened || !user?.id) return;
-    const key = `${CHAT_PUBLIC_LINKS_KEY}:${user.id}`;
-    void AsyncStorage.getItem(key).then((raw) => {
-      if (!raw) {
-        setLinkInstagram('');
-        setLinkFacebook('');
-        setLinkWebsite('');
-        return;
-      }
-      try {
-        const j = JSON.parse(raw) as { instagram?: string; facebook?: string; website?: string };
-        setLinkInstagram(typeof j.instagram === 'string' ? j.instagram : '');
-        setLinkFacebook(typeof j.facebook === 'string' ? j.facebook : '');
-        setLinkWebsite(typeof j.website === 'string' ? j.website : '');
-      } catch {
-        setLinkInstagram('');
-        setLinkFacebook('');
-        setLinkWebsite('');
-      }
-    });
-  }, [modalVisible, user?.id]);
-
-  const savePublicLinks = async () => {
-    if (!user?.id) return;
-    setSavingPublicLinks(true);
-    try {
-      const key = `${CHAT_PUBLIC_LINKS_KEY}:${user.id}`;
-      await AsyncStorage.setItem(
-        key,
-        JSON.stringify({
-          instagram: linkInstagram.trim(),
-          facebook: linkFacebook.trim(),
-          website: linkWebsite.trim(),
-        })
-      );
-      Alert.alert('Salvo', 'Instagram, Facebook e site foram guardados neste dispositivo.');
-    } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível salvar.');
-    }
-    setSavingPublicLinks(false);
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -187,21 +146,10 @@ export default function ChatScreen() {
       await ChatService.requestContact(newEmail);
       Alert.alert('Sucesso', 'Solicitação enviada!');
       setNewEmail('');
-      setModalTab('CONTACTS');
     } catch (e: any) {
       Alert.alert('Erro', e.message || 'Falha ao enviar convite');
     }
     setSendingRequest(false);
-  };
-
-  const handleStartChat = async (userId: string) => {
-    setModalVisible(false);
-    try {
-      const room = await ChatService.createRoom({ isGroup: false, userIds: [userId] });
-      router.push(`/chat/${room.id}?name=${encodeURIComponent(room.name || 'Chat')}&color=${encodeURIComponent(room.avatarColor || '#2563EB')}` as any);
-    } catch (e: any) {
-      Alert.alert('Erro', e.message);
-    }
   };
 
   const handleCreateGroup = async () => {
@@ -398,6 +346,15 @@ export default function ChatScreen() {
         </ScrollView>
       </View>
 
+      {isOnline === false && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={20} color={C.status.warning.fg} />
+          <Text style={styles.offlineBannerText}>
+            Sem conexão. A lista abaixo reflete a última sincronização neste aparelho.
+          </Text>
+        </View>
+      )}
+
       <FlatList
         style={{ backgroundColor: C.background }}
         data={filteredRooms}
@@ -452,9 +409,6 @@ export default function ChatScreen() {
 
             {/* TAB SELECTOR */}
             <View style={styles.tabRow}>
-              <TouchableOpacity style={[styles.tab, modalTab === 'CONTACTS' && styles.tabActive]} onPress={() => setModalTab('CONTACTS')}>
-                <Text style={[styles.tabText, modalTab === 'CONTACTS' && styles.tabTextActive]}>Contatos</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={[styles.tab, modalTab === 'GROUP' && styles.tabActive]} onPress={() => setModalTab('GROUP')}>
                 <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>Criar Grupo</Text>
               </TouchableOpacity>
@@ -464,81 +418,6 @@ export default function ChatScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }} keyboardShouldPersistTaps="handled">
-              
-              {/* ABA CONTATOS */}
-              {modalTab === 'CONTACTS' && (
-                <View>
-                  <View style={{ paddingBottom: 18, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: C.background }}>
-                    <Text style={styles.inputLabel}>Instagram</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="@usuario ou URL do perfil"
-                      placeholderTextColor={C.textLight}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      value={linkInstagram}
-                      onChangeText={setLinkInstagram}
-                      returnKeyType="next"
-                    />
-                    <Text style={[styles.inputLabel, { marginTop: 14 }]}>Facebook</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="URL do perfil ou página"
-                      placeholderTextColor={C.textLight}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      value={linkFacebook}
-                      onChangeText={setLinkFacebook}
-                      returnKeyType="next"
-                    />
-                    <Text style={[styles.inputLabel, { marginTop: 14 }]}>Website</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="https://…"
-                      placeholderTextColor={C.textLight}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                      value={linkWebsite}
-                      onChangeText={setLinkWebsite}
-                      returnKeyType="done"
-                    />
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, savingPublicLinks && { opacity: 0.55 }]}
-                      disabled={savingPublicLinks}
-                      onPress={() => void savePublicLinks()}
-                    >
-                      {savingPublicLinks ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.primaryBtnText}>Salvar links</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={[styles.inputLabel, { marginBottom: 10 }]}>Contatos</Text>
-                  {contacts.length === 0 ? (
-                    <Text style={styles.emptyContacts}>Você ainda não possui contatos aprovados ou compartilhamentos de bens ativos.</Text>
-                  ) : (
-                    contacts.map(c => (
-                      <TouchableOpacity key={c.email} style={styles.contactItem} onPress={() => handleStartChat(c.email)}>
-                        <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: MEDIA_TAG_COLORS.BEFORE }]}>
-                          {c.avatarUrl ? (
-                            <Image source={{ uri: c.avatarUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                          ) : (
-                            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{(c.name || c.email || '?')[0]?.toUpperCase()}</Text>
-                          )}
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.contactName}>{c.name || c.email}</Text>
-                          <Text style={styles.contactEmail}>{c.email}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={C.textLight} />
-                      </TouchableOpacity>
-                    ))
-                  )}
-                </View>
-              )}
 
               {/* ABA CRIAR GRUPO */}
               {modalTab === 'GROUP' && (
@@ -594,7 +473,7 @@ export default function ChatScreen() {
                     value={newEmail}
                     onChangeText={setNewEmail}
                     returnKeyType="done" />
-                  <Text style={styles.helperText}>Uma solicitação será enviada para o aplicativo deste usuário. Assim que aprovado, ele aparecerá na sua aba de Contatos.</Text>
+                  <Text style={styles.helperText}>Uma solicitação será enviada para o aplicativo deste usuário. Assim que aprovado, você poderá incluí-lo ao criar um grupo.</Text>
                   
                   <TouchableOpacity style={[styles.primaryBtn, sendingRequest && { opacity: 0.5 }]} disabled={sendingRequest} onPress={handleSendRequest}>
                     {sendingRequest ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Enviar Convite</Text>}
@@ -631,6 +510,24 @@ function createChatStyles(C: ColorPalette) {
     filterChipTextActive: { color: '#fff' },
     filterBadge: { marginLeft: 5, backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
     filterBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
+
+    offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: C.status.warning.bg,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: C.status.warning.border,
+    },
+    offlineBannerText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: C.status.warning.fg,
+      lineHeight: 17,
+    },
 
     pendingCard: {
       marginHorizontal: 16, marginTop: 4,

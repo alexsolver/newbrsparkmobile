@@ -244,6 +244,8 @@ model User {
   /// Último estado da galeria Recognition CompreFace: { status, at, faces?, subject?, message?, previous? }
   comprefaceRecognitionSync Json?
   role       UserRole @default(USER)
+  /// BCP-47 (ex.: pt-BR, en-US, es-ES) para tradução automática no chat; null = usar idioma do dispositivo / tenant.
+  preferredChatLocale String? @map("preferred_chat_locale")
   isActive   Boolean  @default(true)
   lastLogin  DateTime?
   createdAt  DateTime @default(now())
@@ -695,6 +697,8 @@ model ChatMessage {
   type       String   @default("text") // text, audio, video, image
   content    String?  @db.Text
   mediaUrl   String?
+  /// Cache de traduções por locale canónico: { "pt-BR": "…", "en-US": "…" }
+  translations Json?   @map("translations")
   createdAt  DateTime @default(now())
   
   room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)

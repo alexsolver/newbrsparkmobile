@@ -53,7 +53,7 @@ export default function OrdersScreen() {
   const styles = useMemo(() => createOrdersStyles(C), [C]);
   const statusMap = useMemo(() => buildStatusMap(C), [C]);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const { t } = useTranslation();
   const [filter, setFilter] = useState('all');
   const [realTasks, setRealTasks] = useState<any[]>([]);
@@ -64,7 +64,10 @@ export default function OrdersScreen() {
         if (!user?.email) return;
         try {
           const [events, executedRaw] = await Promise.all([
-            AgendaService.getUnifiedAgenda(user.email),
+            AgendaService.getUnifiedAgenda(
+              user.email,
+              userRole === 'TECHNICIAN' ? 'PROVIDER' : 'CLIENT',
+            ),
             AsyncStorage.getItem('@brspark_executed_tasks'),
           ]);
           let executedParsed: unknown = [];
@@ -97,7 +100,7 @@ export default function OrdersScreen() {
         } catch(e) {}
       }
       fetchTasks();
-    }, [user])
+    }, [user, userRole])
   );
 
   const orders = React.useMemo(() => realTasks, [realTasks]);

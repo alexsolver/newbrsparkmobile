@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -15,14 +15,22 @@ import { FloatingRadialMenu } from '../../src/components/FloatingRadialMenu';
  */
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { colors: C } = useTheme();
-  const activeTint = C.slate;
-  const inactiveTint = C.textSecondary;
   const navStyles = useMemo(() => createNavStyles(), []);
 
-  const ALLOWED_TABS = ['index', 'agenda', 'chat', 'notifications'];
+  const currentName = state.routes[state.index]?.name as string | undefined;
+  const hideTabBarLandscapeAgenda = width > height && currentName === 'agenda';
+  if (hideTabBarLandscapeAgenda) {
+    return <View pointerEvents="none" collapsable={false} style={{ height: 0, width: '100%' }} />;
+  }
+
+  const activeTint = C.slate;
+  const inactiveTint = C.textSecondary;
+
+  const ALLOWED_TABS = ['index', 'agenda', 'chat'];
 
   const visibleRoutes = state.routes.filter((route: any) => ALLOWED_TABS.includes(route.name));
 
@@ -45,7 +53,6 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           let label = options.title || route.name;
           if (route.name === 'index') label = t('tabs.home');
           if (route.name === 'agenda') label = t('tabs.agenda');
-          if (route.name === 'notifications') label = t('tabs.notifications');
           if (route.name === 'chat') label = t('tabs.chat');
 
           const tint = isFocused ? activeTint : inactiveTint;
@@ -120,15 +127,10 @@ function createNavStyles() {
 
 export default function TabLayout() {
   const { colors: C } = useTheme();
-  const [unread, setUnread] = useState(NotificationService.getUnreadCount());
   const [unreadChat, setUnreadChat] = useState(0);
   const prevRoomCounts = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    const unsub = NotificationService.subscribe(() => {
-      setUnread(NotificationService.getUnreadCount());
-    });
-
     const fetchChatUnread = async () => {
       try {
         const rooms = await ChatService.getRooms();
@@ -159,7 +161,6 @@ export default function TabLayout() {
     const interval = setInterval(fetchChatUnread, 5000);
 
     return () => {
-      unsub();
       clearInterval(interval);
     };
   }, []);
@@ -237,37 +238,7 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={{ position: 'relative' }}>
-              <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={24} color={color} />
-              {unread > 0 && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -4,
-                    right: -8,
-                    backgroundColor: C.destructive,
-                    minWidth: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    paddingHorizontal: 3,
-                    borderWidth: 1.5,
-                    borderColor: C.cardWhite,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{unread > 9 ? '9+' : unread}</Text>
-                </View>
-              )}
-            </View>
-          ),
-        }}
-      />
+      <Tabs.Screen name="notifications" options={{ href: null, title: 'Alertas' }} />
 
       <Tabs.Screen name="costs" options={{ href: null }} />
       <Tabs.Screen name="stock" options={{ href: null }} />

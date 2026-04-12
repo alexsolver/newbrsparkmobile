@@ -180,12 +180,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (
         partial.avatarUrl !== undefined ||
         partial.name !== undefined ||
-        partial.email !== undefined
+        partial.email !== undefined ||
+        partial.preferredChatLocale !== undefined
       ) {
         const merged = await AuthService.patchMe({
           name: partial.name,
           email: partial.email,
           avatarUrl: partial.avatarUrl,
+          preferredChatLocale: partial.preferredChatLocale,
         });
         if (merged) {
           setUser(merged);

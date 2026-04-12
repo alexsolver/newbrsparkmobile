@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image, Text, Animated, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -11,6 +11,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
+import { NotificationService } from '../services/notifications';
+import { useTranslation } from 'react-i18next';
 import { MODE_SEGMENT_COLORS } from '../theme/colors';
 import { fontSize, fontWeight, radius } from '../theme/layout';
 
@@ -110,6 +112,7 @@ interface HeaderProps {
 export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }: HeaderProps) {
   const router = useRouter();
   const segments = useSegments() as string[];
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { colors: C } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -118,6 +121,14 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
   const gpsIssue = useGpsAuraIssue();
+  const [notifUnread, setNotifUnread] = useState(() => NotificationService.getUnreadCount());
+
+  useEffect(() => {
+    const unsub = NotificationService.subscribe(() => {
+      setNotifUnread(NotificationService.getUnreadCount());
+    });
+    return unsub;
+  }, []);
 
   // Pulse animation for the online dot
   const pulse = useRef(new Animated.Value(1)).current;
@@ -166,17 +177,17 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   };
 
   const segLabelStyle = {
-    fontSize: fontSize.xs,
-    lineHeight: fontSize.xs + 2,
-    letterSpacing: 0.2,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.1,
     textAlign: 'center' as const,
     /** Não usar adjustsFontSizeToFit: com flex igual por segmento, "PRESTADOR" ficava microscópico vs "BENS". */
   };
 
   /** Largura um pouco maior com 2 segmentos para "PRESTADOR" + "BENS" sem apertar o texto. */
   const idealBadgeWidth = badgeSegmentCount <= 1 ? 122 : badgeSegmentCount === 2 ? 186 : 228;
-  /** Espaço entre logo (≈100) + margem, avatar (≈54) e padding do header — evita sobrepor o logo com absolute center. */
-  const headerSideReserve = 32 + 108 + 54;
+  /** Espaço entre logo (≈100) + margem, alertas + avatar à direita — evita sobrepor o logo com absolute center. */
+  const headerSideReserve = 32 + 108 + 100;
   const maxBadgeByScreen = Math.max(104, windowWidth - headerSideReserve);
   const badgeWidth = Math.min(idealBadgeWidth, maxBadgeByScreen);
 
@@ -303,6 +314,55 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
     </View>
   );
 
+  const notifFocused =
+    segments[0] === '(tabs)' && segments.length > 1 && segments[1] === 'notifications';
+
+  const renderAlertsHeaderButton = () => (
+    <TouchableOpacity
+      onPress={() => router.push('/(tabs)/notifications' as any)}
+      accessibilityRole="button"
+      accessibilityLabel={t('tabs.notifications')}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      style={{
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+      activeOpacity={0.65}
+    >
+      <View style={{ position: 'relative' }}>
+        <Ionicons
+          name={notifFocused ? 'notifications' : 'notifications-outline'}
+          size={24}
+          color={notifFocused ? C.slate : C.textSecondary}
+        />
+        {notifUnread > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -6,
+              backgroundColor: C.destructive,
+              minWidth: 16,
+              height: 16,
+              borderRadius: 8,
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingHorizontal: 3,
+              borderWidth: 1.5,
+              borderColor: C.cardWhite,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>
+              {notifUnread > 9 ? '9+' : notifUnread}
+            </Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   if (title || isAssetDetail || isProfile) {
     return (
       <SafeAreaView
@@ -353,10 +413,11 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
             ) : null}
           </View>
 
-          {/* Right: QR + connectivity dot + Profile */}
+          {/* Right: alertas + avatar */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {!isProfile ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {renderAlertsHeaderButton()}
                 <AvatarConnectivityStack
                   ringSize={48}
                   touchSize={40}
@@ -406,8 +467,9 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
         </View>
 
-        {/* Direita: avatar */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+        {/* Direita: alertas + avatar */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: 4 }}>
+          {renderAlertsHeaderButton()}
           <AvatarConnectivityStack
             ringSize={50}
             touchSize={44}
