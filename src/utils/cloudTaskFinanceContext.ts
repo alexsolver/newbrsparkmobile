@@ -1,5 +1,5 @@
 /**
- * Contexto de OS a partir do cache `@brspark_cloud_tasks` (alinhado ao dashboard).
+ * Contexto de OS a partir do cache FT local (`@brspark_cloud_tasks` — ver `cloudTasksBuckets.ts`).
  */
 
 export type CloudTaskFinanceInfo = {

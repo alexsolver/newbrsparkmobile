@@ -1,5 +1,15 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import {
+  AppState,
+  type AppStateStatus,
+  DeviceEventEmitter,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native';
+import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -7,7 +17,56 @@ import { NotificationService } from '../../src/services/notifications';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatService } from '../../src/services/chat';
-import { FloatingRadialMenu } from '../../src/components/FloatingRadialMenu';
+import {
+  FloatingRadialMenu,
+  TAB_BAR_ICON_SIZE,
+  TAB_BAR_INSETS_BOTTOM_MIN,
+  TAB_BAR_ROW_MIN_HEIGHT,
+  TAB_BAR_ROW_PADDING_TOP,
+} from '../../src/components/FloatingRadialMenu';
+import { useRouter, usePathname } from 'expo-router';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useAppContext } from '../../src/context/AppContext';
+import { computeJourneyUiState, type WorkTimeJourneyPhase } from '../../src/lib/workTimeJourney';
+import { getWorkTimeOutboxForDisplay } from '../../src/services/workTimePunchOutbox';
+import { fetchWorkTimeMe, fetchWorkTimePunchesWithLocalFallback } from '../../src/services/workTimeService';
+import { readWorkTimeMeCacheForUser, writeWorkTimeMeCache } from '../../src/services/workTimeMeCache';
+import { mergePendingWithServerPunches } from '../../src/services/workTimePunchesCache';
+import { pushWorkTimePunchOutbox } from '../../src/services/workTimePunchOutbox';
+import { emitWorkTimeJourneyChanged, WORK_TIME_JOURNEY_CHANGED } from '../../src/lib/workTimeJourneyEvents';
+
+/** Destaque do ícone de ponto no menu — jornada ativa (vermelho) / em intervalo (amarelo). */
+const WORK_TIME_TAB_RED = '#DC2626';
+const WORK_TIME_TAB_YELLOW = '#CA8A04';
+
+/** Aura só quando há jornada «em curso» (vermelho) ou intervalo (amarelo). */
+function workTimeJourneyAuraStyle(phase: 'in_work' | 'on_break'): {
+  ring: string;
+  glow: string;
+  shadowOpacity: number;
+  shadowRadius: number;
+  elevation: number;
+  borderW: number;
+} {
+  if (phase === 'on_break') {
+    return {
+      ring: `${WORK_TIME_TAB_YELLOW}30`,
+      glow: WORK_TIME_TAB_YELLOW,
+      shadowOpacity: 0.55,
+      shadowRadius: 12,
+      elevation: 8,
+      borderW: 1.5,
+    };
+  }
+  return {
+    ring: `${WORK_TIME_TAB_RED}38`,
+    glow: WORK_TIME_TAB_RED,
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 8,
+    borderW: 1.5,
+  };
+}
 
 /**
  * Barra inferior em largura total (referência: iFood) — ícone acima, rótulo abaixo;
@@ -19,7 +78,150 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { colors: C } = useTheme();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { userRole, user } = useAuth();
+  const { mode } = useAppContext();
+  const [showWorkTimeTab, setShowWorkTimeTab] = useState(false);
+  const [workTimeJourneyPhase, setWorkTimeJourneyPhase] = useState<WorkTimeJourneyPhase>('idle_out');
+  const lastWorkTimeTabFetchRef = useRef(0);
   const navStyles = useMemo(() => createNavStyles(), []);
+
+  const refreshWorkTimeTab = useCallback(async () => {
+    if (!user?.id || String(user.role || '').toUpperCase() === 'USER') {
+      setShowWorkTimeTab(false);
+      setWorkTimeJourneyPhase('idle_out');
+      return;
+    }
+    const session = { id: user.id, tenantId: user.tenantId };
+    try {
+      try {
+        await pushWorkTimePunchOutbox();
+      let d: Awaited<ReturnType<typeof fetchWorkTimeMe>> | null = null;
+      let meSource: 'network_ok' | 'network_err' | 'network_throw' | 'cache' | 'none' = 'none';
+      try {
+        d = await fetchWorkTimeMe();
+        if (d && d.ok) meSource = 'network_ok';
+        else if (d) meSource = 'network_err';
+      } catch {
+        d = null;
+        meSource = 'network_throw';
+      }
+      if (!d || !d.ok) {
+        let diskMe: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
+        try {
+          diskMe = await readWorkTimeMeCacheForUser(session);
+        } catch {
+          diskMe = null;
+        }
+        if (diskMe?.ok) {
+          d = diskMe;
+          meSource = 'cache';
+        }
+      }
+      const show = !!(d && d.ok && d.showWorkTimeInApp);
+      if (meSource === 'network_ok' && d && d.ok) {
+        try {
+          await writeWorkTimeMeCache(d);
+        } catch {
+          /* cache best-effort */
+        }
+      }
+      setShowWorkTimeTab(show);
+      if (!show || mode !== 'PROVIDER') {
+        setWorkTimeJourneyPhase('idle_out');
+        return;
+      }
+      const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+      const pending = await getWorkTimeOutboxForDisplay();
+      const merged = mergePendingWithServerPunches(pending, rows);
+      setWorkTimeJourneyPhase(computeJourneyUiState(merged).phase);
+    } catch (outerErr) {
+      let cached: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
+      try {
+        cached = await readWorkTimeMeCacheForUser(session);
+      } catch {
+        cached = null;
+      }
+      if (cached?.ok && cached.showWorkTimeInApp && mode === 'PROVIDER') {
+        setShowWorkTimeTab(true);
+        try {
+          await pushWorkTimePunchOutbox();
+          const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+          const pending = await getWorkTimeOutboxForDisplay();
+          setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
+        } catch {
+          try {
+            const pending = await getWorkTimeOutboxForDisplay();
+            const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+            setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
+          } catch {
+            setWorkTimeJourneyPhase('idle_out');
+          }
+        }
+        return;
+      }
+      setShowWorkTimeTab(false);
+      setWorkTimeJourneyPhase('idle_out');
+    }
+    } catch (fatal) {
+      console.warn('[TabBar] refreshWorkTimeTab (fatal):', fatal);
+      setShowWorkTimeTab(false);
+      setWorkTimeJourneyPhase('idle_out');
+    }
+  }, [user?.id, user?.role, user?.tenantId, mode]);
+
+  useEffect(() => {
+    void refreshWorkTimeTab().catch((e) => console.warn('[TabBar] refreshWorkTimeTab (pathname):', e));
+  }, [refreshWorkTimeTab, pathname]);
+
+  /** Fila de ponto / batidas mudam fora desta barra (sync, outbox) — atualiza aura de imediato. */
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(WORK_TIME_JOURNEY_CHANGED, () => {
+      void refreshWorkTimeTab().catch((e) => console.warn('[TabBar] refreshWorkTimeTab (journey):', e));
+    });
+    return () => sub.remove();
+  }, [refreshWorkTimeTab]);
+
+  /** Enquanto o módulo de ponto está visível: envia fila + reavalia jornada (qualquer separador). */
+  useEffect(() => {
+    if (!showWorkTimeTab || mode !== 'PROVIDER') return;
+    const t = setInterval(
+      () => void refreshWorkTimeTab().catch((e) => console.warn('[TabBar] refreshWorkTimeTab (intervalo):', e)),
+      6_000
+    );
+    return () => clearInterval(t);
+  }, [showWorkTimeTab, mode, refreshWorkTimeTab]);
+
+  /** Ao recuperar rede, tenta enviar batidas pendentes e atualizar aura. */
+  useEffect(() => {
+    if (mode !== 'PROVIDER') return;
+    const sub = Network.addNetworkStateListener((s) => {
+      if (s?.isConnected !== true) return;
+      void (async () => {
+        try {
+          await pushWorkTimePunchOutbox();
+          emitWorkTimeJourneyChanged();
+        } catch (e) {
+          console.warn('[TabBar] Envio da fila de ponto após rede:', e);
+        }
+      })();
+    });
+    return () => sub.remove();
+  }, [mode]);
+
+  useEffect(() => {
+    const onState = (s: AppStateStatus) => {
+      if (s !== 'active') return;
+      if (!user?.id || String(user.role || '').toUpperCase() === 'USER') return;
+      const now = Date.now();
+      if (now - lastWorkTimeTabFetchRef.current < 45_000) return;
+      lastWorkTimeTabFetchRef.current = now;
+      void refreshWorkTimeTab().catch((e) => console.warn('[TabBar] refreshWorkTimeTab (appState):', e));
+    };
+    const sub = AppState.addEventListener('change', onState);
+    return () => sub.remove();
+  }, [user?.id, user?.role, refreshWorkTimeTab]);
 
   const currentName = state.routes[state.index]?.name as string | undefined;
   const hideTabBarLandscapeAgenda = width > height && currentName === 'agenda';
@@ -39,7 +241,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
       style={[
         navStyles.bar,
         {
-          paddingBottom: Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, TAB_BAR_INSETS_BOTTOM_MIN),
           backgroundColor: C.cardWhite,
           borderTopColor: C.border,
         },
@@ -70,7 +272,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                 options.tabBarIcon({
                   focused: isFocused,
                   color: tint,
-                  size: 24,
+                  size: TAB_BAR_ICON_SIZE,
                 })}
               <Text style={[navStyles.tabLabel, { color: tint }]} numberOfLines={1}>
                 {label}
@@ -78,6 +280,78 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             </TouchableOpacity>
           );
         })}
+        {userRole === 'TECHNICIAN' && (
+          <TouchableOpacity
+            onPress={() => router.push('/provider-os-search' as any)}
+            style={navStyles.tabBtn}
+            activeOpacity={0.65}
+            accessibilityRole="button"
+            accessibilityLabel={t('tabs.providerOsSearch')}
+          >
+            <Ionicons name="search" size={TAB_BAR_ICON_SIZE} color={inactiveTint} />
+            <Text style={[navStyles.tabLabel, { color: inactiveTint }]} numberOfLines={1}>
+              {t('tabs.providerOsSearch')}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {showWorkTimeTab && mode === 'PROVIDER' && (() => {
+          const onWorkTimeRoute = pathname === '/work-time';
+          const highlightJourney = workTimeJourneyPhase === 'in_work' || workTimeJourneyPhase === 'on_break';
+
+          let iconColor: string;
+          let iconName: 'time' | 'time-outline';
+          if (workTimeJourneyPhase === 'on_break') {
+            iconColor = WORK_TIME_TAB_YELLOW;
+            iconName = 'time';
+          } else if (workTimeJourneyPhase === 'in_work') {
+            iconColor = WORK_TIME_TAB_RED;
+            iconName = 'time';
+          } else {
+            iconName = onWorkTimeRoute ? 'time' : 'time-outline';
+            iconColor = onWorkTimeRoute ? activeTint : inactiveTint;
+          }
+          const labelColor = onWorkTimeRoute ? activeTint : inactiveTint;
+          const aura = highlightJourney
+            ? workTimeJourneyAuraStyle(workTimeJourneyPhase as 'in_work' | 'on_break')
+            : null;
+
+          return (
+            <TouchableOpacity
+              onPress={() => router.push('/work-time' as any)}
+              style={navStyles.tabBtn}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityLabel={t('tabs.workTime')}
+            >
+              {highlightJourney && aura ? (
+                <View
+                  style={[
+                    navStyles.workTimeAuraWrap,
+                    {
+                      backgroundColor: aura.ring,
+                      borderColor: `${aura.glow}66`,
+                      borderWidth: aura.borderW,
+                      shadowColor: aura.glow,
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: aura.shadowOpacity,
+                      shadowRadius: aura.shadowRadius,
+                      elevation: aura.elevation,
+                    },
+                  ]}
+                >
+                  <Ionicons name={iconName} size={TAB_BAR_ICON_SIZE} color={iconColor} />
+                </View>
+              ) : (
+                <>
+                  <Ionicons name={iconName} size={TAB_BAR_ICON_SIZE} color={iconColor} />
+                  <Text style={[navStyles.tabLabel, { color: labelColor }]} numberOfLines={1}>
+                    {t('tabs.workTime')}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          );
+        })()}
         <View style={navStyles.moreSlot}>
           <FloatingRadialMenu tabBarSlot />
         </View>
@@ -100,20 +374,29 @@ function createNavStyles() {
       flexDirection: 'row',
       alignItems: 'flex-end',
       justifyContent: 'space-between',
-      paddingTop: 6,
-      minHeight: 52,
+      paddingTop: TAB_BAR_ROW_PADDING_TOP,
+      minHeight: TAB_BAR_ROW_MIN_HEIGHT,
     },
     tabBtn: {
       flex: 1,
       minWidth: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 4,
+      paddingVertical: 2,
+    },
+    /** Anel luminoso atrás do ícone de ponto (jornada / rota ativa). */
+    workTimeAuraWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 1,
     },
     tabLabel: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '600',
-      marginTop: 4,
+      marginTop: 2,
       textAlign: 'center',
     },
     moreSlot: {
@@ -157,8 +440,10 @@ export default function TabLayout() {
         prevRoomCounts.current = updated;
       } catch (e) {}
     };
-    fetchChatUnread();
-    const interval = setInterval(fetchChatUnread, 5000);
+    void fetchChatUnread().catch(() => {});
+    const interval = setInterval(() => {
+      void fetchChatUnread().catch(() => {});
+    }, 5000);
 
     return () => {
       clearInterval(interval);
@@ -189,7 +474,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={TAB_BAR_ICON_SIZE} color={color} />
           ),
         }}
       />
@@ -199,7 +484,7 @@ export default function TabLayout() {
         options={{
           title: 'Agenda',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={TAB_BAR_ICON_SIZE} color={color} />
           ),
         }}
       />
@@ -210,7 +495,7 @@ export default function TabLayout() {
           title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
             <View style={{ position: 'relative' }}>
-              <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={TAB_BAR_ICON_SIZE} color={color} />
               {unreadChat > 0 && (
                 <View
                   style={{

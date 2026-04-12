@@ -3,23 +3,32 @@ import { AuthService } from './auth';
 import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
+import { overlayExecutionStatusOutboxOnTasks } from './syncService';
+import { NotificationService } from './notifications';
+import i18n from '../i18n';
+import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
+import { loadFtCloudTasks } from '../lib/cloudTasksBuckets';
 
 /** Quem consome a agenda unificada: compromissos do cliente vs OS de execução do prestador. */
 export type AgendaScope = 'CLIENT' | 'PROVIDER' | 'ALL';
 
+/** Tarefas de rotina (RT): delegação para `taskRowIsRoutineTask`. */
+function agendaRowIsRoutineTask(ev: any): boolean {
+  return taskRowIsRoutineTask(ev);
+}
+
 /**
  * Itens da agenda ligados à execução de OS (checklist / nuvem), não a reservas/manuais/financeiro do cliente.
+ * Exclui RT aqui — no modo prestador as RT entram via `agendaRowIsRoutineTask` no filtro de scope.
  */
 export function isProviderScopeAgendaEvent(ev: AgendaEvent): boolean {
+  if (agendaRowIsRoutineTask(ev)) return false;
   if (ev.source === 'CHECKLIST') return true;
   const src = ev.source as string | undefined;
   if (src === 'MANUAL' || src === 'COST' || src === 'INSURANCE') return false;
   if (ev.category === 'TASK' && ev.refId) return true;
   return false;
 }
-import { overlayExecutionStatusOutboxOnTasks } from './syncService';
-import { NotificationService } from './notifications';
-import i18n from '../i18n';
 
 const AGENDA_OVERLAP_SIG_KEY = '@brspark_agenda_overlap_sig';
 
@@ -116,12 +125,14 @@ export const AgendaService = {
     
     // 1.5. Pull Tasks (Vistorias) Despachadas via Sync Background
     try {
-      const cloudStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-      let cloudData: any[] = [];
-      try { cloudData = JSON.parse(cloudStr); } catch(e){}
-      
+      const cloudData = await loadFtCloudTasks();
       if (Array.isArray(cloudData) && cloudData.length > 0) {
-         const mergedCloud = await overlayExecutionStatusOutboxOnTasks(cloudData);
+         const mergedCloudRaw = await overlayExecutionStatusOutboxOnTasks(cloudData);
+         const mergedCloud = mergedCloudRaw.filter((t: any) => {
+           const st = String(t.status || '').toUpperCase();
+           if (st === 'CANCELLED' || st === 'CANCELED') return false;
+           return true;
+         });
          const cloudIds = new Set(mergedCloud.map(t => t.id));
          localEvents = localEvents.filter(e => !cloudIds.has(e.id));
          localEvents = [...localEvents, ...mergedCloud];
@@ -176,7 +187,7 @@ export const AgendaService = {
 
     let mergedAll = [...localEvents, ...financeEvents, ...insuranceEvents];
     if (scope === 'CLIENT') {
-      mergedAll = mergedAll.filter((e) => !isProviderScopeAgendaEvent(e));
+      mergedAll = mergedAll.filter((e) => !isProviderScopeAgendaEvent(e) && !agendaRowIsRoutineTask(e));
     } else if (scope === 'PROVIDER') {
       mergedAll = mergedAll.filter((e) => isProviderScopeAgendaEvent(e));
     }

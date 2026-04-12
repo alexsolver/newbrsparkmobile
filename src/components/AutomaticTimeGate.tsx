@@ -38,12 +38,12 @@ export function AutomaticTimeGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void runCheck(false);
+    void runCheck(false).catch(() => {});
   }, [runCheck]);
 
   useEffect(() => {
     const onChange = (s: AppStateStatus) => {
-      if (s === 'active') void runCheck(true);
+      if (s === 'active') void runCheck(true).catch(() => {});
     };
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
@@ -72,7 +72,7 @@ export function AutomaticTimeGate({ children }: { children: React.ReactNode }) {
           <Ionicons name="settings-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.primaryBtnText}>{t('deviceTime.openSettings')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => void runCheck()} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.secondaryBtn} onPress={() => void runCheck().catch(() => {})} activeOpacity={0.85}>
           <Text style={styles.secondaryBtnText}>{t('deviceTime.verifyAgain')}</Text>
         </TouchableOpacity>
       </View>

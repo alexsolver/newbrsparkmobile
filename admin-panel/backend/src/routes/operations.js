@@ -10,6 +10,7 @@ const {
   stripRevisionSessionEvidenceInPlace,
 } = require('../lib/revisionSessionFields');
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
+const { resolveFieldTaskAssigneeEmail } = require('../lib/technicianEligibility');
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
   Math.max(120, Number(process.env.TRACKING_GPS_STALE_SEC) || 600)
@@ -49,15 +50,43 @@ function stripResponsesForRevision(raw, templateSchemaData) {
 router.get('/tasks', async (req, res) => {
   try {
     const { email, status, id, limit = 200 } = req.query;
-    const includeSchemaRaw = Boolean(id);
+    const idNorm = id != null && String(id).trim() !== '' ? String(id).trim() : '';
+    const includeSchemaRaw = Boolean(idNorm);
 
-    /** ID técnico (cuid) ou número de OS visível (ex.: FT-2026-04-0000061). */
+    const scopeRaw = req.query.scope != null ? String(req.query.scope).trim().toLowerCase() : '';
+    /** `os` só FT/OS · `rt` só tarefas de rotina · `all` ambas (quadro unificado). */
+    const scope = ['os', 'rt', 'all'].includes(scopeRaw) ? scopeRaw : 'os';
+
+    /** ID de execução (cuid), número FT ou número RT (ex.: RT-2026-04-000001). */
     const clauses = [];
     if (email) clauses.push({ ownerEmail: email });
     if (status) clauses.push({ status: status.toUpperCase() });
-    if (id) clauses.push({ OR: [{ id: String(id) }, { osNumber: String(id) }] });
-    const where =
+    if (idNorm) {
+      clauses.push({
+        OR: [{ id: idNorm }, { osNumber: idNorm }, { routineTaskNumber: idNorm }],
+      });
+    }
+    const innerWhere =
       clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { AND: clauses };
+
+    const routineClause =
+      scope === 'rt'
+        ? { routineTaskNumber: { not: null } }
+        : scope === 'os'
+          ? { routineTaskNumber: null }
+          : null;
+
+    /** Com `id` explícito: ignora `scope` (carrega a execução pedida). Sem `id`: aplica filtro OS/RT/todas. */
+    let where;
+    if (idNorm) {
+      where = innerWhere;
+    } else if (!routineClause) {
+      where = Object.keys(innerWhere).length === 0 ? {} : innerWhere;
+    } else if (Object.keys(innerWhere).length === 0) {
+      where = routineClause;
+    } else {
+      where = { AND: [innerWhere, routineClause] };
+    }
 
     const executions = await prisma.checklistExecution.findMany({
       where,
@@ -348,7 +377,7 @@ router.post('/tasks/:id/reject', async (req, res) => {
 });
 
 // ─── POST /api/operations/tasks/:id/reopen-for-revision ───────
-// Admin: reabre FT concluída para o técnico (nova revisão; mesma FT). App técnico não tem este endpoint.
+// Admin: reabre FT concluída para o destinatário (nova revisão; mesma FT). O app móvel não tem este endpoint.
 router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, res) => {
   try {
     const { id } = req.params;
@@ -357,6 +386,10 @@ router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, re
       include: { template: { select: { schemaData: true, tenantId: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'OS não encontrada.' });
+
+    if (existing.routineTaskNumber != null && String(existing.routineTaskNumber).trim() !== '') {
+      return res.status(400).json({ error: 'Tarefas de rotina (RT) não podem ser reabertas para revisão.' });
+    }
 
     const st = String(existing.status || '').toUpperCase();
     if (!['COMPLETED', 'SYNCED'].includes(st)) {
@@ -370,22 +403,18 @@ router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, re
       req.body && typeof req.body.targetOwnerEmail === 'string' ? req.body.targetOwnerEmail.trim() : '';
     if (rawTarget && rawTarget.toLowerCase() !== previousOwner.toLowerCase()) {
       const templateTenantId = existing.template?.tenantId || null;
-      const assignee = await prisma.user.findFirst({
-        where: {
-          isActive: true,
-          email: { equals: rawTarget, mode: 'insensitive' },
-          ...(templateTenantId ? { tenantId: templateTenantId } : {}),
-          technicianProfile: { status: 'ACTIVE' },
-        },
-        select: { id: true, email: true },
-      });
-      if (!assignee) {
+      const resolved = await resolveFieldTaskAssigneeEmail(
+        prisma,
+        rawTarget,
+        templateTenantId || undefined
+      );
+      if (!resolved) {
         return res.status(400).json({
           error:
-            'O e-mail indicado não corresponde a um prestador habilitado (ativo). Use o e-mail de login do app.',
+            'O e-mail indicado não corresponde a um utilizador ativo elegível (contas cliente não recebem OS). Use o e-mail de login do app.',
         });
       }
-      resolvedOwner = assignee.email;
+      resolvedOwner = resolved;
     }
 
     let mergedMeta =

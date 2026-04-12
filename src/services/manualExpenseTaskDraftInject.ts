@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { findCloudTaskById } from '../lib/cloudTasksBuckets';
 import { fetchChecklistTemplateSchema } from './checklistTemplateSchema';
 import type { TechnicianFinanceKind } from '../types/technicianFinance';
 
@@ -83,10 +84,8 @@ function mergeFinanceJson(
 
 async function cloudTaskRefId(taskId: string): Promise<string | null> {
   try {
-    const raw = await AsyncStorage.getItem('@brspark_cloud_tasks');
-    const arr = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(arr)) return null;
-    const t = arr.find((x: any) => String(x?.id) === String(taskId));
+    const t = await findCloudTaskById(String(taskId));
+    if (!t) return null;
     const ref = t?.refId != null ? String(t.refId).trim() : '';
     return ref && ref !== 'null' ? ref : null;
   } catch {

@@ -40,6 +40,10 @@ const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
+const {
+  publicRouter: workTimePublicRouter,
+  adminRouter: workTimeAdminRouter,
+} = require('./routes/workTime');
 const telemetryRoutes        = require('./routes/telemetry');
 const metricsRoutes          = require('./routes/metrics');
 const reportsRoutes          = require('./routes/reports');
@@ -49,6 +53,7 @@ const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
 } = require('./routes/technicianRegistration');
+const routineTasksAdminRoutes = require('./routes/routineTasksAdmin');
 const {
   fetchProvidersFromCms,
   fetchCategoriesFromCms,
@@ -111,8 +116,10 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+app.use('/api/routine-tasks', require('./routes/routineTasks')); // app: tarefas de rotina (RT)
 app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formulário sem login
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
+app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punches (JWT utilizador)
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
@@ -575,6 +582,8 @@ app.use('/api/compliance',         adminAuthThenPanel, complianceRoutes);
 app.use('/api/notifications',      adminAuthThenPanel, notificationRoutes);
 app.use('/api/cockpit',            adminAuthThenPanel, cockpitRoutes);
 app.use('/api/collection-policy',  adminAuthThenPanel, collectionPolicyRoutes);
+app.use('/api/work-time', adminAuthThenPanel, workTimeAdminRouter); // painel: GET/PATCH /settings
+app.use('/api/admin/routine-tasks', adminAuthThenPanel, routineTasksAdminRoutes);
 app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceita lotes do app
 app.use('/api/metrics',            adminAuthThenPanel, metricsRoutes);
 app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY

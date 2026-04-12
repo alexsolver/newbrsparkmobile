@@ -262,6 +262,19 @@ function resolveFaceUploadMime(file) {
 let cachedLocations = [];
 let faceEnrollmentList = [];
 let faceUserId = '';
+/** Alinhado a admin-panel/backend/src/lib/faceEnrollmentPrimary.js */
+const REGISTRATION_PRIMARY_FACE_ID = 'fe_reg_primary';
+
+function isPrimaryRegistrationFace(p) {
+  return !!(p && typeof p === 'object' && (p.registrationPrimary === true || p.id === REGISTRATION_PRIMARY_FACE_ID));
+}
+
+function sortFaceEnrollmentForDisplay(list) {
+  if (!Array.isArray(list)) return [];
+  const prim = list.filter(isPrimaryRegistrationFace);
+  const rest = list.filter((p) => p && !isPrimaryRegistrationFace(p));
+  return [...prim, ...rest];
+}
 /** Já existe TechnicianProfile (mostrar bloco técnico mesmo com papel ainda não migrado a PROVIDER) */
 let hasTechnicianProfile = false;
 
@@ -386,18 +399,24 @@ function syncTechPanelVisibility() {
 function renderFaceGallery() {
   const el = document.getElementById('face-gallery');
   if (!el) return;
-  if (!faceEnrollmentList.length) {
+  const ordered = sortFaceEnrollmentForDisplay(faceEnrollmentList);
+  if (!ordered.length) {
     el.innerHTML =
       '<div style="grid-column:1/-1;font-size:12px;color:var(--text3);padding:8px 0">Nenhuma foto base. Use «Adicionar fotos».</div>';
     return;
   }
-  el.innerHTML = faceEnrollmentList
-    .map(
-      (p) => `<div class="face-card" data-photo-id="${esc(p.id)}">
+  el.innerHTML = ordered
+    .map((p) => {
+      const primary = isPrimaryRegistrationFace(p);
+      const rm = primary
+        ? '<span class="face-card-protected" title="Foto do passo 1 do cadastro do prestador — não pode ser removida aqui.">Protegida</span>'
+        : `<button type="button" class="btn btn-sm btn-danger face-rm" data-photo-id="${esc(p.id)}">Remover</button>`;
+      return `<div class="face-card${primary ? ' face-card--primary' : ''}" data-photo-id="${esc(p.id)}">
+      ${primary ? '<div class="face-card-ribbon">Referência (passo 1)</div>' : ''}
       <img src="${esc(publicUploadUrl(p.url))}" alt="" loading="lazy" decoding="async" />
-      <button type="button" class="btn btn-sm btn-danger face-rm" data-photo-id="${esc(p.id)}">Remover</button>
-    </div>`
-    )
+      ${rm}
+    </div>`;
+    })
     .join('');
   el.querySelectorAll('.face-rm').forEach((btn) => {
     btn.onclick = () => removeFacePhoto(btn.getAttribute('data-photo-id'));
@@ -406,6 +425,13 @@ function renderFaceGallery() {
 
 async function removeFacePhoto(photoId) {
   if (!photoId || !faceUserId) return;
+  const row = faceEnrollmentList.find((x) => x && x.id === photoId);
+  if (row && isPrimaryRegistrationFace(row)) {
+    alert(
+      'Esta é a foto de referência do passo 1 do cadastro do prestador. Ela não pode ser removida aqui — só muda se o cadastro for refeito e aprovado de novo ou se o usuário for excluído.'
+    );
+    return;
+  }
   if (!confirm('Remover esta foto base?')) return;
   const res = await CONFIG.del(
     `/users/${encodeURIComponent(faceUserId)}/face-enrollment/${encodeURIComponent(photoId)}`
@@ -414,7 +440,9 @@ async function removeFacePhoto(photoId) {
     alert(res.error);
     return;
   }
-  faceEnrollmentList = Array.isArray(res.photos) ? res.photos : faceEnrollmentList.filter((x) => x.id !== photoId);
+  faceEnrollmentList = Array.isArray(res.photos)
+    ? sortFaceEnrollmentForDisplay(res.photos)
+    : sortFaceEnrollmentForDisplay(faceEnrollmentList.filter((x) => x.id !== photoId));
   renderFaceGallery();
   if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
   if (res.comprefaceSync) applyCompreFaceSyncFromServer(res.comprefaceSync);
@@ -445,16 +473,70 @@ export async function bootUserEditPage() {
 
   document.getElementById('f-name').value = u.name || '';
   document.getElementById('f-email').value = u.email || '';
+  const fMat = document.getElementById('f-employee-matricula');
+  if (fMat) fMat.value = u.employeeMatricula != null ? String(u.employeeMatricula) : '';
   document.getElementById('f-phone').value = u.phone || '';
   document.getElementById('f-role').value = normalizeRoleForForm(u.role);
   document.getElementById('f-avatar').value = u.avatarUrl || '';
   document.getElementById('f-active').checked = !!u.isActive;
 
+  const fWt = document.getElementById('f-work-time');
+  if (fWt) fWt.checked = !!u.workTimeTrackingEnabled;
+
+  const wtHint = document.getElementById('wt-user-hint');
+  const wtFace = document.getElementById('wt-face-status');
+  const paintWorkTimeHints = (userRow, wtSet) => {
+    if (!wtHint) return;
+    if (!wtSet || wtSet.error) {
+      wtHint.textContent = 'Não foi possível carregar a política de ponto do tenant.';
+      return;
+    }
+    const parts = [];
+    if (!wtSet.moduleEnabled) parts.push('O módulo de ponto está desligado nas configurações do tenant.');
+    const photos = Array.isArray(userRow.faceEnrollmentPhotos) ? userRow.faceEnrollmentPhotos : [];
+    const cfOk = userRow.comprefaceRecognitionSync && String(userRow.comprefaceRecognitionSync.status) === 'synced';
+    if (wtSet.requireFaceOnEveryPunch && (photos.length === 0 || !cfOk)) {
+      parts.push(
+        'Matrícula facial incompleta ou CompreFace não sincronizado — as batidas são aceites, mas ficam marcadas como matrícula não validada até corrigir.',
+      );
+    }
+    if (String(userRow.technicianProfile?.status || '').toUpperCase() === 'ACTIVE') {
+      parts.push(
+        'Com perfil de prestador ACTIVE, o colaborador não altera foto de perfil nem fotos de matrícula pelo app; use esta página para ajustes.',
+      );
+    }
+    wtHint.innerHTML =
+      parts.length > 0
+        ? `<strong>Atenção:</strong> ${parts.join(' ')}`
+        : '<strong>Política:</strong> requisitos do tenant alinhados com a matrícula atual (verifique sempre antes de exigir ponto).';
+    if (wtFace) {
+      wtFace.innerHTML = `<span style="color:var(--text)">Matrícula facial:</span> ${
+        photos.length ? `${photos.length} foto(s) base` : 'sem fotos base'
+      } · CompreFace: ${cfOk ? '<span style="color:var(--green,#059669)">sincronizado</span>' : '<span style="color:var(--amber,#d97706)">pendente ou erro</span>'}`;
+    }
+  };
+
+  const wtSet = await CONFIG.get('/work-time/settings?tenantId=' + encodeURIComponent(u.tenantId)).catch(() => null);
+  paintWorkTimeHints(u, wtSet);
+
   faceUserId = id;
-  faceEnrollmentList = parseJsonSafe(u.faceEnrollmentPhotos, []);
+  faceEnrollmentList = sortFaceEnrollmentForDisplay(parseJsonSafe(u.faceEnrollmentPhotos, []));
   if (!Array.isArray(faceEnrollmentList)) faceEnrollmentList = [];
   renderFaceGallery();
   paintComprefaceAdminPanel(u.comprefaceRecognitionSync);
+
+  const faceIdentityHint = document.getElementById('face-identity-admin-hint');
+  if (faceIdentityHint) {
+    const tpActive = String(u.technicianProfile?.status || '').toUpperCase() === 'ACTIVE';
+    if (tpActive) {
+      faceIdentityHint.style.display = 'block';
+      faceIdentityHint.textContent =
+        'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app — só por esta ficha no painel. O botão «Sincronizar novamente» segue disponível para corrigir falhas com o CompreFace.';
+    } else {
+      faceIdentityHint.style.display = 'none';
+      faceIdentityHint.textContent = '';
+    }
+  }
 
   const btnFacePick = document.getElementById('btn-face-pick');
   const faceFileInput = document.getElementById('face-file-input');
@@ -490,7 +572,7 @@ export async function bootUserEditPage() {
             alert(res.error);
             break;
           }
-          if (Array.isArray(res.photos)) faceEnrollmentList = res.photos;
+          if (Array.isArray(res.photos)) faceEnrollmentList = sortFaceEnrollmentForDisplay(res.photos);
           renderFaceGallery();
           if (res.comprefaceRecognitionSync) paintComprefaceAdminPanel(res.comprefaceRecognitionSync);
           scheduleCompreFaceAutoSync();
@@ -594,10 +676,12 @@ export async function bootUserEditPage() {
     const body = {
       name: document.getElementById('f-name').value.trim(),
       email: document.getElementById('f-email').value.trim(),
+      employeeMatricula: (document.getElementById('f-employee-matricula')?.value || '').trim() || null,
       phone: document.getElementById('f-phone').value.trim() || null,
       role: selRole,
       avatarUrl: document.getElementById('f-avatar').value.trim() || null,
       isActive: document.getElementById('f-active').checked,
+      workTimeTrackingEnabled: !!document.getElementById('f-work-time')?.checked,
       addressJson: {
         line1: document.getElementById('a-line1').value.trim() || null,
         line2: document.getElementById('a-line2').value.trim() || null,
@@ -622,7 +706,6 @@ export async function bootUserEditPage() {
           }
         : undefined,
     };
-
     if (!body.name || !body.email) {
       alert('Nome e e-mail são obrigatórios.');
       return;

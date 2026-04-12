@@ -208,7 +208,7 @@ const ROUTES = [
   })],
 
   // ── Operations (Kanban — sem adminAuth no router; uma rota usa adminAuth)
-  ['get', '/api/operations/tasks', op('Lista execuções/OS (filtros: email, status, id, limit)', ['Operações & OS'], false)],
+  ['get', '/api/operations/tasks', op('Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os)', ['Operações & OS'], false)],
   ['get', '/api/operations/tasks/{id}/revisions/export', op('Exportar revisões', ['Operações & OS'], false, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],

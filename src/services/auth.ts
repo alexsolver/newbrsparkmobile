@@ -88,6 +88,8 @@ export interface User {
   name: string;
   email: string;
   tenantId: string;
+  /** Matrícula funcional (RH / ponto), única por organização quando definida no painel. */
+  employeeMatricula?: string | null;
   role: string;
   /** Idioma preferido para ver traduções no chat (BCP-47); null = automático (tenant / app). */
   preferredChatLocale?: string | null;
@@ -106,11 +108,24 @@ export interface User {
     cft?: string;
     specialty?: string;
   };
+  /** Documentos pessoais (painel) — ex.: identificador para exibição em ponto. */
+  personalDocuments?: Array<{ identifier?: string; docType?: string; label?: string }>;
 }
 
 /** Prestador habilitado a receber OS (backend exige `TechnicianProfile.status === ACTIVE`). */
 export function isTechnicianProfileActive(user: User | null | undefined): boolean {
   return String(user?.technicianProfile?.status || '').toUpperCase() === 'ACTIVE';
+}
+
+/** Papel na API — pode receber OS/FT e RT no servidor (todos exceto cliente `USER`). */
+export function isFieldTaskEligibleRole(role: string | null | undefined): boolean {
+  const r = String(role || '').toUpperCase();
+  return r === 'PROVIDER' || r === 'MANAGER' || r === 'TENANT_ADMIN' || r === 'SAAS_ADMIN';
+}
+
+/** Modo «campo / prestador» no app: perfil técnico ativo ou conta interna não-cliente. */
+export function canUseFieldWorkAppRole(user: User | null | undefined): boolean {
+  return isTechnicianProfileActive(user) || isFieldTaskEligibleRole(user?.role);
 }
 
 /** Erro especial lançado quando o backend exige 2FA */

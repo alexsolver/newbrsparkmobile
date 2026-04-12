@@ -63,13 +63,15 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
         return;
       }
       // Logged-in user trying to access auth — check if onboarding is needed first
-      AsyncStorage.getItem('@brspark_onboarding_done').then(done => {
-        if (!done) {
-          router.replace('/auth/onboarding' as any);
-        } else {
-          router.replace('/(tabs)' as any);
-        }
-      });
+      AsyncStorage.getItem('@brspark_onboarding_done')
+        .then((done) => {
+          if (!done) {
+            router.replace('/auth/onboarding' as any);
+          } else {
+            router.replace('/(tabs)' as any);
+          }
+        })
+        .catch(() => {});
     }
   }, [user, loading, segments, pendingTechRegInvite]);
 
@@ -127,7 +129,7 @@ function AppInitializer() {
       }
     };
     
-    init();
+    void init().catch((err) => console.error('[BOOT] init():', err));
 
     // Sync every 5 minutes
     const intervalId = setInterval(() => { 
@@ -179,6 +181,8 @@ function MainLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="provider-os-search" />
+        <Stack.Screen name="work-time" />
         <Stack.Screen name="provider-services/[tenantId]" />
         <Stack.Screen name="+not-found" options={{ headerShown: true }} />
       </Stack>

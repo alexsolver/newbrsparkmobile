@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loadFtCloudTasks, loadAllCloudTasksForExecutionLookup } from '../lib/cloudTasksBuckets';
 import { getTaskIdsWithPendingExecutionStatusOutbox } from '../services/syncService';
 import { fetchChecklistTemplateSchema, schemaArrayHasTechnicianFinance } from '../services/checklistTemplateSchema';
 import { taskOsLabel } from './taskOsLabel';
@@ -9,7 +10,7 @@ export type LinkableExpenseTask = {
   displayLine: string;
 };
 
-// ── Mesma lógica que `effectiveProviderTaskStatus` no dashboard (pendentes / em andamento) ──
+// ── Mesma lógica que `effectiveProviderTaskStatus` no dashboard (Pendentes vs Iniciadas) ──
 
 function taskMetadataRecord(t: any): Record<string, unknown> {
   const m = t?.metadata;
@@ -66,7 +67,7 @@ export function effectiveProviderTaskStatus(
   const meta = taskMetadataRecord(t);
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
-    if (inprogressIds.has(String(t.id)) || acceptedIds.has(String(t.id))) return 'IN_PROGRESS';
+    if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
     return 'PENDING';
   }
   if (completedIds.has(String(t.id))) return 'COMPLETED';
@@ -77,9 +78,8 @@ export function effectiveProviderTaskStatus(
   if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
   if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
   if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
-  if (acceptedIds.has(String(t.id)) && (raw === 'PENDING' || raw === 'RECEIVED')) return 'IN_PROGRESS';
   if (raw === 'RECEIVED') return 'PENDING';
-  if (raw === 'ACCEPTED') return 'IN_PROGRESS';
+  if (raw === 'ACCEPTED') return 'PENDING';
   return raw === 'PENDING' || raw === '' ? 'PENDING' : raw;
 }
 
@@ -200,10 +200,9 @@ export async function buildProviderTaskStatusSets(): Promise<{
  * (conforme estado efectivo e datas no payload sincronizado).
  */
 export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableExpenseTask[]> {
-  const cloudRaw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
   let tasks: any[] = [];
   try {
-    tasks = JSON.parse(cloudRaw);
+    tasks = await loadFtCloudTasks();
   } catch {
     tasks = [];
   }
@@ -226,6 +225,9 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
   const candidates: any[] = [];
   for (const t of tasks) {
     if (t?.id == null) continue;
+    if (t?.routineTaskNumber || (t?.metadata && typeof t.metadata === 'object' && t.metadata.routineTask)) {
+      continue;
+    }
     const id = String(t.id);
     if (rejectedSet.has(id)) continue;
     const refId = t.refId != null ? String(t.refId).trim() : '';
@@ -269,7 +271,7 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
   return out;
 }
 
-/** Cada id existe em `@brspark_cloud_tasks` e obedece às regras de elegibilidade (aberta ou ≤30 dias concluída + campo despesa). */
+/** Cada id existe no cache FT local e obedece às regras de elegibilidade (aberta ou ≤30 dias concluída + campo despesa). */
 export async function areTaskIdsEligibleForExpenseLink(taskIds: string[]): Promise<boolean> {
   const want = new Set(taskIds.map((x) => String(x).trim()).filter(Boolean));
   if (want.size === 0) return true;
@@ -286,10 +288,9 @@ export async function linkedTasksAllowFullEditAfterReview(taskIds: string[]): Pr
   const ids = [...new Set(taskIds.map((x) => String(x).trim()).filter(Boolean))];
   if (ids.length === 0) return true;
 
-  const cloudRaw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
   let tasks: any[] = [];
   try {
-    tasks = JSON.parse(cloudRaw);
+    tasks = await loadAllCloudTasksForExecutionLookup();
   } catch {
     tasks = [];
   }

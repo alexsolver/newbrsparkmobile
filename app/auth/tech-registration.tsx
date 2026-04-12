@@ -6,7 +6,7 @@
  * Ordem de validação IA: `/api/me/validate-technician-profile-photo` → `/api/technician-registration/public/:token/validate-profile-photo` → `/api/ai-technician-profile-photo/validate` (404 em cada passo tenta o próximo).
  * Isto é independente da biometria operacional dos checklists.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { API_BASE, getToken, apiFetch } from '../../src/services/auth';
+import { API_BASE, getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 
 /** Mínimo de fotos para o reconhecimento facial do tenant — secção à parte do passo 1 (IA). */
@@ -132,6 +132,13 @@ function userFacingFaceEnrollmentError(
         'A verificação demorou demais. Tente de novo com melhor rede ou uma imagem um pouco menor.',
     };
   }
+  if (c === 'TECH_IDENTITY_LOCKED') {
+    return {
+      title: 'Cadastro fechado',
+      message:
+        'A sua conta de prestador já está ativa. A foto de perfil e as fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.',
+    };
+  }
   if (
     c === 'SERVER_ERROR' ||
     c === 'BIOMETRY_SERVICE_ERROR' ||
@@ -173,6 +180,13 @@ function userFacingIdDocumentError(
   rawMessage: string | undefined
 ): { title: string; message: string } {
   const c = String(code || '');
+  if (c === 'TECH_IDENTITY_LOCKED') {
+    return {
+      title: 'Cadastro fechado',
+      message:
+        'A sua conta de prestador já está ativa. O documento de identidade e os dados biométricos do cadastro só podem ser alterados pela empresa no painel administrativo.',
+    };
+  }
   if (c === 'ID_DOC_IMAGE_REQUIRED') {
     return {
       title: 'Envie uma foto',
@@ -473,6 +487,19 @@ export default function TechRegistrationScreen() {
   const [password, setPassword] = useState('');
 
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const identityLockNavRef = useRef(false);
+
+  /** Prestador já ACTIVE não deve usar o fluxo de candidatura para mudar foto ou biometria. */
+  useEffect(() => {
+    if (!token || !user || !isTechnicianProfileActive(user)) return;
+    if (identityLockNavRef.current) return;
+    identityLockNavRef.current = true;
+    Alert.alert(
+      'Prestador ativo',
+      'A sua conta já está habilitada. Não é possível alterar o cadastro de prestador por este formulário. A foto de perfil e a matrícula facial são geridas pela empresa no painel administrativo.',
+      [{ text: 'OK', onPress: () => router.back() }]
+    );
+  }, [token, user, router]);
 
   const basePath = useMemo(
     () => `${API_BASE}/api/technician-registration/public/${encodeURIComponent(token)}`,
@@ -895,6 +922,7 @@ export default function TechRegistrationScreen() {
 
   const saveDraftSoon = useCallback(() => {
     if (!token || !sessionOk || status === 'SUBMITTED' || closed) return;
+    if (user && isTechnicianProfileActive(user)) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(async () => {
       try {
@@ -912,7 +940,7 @@ export default function TechRegistrationScreen() {
         /* ignore */
       }
     }, 900);
-  }, [basePath, token, sessionOk, status, closed, buildResponsesJson]);
+  }, [basePath, token, sessionOk, status, closed, buildResponsesJson, user]);
 
   /** Passo 1 — grava só a foto de perfil (não entra em faceEnrollmentPhotos). */
   const postProfilePhoto = async (
@@ -924,6 +952,13 @@ export default function TechRegistrationScreen() {
     if (!jwt) {
       Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
       return { ok: false, error: 'no_jwt' };
+    }
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert(
+        'Prestador ativo',
+        'A foto de perfil só pode ser alterada pela empresa no painel administrativo.'
+      );
+      return { ok: false, error: 'identity_locked' };
     }
     const res = await fetch(`${basePath}/profile-photo`, {
       method: 'POST',
@@ -943,7 +978,12 @@ export default function TechRegistrationScreen() {
     });
     const data = await res.json();
     if (!res.ok) {
-      Alert.alert('Foto de perfil', data.error || 'Falha ao gravar.');
+      if (data.code === 'TECH_IDENTITY_LOCKED') {
+        const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
+        Alert.alert(title, message);
+      } else {
+        Alert.alert('Foto de perfil', data.error || 'Falha ao gravar.');
+      }
       return { ok: false, error: data.error || 'upload_failed' };
     }
     const cap = data.techRegPrimaryProfileCapture;
@@ -980,6 +1020,13 @@ export default function TechRegistrationScreen() {
     if (!jwt) {
       Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
       return { ok: false, error: 'no_jwt' };
+    }
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert(
+        'Prestador ativo',
+        'As fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.'
+      );
+      return { ok: false, error: 'identity_locked' };
     }
     if (!opts?.skipLoading) setFaceEnrollmentSubmitting(true);
     try {
@@ -1069,6 +1116,13 @@ export default function TechRegistrationScreen() {
     const jwt = await getToken();
     if (!jwt) {
       Alert.alert('Sessão', 'Inicie sessão no app para enviar o documento.');
+      return false;
+    }
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert(
+        'Prestador ativo',
+        'O documento de identidade do cadastro só pode ser alterado pela empresa no painel administrativo.'
+      );
       return false;
     }
     setIdDocumentSubmitting(true);
@@ -1245,6 +1299,13 @@ export default function TechRegistrationScreen() {
   };
 
   const removeFace = async (photoId: string) => {
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert(
+        'Prestador ativo',
+        'As fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.'
+      );
+      return;
+    }
     if (primaryProfileCapture?.photoId && String(photoId) === String(primaryProfileCapture.photoId)) {
       Alert.alert(
         'Foto de perfil',
@@ -1258,10 +1319,15 @@ export default function TechRegistrationScreen() {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${jwt}` },
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const rm = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível remover esta foto.';
-      Alert.alert('Remover foto', rm);
+      if (data.code === 'TECH_IDENTITY_LOCKED') {
+        const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
+        Alert.alert(title, message);
+      } else {
+        const rm = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível remover esta foto.';
+        Alert.alert('Remover foto', rm);
+      }
       return;
     }
     if (Array.isArray(data.photos)) {
@@ -1517,6 +1583,10 @@ export default function TechRegistrationScreen() {
       Alert.alert('Sessão', 'Inicie sessão no app para submeter a candidatura.');
       return;
     }
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert('Prestador ativo', 'Não é possível reenviar a candidatura. A sua conta já está habilitada.');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`${basePath}/submit`, {
@@ -1532,8 +1602,15 @@ export default function TechRegistrationScreen() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const errMsg = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível enviar a candidatura. Tente novamente.';
-        Alert.alert('Envio', errMsg);
+        if (data.code === 'TECH_IDENTITY_LOCKED') {
+          const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
+          Alert.alert(title, message);
+        } else {
+          const errMsg =
+            sanitizeBiometryUserText(String(data.error || '')) ||
+            'Não foi possível enviar a candidatura. Tente novamente.';
+          Alert.alert('Envio', errMsg);
+        }
         return;
       }
       Alert.alert('Enviado', 'Sua candidatura foi enviada. Aguarde a análise da equipe.', [

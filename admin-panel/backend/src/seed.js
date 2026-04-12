@@ -363,6 +363,13 @@ async function main() {
     { key: 'reports',   label: 'Relatórios Avançados', description: 'Exportação CSV e análise de custos',      icon: 'stats-chart-outline', enabled: false },
     { key: 'realtime',  label: 'Sync em Tempo Real',   description: 'Sincronização cloud em tempo real',       icon: 'sync-outline', enabled: false },
     { key: 'i18n',      label: 'Multi-idioma',          description: 'Suporte a EN, ES e PT-BR',                icon: 'globe-outline', enabled: true },
+    {
+      key: 'work_time',
+      label: 'Registro de horas (ponto)',
+      description: 'Módulo de batidas com face e localização no app do técnico',
+      icon: 'finger-print-outline',
+      enabled: true,
+    },
   ];
   for (const flag of flags) {
     const existing = await prisma.featureFlag.findFirst({ where: { key: flag.key, tenantId: null } });

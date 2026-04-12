@@ -9,6 +9,7 @@ const {
   deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
 } = require('./comprefaceClient');
+const { isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
 
 function parseVisionMeta(raw) {
   try {
@@ -63,18 +64,50 @@ async function syncUserToCompreface(prisma, userId) {
 
   const publicRoot = path.join(__dirname, '../../public');
   const buffers = [];
+  const urlsSeen = new Set();
 
-  if (user.avatarUrl) {
+  async function pushBufferFromUrl(sourceUrl, buf, fileName) {
+    if (!buf || buf.length < 64) return;
+    const key = String(sourceUrl || fileName || '').trim() || fileName;
+    if (urlsSeen.has(key)) return;
+    urlsSeen.add(key);
+    buffers.push({ buf, name: fileName });
+  }
+
+  const list = Array.isArray(user.faceEnrollmentPhotos) ? user.faceEnrollmentPhotos : [];
+  const primaryList = list.filter((p) => p && isRegistrationPrimaryFacePhoto(p));
+  const restList = list.filter((p) => p && !isRegistrationPrimaryFacePhoto(p));
+
+  for (const p of primaryList) {
+    if (!p.url) continue;
+    try {
+      const b = await bufferFromPublicOrUrl(p.url, publicRoot);
+      const ext = String(p.mimeType || '')
+        .toLowerCase()
+        .includes('png')
+        ? 'png'
+        : 'jpg';
+      await pushBufferFromUrl(
+        p.url,
+        b,
+        `${String(p.id || 'fe').replace(/[^\w.-]/g, '_')}.${ext}`
+      );
+    } catch (e) {
+      console.warn('[comprefaceSync] faceEnrollment primary', p.id, e.message);
+    }
+  }
+
+  const av = String(user.avatarUrl || '').trim();
+  if (av) {
     try {
       const b = await bufferFromPublicOrUrl(user.avatarUrl, publicRoot);
-      if (b && b.length >= 64) buffers.push({ buf: b, name: 'avatar.jpg' });
+      await pushBufferFromUrl(av, b, 'avatar.jpg');
     } catch (e) {
       console.warn('[comprefaceSync] avatarUrl', e.message);
     }
   }
 
-  const list = Array.isArray(user.faceEnrollmentPhotos) ? user.faceEnrollmentPhotos : [];
-  for (const p of list) {
+  for (const p of restList) {
     if (!p || typeof p !== 'object' || !p.url) continue;
     try {
       const b = await bufferFromPublicOrUrl(p.url, publicRoot);
@@ -84,7 +117,11 @@ async function syncUserToCompreface(prisma, userId) {
           .includes('png')
           ? 'png'
           : 'jpg';
-      if (b && b.length >= 64) buffers.push({ buf: b, name: `${String(p.id || 'fe').replace(/[^\w.-]/g, '_')}.${ext}` });
+      await pushBufferFromUrl(
+        p.url,
+        b,
+        `${String(p.id || 'fe').replace(/[^\w.-]/g, '_')}.${ext}`
+      );
     } catch (e) {
       console.warn('[comprefaceSync] faceEnrollment', p.id, e.message);
     }

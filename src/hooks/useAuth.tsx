@@ -8,6 +8,7 @@ import {
   subscribeSessionInvalidated,
   applySessionInvalidatedFromServer,
   isTechnicianProfileActive,
+  canUseFieldWorkAppRole,
 } from '../services/auth';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,12 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    if (userRole === 'TECHNICIAN' && !isTechnicianProfileActive(user)) {
+    if (userRole === 'TECHNICIAN' && !canUseFieldWorkAppRole(user)) {
       _setUserRole('CLIENT');
       AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     }
-  }, [user, user?.technicianProfile?.status, userRole]);
+  }, [user, user?.technicianProfile?.status, user?.role, userRole]);
 
   /** Prestador habilitado remotamente (painel): passar a TECHNICIAN + modo prestador no Header */
   useEffect(() => {
@@ -72,22 +73,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** Ao voltar ao primeiro plano, atualizar /me para refletir habilitação feita no painel (com throttle). */
   const lastMeRefreshRef = useRef(0);
   useEffect(() => {
-    const onState = async (s: AppStateStatus) => {
-      if (s !== 'active') return;
-      const now = Date.now();
-      if (now - lastMeRefreshRef.current < 45_000) return;
-      const local = await AuthService.getUser();
-      if (!local) return;
-      lastMeRefreshRef.current = now;
-      try {
-        const fresh = await AuthService.validateSession();
-        if (fresh) {
-          setUser(fresh);
-          runAvatarWarm(fresh);
+    const onState = (s: AppStateStatus) => {
+      void (async () => {
+        try {
+          if (s !== 'active') return;
+          const now = Date.now();
+          if (now - lastMeRefreshRef.current < 45_000) return;
+          const local = await AuthService.getUser();
+          if (!local) return;
+          lastMeRefreshRef.current = now;
+          try {
+            const fresh = await AuthService.validateSession();
+            if (fresh) {
+              setUser(fresh);
+              runAvatarWarm(fresh);
+            }
+          } catch {
+            /* ignore */
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
+      })().catch(() => {});
     };
     const sub = AppState.addEventListener('change', onState);
     return () => sub.remove();
@@ -143,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const wasActive = localUser ? isTechnicianProfileActive(localUser) : false;
         const nowActive = effective ? isTechnicianProfileActive(effective) : false;
 
-        if (role === 'TECHNICIAN' && !nowActive) {
+        if (role === 'TECHNICIAN' && !nowActive && !canUseFieldWorkAppRole(effective)) {
           role = 'CLIENT';
           await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
         }
@@ -207,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.login(email, password, tenantId);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = isTechnicianProfileActive(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -218,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = isTechnicianProfileActive(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -247,7 +254,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setUserRole = async (role: 'CLIENT' | 'TECHNICIAN') => {
-    if (role === 'TECHNICIAN' && user && !isTechnicianProfileActive(user)) {
+    if (role === 'TECHNICIAN' && user && !canUseFieldWorkAppRole(user)) {
       return;
     }
     _setUserRole(role);

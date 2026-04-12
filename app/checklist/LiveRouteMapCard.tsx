@@ -1,24 +1,28 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  Dimensions,
+  Easing,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Easing,
-  Modal,
-  Dimensions,
-  ScrollView,
-  Image,
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { Alert, Linking, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ScreenOrientation from 'expo-screen-orientation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src/services/osrmClient';
@@ -27,6 +31,11 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
+
+/** Modal: todas as orientações usuais (tipo mutável para compatibilidade com `ModalProps`). */
+const TRANSIT_MODAL_SUPPORTED_ORIENTATIONS: NonNullable<
+  React.ComponentProps<typeof Modal>['supportedOrientations']
+> = ['portrait', 'portrait-upside-down', 'landscape', 'landscape-left', 'landscape-right'];
 
 /**
  * Android: `react-native-maps` usa Google Maps e precisa de API key no manifest.
@@ -162,25 +171,108 @@ function splitPolylineByArcM(poly: number[][], targetArcM: number): { covered: n
   return { covered: poly.map((c) => [c[0], c[1]]), remaining: [[last[0], last[1]]] };
 }
 
-/** Inclinação 3D semelhante a Apple / Google Maps em modo condução. */
-const NAVIGATION_MAP_PITCH = 52;
+/** Mapa de navegação em 2D (sem inclinação) — leitura clara das vias e menos sensação de «girar». */
+const NAVIGATION_MAP_PITCH = 0;
+
+/** Velocidade mínima (m/s) para confiar no rumo de curso do GPS. */
+const MIN_SPEED_USE_COURSE_MPS = 1.15;
+/** Abaixo disto consideramos «parado / muito lento» (bússola / congelar rumo). */
+const STATIONARY_SPEED_MPS = 0.85;
+/** Deslocamento mínimo entre amostras para usar bearing GPS (evita ruído de metros). */
+const MIN_GPS_DELTA_M_FOR_BEARING = 12;
+/** Se o GPS está a menos desta distância da polilinha, alinhar o rumo ao segmento (via / patrulha). */
+const ROUTE_SNAP_MAX_DIST_M = 48;
+/** Só usar rumo directo ao destino quando ainda está longe (m). */
+const DEST_MIN_DIST_FOR_BEARING_M = 30;
+/** Ignorar micro-rotações quando parado (graus). */
+const HEADING_DEAD_ZONE_DEG = 12;
 
 /**
- * Azimute do mapa em modo "rumo em cima": deslocamento entre leituras ou, quase parado, rumo ao destino.
+ * Bearing do segmento da polilinha mais próximo de (lat,lng); null se o ponto estiver longe da linha.
  */
-function computeDrivingMapHeading(
-  prev: { lat: number; lng: number } | null,
-  cur: { lat: number; lng: number },
-  dest: { lat: number; lng: number } | null,
-  fallbackHeading: number
-): number {
-  if (prev && haversineM(prev.lat, prev.lng, cur.lat, cur.lng) > 2.5) {
+function tangentBearingNearPolyline(
+  poly: number[][],
+  lat: number,
+  lng: number,
+  maxDistM: number
+): number | null {
+  if (!poly || poly.length < 2) return null;
+  let bestDist = Infinity;
+  let bestI = 0;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const [aL, aG] = poly[i];
+    const [bL, bG] = poly[i + 1];
+    const dx = bG - aG;
+    const dy = bL - aL;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const pL = aL + t * dy;
+    const pG = aG + t * dx;
+    const d = haversineM(lat, lng, pL, pG);
+    if (d < bestDist) {
+      bestDist = d;
+      bestI = i;
+    }
+  }
+  if (bestDist > maxDistM) return null;
+  const [aL, aG] = poly[bestI];
+  const [bL, bG] = poly[bestI + 1];
+  return bearingDeg(aL, aG, bL, bG);
+}
+
+/**
+ * Rumo para a câmera «rumo em cima»: curso GPS em movimento, tangente à rota quando colado à linha,
+ * delta GPS só com deslocamento real, bússola parado, senão destino ou último rumo.
+ */
+function computeNavHeading(input: {
+  prev: { lat: number; lng: number } | null;
+  cur: { lat: number; lng: number };
+  dest: { lat: number; lng: number } | null;
+  fallback: number;
+  speedMps: number | null | undefined;
+  courseDeg: number | null | undefined;
+  compassDeg: number | null | undefined;
+  routePoly: number[][] | null;
+}): number {
+  const { prev, cur, dest, fallback, speedMps, courseDeg, compassDeg, routePoly } = input;
+  const spd = typeof speedMps === 'number' && Number.isFinite(speedMps) ? speedMps : null;
+
+  if (spd != null && spd >= MIN_SPEED_USE_COURSE_MPS && courseDeg != null) {
+    return courseDeg;
+  }
+
+  if (routePoly && routePoly.length >= 2) {
+    const tan = tangentBearingNearPolyline(routePoly, cur.lat, cur.lng, ROUTE_SNAP_MAX_DIST_M);
+    if (tan != null) return tan;
+  }
+
+  if (prev && haversineM(prev.lat, prev.lng, cur.lat, cur.lng) >= MIN_GPS_DELTA_M_FOR_BEARING) {
     return bearingDeg(prev.lat, prev.lng, cur.lat, cur.lng);
   }
-  if (dest && haversineM(cur.lat, cur.lng, dest.lat, dest.lng) > 8) {
+
+  if ((spd == null || spd < STATIONARY_SPEED_MPS) && compassDeg != null) {
+    return compassDeg;
+  }
+
+  if (dest && haversineM(cur.lat, cur.lng, dest.lat, dest.lng) >= DEST_MIN_DIST_FOR_BEARING_M) {
     return bearingDeg(cur.lat, cur.lng, dest.lat, dest.lng);
   }
-  return fallbackHeading;
+
+  return fallback;
+}
+
+/** Evita oscilar o mapa com ruído GPS quando quase parado. */
+function applyDeadZoneStationary(
+  current: number,
+  proposed: number,
+  speedMps: number | null | undefined
+): number {
+  const d = ((((proposed - current) % 360) + 540) % 360) - 180;
+  const ad = Math.abs(d);
+  const slow = speedMps == null || speedMps < STATIONARY_SPEED_MPS;
+  if (slow && ad < HEADING_DEAD_ZONE_DEG) return current;
+  return proposed;
 }
 
 /** Interpola rumo no círculo (menor arco) para rotações menos bruscas na câmera. */
@@ -190,12 +282,12 @@ function smoothHeadingDeg(current: number, target: number, factor: number): numb
   return ((next % 360) + 360) % 360;
 }
 
-const FOLLOW_CAMERA_MIN_MS = 1400;
-const FOLLOW_MOVE_THRESHOLD_M = 30;
-const HEADING_SMOOTH_FACTOR = 0.34;
+const FOLLOW_CAMERA_MIN_MS = 900;
+const FOLLOW_MOVE_THRESHOLD_M = 14;
+const HEADING_SMOOTH_FACTOR = 0.22;
 
-/** Zoom em modo navegação; abaixo disto a câmera aproxima-se sozinha (ex.: após fit da rota inteira). */
-const NAV_FOLLOW_ZOOM = 17;
+/** Zoom em modo navegação (rua a rua). */
+const NAV_FOLLOW_ZOOM = 18;
 const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
 
 function formatElapsedSinceTransitPt(isoStart: string): string {
@@ -216,6 +308,7 @@ function EtaBadge({
   hint,
   noDestination,
   transitElapsedLabel,
+  isLandscape,
 }: {
   etaMinutes: number | null | undefined;
   pct: number;
@@ -223,6 +316,7 @@ function EtaBadge({
   /** Não há ponto de chegada para OSRM — não mostrar "Calculando...". */
   noDestination?: boolean;
   transitElapsedLabel?: string | null;
+  isLandscape: boolean;
 }) {
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -250,7 +344,14 @@ function EtaBadge({
   }
 
   return (
-    <View style={[etaStyles.wrapper, noDestination && etaStyles.wrapperWide]} pointerEvents="none">
+    <View
+      style={[
+        etaStyles.wrapper,
+        noDestination && etaStyles.wrapperWide,
+        isLandscape && etaStyles.wrapperLandscape,
+      ]}
+      pointerEvents="none"
+    >
       <LinearGradient
         colors={['#f97316', '#ea580c']}
         start={{ x: 0, y: 0 }}
@@ -310,6 +411,10 @@ const etaStyles = StyleSheet.create({
     maxWidth: 300,
     right: 16,
     left: 16,
+  },
+  /** Em landscape os botões ficam numa faixa baixa — sobe o cartão ETA para não encostar. */
+  wrapperLandscape: {
+    bottom: 92,
   },
   gradient: {
     paddingHorizontal: 11,
@@ -405,7 +510,21 @@ export default function LiveRouteMapCard({
   taskId,
   corridorToleranceM,
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
+  const [exoOrientation, setExoOrientation] = useState(ScreenOrientation.Orientation.UNKNOWN);
   const embedNativeMap = useMemo(() => shouldEmbedNativeTransitMap(), []);
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => setWindowDims(window));
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    setWindowDims(Dimensions.get('window'));
+  }, [visible]);
+
   const { user } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
@@ -425,6 +544,34 @@ export default function LiveRouteMapCard({
   /** Painel de dicas na primeira vez (mapa nativo). */
   const [showTransitHints, setShowTransitHints] = useState(false);
 
+  /** No iOS o `Modal` pode não refletir dimensões a tempo — `expo-screen-orientation` + `Dimensions`. */
+  useEffect(() => {
+    if (!visible || !expanded) return;
+    let subscription: { remove: () => void } | undefined;
+    void ScreenOrientation.getOrientationAsync()
+      .then((o) => setExoOrientation(o))
+      .catch(() => {});
+    try {
+      subscription = ScreenOrientation.addOrientationChangeListener((e) => {
+        setExoOrientation(e.orientationInfo.orientation);
+      });
+    } catch {
+      /* ambiente sem módulo nativo */
+    }
+    return () => subscription?.remove();
+  }, [visible, expanded]);
+
+  /**
+   * Android: garantir que a Activity pode rodar com o mapa em ecrã cheio (alguns builds / OEM).
+   * O `RCTModalHostView` no RN 0.81 ignora `supportedOrientations` no nativo — o desbloqueio ajuda
+   * quando havia política de orientação aplicada antes.
+   */
+  useEffect(() => {
+    if (!visible || !expanded) return;
+    if (Platform.OS !== 'android') return;
+    void ScreenOrientation.unlockAsync().catch(() => {});
+  }, [visible, expanded]);
+
   /** Refs: o efeito do ETA não pode depender de myPos/update — cada GPS reiniciava o efeito e abortava o fetch OSRM. */
   const myPosRef = useRef(myPos);
   const updateRef = useRef(update);
@@ -442,6 +589,8 @@ export default function LiveRouteMapCard({
   const lastAutoFitSigRef = useRef('');
   /** Último rumo aplicado à câmera (modo navegação); mantém-se ao parar no semáforo. */
   const lastMapHeadingRef = useRef(0);
+  /** Bússola do dispositivo (watchHeadingAsync), graus 0–360. */
+  const lastCompassHeadingRef = useRef<number | null>(null);
 
   const dynamicRouteRef = useRef<number[][] | null>(null);
   const routeRef = useRef<number[][]>(route);
@@ -488,13 +637,18 @@ export default function LiveRouteMapCard({
         prev && Number.isFinite(prev.lat) && Number.isFinite(prev.lng)
           ? { lat: prev.lat, lng: prev.lng }
           : null;
-      const rawHeading = computeDrivingMapHeading(
-        prevPos,
-        { lat: u.currentLat, lng: u.currentLng },
+      const rawHeading = computeNavHeading({
+        prev: prevPos,
+        cur: { lat: u.currentLat, lng: u.currentLng },
         dest,
-        lastMapHeadingRef.current
-      );
-      const heading = smoothHeadingDeg(lastMapHeadingRef.current, rawHeading, HEADING_SMOOTH_FACTOR);
+        fallback: lastMapHeadingRef.current,
+        speedMps: u.speedMps,
+        courseDeg: u.courseDeg,
+        compassDeg: lastCompassHeadingRef.current,
+        routePoly: paintLine,
+      });
+      const dead = applyDeadZoneStationary(lastMapHeadingRef.current, rawHeading, u.speedMps);
+      const heading = smoothHeadingDeg(lastMapHeadingRef.current, dead, HEADING_SMOOTH_FACTOR);
       lastMapHeadingRef.current = heading;
 
       const now = Date.now();
@@ -510,42 +664,15 @@ export default function LiveRouteMapCard({
       lastFollowAnchorRef.current = { lat: u.currentLat, lng: u.currentLng };
 
       const map = mapRef.current;
-      if (!map?.getCamera) {
-        map?.animateCamera(
-          {
-            center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom: NAV_FOLLOW_ZOOM,
-            heading,
-            pitch: NAVIGATION_MAP_PITCH,
-          },
-          { duration: 420 }
-        );
-        return;
-      }
-      void map.getCamera().then((cam) => {
-        const z = cam.zoom ?? NAV_FOLLOW_ZOOM;
-        const zoom = z < NAV_MIN_ACCEPTABLE_ZOOM ? NAV_FOLLOW_ZOOM : z;
-        map.animateCamera(
-          {
-            center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom,
-            pitch: NAVIGATION_MAP_PITCH,
-            heading,
-            altitude: cam.altitude,
-          },
-          { duration: 420 }
-        );
-      }).catch(() => {
-        map?.animateCamera(
-          {
-            center: { latitude: u.currentLat, longitude: u.currentLng },
-            zoom: NAV_FOLLOW_ZOOM,
-            heading,
-            pitch: NAVIGATION_MAP_PITCH,
-          },
-          { duration: 420 }
-        );
-      });
+      map?.animateCamera(
+        {
+          center: { latitude: u.currentLat, longitude: u.currentLng },
+          zoom: NAV_FOLLOW_ZOOM,
+          heading,
+          pitch: NAVIGATION_MAP_PITCH,
+        },
+        { duration: 320 }
+      );
     };
 
     const statusHandler = ({ status }: any) => {
@@ -584,11 +711,42 @@ export default function LiveRouteMapCard({
       prevPosRef.current = null;
       prevFollowUserRef.current = false;
       lastMapHeadingRef.current = 0;
+      lastCompassHeadingRef.current = null;
       setFollowUser(true);
       setShowTransitHints(false);
       setRoutePaintArcM(0);
     }
   }, [visible]);
+
+  /** Bússola em tempo real — melhora o rumo quando o GPS está lento ou parado (só com mapa aberto). */
+  useEffect(() => {
+    if (!visible || !embedNativeMap || !expanded) return;
+    let cancelled = false;
+    let sub: { remove: () => void } | null = null;
+    void (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || cancelled) return;
+        const r = await Location.watchHeadingAsync((hd) => {
+          const tr = hd.trueHeading;
+          const mg = hd.magHeading;
+          const v = Number.isFinite(tr) && tr >= 0 ? tr : mg;
+          if (Number.isFinite(v) && v >= 0) {
+            lastCompassHeadingRef.current = ((v % 360) + 360) % 360;
+          }
+        });
+        if (!cancelled && r && typeof (r as { remove?: () => void }).remove === 'function') {
+          sub = r as { remove: () => void };
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [visible, embedNativeMap, expanded]);
 
   const dynamicRoutePaintSig = useMemo(() => {
     if (!dynamicRoute || dynamicRoute.length < 2) return '';
@@ -853,7 +1011,27 @@ export default function LiveRouteMapCard({
       lastFollowAnchorRef.current = { lat: myPos.lat, lng: myPos.lng };
       lastFollowCameraAtRef.current = Date.now();
       const dest = pickDestinationForOsrm(targetLoc, route);
-      const h = computeDrivingMapHeading(null, myPos, dest, lastMapHeadingRef.current);
+      const polyNav =
+        dynamicRouteRef.current && dynamicRouteRef.current.length >= 2
+          ? dynamicRouteRef.current
+          : routeRef.current && routeRef.current.length >= 2
+            ? routeRef.current
+            : null;
+      const raw = computeNavHeading({
+        prev: null,
+        cur: { lat: myPos.lat, lng: myPos.lng },
+        dest,
+        fallback: lastMapHeadingRef.current,
+        speedMps: null,
+        courseDeg: null,
+        compassDeg: lastCompassHeadingRef.current,
+        routePoly: polyNav,
+      });
+      const h = smoothHeadingDeg(
+        lastMapHeadingRef.current,
+        applyDeadZoneStationary(lastMapHeadingRef.current, raw, null),
+        HEADING_SMOOTH_FACTOR
+      );
       lastMapHeadingRef.current = h;
       map?.animateCamera(
         {
@@ -896,6 +1074,18 @@ export default function LiveRouteMapCard({
   }, [noDestinationForEta, transitStartedAtIso, elapsedTick]);
 
   if (!visible) return null;
+
+  const dimLandscape = windowDims.width > windowDims.height;
+  const exoLandscape =
+    exoOrientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+    exoOrientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+  const isLandscape = exoLandscape || dimLandscape;
+
+  /** Android + Google Maps: após rotação o surface do mapa no Dialog costuma ficar errado até remontar. */
+  const androidMapRelayoutKey =
+    Platform.OS === 'android'
+      ? `transit-map-${Math.round(windowDims.width)}x${Math.round(windowDims.height)}`
+      : 'transit-map-ios';
 
   const isDeviation = update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
@@ -961,38 +1151,37 @@ export default function LiveRouteMapCard({
     const map = mapRef.current;
     const centerOnce = async (lat: number, lng: number) => {
       const nav = followUserRef.current;
-      if (map?.getCamera) {
+      if (!map) return;
+      if (nav) {
+        map.animateCamera(
+          {
+            center: { latitude: lat, longitude: lng },
+            zoom: NAV_FOLLOW_ZOOM,
+            heading: lastMapHeadingRef.current,
+            pitch: NAVIGATION_MAP_PITCH,
+          },
+          { duration: 400 }
+        );
+        return;
+      }
+      if (map.getCamera) {
         try {
           const cam = await map.getCamera();
           map.animateCamera(
             {
               center: { latitude: lat, longitude: lng },
               zoom: cam.zoom ?? 16,
-              pitch: nav ? NAVIGATION_MAP_PITCH : cam.pitch,
-              heading: nav ? lastMapHeadingRef.current : cam.heading,
+              pitch: cam.pitch,
+              heading: cam.heading,
               altitude: cam.altitude,
             },
             { duration: 400 }
           );
         } catch {
-          map?.animateCamera(
-            {
-              center: { latitude: lat, longitude: lng },
-              zoom: 16,
-              ...(nav ? { heading: lastMapHeadingRef.current, pitch: NAVIGATION_MAP_PITCH } : {}),
-            },
-            { duration: 400 }
-          );
+          map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 16 }, { duration: 400 });
         }
       } else {
-        map?.animateCamera(
-          {
-            center: { latitude: lat, longitude: lng },
-            zoom: 16,
-            ...(nav ? { heading: lastMapHeadingRef.current, pitch: NAVIGATION_MAP_PITCH } : {}),
-          },
-          { duration: 400 }
-        );
+        map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 16 }, { duration: 400 });
       }
     };
     if (myPos) {
@@ -1060,28 +1249,75 @@ export default function LiveRouteMapCard({
 
   const hasRoute = route && route.length >= 2;
 
+  const transitHeaderLong =
+    isComplete
+      ? 'Deslocamento Concluído'
+      : isPaused
+        ? 'Navegação Pausada'
+        : !hasRoute
+          ? 'Deslocamento em Andamento'
+          : isDeviation
+            ? `Aviso: ~${update?.distanceFromRoute ?? '—'} m fora do trajeto`
+            : `Em Rota · ${pct}%${zoneType === 'route' && update?.patrolCoveragePercent != null ? ` · Patrulha ~${update.patrolCoveragePercent}%` : ''}`;
+
+  const transitStatusShort = isComplete
+    ? 'Concluído'
+    : isPaused
+      ? 'Pausado'
+      : !hasRoute
+        ? 'Em desloc.'
+        : isDeviation
+          ? 'Aviso'
+          : `${pct}%`;
+
+  const showTransitStatusDetail = () => {
+    Alert.alert('Estado do deslocamento', transitHeaderLong);
+  };
+
   // Full Screen Modal View
   return (
-    <Modal visible={expanded} animationType="slide">
+    <Modal
+      visible={expanded}
+      animationType="slide"
+      supportedOrientations={TRANSIT_MODAL_SUPPORTED_ORIENTATIONS}
+    >
       <View style={styles.modalContainer}>
-        
-        {/* Floating Header */}
-        <View style={[styles.floatingHeader, { borderLeftColor: statusColor }]}>
-           <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>
-                 {isComplete ? 'Deslocamento Concluído' : isPaused ? 'Navegação Pausada' :(!hasRoute ? 'Deslocamento em Andamento' : (isDeviation ? `Aviso: ~${update?.distanceFromRoute} m fora do trajeto` : `Em Rota · ${pct}%${zoneType === 'route' && update?.patrolCoveragePercent != null ? ` · Patrulha ~${update.patrolCoveragePercent}%` : ''}`))}
-              </Text>
-              {/* ETA moved to floating map badge below */}
-              {hasRoute && !isComplete && !isPaused && (
-                 <View style={styles.miniBar}>
-                   <View style={[styles.miniBarFill, { width: `${pct}%` as any, backgroundColor: statusColor }]} />
-                 </View>
-              )}
-           </View>
-           <TouchableOpacity style={styles.minimizeBtn} onPress={() => setExpanded(false)}>
-             <Ionicons name="chevron-down" size={24} color="#64748b" />
-           </TouchableOpacity>
-        </View>
+        {/* Landscape: sem faixa superior larga — minimizar no canto; estado do deslocamento vai para o chip inferior */}
+        {isLandscape ? (
+          <TouchableOpacity
+            style={[
+              styles.landscapeMinimizeFab,
+              { top: insets.top + 6, right: Math.max(12, insets.right + 4) },
+            ]}
+            onPress={() => setExpanded(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Minimizar mapa"
+          >
+            <Ionicons name="chevron-down" size={22} color="#475569" />
+          </TouchableOpacity>
+        ) : (
+          <View
+            style={[
+              styles.floatingHeader,
+              {
+                borderLeftColor: statusColor,
+                top: insets.top + 10,
+              },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>{transitHeaderLong}</Text>
+              {hasRoute && !isComplete && !isPaused ? (
+                <View style={styles.miniBar}>
+                  <View style={[styles.miniBarFill, { width: `${pct}%` as any, backgroundColor: statusColor }]} />
+                </View>
+              ) : null}
+            </View>
+            <TouchableOpacity style={styles.minimizeBtn} onPress={() => setExpanded(false)}>
+              <Ionicons name="chevron-down" size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {showTransitHints && embedNativeMap && (
           <View style={styles.hintPanel} accessibilityViewIsModal>
@@ -1098,8 +1334,9 @@ export default function LiveRouteMapCard({
             </View>
             <ScrollView style={styles.hintScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.hintBody}>
-                Por padrão o mapa está em <Text style={styles.hintStrong}>modo navegação</Text>: segue a sua posição,
-                alinha o rumo em cima (com rotação suave) e inclina em 3D, como nas apps de navegação.
+                Por padrão o mapa está em <Text style={styles.hintStrong}>modo navegação</Text> (vista 2D): segue a sua posição
+                ao centro com zoom alto, alinha o <Text style={styles.hintStrong}>rumo em cima</Text> com suavização, usando o rumo
+                do GPS em movimento, a direção da rota quando está junto da linha e a bússola quando vai mais devagar.
                 {'\n\n'}
                 Toque no ícone <Text style={styles.hintStrong}>navegação</Text> (círculo com seta) para{' '}
                 <Text style={styles.hintStrong}>mapa livre</Text>: norte em cima, pode arrastar e rodar o mapa.
@@ -1128,6 +1365,7 @@ export default function LiveRouteMapCard({
         )}
 
         <MapView
+          key={androidMapRelayoutKey}
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
           initialRegion={{
@@ -1136,7 +1374,9 @@ export default function LiveRouteMapCard({
           }}
           mapPadding={
             followUser
-              ? { top: 100, right: 52, bottom: 248, left: 52 }
+              ? isLandscape
+                ? { top: 20, right: 56, bottom: 108, left: 56 }
+                : { top: 100, right: 52, bottom: 248, left: 52 }
               : { top: 0, right: 0, bottom: 0, left: 0 }
           }
           showsUserLocation={false}
@@ -1145,7 +1385,7 @@ export default function LiveRouteMapCard({
           showsCompass={followUser}
           zoomEnabled
           scrollEnabled={!followUser}
-          pitchEnabled
+          pitchEnabled={!followUser}
           rotateEnabled={!followUser}
         >
           {route && route.length >= 2 && !suppressTemplatePolyline && zoneType !== 'segment' && (
@@ -1346,7 +1586,7 @@ export default function LiveRouteMapCard({
           )}
         </MapView>
 
-        <View style={styles.floatingRightGroup}>
+        <View style={[styles.floatingRightGroup, isLandscape && styles.floatingRightGroupLandscape]}>
           {(route?.length > 0 || targetLoc?.lat) && (
             <TouchableOpacity style={styles.navBtn} onPress={openNavOptions}>
                <Ionicons name="navigate" size={24} color="#fff" />
@@ -1374,37 +1614,71 @@ export default function LiveRouteMapCard({
           )}
         </View>
 
-        {/* Floating Controls at Bottom */}
-        <View style={styles.bottomControls}>
-            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
-               <TouchableOpacity 
-                  style={[styles.pauseBtn, isPaused && { backgroundColor: '#10b981', borderColor: '#10b981' }]} 
-                  onPress={handlePauseResume}
-               >
-                  <Ionicons name={isPaused ? "play" : "pause"} size={18} color={isPaused ? "#fff" : "#475569"} />
-                  <Text style={[styles.pauseText, isPaused && { color: '#fff' }]}>{isPaused ? 'Retomar Rota' : 'Pausar'}</Text>
-               </TouchableOpacity>
-            </View>
+        {/* Controles inferiores: coluna em pé; em landscape, faixa compacta centrada para não tapar o mapa */}
+        <View
+          style={[
+            styles.bottomControls,
+            { bottom: Math.max(16, insets.bottom + (isLandscape ? 8 : 14)) },
+            isLandscape && styles.bottomControlsLandscape,
+          ]}
+        >
+          {isLandscape ? (
+            <TouchableOpacity
+              style={[styles.landscapeStatusChip, { borderLeftColor: statusColor }]}
+              onPress={() => setExpanded(false)}
+              onLongPress={showTransitStatusDetail}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Minimizar mapa. Toque longo para ver detalhes do deslocamento."
+            >
+              <Ionicons
+                name={isComplete ? 'checkmark-circle' : isPaused ? 'pause-circle' : isDeviation ? 'warning' : 'navigate'}
+                size={16}
+                color={statusColor}
+              />
+              <Text style={styles.landscapeStatusChipText} numberOfLines={1}>
+                {transitStatusShort}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
-            {onEndTransit && (
-               <TouchableOpacity
-                  style={[styles.endTransitBtn, endTransitLoading && { opacity: 0.85 }]}
-                  disabled={endTransitLoading}
-                  onPress={() => {
-                    if (endTransitLoading) return;
-                    void Promise.resolve(onEndTransit());
-                  }}
-               >
-                  {endTransitLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Ionicons name="stop-circle" size={20} color="#fff" />
-                  )}
-                  <Text style={styles.endTransitText}>
-                    {endTransitLoading ? 'A obter localização…' : 'FINALIZAR DESLOCAMENTO'}
-                  </Text>
-               </TouchableOpacity>
-            )}
+          <TouchableOpacity
+            style={[
+              styles.pauseBtn,
+              isLandscape && styles.pauseBtnLandscape,
+              isPaused && { backgroundColor: '#10b981', borderColor: '#10b981' },
+            ]}
+            onPress={handlePauseResume}
+          >
+            <Ionicons name={isPaused ? 'play' : 'pause'} size={18} color={isPaused ? '#fff' : '#475569'} />
+            <Text style={[styles.pauseText, isPaused && { color: '#fff' }]}>
+              {isPaused ? 'Retomar Rota' : 'Pausar'}
+            </Text>
+          </TouchableOpacity>
+
+          {onEndTransit ? (
+            <TouchableOpacity
+              style={[
+                styles.endTransitBtn,
+                isLandscape && styles.endTransitBtnLandscape,
+                endTransitLoading && { opacity: 0.85 },
+              ]}
+              disabled={endTransitLoading}
+              onPress={() => {
+                if (endTransitLoading) return;
+                void Promise.resolve(onEndTransit());
+              }}
+            >
+              {endTransitLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="stop-circle" size={20} color="#fff" />
+              )}
+              <Text style={[styles.endTransitText, isLandscape && styles.endTransitTextLandscape]}>
+                {endTransitLoading ? 'A obter localização…' : isLandscape ? 'Finalizar' : 'FINALIZAR DESLOCAMENTO'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* ──── Premium ETA Badge — always visible during transit ──── */}
@@ -1415,12 +1689,13 @@ export default function LiveRouteMapCard({
             hint={etaHint}
             noDestination={noDestinationForEta}
             transitElapsedLabel={transitElapsedLabel}
+            isLandscape={isLandscape}
           />
         )}
 
         {/* Deviation Banner Overlay */}
         {isDeviation && !isPaused && (
-          <View style={styles.deviationBanner}>
+          <View style={[styles.deviationBanner, { top: isLandscape ? insets.top + 10 : 120 }]}>
             <Ionicons name="warning" size={18} color="#78350f" style={{ marginRight: 8 }} />
             <Text style={styles.deviationText}>
               Aviso: fora do corredor (~{update?.distanceFromRoute ?? '—'} m). Não bloqueia o deslocamento.
@@ -1437,26 +1712,122 @@ const styles = StyleSheet.create({
   minimizedCard: { marginHorizontal: 16, marginTop: 10, padding: 16, backgroundColor: '#fff', borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
   minimizedTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   
-  floatingHeader: { position: 'absolute', top: 50, left: 16, right: 16, zIndex: 10, backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, borderLeftWidth: 4 },
+  floatingHeader: { position: 'absolute', left: 16, right: 16, zIndex: 10, backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, borderLeftWidth: 4 },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
   minimizeBtn: { padding: 4 },
+  landscapeMinimizeFab: {
+    position: 'absolute',
+    zIndex: 30,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  landscapeStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingLeft: 8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderLeftWidth: 4,
+    maxWidth: 118,
+    flexShrink: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  landscapeStatusChipText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
   miniBar: { height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden', width: '100%', marginTop: 4 },
   miniBarFill: { height: 4, borderRadius: 2 },
   
   floatingRightGroup: { position: 'absolute', right: 16, bottom: 180, zIndex: 10, alignItems: 'center', gap: 12 },
+  floatingRightGroupLandscape: { bottom: 76 },
   navBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', shadowColor: '#3b82f6', shadowOpacity: 0.4, shadowRadius: 6, elevation: 6 },
   recenterBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 5, elevation: 4 },
   
-  bottomControls: { position: 'absolute', bottom: 30, left: 16, right: 16, zIndex: 20 },
-  pauseBtn: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2, gap: 8 },
+  bottomControls: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 20,
+    flexDirection: 'column',
+    gap: 12,
+  },
+  bottomControlsLandscape: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    left: 10,
+    right: 10,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  pauseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 8,
+  },
+  pauseBtnLandscape: {
+    minWidth: 118,
+    flexShrink: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
   pauseText: { fontSize: 15, fontWeight: '700', color: '#475569' },
-  
-  endTransitBtn: { flexDirection: 'row', backgroundColor: '#ea580c', paddingVertical: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#ea580c', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, gap: 10 },
+
+  endTransitBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#ea580c',
+    paddingVertical: 16,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#ea580c',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    gap: 10,
+  },
+  endTransitBtnLandscape: {
+    flexShrink: 1,
+    maxWidth: 280,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
   endTransitText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  endTransitTextLandscape: { fontSize: 14, letterSpacing: 0.3 },
 
   deviationBanner: {
     position: 'absolute',
-    top: 120,
     left: 16,
     right: 16,
     backgroundColor: '#fef3c7',

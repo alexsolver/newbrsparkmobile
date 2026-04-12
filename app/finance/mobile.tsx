@@ -27,6 +27,7 @@ import {
   cloudTaskToFinanceInfo,
   formatOsHeadline,
 } from '../../src/utils/cloudTaskFinanceContext';
+import { loadFtCloudTasks } from '../../src/lib/cloudTasksBuckets';
 import {
   loadTechnicianExpenseCategoryCatalog,
   labelForTechnicianExpenseCategory,
@@ -282,9 +283,7 @@ export default function TechnicianFinanceScreen() {
 
   const loadTaskMap = useCallback(async () => {
     try {
-      const raw = await AsyncStorage.getItem('@brspark_cloud_tasks');
-      const arr = raw ? JSON.parse(raw) : [];
-      const list = Array.isArray(arr) ? arr : [];
+      const list = await loadFtCloudTasks();
       setCloudTasksRaw(list);
       const m = new Map<string, CloudTaskFinanceInfo>();
       for (const t of list) {

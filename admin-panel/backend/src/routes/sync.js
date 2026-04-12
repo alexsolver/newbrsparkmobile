@@ -5,7 +5,7 @@ const authUser = require('../middleware/authUser');
 const { recordSync } = require('../services/cockpitMetrics');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
-const { isActiveTechnicianForEmail } = require('../lib/technicianEligibility');
+const { canReceiveFieldTasksForEmail } = require('../lib/technicianEligibility');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -342,7 +342,7 @@ function mapChecklistExecutionToSyncTask(ex) {
     null;
   const description = meta.description || ex.template?.description || 'Tarefa de rotina despachada.';
 
-  const isDone = ['COMPLETED', 'SYNCED'].includes(String(ex.status || '').toUpperCase());
+  const isDone = ['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED'].includes(String(ex.status || '').toUpperCase());
   const anchorDate = isDone && ex.completedAt ? ex.completedAt : ex.createdAt;
 
   const hasAgendaSlot =
@@ -390,9 +390,13 @@ function mapChecklistExecutionToSyncTask(ex) {
     ? new Date(ex.createdAt).toISOString()
     : null;
 
+  const routineTaskNumber = ex.routineTaskNumber != null ? String(ex.routineTaskNumber).trim() : '';
+  const isRt = routineTaskNumber.length > 0;
+
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
+    routineTaskNumber: isRt ? routineTaskNumber : null,
     /** Criação da execução no servidor (ordenar / portabilidade no app). */
     executionCreatedAt: executionCreatedIso,
     lastSubmittedRevision: effectiveLastSubmittedRevision(
@@ -405,7 +409,7 @@ function mapChecklistExecutionToSyncTask(ex) {
     startDate,
     endDate,
     isAllDay,
-    source: 'CHECKLIST',
+    source: isRt ? 'ROUTINE_TASK' : 'CHECKLIST',
     metadata: meta,
     title,
     templateTitle,
@@ -445,9 +449,9 @@ router.get('/tasks', async (req, res) => {
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
 
     const tenantId = String(req.user?.tenantId || '').trim();
-    const canReceiveOs = await isActiveTechnicianForEmail(prisma, ownerEmail, tenantId);
+    const canReceiveOs = await canReceiveFieldTasksForEmail(prisma, ownerEmail, tenantId);
     if (!canReceiveOs) {
-      console.log(`[sync/tasks] ${ownerEmail} — sem prestador ativo no tenant; retorno vazio.`);
+      console.log(`[sync/tasks] ${ownerEmail} — utilizador inelegível para FT/OS neste tenant (ex.: cliente); retorno vazio.`);
       return res.json([]);
     }
 
@@ -461,17 +465,29 @@ router.get('/tasks', async (req, res) => {
       },
     };
 
-    const activeExecs = await prisma.checklistExecution.findMany({
+    const activeOs = await prisma.checklistExecution.findMany({
       where: {
         ownerEmail: ownerWhere,
+        routineTaskNumber: null,
         status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
       },
       include: { template: true, ...revInclude },
     });
 
-    const doneExecs = await prisma.checklistExecution.findMany({
+    const activeRt = await prisma.checklistExecution.findMany({
       where: {
         ownerEmail: ownerWhere,
+        routineTaskNumber: { not: null },
+        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+      },
+      orderBy: [{ createdAt: 'asc' }],
+      include: { template: true, ...revInclude },
+    });
+
+    const doneOs = await prisma.checklistExecution.findMany({
+      where: {
+        ownerEmail: ownerWhere,
+        routineTaskNumber: null,
         status: { in: ['COMPLETED', 'SYNCED'] },
       },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
@@ -479,13 +495,40 @@ router.get('/tasks', async (req, res) => {
       include: { template: true, ...revInclude },
     });
 
-    const seen = new Set(activeExecs.map((e) => e.id));
-    const merged = [...activeExecs, ...doneExecs.filter((e) => !seen.has(e.id))];
+    const doneRt = await prisma.checklistExecution.findMany({
+      where: {
+        ownerEmail: ownerWhere,
+        routineTaskNumber: { not: null },
+        status: { in: ['COMPLETED', 'SYNCED'] },
+      },
+      orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 200,
+      include: { template: true, ...revInclude },
+    });
+
+    const cancelledRt = await prisma.checklistExecution.findMany({
+      where: {
+        ownerEmail: ownerWhere,
+        routineTaskNumber: { not: null },
+        status: { in: ['CANCELLED', 'CANCELED'] },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 200,
+      include: { template: true, ...revInclude },
+    });
+
+    const seen = new Set();
+    const merged = [];
+    for (const e of [...activeOs, ...activeRt, ...doneOs, ...doneRt, ...cancelledRt]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      merged.push(e);
+    }
 
     const userTasks = merged.map(mapChecklistExecutionToSyncTask);
 
     console.log(
-      `[sync/tasks] ✅ ${ownerEmail} → ${activeExecs.length} ativa(s) + ${doneExecs.length} concl./sync → ${userTasks.length} no payload`
+      `[sync/tasks] ✅ ${ownerEmail} → OS ativas ${activeOs.length} + RT ativas ${activeRt.length} + concl./sync OS ${doneOs.length} + RT ${doneRt.length} + RT cancel. ${cancelledRt.length} → ${userTasks.length} no payload`
     );
     res.json(userTasks);
   } catch (err) {

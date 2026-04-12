@@ -18,9 +18,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem('@pref_dark_mode').then(v => {
-      if (v) setDark(JSON.parse(v));
-    });
+    AsyncStorage.getItem('@pref_dark_mode')
+      .then((v) => {
+        if (v) setDark(JSON.parse(v));
+      })
+      .catch(() => {});
   }, []);
 
   const toggleDarkMode = async (val: boolean) => {

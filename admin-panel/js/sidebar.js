@@ -2,9 +2,47 @@
  * sidebar.js — shared sidebar HTML injected on every page
  */
 
-import { ensureAdminApiDetected } from './config.js';
+import {
+  ensureAdminApiDetected,
+  restoreAdminSessionBundleIfNeeded,
+  persistAdminSessionBundleFromSessionStorage,
+  clearAdminSessionFully,
+} from './config.js';
 
 const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
+
+/**
+ * Novo separador não herda `sessionStorage` — copia chaves de sessão do separador que abriu esta página
+ * (mesma origem), para links com `target="_blank"` + `rel="opener"` continuarem autenticados.
+ */
+function seedAdminSessionFromOpenerIfNeeded() {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    if (sessionStorage.getItem('brspark_admin_token')) return;
+    const op = window.opener;
+    if (!op || op.closed) return;
+    const src = op.sessionStorage;
+    if (!src) return;
+    const keys = [
+      'brspark_admin_token',
+      'brspark_admin_email',
+      'brspark_admin_name',
+      'brspark_admin_role',
+      'brspark_panel_mode',
+      'brspark_panel_tenant',
+    ];
+    for (const k of keys) {
+      try {
+        const v = src.getItem(k);
+        if (v != null && v !== '') sessionStorage.setItem(k, v);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* origem diferente / política do browser */
+  }
+}
 
 export function isSidebarCollapsed() {
   return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
@@ -33,6 +71,7 @@ export const NAV_ITEMS = [
   { page: 'technician-applications.html', icon: 'person-add-outline', label: 'Cadastro prestador', section: null },
   { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
   { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
+  { page: 'routine-tasks.html', icon: 'repeat-outline',     label: 'RT — Tarefas de rotina', section: null },
   { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
   { page: 'evaluations.html',   icon: 'star-half-outline',     label: 'Avaliações',           section: null },
   { page: 'cockpit.html',       icon: 'pulse-outline',      label: 'Sync Cockpit',         section: null },
@@ -44,6 +83,7 @@ export const NAV_ITEMS = [
   { page: 'notifications.html', icon: 'notifications-outline', label: 'Notificações',          section: null },
   { page: 'compliance.html',      icon: 'shield-checkmark-outline', label: 'LGPD & Compliance',   section: null },
   { page: 'data-collection.html', icon: 'pulse-outline',            label: 'Coleta de Dados',      section: null },
+  { page: 'work-time.html',       icon: 'finger-print-outline',     label: 'Registro de horas',    section: null },
   { page: 'telemetry.html',       icon: 'navigate-circle-outline',  label: 'Telemetria',            section: null },
   { page: 'api-docs.html',      icon: 'document-text-outline',   label: 'API Docs',              section: null },
   { page: 'audit.html',         icon: 'time-outline',       label: 'Auditoria',             section: 'Sistema' },
@@ -64,10 +104,12 @@ export const MANAGER_PANEL_PAGES = new Set([
   'subscriptions.html',
   'checklists.html',
   'operations.html',
+  'routine-tasks.html',
   'reports.html',
   'evaluations.html',
   'cockpit.html',
   'technician-applications.html',
+  'work-time.html',
 ]);
 
 export function getStoredPanelRole() {
@@ -96,12 +138,7 @@ export function defaultLandingPageForRole(role) {
 }
 
 function logout() {
-  sessionStorage.removeItem('brspark_admin_token');
-  sessionStorage.removeItem('brspark_admin_email');
-  sessionStorage.removeItem('brspark_admin_name');
-  sessionStorage.removeItem('brspark_admin_role');
-  sessionStorage.removeItem('brspark_panel_mode');
-  sessionStorage.removeItem('brspark_panel_tenant');
+  clearAdminSessionFully();
   window.location.href = 'index.html';
 }
 
@@ -183,6 +220,8 @@ export function renderSidebar(alertCount = 3) {
 
 export async function initPage() {
   await ensureAdminApiDetected();
+  seedAdminSessionFromOpenerIfNeeded();
+  restoreAdminSessionBundleIfNeeded();
 
   if (!sessionStorage.getItem('brspark_admin_token')) {
     window.location.href = 'index.html';
@@ -230,4 +269,6 @@ export async function initPage() {
       document.body.classList.add('sidebar-collapsed');
     }
   });
+
+  persistAdminSessionBundleFromSessionStorage();
 }

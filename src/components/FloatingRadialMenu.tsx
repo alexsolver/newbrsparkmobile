@@ -9,6 +9,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +19,14 @@ import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../hooks/useAuth';
+import {
+  fetchRoutineTaskAssignments,
+  openRoutineTaskAndCacheCloudTask,
+  type RoutineTaskAssignmentDto,
+} from '../services/routineTaskService';
+import { loadRtCloudTasks } from '../lib/cloudTasksBuckets';
+import { countRoutineTasksInLocalRtCacheForTemplate } from '../lib/routineTaskQueueUi';
 
 const ADMIN_MENU_ITEMS = [
   { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
@@ -27,12 +37,18 @@ const ADMIN_MENU_ITEMS = [
   { id: 'docs', label: 'Arquivos', icon: 'folder-open-outline', color: '#3B82F6', route: '/documents/new' },
 ];
 
+/** Métricas da barra inferior — manter alinhado com `(tabs)/_layout.tsx`. */
+export const TAB_BAR_ICON_SIZE = 20;
+export const TAB_BAR_ROW_PADDING_TOP = 4;
+export const TAB_BAR_ROW_MIN_HEIGHT = 44;
+export const TAB_BAR_INSETS_BOTTOM_MIN = 6;
+
 /**
- * Altura total da barra inferior custom (deve coincidir com `(tabs)/_layout.tsx`):
+ * Altura total da barra inferior custom:
  * paddingTop da linha + minHeight + paddingBottom da barra.
  */
 export function tabBarOuterHeight(insetsBottom: number): number {
-  return 6 + 52 + Math.max(insetsBottom, 8);
+  return TAB_BAR_ROW_PADDING_TOP + TAB_BAR_ROW_MIN_HEIGHT + Math.max(insetsBottom, TAB_BAR_INSETS_BOTTOM_MIN);
 }
 
 const PROVIDER_MENU_ITEMS = [
@@ -134,7 +150,7 @@ function AdminRadialFan({
           accessibilityLabel={triggerLabel}
         >
           <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <Ionicons name="add" size={24} color={triggerColor} />
+            <Ionicons name="add" size={TAB_BAR_ICON_SIZE} color={triggerColor} />
           </Animated.View>
           <Text style={[radialStyles.tabBarTriggerLabel, { color: triggerColor }]} numberOfLines={1}>
             {triggerLabel}
@@ -222,8 +238,12 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
   const { colors: C } = useTheme();
   const { mode } = useAppContext();
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [rtAssignments, setRtAssignments] = useState<RoutineTaskAssignmentDto[]>([]);
+  const [rtCloudRows, setRtCloudRows] = useState<any[]>([]);
+  const [rtLoading, setRtLoading] = useState(false);
 
   const closeMenu = () => setIsOpen(false);
 
@@ -232,6 +252,74 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
     setTimeout(() => {
       router.push(item.route as any);
     }, 150);
+  };
+
+  useEffect(() => {
+    if (mode !== 'PROVIDER' || !isOpen) return;
+    let cancelled = false;
+    const role = String(user?.role || '').toUpperCase();
+    if (role === 'USER') {
+      setRtAssignments([]);
+      return;
+    }
+    setRtLoading(true);
+    void (async () => {
+      const settled = await Promise.allSettled([fetchRoutineTaskAssignments(), loadRtCloudTasks()]);
+      if (!cancelled) {
+        setRtAssignments(settled[0].status === 'fulfilled' ? settled[0].value : []);
+        setRtCloudRows(settled[1].status === 'fulfilled' ? settled[1].value : []);
+      }
+      if (!cancelled) setRtLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, isOpen, user?.role]);
+
+  const handleRoutineTaskPress = (a: RoutineTaskAssignmentDto) => {
+    closeMenu();
+    void (async () => {
+      try {
+        // #region agent log
+        const badgeCnt = countRoutineTasksInLocalRtCacheForTemplate(rtCloudRows, a.templateId);
+        const freshRows = await loadRtCloudTasks();
+        const freshCnt = countRoutineTasksInLocalRtCacheForTemplate(freshRows, a.templateId);
+        const pl = {
+          sessionId: 'd392c6',
+          hypothesisId: 'B',
+          location: 'FloatingRadialMenu.tsx:handleRoutineTaskPress',
+          message: 'badge_vs_fresh_rows',
+          data: { badgeCnt, freshCnt, tplLen: String(a.templateId || '').length },
+          timestamp: Date.now(),
+        };
+        if (__DEV__) console.warn('[DEBUG_RT]', JSON.stringify(pl));
+        fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd392c6' },
+          body: JSON.stringify(pl),
+        }).catch(() => {});
+        // #endregion
+        const r = await openRoutineTaskAndCacheCloudTask(a.templateId, { titleHint: a.title });
+        if (!r) {
+          Alert.alert(t('common.attention'), t('radialMenu.routineTaskOpenFailed'));
+          return;
+        }
+        setTimeout(() => {
+          router.push({
+            pathname: '/checklist/[id]',
+            params: {
+              id: a.templateId,
+              taskId: r.executionId,
+              routineTask: '1',
+              rtNumber: r.routineTaskNumber,
+            },
+          } as any);
+        }, 150);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        Alert.alert(t('common.error'), msg || t('radialMenu.routineTaskOpenFailed'));
+      }
+    })();
   };
 
   if (mode === 'PROVIDER') {
@@ -246,7 +334,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
             accessibilityRole="button"
             accessibilityLabel={t('tabs.moreActions')}
           >
-            <Ionicons name="add" size={24} color={triggerColor} />
+            <Ionicons name="add" size={TAB_BAR_ICON_SIZE} color={triggerColor} />
             <Text style={[listStyles.tabBarTriggerLabel, { color: triggerColor }]} numberOfLines={1}>
               {t('tabs.moreActions')}
             </Text>
@@ -310,6 +398,87 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                   </View>
                 </TouchableOpacity>
               ))}
+
+              {rtLoading ? (
+                <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                  <ActivityIndicator color="#EA580C" />
+                  <Text style={{ marginTop: 8, fontSize: 12, color: '#64748B', fontWeight: '600' }}>
+                    {t('radialMenu.routineTasksLoading')}
+                  </Text>
+                </View>
+              ) : rtAssignments.length > 0 ? (
+                <>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '900',
+                      color: '#94A3B8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.6,
+                      marginTop: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {t('radialMenu.routineTasksSection')}
+                  </Text>
+                  {rtAssignments.map((a) => {
+                    const rtCacheCount = countRoutineTasksInLocalRtCacheForTemplate(rtCloudRows, a.templateId);
+                    return (
+                    <TouchableOpacity
+                      key={`rt_${a.templateId}`}
+                      activeOpacity={0.88}
+                      onPress={() => handleRoutineTaskPress(a)}
+                      style={listStyles.rowCard}
+                      accessibilityLabel={t('radialMenu.routineTaskCacheCountA11y', {
+                        title: a.title,
+                        count: rtCacheCount,
+                      })}
+                    >
+                      <View
+                        style={[
+                          listStyles.rowIconWrap,
+                          {
+                            backgroundColor: 'rgba(234, 88, 12, 0.12)',
+                            borderColor: 'rgba(234, 88, 12, 0.28)',
+                          },
+                        ]}
+                      >
+                        <Ionicons name="reader-outline" size={26} color="#EA580C" />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={listStyles.rowTitle} numberOfLines={2}>
+                            {a.title}
+                          </Text>
+                          {a.description ? (
+                            <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }} numberOfLines={2}>
+                              {a.description}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 17,
+                            fontWeight: '900',
+                            color: '#EA580C',
+                            minWidth: 28,
+                            textAlign: 'right',
+                            paddingTop: 2,
+                          }}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        >
+                          {rtCacheCount}
+                        </Text>
+                      </View>
+                      <View style={listStyles.rowChevronWrap}>
+                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                      </View>
+                    </TouchableOpacity>
+                    );
+                  })}
+                </>
+              ) : null}
             </ScrollView>
           </View>
         </Modal>
@@ -349,13 +518,13 @@ const radialStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    minHeight: 48,
+    paddingVertical: 4,
+    minHeight: 44,
   },
   tabBarTriggerLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
   },
   addBtn: {
@@ -438,13 +607,13 @@ const listStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    minHeight: 48,
+    paddingVertical: 4,
+    minHeight: 44,
   },
   tabBarTriggerLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
   },
   addBtn: {

@@ -25,6 +25,12 @@ export interface RouteUpdate {
   closestPointIndex: number;
   /** Cobertura estimada da rota de referência (patrulha), % */
   patrolCoveragePercent?: number;
+  /** Velocidade do GPS (m/s), quando disponível — para rumo estável no mapa de deslocamento. */
+  speedMps?: number | null;
+  /** Rumo de curso do GPS (graus, 0=N); em muitos dispositivos inválido quando parado. */
+  courseDeg?: number | null;
+  /** Precisão horizontal declarada pelo GPS (m). */
+  horizontalAccuracyM?: number | null;
 }
 
 type Listener = (data: any) => void;
@@ -138,6 +144,8 @@ class RouteTrackingService {
           ? 'ROUTE_DEVIATION'
           : 'ROUTE_ON_TRACK';
 
+    const speed = loc.coords.speed;
+    const course = loc.coords.heading;
     const update: RouteUpdate = {
       event,
       distanceFromRoute: Math.round(dist),
@@ -146,6 +154,14 @@ class RouteTrackingService {
       currentLng: lng,
       closestPointIndex: idx,
       ...(patrolCoveragePercent !== undefined ? { patrolCoveragePercent } : {}),
+      speedMps:
+        typeof speed === 'number' && Number.isFinite(speed) && speed >= 0 ? speed : null,
+      courseDeg:
+        typeof course === 'number' && Number.isFinite(course) && course >= 0 && course <= 360
+          ? course
+          : null,
+      horizontalAccuracyM:
+        typeof acc === 'number' && Number.isFinite(acc) && acc >= 0 ? acc : null,
     };
 
     this.emit(event, update);
@@ -208,7 +224,7 @@ class RouteTrackingService {
     const watchFallback = async () => {
       try {
         this.subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
+          { accuracy: Location.Accuracy.High, timeInterval: 2500, distanceInterval: 7 },
           (loc) => this.applyLocationObject(loc)
         );
         this.usingBackgroundTask = false;
@@ -225,8 +241,8 @@ class RouteTrackingService {
 
     const taskOptions: Location.LocationTaskOptions = {
       accuracy: Location.Accuracy.High,
-      timeInterval: 4000,
-      distanceInterval: 12,
+      timeInterval: 2500,
+      distanceInterval: 8,
       activityType: Location.ActivityType.AutomotiveNavigation,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,

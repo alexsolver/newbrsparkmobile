@@ -7,6 +7,7 @@ const crypto  = require('crypto');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
+const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = require('../lib/technicianIdentityLock');
 
 // /api/vision/* — biometria de campo / checklists (CompreFace conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
 const visionRouter = require('./vision');
@@ -267,6 +268,7 @@ router.post('/login', async (req, res) => {
         role: user.role,
         avatarUrl: user.avatarUrl,
         preferredChatLocale: user.preferredChatLocale ?? null,
+        employeeMatricula: user.employeeMatricula ?? null,
         tenantId: user.tenantId,
         tenant: { id: user.tenant.id, name: user.tenant.name, status: user.tenant.status },
         technicianProfile: user.technicianProfile,
@@ -435,6 +437,10 @@ router.get('/me', authUser, async (req, res) => {
 router.put('/me', authUser, async (req, res) => {
   try {
     const { name, email, avatarUrl, preferredChatLocale } = req.body;
+
+    if (avatarUrl !== undefined && (await isTechnicianIdentityLockedForUserId(req.user.id))) {
+      return res.status(403).json(TECH_IDENTITY_LOCKED_BODY);
+    }
 
     let localeUpdate = undefined;
     if (preferredChatLocale !== undefined) {

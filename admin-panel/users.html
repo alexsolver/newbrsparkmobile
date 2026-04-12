@@ -20,6 +20,10 @@
           <option value="TENANT_ADMIN">Admin do tenant</option>
           <option value="SAAS_ADMIN">Admin SaaS</option>
         </select>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);margin-left:4px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="filter-worktime" />
+          Só ponto ativo
+        </label>
         <a class="btn btn-outline" href="technician-applications.html" style="text-decoration:none;display:inline-flex;align-items:center">Cadastro prestador</a>
         <button class="btn btn-primary" onclick="openModal('new-user-modal')">+ Novo Usuário</button>
       </div>
@@ -41,9 +45,9 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Nome</th><th>E-mail</th><th>Tenant</th><th>Papel</th><th>Último Acesso</th><th>Conta / OS</th><th>CompreFace</th><th style="text-align:right">Ações</th></tr>
+              <tr><th>Nome</th><th>E-mail</th><th>Matrícula</th><th>Tenant</th><th>Papel</th><th>Ponto</th><th>Último Acesso</th><th>Conta / OS</th><th>CompreFace</th><th style="text-align:right">Ações</th></tr>
             </thead>
-            <tbody id="users-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
+            <tbody id="users-tbody"><tr><td colspan="10" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
           </table>
         </div>
         <div id="pagination" style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border)"></div>
@@ -61,6 +65,7 @@
         <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="new-name" placeholder="João Silva" /></div>
         <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="new-email" type="email" placeholder="joao@exemplo.com" /></div>
       </div>
+      <div class="form-group"><label class="form-label">Matrícula funcional</label><input class="form-control" id="new-employee-matricula" maxlength="80" placeholder="Opcional — única na organização" autocomplete="off" /></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">Conta (Tenant)</label>
           <select class="form-control" id="new-tenant"><option value="">Selecione...</option></select>
@@ -141,7 +146,14 @@
     currentPage = page;
     const q      = document.getElementById('search-input').value.trim();
     const role   = document.getElementById('filter-role').value;
-    const params = new URLSearchParams({ page, limit: 50, ...(q && { q }), ...(role && { role }) });
+    const workT  = document.getElementById('filter-worktime')?.checked ? '1' : '';
+    const params = new URLSearchParams({
+      page,
+      limit: 50,
+      ...(q && { q }),
+      ...(role && { role }),
+      ...(workT && { workTime: workT }),
+    });
     const res    = await CONFIG.get(`/users?${params}`);
     if (!res) return;
 
@@ -156,7 +168,7 @@
         .replace(/>/g, '&gt;')
         .slice(0, 1200);
       document.getElementById('users-tbody').innerHTML =
-        `<tr><td colspan="8" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
+        `<tr><td colspan="10" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
           <strong>Não foi possível carregar os usuários.</strong> Reinicie o servidor da API após <code>npx prisma generate</code> se acabou de migrar o schema.<br/>
           <span style="display:block;margin-top:10px;font-size:11px;color:var(--text3);white-space:pre-wrap;font-weight:400">${detail}</span>
         </td></tr>`;
@@ -228,6 +240,17 @@
       return '<span style="color:var(--text3);font-size:12px">—</span>';
     };
 
+    const pontoCell = (u) =>
+      u.workTimeTrackingEnabled
+        ? '<span class="badge badge-green" style="font-size:10px;font-weight:700">Sim</span>'
+        : '<span class="badge badge-gray" style="font-size:10px">Não</span>';
+
+    const matriculaCell = (u) => {
+      const m = u.employeeMatricula != null ? String(u.employeeMatricula).trim() : '';
+      if (!m) return '<span style="color:var(--text3);font-size:12px">—</span>';
+      return `<span style="font-variant-numeric:tabular-nums;font-weight:700;font-size:12px" title="${escAttr(m)}">${escAttr(m)}</span>`;
+    };
+
     const comprefaceListCell = (sync) => {
       if (!sync || typeof sync !== 'object') {
         return '<span style="font-size:11px;color:var(--text3)" title="Sem registro de sincronização CompreFace">—</span>';
@@ -265,8 +288,10 @@
       <tr>
         <td class="bold">${u.name}</td>
         <td style="color:var(--text3)">${u.email}</td>
+        <td style="vertical-align:middle;white-space:nowrap">${matriculaCell(u)}</td>
         <td style="vertical-align:top">${tenantListCell(u)}</td>
         <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleLbl[u.role] || u.role}</span></td>
+        <td style="vertical-align:middle">${pontoCell(u)}</td>
         <td style="color:var(--text3);font-size:11px">${fmt(u.lastLogin)}</td>
         <td style="vertical-align:top"><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta ativa' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta inativa'}</span>${prestadorOsHint(u.technicianProfile)}</td>
         <td style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
@@ -276,7 +301,7 @@
           <button class="btn ${u.isActive ? 'btn-danger' : 'btn-success'} btn-sm" onclick="toggleUser('${u.id}')">${u.isActive ? 'Desativar' : 'Ativar'}</button>
         </td>
       </tr>`).join('')
-    : '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum usuário encontrado.</td></tr>';
+    : '<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:32px">Nenhum usuário encontrado.</td></tr>';
 
     // Pagination
     const pages = Math.ceil(total / 50);
@@ -313,13 +338,17 @@
       tenantId: document.getElementById('new-tenant').value,
       role:     document.getElementById('new-role').value,
       password: document.getElementById('new-password').value,
+      employeeMatricula: (document.getElementById('new-employee-matricula')?.value || '').trim() || undefined,
     };
     if (!body.name || !body.email || !body.password || !body.tenantId)
       return alert('Preencha todos os campos obrigatórios.');
     const res = await CONFIG.post('/users', body);
     if (res?.id) {
       closeModal('new-user-modal');
-      ['new-name','new-email','new-password'].forEach(id => { document.getElementById(id).value = ''; });
+      ['new-name','new-email','new-password','new-employee-matricula'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
       loadUsers();
     } else alert('Erro: ' + (res?.error || 'Falha ao criar usuário.'));
   });
@@ -327,6 +356,7 @@
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadUsers(1), 300); });
   document.getElementById('filter-role').addEventListener('change', () => loadUsers(1));
+  document.getElementById('filter-worktime')?.addEventListener('change', () => loadUsers(1));
 
   loadUsers();
 </script>

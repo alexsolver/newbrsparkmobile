@@ -34,6 +34,15 @@ import { ensureTechnicianStockLegacyMigration } from './technicianStockMigration
 import { uploadFile } from './storageService';
 import { ensureTechFinanceAttachmentsUploaded } from './technicianFinanceAttachmentSync';
 import { pushTrackingSyncQueue } from './trackingSyncQueue';
+import { pushWorkTimePunchOutbox } from './workTimePunchOutbox';
+import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
+import {
+  loadFtCloudTasks,
+  loadRtCloudTasks,
+  saveFtCloudTasks,
+  saveRtCloudTasks,
+  partitionFtRt,
+} from '../lib/cloudTasksBuckets';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
@@ -46,9 +55,9 @@ const EXECUTION_CACHE_PREFIX = '@brspark_execution_';
 
 /**
  * Tempo máximo que o técnico mantém no aparelho o corpo (respostas) de uma OS já concluída na nuvem,
- * após a última visualização com download bem-sucedido.
+ * após a última visualização com download bem-sucedido (cache de leitura / reabrir).
  */
-export const COMPLETED_BODY_LOCAL_TTL_MS = 2 * 60 * 60 * 1000;
+export const COMPLETED_BODY_LOCAL_TTL_MS = 4 * 60 * 60 * 1000;
 
 /** Alinhar a `EXEC_VIEW_ONLY_STATUSES` do checklist: só estas execuções são alvo de purge por TTL. */
 const TERMINAL_EXEC_CACHE_STATUSES = new Set([
@@ -194,42 +203,49 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
   }
   isSyncing = true;
   try {
-    // 0. Enviar eventos de telemetria primeiro (dados de coleta)
-    await pushTelemetryBatch();
-
-    // 0b. Pausa/retomada do link público (enfileirado offline no mapa ao vivo)
-    await pushTrackingSyncQueue();
-
-    // 0c. PATCH de estado de execução (ex.: PAUSED / IN_PROGRESS) enfileirado offline
-    await pushExecutionStatusOutbox();
-
-    // 1. Prioridade: Enviar checklists concluídos offline
-    await pushChecklistOutbox();
-
-    // 2. Fila genérica
-    const queue = getSyncQueue(ownerEmail);
-    if (queue.length === 0) return;
-
     try {
-      const res = await apiFetch('/api/sync/push', {
-        method: 'POST',
-        body: JSON.stringify({ queue }),
-        headers: ownerEmail ? { 'x-owner-email': ownerEmail } : {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        console.log(`[SYNC] Push de ${data.processed}/${queue.length} itens genéricos concluído.`);
-        const processedIds = data.processedIds || [];
-        for (const item of queue) {
-           if (processedIds.includes((item as any).id || (item as any).payload?.id)) {
-             clearSyncQueueItem((item as any).id);
-           }
+      // 0. Enviar eventos de telemetria primeiro (dados de coleta)
+      await pushTelemetryBatch();
+
+      // 0b. Pausa/retomada do link público (enfileirado offline no mapa ao vivo)
+      await pushTrackingSyncQueue();
+
+      // 0b2. Batidas de ponto enfileiradas offline (verify-face + POST quando houver rede)
+      await pushWorkTimePunchOutbox();
+
+      // 0c. PATCH de estado de execução (ex.: PAUSED / IN_PROGRESS) enfileirado offline
+      await pushExecutionStatusOutbox();
+
+      // 1. Prioridade: Enviar checklists concluídos offline
+      await pushChecklistOutbox();
+
+      // 2. Fila genérica
+      const queue = getSyncQueue(ownerEmail);
+      if (queue.length === 0) return;
+
+      try {
+        const res = await apiFetch('/api/sync/push', {
+          method: 'POST',
+          body: JSON.stringify({ queue }),
+          headers: ownerEmail ? { 'x-owner-email': ownerEmail } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`[SYNC] Push de ${data.processed}/${queue.length} itens genéricos concluído.`);
+          const processedIds = data.processedIds || [];
+          for (const item of queue) {
+            if (processedIds.includes((item as any).id || (item as any).payload?.id)) {
+              clearSyncQueueItem((item as any).id);
+            }
+          }
+        } else {
+          console.warn(`[SYNC] Push genérico não-OK (${res.status}), fila com ${queue.length} itens.`);
         }
-      } else {
-        console.warn(`[SYNC] Push genérico não-OK (${res.status}), fila com ${queue.length} itens.`);
+      } catch (e) {
+        console.warn('[SYNC] Falha de conexão durante o push genérico.', e);
       }
     } catch (e) {
-      console.warn('[SYNC] Falha de conexão durante o push genérico.', e);
+      console.warn('[SYNC] pushSyncQueue interrompido (rede ou dados locais):', e);
     }
   } finally {
     isSyncing = false;
@@ -1498,43 +1514,76 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         await stripExecutionStatusOutboxForPendingServerTasks(remoteTasks);
         await stripInProgressLocalForRevisionPendingTasks(remoteTasks);
 
-        let existingList: any[] = [];
-        try {
-          const exRaw = await AsyncStorage.getItem('@brspark_cloud_tasks');
-          const ex = exRaw ? JSON.parse(exRaw) : [];
-          existingList = Array.isArray(ex) ? ex : [];
-        } catch {
-          existingList = [];
+        let ftExisting = await loadFtCloudTasks();
+        let rtExisting = await loadRtCloudTasks();
+        /** Migração: RT ainda guardadas no blob FT → bucket RT. */
+        const { ft: ftOnly, rt: rtStragglers } = partitionFtRt(ftExisting);
+        if (rtStragglers.length > 0) {
+          ftExisting = ftOnly;
+          const rtById = new Map(rtExisting.map((t: any) => [String(t.id), t]));
+          for (const row of rtStragglers) rtById.set(String(row.id), row);
+          rtExisting = [...rtById.values()];
+          await saveFtCloudTasks(ftExisting);
+          await saveRtCloudTasks(rtExisting);
         }
+        const existingList = [...ftExisting, ...rtExisting];
         const prevById = new Map(existingList.map((t: any) => [String(t.id), t]));
 
         const hadPriorTasksPull =
           (await AsyncStorage.getItem('@brspark_pull_tasks_ever')) === '1';
 
-        const mergedRemote = remoteTasks.map((remote: any) =>
+        const remoteFt = remoteTasks.filter((t: any) => !taskRowIsRoutineTask(t));
+        const remoteRt = remoteTasks.filter((t: any) => taskRowIsRoutineTask(t));
+        const remoteAllIds = new Set(remoteTasks.map((t: any) => String(t?.id || '')));
+
+        const mergedRemoteFt = remoteFt.map((remote: any) =>
+          mergeRemoteCloudTaskWithPrevious(remote, prevById.get(String(remote.id)))
+        );
+        const mergedRemoteRt = remoteRt.map((remote: any) =>
           mergeRemoteCloudTaskWithPrevious(remote, prevById.get(String(remote.id)))
         );
 
-        let processedTasks = await overlayExecutionStatusOutboxOnTasks(mergedRemote);
-
-        await clearLocalAcceptedTasksForRevisionReopen(processedTasks);
-
-        // Add receivedAt timestamp so the server knows when the phone got it
-        processedTasks = processedTasks.map((t: any) => {
-            if (t.metadata && t.metadata.receivedAt) return t; // Already has it
-            return {
-                ...t,
-                metadata: {
-                    ...(t.metadata || {}),
-                    receivedAt: new Date().toISOString()
-                }
-            };
+        const carriedRt = rtExisting.filter((t: any) => {
+          const rid = String(t?.id || '');
+          if (!rid || remoteAllIds.has(rid)) return false;
+          const st = String(t?.status || '').toUpperCase();
+          if (st === 'CANCELLED' || st === 'CANCELED') return false;
+          return true;
         });
-        
-        await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(processedTasks));
-        
-        // Notify backend we RECEIVED them (sends ping to Kanban that it arrived at the phone: Aguardando Aceite)
-        const unreceived = remoteTasks.filter((t: any) => t.status === 'PENDING' && !t.metadata?.receivedAt);
+
+        let processedFt = await overlayExecutionStatusOutboxOnTasks(mergedRemoteFt);
+        let processedRt = await overlayExecutionStatusOutboxOnTasks([...carriedRt, ...mergedRemoteRt]);
+
+        await clearLocalAcceptedTasksForRevisionReopen([...processedFt, ...processedRt]);
+
+        const keepAfterPull = (t: any) => {
+          const st = String(t?.status || '').toUpperCase();
+          if (st !== 'CANCELLED' && st !== 'CANCELED') return true;
+          return !taskRowIsRoutineTask(t);
+        };
+        processedFt = processedFt.filter(keepAfterPull);
+        processedRt = processedRt.filter(keepAfterPull);
+
+        const stampReceived = (t: any) => {
+          if (t.metadata && t.metadata.receivedAt) return t;
+          return {
+            ...t,
+            metadata: {
+              ...(t.metadata || {}),
+              receivedAt: new Date().toISOString(),
+            },
+          };
+        };
+        processedFt = processedFt.map(stampReceived);
+        processedRt = processedRt.map(stampReceived);
+
+        await saveFtCloudTasks(processedFt);
+        await saveRtCloudTasks(processedRt);
+
+        // Notify backend we RECEIVED them — só FT/OS (RT não usa fila «Pendentes» do técnico).
+        const unreceived = remoteFt.filter(
+          (t: any) => t.status === 'PENDING' && !t.metadata?.receivedAt,
+        );
         if (unreceived.length > 0) {
             Promise.all(unreceived.map((t: any) => apiFetch(`/api/checklists/executions/${t.id}/status`, {
                 method: 'PATCH',
@@ -1545,7 +1594,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
 
         // Igual ao chat: aviso local quando a sync traz OS novas (push remoto do painel é independente).
         if (hadPriorTasksPull) {
-          const newTasks = remoteTasks.filter((t: any) => {
+          const newTasks = remoteFt.filter((t: any) => {
             const id = String(t.id);
             if (prevById.has(id)) return false;
             const st = String(t.status || '').toUpperCase();
@@ -1580,7 +1629,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
 
         await AsyncStorage.setItem('@brspark_pull_tasks_ever', '1');
         await purgeExpiredCompletedExecutionCaches();
-        console.log(`[pullTasks] 💾 Cache @brspark_cloud_tasks atualizado`);
+        console.log(`[pullTasks] 💾 Cache FT + RT (buckets separados) atualizado`);
     } else {
         const err = await res.text();
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);

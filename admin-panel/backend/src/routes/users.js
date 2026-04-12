@@ -9,16 +9,32 @@ const { auditActor } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
+const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 
 const USER_ROLES = new Set(['USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
 
+/** Matrícula funcional (ponto / RH). Vazio → null. Máx. 80 caracteres. */
+function normalizeEmployeeMatricula(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  return s.slice(0, 80);
+}
+
 function normalizeFacePhotos(raw) {
   if (raw == null) return [];
   if (Array.isArray(raw)) return raw.filter((p) => p && typeof p === 'object' && p.id && p.url);
   return [];
+}
+
+function sortFaceEnrollmentPrimaryFirst(arr) {
+  const list = normalizeFacePhotos(arr);
+  const prim = list.filter(isRegistrationPrimaryFacePhoto);
+  const rest = list.filter((p) => !isRegistrationPrimaryFacePhoto(p));
+  return [...prim, ...rest];
 }
 
 function mimeToFaceExt(mt) {
@@ -49,6 +65,7 @@ const userListSelect = {
   tenantId: true,
   email: true,
   name: true,
+  employeeMatricula: true,
   avatarUrl: true,
   phone: true,
   role: true,
@@ -59,16 +76,24 @@ const userListSelect = {
   comprefaceRecognitionSync: true,
   tenant: { select: { id: true, name: true, email: true } },
   technicianProfile: { select: { id: true, status: true } },
+  workTimeTrackingEnabled: true,
 };
 
 // GET /api/users
 router.get('/', async (req, res) => {
   try {
-    const { tenantId, role, q, page = 1, limit = 50 } = req.query;
+    const { tenantId, role, q, page = 1, limit = 50, workTime } = req.query;
     const where = {
       ...(tenantId && { tenantId }),
       ...(role && { role }),
-      ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] }),
+      ...(workTime === '1' && { workTimeTrackingEnabled: true }),
+      ...(q && {
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { employeeMatricula: { contains: q, mode: 'insensitive' } },
+        ],
+      }),
     };
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -89,13 +114,20 @@ router.get('/', async (req, res) => {
 // POST /api/users
 router.post('/', async (req, res) => {
   try {
-    const { name, email, password, tenantId, role: bodyRole = 'USER' } = req.body;
+    const { name, email, password, tenantId, role: bodyRole = 'USER', employeeMatricula: rawMatricula } = req.body;
     if (!name || !email || !password || !tenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
     const role = String(bodyRole).toUpperCase();
     if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Papel inválido.' });
+    const employeeMatricula = normalizeEmployeeMatricula(rawMatricula);
+    if (employeeMatricula) {
+      const dup = await prisma.user.findFirst({ where: { tenantId, employeeMatricula } });
+      if (dup) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
+    }
     const hash = await bcrypt.hash(password, 10);
     const user = await prisma.$transaction(async (tx) => {
-      const u = await tx.user.create({ data: { name, email, password: hash, tenantId, role } });
+      const u = await tx.user.create({
+        data: { name, email, password: hash, tenantId, role, employeeMatricula },
+      });
       if (role === 'PROVIDER') {
         await tx.technicianProfile.create({
           data: { userId: u.id, status: 'PENDING', score: 5 },
@@ -107,8 +139,17 @@ router.post('/', async (req, res) => {
     await prisma.auditLog.create({
       data: { ..._a, tenantId, action: 'USER_CREATE', resource: email, category: 'ADMIN' },
     });
-    res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
+    res
+      .status(201)
+      .json({ id: user.id, name: user.name, email: user.email, role: user.role, employeeMatricula: user.employeeMatricula });
   } catch (err) {
+    if (err.code === 'P2002') {
+      const fields = Array.isArray(err.meta?.target) ? err.meta.target.map(String) : [];
+      if (fields.some((f) => f.includes('employee_matricula'))) {
+        return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
+      }
+      return res.status(400).json({ error: 'Registo duplicado (e-mail ou outro campo único).' });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -257,7 +298,7 @@ router.post('/:id/face-enrollment', async (req, res) => {
       mimeType: mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
       createdAt,
     };
-    const next = [...list, entry];
+    const next = sortFaceEnrollmentPrimaryFirst([...list, entry]);
 
     await prisma.user.update({
       where: { id },
@@ -361,8 +402,14 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
     const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
     const found = list.find((p) => p.id === photoId);
     if (!found) return res.status(404).json({ error: 'Foto não encontrada.' });
+    if (isRegistrationPrimaryFacePhoto(found)) {
+      return res.status(400).json({
+        error:
+          'Esta foto é a do passo 1 do cadastro do prestador (referência principal) e não pode ser removida aqui. Ela só é substituída se o cadastro for refeito e aprovado de novo, ou se o usuário for excluído.',
+      });
+    }
 
-    const next = list.filter((p) => p.id !== photoId);
+    const next = sortFaceEnrollmentPrimaryFirst(list.filter((p) => p.id !== photoId));
 
     if (found.url && typeof found.url === 'string' && found.url.startsWith('/uploads/face-enrollment/')) {
       const rel = found.url.replace(/^\/uploads\//, '');
@@ -477,10 +524,33 @@ router.patch('/:id', express.json(), async (req, res) => {
       faceEnrollmentPhotos,
       isProvider,
       technician,
+      workTimeTrackingEnabled,
+      workTimeEnrolledAt,
+      employeeMatricula: bodyEmployeeMatricula,
     } = req.body;
 
     if (faceEnrollmentPhotos !== undefined && !Array.isArray(faceEnrollmentPhotos)) {
       return res.status(400).json({ error: 'faceEnrollmentPhotos deve ser um array.' });
+    }
+
+    let prevRegistrationPrimary = null;
+    if (faceEnrollmentPhotos !== undefined) {
+      const prevFaces = normalizeFacePhotos(existing.faceEnrollmentPhotos);
+      prevRegistrationPrimary = prevFaces.find(isRegistrationPrimaryFacePhoto);
+      if (prevRegistrationPrimary) {
+        const nextFaces = normalizeFacePhotos(faceEnrollmentPhotos);
+        const kept = nextFaces.find(
+          (p) =>
+            p.id === prevRegistrationPrimary.id &&
+            String(p.url || '') === String(prevRegistrationPrimary.url || '')
+        );
+        if (!kept) {
+          return res.status(400).json({
+            error:
+              'A foto base do passo 1 do cadastro do prestador não pode ser removida nem alterada por esta via.',
+          });
+        }
+      }
     }
 
     if (role != null && !USER_ROLES.has(String(role).toUpperCase())) {
@@ -498,6 +568,16 @@ router.patch('/:id', express.json(), async (req, res) => {
       if (dup) return res.status(400).json({ error: 'E-mail já em uso neste tenant.' });
     }
 
+    if (bodyEmployeeMatricula !== undefined) {
+      const norm = normalizeEmployeeMatricula(bodyEmployeeMatricula);
+      if (norm) {
+        const dupM = await prisma.user.findFirst({
+          where: { tenantId: existing.tenantId, employeeMatricula: norm, NOT: { id } },
+        });
+        if (dupM) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       const userPatch = {};
       if (name != null) userPatch.name = String(name).trim();
@@ -513,9 +593,39 @@ router.patch('/:id', express.json(), async (req, res) => {
         };
       }
       if (typeof isActive === 'boolean') userPatch.isActive = isActive;
+      if (typeof workTimeTrackingEnabled === 'boolean') {
+        userPatch.workTimeTrackingEnabled = workTimeTrackingEnabled;
+        if (workTimeTrackingEnabled && !existing.workTimeEnrolledAt) {
+          userPatch.workTimeEnrolledAt = new Date();
+        }
+        if (!workTimeTrackingEnabled) {
+          userPatch.workTimeEnrolledAt = null;
+        }
+      }
+      if (workTimeEnrolledAt !== undefined) {
+        if (workTimeEnrolledAt === null || workTimeEnrolledAt === '') {
+          userPatch.workTimeEnrolledAt = null;
+        } else {
+          const d = new Date(workTimeEnrolledAt);
+          if (!Number.isNaN(d.getTime())) userPatch.workTimeEnrolledAt = d;
+        }
+      }
       if (addressJson !== undefined) userPatch.addressJson = addressJson;
       if (personalDocuments !== undefined) userPatch.personalDocuments = personalDocuments;
-      if (faceEnrollmentPhotos !== undefined) userPatch.faceEnrollmentPhotos = faceEnrollmentPhotos;
+      if (bodyEmployeeMatricula !== undefined) {
+        userPatch.employeeMatricula = normalizeEmployeeMatricula(bodyEmployeeMatricula);
+      }
+      if (faceEnrollmentPhotos !== undefined) {
+        let nextFaces = sortFaceEnrollmentPrimaryFirst(faceEnrollmentPhotos);
+        if (prevRegistrationPrimary) {
+          nextFaces = nextFaces.map((p) =>
+            p.id === prevRegistrationPrimary.id
+              ? { ...prevRegistrationPrimary, ...p, registrationPrimary: true }
+              : p
+          );
+        }
+        userPatch.faceEnrollmentPhotos = nextFaces;
+      }
 
       if (Object.keys(userPatch).length) {
         await tx.user.update({ where: { id }, data: userPatch });
@@ -565,6 +675,7 @@ router.patch('/:id', express.json(), async (req, res) => {
           data: techPayload,
         });
       }
+
     });
 
     await prisma.auditLog
@@ -582,12 +693,22 @@ router.patch('/:id', express.json(), async (req, res) => {
 
     const fresh = await prisma.user.findUnique({
       where: { id },
-      include: { tenant: { select: { id: true, name: true, email: true } }, technicianProfile: true },
+      include: {
+        tenant: { select: { id: true, name: true, email: true } },
+        technicianProfile: true,
+      },
     });
     const { password, ...safe } = fresh;
     res.json(safe);
   } catch (err) {
     console.error('PATCH /users/:id', err);
+    if (err.code === 'P2002') {
+      const fields = Array.isArray(err.meta?.target) ? err.meta.target.map(String) : [];
+      if (fields.some((f) => f.includes('employee_matricula'))) {
+        return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
+      }
+      return res.status(400).json({ error: 'Registo duplicado (e-mail ou outro campo único).' });
+    }
     res.status(500).json({ error: err.message });
   }
 });

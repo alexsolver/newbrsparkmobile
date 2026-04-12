@@ -2,6 +2,30 @@
 
 const TASK_ICON_MAX = 80;
 
+const TASK_ICON_LIBRARIES = new Set([
+  'Ionicons',
+  'AntDesign',
+  'Entypo',
+  'Feather',
+  'FontAwesome',
+  'FontAwesome5',
+  'Foundation',
+  'MaterialIcons',
+  'MaterialCommunityIcons',
+  'Octicons',
+]);
+
+/**
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function sanitizeTaskIconLibrary(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  if (!s || s.length > 48) return '';
+  return TASK_ICON_LIBRARIES.has(s) ? s : '';
+}
+
 /**
  * Nome de ícone Ionicons (kebab-case) para metadata.icon do modelo / tarefa.
  * @param {unknown} raw
@@ -22,8 +46,11 @@ function sanitizeTaskIconName(raw) {
 function compactTemplateMetadataForPrompt(meta) {
   const m = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : {};
   const icon = sanitizeTaskIconName(m.icon);
+  const iconLibrary = sanitizeTaskIconLibrary(m.iconLibrary);
   try {
-    return JSON.stringify({ icon });
+    const o = { icon };
+    if (icon && iconLibrary && iconLibrary !== 'Ionicons') o.iconLibrary = iconLibrary;
+    return JSON.stringify(o);
   } catch {
     return '{"icon":""}';
   }
@@ -45,10 +72,23 @@ function applyTemplateMetadataPatch(current, patch) {
     const rawIc = patch.icon;
     if (rawIc === '' || rawIc === null) {
       delete base.icon;
+      delete base.iconLibrary;
     } else {
       const ic = sanitizeTaskIconName(rawIc);
       if (ic) base.icon = ic;
       else warnings.push('templateMetadataPatch.icon ignorado (formato inválido).');
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'iconLibrary')) {
+    const rawLib = patch.iconLibrary;
+    if (rawLib === '' || rawLib === null) {
+      delete base.iconLibrary;
+    } else {
+      const lib = sanitizeTaskIconLibrary(rawLib);
+      if (lib && lib !== 'Ionicons') base.iconLibrary = lib;
+      else delete base.iconLibrary;
+      if (!lib && String(rawLib || '').trim())
+        warnings.push('templateMetadataPatch.iconLibrary ignorado (valor inválido).');
     }
   }
   return { metadata: base, warnings };
@@ -56,6 +96,7 @@ function applyTemplateMetadataPatch(current, patch) {
 
 module.exports = {
   sanitizeTaskIconName,
+  sanitizeTaskIconLibrary,
   compactTemplateMetadataForPrompt,
   applyTemplateMetadataPatch,
 };

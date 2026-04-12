@@ -133,17 +133,21 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   // Pulse animation for the online dot
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    if (isOnline) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.6, duration: 900, useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
+    if (isOnline !== true) {
       pulse.setValue(1);
+      return;
     }
-  }, [isOnline]);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.6, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [isOnline, pulse]);
 
   // Dot color: grey while first check, green online, red offline
   const dotColor =

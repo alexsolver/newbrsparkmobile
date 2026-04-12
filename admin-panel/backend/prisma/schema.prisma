@@ -76,6 +76,79 @@ model Tenant {
   evaluationActionPlans EvaluationActionPlan[]
   evaluationDisputes    EvaluationDispute[]
   technicianRegistrationApplications TechnicianRegistrationApplication[]
+  workTimeSettings      WorkTimeSettings?
+  workTimePunches       WorkTimePunch[]
+  routineTaskAssignments RoutineTaskAssignment[]
+}
+
+/// Política de registro de horas trabalhadas (ponto) — 1 registo por tenant.
+model WorkTimeSettings {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  moduleEnabled                 Boolean @default(false)
+  requireFaceOnEveryPunch       Boolean @default(true)
+  requireGpsOnEveryPunch        Boolean @default(true)
+  requireResolvedAddress        Boolean @default(true)
+  maxClockDriftSeconds          Int     @default(300)
+  minGpsAccuracyMeters          Int?
+  employeeNoticeMarkdown        String? @db.Text
+  consentVersion                String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum WorkTimePunchType {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_START
+  BREAK_END
+}
+
+enum WorkTimePunchSyncStatus {
+  PENDING
+  SYNCED
+  ERROR
+}
+
+model WorkTimePunch {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type              WorkTimePunchType
+  deviceTimestamp   DateTime
+  serverTimestamp   DateTime            @default(now())
+  lat               Float?
+  lng               Float?
+  accuracy          Float?
+  formattedAddress  String?             @db.Text
+  addressResolvedAt DateTime?
+
+  faceVerificationId String?
+  faceScore          Float?
+  faceEngine         String?
+  /// true quando, no momento da batida, a matrícula facial não cumpria fotos base + CompreFace sincronizado.
+  faceEnrollmentInvalid Boolean @default(false)
+
+  /// Batida registada fora do percurso ideal (falha de GPS, endereço, face, etc.) com justificativa.
+  exceptionRegistration   Boolean @default(false)
+  exceptionJustification  String? @db.Text
+  /// Resumo da validação: dispositivo, GPS, endereço, face (auditoria).
+  validationSnapshot      Json?
+
+  syncStatus WorkTimePunchSyncStatus @default(SYNCED)
+  rawPayload Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, userId, deviceTimestamp])
+  @@index([userId, createdAt])
 }
 
 /// Candidatura de cadastro de prestador (formulário global + revisão do gestor).
@@ -233,6 +306,8 @@ model User {
   email      String
   name       String
   password   String   // bcrypt hash
+  /// Matrícula funcional (RH / ponto). Uma por utilizador; única por tenant quando preenchida.
+  employeeMatricula String? @map("employee_matricula")
   avatarUrl  String?
   phone      String?
   /// Endereço residencial / correspondência (JSON estruturado, alinhado a multi-location)
@@ -265,8 +340,14 @@ model User {
   evaluationActionPlans           EvaluationActionPlan[] @relation("ActionPlanTechnician")
   disputesOpened                  EvaluationDispute[] @relation("DisputeOpenedByTechnician")
   disputesResolved                EvaluationDispute[] @relation("DisputeResolvedBySupervisor")
+  workTimePunches                   WorkTimePunch[]
+  routineTaskAssignments            RoutineTaskAssignment[]
+
+  workTimeTrackingEnabled Boolean   @default(false)
+  workTimeEnrolledAt      DateTime?
 
   @@unique([email, tenantId])
+  @@unique([tenantId, employeeMatricula])
 }
 
 model TechnicianProfile {
@@ -737,6 +818,34 @@ model ChecklistTemplate {
   updatedAt   DateTime @updatedAt
   
   executions  ChecklistExecution[]
+  routineTaskAssignments RoutineTaskAssignment[]
+}
+
+/// Contador global por período AAAA-MM (fuso America/Sao_Paulo) para RT-AAAA-MM-NNNNNN (tarefas de rotina).
+model RtSerialCounter {
+  periodKey String @id
+  lastSeq   Int    @default(0)
+}
+
+/// Formulários do Form Builder associados ao técnico (tarefas de rotina / RT), configurados no perfil no painel.
+model RoutineTaskAssignment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId String
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// Rótulo opcional no menu «Mais» do app; vazio → usa o título do modelo.
+  menuLabel  String?
+  sortOrder  Int      @default(0)
+  /// Quantas execuções RT ativas (PENDING/…/IN_PROGRESS) manter no servidor para cache no celular (1–20).
+  mobilePrefetchSlots Int @default(1)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, templateId])
+  @@index([tenantId])
+  @@index([userId])
 }
 
 /// Contador global por período AAAA-MM (fuso America/Sao_Paulo) para FT-AAAA-MM-NNNNNNN.
@@ -771,6 +880,8 @@ model ChecklistExecution {
   id          String   @id @default(cuid())
   /// Número convencional ex.: FT-2026-04-0000001. Único entre valores não nulos (índice parcial SQL; ver migration).
   osNumber    String?
+  /// Tarefa de rotina (app): ex. RT-2026-04-000123. Não entra na lista de OS; índice único parcial no SQL (migration).
+  routineTaskNumber String?
   templateId  String?
   template    ChecklistTemplate? @relation(fields: [templateId], references: [id])
   ownerEmail  String   // Email do Técnico/Coordenador

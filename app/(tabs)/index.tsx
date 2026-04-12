@@ -19,6 +19,8 @@ import {
   ActivityIndicator,
   Linking,
   FlatList,
+  Animated,
+  Easing,
 } from 'react-native';
 import {
   SERVICE_CATEGORY_COLORS,
@@ -41,7 +43,18 @@ import { LEGACY_SERVICE_CATEGORY_I18N } from '../../src/services/directoryCatego
 import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 import { ApiService, ProviderService } from '../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  Ionicons,
+  AntDesign,
+  Entypo,
+  Feather,
+  FontAwesome,
+  FontAwesome5,
+  Foundation,
+  MaterialIcons,
+  MaterialCommunityIcons,
+  Octicons,
+} from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Badge } from '../../src/components/Badge';
 import { StockService } from '../../src/services/stockService';
@@ -65,11 +78,53 @@ import {
   purgeExpiredCompletedExecutionCaches,
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from '../../src/services/syncService';
+import { patchCloudTaskById } from '../../src/lib/cloudTasksBuckets';
+import { taskRowIsRoutineTask } from '../../src/lib/routineTaskQueueUi';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 import MapView, { Marker, Callout, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
+
+/** Ícone do despacho (`metadata.icon` + `metadata.iconLibrary`) — paridade com o Form Builder. */
+function TaskMetadataGlyph({
+  icon,
+  iconLibrary,
+  size,
+  color,
+}: {
+  icon?: string | null;
+  iconLibrary?: string | null;
+  size: number;
+  color: string;
+}) {
+  const name = (icon && String(icon).trim()) || '';
+  if (!name) return null;
+  const lib = String(iconLibrary || 'Ionicons').trim() || 'Ionicons';
+  switch (lib) {
+    case 'AntDesign':
+      return <AntDesign name={name as any} size={size} color={color} />;
+    case 'Entypo':
+      return <Entypo name={name as any} size={size} color={color} />;
+    case 'Feather':
+      return <Feather name={name as any} size={size} color={color} />;
+    case 'FontAwesome':
+      return <FontAwesome name={name as any} size={size} color={color} />;
+    case 'FontAwesome5':
+      return <FontAwesome5 name={name as any} size={size} color={color} />;
+    case 'Foundation':
+      return <Foundation name={name as any} size={size} color={color} />;
+    case 'MaterialIcons':
+      return <MaterialIcons name={name as any} size={size} color={color} />;
+    case 'MaterialCommunityIcons':
+      return <MaterialCommunityIcons name={name as any} size={size} color={color} />;
+    case 'Octicons':
+      return <Octicons name={name as any} size={size} color={color} />;
+    case 'Ionicons':
+    default:
+      return <Ionicons name={name as any} size={size} color={color} />;
+  }
+}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -191,7 +246,7 @@ function parseIsoToMs(iso: string | null | undefined): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-export type ProviderListSortMode =
+type ProviderListSortMode =
   | 'NEWEST'
   | 'OLDEST'
   | 'CREATED_NEWEST'
@@ -200,6 +255,111 @@ export type ProviderListSortMode =
   | 'DUE_LATEST'
   | 'OSRM_ROUTE'
   | 'OSRM_SLA_ROUTE';
+
+/** Modos listados na folha de toque longo (sem rota OSRM). */
+type ProviderLongPressSheetMode =
+  | 'NEWEST'
+  | 'OLDEST'
+  | 'CREATED_NEWEST'
+  | 'CREATED_OLDEST'
+  | 'DUE_SOONEST'
+  | 'DUE_LATEST';
+
+const PROVIDER_LONGPRESS_SORT_ROWS: {
+  mode: ProviderLongPressSheetMode;
+  i18nKey:
+    | 'receiptNewest'
+    | 'receiptOldest'
+    | 'createdNew'
+    | 'createdOld'
+    | 'dueSoon'
+    | 'dueLate';
+  icon: string;
+}[] = [
+  { mode: 'NEWEST', i18nKey: 'receiptNewest', icon: 'arrow-down-circle-outline' },
+  { mode: 'OLDEST', i18nKey: 'receiptOldest', icon: 'arrow-up-circle-outline' },
+  { mode: 'CREATED_NEWEST', i18nKey: 'createdNew', icon: 'create-outline' },
+  { mode: 'CREATED_OLDEST', i18nKey: 'createdOld', icon: 'document-text-outline' },
+  { mode: 'DUE_SOONEST', i18nKey: 'dueSoon', icon: 'alarm-outline' },
+  { mode: 'DUE_LATEST', i18nKey: 'dueLate', icon: 'hourglass-outline' },
+];
+
+/** Critérios mostrados ao segurar «Recentes» (sem opostos de «Antigas» na mesma folha). */
+const PROVIDER_LONGPRESS_RECENT_MODES: readonly ProviderLongPressSheetMode[] = [
+  'NEWEST',
+  'CREATED_NEWEST',
+  'DUE_SOONEST',
+];
+/** Critérios mostrados ao segurar «Antigas». */
+const PROVIDER_LONGPRESS_OLD_MODES: readonly ProviderLongPressSheetMode[] = [
+  'OLDEST',
+  'CREATED_OLDEST',
+  'DUE_LATEST',
+];
+
+function providerLongPressModesForAnchor(anchor: 'NEWEST' | 'OLDEST'): readonly ProviderLongPressSheetMode[] {
+  return anchor === 'NEWEST' ? PROVIDER_LONGPRESS_RECENT_MODES : PROVIDER_LONGPRESS_OLD_MODES;
+}
+
+function providerListModeInLongPressAnchorFamily(
+  mode: ProviderListSortMode,
+  anchor: 'NEWEST' | 'OLDEST',
+): boolean {
+  if (mode === 'OSRM_ROUTE' || mode === 'OSRM_SLA_ROUTE') return false;
+  return (providerLongPressModesForAnchor(anchor) as readonly string[]).includes(mode);
+}
+
+function providerLongPressRowsForAnchor(anchor: 'NEWEST' | 'OLDEST') {
+  const allow = new Set(providerLongPressModesForAnchor(anchor));
+  return PROVIDER_LONGPRESS_SORT_ROWS.filter((r) => allow.has(r.mode));
+}
+
+function normalizeSavedLongPressForSlot(
+  mode: ProviderLongPressSheetMode,
+  slot: 'recent' | 'old',
+): ProviderLongPressSheetMode {
+  const anchor = slot === 'recent' ? 'NEWEST' : 'OLDEST';
+  return providerLongPressModesForAnchor(anchor).includes(mode) ? mode : anchor === 'NEWEST' ? 'NEWEST' : 'OLDEST';
+}
+
+const OS_ALT_SORT_STORAGE_KEY = '@brspark_provider_os_alt_sort_v1';
+
+/** Chips Recentes / Antigas / Roteirizador — mesma métrica de ícone e texto. */
+const PROVIDER_OS_SORT_CHIP_ICON_SIZE = 16;
+const PROVIDER_OS_SORT_CHIP_FONT_SIZE = 11;
+const PROVIDER_OS_SORT_CHIP_LINE_HEIGHT = Math.round(PROVIDER_OS_SORT_CHIP_FONT_SIZE * 1.22);
+const PROVIDER_OS_SORT_CHIP_ICON_MARGIN = 5;
+
+function isProviderLongPressSheetMode(s: string): s is ProviderLongPressSheetMode {
+  return (
+    s === 'NEWEST' ||
+    s === 'OLDEST' ||
+    s === 'CREATED_NEWEST' ||
+    s === 'CREATED_OLDEST' ||
+    s === 'DUE_SOONEST' ||
+    s === 'DUE_LATEST'
+  );
+}
+
+function parseStoredAltSort(obj: unknown, slot: 'recent' | 'old'): ProviderLongPressSheetMode {
+  if (obj == null || typeof obj !== 'object') return slot === 'recent' ? 'NEWEST' : 'OLDEST';
+  const raw = (obj as Record<string, unknown>)[slot];
+  const s = String(raw || '');
+  if (isProviderLongPressSheetMode(s)) return s;
+  return slot === 'recent' ? 'NEWEST' : 'OLDEST';
+}
+
+function providerAltPickedDefaultForSheet(
+  anchor: 'NEWEST' | 'OLDEST',
+  currentMode: ProviderListSortMode,
+  savedRecent: ProviderLongPressSheetMode,
+  savedOld: ProviderLongPressSheetMode,
+): ProviderLongPressSheetMode {
+  if (providerListModeInLongPressAnchorFamily(currentMode, anchor)) {
+    return currentMode as ProviderLongPressSheetMode;
+  }
+  return anchor === 'NEWEST' ? savedRecent : savedOld;
+}
 
 function providerSortTieBreak(a: { id?: string }, b: { id?: string }): number {
   return String(a.id || '').localeCompare(String(b.id || ''));
@@ -330,10 +490,29 @@ function spreadOverlappingRouteMarkerCoords(
   return out;
 }
 
+/** Minutos até o prazo efetivo de ordenação (`__dueSortMs`: fim previsto formulário ou vencimento). */
+function providerTaskMinutesToDueSort(item: any): number | null {
+  const ms = item.__dueSortMs;
+  if (ms == null || !Number.isFinite(Number(ms)) || Number(ms) <= 0) return null;
+  return (Number(ms) - Date.now()) / 60000;
+}
+
+/** Duração de viagem ajustada por urgência (Rota + SLA). Usa `__dueSortMs`, não o `dueDate` só vencimento do cartão. */
+function providerOsrmSlaAdjustedDurationMinutes(durationSecs: number, item: any): number {
+  const durationMins = durationSecs / 60;
+  const minsToDue = providerTaskMinutesToDueSort(item);
+  if (minsToDue == null) return durationMins;
+  let urgencyDiscount = 0;
+  if (minsToDue < 0) urgencyDiscount = 999999;
+  else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
+  else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
+  return durationMins - urgencyDiscount;
+}
+
 /** Mesma ordenação da lista “Rota do dia” (para polilinha bater com os números 1,2,3…). */
 function sortTasksForOsrmRoute(
   tasks: any[],
-  mode: 'NEWEST' | 'OLDEST' | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE',
+  mode: ProviderListSortMode,
   osrmDurations: Record<string, number>
 ): any[] {
   return [...tasks].sort((a, b) => {
@@ -341,25 +520,11 @@ function sortTasksForOsrmRoute(
       const d1 = osrmDurations[String(a.id)] ?? 999999;
       const d2 = osrmDurations[String(b.id)] ?? 999999;
       if (mode === 'OSRM_SLA_ROUTE') {
-        const getScore = (item: any, durationSecs: number) => {
-          const durationMins = durationSecs / 60;
-          if (!item.dueDate) return durationMins;
-          const msToDue = new Date(item.dueDate).getTime() - Date.now();
-          const minsToDue = msToDue / 60000;
-          let urgencyDiscount = 0;
-          if (minsToDue < 0) urgencyDiscount = 999999;
-          else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
-          else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
-          return durationMins - urgencyDiscount;
-        };
-        return getScore(a, d1) - getScore(b, d2);
+        return providerOsrmSlaAdjustedDurationMinutes(d1, a) - providerOsrmSlaAdjustedDurationMinutes(d2, b);
       }
       return d1 - d2;
     }
-    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    if (isNaN(tA) || isNaN(tB)) return 0;
-    return mode === 'NEWEST' ? tB - tA : tA - tB;
+    return compareProviderTasksForList(a, b, mode);
   });
 }
 
@@ -376,6 +541,14 @@ function taskMetadataRecord(t: any): Record<string, unknown> {
   }
   if (typeof m === 'object') return m as Record<string, unknown>;
   return {};
+}
+
+/** Vencimento operacional (`metadata.dueDate` / `endDate`), sem fim previsto da agenda — valor do cartão. */
+function providerTaskVencimentoIso(t: any): string | null {
+  const meta = taskMetadataRecord(t);
+  if (meta.dueDate != null && String(meta.dueDate).trim() !== '') return String(meta.dueDate).trim();
+  if (t?.endDate != null && String(t.endDate).trim() !== '') return String(t.endDate).trim();
+  return null;
 }
 
 /** ISO da sincronização no aparelho (metadata.receivedAt ou syncedAt). */
@@ -740,6 +913,9 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
   const segmentEnds = providerTaskSegmentPolygonEndpoints(task);
   const segmentLineA = segmentEnds ? providerTaskSegmentDisplayLineA(task) : '';
   const segmentLineB = segmentEnds ? providerTaskSegmentDisplayLineB(task) : '';
+  const vencDetailIso = providerTaskVencimentoIso(task);
+  const vencDetailMs = vencDetailIso ? new Date(vencDetailIso).getTime() : NaN;
+  const vencDetailOverdue = Number.isFinite(vencDetailMs) && vencDetailMs < Date.now();
 
   return (
     <>
@@ -994,6 +1170,25 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 </Text>
               </View>
             </View>
+            {vencDetailIso ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <Ionicons name="alert-circle-outline" size={18} color={P.textSecondary} style={{ marginRight: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                    {t('home.osVencimentoDetailLabel')}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: vencDetailOverdue ? P.destructive : P.textSecondary,
+                      fontWeight: '800',
+                    }}
+                  >
+                    {formatProviderTaskWindowDateTime(vencDetailIso, i18n.language || 'pt-BR')}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
               <Ionicons name="play-circle-outline" size={18} color={P.textSecondary} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
@@ -1023,23 +1218,26 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
           </View>
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="alert-circle" size={18} color={P.destructive} style={{ marginRight: 12 }} />
-            <View>
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color={vencDetailIso ? (vencDetailOverdue ? P.destructive : P.textSecondary) : P.textLight}
+              style={{ marginRight: 12 }}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                {t('home.osVencimentoDetailLabel')}
+              </Text>
               <Text
                 style={{
-                  fontSize: 11,
-                  color: P.destructive,
+                  fontSize: 14,
+                  color: vencDetailIso ? (vencDetailOverdue ? P.destructive : P.textSecondary) : P.textLight,
                   fontWeight: '800',
-                  textTransform: 'uppercase',
                 }}
               >
-                {t('home.osDueDetailTitleLegacy')}
-              </Text>
-              <Text style={{ fontSize: 14, color: P.destructive, fontWeight: '900' }}>
-                {new Date(task.dueDate).toLocaleString(i18n.language || 'pt-BR', {
-                  dateStyle: 'short',
-                  timeStyle: 'short',
-                })}
+                {vencDetailIso
+                  ? formatProviderTaskWindowDateTime(vencDetailIso, i18n.language || 'pt-BR')
+                  : '—'}
               </Text>
             </View>
           </View>
@@ -1131,7 +1329,7 @@ function effectiveProviderTaskStatus(
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   // Revisão reaberta no admin: PENDING/RECEIVED antes do cache "executada" (evita listar como finalizada).
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
-    if (inprogressIds.has(String(t.id)) || acceptedIds.has(String(t.id))) return 'IN_PROGRESS';
+    if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
     return 'PENDING';
   }
   // Conclusão local/offline: `@brspark_executed_tasks` já tem o id, mas a agenda/cache ainda pode trazer IN_PROGRESS/ACCEPTED até sincronizar.
@@ -1143,10 +1341,9 @@ function effectiveProviderTaskStatus(
   if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
   if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
   if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
-  // Aceite no app (lista local) ou no Kanban: não deixar em "Pendentes" só porque o PATCH ainda não chegou ao servidor.
-  if (acceptedIds.has(String(t.id)) && (raw === 'PENDING' || raw === 'RECEIVED')) return 'IN_PROGRESS';
+  // Aceite (app / Kanban) sem execução iniciada: fica em «Pendentes» até `inprogressIds` ou IN_PROGRESS real no servidor.
   if (raw === 'RECEIVED') return 'PENDING';
-  if (raw === 'ACCEPTED') return 'IN_PROGRESS';
+  if (raw === 'ACCEPTED') return 'PENDING';
   return raw === 'PENDING' || raw === '' ? 'PENDING' : raw;
 }
 
@@ -1154,7 +1351,7 @@ function providerTabMatchesTask(
   tab: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
   status: string
 ): boolean {
-  // PAUSED: mesma aba que "Em andamento" (OS já iniciada; cartão vermelho com badge de pausa).
+  // PAUSED: mesma aba que "Iniciadas" (OS já iniciada; cartão vermelho com badge de pausa).
   if (tab === 'PENDING') return status === 'PENDING';
   if (tab === 'IN_PROGRESS') return status === 'IN_PROGRESS' || status === 'PAUSED';
   return status === tab;
@@ -1174,7 +1371,7 @@ function providerTaskListAccentColor(
   if (isProviderRevisionTask(t) && (eff === 'PENDING' || eff === 'IN_PROGRESS')) {
     return SERVICE_CATEGORY_COLORS.Tecnologia;
   }
-  if (inprogressIds.has(String(t.id)) || t.isAccepted) return MEDIA_TAG_COLORS.DURING;
+  if (eff === 'IN_PROGRESS' || eff === 'PAUSED') return MEDIA_TAG_COLORS.DURING;
   return P.textLight;
 }
 
@@ -1218,7 +1415,7 @@ function smartMatch(provider: any, query: string): boolean {
   return words.some(w => kwStr.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(w));
 }
 
-/** PATCH IN_PROGRESS (ou fila offline) + cache `@brspark_cloud_tasks`, alinhado ao checklist. */
+/** PATCH IN_PROGRESS (ou fila offline) + cache local FT/RT (buckets), alinhado ao checklist. */
 async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<void> {
   const id = String(taskId || '').trim();
   if (!id) return;
@@ -1229,30 +1426,72 @@ async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<
     metadata: { executionPaused: false, lastResumedAt: ts },
   });
   try {
-    const raw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-    let arr: any[] = [];
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      arr = [];
-    }
-    if (!Array.isArray(arr)) arr = [];
-    const ix = arr.findIndex((x: any) => String(x.id) === id);
-    if (ix >= 0) {
-      arr[ix] = {
-        ...arr[ix],
-        status: 'IN_PROGRESS',
-        metadata: {
-          ...(arr[ix].metadata || {}),
-          executionPaused: false,
-          lastResumedAt: ts,
-        },
-      };
-      await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(arr));
-    }
+    await patchCloudTaskById(id, (row) => ({
+      ...row,
+      status: 'IN_PROGRESS',
+      metadata: {
+        ...(row.metadata || {}),
+        executionPaused: false,
+        lastResumedAt: ts,
+      },
+    }));
   } catch {
     /* ignore */
   }
+}
+
+/** Selo circular na lista prestador: OS a aguardar confirmação (prancheta) + tempo (ampulheta), com pulso no pai. */
+function ProviderAwaitAcceptOrb(props: {
+  pulseOpacity: Animated.Value;
+  pulseScale: Animated.Value;
+  warning: { fg: string; bg: string; border: string };
+  cardWhite: string;
+  accessibilityLabel: string;
+}) {
+  const { pulseOpacity, pulseScale, warning, cardWhite, accessibilityLabel } = props;
+  return (
+    <Animated.View
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: warning.bg,
+        borderWidth: 2,
+        borderColor: warning.border,
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: pulseOpacity,
+        transform: [{ scale: pulseScale }],
+        shadowColor: warning.fg,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
+        elevation: 4,
+      }}
+    >
+      <MaterialCommunityIcons name="clipboard-check-outline" size={22} color={warning.fg} />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          right: -2,
+          bottom: -2,
+          width: 18,
+          height: 18,
+          borderRadius: 9,
+          backgroundColor: cardWhite,
+          borderWidth: 1.5,
+          borderColor: warning.border,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Ionicons name="hourglass-outline" size={10} color={warning.fg} />
+      </View>
+    </Animated.View>
+  );
 }
 
 export default function DashboardScreen() {
@@ -1302,15 +1541,25 @@ export default function DashboardScreen() {
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  /** IDs em `@brspark_accepted_tasks` — alinhado a `effectiveProviderTaskStatus` (aba Pendentes vs Em andamento). */
+  /** IDs em `@brspark_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
-  const [providerSortMode, setProviderSortMode] = useState<'NEWEST' | 'OLDEST' | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>('NEWEST');
+  const [providerSortMode, setProviderSortMode] = useState<ProviderListSortMode>('NEWEST');
   const [osrmDurations, setOsrmDurations] = useState<Record<string, number>>({});
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
   /** Qual modo está a ser calculado (spinner nos chips — não confundir com providerSortMode até terminar) */
   const [osrmOptimizingMode, setOsrmOptimizingMode] = useState<null | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>(null);
   const lastOsrmPendingKeyRef = useRef<string>('');
-  const [providerSearch, setProviderSearch] = useState('');
+  /** Evita que o toque curto dispare logo após toque longo (Recentes / Antigas). */
+  const skipReceiptTapAfterLongPress = useRef(false);
+  /** Folha de critérios alternativos: âncora do segmento que abriu o menu. */
+  const [providerAltSortAnchor, setProviderAltSortAnchor] = useState<null | 'NEWEST' | 'OLDEST'>(null);
+  const [providerAltSortPicked, setProviderAltSortPicked] = useState<ProviderLongPressSheetMode>('NEWEST');
+  const [savedAltSortRecent, setSavedAltSortRecent] = useState<ProviderLongPressSheetMode>('NEWEST');
+  const [savedAltSortOld, setSavedAltSortOld] = useState<ProviderLongPressSheetMode>('OLDEST');
+  const [providerRouteSheetOpen, setProviderRouteSheetOpen] = useState(false);
+  /** Pulso no selo «aguardando aceite» (lista prestador). */
+  const providerAwaitAcceptPulseOpacity = useRef(new Animated.Value(1)).current;
+  const providerAwaitAcceptPulseScale = useRef(new Animated.Value(1)).current;
   const [isProviderMenuExpanded, setIsProviderMenuExpanded] = useState(true);
   // Which list section is currently in drag-reorder mode ('MY' | 'SHARED' | null)
   const [reorderingList, setReorderingList] = useState<'MY' | 'SHARED' | null>(null);
@@ -1363,6 +1612,76 @@ export default function DashboardScreen() {
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (mode !== 'PROVIDER') {
+      providerAwaitAcceptPulseOpacity.stopAnimation();
+      providerAwaitAcceptPulseOpacity.setValue(1);
+      providerAwaitAcceptPulseScale.stopAnimation();
+      providerAwaitAcceptPulseScale.setValue(1);
+      return;
+    }
+    const pulseMs = 520;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(providerAwaitAcceptPulseOpacity, {
+            toValue: 0.38,
+            duration: pulseMs,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(providerAwaitAcceptPulseScale, {
+            toValue: 1.16,
+            duration: pulseMs,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(providerAwaitAcceptPulseOpacity, {
+            toValue: 1,
+            duration: pulseMs,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(providerAwaitAcceptPulseScale, {
+            toValue: 1,
+            duration: pulseMs,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      providerAwaitAcceptPulseOpacity.setValue(1);
+      providerAwaitAcceptPulseScale.setValue(1);
+    };
+  }, [mode, providerAwaitAcceptPulseOpacity, providerAwaitAcceptPulseScale]);
+
+  useEffect(() => {
+    if (mode !== 'PROVIDER') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(OS_ALT_SORT_STORAGE_KEY);
+        const o = raw ? JSON.parse(raw) : {};
+        if (cancelled) return;
+        setSavedAltSortRecent(
+          normalizeSavedLongPressForSlot(parseStoredAltSort(o, 'recent'), 'recent'),
+        );
+        setSavedAltSortOld(normalizeSavedLongPressForSlot(parseStoredAltSort(o, 'old'), 'old'));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
   /** Pendentes com coordenadas, na mesma ordem da lista quando “Rota” está ativa (mapa alinhado à timeline). */
   const routeMapTasksOrdered = useMemo(() => {
     const base = providerTasks.filter((t) => {
@@ -1370,10 +1689,7 @@ export default function DashboardScreen() {
       if (!providerTabMatchesTask(providerTab, s)) return false;
       return parseCoordLatLng(t) != null;
     });
-    if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
-      return sortTasksForOsrmRoute(base, providerSortMode, osrmDurations);
-    }
-    return sortTasksForOsrmRoute(base, 'NEWEST', {});
+    return sortTasksForOsrmRoute(base, providerSortMode, osrmDurations);
   }, [providerTasks, completedIds, inprogressIds, acceptedIds, providerTab, providerSortMode, osrmDurations]);
 
   /** Coordenadas só para o pin (polilinha usa coords reais). Separa pins < ~50 m para não esconder 2 atrás do 1. */
@@ -1538,18 +1854,7 @@ export default function DashboardScreen() {
            const d1 = newDurs[String(a.id)] ?? 999999;
            const d2 = newDurs[String(b.id)] ?? 999999;
            if (mode === 'OSRM_SLA_ROUTE') {
-               const getScore = (item: any, durationSecs: number) => {
-                   const durationMins = durationSecs / 60;
-                   if (!item.dueDate) return durationMins;
-                   const msToDue = new Date(item.dueDate).getTime() - Date.now();
-                   const minsToDue = msToDue / 60000;
-                   let urgencyDiscount = 0;
-                   if (minsToDue < 0) urgencyDiscount = 999999;
-                   else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
-                   else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
-                   return durationMins - urgencyDiscount;
-               };
-               return getScore(a, d1) - getScore(b, d2);
+               return providerOsrmSlaAdjustedDurationMinutes(d1, a) - providerOsrmSlaAdjustedDurationMinutes(d2, b);
            }
            return d1 - d2;
         });
@@ -1621,18 +1926,7 @@ export default function DashboardScreen() {
                 const d1 = osrmDurations[String(a.id)] ?? 999999;
                 const d2 = osrmDurations[String(b.id)] ?? 999999;
                 if (mode === 'OSRM_SLA_ROUTE') {
-                  const getScore = (item: any, durationSecs: number) => {
-                    const durationMins = durationSecs / 60;
-                    if (!item.dueDate) return durationMins;
-                    const msToDue = new Date(item.dueDate).getTime() - Date.now();
-                    const minsToDue = msToDue / 60000;
-                    let urgencyDiscount = 0;
-                    if (minsToDue < 0) urgencyDiscount = 999999;
-                    else if (minsToDue < 120) urgencyDiscount = (120 - minsToDue) * 5;
-                    else if (minsToDue < 1440) urgencyDiscount = (1440 - minsToDue) * 0.1;
-                    return durationMins - urgencyDiscount;
-                  };
-                  return getScore(a, d1) - getScore(b, d2);
+                  return providerOsrmSlaAdjustedDurationMinutes(d1, a) - providerOsrmSlaAdjustedDurationMinutes(d2, b);
                 }
                 return d1 - d2;
               });
@@ -1665,9 +1959,11 @@ export default function DashboardScreen() {
       updates.push({ id: item.id, displayOrder: i + 1 });
     });
 
-    import('../../src/database').then(({ updateAssetOrder }) => {
-      updateAssetOrder(updates, user?.email || '');
-    });
+    import('../../src/database')
+      .then(({ updateAssetOrder }) => {
+        updateAssetOrder(updates, user?.email || '');
+      })
+      .catch(() => {});
 
     const applySwap = (prev: Asset[]) =>
       prev.map(a => { const found = clone.find(c => c.id === a.id); return found ? { ...a, displayOrder: found.displayOrder } : a; });
@@ -1794,7 +2090,8 @@ export default function DashboardScreen() {
          const pt_filtered = combinedEvents.filter((e: any) => {
              if (e.source !== 'CHECKLIST' && e.category !== 'TASK') return false;
              if (rejectedTasks.includes(String(e.id))) return false;
-             return true; 
+             if (taskRowIsRoutineTask(e)) return false;
+             return true;
          }).filter((e: any) => {
              const isPurged = executedTasksRaw.find((raw:any) => (typeof raw === 'string' ? raw : raw.id) === String(e.id)) 
                               && !executedMap[String(e.id)];
@@ -1821,6 +2118,21 @@ export default function DashboardScreen() {
             const formTemplateTitle =
               rawFormTitle && rawFormTitle !== String(serviceTitle).trim() ? rawFormTitle : null;
 
+            const executionCreatedIso =
+              t.executionCreatedAt != null && String(t.executionCreatedAt).trim() !== ''
+                ? String(t.executionCreatedAt).trim()
+                : null;
+            const createdAtDisplay =
+              executionCreatedIso || ymdLocalNoonToIsoUtc(t.startDate) || new Date().toISOString();
+            const receivedMs = parseIsoToMs(providerTaskDeviceReceivedAtIso(t));
+            const osCreatedMs =
+              parseIsoToMs(executionCreatedIso) ||
+              parseIsoToMs(ymdLocalNoonToIsoUtc(t.startDate)) ||
+              0;
+            const __receivedSortMs = receivedMs > 0 ? receivedMs : osCreatedMs;
+            const __osCreatedSortMs = osCreatedMs;
+            const __dueSortMs = parseIsoToMs(providerTaskDueIsoForSort(t));
+
             return {
                ...t,
                id: String(t.id),
@@ -1837,8 +2149,11 @@ export default function DashboardScreen() {
                isCachedLocally: false,
                service: serviceTitle,
                formTemplateTitle,
-               createdAt: t.startDate || new Date().toISOString(),
-               dueDate: providerTaskDueIso(t),
+               createdAt: createdAtDisplay,
+               dueDate: providerTaskVencimentoIso(t) ?? '',
+               __receivedSortMs,
+               __osCreatedSortMs,
+               __dueSortMs,
                description: t.description || 'Nenhuma descrição detalhada foi fornecida para esta Ordem de Serviço.',
                color: providerTaskListAccentColor(
                  {
@@ -1854,12 +2169,12 @@ export default function DashboardScreen() {
                ),
                refId: t.refId,
                icon: t.metadata?.icon || t.icon || null,
+               iconLibrary: t.metadata?.iconLibrary || null,
                isAccepted: acceptedTasks.includes(String(t.id)),
                pauseReasonSummary: t.metadata?.lastPauseReasonSummary || null,
             };
          });
-         // Default to NEWEST based on createdAt
-         mapped.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+         mapped.sort((a: any, b: any) => compareProviderTasksForList(a, b, 'NEWEST'));
 
          const cacheNow = Date.now();
          const completedIdList = mapped
@@ -2021,7 +2336,7 @@ export default function DashboardScreen() {
         try {
           await pushSyncQueue(user.email);
           await pullTasks(user.email);
-          loadData(false);
+          await loadData(false);
         } catch (e) {
           console.warn('[Dashboard] sync pós-reconexão:', e);
         }
@@ -2036,18 +2351,20 @@ export default function DashboardScreen() {
   // ── Auto-Sync Background Poller for Pending Offline Tasks ──
   useEffect(() => {
     let active = true;
-    const interval = setInterval(async () => {
+    const interval = setInterval(() => {
       if (!active || !user) return;
-      try {
-        // ALWAYS push sync queue so that pushTelemetryBatch() runs!
-        await pushSyncQueue(user.email);
-        await pullTasks(user.email);
-        if (active) loadData(false);
-      } catch(e) {
-         console.log("[Auto-Poller] Falha silenciosa:", e);
-      }
+      void (async () => {
+        try {
+          // ALWAYS push sync queue so that pushTelemetryBatch() runs!
+          await pushSyncQueue(user.email);
+          await pullTasks(user.email);
+          if (active) await loadData(false);
+        } catch (e) {
+          console.log('[Auto-Poller] Falha silenciosa:', e);
+        }
+      })();
     }, 5000); // 5 segundos
-    
+
     return () => {
       active = false;
       clearInterval(interval);
@@ -2547,6 +2864,9 @@ export default function DashboardScreen() {
     [svcFilter, searchText, categories, t, styles]
   );
 
+  /** No modo prestador (técnico), a página de bens fica à esquerda no pager — desativa o swipe para não aceder a bens por gesto. */
+  const technicianProviderPagerLocked = userRole === 'TECHNICIAN' && mode === 'PROVIDER';
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
 
@@ -2559,7 +2879,8 @@ export default function DashboardScreen() {
         onMomentumScrollEnd={onPageScroll}
         onLayout={(e) => setPagerWidth(e.nativeEvent.layout.width)}
         scrollEventThrottle={16}
-        scrollEnabled={true}
+        scrollEnabled={!technicianProviderPagerLocked}
+        bounces={!technicianProviderPagerLocked}
         style={{ flex: 1 }}
       >
         {/* ═══════ PAGE 1: Catálogo de Serviços ═══════ */}
@@ -2890,102 +3211,390 @@ export default function DashboardScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
         >
-          {/* Sticky Tab Header Wrapper */}
-          <View style={{ backgroundColor: C.background, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.divider, zIndex: 10 }}>
-            {/* Provider Top Tabs */}
-            <View style={{ flexDirection: 'row', marginHorizontal: 16, backgroundColor: C.divider, borderRadius: 14, padding: 4 }}>
-              {[
-                { id: 'PENDING' as const, label: 'Pendentes', color: MODE_SEGMENT_COLORS.PROVIDER },
-                { id: 'IN_PROGRESS' as const, label: 'Em andamento', color: MEDIA_TAG_COLORS.BEFORE },
-                { id: 'COMPLETED' as const, label: 'Concluídas', color: MEDIA_TAG_COLORS.AFTER },
-              ].map((tab) => {
-              const isActive = providerTab === tab.id;
-              const stageCount =
-                tab.id === 'PENDING'
-                  ? providerStageCounts.pending
-                  : tab.id === 'IN_PROGRESS'
-                    ? providerStageCounts.inProgress
-                    : providerStageCounts.completed;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => {
-                    setProviderTab(tab.id as any);
-                    if (tab.id !== 'PENDING' && (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE')) {
-                      setProviderSortMode('NEWEST');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                  style={{
-                    flex: 1, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                    backgroundColor: isActive ? C.cardWhite : 'transparent',
-                    shadowColor: isActive ? C.slate : 'transparent', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isActive ? 0.1 : 0, shadowRadius: 4, elevation: isActive ? 2 : 0
-                  }}
-                >
-                  <Text
-                    style={{ fontSize: 11, fontWeight: isActive ? '900' : '700', color: isActive ? tab.color : C.textLight, textAlign: 'center' }}
-                    numberOfLines={2}
+          {/* Sticky Tab Header — fundo neutro; trilho do segmento com ícone, rótulo e badge */}
+          <View
+            style={{
+              backgroundColor: C.background,
+              paddingTop: 6,
+              paddingBottom: 6,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: C.divider,
+              zIndex: 10,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                marginHorizontal: 16,
+                borderRadius: 14,
+                padding: 2,
+                backgroundColor: C.surfaceLow,
+                borderWidth: StyleSheet.hairlineWidth * 2,
+                borderColor: C.border,
+              }}
+            >
+              {(
+                [
+                  {
+                    id: 'PENDING' as const,
+                    label: 'Pendentes',
+                    color: MODE_SEGMENT_COLORS.PROVIDER,
+                    icon: 'hourglass-outline' as const,
+                  },
+                  {
+                    id: 'IN_PROGRESS' as const,
+                    label: 'Iniciadas',
+                    color: MEDIA_TAG_COLORS.BEFORE,
+                    icon: 'build-outline' as const,
+                  },
+                  {
+                    id: 'COMPLETED' as const,
+                    label: 'Concluídas',
+                    color: MEDIA_TAG_COLORS.AFTER,
+                    icon: 'checkmark-done-outline' as const,
+                  },
+                ] as const
+              ).map((tab) => {
+                const isActive = providerTab === tab.id;
+                const stageCount =
+                  tab.id === 'PENDING'
+                    ? providerStageCounts.pending
+                    : tab.id === 'IN_PROGRESS'
+                      ? providerStageCounts.inProgress
+                      : providerStageCounts.completed;
+                const inactiveInk = C.textLight;
+                /** Mesma lógica que `providerTaskListAccentColor`: pendente = cinza; em andamento = âmbar; concluída = verde. */
+                const tabTopStripeColor =
+                  tab.id === 'PENDING'
+                    ? C.textLight
+                    : tab.id === 'IN_PROGRESS'
+                      ? MEDIA_TAG_COLORS.DURING
+                      : C.connectivity.online;
+                return (
+                  <Pressable
+                    key={tab.id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                    accessibilityLabel={`${tab.label}, ${stageCount}`}
+                    android_ripple={{ color: themeDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.08)', foreground: true }}
+                    onPress={() => {
+                      setProviderTab(tab.id as any);
+                      if (tab.id !== 'PENDING' && (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE')) {
+                        setProviderSortMode('NEWEST');
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
+                        marginHorizontal: 2,
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        backgroundColor: isActive
+                          ? C.cardWhite
+                          : pressed
+                            ? themeDark
+                              ? 'rgba(255,255,255,0.06)'
+                              : 'rgba(15,23,42,0.04)'
+                            : 'transparent',
+                        ...(isActive
+                          ? Platform.select({
+                              ios: {
+                                shadowColor: '#0f172a',
+                                shadowOffset: { width: 0, height: 3 },
+                                shadowOpacity: 0.12,
+                                shadowRadius: 6,
+                              },
+                              android: { elevation: 3 },
+                              default: {},
+                            })
+                          : {}),
+                      },
+                    ]}
                   >
-                    {tab.label}
-                    <Text style={{ fontWeight: '800', opacity: isActive ? 0.92 : 0.85 }}>{` (${stageCount})`}</Text>
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    {isActive ? (
+                      <View style={{ height: 2, width: '100%', backgroundColor: tabTopStripeColor }} />
+                    ) : (
+                      <View style={{ height: 2, width: '100%', backgroundColor: 'transparent' }} />
+                    )}
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 6,
+                        paddingHorizontal: 4,
+                        minHeight: 46,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          width: '100%',
+                          fontSize: 16,
+                          fontWeight: isActive ? '900' : '800',
+                          letterSpacing: 0.2,
+                          color: isActive ? C.slate : inactiveInk,
+                          textAlign: 'center',
+                        }}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.88}
+                      >
+                        {tab.label}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginTop: 3,
+                          gap: 5,
+                        }}
+                      >
+                        <Ionicons
+                          name={tab.icon}
+                          size={16}
+                          color={isActive ? tab.color : inactiveInk}
+                          style={{ opacity: isActive ? 1 : 0.9 }}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            lineHeight: 14,
+                            fontWeight: '900',
+                            fontVariant: ['tabular-nums'],
+                            letterSpacing: 0.35,
+                            color: isActive ? tab.color : C.slate,
+                            ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+                          }}
+                          numberOfLines={1}
+                        >
+                          {stageCount > 999 ? '999+' : String(stageCount)}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
-          {/* Provider Search & Filters */}
-          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.background, borderRadius: 12, paddingHorizontal: 16, height: 48, borderWidth: 1, borderColor: C.divider, shadowColor: C.slate, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 }}>
-               <Ionicons name="search" size={20} color={C.textLight} style={{ marginRight: 12 }} />
-               <TextInput 
-                 style={{ flex: 1, fontSize: 14, fontWeight: '700', color: C.slate, padding: 0 }} 
-                 placeholder="Buscar OS..." 
-                 placeholderTextColor={C.textLight}
-                 value={providerSearch}
-                 onChangeText={setProviderSearch}
-                 returnKeyType="search"
-               />
-               {providerSearch.length > 0 && (
-                 <TouchableOpacity onPress={() => setProviderSearch('')}>
-                   <Ionicons name="close-circle" size={20} color={C.border} />
-                 </TouchableOpacity>
-               )}
+          {/* Chips de ordenação (Recentes / Antigas / Roteirizador) — métricas: PROVIDER_OS_SORT_CHIP_* */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6, backgroundColor: C.background }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 2,
+                gap: 5,
+              }}
+            >
+              <Pressable
+                delayLongPress={420}
+                onLongPress={() => {
+                  skipReceiptTapAfterLongPress.current = true;
+                  setProviderAltSortPicked(
+                    providerAltPickedDefaultForSheet(
+                      'NEWEST',
+                      providerSortMode,
+                      savedAltSortRecent,
+                      savedAltSortOld,
+                    ),
+                  );
+                  setProviderAltSortAnchor('NEWEST');
+                }}
+                onPress={() => {
+                  if (skipReceiptTapAfterLongPress.current) {
+                    skipReceiptTapAfterLongPress.current = false;
+                    return;
+                  }
+                  setProviderSortMode(savedAltSortRecent);
+                }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minWidth: 0,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST')
+                    ? C.status.warning.bg
+                    : 'transparent',
+                  paddingHorizontal: 6,
+                  paddingVertical: 3,
+                  borderRadius: 12,
+                  opacity: pressed ? 0.88 : 1,
+                })}
+              >
+                <Ionicons
+                  name={
+                    providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST') ? 'time' : 'time-outline'
+                  }
+                  size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
+                  color={
+                    providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST')
+                      ? MODE_SEGMENT_COLORS.PROVIDER
+                      : C.textLight
+                  }
+                  style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
+                />
+                <Text
+                  style={{
+                    fontSize: PROVIDER_OS_SORT_CHIP_FONT_SIZE,
+                    lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
+                    fontWeight: providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST') ? '900' : '700',
+                    color: providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST')
+                      ? MODE_SEGMENT_COLORS.PROVIDER
+                      : C.textLight,
+                    textTransform: 'uppercase',
+                    flexShrink: 1,
+                  }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {t('home.providerSort.recent')}
+                </Text>
+              </Pressable>
+              <Pressable
+                delayLongPress={420}
+                onLongPress={() => {
+                  skipReceiptTapAfterLongPress.current = true;
+                  setProviderAltSortPicked(
+                    providerAltPickedDefaultForSheet(
+                      'OLDEST',
+                      providerSortMode,
+                      savedAltSortRecent,
+                      savedAltSortOld,
+                    ),
+                  );
+                  setProviderAltSortAnchor('OLDEST');
+                }}
+                onPress={() => {
+                  if (skipReceiptTapAfterLongPress.current) {
+                    skipReceiptTapAfterLongPress.current = false;
+                    return;
+                  }
+                  setProviderSortMode(savedAltSortOld);
+                }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minWidth: 0,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
+                    ? C.status.warning.bg
+                    : 'transparent',
+                  paddingHorizontal: 6,
+                  paddingVertical: 3,
+                  borderRadius: 12,
+                  opacity: pressed ? 0.88 : 1,
+                })}
+              >
+                <Ionicons
+                  name={
+                    providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
+                      ? 'calendar'
+                      : 'calendar-outline'
+                  }
+                  size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
+                  color={
+                    providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
+                      ? MODE_SEGMENT_COLORS.PROVIDER
+                      : C.textLight
+                  }
+                  style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
+                />
+                <Text
+                  style={{
+                    fontSize: PROVIDER_OS_SORT_CHIP_FONT_SIZE,
+                    lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
+                    fontWeight: providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST') ? '900' : '700',
+                    color: providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
+                      ? MODE_SEGMENT_COLORS.PROVIDER
+                      : C.textLight,
+                    textTransform: 'uppercase',
+                    flexShrink: 1,
+                  }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {t('home.providerSort.oldestRecv')}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setProviderRouteSheetOpen(true)}
+                style={({ pressed }) => {
+                  const routeOn = providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE';
+                  return {
+                    flex: 1,
+                    minWidth: 0,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: routeOn ? C.status.warning.bg : 'transparent',
+                    paddingHorizontal: 6,
+                    paddingVertical: 3,
+                    borderRadius: 12,
+                    opacity: providerTab === 'PENDING' ? (pressed ? 0.88 : 1) : 0.5,
+                  };
+                }}
+              >
+                {(() => {
+                  const routeOn = providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE';
+                  const iconName =
+                    providerSortMode === 'OSRM_SLA_ROUTE'
+                      ? routeOn
+                        ? 'alert-circle'
+                        : 'alert-circle-outline'
+                      : providerSortMode === 'OSRM_ROUTE'
+                        ? routeOn
+                          ? 'rocket'
+                          : 'rocket-outline'
+                        : 'rocket-outline';
+                  return (
+                    <>
+                      {isOptimizingRoute &&
+                      (osrmOptimizingMode === 'OSRM_ROUTE' || osrmOptimizingMode === 'OSRM_SLA_ROUTE') ? (
+                        <View
+                          style={{
+                            width: PROVIDER_OS_SORT_CHIP_ICON_SIZE,
+                            height: PROVIDER_OS_SORT_CHIP_ICON_SIZE,
+                            marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} />
+                        </View>
+                      ) : (
+                        <Ionicons
+                          name={iconName as any}
+                          size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
+                          color={routeOn ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                          style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
+                        />
+                      )}
+                      <Text
+                        style={{
+                          fontSize: PROVIDER_OS_SORT_CHIP_FONT_SIZE,
+                          lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
+                          fontWeight: routeOn ? '900' : '700',
+                          color: routeOn ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight,
+                          textTransform: 'uppercase',
+                          flexShrink: 1,
+                        }}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.75}
+                      >
+                        {t('home.providerSort.routerLabel')}
+                      </Text>
+                    </>
+                  );
+                })()}
+              </Pressable>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, paddingBottom: 8, marginTop: 12 }}>
-               <TouchableOpacity 
-                  onPress={() => setProviderSortMode('NEWEST')}
-                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'NEWEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
-               >
-                  <Ionicons name={providerSortMode === 'NEWEST' ? "time" : "time-outline"} size={16} color={providerSortMode === 'NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'NEWEST' ? '900' : '700', color: providerSortMode === 'NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>Recentes</Text>
-               </TouchableOpacity>
-               <TouchableOpacity 
-                  onPress={() => setProviderSortMode('OLDEST')}
-                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OLDEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
-               >
-                  <Ionicons name={providerSortMode === 'OLDEST' ? "calendar" : "calendar-outline"} size={16} color={providerSortMode === 'OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OLDEST' ? '900' : '700', color: providerSortMode === 'OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>Antigas</Text>
-               </TouchableOpacity>
-               <TouchableOpacity 
-                  onPress={() => onSortRoutePress('OSRM_ROUTE')}
-                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
-                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OSRM_ROUTE' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
-               >
-                  {osrmOptimizingMode === 'OSRM_ROUTE' ? <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ marginRight: 6 }} /> : <Ionicons name="rocket" size={16} color={providerSortMode === 'OSRM_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />}
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>Rota</Text>
-               </TouchableOpacity>
-               <TouchableOpacity 
-                  onPress={() => onSortRoutePress('OSRM_SLA_ROUTE')}
-                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
-               >
-                  {osrmOptimizingMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />}
-                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_SLA_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_SLA_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>Rota + Vencimento</Text>
-               </TouchableOpacity>
-               
-            </ScrollView>
           </View>
 
           {/* Provider Content Placeholder / List */}
@@ -2998,55 +3607,36 @@ export default function DashboardScreen() {
               <Ionicons name="construct" size={40} color={MODE_SEGMENT_COLORS.PROVIDER} />
             </View>
             <Text style={{ fontSize: 24, fontWeight: '900', color: C.slate, textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
-              {providerTab === 'PENDING' ? 'Nenhuma Ordem Pendente' : providerTab === 'IN_PROGRESS' ? 'Nenhuma Em Andamento' : 'Nenhuma Concluída'}
+              {providerTab === 'PENDING' ? 'Nenhuma Ordem Pendente' : providerTab === 'IN_PROGRESS' ? 'Nenhuma Ordem Iniciada' : 'Nenhuma Concluída'}
             </Text>
             <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', lineHeight: 22 }}>
               A lista de serviços aparecerá aqui logo que houver despachos do painel central.
             </Text>
           </View>
           ) : (
-            <View style={{ padding: 16 }}>
-              {providerTasks
-                .filter(t => {
-                  const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-                  return providerTabMatchesTask(providerTab, s);
-                })
-                .filter(t => providerSearch === '' || t.id.toLowerCase().includes(providerSearch.toLowerCase()) || (t.osNumber && String(t.osNumber).toLowerCase().includes(providerSearch.toLowerCase())) || (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())))
-                .sort((a,b) => {
-                   if (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') {
-                       const d1 = osrmDurations[String(a.id)] ?? 999999;
-                       const d2 = osrmDurations[String(b.id)] ?? 999999;
-                       
-                       if (providerSortMode === 'OSRM_SLA_ROUTE') {
-                           const getScore = (item: any, durationSecs: number) => {
-                               const durationMins = durationSecs / 60;
-                               if (!item.dueDate) return durationMins;
-                               
-                               const msToDue = new Date(item.dueDate).getTime() - Date.now();
-                               const minsToDue = msToDue / 60000;
-                               
-                               let urgencyDiscount = 0;
-                               if (minsToDue < 0) {
-                                   urgencyDiscount = 999999; // Atrasado: prioridade absoluta
-                               } else if (minsToDue < 120) {
-                                   urgencyDiscount = (120 - minsToDue) * 5; // < 2h: alta redução de custo
-                               } else if (minsToDue < 1440) {
-                                   urgencyDiscount = (1440 - minsToDue) * 0.1; // < 1d: leve desconto
-                               }
-                               return durationMins - urgencyDiscount;
-                           };
-                           return getScore(a, d1) - getScore(b, d2);
-                       }
-                       return d1 - d2;
-                   }
-                   const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                   const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                   if (isNaN(tA) || isNaN(tB)) return 0;
-                   return providerSortMode === 'NEWEST' ? tB - tA : tA - tB;
-                })
-                .map((order, index, arr) => {
+            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16 }}>
+              {sortTasksForOsrmRoute(
+                providerTasks
+                  .filter((t) => {
+                    const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
+                    return providerTabMatchesTask(providerTab, s);
+                  }),
+                providerSortMode,
+                osrmDurations,
+              ).map((order, index, arr) => {
                 const listAccent = providerTaskListAccentColor(order, completedIds, inprogressIds, acceptedIds, C);
                 const listEff = effectiveProviderTaskStatus(order, completedIds, inprogressIds, acceptedIds);
+                const cardVencIso = providerTaskVencimentoIso(order);
+                const cardVencMs = cardVencIso ? new Date(cardVencIso).getTime() : NaN;
+                const cardVencOverdue = Number.isFinite(cardVencMs) && cardVencMs < Date.now();
+                const cardVencLine = t('home.osDueLine', {
+                  date: cardVencIso
+                    ? new Date(cardVencIso).toLocaleString(i18n.language || 'pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })
+                    : '—',
+                });
                 const osMapZoneVisual = getLocationZoneTypeVisual(order.locationZoneType);
                 const zoneChrome = resolveLocationZoneChrome(order.locationZoneType, C, themeDark);
                 /** Mesmo ponto que o mapinha / OSRM (inclui 1.º vértice de rota/trecho) — alinhado a pendentes e em andamento. */
@@ -3126,8 +3716,9 @@ export default function DashboardScreen() {
                               alignItems: 'center',
                             }}
                           >
-                            <Ionicons
-                              name={(order.icon as any) || 'construct-outline'}
+                            <TaskMetadataGlyph
+                              icon={(order.icon as any) || 'construct-outline'}
+                              iconLibrary={order.iconLibrary}
                               size={24}
                               color={listAccent}
                             />
@@ -3175,29 +3766,90 @@ export default function DashboardScreen() {
                                 ) : null}
                               </View>
                               {order.formTemplateTitle ? (
+                                providerTab === 'PENDING' && !order.isAccepted ? (
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      marginTop: 6,
+                                      gap: 10,
+                                    }}
+                                  >
+                                    <View
+                                      style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        alignSelf: 'flex-start',
+                                        maxWidth: '100%',
+                                        paddingVertical: 5,
+                                        paddingHorizontal: 11,
+                                        borderRadius: 999,
+                                        backgroundColor: C.primary,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 11,
+                                          fontWeight: '800',
+                                          color: C.cardWhite,
+                                          letterSpacing: -0.08,
+                                          lineHeight: 15,
+                                        }}
+                                        numberOfLines={2}
+                                      >
+                                        {order.formTemplateTitle}
+                                      </Text>
+                                    </View>
+                                    <ProviderAwaitAcceptOrb
+                                      pulseOpacity={providerAwaitAcceptPulseOpacity}
+                                      pulseScale={providerAwaitAcceptPulseScale}
+                                      warning={C.status.warning}
+                                      cardWhite={C.cardWhite}
+                                      accessibilityLabel={t('home.providerOsAwaitingAcceptBadge')}
+                                    />
+                                  </View>
+                                ) : (
+                                  <View
+                                    style={{
+                                      alignSelf: 'flex-start',
+                                      marginTop: 6,
+                                      maxWidth: '100%',
+                                      paddingVertical: 5,
+                                      paddingHorizontal: 11,
+                                      borderRadius: 999,
+                                      backgroundColor: C.primary,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: '800',
+                                        color: C.cardWhite,
+                                        letterSpacing: -0.08,
+                                        lineHeight: 15,
+                                      }}
+                                      numberOfLines={2}
+                                    >
+                                      {order.formTemplateTitle}
+                                    </Text>
+                                  </View>
+                                )
+                              ) : providerTab === 'PENDING' && !order.isAccepted ? (
                                 <View
                                   style={{
-                                    alignSelf: 'flex-start',
+                                    flexDirection: 'row',
                                     marginTop: 6,
-                                    maxWidth: '100%',
-                                    paddingVertical: 5,
-                                    paddingHorizontal: 11,
-                                    borderRadius: 999,
-                                    backgroundColor: C.primary,
+                                    justifyContent: 'flex-end',
+                                    width: '100%',
                                   }}
                                 >
-                                  <Text
-                                    style={{
-                                      fontSize: 11,
-                                      fontWeight: '800',
-                                      color: C.cardWhite,
-                                      letterSpacing: -0.08,
-                                      lineHeight: 15,
-                                    }}
-                                    numberOfLines={2}
-                                  >
-                                    {order.formTemplateTitle}
-                                  </Text>
+                                  <ProviderAwaitAcceptOrb
+                                    pulseOpacity={providerAwaitAcceptPulseOpacity}
+                                    pulseScale={providerAwaitAcceptPulseScale}
+                                    warning={C.status.warning}
+                                    cardWhite={C.cardWhite}
+                                    accessibilityLabel={t('home.providerOsAwaitingAcceptBadge')}
+                                  />
                                 </View>
                               ) : null}
                               <Text
@@ -3333,33 +3985,21 @@ export default function DashboardScreen() {
                             <Ionicons
                               name="calendar-outline"
                               size={16}
-                              color={providerTaskHasAgendaFormWindow(order) ? C.accent : C.destructive}
+                              color={cardVencIso ? (cardVencOverdue ? C.destructive : C.slate) : C.textSecondary}
                               style={{ marginTop: 1 }}
                             />
                             <Text
                               style={{
                                 flex: 1,
                                 fontSize: 12,
-                                color: providerTaskHasAgendaFormWindow(order) ? C.slate : C.destructive,
+                                color: cardVencIso ? (cardVencOverdue ? C.destructive : C.slate) : C.textSecondary,
                                 fontWeight: '900',
                                 lineHeight: 16,
                                 letterSpacing: -0.12,
                               }}
                               numberOfLines={3}
                             >
-                              {providerTaskHasAgendaFormWindow(order)
-                                ? t('home.osDueLineAgenda', {
-                                    date: new Date(order.dueDate).toLocaleString(i18n.language || 'pt-BR', {
-                                      dateStyle: 'short',
-                                      timeStyle: 'short',
-                                    }),
-                                  })
-                                : t('home.osDueLine', {
-                                    date: new Date(order.dueDate).toLocaleString(i18n.language || 'pt-BR', {
-                                      dateStyle: 'short',
-                                      timeStyle: 'short',
-                                    }),
-                                  })}
+                              {cardVencLine}
                             </Text>
                           </View>
                         </View>
@@ -3556,6 +4196,220 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
+      {/* ─── Prestador: menu toque longo (Recentes / Antigas) ─── */}
+      <Modal
+        visible={providerAltSortAnchor != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setProviderAltSortAnchor(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setProviderAltSortAnchor(null)} />
+          <View
+            style={[
+              styles.sortSheet,
+              {
+                backgroundColor: C.cardWhite,
+                paddingBottom: Math.max(insets.bottom, 12) + 8,
+                maxHeight: Dimensions.get('window').height * 0.78,
+              },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetTitle, { color: C.primary, marginBottom: 14 }]}>{t('home.providerSort.altSheetTitle')}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {(providerAltSortAnchor ? providerLongPressRowsForAnchor(providerAltSortAnchor) : []).map((row) => {
+                const selected = providerAltSortPicked === row.mode;
+                return (
+                  <TouchableOpacity
+                    key={row.mode}
+                    onPress={() => setProviderAltSortPicked(row.mode)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 14,
+                      paddingHorizontal: 4,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: C.divider,
+                    }}
+                  >
+                    <Ionicons
+                      name={row.icon as any}
+                      size={22}
+                      color={selected ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                    />
+                    <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, fontWeight: '800', color: C.slate }}>
+                      {t(`home.providerSort.${row.i18nKey}`)}
+                    </Text>
+                    {selected ? (
+                      <Ionicons name="checkmark-circle" size={24} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setProviderSortMode(providerAltSortPicked as ProviderListSortMode);
+                  setProviderAltSortAnchor(null);
+                }}
+                style={{
+                  flex: 1,
+                  marginRight: 10,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  backgroundColor: C.divider,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '800', color: C.slate }}>{t('home.providerSort.actionView')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  const anchor = providerAltSortAnchor;
+                  if (!anchor) return;
+                  setProviderSortMode(providerAltSortPicked as ProviderListSortMode);
+                  try {
+                    const raw = await AsyncStorage.getItem(OS_ALT_SORT_STORAGE_KEY);
+                    let o: Record<string, string> = {};
+                    try {
+                      o = raw ? JSON.parse(raw) : {};
+                    } catch {
+                      o = {};
+                    }
+                    if (anchor === 'NEWEST') {
+                      o.recent = providerAltSortPicked;
+                      setSavedAltSortRecent(providerAltSortPicked);
+                    } else {
+                      o.old = providerAltSortPicked;
+                      setSavedAltSortOld(providerAltSortPicked);
+                    }
+                    await AsyncStorage.setItem(OS_ALT_SORT_STORAGE_KEY, JSON.stringify(o));
+                  } catch {
+                    /* ignore */
+                  }
+                  setProviderAltSortAnchor(null);
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  backgroundColor: MODE_SEGMENT_COLORS.PROVIDER,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '900', color: '#FFFFFF' }}>{t('home.providerSort.actionSave')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Prestador: Roteirizador (Rota / Rota + prazo) ─── */}
+      <Modal
+        visible={providerRouteSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setProviderRouteSheetOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setProviderRouteSheetOpen(false)} />
+          <View
+            style={[
+              styles.sortSheet,
+              {
+                backgroundColor: C.cardWhite,
+                paddingBottom: Math.max(insets.bottom, 12) + 8,
+              },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetTitle, { color: C.primary, marginBottom: 8 }]}>{t('home.providerSort.routerSheetTitle')}</Text>
+            <Text
+              style={{
+                fontSize: 13,
+                color: C.textLight,
+                textAlign: 'center',
+                marginBottom: 14,
+                lineHeight: 18,
+                paddingHorizontal: 6,
+              }}
+            >
+              {t('home.providerSort.routerSheetSubtitle')}
+            </Text>
+            {(
+              [
+                { mode: 'OSRM_ROUTE' as const, i18nKey: 'route' as const, icon: 'navigate-outline' as const },
+                { mode: 'OSRM_SLA_ROUTE' as const, i18nKey: 'routeSla' as const, icon: 'git-merge-outline' as const },
+              ] as const
+            ).map((row) => {
+              const routeLocked = providerTab !== 'PENDING';
+              const routeCalcBusy =
+                isOptimizingRoute &&
+                (osrmOptimizingMode === 'OSRM_ROUTE' || osrmOptimizingMode === 'OSRM_SLA_ROUTE');
+              const selected = providerSortMode === row.mode;
+              const rowLoading = osrmOptimizingMode === row.mode;
+              const disabled = routeLocked || routeCalcBusy;
+              return (
+                <TouchableOpacity
+                  key={row.mode}
+                  disabled={disabled}
+                  onPress={() => {
+                    if (providerSortMode !== row.mode) {
+                      onSortRoutePress(row.mode as 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE');
+                    }
+                    setProviderRouteSheetOpen(false);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 14,
+                    paddingHorizontal: 4,
+                    opacity: disabled ? 0.45 : 1,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: C.divider,
+                  }}
+                >
+                  {rowLoading ? (
+                    <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ width: 22 }} />
+                  ) : (
+                    <Ionicons
+                      name={row.icon as any}
+                      size={22}
+                      color={selected ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                    />
+                  )}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.slate }}>{t(`home.providerSort.${row.i18nKey}`)}</Text>
+                    {routeLocked ? (
+                      <Text style={{ fontSize: 11, color: C.textLight, marginTop: 3 }}>
+                        {t('home.providerSort.routeOnlyPending')}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {selected && !rowLoading ? (
+                    <Ionicons name="checkmark-circle" size={24} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              onPress={() => setProviderRouteSheetOpen(false)}
+              style={{
+                marginTop: 12,
+                paddingVertical: 14,
+                borderRadius: 12,
+                backgroundColor: C.divider,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '800', color: C.slate }}>{t('home.providerSort.sheetClose')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ─── Task Details Modal (Bottom Sheet variant) ─── */}
       <Modal
         visible={taskModalVisible}
@@ -3613,7 +4467,12 @@ export default function DashboardScreen() {
                         {selectedTask.icon.startsWith('http') ? (
                           <Image source={{ uri: selectedTask.icon }} style={{ width: 32, height: 32 }} resizeMode="contain" />
                         ) : (
-                          <Ionicons name={selectedTask.icon as any} size={32} color={C.accent} />
+                          <TaskMetadataGlyph
+                            icon={selectedTask.icon as any}
+                            iconLibrary={selectedTask.iconLibrary}
+                            size={32}
+                            color={C.accent}
+                          />
                         )}
                       </View>
                     ) : null}

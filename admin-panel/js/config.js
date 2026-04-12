@@ -5,6 +5,75 @@
  */
 const LS_API_ORIGIN = 'brspark_admin_api_origin';
 
+/** Cópia da sessão do painel (JWT + metadados) — partilhada entre separadores; limpa no logout e em 401. */
+const LS_ADMIN_SESSION_BUNDLE = 'brspark_admin_session_bundle';
+
+/**
+ * Grava no `localStorage` o mesmo conteúdo relevante do `sessionStorage` (login válido).
+ * Permite abrir `operations.html` / PDF noutro separador sem perder o Bearer.
+ */
+export function persistAdminSessionBundleFromSessionStorage() {
+  if (typeof window === 'undefined' || !window.sessionStorage || !window.localStorage) return;
+  try {
+    const token = sessionStorage.getItem('brspark_admin_token');
+    if (!token) {
+      localStorage.removeItem(LS_ADMIN_SESSION_BUNDLE);
+      return;
+    }
+    const bundle = {
+      token,
+      email: sessionStorage.getItem('brspark_admin_email') || '',
+      name: sessionStorage.getItem('brspark_admin_name') || '',
+      role: sessionStorage.getItem('brspark_admin_role') || '',
+      panelMode: sessionStorage.getItem('brspark_panel_mode') || '',
+      panelTenant: sessionStorage.getItem('brspark_panel_tenant') || '',
+    };
+    localStorage.setItem(LS_ADMIN_SESSION_BUNDLE, JSON.stringify(bundle));
+  } catch {
+    /* quota / modo privado */
+  }
+}
+
+/** Se não há token neste separador, repõe a partir do bundle (outro separador com a mesma sessão). */
+export function restoreAdminSessionBundleIfNeeded() {
+  if (typeof window === 'undefined' || !window.sessionStorage || !window.localStorage) return;
+  try {
+    if (sessionStorage.getItem('brspark_admin_token')) return;
+    const raw = localStorage.getItem(LS_ADMIN_SESSION_BUNDLE);
+    if (!raw) return;
+    const b = JSON.parse(raw);
+    if (!b || typeof b !== 'object' || !b.token) return;
+    sessionStorage.setItem('brspark_admin_token', String(b.token));
+    if (b.email) sessionStorage.setItem('brspark_admin_email', String(b.email));
+    if (b.name != null) sessionStorage.setItem('brspark_admin_name', String(b.name));
+    if (b.role != null) sessionStorage.setItem('brspark_admin_role', String(b.role));
+    if (b.panelMode != null) sessionStorage.setItem('brspark_panel_mode', String(b.panelMode));
+    if (b.panelTenant != null && String(b.panelTenant).trim() !== '') {
+      sessionStorage.setItem('brspark_panel_tenant', String(b.panelTenant));
+    }
+  } catch {
+    /* JSON inválido */
+  }
+}
+
+export function clearAdminSessionBundle() {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(LS_ADMIN_SESSION_BUNDLE);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Logout / 401: apaga sessão em memória e o espelho em disco. */
+export function clearAdminSessionFully() {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+  } catch {
+    /* ignore */
+  }
+  clearAdminSessionBundle();
+}
+
 /** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */
 let _apiBase = null;
 
@@ -141,8 +210,11 @@ export const CONFIG = {
     return resolveApiBase();
   },
 
-  /** Returns stored JWT token */
-  getToken: () => sessionStorage.getItem('brspark_admin_token') || '',
+  /** Returns stored JWT token (repõe a partir do bundle se este separador ainda não tiver sessão). */
+  getToken: () => {
+    restoreAdminSessionBundleIfNeeded();
+    return sessionStorage.getItem('brspark_admin_token') || '';
+  },
 
   /** Common headers for all fetch requests */
   headers: () => ({
@@ -153,7 +225,11 @@ export const CONFIG = {
   /** Convenience fetch wrapper */
   async get(path) {
     const res = await fetch(`${CONFIG.API_BASE}${path}`, { headers: CONFIG.headers() });
-    if (res.status === 401) { sessionStorage.clear(); window.location.href = 'index.html'; return null; }
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return null;
+    }
     const raw = await res.text();
     try {
       return JSON.parse(raw);
@@ -166,7 +242,7 @@ export const CONFIG = {
   async post(path, body) {
     const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'POST', headers: CONFIG.headers(), body: JSON.stringify(body) });
     if (res.status === 401) {
-      sessionStorage.clear();
+      clearAdminSessionFully();
       window.location.href = 'index.html';
       return null;
     }
@@ -184,17 +260,70 @@ export const CONFIG = {
   },
 
   async patch(path, body) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'PATCH', headers: CONFIG.headers(), body: JSON.stringify(body) });
-    return res.json();
+    const res = await fetch(`${CONFIG.API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: CONFIG.headers(),
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return null;
+    }
+    const raw = await res.text();
+    try {
+      const data = raw ? JSON.parse(raw) : {};
+      if (!res.ok && data && typeof data === 'object' && !data.error) {
+        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      }
+      return data;
+    } catch {
+      console.error('[CONFIG.patch] Resposta não é JSON', path, res.status, raw?.slice?.(0, 200));
+      return { error: `Resposta inválida do servidor (HTTP ${res.status}).` };
+    }
   },
 
   async put(path, body) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'PUT', headers: CONFIG.headers(), body: JSON.stringify(body) });
-    return res.json();
+    const res = await fetch(`${CONFIG.API_BASE}${path}`, {
+      method: 'PUT',
+      headers: CONFIG.headers(),
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return null;
+    }
+    const raw = await res.text();
+    try {
+      const data = raw ? JSON.parse(raw) : {};
+      if (!res.ok && data && typeof data === 'object' && !data.error) {
+        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      }
+      return data;
+    } catch {
+      console.error('[CONFIG.put] Resposta não é JSON', path, res.status, raw?.slice?.(0, 200));
+      return { error: `Resposta inválida do servidor (HTTP ${res.status}).` };
+    }
   },
 
   async del(path) {
     const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'DELETE', headers: CONFIG.headers() });
-    return res.json();
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return null;
+    }
+    const raw = await res.text();
+    try {
+      const data = raw ? JSON.parse(raw) : {};
+      if (!res.ok && data && typeof data === 'object' && !data.error) {
+        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      }
+      return data;
+    } catch {
+      console.error('[CONFIG.del] Resposta não é JSON', path, res.status, raw?.slice?.(0, 200));
+      return { error: `Resposta inválida do servidor (HTTP ${res.status}).` };
+    }
   },
 };

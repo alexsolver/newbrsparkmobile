@@ -215,7 +215,7 @@ export const NotificationService = {
     _notifications = [newNotif, ..._notifications];
     _listeners.forEach(l => l());
     // Dispara push local
-    NotificationService.scheduleLocalPush(notification.title, notification.body);
+    void NotificationService.scheduleLocalPush(notification.title, notification.body).catch(() => {});
   },
 
   subscribe(listener: () => void) {

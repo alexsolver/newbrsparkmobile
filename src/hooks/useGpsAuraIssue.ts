@@ -51,13 +51,15 @@ export function useGpsAuraIssue(): boolean {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => {});
 
     const onAppState = (s: AppStateStatus) => {
-      if (s === 'active') void refresh();
+      if (s === 'active') void refresh().catch(() => {});
     };
     const sub = AppState.addEventListener('change', onAppState);
-    const interval = setInterval(() => void refresh(), RECHECK_INTERVAL_MS);
+    const interval = setInterval(() => {
+      void refresh().catch(() => {});
+    }, RECHECK_INTERVAL_MS);
     return () => {
       sub.remove();
       clearInterval(interval);

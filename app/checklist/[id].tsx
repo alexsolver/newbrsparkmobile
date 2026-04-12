@@ -50,6 +50,12 @@ import {
   pushSyncQueue,
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from '../../src/services/syncService';
+import {
+  findCloudTaskById,
+  loadAllCloudTasksForExecutionLookup,
+  savePartitionedFromUnifiedList,
+  patchCloudTaskById,
+} from '../../src/lib/cloudTasksBuckets';
 import { applyMaterialsStockForSubmission, parseMaterialsValue } from '../../src/checklist/applyMaterialsStockOnSubmit';
 import { applyMaterialsReceiptForSubmission } from '../../src/checklist/applyMaterialsReceiptOnSubmit';
 import {
@@ -59,6 +65,7 @@ import {
 import { ChecklistMaterialsConsumptionField } from '../../src/components/ChecklistMaterialsConsumptionField';
 import { ChecklistMaterialsReceiptField } from '../../src/components/ChecklistMaterialsReceiptField';
 import { useAuth } from '../../src/hooks/useAuth';
+import { evaluateBusinessCondition } from '../../src/lib/businessRuleCondition';
 
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
 const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -83,9 +90,6 @@ const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
   admin: '#CA8A04',
   other: '#64748B',
 };
-
-/** Alinhado ao builder do painel — condição “cronômetro geral”. */
-const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
 /** Extrai valor de objecto JSON por caminho com pontos (ex.: current.temp_c); suporta índices numéricos em arrays. */
 function brsparkJsonPathLookup(obj: unknown, path: string): unknown {
@@ -591,7 +595,34 @@ function normalizeSignatureSummarySourceIds(raw: unknown): string[] {
   return [];
 }
 
-/** Valor para o resumo: mesmo âmbito; na raiz tenta também localizar em linhas repetíveis. */
+/** Lê a lista configurada no schema (camelCase ou snake_case). */
+function getSignatureSummarySourceFieldIds(field: any): string[] {
+  return normalizeSignatureSummarySourceIds(
+    field?.summarySourceFieldIds ?? field?.summary_source_field_ids
+  );
+}
+
+function isSummarySourceValueEmpty(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (typeof v === 'string' && v.trim() === '') return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+/** URIs de mídia para miniaturas no resumo (foto, carimbo, facial, anexo). */
+function collectSummaryThumbnailUris(fieldDef: any | undefined, raw: unknown): string[] {
+  if (!fieldDef) return [];
+  const t = effectiveSchemaFieldType(fieldDef);
+  if (t !== 'photo' && t !== 'photo_stamped' && t !== 'facial_recognition' && t !== 'file_upload') return [];
+  const arr = normalizeResponseArray(raw)
+    .map((u) => String(u || '').trim())
+    .filter(Boolean);
+  if (t !== 'file_upload') return arr;
+  return arr.filter((u) => /\.(png|jpe?g|webp|gif|heic|heif)(\?|$)/i.test(u) || u.startsWith('data:image'));
+}
+
+/** Valor para o resumo: mesmo âmbito; na raiz tenta também localizar em linhas repetíveis.
+ * Dentro de uma linha repetível, se o campo referenciado estiver na raiz do formulário, usa esse valor. */
 function resolveSummarySourceValue(
   responses: Record<string, any>,
   scope: SectionRepeatScope | null | undefined,
@@ -599,10 +630,14 @@ function resolveSummarySourceValue(
   schemaData: any[] | undefined
 ): unknown {
   const direct = getScopedFieldValue(responses, scope ?? null, sourceFieldId);
-  if (direct !== undefined && direct !== null && String(direct).trim() !== '') return direct;
+  if (!isSummarySourceValueEmpty(direct)) return direct;
+  if (scope) {
+    const root = responses[sourceFieldId];
+    if (!isSummarySourceValueEmpty(root)) return root;
+  }
   if (!scope) {
     const found = findFieldValueInResponses(responses, sourceFieldId, schemaData);
-    if (found !== undefined && found !== null && String(found).trim() !== '') return found;
+    if (!isSummarySourceValueEmpty(found)) return found;
   }
   return direct;
 }
@@ -738,7 +773,7 @@ function formatFacialConfidencePct(c: unknown): string | null {
 }
 
 const FACIAL_NO_FACE_IN_IMAGE_MSG =
-  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; fotografias de telas, reflexos ou imagens em papel não serão validadas.';
 
 /** Remove marcas de produto fornecedor de textos vindos da API ou de relatórios antigos. */
 function sanitizeFacialUserFacingCopy(text: string | undefined | null): string {
@@ -1572,7 +1607,7 @@ function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any 
 export default function ChecklistEngine() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { id, taskId } = useLocalSearchParams();
+  const { id, taskId, routineTask, rtNumber } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -1642,6 +1677,16 @@ export default function ChecklistEngine() {
 
   const resolvedTaskId =
     typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
+
+  const resolvedRtNumber =
+    typeof rtNumber === 'string'
+      ? rtNumber
+      : Array.isArray(rtNumber)
+        ? String(rtNumber[0] || '')
+        : String(rtNumber || '');
+  const routineTaskFlag =
+    String(Array.isArray(routineTask) ? routineTask[0] : routineTask || '') === '1';
+  const isRoutineTaskFlow = routineTaskFlag && !!resolvedTaskId;
 
   const [ruleTick, setRuleTick] = useState(0);
   const fgSegmentStartRef = useRef<number | null>(null);
@@ -2095,11 +2140,9 @@ export default function ChecklistEngine() {
         // Load task location from cloudTasks cache
         let taskLocation: any = null;
         try {
-          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-          const cloudTasks = JSON.parse(cloudTasksStr);
-          const thisTask = cloudTasks.find((t: any) => String(t.id) === String(taskId));
+          const thisTask = await findCloudTaskById(String(taskId));
           if (thisTask) taskLocation = thisTask;
-        } catch(e) {}
+        } catch (e) {}
 
         if (!taskLocation || (!taskLocation.locationLat && !taskLocation.locationPolygon)) {
           // No location on task — just record GPS evidence, do NOT block
@@ -2412,15 +2455,11 @@ export default function ChecklistEngine() {
           
           // Gravação local forte para garantir que vai no payload final caso o ping falhe
           try {
-             const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-             let cloudTasks = JSON.parse(cloudTasksStr);
-             const idx = cloudTasks.findIndex((t: any) => String(t.id) === String(taskId));
-             if (idx > -1) {
-                 cloudTasks[idx].metadata = cloudTasks[idx].metadata || {};
-                 if (status === 'ACCEPTED') cloudTasks[idx].metadata.acceptedAt = ts;
-                 await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(cloudTasks));
-             }
-          } catch(err) {}
+            await patchCloudTaskById(String(taskId), (row) => {
+              const meta = { ...(row.metadata || {}), ...(status === 'ACCEPTED' ? { acceptedAt: ts } : {}) };
+              return { ...row, metadata: meta };
+            });
+          } catch (err) {}
 
           apiFetch(`/api/checklists/executions/${taskId}/status`, {
              method: 'PATCH',
@@ -2512,16 +2551,14 @@ export default function ChecklistEngine() {
       const updatedTasks = cloudTasks.map((t: any) =>
         String(t.id) === String(resolvedTaskId) ? { ...t, etaMinutes: minutes } : t
       );
-      await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(updatedTasks));
+      await savePartitionedFromUnifiedList(updatedTasks);
     };
 
     const fetchEta = async () => {
       try {
         let cloudTasks: any[] = [];
         try {
-          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-          const parsed = JSON.parse(cloudTasksStr);
-          cloudTasks = Array.isArray(parsed) ? parsed : [];
+          cloudTasks = await loadAllCloudTasksForExecutionLookup();
         } catch {
           cloudTasks = [];
         }
@@ -2625,11 +2662,7 @@ export default function ChecklistEngine() {
       let cloudTaskTerminal = false;
       if (taskId) {
         try {
-          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-          const cloudTasks = JSON.parse(cloudTasksStr);
-          const ct = Array.isArray(cloudTasks)
-            ? cloudTasks.find((t: any) => String(t.id) === String(taskId))
-            : null;
+          const ct = await findCloudTaskById(String(taskId));
           if (ct && executionIsViewOnly(ct)) cloudTaskTerminal = true;
         } catch {
           /* ignore */
@@ -2850,15 +2883,12 @@ export default function ChecklistEngine() {
          if (taskId) {
            let ctEarly: any = null;
            try {
-             const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-             let cloudTasksEarly: any[] = [];
              try {
-               const pe = JSON.parse(cloudTasksStr);
-               cloudTasksEarly = Array.isArray(pe) ? pe : [];
+               const allEarly = await loadAllCloudTasksForExecutionLookup();
+               ctEarly = allEarly.find((t: any) => String(t.id) === String(taskId));
              } catch {
-               cloudTasksEarly = [];
+               ctEarly = undefined;
              }
-             ctEarly = cloudTasksEarly.find((t: any) => String(t.id) === String(taskId));
              if (ctEarly?.status === 'PAUSED') serverPausedFlag = true;
              if (ctEarly != null && ctEarly.lastSubmittedRevision != null) {
                lastSubmittedRevForNext = Math.max(
@@ -3081,15 +3111,29 @@ export default function ChecklistEngine() {
 
       // ── Opção B: mapa rota/trecho + cerca global do template (raio em settings) ──────
       const wantGlobalFence =
-        !!tmpl?.settings?.requireGlobalGeofence && !!taskId && !readOnlyMode;
+        !!tmpl?.settings?.requireGlobalGeofence && !!taskId && !readOnlyMode && !isRoutineTaskFlow;
       const globalRad = clampGlobalGeofenceRadiusMeters(tmpl?.settings?.globalGeofenceRadius);
       globalGeofenceRadiusForNextGateRef.current = globalRad;
 
       if (taskId && !readOnlyMode) {
         try {
-          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-          const cloudTasks = JSON.parse(cloudTasksStr);
-          const thisTask = cloudTasks.find((t: any) => String(t.id) === String(taskId));
+          let thisTask = await findCloudTaskById(String(taskId));
+          if (!thisTask && isRoutineTaskFlow && resolvedTaskId) {
+            const rtNum = resolvedRtNumber?.trim() || '';
+            thisTask = {
+              id: String(resolvedTaskId),
+              osNumber: rtNum || null,
+              routineTaskNumber: rtNum || null,
+              metadata: { routineTask: true },
+              status: 'IN_PROGRESS',
+              locationLat: null,
+              locationLng: null,
+              locationRadius: null,
+              locationZoneType: null,
+              locationPolygon: null,
+              locationAddress: null,
+            };
+          }
           console.log('[GeoMap] taskId=', taskId, '| task found=', !!thisTask, '| locationZoneType=', thisTask?.locationZoneType);
           if (thisTask) {
             setCurrentTask(thisTask);
@@ -3126,7 +3170,7 @@ export default function ChecklistEngine() {
                 setShowGlobalGeofenceMap(true);
               }
             }
-          } else if (wantGlobalFence) {
+          } else if (wantGlobalFence && !isRoutineTaskFlow) {
             Alert.alert(
               'Cerca global',
               'Não encontramos esta OS no cache do aparelho. Sincronize e tente novamente, ou desative a cerca global no formulário.',
@@ -3135,7 +3179,8 @@ export default function ChecklistEngine() {
             setLoading(false);
             return;
           } else {
-            console.log('[GeoMap] ⚠️ Task não encontrada no cache. Total no cache:', cloudTasks.length);
+            const n = (await loadAllCloudTasksForExecutionLookup()).length;
+            console.log('[GeoMap] ⚠️ Task não encontrada no cache. Total no cache:', n);
           }
         } catch (e) {
           console.error('[GeoMap] erro:', e);
@@ -3151,15 +3196,8 @@ export default function ChecklistEngine() {
         let skipAutoInProgress = false;
         if (reopenRevisionPending) {
           try {
-            const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-            let cloudTasks: any[] = [];
-            try {
-              const p = JSON.parse(cloudTasksStr);
-              cloudTasks = Array.isArray(p) ? p : [];
-            } catch {
-              cloudTasks = [];
-            }
-            const ct = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
+            const allCt = await loadAllCloudTasksForExecutionLookup();
+            const ct = allCt.find((t: any) => String(t.id) === String(resolvedTaskId));
             const st = String(ct?.status || '').toUpperCase();
             const accRaw = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
             let acc: string[] = [];
@@ -3210,23 +3248,11 @@ export default function ChecklistEngine() {
   const updateLocalCloudTaskFields = useCallback(
     async (tid: string, patch: { status?: string; metadata?: Record<string, unknown> }) => {
       try {
-        const raw = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-        let arr: any[] = [];
-        try {
-          const p = JSON.parse(raw);
-          arr = Array.isArray(p) ? p : [];
-        } catch {
-          arr = [];
-        }
-        const i = arr.findIndex((x: any) => String(x.id) === String(tid));
-        if (i < 0) return;
-        const row = arr[i];
-        arr[i] = {
+        await patchCloudTaskById(String(tid), (row) => ({
           ...row,
           ...(patch.status ? { status: patch.status } : {}),
           metadata: { ...(row.metadata || {}), ...(patch.metadata || {}) },
-        };
-        await AsyncStorage.setItem('@brspark_cloud_tasks', JSON.stringify(arr));
+        }));
       } catch {}
     },
     []
@@ -3313,7 +3339,9 @@ export default function ChecklistEngine() {
               lastPauseAt: startedAt,
             },
           });
-          void AsyncStorage.getItem('@brspark_email').then((email) => pushSyncQueue(email || undefined));
+          void AsyncStorage.getItem('@brspark_email')
+            .then((email) => pushSyncQueue(email || undefined))
+            .catch(() => {});
         });
       }
       return next;
@@ -3963,6 +3991,17 @@ export default function ChecklistEngine() {
           
           inprogs = inprogs.filter((t: string) => t !== String(taskId));
           await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(inprogs));
+
+          /** RT/FT: alinhar cache `@brspark_*_cloud_tasks` ao concluir — senão RT fica `IN_PROGRESS` e «Abrir» reutiliza a mesma execução. */
+          try {
+            await patchCloudTaskById(String(taskId), (row) => ({
+              ...row,
+              status: 'COMPLETED',
+              metadata: { ...(row.metadata || {}), localCompletedAt: new Date().toISOString() },
+            }));
+          } catch {
+            /* ignore */
+          }
       }
 
       const AuthSvc = require('../../src/services/auth').AuthService;
@@ -3979,9 +4018,7 @@ export default function ChecklistEngine() {
       let origMeta: any = {};
       let osNumMeta: string | undefined;
       try {
-          const cloudTasksStr = await AsyncStorage.getItem('@brspark_cloud_tasks') || '[]';
-          const cloudTasks = JSON.parse(cloudTasksStr);
-          const origTask = cloudTasks.find((t: any) => String(t.id) === String(taskId));
+          const origTask = await findCloudTaskById(String(taskId));
           if (origTask && origTask.metadata) {
              origMeta = {
                receivedAt: origTask.metadata.receivedAt,
@@ -4024,10 +4061,19 @@ export default function ChecklistEngine() {
       finalResponses.__form_active_seconds_final = formActiveSeconds;
 
       if (!isReadOnly) {
+        const routineRtNum =
+          (currentTask?.routineTaskNumber != null && String(currentTask.routineTaskNumber).trim() !== ''
+            ? String(currentTask.routineTaskNumber).trim()
+            : undefined) ||
+          (resolvedRtNumber && String(resolvedRtNumber).trim() !== ''
+            ? String(resolvedRtNumber).trim()
+            : undefined);
         const ftForStockHistory =
           (currentTask?.osNumber != null && String(currentTask.osNumber).trim() !== ''
             ? String(currentTask.osNumber).trim()
-            : undefined) ?? osNumMeta;
+            : undefined) ??
+          osNumMeta ??
+          routineRtNum;
         const matRes = await applyMaterialsStockForSubmission({
           schemaAll,
           responses: finalResponses,
@@ -4114,9 +4160,9 @@ export default function ChecklistEngine() {
         
         // Aciona explicitamente o Sync Worker em background se possível
         try {
-            const { pushSyncQueue } = require('../../src/services/syncService');
-            pushSyncQueue(uEmail);
-        } catch(e) {}
+          const { pushSyncQueue } = require('../../src/services/syncService');
+          void pushSyncQueue(uEmail).catch(() => {});
+        } catch (e) {}
 
         // Volta ao estado IDLE e dispara cálculo de métricas da OS
         dataCollectionService.setState('IDLE', {
@@ -4136,64 +4182,21 @@ export default function ChecklistEngine() {
 
   // --- Logic Engine Evaluator (IF/THEN Rules Central) ---
   const evaluateCondition = (condFieldId: string, op: string, condValue: any, dataModel: any = responses) => {
-      const nowMs = Date.now();
-      const schema = template?.schemaData || [];
-
-      if (condFieldId === FORM_CLOCK_COND_ID) {
-        const elapsed = getFormElapsedSeconds(dataModel, nowMs);
-        const secTarget = parseFloat(String(condValue ?? '0').replace(',', '.')) || 0;
-        if (op === 'form_elapsed_sec_gte') return elapsed >= secTarget;
-        if (op === 'form_elapsed_sec_lte') return elapsed <= secTarget;
-        return false;
-      }
-
-      const condFieldDef = schema.find((x: any) => x.id === condFieldId);
-      if (condFieldDef?.type === 'section_break') {
-        const { start, end } = getSectionTimingKeys(condFieldId);
-        const hasStart = !!dataModel[start];
-        const hasEnd = !!dataModel[end];
-        const elapsed = getSectionElapsedSeconds(dataModel, condFieldId, nowMs);
-        const secTarget = parseFloat(String(condValue ?? '0').replace(',', '.')) || 0;
-
-        if (op === 'section_has_started') return hasStart;
-        if (op === 'section_not_started') return !hasStart;
-        if (op === 'section_has_ended') return hasEnd;
-        if (op === 'section_not_ended') return hasStart && !hasEnd;
-        if (op === 'section_in_progress') return hasStart && !hasEnd;
-        if (op === 'section_elapsed_sec_gte') return elapsed != null && elapsed >= secTarget;
-        if (op === 'section_elapsed_sec_lte') return elapsed != null && elapsed <= secTarget;
-        return false;
-      }
-
-      const rawDepVal = dataModel[condFieldId];
-      const parseToStr = (val: any) => {
-        if (val === undefined || val === null) return '';
-        if (Array.isArray(val)) return val.map((v) => String(v)).join(', ').toLowerCase();
-        return String(val).toLowerCase();
-      };
-      
-      const depVal = parseToStr(rawDepVal).trim();
-      const targetVal = parseToStr(condValue).trim();
-
-      if (op === 'is_empty') return depVal === '';
-      if (op === 'not_empty') return depVal !== '';
-
-      if (op === '==') return depVal === targetVal;
-      if (op === '!=') return depVal !== targetVal;
-      if (op === 'contains') return depVal.includes(targetVal);
-      if (op === 'not_contains') return !depVal.includes(targetVal);
-
-      const numDep = parseFloat(depVal);
-      const numTarget = parseFloat(targetVal);
-      
-      if (isNaN(numDep) || isNaN(numTarget)) return false; 
-      
-      if (op === '>') return numDep > numTarget;
-      if (op === '<') return numDep < numTarget;
-      if (op === '>=') return numDep >= numTarget;
-      if (op === '<=') return numDep <= numTarget;
-      
-      return false;
+    const nowMs = Date.now();
+    const schema = template?.schemaData || [];
+    return evaluateBusinessCondition(
+      condFieldId,
+      op,
+      condValue,
+      dataModel && typeof dataModel === 'object' ? dataModel : {},
+      nowMs,
+      schema,
+      {
+        getFormElapsedSeconds,
+        getSectionElapsedSeconds,
+        getSectionTimingKeys,
+      },
+    );
   };
 
   // --- Central Automations (Side Effects Engine) ---
@@ -6626,7 +6629,7 @@ export default function ChecklistEngine() {
                  </TouchableOpacity>
               )}
               {field.type === 'signature_summary' && (() => {
-                const summaryIds = normalizeSignatureSummarySourceIds(field.summarySourceFieldIds);
+                const summaryIds = getSignatureSummarySourceFieldIds(field);
                 const schemaList = template?.schemaData || [];
                 const byId = new Map<string, any>(schemaList.map((x: any) => [x.id, x]));
                 const openSig = () =>
@@ -6671,6 +6674,10 @@ export default function ChecklistEngine() {
                           const def = byId.get(sid);
                           const raw = resolveSummarySourceValue(responses, scope, sid, schemaList);
                           const line = formatFieldValueForSignatureSummary(def, raw);
+                          const thumbUris = collectSummaryThumbnailUris(def, raw);
+                          const isGenericMediaLine =
+                            typeof line === 'string' && line.includes('Mídia ou anexo registado');
+                          const showValueText = thumbUris.length === 0 || !isGenericMediaLine;
                           const isLast = sidx === summaryIds.length - 1;
                           return (
                             <View
@@ -6685,17 +6692,58 @@ export default function ChecklistEngine() {
                               <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>
                                 {def?.label || sid}
                               </Text>
-                              <Text
-                                style={{
-                                  fontSize: 15,
-                                  color: '#0f172a',
-                                  marginTop: 6,
-                                  lineHeight: 22,
-                                  fontWeight: '600',
-                                }}
-                              >
-                                {line}
-                              </Text>
+                              {thumbUris.length > 0 ? (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                    marginTop: 8,
+                                  }}
+                                >
+                                  {thumbUris.map((u, ii) => (
+                                    <Image
+                                      key={`${sid}_sum_${ii}`}
+                                      source={{ uri: String(u).split('?')[0] }}
+                                      style={{
+                                        width: 76,
+                                        height: 76,
+                                        borderRadius: 10,
+                                        backgroundColor: '#e2e8f0',
+                                        borderWidth: 1,
+                                        borderColor: '#e2e8f0',
+                                      }}
+                                      resizeMode="cover"
+                                    />
+                                  ))}
+                                </View>
+                              ) : null}
+                              {showValueText ? (
+                                <Text
+                                  style={{
+                                    fontSize: 15,
+                                    color: '#0f172a',
+                                    marginTop: thumbUris.length > 0 ? 8 : 6,
+                                    lineHeight: 22,
+                                    fontWeight: '600',
+                                  }}
+                                >
+                                  {line}
+                                </Text>
+                              ) : (
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    color: '#64748b',
+                                    marginTop: 8,
+                                    fontWeight: '600',
+                                  }}
+                                >
+                                  {thumbUris.length === 1
+                                    ? '1 imagem no formulário'
+                                    : `${thumbUris.length} imagens no formulário`}
+                                </Text>
+                              )}
                             </View>
                           );
                         })

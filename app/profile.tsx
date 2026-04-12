@@ -15,7 +15,14 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../src/hooks/useResolvedAvatarUri';
-import { AuthService, API_BASE, getToken, isTechnicianProfileActive } from '../src/services/auth';
+import {
+  AuthService,
+  API_BASE,
+  getToken,
+  isTechnicianProfileActive,
+  isFieldTaskEligibleRole,
+  canUseFieldWorkAppRole,
+} from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
@@ -528,6 +535,10 @@ export default function ProfileScreen() {
 
   const uploadAvatar = async (asset: any) => {
     try {
+      if (user && isTechnicianProfileActive(user)) {
+        Alert.alert(t('profile.avatarLockedTitle'), t('profile.avatarLockedBody'));
+        return;
+      }
       setSyncing(true);
       const token = await getToken();
 
@@ -571,7 +582,18 @@ export default function ProfileScreen() {
       });
 
       if (!userRes.ok) {
-        throw new Error(`Profile API HTTP ${userRes.status}: ${await userRes.text()}`);
+        const errText = await userRes.text();
+        let errJson: { code?: string; error?: string } = {};
+        try {
+          errJson = JSON.parse(errText);
+        } catch {
+          /* ignore */
+        }
+        if (userRes.status === 403 && errJson.code === 'TECH_IDENTITY_LOCKED') {
+          Alert.alert(t('profile.avatarLockedTitle'), t('profile.avatarLockedBody'));
+          return;
+        }
+        throw new Error(`Profile API HTTP ${userRes.status}: ${errText}`);
       }
 
       let localUri: string | undefined;
@@ -600,6 +622,10 @@ export default function ProfileScreen() {
   };
 
   const pickAvatar = () => {
+    if (user && isTechnicianProfileActive(user)) {
+      Alert.alert(t('profile.avatarLockedTitle'), t('profile.avatarLockedBody'));
+      return;
+    }
     setShowAvatarModal(true);
   };
 
@@ -638,8 +664,12 @@ export default function ProfileScreen() {
                 <Ionicons name="person" size={40} color={C.textLight} />
               </View>
             )}
-            <View style={styles.headerAvatarEdit}>
-              <Ionicons name="camera" size={14} color="#fff" />
+            <View style={[styles.headerAvatarEdit, user && isTechnicianProfileActive(user) ? { opacity: 0.85 } : null]}>
+              <Ionicons
+                name={user && isTechnicianProfileActive(user) ? 'lock-closed' : 'camera'}
+                size={14}
+                color="#fff"
+              />
             </View>
           </TouchableOpacity>
           
@@ -736,7 +766,7 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {isTechnicianProfileActive(user) ? (
+        {isTechnicianProfileActive(user) || isFieldTaskEligibleRole(user.role) ? (
           <>
             <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
               <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
@@ -744,7 +774,9 @@ export default function ProfileScreen() {
             </View>
             <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
               <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
-                Alterne entre Cliente Regular e Prestador (ativa política severa de rastreamento).
+                {isTechnicianProfileActive(user)
+                  ? 'Alterne entre Cliente Regular e Prestador (ativa política severa de rastreamento).'
+                  : 'Conta interna: use Prestador para OS, tarefas de rotina e sincronização de campo (sem cadastro CompreFace).'}
               </Text>
             </View>
             <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
@@ -760,7 +792,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
-                    if (!isTechnicianProfileActive(user)) {
+                    if (!canUseFieldWorkAppRole(user)) {
                       Alert.alert(
                         'Prestador indisponível',
                         'Sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',
@@ -779,7 +811,7 @@ export default function ProfileScreen() {
               </View>
             </View>
           </>
-        ) : !user.technicianProfile ? (
+        ) : !user.technicianProfile && !isFieldTaskEligibleRole(user.role) ? (
           <View style={{ marginTop: 12, marginBottom: 12, marginHorizontal: 16 }}>
             <TouchableOpacity onPress={handleBecomeTechnician} style={{ backgroundColor: '#D97706', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Quero ser um Prestador</Text>

@@ -8,13 +8,14 @@ const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
+const { createNextRoutineTaskAfterComplete } = require('../lib/routineTaskLifecycle');
 const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionFields');
 const {
     normalizeTemplateTitle,
     findActiveDuplicateInFolder,
 } = require('../lib/templateTitleUnique');
 const { computeExecutionBusinessMetrics } = require('../lib/executionBusinessMetrics');
-const { isActiveTechnicianForEmail } = require('../lib/technicianEligibility');
+const { resolveFieldTaskAssigneeEmail } = require('../lib/technicianEligibility');
 const { validateChecklistTransitDisplacement } = require('../lib/checklistTransitRules');
 const {
     resolveSnapshotExpectedFormDurationMinutes,
@@ -560,6 +561,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
 router.post('/executions', authUser, async (req, res) => {
     try {
+        let nextRoutineTaskPayload = null;
         const { id, taskId, templateId, ownerEmail, assetId, metadata, gpsLocation, startedAt, completedAt } = req.body;
         let responses = req.body.responses;
         const authEmail = req.user.email;
@@ -687,6 +689,9 @@ router.post('/executions', authUser, async (req, res) => {
                     revision: clientRev,
                 });
 
+                const shouldSpawnNextRoutine =
+                    !!existing.routineTaskNumber && lastSub === 0 && clientRev === 1;
+
                 execution = await prisma.$transaction(async (tx) => {
                     await tx.checklistExecutionRevision.create({
                         data: {
@@ -714,6 +719,16 @@ router.post('/executions', authUser, async (req, res) => {
                         },
                     });
                 });
+
+                if (shouldSpawnNextRoutine && execution?.id) {
+                    try {
+                        nextRoutineTaskPayload = await createNextRoutineTaskAfterComplete(prisma, {
+                            completedExecutionId: execution.id,
+                        });
+                    } catch (rtErr) {
+                        console.error('[routineTask] spawn após submissão', rtErr);
+                    }
+                }
             }
         }
         
@@ -800,7 +815,11 @@ router.post('/executions', authUser, async (req, res) => {
         const payloadSize = JSON.stringify(req.body).length;
         recordSync(execution.ownerEmail || authEmail, true, payloadSize);
         
-        res.json({ success: true, executionId: execution.id });
+        res.json({
+            success: true,
+            executionId: execution.id,
+            ...(nextRoutineTaskPayload ? { nextRoutineTask: nextRoutineTaskPayload } : {}),
+        });
     } catch(err) {
         console.error("POST /api/checklists/executions error:", err);
         const ownerEmail = req.body?.ownerEmail || 'unknown';
@@ -841,17 +860,17 @@ router.post('/dispatch', async (req, res) => {
 
         const assigneeEmail = String(payload.ownerEmail || '').trim();
         const scopedTenantId = loadedTemplate?.tenantId || null;
-        const assigneeOk = await isActiveTechnicianForEmail(
+        const resolvedOwnerEmail = await resolveFieldTaskAssigneeEmail(
           prisma,
           assigneeEmail,
           scopedTenantId || undefined
         );
-        if (!assigneeOk) {
+        if (!resolvedOwnerEmail) {
           const scoped = scopedTenantId
             ? ' neste inquilino/empresa'
             : '';
           return res.status(400).json({
-            error: `O e-mail indicado não é um prestador habilitado (ativo)${scoped}. A OS não foi criada.`,
+            error: `O e-mail não corresponde a um utilizador ativo elegível (contas cliente não recebem OS)${scoped}. A OS não foi criada.`,
           });
         }
 
@@ -875,7 +894,7 @@ router.post('/dispatch', async (req, res) => {
             data: {
                 osNumber,
                 templateId: realTemplateId,    // nullable FK — ok if null
-                ownerEmail: payload.ownerEmail,
+                ownerEmail: resolvedOwnerEmail,
                 status: 'PENDING',
                 responses: null,               // deliberately empty until tech fills it
                 scheduledStartAt: scheduledStart,
@@ -903,7 +922,7 @@ router.post('/dispatch', async (req, res) => {
         // User é único por (email, tenantId). findFirst só por email podia apanhar o tenant
         // errado → zero PushToken. Com tenant do template restringimos; sem tenant, todos os Users com o e-mail.
         try {
-            const emailRaw = String(payload.ownerEmail || '').trim();
+            const emailRaw = String(resolvedOwnerEmail || '').trim();
             const emailFilter = { equals: emailRaw, mode: 'insensitive' };
 
             let userIds = [];

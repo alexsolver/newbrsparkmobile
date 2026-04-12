@@ -25,6 +25,7 @@ import { StockItem, StockMovement } from '../../src/types/stock';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useManualSync } from '../../src/hooks/useManualSync';
 import { labelForTechStockMovement, parseTechStockReason } from '../../src/utils/techStockReason';
+import { loadFtCloudTasks } from '../../src/lib/cloudTasksBuckets';
 
 const OFFLINE_HISTORY_MS = 30 * 24 * 60 * 60 * 1000;
 /** Janelas consultadas no servidor (cada salto = estes dias). */
@@ -119,8 +120,7 @@ export default function TechnicianStockScreen() {
 
   const loadTaskMap = useCallback(async () => {
     try {
-      const raw = await AsyncStorage.getItem('@brspark_cloud_tasks');
-      const arr = raw ? JSON.parse(raw) : [];
+      const arr = await loadFtCloudTasks();
       const m = new Map<string, { title?: string; osNumber?: string | null }>();
       if (Array.isArray(arr)) {
         for (const t of arr) {

@@ -34,7 +34,7 @@ export function useConnectivity(intervalMs?: number) {
   const check = useCallback(async () => {
     try {
       const net = await Network.getNetworkStateAsync();
-      if (net.isConnected === false) {
+      if (net?.isConnected === false) {
         setIsOnline(false);
         setLastChecked(new Date());
         return;
@@ -57,31 +57,38 @@ export function useConnectivity(intervalMs?: number) {
 
   useEffect(() => {
     const pollEvery = defaultPollIntervalMs(intervalMs);
-    check();
+    void check().catch(() => {});
 
-    timerRef.current = setInterval(check, pollEvery);
+    timerRef.current = setInterval(() => {
+      void check().catch(() => {});
+    }, pollEvery);
 
     const debounceMs =
       Platform.OS === 'ios' ? NET_DEBOUNCE_MS_IOS : NET_DEBOUNCE_MS_ANDROID;
 
     const scheduleCheckFromNet = (event: Network.NetworkStateEvent) => {
-      if (Platform.OS === 'ios' && event.isConnected === true) {
+      try {
+        const connected = event?.isConnected === true;
+        if (Platform.OS === 'ios' && connected) {
+          if (netDebounceRef.current) clearTimeout(netDebounceRef.current);
+          netDebounceRef.current = null;
+          void check().catch(() => {});
+          return;
+        }
         if (netDebounceRef.current) clearTimeout(netDebounceRef.current);
-        netDebounceRef.current = null;
-        check();
-        return;
+        netDebounceRef.current = setTimeout(() => {
+          netDebounceRef.current = null;
+          void check().catch(() => {});
+        }, debounceMs);
+      } catch (e) {
+        console.warn('[useConnectivity] listener de rede:', e);
       }
-      if (netDebounceRef.current) clearTimeout(netDebounceRef.current);
-      netDebounceRef.current = setTimeout(() => {
-        netDebounceRef.current = null;
-        check();
-      }, debounceMs);
     };
 
     const netSub = Network.addNetworkStateListener(scheduleCheckFromNet);
 
     const onAppState = (state: AppStateStatus) => {
-      if (state === 'active') check();
+      if (state === 'active') void check().catch(() => {});
     };
     const appSub = AppState.addEventListener('change', onAppState);
 

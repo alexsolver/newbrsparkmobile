@@ -77,11 +77,13 @@ i18n.use(initReactI18next).init({
 });
 
 // Load saved language preference
-AsyncStorage.getItem(LANG_KEY).then(saved => {
-  if (saved && (SUPPORTED as readonly string[]).includes(saved)) {
-    i18n.changeLanguage(saved);
-  }
-});
+AsyncStorage.getItem(LANG_KEY)
+  .then((saved) => {
+    if (saved && (SUPPORTED as readonly string[]).includes(saved)) {
+      void i18n.changeLanguage(saved);
+    }
+  })
+  .catch(() => {});
 
 // Helper to change and persist language
 export async function setLanguage(lang: SupportedLang) {

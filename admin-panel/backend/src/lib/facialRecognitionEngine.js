@@ -18,7 +18,7 @@ const FACIAL_GALLERY_SYNC_HINT =
   'No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
 
 const NO_FACE_IN_IMAGE_PT_BR =
-  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; evite fotografar uma tela, reflexos ou imagens em papel.';
+  'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; fotografias de telas, reflexos ou imagens em papel não serão validadas.';
 
 function auditNoFaceInImage(mode, engine) {
   return {
@@ -168,21 +168,6 @@ async function verifyFacialImageBuffer(prisma, opts) {
         return { ok: false, audit: auditNoFaceInImage(mode, engine) };
       }
       console.error('[facialRecognitionEngine] recognize', e);
-      // #region agent log
-      try {
-        require('fs').appendFileSync(
-          '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-fd3da5.log',
-          `${JSON.stringify({
-            sessionId: 'fd3da5',
-            hypothesisId: 'facial-unreachable',
-            location: 'facialRecognitionEngine.js:recognize-fail',
-            message: String(e && e.message ? e.message : e).slice(0, 200),
-            data: { code: e && e.code, status: e && e.status },
-            timestamp: Date.now(),
-          })}\n`
-        );
-      } catch (_) {}
-      // #endregion
       return {
         ok: false,
         skip: true,
@@ -443,21 +428,6 @@ async function resolvePendingFacialAuditsOnSync(prisma, { responses, templateId,
       const fieldId = key.slice(0, -'__biometric'.length);
       const photoUri = firstHttpPhotoUri(scope[fieldId]);
       if (!photoUri) {
-        // #region agent log
-        try {
-          require('fs').appendFileSync(
-            '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-fd3da5.log',
-            `${JSON.stringify({
-              sessionId: 'fd3da5',
-              hypothesisId: 'H1',
-              location: 'facialRecognitionEngine.js:noPhotoUri',
-              message: 'pending facial sem URL HTTP',
-              data: { fieldId },
-              timestamp: Date.now(),
-            })}\n`
-          );
-        } catch (_) {}
-        // #endregion
         console.warn(
           '[facialRecognitionEngine] pending facial sem URL HTTP no campo',
           fieldId,

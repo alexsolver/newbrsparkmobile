@@ -17,6 +17,10 @@ const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
+const {
+  draftPatchTouchesLockedIdentity,
+  respondWithTechnicianIdentityLockIfNeeded,
+} = require('../lib/technicianIdentityLock');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
 const {
   extractIdDocumentWithOpenAi,
@@ -132,6 +136,16 @@ function validateSubmitPayload(app, body) {
   return null;
 }
 
+/** Bloqueia alterações de identidade facial no fluxo candidato quando o TechnicianProfile já está ACTIVE. */
+async function blockLockedTechnicianIdentity(req, res, next) {
+  try {
+    if (await respondWithTechnicianIdentityLockIfNeeded(req, res)) return;
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
 async function bindTechRegistrationCandidate(req, res, next) {
   try {
     const app = await prisma.technicianRegistrationApplication.findUnique({
@@ -179,6 +193,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
+  blockLockedTechnicianIdentity,
   async (req, res) => {
     try {
       const { fileBase64, mimeType, techRegPrimaryProfileCapture: capIn } = req.body || {};
@@ -364,7 +379,11 @@ publicRouter.patch(
       if (app.status === 'SUBMITTED') {
         return res.status(400).json({ error: 'Candidatura aguarda análise. Não é possível alterar o rascunho agora.' });
       }
-      let next = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body);
+      const patchIn = req.body.responsesJson || req.body;
+      if (draftPatchTouchesLockedIdentity(patchIn) && (await respondWithTechnicianIdentityLockIfNeeded(req, res))) {
+        return;
+      }
+      let next = mergeJsonResponses(app.responsesJson, patchIn);
       const saniDraft = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(next);
       if (saniDraft.changed) next = saniDraft.next;
       const updated = await prisma.technicianRegistrationApplication.update({
@@ -387,6 +406,7 @@ publicRouter.post(
   express.json({ limit: '10mb' }),
   authUser,
   bindTechRegistrationCandidate,
+  blockLockedTechnicianIdentity,
   async (req, res) => {
     try {
       const app = req.techRegApp;
@@ -485,6 +505,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
+  blockLockedTechnicianIdentity,
   async (req, res) => {
   try {
     const { fileBase64, mimeType } = req.body;
@@ -587,7 +608,12 @@ publicRouter.post(
   }
 );
 
-publicRouter.delete('/:token/face-enrollment/:photoId', authUser, bindTechRegistrationCandidate, async (req, res) => {
+publicRouter.delete(
+  '/:token/face-enrollment/:photoId',
+  authUser,
+  bindTechRegistrationCandidate,
+  blockLockedTechnicianIdentity,
+  async (req, res) => {
   try {
     const { photoId } = req.params;
     const app = req.techRegApp;
@@ -694,6 +720,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
+  blockLockedTechnicianIdentity,
   async (req, res) => {
     try {
       const { fileBase64, mimeType } = req.body || {};

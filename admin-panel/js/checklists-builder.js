@@ -347,6 +347,8 @@ let currentFormId = null;
 let currentFormTitle = 'Novo formulário';
 let currentFormDesc = '';
 let currentFormIcon = '';
+/** Biblioteca do ícone do modelo (`metadata.iconLibrary`) — paridade com o app e com `renderWebIcon`. */
+let currentFormIconLibrary = 'Ionicons';
 /** Pasta do modelo em edição (null = raiz) — persistida na API como folderId */
 let currentFormFolderId = null;
 /** Pasta aberta no modal “Meus Formulários” */
@@ -1780,14 +1782,25 @@ window.triggerIconPickerForField = function(evt, id) {
     });
 };
 
-/** Ícone do modelo (metadata.icon) — ao lado do título, como nos cartões do canvas. */
+/** Ícone do modelo (metadata.icon + metadata.iconLibrary) — ao lado do título, como nos cartões do canvas. */
 window.openTemplateFormIconPicker = function (evt) {
     if (evt) evt.preventDefault();
-    window.openIconPicker((iconName) => {
+    window.openIconPicker((iconName, iconLib, iconColor) => {
         const v = iconName != null ? String(iconName).trim() : '';
         currentFormIcon = v;
+        currentFormIconLibrary = v
+            ? String(iconLib || 'Ionicons').trim() || 'Ionicons'
+            : 'Ionicons';
         const ti = document.getElementById('tpl-icon');
         if (ti) ti.value = v;
+        if (iconColor && String(iconColor).trim()) {
+            try {
+                lastIconPickerColor = String(iconColor).trim();
+                saveLastIconPickerColor(lastIconPickerColor);
+            } catch (eCol) {
+                /* ignore */
+            }
+        }
         syncBuilderTaskIconDom();
     });
 };
@@ -2570,6 +2583,17 @@ function templateTitleDuplicateInLocalDb(title, folderId, excludeId) {
     return null;
 }
 
+/** `metadata` do modelo: ícone + biblioteca (quando não é Ionicons). */
+function buildChecklistTemplateMetadata() {
+    const icon = String(currentFormIcon || '').trim();
+    const meta = { icon: icon || '' };
+    if (icon) {
+        const lib = String(currentFormIconLibrary || 'Ionicons').trim() || 'Ionicons';
+        if (lib !== 'Ionicons') meta.iconLibrary = lib;
+    }
+    return meta;
+}
+
 window.saveChecklist = async function() {
     const btn = document.querySelector('.topbar-actions .btn-primary');
     const oldText = btn.innerHTML;
@@ -2584,6 +2608,12 @@ window.saveChecklist = async function() {
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
     currentFormIcon = document.getElementById('tpl-icon').value;
+    const tplLibEl = document.getElementById('tpl-icon-library');
+    if (tplLibEl && String(tplLibEl.value || '').trim()) {
+        currentFormIconLibrary = String(tplLibEl.value).trim();
+    } else if (!String(currentFormIcon || '').trim()) {
+        currentFormIconLibrary = 'Ionicons';
+    }
 
     try {
         if(!currentFormId || currentFormId === 'temp_new') {
@@ -2632,7 +2662,7 @@ window.saveChecklist = async function() {
             title: currentFormTitle,
             description: currentFormDesc,
             settings: globalFormSettings,
-            metadata: { icon: currentFormIcon },
+            metadata: buildChecklistTemplateMetadata(),
             schema: schemaSnapshot,
             folderId: currentFormFolderId ?? null,
             updatedAt: new Date().toISOString()
@@ -2650,7 +2680,7 @@ window.saveChecklist = async function() {
                 id: currentFormId,
                 title: currentFormTitle,
                 description: currentFormDesc,
-                metadata: { icon: currentFormIcon },
+                metadata: buildChecklistTemplateMetadata(),
                 settings: globalFormSettings,
                 schemaData: schemaSnapshot,
                 folderId: currentFormFolderId ?? null
@@ -3363,7 +3393,17 @@ window.renderFormsGridFromLocal = function (db) {
 
     sortedForms.forEach((form) => {
         const count = (form.schema || []).length;
-        const iconHtml = form.metadata?.icon ? `<ion-icon name="${escapeHtmlAttr(form.metadata.icon)}"></ion-icon>` : '📋';
+        const iconHtml = form.metadata?.icon
+            ? typeof window.renderWebIcon === 'function'
+                ? window.renderWebIcon(
+                      form.metadata.iconLibrary || 'Ionicons',
+                      form.metadata.icon,
+                      '#64748b',
+                      26,
+                      true
+                  )
+                : `<ion-icon name="${escapeHtmlAttr(form.metadata.icon)}"></ion-icon>`
+            : '📋';
         const fid = escapeHtmlAttr(form.id);
         const ftitle = escapeHtml(form.title);
         const moveSelectId = 'move-folder-' + form.id.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -3430,6 +3470,8 @@ window.loadChecklist = function(id) {
         currentFormTitle = form.title;
         currentFormDesc = form.description || '';
         currentFormIcon = form.metadata?.icon || '';
+        currentFormIconLibrary =
+            String(form.metadata?.iconLibrary || '').trim() || 'Ionicons';
         currentFormFolderId = form.folderId ?? null;
         globalFormSettings = Object.assign(
             {
@@ -3506,8 +3548,11 @@ window.confirmCreateNewChecklist = function () {
     document.getElementById('tpl-title').value = title;
     document.getElementById('tpl-desc').value = '';
     currentFormIcon = '';
+    currentFormIconLibrary = 'Ionicons';
     const tiNew = document.getElementById('tpl-icon');
     if (tiNew) tiNew.value = '';
+    const tlNew = document.getElementById('tpl-icon-library');
+    if (tlNew) tlNew.value = 'Ionicons';
     syncBuilderTaskIconDom();
 
     renderCanvas();
@@ -3565,6 +3610,10 @@ function renderMobilePreview() {
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
     currentFormIcon = document.getElementById('tpl-icon').value;
+    const pvLib = document.getElementById('tpl-icon-library');
+    if (pvLib && String(pvLib.value || '').trim()) {
+        currentFormIconLibrary = String(pvLib.value).trim();
+    }
 
     const titleEl = document.getElementById('mobile-preview-title');
     const contentEl = document.getElementById('mobile-preview-content');
@@ -3572,11 +3621,21 @@ function renderMobilePreview() {
 
     const rawFormIcon = String(currentFormIcon || '').trim();
     if (rawFormIcon) {
-        titleEl.innerHTML =
-            '<span style="display:inline-flex;align-items:center;justify-content:center;gap:8px;max-width:100%;">' +
+        const pvLibUse = String(currentFormIconLibrary || 'Ionicons').trim() || 'Ionicons';
+        let glyph =
             '<ion-icon name="' +
             escapeHtmlAttr(rawFormIcon) +
-            '" style="font-size:22px;flex-shrink:0;vertical-align:middle;"></ion-icon>' +
+            '" style="font-size:22px;flex-shrink:0;vertical-align:middle;"></ion-icon>';
+        if (typeof window.renderWebIcon === 'function') {
+            try {
+                glyph = window.renderWebIcon(pvLibUse, rawFormIcon, lastIconPickerColor || '#1d4ed8', 22, true);
+            } catch (ePv) {
+                /* mantém ion-icon */
+            }
+        }
+        titleEl.innerHTML =
+            '<span style="display:inline-flex;align-items:center;justify-content:center;gap:8px;max-width:100%;">' +
+            glyph +
             '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
             escapeHtmlLogic(currentFormTitle || 'Preview mobile') +
             '</span></span>';
@@ -3809,7 +3868,7 @@ window.confirmTestDispatch = async function() {
             title: `Formulário novo (${new Date().toLocaleTimeString('pt-BR')})`,
             description: 'Enviado de forma manual para vistoria.',
             scheduledStartAt: new Date().toISOString(),
-            metadata: { icon: currentFormIcon || document.getElementById('tpl-icon').value },
+            metadata: buildChecklistTemplateMetadata(),
         };
         const ef = globalFormSettings && globalFormSettings.expectedFormDurationMinutes;
         if (ef != null && Number.isFinite(Number(ef)) && Number(ef) >= 5) {
@@ -3861,6 +3920,77 @@ window.confirmTestDispatch = async function() {
 /** Monitor virtual: tempo total do formulário (app grava __form_started_at / metadata). */
 const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
+/** Paridade com `src/lib/businessRuleCondition.ts` — operadores por tipo de monitor. */
+const NORMAL_LOGIC_OPS = [
+    ['==', 'Igual a (==)'],
+    ['!=', 'Diferente de (!=)'],
+    ['contains', 'Contém texto'],
+    ['not_contains', 'Não contém texto'],
+    ['starts_with', 'Começa com'],
+    ['ends_with', 'Termina com'],
+    ['not_starts_with', 'Não começa com'],
+    ['not_ends_with', 'Não termina com'],
+    ['is_empty', 'Está vazio'],
+    ['not_empty', 'Está preenchido (qualquer valor)'],
+    ['is_true', 'Verdadeiro (caixa / sim / 1)'],
+    ['is_false', 'Falso (não / 0 / desmarcado)'],
+    ['>', 'Maior que (número)'],
+    ['<', 'Menor que (número)'],
+    ['>=', 'Maior ou igual (número)'],
+    ['<=', 'Menor ou igual (número)'],
+    ['between', 'Entre dois números (inclusive) — valor: min|max'],
+    ['not_between', 'Fora do intervalo — valor: min|max'],
+    ['one_of', 'É um de (lista exata, separada por vírgula)'],
+    ['none_of', 'Não é nenhum de (lista exata)'],
+    ['includes_any', 'Contém qualquer trecho da lista (vírgula)'],
+    ['includes_all', 'Contém todos os trechos da lista'],
+    ['excludes_all', 'Não contém nenhum trecho da lista'],
+    ['matches_regex', 'Corresponde ao padrão (regex JavaScript)'],
+    ['length_eq', 'Tamanho do texto = (número de caracteres)'],
+    ['length_neq', 'Tamanho do texto ≠'],
+    ['length_gt', 'Tamanho do texto >'],
+    ['length_gte', 'Tamanho do texto ≥'],
+    ['length_lt', 'Tamanho do texto <'],
+    ['length_lte', 'Tamanho do texto ≤'],
+    ['count_eq', 'N.º de itens selecionados ='],
+    ['count_neq', 'N.º de itens selecionados ≠'],
+    ['count_gt', 'N.º de itens selecionados >'],
+    ['count_gte', 'N.º de itens selecionados ≥'],
+    ['count_lt', 'N.º de itens selecionados <'],
+    ['count_lte', 'N.º de itens selecionados ≤'],
+    ['date_before', 'Data/hora é antes de (valor ISO ou reconhecível)'],
+    ['date_after', 'Data/hora é depois de'],
+    ['date_on_or_before', 'Data/hora ≤ referência'],
+    ['date_on_or_after', 'Data/hora ≥ referência'],
+];
+
+const FORM_CLOCK_LOGIC_OPS = [
+    ['form_elapsed_sec_gte', 'Tempo total no formulário ≥ (segundos)'],
+    ['form_elapsed_sec_lte', 'Tempo total no formulário ≤ (segundos)'],
+    ['form_elapsed_sec_gt', 'Tempo total no formulário > (segundos)'],
+    ['form_elapsed_sec_lt', 'Tempo total no formulário < (segundos)'],
+    ['form_elapsed_sec_eq', 'Tempo total no formulário = (segundos inteiros)'],
+    ['form_elapsed_sec_between', 'Tempo total entre (seg) — min|max'],
+];
+
+const SECTION_LOGIC_OPS = [
+    ['section_has_started', 'Técnico já entrou nesta etapa'],
+    ['section_not_started', 'Ainda não entrou nesta etapa'],
+    ['section_has_ended', 'Etapa já foi concluída (avançou ou enviou)'],
+    ['section_not_ended', 'Etapa ainda não foi concluída'],
+    ['section_in_progress', 'Em curso (entrou e não concluiu)'],
+    ['section_elapsed_sec_gte', 'Tempo gasto na etapa ≥ (segundos)'],
+    ['section_elapsed_sec_lte', 'Tempo gasto na etapa ≤ (segundos)'],
+    ['section_elapsed_sec_gt', 'Tempo gasto na etapa > (segundos)'],
+    ['section_elapsed_sec_lt', 'Tempo gasto na etapa < (segundos)'],
+    ['section_elapsed_sec_eq', 'Tempo gasto na etapa = (segundos inteiros)'],
+    ['section_elapsed_sec_between', 'Tempo na etapa entre (seg) — min|max'],
+];
+
+const NORMAL_LOGIC_OP_VALUES = NORMAL_LOGIC_OPS.map((r) => r[0]);
+const FORM_CLOCK_LOGIC_OP_VALUES = FORM_CLOCK_LOGIC_OPS.map((r) => r[0]);
+const SECTION_LOGIC_OP_VALUES = SECTION_LOGIC_OPS.map((r) => r[0]);
+
 function escapeHtmlLogic(s) {
     if (s == null) return '';
     return String(s)
@@ -3879,13 +4009,103 @@ function logicFieldSelectLabel(fld) {
     return `${fld.label || fld.id} (${fld.id})`;
 }
 
-function logicConditionNeedsSeconds(operator) {
+function logicConditionNeedsNumericInput(operator) {
     return (
         operator === 'section_elapsed_sec_gte' ||
         operator === 'section_elapsed_sec_lte' ||
+        operator === 'section_elapsed_sec_gt' ||
+        operator === 'section_elapsed_sec_lt' ||
+        operator === 'section_elapsed_sec_eq' ||
+        operator === 'section_elapsed_sec_between' ||
         operator === 'form_elapsed_sec_gte' ||
-        operator === 'form_elapsed_sec_lte'
+        operator === 'form_elapsed_sec_lte' ||
+        operator === 'form_elapsed_sec_gt' ||
+        operator === 'form_elapsed_sec_lt' ||
+        operator === 'form_elapsed_sec_eq' ||
+        operator === 'form_elapsed_sec_between'
     );
+}
+
+function logicConditionNeedsNoValueField(operator) {
+    return (
+        operator === 'is_empty' ||
+        operator === 'not_empty' ||
+        operator === 'is_true' ||
+        operator === 'is_false' ||
+        operator === 'section_has_started' ||
+        operator === 'section_not_started' ||
+        operator === 'section_has_ended' ||
+        operator === 'section_not_ended' ||
+        operator === 'section_in_progress'
+    );
+}
+
+function logicConditionSingleNumberInput(operator) {
+    return (
+        operator === '>' ||
+        operator === '<' ||
+        operator === '>=' ||
+        operator === '<=' ||
+        operator === 'length_eq' ||
+        operator === 'length_neq' ||
+        operator === 'length_gt' ||
+        operator === 'length_gte' ||
+        operator === 'length_lt' ||
+        operator === 'length_lte' ||
+        operator === 'count_eq' ||
+        operator === 'count_neq' ||
+        operator === 'count_gt' ||
+        operator === 'count_gte' ||
+        operator === 'count_lt' ||
+        operator === 'count_lte'
+    );
+}
+
+function defaultValueForRuleOperator(op) {
+    if (
+        op === 'between' ||
+        op === 'not_between' ||
+        op === 'form_elapsed_sec_between' ||
+        op === 'section_elapsed_sec_between'
+    ) {
+        return '0|3600';
+    }
+    if (logicConditionNeedsNumericInput(op)) return '60';
+    return '';
+}
+
+function logicValuePlaceholder(op) {
+    const map = {
+        between: 'Mínimo|Máximo (ex.: 10|500)',
+        not_between: 'Mínimo|Máximo — fora do intervalo',
+        one_of: 'Valor1, Valor2 (igualdade, ignora maiúsculas)',
+        none_of: 'Valor1, Valor2…',
+        includes_any: 'Trecho1, Trecho2…',
+        includes_all: 'Trecho1, Trecho2… (todos devem aparecer)',
+        excludes_all: 'Trecho1, Trecho2… (nenhum pode aparecer)',
+        matches_regex: 'Regex JS (máx. 500 caracteres)',
+        '>': 'Número de referência',
+        '<': 'Número de referência',
+        '>=': 'Número de referência',
+        '<=': 'Número de referência',
+        length_eq: 'Número de caracteres',
+        length_neq: 'Número de caracteres',
+        length_gt: 'Número de caracteres',
+        length_gte: 'Número de caracteres',
+        length_lt: 'Número de caracteres',
+        length_lte: 'Número de caracteres',
+        count_eq: 'Quantidade de itens na resposta (listas)',
+        count_neq: 'Quantidade',
+        count_gt: 'Quantidade',
+        count_gte: 'Quantidade',
+        count_lt: 'Quantidade',
+        count_lte: 'Quantidade',
+        date_before: 'Data/hora de referência (ex.: 2025-12-31 ou ISO 8601)',
+        date_after: 'Data/hora de referência',
+        date_on_or_before: 'Data/hora de referência',
+        date_on_or_after: 'Data/hora de referência',
+    };
+    return map[op] || 'Valor esperado';
 }
 
 /** Ajusta operador/valor quando o monitor deixa de ser campo “normal”. */
@@ -3895,23 +4115,13 @@ function normalizeRuleOperatorForMonitor(rule) {
     const isFormClock = mid === FORM_CLOCK_COND_ID;
     const isSection = fld && fld.type === 'section_break';
 
-    let valid = ['==', '!=', 'contains', 'not_empty', 'is_empty'];
-    if (isFormClock) valid = ['form_elapsed_sec_gte', 'form_elapsed_sec_lte'];
-    else if (isSection) {
-        valid = [
-            'section_has_started',
-            'section_not_started',
-            'section_has_ended',
-            'section_not_ended',
-            'section_in_progress',
-            'section_elapsed_sec_gte',
-            'section_elapsed_sec_lte',
-        ];
-    }
+    let valid = NORMAL_LOGIC_OP_VALUES;
+    if (isFormClock) valid = FORM_CLOCK_LOGIC_OP_VALUES;
+    else if (isSection) valid = SECTION_LOGIC_OP_VALUES;
 
     if (!valid.includes(rule.operator)) {
         rule.operator = valid[0];
-        rule.value = logicConditionNeedsSeconds(rule.operator) ? '60' : '';
+        rule.value = defaultValueForRuleOperator(rule.operator);
     }
 }
 
@@ -3921,42 +4131,39 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
     const isSection = fld && fld.type === 'section_break';
     const op = rule.operator || '==';
 
-    let opSelect = '';
-    if (isFormClock) {
-        opSelect = `
+    let opList = NORMAL_LOGIC_OPS;
+    if (isFormClock) opList = FORM_CLOCK_LOGIC_OPS;
+    else if (isSection) opList = SECTION_LOGIC_OPS;
+
+    const opSelect = `
             <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
-                <option value="form_elapsed_sec_gte" ${op === 'form_elapsed_sec_gte' ? 'selected' : ''}>Tempo total no formulário ≥ (segundos)</option>
-                <option value="form_elapsed_sec_lte" ${op === 'form_elapsed_sec_lte' ? 'selected' : ''}>Tempo total no formulário ≤ (segundos)</option>
+                ${opList
+                    .map(
+                        ([val, label]) =>
+                            `<option value="${escapeHtmlLogic(val)}" ${op === val ? 'selected' : ''}>${escapeHtmlLogic(
+                                label,
+                            )}</option>`,
+                    )
+                    .join('')}
             </select>`;
-    } else if (isSection) {
-        opSelect = `
-            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
-                <option value="section_has_started" ${op === 'section_has_started' ? 'selected' : ''}>Técnico já entrou nesta etapa</option>
-                <option value="section_not_started" ${op === 'section_not_started' ? 'selected' : ''}>Ainda não entrou nesta etapa</option>
-                <option value="section_has_ended" ${op === 'section_has_ended' ? 'selected' : ''}>Etapa já foi concluída (avançou ou enviou)</option>
-                <option value="section_not_ended" ${op === 'section_not_ended' ? 'selected' : ''}>Etapa ainda não foi concluída</option>
-                <option value="section_in_progress" ${op === 'section_in_progress' ? 'selected' : ''}>Em curso (entrou e não concluiu)</option>
-                <option value="section_elapsed_sec_gte" ${op === 'section_elapsed_sec_gte' ? 'selected' : ''}>Tempo gasto na etapa ≥ (segundos)</option>
-                <option value="section_elapsed_sec_lte" ${op === 'section_elapsed_sec_lte' ? 'selected' : ''}>Tempo gasto na etapa ≤ (segundos)</option>
-            </select>`;
-    } else {
-        opSelect = `
-            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
-                <option value="==" ${op === '==' ? 'selected' : ''}>Igual a (==)</option>
-                <option value="!=" ${op === '!=' ? 'selected' : ''}>Diferente de (!=)</option>
-                <option value="contains" ${op === 'contains' ? 'selected' : ''}>Contém texto</option>
-                <option value="not_empty" ${op === 'not_empty' ? 'selected' : ''}>Estiver Preenchido (Qualquer valor)</option>
-                <option value="is_empty" ${op === 'is_empty' ? 'selected' : ''}>Estiver Vazio</option>
-            </select>`;
-    }
 
     let valInput = '';
-    if (logicConditionNeedsSeconds(op)) {
+    if (logicConditionNeedsNumericInput(op)) {
+        const useBetween = op.endsWith('_between');
         valInput = `
-            <input type="number" min="0" step="1" class="prop-input" placeholder="Segundos (ex: 120)" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
-    } else if (!isFormClock && !isSection && op !== 'is_empty' && op !== 'not_empty') {
+            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${
+                useBetween ? 'min|max em segundos (ex.: 30|600)' : 'Segundos (ex.: 120)'
+            }" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+    } else if (!isFormClock && !isSection && logicConditionSingleNumberInput(op)) {
         valInput = `
-            <input type="text" class="prop-input" placeholder="Valor esperado" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            <input type="number" step="any" class="prop-input" placeholder="${escapeHtmlLogic(
+                logicValuePlaceholder(op),
+            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+    } else if (!isFormClock && !isSection && !logicConditionNeedsNoValueField(op)) {
+        valInput = `
+            <input type="text" class="prop-input" placeholder="${escapeHtmlLogic(
+                logicValuePlaceholder(op),
+            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
     }
 
     return { opSelect, valInput };
@@ -4430,17 +4637,21 @@ window.brsparkCopilotClearFocusedField = function () {
 
 function syncBuilderTaskIconDom() {
     const ti = document.getElementById('tpl-icon');
+    const libHidden = document.getElementById('tpl-icon-library');
     const trigger = document.getElementById('tpl-form-icon-trigger');
     const raw = currentFormIcon != null ? String(currentFormIcon) : '';
     const ic = raw.trim();
     if (ti) ti.value = ic;
     if (!trigger) return;
     const has = !!ic;
+    const libForTpl = has ? String(currentFormIconLibrary || 'Ionicons').trim() || 'Ionicons' : 'Ionicons';
+    if (libHidden) libHidden.value = libForTpl;
+    if (!has) currentFormIconLibrary = 'Ionicons';
     trigger.style.background = has ? '#eff6ff' : '#f8fafc';
     trigger.style.border = has ? '1px solid #3b82f6' : '1px dashed #cbd5e1';
     if (has) {
         try {
-            trigger.innerHTML = window.renderWebIcon('Ionicons', ic, lastIconPickerColor, 22);
+            trigger.innerHTML = window.renderWebIcon(libForTpl, ic, lastIconPickerColor, 22);
         } catch (eR) {
             trigger.innerHTML =
                 '<ion-icon name="' +
@@ -4484,6 +4695,8 @@ function pushCopilotUndoSnapshot() {
                 fields: JSON.parse(JSON.stringify(fields)),
                 settings: JSON.parse(JSON.stringify(globalFormSettings || {})),
                 taskIcon: typeof currentFormIcon === 'string' ? currentFormIcon : '',
+                taskIconLibrary:
+                    typeof currentFormIconLibrary === 'string' ? currentFormIconLibrary : 'Ionicons',
             }),
         );
     } catch (eSnap) {
@@ -4503,6 +4716,8 @@ function parseCopilotUndoEntry(raw) {
                 fields: o.fields,
                 settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
                 taskIcon: o.taskIcon != null ? String(o.taskIcon) : '',
+                taskIconLibrary:
+                    o.taskIconLibrary != null ? String(o.taskIconLibrary) : 'Ionicons',
             };
         }
         if (o && o.v === 2 && Array.isArray(o.fields)) {
@@ -4895,8 +5110,15 @@ function brsparkCopilotApplyChatResponse(data) {
         Object.prototype.hasOwnProperty.call(data.templateMetadata, 'icon')
     ) {
         try {
-            metadataChanged =
-                String(data.templateMetadata.icon || '').trim() !== String(currentFormIcon || '').trim();
+            const prevSig =
+                String(currentFormIcon || '').trim() +
+                '\n' +
+                String(currentFormIconLibrary || 'Ionicons').trim();
+            const nextSig =
+                String(data.templateMetadata.icon || '').trim() +
+                '\n' +
+                String(data.templateMetadata.iconLibrary || 'Ionicons').trim();
+            metadataChanged = prevSig !== nextSig;
         } catch (eMeta) {
             metadataChanged = true;
         }
@@ -4970,7 +5192,7 @@ async function brsparkCopilotPostChatRound(userText) {
         formContext: collectCopilotFormContext(),
         spreadsheetSummary: summary,
         templateSettings: JSON.parse(JSON.stringify(globalFormSettings || {})),
-        templateMetadata: { icon: typeof currentFormIcon === 'string' ? currentFormIcon : '' },
+        templateMetadata: buildChecklistTemplateMetadata(),
     };
     if (tid) chatPayload.templateId = tid;
 
@@ -5138,6 +5360,10 @@ window.brsparkCopilotApplyPatch = function (opts) {
     if (hasMeta && Object.prototype.hasOwnProperty.call(data.templateMetadata, 'icon')) {
         currentFormIcon =
             data.templateMetadata.icon != null ? String(data.templateMetadata.icon).trim() : '';
+        currentFormIconLibrary =
+            data.templateMetadata.iconLibrary != null
+                ? String(data.templateMetadata.iconLibrary).trim() || 'Ionicons'
+                : 'Ionicons';
         syncBuilderTaskIconDom();
     }
     renderCanvas();
@@ -5158,6 +5384,8 @@ window.brsparkCopilotUndo = function () {
     }
     if (!entry.taskIconSkip) {
         currentFormIcon = entry.taskIcon != null ? String(entry.taskIcon) : '';
+        currentFormIconLibrary =
+            entry.taskIconLibrary != null ? String(entry.taskIconLibrary) : 'Ionicons';
         syncBuilderTaskIconDom();
     }
     renderCanvas();

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Registro de horas</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .wt-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; }
+    .wt-panel-title { font-size: 13px; font-weight: 900; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .wt-panel-desc { font-size: 11px; color: var(--text3); margin-bottom: 14px; line-height: 1.45; }
+    .wt-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+    .wt-toggle-label strong { font-size: 13px; font-weight: 700; color: var(--text); display: block; }
+    .wt-toggle-label span { font-size: 11px; color: var(--text3); }
+    .wt-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+    .wt-toggle input { opacity: 0; width: 0; height: 0; }
+    .wt-slider { position: absolute; inset: 0; background: #cbd5e1; border-radius: 22px; transition: 0.25s; cursor: pointer; }
+    .wt-slider::before { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: 0.25s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+    input:checked + .wt-slider { background: var(--accent); }
+    input:checked + .wt-slider::before { transform: translateX(18px); }
+    .wt-field { margin-bottom: 10px; }
+    .wt-field label { font-size: 10px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+    .wt-field input, .wt-field textarea { width: 100%; max-width: 520px; padding: 9px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 600; background: var(--bg); color: var(--text); box-sizing: border-box; }
+    .wt-alert { padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 14px; border: 1px solid var(--border); background: var(--amber-dim, #fffbeb); color: var(--amber, #92400e); }
+    .wt-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); margin-top: 12px; }
+    .wt-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1720px; }
+    .wt-table th, .wt-table td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .wt-table th { font-size: 10px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; background: var(--surface2); }
+    .wt-table tr:last-child td { border-bottom: none; }
+    .wt-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; }
+    .wt-badge-warn { background: var(--amber-dim, #fffbeb); color: var(--amber, #92400e); border: 1px solid var(--border); }
+    .wt-badge-ok { background: var(--green-dim, #ecfdf5); color: var(--green, #047857); border: 1px solid var(--border); }
+    .wt-report-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
+    .wt-report-toolbar .form-group { margin-bottom: 0; }
+    .wt-pagination { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--text3); font-weight: 600; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">
+        <ion-icon name="time-outline" style="vertical-align: -3px; margin-right: 6px; color: var(--accent)"></ion-icon>
+        Registro de horas trabalhadas
+      </span>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-primary" id="btn-save-wt">Salvar</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div id="wt-tenant-bar" class="wt-alert" style="display: none">
+        <strong>Tenant:</strong> selecione a organização (perfil SaaS) ou entre no modo tenant no login do painel.
+      </div>
+      <div id="wt-saas-tenant" style="display: none; margin-bottom: 16px" class="form-group">
+        <label class="form-label">Organização (tenant)</label>
+        <select class="form-control" id="wt-tenant-select" style="max-width: 480px"></select>
+      </div>
+
+      <div class="wt-alert dc-alert-info" style="background: var(--blue-dim, #eff6ff); color: var(--blue, #1d4ed8); border-color: #bfdbfe">
+        <ion-icon name="information-circle-outline" style="font-size: 18px; flex-shrink: 0"></ion-icon>
+        <span>
+          No app, o ponto fica disponível para <strong>qualquer papel exceto cliente</strong> (não se aplica a contas «Usuário» / <code>USER</code>), desde que estejam ativos a
+          <strong>flag global «work_time»</strong>, o interruptor abaixo e a <strong>habilitação por utilizador</strong> (editar utilizador → Registro de horas). Reconhecimento facial e geocoding dependem das integrações (CompreFace, rede para Nominatim).
+        </span>
+      </div>
+
+      <div class="wt-panel">
+        <div class="wt-panel-title"><ion-icon name="power-outline"></ion-icon> Módulo</div>
+        <p class="wt-panel-desc">Ativa ou desativa o registo de ponto para toda a organização (não remove batidas já gravadas).</p>
+        <div class="wt-toggle-row">
+          <div class="wt-toggle-label">
+            <strong>Ativar registro de horas para esta organização</strong>
+            <span>Quando desligado, o app não oferece batidas mesmo que o utilizador esteja habilitado.</span>
+          </div>
+          <label class="wt-toggle">
+            <input type="checkbox" id="wt-module-enabled" />
+            <span class="wt-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="wt-panel">
+        <div class="wt-panel-title"><ion-icon name="shield-checkmark-outline"></ion-icon> Obrigatoriedades por batida</div>
+        <p class="wt-panel-desc">Alinhado à política de auditoria (face, GPS, endereço resolvido).</p>
+        <div class="wt-toggle-row">
+          <div class="wt-toggle-label">
+            <strong>Reconhecimento facial obrigatório</strong>
+            <span>Cada batida deve incluir verificação facial (1:1 com a galeria CompreFace).</span>
+          </div>
+          <label class="wt-toggle">
+            <input type="checkbox" id="wt-req-face" checked />
+            <span class="wt-slider"></span>
+          </label>
+        </div>
+        <div class="wt-toggle-row">
+          <div class="wt-toggle-label">
+            <strong>Localização GPS obrigatória</strong>
+            <span>Coordenadas em cada batida.</span>
+          </div>
+          <label class="wt-toggle">
+            <input type="checkbox" id="wt-req-gps" checked />
+            <span class="wt-slider"></span>
+          </label>
+        </div>
+        <div class="wt-toggle-row">
+          <div class="wt-toggle-label">
+            <strong>Endereço resolvido obrigatório</strong>
+            <span>O servidor tenta reverse geocode; sem endereço a batida é recusada se esta opção estiver ativa.</span>
+          </div>
+          <label class="wt-toggle">
+            <input type="checkbox" id="wt-req-addr" checked />
+            <span class="wt-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="wt-panel">
+        <div class="wt-panel-title"><ion-icon name="lock-closed-outline"></ion-icon> Integridade</div>
+        <p class="wt-panel-desc">Limites de relógio e precisão GPS.</p>
+        <div class="wt-field">
+          <label>Tolerância de deriva do relógio (segundos)</label>
+          <input type="number" id="wt-drift" min="30" max="86400" value="300" style="max-width: 200px" />
+        </div>
+        <div class="wt-field">
+          <label>Precisão GPS máxima aceite (metros, vazio = sem limite)</label>
+          <input type="number" id="wt-acc" min="1" placeholder="Ex.: 80" style="max-width: 200px" />
+        </div>
+      </div>
+
+      <div class="wt-panel">
+        <div class="wt-panel-title"><ion-icon name="document-text-outline"></ion-icon> Texto interno / versão</div>
+        <p class="wt-panel-desc">Referência para RH ou versão de política interna (opcional).</p>
+        <div class="wt-field">
+          <label>Versão / código do aviso</label>
+          <input type="text" id="wt-consent-ver" placeholder="Ex.: ponto-2026-04" />
+        </div>
+        <div class="wt-field">
+          <label>Nota (Markdown permitido)</label>
+          <textarea id="wt-notice" rows="5" placeholder="Instruções para o colaborador…"></textarea>
+        </div>
+      </div>
+
+      <div class="wt-panel" id="wt-reports-panel">
+        <div class="wt-panel-title"><ion-icon name="stats-chart-outline"></ion-icon> Relatórios de batidas</div>
+        <p class="wt-panel-desc">
+          Listagem e exportação CSV por organização. No <strong>app</strong>, cada utilizador continua a poder usar
+          <code>GET /api/work-time/punches</code> (JWT do app) para as próprias batidas.
+        </p>
+        <div class="wt-report-toolbar">
+          <div class="form-group">
+            <label class="form-label">Data inicial</label>
+            <input type="date" class="form-control" id="wt-report-from" style="max-width: 160px" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data final</label>
+            <input type="date" class="form-control" id="wt-report-to" style="max-width: 160px" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Janela rápida (se datas vazias)</label>
+            <select class="form-control" id="wt-report-days" style="max-width: 120px">
+              <option value="7">7 dias</option>
+              <option value="31" selected>31 dias</option>
+              <option value="90">90 dias</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 220px">
+            <label class="form-label">Prestador (opcional)</label>
+            <select class="form-control" id="wt-report-user">
+              <option value="">Todos com ponto ativo</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="wt-report-load">Carregar</button>
+          <button type="button" class="btn btn-primary btn-sm" id="wt-report-csv">
+            <ion-icon name="download-outline" style="vertical-align: -2px; margin-right: 4px"></ion-icon>
+            Exportar CSV
+          </button>
+        </div>
+        <p id="wt-report-status" style="font-size: 12px; color: var(--text3); margin: 0 0 8px"></p>
+        <div class="wt-table-wrap">
+          <table class="wt-table" id="wt-report-table">
+            <thead>
+              <tr>
+                <th>Data/hora (aparelho)</th>
+                <th>Tipo</th>
+                <th>Estado do registo</th>
+                <th>Jornada acumulada do dia</th>
+                <th>Nome completo</th>
+                <th>Matrícula</th>
+                <th>Aparelho</th>
+                <th>GPS</th>
+                <th>Endereço</th>
+                <th>Exceção</th>
+                <th>Reconhecimento facial</th>
+                <th>Validado por reconhecimento facial</th>
+                <th>Registo sem biometria (exceção)</th>
+              </tr>
+            </thead>
+            <tbody id="wt-report-tbody">
+              <tr><td colspan="13" style="color: var(--text3); font-weight: 600">Selecione o tenant e toque em Carregar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wt-pagination" id="wt-report-pagination" style="display: none">
+          <button type="button" class="btn btn-ghost btn-sm" id="wt-report-prev">Anterior</button>
+          <span id="wt-report-pageinfo"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="wt-report-next">Seguinte</button>
+        </div>
+        <p style="font-size: 11px; color: var(--text3); margin-top: 14px; line-height: 1.45">
+          Painel: <code>GET /api/work-time/reports/punches</code> ·
+          <code>GET /api/work-time/reports/punches/export.csv</code> (até 10&nbsp;000 linhas por exportação).
+          <br />
+          A coluna «Jornada acumulada do dia» usa o dia civil em <strong>America/Sao_Paulo</strong> até cada batida (entrada, intervalos e saída).
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG, ensureAdminApiDetected, clearAdminSessionFully } from './js/config.js';
+
+  await ensureAdminApiDetected();
+  await initPage();
+
+  const role = (sessionStorage.getItem('brspark_admin_role') || '').trim();
+
+  function panelTenantId() {
+    try {
+      const raw = sessionStorage.getItem('brspark_panel_tenant');
+      if (!raw) return null;
+      const t = JSON.parse(raw);
+      return t?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  let activeTenantId = panelTenantId();
+
+  const PUNCH_LABEL = {
+    CLOCK_IN: 'Entrada',
+    CLOCK_OUT: 'Saída',
+    BREAK_START: 'Início intervalo',
+    BREAK_END: 'Fim intervalo',
+  };
+
+  let reportPage = 1;
+  const reportLimit = 50;
+  let reportTotalPages = 1;
+  let reportTotal = 0;
+
+  function fmtIsoLocal(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+    } catch {
+      return iso;
+    }
+  }
+
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Conforme = sem exceção e matrícula facial OK no fluxo normal do painel. */
+  function punchRecordTone(r) {
+    if (r.exceptionRegistration) return 'caution';
+    if (r.faceEnrollmentInvalid === true) return 'caution';
+    return 'success';
+  }
+
+  function statusIndicatorCell(r) {
+    const ok = punchRecordTone(r) === 'success';
+    const dot = ok ? '#22c55e' : '#eab308';
+    const fg = ok ? '#166534' : '#854d0e';
+    const label = ok ? 'Registo conforme' : 'Registo com ressalva';
+    return `<div style="display:flex;align-items:center;gap:8px;white-space:nowrap"><span style="width:12px;height:12px;border-radius:50%;background:${dot};flex-shrink:0" title=""></span><span style="font-weight:800;color:${fg}">${escHtml(label)}</span></div>`;
+  }
+
+  function journeyAccumulatedCell(r) {
+    const t =
+      r.accumulatedWorkDayLabel != null && String(r.accumulatedWorkDayLabel).trim()
+        ? String(r.accumulatedWorkDayLabel).trim()
+        : '0h00';
+    const line = `Até este registo, você já tinha trabalhado ${t} hoje.`;
+    return `<div style="font-size:11px;line-height:1.45;max-width:220px"><span style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:0.35px">JORNADA ACUMULADA DO DIA</span><div style="margin-top:4px;font-weight:600;color:var(--text)">${escHtml(line)}</div></div>`;
+  }
+
+  function buildReportQuery(tid, opts) {
+    const params = new URLSearchParams();
+    params.set('tenantId', tid);
+    const uid = document.getElementById('wt-report-user').value.trim();
+    if (uid) params.set('userId', uid);
+    const from = document.getElementById('wt-report-from').value;
+    const to = document.getElementById('wt-report-to').value;
+    if (from && to) {
+      params.set('from', from);
+      params.set('to', to);
+    } else {
+      params.set('days', document.getElementById('wt-report-days').value || '31');
+    }
+    if (opts?.includePaging) {
+      params.set('page', String(opts.page || 1));
+      params.set('limit', String(reportLimit));
+    }
+    return params;
+  }
+
+  async function loadUsersForReport(tid) {
+    const sel = document.getElementById('wt-report-user');
+    if (!sel || !tid) return;
+    sel.innerHTML = '<option value="">Todos com ponto ativo</option>';
+    try {
+      const res = await CONFIG.get(
+        '/users?tenantId=' + encodeURIComponent(tid) + '&workTime=1&limit=500'
+      );
+      (res?.data || []).forEach((u) => {
+        const lab = `${u.name || u.email || u.id} — ${u.email || ''}`;
+        sel.innerHTML += `<option value="${u.id}">${escHtml(lab)}</option>`;
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function loadPunches(page) {
+    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    const statusEl = document.getElementById('wt-report-status');
+    const tbody = document.getElementById('wt-report-tbody');
+    const pag = document.getElementById('wt-report-pagination');
+    if (!tid) {
+      if (statusEl) statusEl.textContent = 'Selecione o tenant para ver batidas.';
+      return;
+    }
+    reportPage = Math.max(1, page || 1);
+    if (statusEl) statusEl.textContent = 'A carregar…';
+    const qs = buildReportQuery(tid, { includePaging: true, page: reportPage }).toString();
+    const j = await CONFIG.get('/work-time/reports/punches?' + qs);
+    if (j?.error) {
+      if (statusEl) statusEl.textContent = j.error;
+      return;
+    }
+    reportTotal = j.total || 0;
+    reportTotalPages = j.totalPages || 1;
+    const rows = j.data || [];
+    if (statusEl) {
+      statusEl.textContent = `${reportTotal} batida(s) no período · página ${reportPage} de ${reportTotalPages}`;
+    }
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="13" style="color:var(--text3);font-weight:600">Sem batidas para os filtros atuais.</td></tr>';
+    } else {
+      tbody.innerHTML = rows
+        .map((r) => {
+          const lab = PUNCH_LABEL[r.type] || r.type;
+          const u = r.user || {};
+          const fullName = (r.employeeFullName && String(r.employeeFullName).trim()) || u.name || u.email || r.userId || '—';
+          const emailLine = u.email && String(u.email).trim() ? escHtml(u.email) : '';
+          const matricula = (r.employeeMatricula && String(r.employeeMatricula).trim()) || '—';
+          const device = (r.deviceSummary && String(r.deviceSummary).trim()) || '—';
+          const gps = (r.gpsLine && String(r.gpsLine).trim()) || '—';
+          const exc = r.exceptionRegistration
+            ? '<span class="wt-badge wt-badge-warn">Exceção</span>'
+            : '<span class="wt-badge wt-badge-ok">Normal</span>';
+          const face = r.faceEnrollmentInvalid
+            ? '<span class="wt-badge wt-badge-warn">Não validada</span>'
+            : '<span class="wt-badge wt-badge-ok">OK</span>';
+          const addr = r.formattedAddress ? escHtml(r.formattedAddress) : '—';
+          const faceId = r.faceVerificationId && String(r.faceVerificationId).trim();
+          const faceValidatedCell = faceId
+            ? '<span style="font-weight:700;color:var(--green,#047857)">Validado por reconhecimento facial.</span>'
+            : '<span style="color:var(--text3)">Sem verificação facial associada a esta batida.</span>';
+          const justRaw = r.exceptionJustification && String(r.exceptionJustification).trim();
+          const excNoBioCell = r.exceptionRegistration
+            ? `<div style="font-weight:700;margin-bottom:4px">Registo realizado sem biometria (exceção e justificativa, se houver).</div>${
+                justRaw
+                  ? `<div style="font-size:11px;color:var(--text);line-height:1.4"><span style="font-weight:800;color:var(--text3)">Justificativa:</span> ${escHtml(justRaw)}</div>`
+                  : '<div style="font-size:11px;color:var(--text3)">(Sem texto de justificativa registado.)</div>'
+              }`
+            : '<span style="color:var(--text3)">—</span>';
+          return `<tr>
+            <td style="white-space:nowrap;font-weight:700;color:var(--text)">${escHtml(fmtIsoLocal(r.deviceTimestamp))}</td>
+            <td>${escHtml(lab)}</td>
+            <td>${statusIndicatorCell(r)}</td>
+            <td>${journeyAccumulatedCell(r)}</td>
+            <td>${escHtml(fullName)}${emailLine ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">${emailLine}</div>` : ''}</td>
+            <td style="white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700">${escHtml(matricula)}</td>
+            <td style="max-width:220px;font-size:11px;line-height:1.35">${escHtml(device)}</td>
+            <td style="max-width:200px;font-size:11px;line-height:1.35;font-variant-numeric:tabular-nums">${escHtml(gps)}</td>
+            <td style="max-width:280px;font-size:11px;line-height:1.35">${addr}</td>
+            <td>${exc}</td>
+            <td>${face}</td>
+            <td style="max-width:200px;font-size:11px;line-height:1.35">${faceValidatedCell}</td>
+            <td style="max-width:280px;font-size:11px;line-height:1.35">${excNoBioCell}</td>
+          </tr>`;
+        })
+        .join('');
+    }
+    if (pag) {
+      pag.style.display = reportTotalPages > 1 ? 'flex' : 'none';
+      document.getElementById('wt-report-pageinfo').textContent = `Página ${reportPage} / ${reportTotalPages}`;
+      document.getElementById('wt-report-prev').disabled = reportPage <= 1;
+      document.getElementById('wt-report-next').disabled = reportPage >= reportTotalPages;
+    }
+  }
+
+  async function exportPunchesCsv() {
+    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    if (!tid) {
+      alert('Selecione o tenant.');
+      return;
+    }
+    const params = buildReportQuery(tid, { includePaging: false });
+    const url = `${CONFIG.API_BASE}/work-time/reports/punches/export.csv?${params.toString()}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${CONFIG.getToken()}` } });
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return;
+    }
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      alert(msg);
+      return;
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/i);
+    const fname = m ? m[1] : `batidas_ponto_${tid.slice(0, 8)}.csv`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function resolveTenantForUi() {
+    const bar = document.getElementById('wt-tenant-bar');
+    const saasBox = document.getElementById('wt-saas-tenant');
+    if (role === 'SAAS_ADMIN' && !activeTenantId) {
+      bar.style.display = 'flex';
+      saasBox.style.display = 'block';
+      const res = await CONFIG.get('/tenants?limit=500');
+      const sel = document.getElementById('wt-tenant-select');
+      sel.innerHTML = '<option value="">Selecione o tenant…</option>';
+      (res?.data || []).forEach((t) => {
+        sel.innerHTML += `<option value="${t.id}">${t.name} — ${t.email}</option>`;
+      });
+      sel.onchange = () => {
+        activeTenantId = sel.value || null;
+        if (activeTenantId) {
+          void loadSettings();
+          void loadUsersForReport(activeTenantId);
+        }
+      };
+      return null;
+    }
+    bar.style.display = 'none';
+    if (role === 'SAAS_ADMIN' && activeTenantId) {
+      saasBox.style.display = 'block';
+      const res = await CONFIG.get('/tenants?limit=500');
+      const sel = document.getElementById('wt-tenant-select');
+      sel.innerHTML = '';
+      (res?.data || []).forEach((t) => {
+        sel.innerHTML += `<option value="${t.id}" ${t.id === activeTenantId ? 'selected' : ''}>${t.name} — ${t.email}</option>`;
+      });
+      sel.onchange = () => {
+        activeTenantId = sel.value || null;
+        if (activeTenantId) {
+          void loadSettings();
+          void loadUsersForReport(activeTenantId);
+        }
+      };
+    } else {
+      saasBox.style.display = 'none';
+    }
+    if (!activeTenantId && role !== 'SAAS_ADMIN') {
+      bar.style.display = 'flex';
+      bar.textContent = 'Não foi possível determinar o tenant da sessão. Volte a entrar no painel em modo tenant.';
+      return null;
+    }
+    return activeTenantId;
+  }
+
+  function fillForm(s) {
+    document.getElementById('wt-module-enabled').checked = !!s.moduleEnabled;
+    document.getElementById('wt-req-face').checked = !!s.requireFaceOnEveryPunch;
+    document.getElementById('wt-req-gps').checked = !!s.requireGpsOnEveryPunch;
+    document.getElementById('wt-req-addr').checked = !!s.requireResolvedAddress;
+    document.getElementById('wt-drift').value = String(s.maxClockDriftSeconds ?? 300);
+    document.getElementById('wt-acc').value =
+      s.minGpsAccuracyMeters != null ? String(s.minGpsAccuracyMeters) : '';
+    document.getElementById('wt-consent-ver').value = s.consentVersion || '';
+    document.getElementById('wt-notice').value = s.employeeNoticeMarkdown || '';
+  }
+
+  async function loadSettings() {
+    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    if (!tid) return;
+    const s = await CONFIG.get('/work-time/settings?tenantId=' + encodeURIComponent(tid));
+    if (s?.error) {
+      alert(s.error);
+      return;
+    }
+    fillForm(s);
+    void loadUsersForReport(tid);
+    void loadPunches(1);
+  }
+
+  document.getElementById('btn-save-wt').onclick = async () => {
+    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    if (!tid) {
+      alert('Selecione o tenant.');
+      return;
+    }
+    const minAccRaw = document.getElementById('wt-acc').value.trim();
+    const body = {
+      tenantId: tid,
+      moduleEnabled: document.getElementById('wt-module-enabled').checked,
+      requireFaceOnEveryPunch: document.getElementById('wt-req-face').checked,
+      requireGpsOnEveryPunch: document.getElementById('wt-req-gps').checked,
+      requireResolvedAddress: document.getElementById('wt-req-addr').checked,
+      maxClockDriftSeconds: parseInt(document.getElementById('wt-drift').value, 10) || 300,
+      minGpsAccuracyMeters: minAccRaw === '' ? null : parseInt(minAccRaw, 10),
+      consentVersion: document.getElementById('wt-consent-ver').value.trim() || null,
+      employeeNoticeMarkdown: document.getElementById('wt-notice').value.trim() || null,
+    };
+    const res = await CONFIG.patch('/work-time/settings', body);
+    if (res?.error) {
+      alert(res.error);
+      return;
+    }
+    alert('Configurações guardadas.');
+    fillForm(res);
+  };
+
+  document.getElementById('wt-report-load').onclick = () => void loadPunches(1);
+  document.getElementById('wt-report-csv').onclick = () => void exportPunchesCsv();
+  document.getElementById('wt-report-prev').onclick = () => void loadPunches(reportPage - 1);
+  document.getElementById('wt-report-next').onclick = () => void loadPunches(reportPage + 1);
+
+  const tid = await resolveTenantForUi();
+  if (tid) await loadSettings();
+  else if (role === 'SAAS_ADMIN') {
+    /* aguarda seleção */
+  } else {
+    await loadSettings();
+  }
+</script>
+</body>
+</html>

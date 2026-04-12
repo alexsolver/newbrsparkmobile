@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs').promises;
+const { REGISTRATION_PRIMARY_FACE_ID, isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
 
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
@@ -49,6 +50,78 @@ async function copyRegistrationFacePhotosToUser(applicationId, userId, photos) {
   return out;
 }
 
+async function unlinkPreviousPrimaryFaceFiles(userId) {
+  const dir = path.join(UPLOADS_ROOT, 'face-enrollment', userId);
+  let files;
+  try {
+    files = await fs.readdir(dir);
+  } catch {
+    return;
+  }
+  for (const f of files) {
+    if (f === `${REGISTRATION_PRIMARY_FACE_ID}.jpg` || f === `${REGISTRATION_PRIMARY_FACE_ID}.png` || f === `${REGISTRATION_PRIMARY_FACE_ID}.webp`) {
+      try {
+        await fs.unlink(path.join(dir, f));
+      } catch (_) {}
+    }
+  }
+}
+
+/**
+ * Copia a foto de perfil do passo 1 (avatar na candidatura) para matrícula facial do utilizador.
+ * @returns {Promise<object|null>}
+ */
+async function copyTechRegAvatarAsPrimaryFaceEnrollment(applicationId, userId, avatarUrl) {
+  const url = String(avatarUrl || '').trim();
+  const prefix = `/uploads/tech-registration/${applicationId}/`;
+  if (!url.startsWith(prefix)) return null;
+
+  const rel = url.replace(/^\/uploads\//, '');
+  const srcAbs = path.join(UPLOADS_ROOT, ...rel.split('/'));
+  await unlinkPreviousPrimaryFaceFiles(userId);
+  const destDir = path.join(UPLOADS_ROOT, 'face-enrollment', userId);
+  await fs.mkdir(destDir, { recursive: true });
+  let ext = path.extname(srcAbs).toLowerCase();
+  if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png' && ext !== '.webp') ext = '.jpg';
+  const destName = ext === '.jpeg' ? `${REGISTRATION_PRIMARY_FACE_ID}.jpg` : `${REGISTRATION_PRIMARY_FACE_ID}${ext}`;
+  const destAbs = path.join(destDir, destName);
+  try {
+    await fs.copyFile(srcAbs, destAbs);
+  } catch (e) {
+    console.warn('[tech-reg] cópia foto principal (passo 1) falhou:', e.message || e);
+    return null;
+  }
+  const mimeType =
+    ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+  return {
+    id: REGISTRATION_PRIMARY_FACE_ID,
+    url: `/uploads/face-enrollment/${userId}/${destName}`,
+    mimeType,
+    createdAt: new Date().toISOString(),
+    registrationPrimary: true,
+  };
+}
+
+/**
+ * Matrícula facial: foto do passo 1 primeiro (referência), depois fotos do passo 2 copiadas.
+ */
+async function buildFaceEnrollmentFromApprovedRegistration(applicationId, userId, rawAvatarUrl, step2Photos) {
+  const primary = await copyTechRegAvatarAsPrimaryFaceEnrollment(applicationId, userId, rawAvatarUrl);
+  const copiedStep2 = await copyRegistrationFacePhotosToUser(applicationId, userId, step2Photos);
+  const out = [];
+  if (primary) out.push(primary);
+  const primaryUrl = primary ? String(primary.url || '') : '';
+  const rawAv = String(rawAvatarUrl || '').trim();
+  for (const p of copiedStep2) {
+    if (!p || isRegistrationPrimaryFacePhoto(p)) continue;
+    const u = String(p.url || '');
+    if (primaryUrl && u === primaryUrl) continue;
+    if (rawAv && u === rawAv) continue;
+    out.push(p);
+  }
+  return out;
+}
+
 function parseSkills(raw) {
   if (Array.isArray(raw)) return raw.map((s) => String(s).trim()).filter(Boolean);
   if (typeof raw === 'string') {
@@ -86,7 +159,12 @@ async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, 
   const { raw, name, addressJson, personalDocuments, technician, faceBefore } = ctx;
 
   return prisma.$transaction(async (tx) => {
-    const copiedFaces = await copyRegistrationFacePhotosToUser(app.id, existingUser.id, faceBefore);
+    const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
+      app.id,
+      existingUser.id,
+      raw.avatarUrl,
+      faceBefore
+    );
 
     const userData = {
       name,
@@ -97,10 +175,8 @@ async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, 
       role: 'PROVIDER',
       isActive: true,
     };
-    if (copiedFaces.length) {
-      userData.faceEnrollmentPhotos = copiedFaces;
-    }
-    if (faceBefore.length) {
+    if (mergedFaces.length) {
+      userData.faceEnrollmentPhotos = mergedFaces;
       userData.comprefaceRecognitionSync = {
         status: 'pending',
         at: new Date().toISOString(),
@@ -205,21 +281,21 @@ async function materializeApprovedApplication(prisma, applicationId) {
         addressJson,
         personalDocuments,
         faceEnrollmentPhotos: [],
-        comprefaceRecognitionSync: faceBefore.length
-          ? {
-              status: 'pending',
-              at: new Date().toISOString(),
-              message: 'Candidatura aprovada — a sincronizar galeria CompreFace.',
-            }
-          : undefined,
       },
     });
 
-    const copiedFaces = await copyRegistrationFacePhotosToUser(app.id, user.id, faceBefore);
-    if (copiedFaces.length) {
+    const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(app.id, user.id, raw.avatarUrl, faceBefore);
+    if (mergedFaces.length) {
       await tx.user.update({
         where: { id: user.id },
-        data: { faceEnrollmentPhotos: copiedFaces },
+        data: {
+          faceEnrollmentPhotos: mergedFaces,
+          comprefaceRecognitionSync: {
+            status: 'pending',
+            at: new Date().toISOString(),
+            message: 'Candidatura aprovada — a sincronizar galeria CompreFace.',
+          },
+        },
       });
     }
 
@@ -259,6 +335,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
 module.exports = {
   materializeApprovedApplication,
   copyRegistrationFacePhotosToUser,
+  buildFaceEnrollmentFromApprovedRegistration,
   normalizeFacePhotos,
   MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
 };

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — RT — Tarefas de rotina</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .rt-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; }
+    .rt-panel-title { font-size: 13px; font-weight: 900; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .rt-panel-desc { font-size: 11px; color: var(--text3); margin-bottom: 14px; line-height: 1.45; }
+    .rt-alert { padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 14px; border: 1px solid var(--border); background: var(--amber-dim, #fffbeb); color: var(--amber, #92400e); }
+    .rt-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
+    .rt-toolbar .form-group { margin-bottom: 0; }
+    .rt-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); margin-top: 12px; }
+    .rt-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 820px; }
+    .rt-table th, .rt-table td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .rt-table th { font-size: 10px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; background: var(--surface2); }
+    .rt-table tr:last-child td { border-bottom: none; }
+    .rt-muted { font-size: 11px; color: var(--text3); }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">
+        <ion-icon name="repeat-outline" style="vertical-align: -3px; margin-right: 6px; color: var(--accent)"></ion-icon>
+        RT — Tarefas de rotina
+      </span>
+    </div>
+    <div class="page-body">
+      <div id="rt-tenant-bar" class="rt-alert" style="display: none">
+        <strong>Tenant:</strong> selecione a organização (perfil SaaS) ou entre no modo tenant no login do painel.
+      </div>
+      <div id="rt-saas-tenant" style="display: none; margin-bottom: 16px" class="form-group">
+        <label class="form-label">Organização (tenant)</label>
+        <select class="form-control" id="rt-tenant-select" style="max-width: 480px"></select>
+      </div>
+
+      <div class="rt-panel">
+        <div class="rt-panel-title"><ion-icon name="link-outline"></ion-icon> Associar modelo a utilizadores</div>
+        <p class="rt-panel-desc">
+          Escolha um <strong>modelo</strong> do Form Builder, selecione um ou vários <strong>utilizadores da organização</strong> (Ctrl/Cmd + clique na lista) e, se quiser, defina o
+          <strong>nome no menu «Mais»</strong> no app (vazio = usa o título do modelo). A lista mostra todos os perfis; em «Aplicar associações» só entram contas
+          <strong>ativas que não sejam cliente</strong> (papel diferente de «Cliente»), alinhado às OS/FT e RT no app.
+        </p>
+        <div class="grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start">
+          <div class="form-group">
+            <label class="form-label">Modelo de formulário</label>
+            <select class="form-control" id="rt-bulk-template"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nome no menu «Mais» (opcional)</label>
+            <input type="text" class="form-control" id="rt-bulk-menu" maxlength="120" placeholder="Ex.: Abertura de turno" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-top: 10px">
+          <label class="form-label">Utilizadores da organização</label>
+          <select class="form-control" id="rt-bulk-users" multiple size="10" style="min-height: 200px; font-size: 13px"></select>
+          <p class="rt-muted" style="margin-top: 6px">Mantenha Ctrl (Windows) ou Cmd (Mac) para selecionar vários.</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="rt-bulk-apply">Aplicar associações</button>
+        <p id="rt-bulk-msg" class="rt-muted" style="margin-top: 10px"></p>
+      </div>
+
+      <div class="rt-panel">
+        <div class="rt-panel-title"><ion-icon name="list-outline"></ion-icon> Associações atuais</div>
+        <p class="rt-panel-desc">Edite o rótulo do menu, a ordem ou o número de tarefas em cache (1–20); use «Guardar» por linha ou remova a associação (as RT ativas dessa combinação são canceladas).</p>
+        <div class="rt-toolbar">
+          <div class="form-group">
+            <label class="form-label">Filtrar por modelo</label>
+            <select class="form-control" id="rt-assign-filter-template" style="min-width: 220px"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Filtrar por técnico</label>
+            <select class="form-control" id="rt-assign-filter-user" style="min-width: 220px"></select>
+          </div>
+          <button type="button" class="btn btn-secondary" id="rt-assign-reload">Atualizar lista</button>
+        </div>
+        <div class="rt-table-wrap">
+          <table class="rt-table" id="rt-assign-table">
+            <thead>
+              <tr>
+                <th>Técnico</th>
+                <th>E-mail</th>
+                <th>Modelo</th>
+                <th>Nome no menu</th>
+                <th>Ordem</th>
+                <th style="max-width: 110px">Cache no app</th>
+                <th style="width: 1%; white-space: nowrap">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="rt-assign-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { bootRoutineTasksPage } from './js/routine-tasks-page.js';
+  bootRoutineTasksPage();
+</script>
+</body>
+</html>

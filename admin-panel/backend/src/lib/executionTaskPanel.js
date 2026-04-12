@@ -81,6 +81,7 @@ function mapExecutionToPanelTask(ex, opts = {}) {
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
+    routineTaskNumber: ex.routineTaskNumber || null,
     lastSubmittedRevision: lsr,
     refId: meta.refId || ex.templateId || null,
     ownerEmail: ex.ownerEmail,

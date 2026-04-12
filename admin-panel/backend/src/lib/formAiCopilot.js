@@ -61,8 +61,9 @@ Retorne APENAS JSON válido (sem markdown), com as chaves:
   - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription" } }
   - { "op": "remove_field", "id": "<field_id>" } — só com pedido explícito de remoção.
 
-- "logicSuggestions": array OU null. Cada entrada: { "monitorLabel", "operator": "==" | "!=" | "contains", "value", "targetLabel", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }.
-  **Limite:** só existe comparação com **valor de texto** guardado no campo monitorizado (==, !=, contém). **Não** há operadores «menor que»/«maior que» numéricos, nem regras por **km de deslocamento**, duração de tracking ou GPS agregado — **transit_start** / **transit_end** não representam «quantos km foram percorridos». Se o utilizador pedir isso, siga o ponto 2 (replyText honesto + opções; **logicSuggestions: null** ou []).
+- "logicSuggestions": array OU null. Cada entrada: { "monitorLabel", "operator": string, "value", "targetLabel", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }.
+  **Operadores (motor no app):** texto (==, !=, contains, not_contains, starts_with, ends_with, …), vazio/preenchido (is_empty, not_empty), booleanos (is_true, is_false), números (>, <, >=, <=, between / not_between com valor **min|max**), listas de opções (one_of, none_of, includes_any, includes_all, excludes_all), regex (matches_regex), tamanho de texto (length_*), contagem de itens em resposta múltipla (count_*), datas (date_before, date_after, date_on_or_before, date_on_or_after — valores ISO ou reconhecíveis por Date.parse), e tempos de formulário/etapa (form_elapsed_sec_*, section_elapsed_sec_*, section_has_started, …). Use o operador mínimo adequado ao pedido.
+  **Limite:** **transit_start** / **transit_end** não expõem «km percorridos» nem métricas de tracking como valor único de regra — não finja que existe. Se o utilizador pedir só isso, siga o ponto 2 (replyText honesto + opções; **logicSuggestions: null** ou []).
   Use rótulos que existam no schema. Não invente rótulos.
 
 - "settingsPatch": objeto com um subconjunto das chaves de definições globais acima OU null. Não envie chaves extra.
@@ -402,7 +403,7 @@ Cada regra no app: monitora um campo (ou cronômetro); SE condição; ENTÃO aç
 Use apenas rótulos de campos que existam no JSON do schema enviado pelo usuário.
 Campos transit_start e transit_end (deslocamento) ficam **sempre** no **início** do formulário (primeiro bloco operacional) e em par — não sugira regras nem textos que os coloquem no meio ou no fim do fluxo.
 
-**Operadores suportados nas sugestões:** apenas "==", "!=" e "contains" sobre o **valor em texto** do campo monitorizado. **Não** existe regra por km de deslocamento, distância GPS agregada, «menor que» numérico nem métricas de tracking que não sejam um valor de campo. Se o pedido do administrador exigir isso, **não** finja que há regra: devolva **logicSuggestions: []** e em **replyText** explique que **não é possível** no motor atual, **porquê** (breve), e liste **2 a 4 alternativas** viáveis (outro tipo de condição, cerca global, campo sim/não, etc.).
+**Operadores suportados nas sugestões:** o motor aceita comparações de texto, números (ex.: ">", "<=", "between" com valor **min|max**), vazio/preenchido, booleanos, listas (one_of, includes_any, …), regex (matches_regex), tamanho (length_*), contagem em resposta múltipla (count_*), datas (date_*) e tempos de formulário/etapa — use o mais simples que resolver o caso. **Não** existe regra direta por «km de deslocamento» só a partir de **transit_start** / **transit_end** como número mágico. Se o pedido exigir só isso, devolva **logicSuggestions: []** e em **replyText** explique o limite e **2 a 4 alternativas** viáveis.
 
 Retorne APENAS JSON válido:
 {

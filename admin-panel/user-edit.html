@@ -70,6 +70,17 @@
     .face-card { position:relative; border-radius:10px; overflow:hidden; border:1px solid var(--border); aspect-ratio:3/4; background:var(--surface2); }
     .face-card img { width:100%; height:100%; object-fit:cover; display:block; }
     .face-card .face-rm { position:absolute; top:6px; right:6px; z-index:2; }
+    .face-card--primary { box-shadow: 0 0 0 2px var(--accent, #2563eb); }
+    .face-card-ribbon {
+      position:absolute; left:0; right:0; bottom:0; z-index:2;
+      background: linear-gradient(transparent, rgba(15, 23, 42, 0.85));
+      color: #fff; font-size:10px; font-weight: 700; padding: 22px 6px 6px; text-align: center; line-height: 1.25;
+    }
+    .face-card-protected {
+      position:absolute; top:6px; right:6px; z-index:3; font-size:10px; font-weight:600;
+      color: var(--text2); background: var(--surface); padding: 4px 8px; border-radius: 6px;
+      border: 1px solid var(--border); max-width: 118px; text-align: center; line-height: 1.2;
+    }
     .ue-compreface-sync {
       margin-top: 16px;
       padding: 16px 18px;
@@ -176,6 +187,7 @@
         <nav class="ue-nav" aria-label="Secções do formulário">
           <a href="#sec-dados">Dados pessoais</a>
           <a href="#sec-face">Reconhecimento facial</a>
+          <a href="#sec-work-time">Registro de horas</a>
           <a href="#sec-endereco">Endereço</a>
           <a href="#sec-acesso">Tipo de acesso</a>
           <a href="#sec-tecnico">Prestador</a>
@@ -202,7 +214,8 @@
       <div class="panel ue-section" id="sec-face" style="margin-top:16px">
         <div class="panel-header"><span class="panel-title">Reconhecimento facial — fotos base</span></div>
         <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Envie <strong>várias fotos nítidas do rosto</strong> (frente, ligeiras variações de ângulo ou iluminação) para o motor de reconhecimento usar como referência. Formatos: <strong>JPEG, PNG ou WebP</strong> (fotos <strong>HEIC</strong> do iPhone não são aceitas — use «Mais compatível» nas configurações da câmera ou exporte JPEG). Em celulares Android o tipo do arquivo às vezes vem vazio: o servidor tenta detectar a imagem pelo conteúdo. Até <strong>12</strong> imagens, máx. <strong>5 MB</strong> cada. Essas imagens são distintas da URL de avatar.</p>
+          <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fotos base para o motor de reconhecimento: <strong>JPEG, PNG ou WebP</strong> (máx. <strong>5 MB</strong> cada; até <strong>12</strong>). HEIC do iPhone não é aceite. Quem veio do <strong>cadastro em etapas</strong> traz a foto do passo 1 como referência principal (não removível aqui; só muda com novo cadastro aprovado ou exclusão do utilizador). Reforce com fotos nítidas adicionais do rosto. O campo «URL foto de perfil» em Dados pessoais é gestão administrativa (o app do colaborador <strong>não</strong> permite trocar foto nem matrícula após o perfil de prestador ficar <strong>ACTIVE</strong>).</p>
+          <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
           <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
           <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
           <span id="face-upload-status" style="font-size:12px;color:var(--text3);margin-left:10px"></span>
@@ -214,7 +227,7 @@
               </div>
               <div class="ue-compreface-sync__text">
                 <strong>Galeria CompreFace (Recognition)</strong>
-                <span class="desc">Ao adicionar ou remover fotos base, a galeria é <strong>atualizada automaticamente</strong> no CompreFace (avatar URL + matrículas). Requer integração «Exadel CompreFace» ativa em Integrações.</span>
+                <span class="desc">Ao adicionar ou remover fotos base, a galeria é <strong>atualizada automaticamente</strong> no CompreFace (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas). Requer integração «Exadel CompreFace» ativa em Integrações.</span>
               </div>
             </div>
             <div class="ue-compreface-sync__actions">
@@ -227,6 +240,29 @@
             <div id="compreface-admin-status" aria-live="polite"></div>
           </div>
           <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no CompreFace segue o formato tenant:usuário definido pelo painel.</p>
+        </div>
+      </div>
+
+      <div class="panel ue-section" id="sec-work-time" style="margin-top:16px">
+        <div class="panel-header"><span class="panel-title">Registro de horas (ponto)</span></div>
+        <div style="padding:16px 20px">
+          <div class="form-group" style="margin-bottom:14px;max-width:420px">
+            <label class="form-label" for="f-employee-matricula">Matrícula funcional</label>
+            <input class="form-control" id="f-employee-matricula" maxlength="80" placeholder="Ex.: 12345, FT-00042…" autocomplete="off" />
+            <p style="font-size:11px;color:var(--text3);margin:6px 0 0;line-height:1.4">Um valor por utilizador, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).</p>
+          </div>
+          <div id="wt-user-hint" class="hint-box" style="margin-bottom:12px">
+            A carregar política do tenant…
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="f-work-time" />
+            <span style="font-size:13px;font-weight:700">Habilitar registro de horas para este utilizador</span>
+          </label>
+          <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">
+            Efetivo no app para todos os papéis <strong>exceto cliente</strong> (papel «Usuário» / <code>USER</code>): com a flag <strong>work_time</strong>, módulo ligado em
+            <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, esta opção ativa no utilizador e matrícula facial conforme a política.
+          </p>
+          <div id="wt-face-status" style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text3)"></div>
         </div>
       </div>
 

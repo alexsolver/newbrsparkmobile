@@ -566,10 +566,15 @@
         <span class="live-dot" title="Auto-refresh ativo"></span>
       </div>
       <div class="topbar-actions">
+        <select class="filter-input" id="filter-scope" onchange="onOpsScopeFilterChange()" style="min-width:200px" title="O que mostrar no quadro">
+          <option value="os" selected>Apenas OS (FT)</option>
+          <option value="rt">Apenas RT</option>
+          <option value="all">OS e RT (todas)</option>
+        </select>
         <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
           <option value="">Todos os técnicos</option>
         </select>
-        <input class="filter-input" type="text" id="filter-search" placeholder="Buscar OS, ID, título…" oninput="applyFilters()" style="min-width:240px" />
+        <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" oninput="applyFilters()" style="min-width:240px" />
         <button class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ Atualizar</button>
         <button class="btn btn-primary btn-sm" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
       </div>
@@ -983,7 +988,7 @@
 
 <script type="module">
 import { initPage } from './js/sidebar.js';
-import { CONFIG }   from './js/config.js';
+import { CONFIG, clearAdminSessionFully } from './js/config.js';
 import {
   mergePresetConfig,
   isFieldVisible,
@@ -1059,8 +1064,10 @@ function revisionContextSubtitle(t) {
   return parts.length ? ' · ' + parts.join(' · ') : '';
 }
 
-/** Número FT convencional ou recorte do id técnico (cartões / busca). */
+/** Número FT, número RT ou recorte do id técnico (cartões / busca). */
 function displayOsLabel(task) {
+  const rt = task && task.routineTaskNumber && String(task.routineTaskNumber).trim();
+  if (rt) return rt;
   const on = task && task.osNumber && String(task.osNumber).trim();
   if (on) return on;
   return shortId(task && task.id);
@@ -1286,6 +1293,14 @@ window.openReopenRevisionModal = async function (taskId) {
     alert('Tarefa não encontrada. Actualize o quadro (F5).');
     return;
   }
+  const isRoutineTask =
+    task.routineTaskNumber != null && String(task.routineTaskNumber).trim() !== '';
+  if (isRoutineTask) {
+    reopenRevisionTaskId = null;
+    if (modalEl) modalEl.dataset.reopenTaskId = '';
+    alert('Tarefas de rotina (RT) não podem ser reabertas para revisão.');
+    return;
+  }
   document.getElementById('reopen-revision-ft-label').textContent = displayOsLabel(task);
   document.getElementById('reopen-revision-current-email').textContent = task.ownerEmail || '—';
   document.getElementById('reopen-revision-same').checked = true;
@@ -1341,6 +1356,15 @@ window.submitReopenRevision = async function () {
     console.warn('[reopen] submit sem taskId');
     return;
   }
+  const taskPre = allTasks.find((t) => String(t.id) === String(taskId));
+  if (
+    taskPre?.routineTaskNumber != null &&
+    String(taskPre.routineTaskNumber).trim() !== ''
+  ) {
+    alert('Tarefas de rotina (RT) não podem ser reabertas para revisão.');
+    window.closeReopenRevisionModal();
+    return;
+  }
   const task = allTasks.find((t) => String(t.id) === String(taskId));
   const btn = document.getElementById('reopen-revision-confirm-btn');
   const btnLabel = btn ? btn.textContent : '';
@@ -1374,7 +1398,7 @@ window.submitReopenRevision = async function () {
       signal: ac.signal,
     });
     if (r.status === 401) {
-      sessionStorage.clear();
+      clearAdminSessionFully();
       window.location.href = 'index.html';
       return;
     }
@@ -1415,11 +1439,39 @@ window.submitReopenRevision = async function () {
 };
 
 // ── Load Board ────────────────────────────────────────────────
+function getOpsScopeForApi() {
+  const sel = document.getElementById('filter-scope');
+  let v = sessionStorage.getItem('brspark_ops_scope');
+  if (!v || !['os', 'rt', 'all'].includes(v)) {
+    v = sel && ['os', 'rt', 'all'].includes(sel.value) ? sel.value : 'os';
+  }
+  if (!['os', 'rt', 'all'].includes(v)) v = 'os';
+  if (sel) sel.value = v;
+  try {
+    sessionStorage.setItem('brspark_ops_scope', v);
+  } catch {
+    /* ignore */
+  }
+  return v;
+}
+
+window.onOpsScopeFilterChange = function () {
+  const sel = document.getElementById('filter-scope');
+  const v = sel && ['os', 'rt', 'all'].includes(sel.value) ? sel.value : 'os';
+  try {
+    sessionStorage.setItem('brspark_ops_scope', v);
+  } catch {
+    /* ignore */
+  }
+  void window.loadBoard();
+};
+
 window.loadBoard = async function() {
   try {
     const rpDlg = document.getElementById('revision-picker-modal');
     if (rpDlg && rpDlg.open) return;
-    const data = await CONFIG.get(`/operations/tasks?_t=${Date.now()}`);
+    const scope = getOpsScopeForApi();
+    const data = await CONFIG.get(`/operations/tasks?_t=${Date.now()}&scope=${encodeURIComponent(scope)}`);
     if (!data) return;
     if (!Array.isArray(data)) {
       console.error('[OPS] /operations/tasks não devolveu array:', data);
@@ -1444,7 +1496,7 @@ function renderStats(tasks) {
   const total     = tasks.length;
 
   const defs = [
-    { label: 'Total de OS',   value: total,     color: 'var(--accent)',  icon: 'git-branch-outline' },
+    { label: 'Total no quadro', value: total, color: 'var(--accent)', icon: 'git-branch-outline' },
     { label: 'Não iniciadas', value: pending,   color: 'var(--amber)',   icon: 'hourglass-outline' },
     { label: 'Em Campo',      value: progress,  color: 'var(--blue)',    icon: 'construct-outline' },
     { label: 'Concluídas',    value: completed, color: 'var(--green)',   icon: 'checkmark-circle-outline' },
@@ -1482,6 +1534,7 @@ window.applyFilters = function() {
       (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
       (t.refId||'').toLowerCase().includes(searchFilter) ||
       String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
+      String(t.routineTaskNumber || '').toLowerCase().includes(searchFilter) ||
       String(t.lastSubmittedRevision ?? '').includes(searchFilter);
     return matchEmail && matchSearch;
   });
@@ -1523,6 +1576,7 @@ function renderKanban(tasks) {
         res = res.filter(t => 
            (t.id || '').toLowerCase().includes(st.text) || 
            (t.osNumber || '').toLowerCase().includes(st.text) || 
+           String(t.routineTaskNumber || '').toLowerCase().includes(st.text) ||
            (t.title || '').toLowerCase().includes(st.text) || 
            (t.ownerEmail || '').toLowerCase().includes(st.text) ||
            (t.refId || '').toLowerCase().includes(st.text)
@@ -1561,7 +1615,7 @@ function renderKanban(tasks) {
   const render = (arr, colClass) => arr.length === 0
     ? `<div class="kanban-empty">
         <div class="kanban-empty-icon"><ion-icon name="mail-open-outline" style="vertical-align:-2px"></ion-icon></div>
-        Nenhuma OS aqui
+        Nenhuma atividade aqui
       </div>`
     : arr.map(t => buildCard(t, colClass)).join('');
 
@@ -1603,11 +1657,16 @@ function opsPauseReasonText(task) {
 }
 
 function buildCard(task, colClass) {
+  const isRt = !!(task.routineTaskNumber && String(task.routineTaskNumber).trim());
+  const rtBadge = isRt
+    ? '<span class="badge" style="background:#fff7ed;color:#c2410c;font-size:9px;margin-bottom:6px;border:1px solid #fed7aa"><ion-icon name="reader-outline" style="vertical-align:-2px"></ion-icon> RT</span>'
+    : '';
   const refTitle = task.title || task.metadata?.title;
-  const titlePlain = refTitle || `OS ${displayOsLabel(task)}`;
+  const kindLabel = isRt ? 'RT' : 'OS';
+  const titlePlain = refTitle || `${kindLabel} ${displayOsLabel(task)}`;
   const titleHtml = refTitle
     ? String(refTitle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    : `OS <strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>`;
+    : `${kindLabel} <strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>`;
   const formDisplayName = String(task.metadata?.templateTitle || task.template?.title || '').trim();
   const formNameHtml = formDisplayName
     ? `<div style="font-size:10px;color:var(--text2);margin-top:5px;line-height:1.35;word-break:break-word"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.3px">Formulário · </span>${String(formDisplayName)
@@ -1656,12 +1715,15 @@ function buildCard(task, colClass) {
   const fd = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
   const reopenForRevisionBtn =
-    colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(String(task.status || '').toUpperCase())
+    !isRt &&
+    colClass === 'col-completed' &&
+    ['COMPLETED', 'SYNCED'].includes(String(task.status || '').toUpperCase())
       ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
       : '';
 
   return `
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
+      ${rtBadge}
       ${subBadge}
       <div class="task-card-title" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
       ${formNameHtml}
@@ -4035,7 +4097,19 @@ window.confirmRevisionPicker = async function () {
 };
 
 async function openDetailInternal(id, viewRevisionNumOrNull) {
-  const t = allTasks.find((x) => x.id === id);
+  let t = allTasks.find((x) => x.id === id);
+  if (!t) {
+    try {
+      const data = await CONFIG.get(`/operations/tasks?id=${encodeURIComponent(id)}`);
+      if (Array.isArray(data) && data.length) {
+        const found = data.find((x) => x.id === id) || data[0];
+        t = found;
+        if (t && !allTasks.some((x) => x.id === t.id)) allTasks.push(t);
+      }
+    } catch (e) {
+      console.warn('[openDetailInternal] carregar execução', e);
+    }
+  }
   if (!t) return;
   currentDetailId = id;
   _currentTask = t;
@@ -4111,7 +4185,18 @@ async function openDetailInternal(id, viewRevisionNumOrNull) {
 
 window.openDetail = function (id) {
   void (async () => {
-    const t = allTasks.find((x) => x.id === id);
+    let t = allTasks.find((x) => x.id === id);
+    if (!t) {
+      try {
+        const data = await CONFIG.get(`/operations/tasks?id=${encodeURIComponent(id)}`);
+        if (Array.isArray(data) && data.length) {
+          t = data.find((x) => x.id === id) || data[0];
+          if (t && !allTasks.some((x) => x.id === t.id)) allTasks.push(t);
+        }
+      } catch (e) {
+        console.warn('[openDetail] carregar execução', e);
+      }
+    }
     if (!t) return;
     let revs = [];
     try {
@@ -6620,9 +6705,33 @@ window.confirmDispatch = async function() {
   });
 })();
 
+// ── Abrir RT/OS por link (ex.: routine-tasks.html → ?openExecution=id) ──
+async function maybeOpenExecutionFromQuery() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const execId = (p.get('openExecution') || '').trim();
+    if (!execId) return;
+    const data = await CONFIG.get(`/operations/tasks?id=${encodeURIComponent(execId)}`);
+    if (!Array.isArray(data) || !data.length) {
+      alert('Não foi possível abrir o formulário: execução não encontrada.');
+      return;
+    }
+    const found = data.find((x) => x.id === execId) || data[0];
+    if (found && !allTasks.some((x) => x.id === found.id)) allTasks.push(found);
+    await openDetailInternal(found.id, null);
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+  } catch (e) {
+    console.warn('[maybeOpenExecutionFromQuery]', e);
+    alert('Erro ao abrir o formulário a partir do link.');
+  }
+}
+
 // ── Auto-refresh (30s) ─────────────────────────────────────────
 initDispatchTechAutocomplete();
-loadBoard();
+void (async () => {
+  await window.loadBoard();
+  await maybeOpenExecutionFromQuery();
+})();
 refreshInterval = setInterval(loadBoard, 30000);
 window.addEventListener('beforeunload', () => clearInterval(refreshInterval));
 </script>
