@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { TaskMetadataGlyph } from './TaskMetadataGlyph';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { useRouter } from 'expo-router';
@@ -423,6 +424,13 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                   </Text>
                   {rtAssignments.map((a) => {
                     const rtCacheCount = countRoutineTasksInLocalRtCacheForTemplate(rtCloudRows, a.templateId);
+                    const rtIconName = String(a.icon || '').trim();
+                    const rtAccent = String(a.iconColor || '').trim() || '#EA580C';
+                    const rtGlyph = rtIconName ? (
+                      <TaskMetadataGlyph icon={a.icon} iconLibrary={a.iconLibrary} size={26} color={rtAccent} />
+                    ) : (
+                      <Ionicons name="reader-outline" size={26} color={rtAccent} />
+                    );
                     return (
                     <TouchableOpacity
                       key={`rt_${a.templateId}`}
@@ -438,12 +446,12 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                         style={[
                           listStyles.rowIconWrap,
                           {
-                            backgroundColor: 'rgba(234, 88, 12, 0.12)',
-                            borderColor: 'rgba(234, 88, 12, 0.28)',
+                            backgroundColor: `${rtAccent}18`,
+                            borderColor: `${rtAccent}35`,
                           },
                         ]}
                       >
-                        <Ionicons name="reader-outline" size={26} color="#EA580C" />
+                        {rtGlyph}
                       </View>
                       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                         <View style={{ flex: 1, minWidth: 0 }}>

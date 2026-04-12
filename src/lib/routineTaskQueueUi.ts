@@ -23,7 +23,8 @@ function isTerminalStatus(st: string): boolean {
   return TERMINAL.has(st);
 }
 
-function routineTemplateKey(t: any): string {
+/** Chave do modelo no cache (alinhada ao sync: refId / metadata.refId / templateId). */
+export function routineTemplateKey(t: any): string {
   const m = t?.metadata;
   const refFromMeta =
     m && typeof m === 'object' && (m as { refId?: unknown }).refId != null
@@ -31,6 +32,19 @@ function routineTemplateKey(t: any): string {
       : '';
   const ref = String(t?.refId || refFromMeta || t?.templateId || '').trim();
   return ref || `__no_tpl__:${String(t?.id || '')}`;
+}
+
+/**
+ * Mesma regra que o badge do menu RT + abertura offline: RT reconhecível, mesmo modelo, não terminal.
+ * Única fonte de verdade para não haver «conta 1 mas não abre».
+ */
+export function routineTaskLocalRowMatchesTemplateNonTerminal(t: any, templateId: string): boolean {
+  const tid = String(templateId || '').trim();
+  if (!tid) return false;
+  if (!taskRowIsRoutineTask(t)) return false;
+  if (routineTemplateKey(t) !== tid) return false;
+  if (isTerminalStatus(taskStatusUpper(t))) return false;
+  return true;
 }
 
 function createdMs(t: any): number {
@@ -80,14 +94,9 @@ export function isRoutineTaskQueueHeadForWorklist(task: any, allTasks: any[]): b
  * Quantas execuções RT não terminais existem no cache local (`@brspark_rt_cloud_tasks`) para o modelo (`templateId` / refId).
  */
 export function countRoutineTasksInLocalRtCacheForTemplate(rows: any[], templateId: string): number {
-  const tid = String(templateId || '').trim();
-  if (!tid) return 0;
   let n = 0;
   for (const t of Array.isArray(rows) ? rows : []) {
-    if (!taskRowIsRoutineTask(t)) continue;
-    if (routineTemplateKey(t) !== tid) continue;
-    if (isTerminalStatus(taskStatusUpper(t))) continue;
-    n += 1;
+    if (routineTaskLocalRowMatchesTemplateNonTerminal(t, templateId)) n += 1;
   }
   return n;
 }

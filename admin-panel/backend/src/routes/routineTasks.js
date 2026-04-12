@@ -35,7 +35,7 @@ router.get('/me', async (req, res) => {
       where: { userId, tenantId },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: {
-        template: { select: { id: true, title: true, description: true, isActive: true } },
+        template: { select: { id: true, title: true, description: true, isActive: true, metadata: true } },
       },
     });
 
@@ -50,6 +50,11 @@ router.get('/me', async (req, res) => {
       const activeCount = await countActiveRtForTemplate(prisma, email, r.templateId);
       const custom = r.menuLabel != null ? String(r.menuLabel).trim() : '';
       const fallback = r.template.title ? String(r.template.title).trim() : '';
+      const tmplMeta =
+        r.template.metadata && typeof r.template.metadata === 'object' ? r.template.metadata : {};
+      const icon = tmplMeta.icon != null ? String(tmplMeta.icon).trim() : '';
+      const iconLibrary = tmplMeta.iconLibrary != null ? String(tmplMeta.iconLibrary).trim() : '';
+      const iconColor = tmplMeta.iconColor != null ? String(tmplMeta.iconColor).trim() : '';
       assignments.push({
         templateId: r.templateId,
         title: custom || fallback || 'Tarefa de rotina',
@@ -59,6 +64,9 @@ router.get('/me', async (req, res) => {
         sortOrder: r.sortOrder,
         mobilePrefetchSlots: clampSlots(r.mobilePrefetchSlots ?? 1),
         rtActiveCount: activeCount,
+        icon: icon || null,
+        iconLibrary: iconLibrary || null,
+        iconColor: iconColor || null,
       });
     }
     res.json({ assignments });

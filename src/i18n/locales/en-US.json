@@ -864,7 +864,20 @@
     "activePortfolio": "Portfolio",
     "providerSearchPlaceholder": "Search by WO no., service…",
     "revisionBadge": "Revision",
+<<<<<<< HEAD
     "providerOsAwaitingAcceptBadge": "Awaiting acceptance",
+=======
+    "providerSort": {
+      "recent": "Recent",
+      "oldestRecv": "Oldest",
+      "createdNew": "Created (newest)",
+      "createdOld": "Created (oldest)",
+      "dueSoon": "Due (soonest)",
+      "dueLate": "Due (latest)",
+      "route": "Route",
+      "routeSla": "Route + due"
+    },
+>>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
     "osReceivedAtLabel": "Received:",
     "osReceivedAtLine": "Received: {{date}}",
     "osEtaChip": "ETA {{minutes}} min",

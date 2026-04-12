@@ -12,6 +12,10 @@ export type RoutineTaskAssignmentDto = {
   mobilePrefetchSlots?: number;
   /** Quantas RT ativas existem neste momento para este modelo. */
   rtActiveCount?: number;
+  /** Ícone do modelo no Form Builder (`ChecklistTemplate.metadata`). */
+  icon?: string | null;
+  iconLibrary?: string | null;
+  iconColor?: string | null;
 };
 
 export type RoutineTaskOpenResult = {

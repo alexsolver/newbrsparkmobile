@@ -43,18 +43,7 @@ import { LEGACY_SERVICE_CATEGORY_I18N } from '../../src/services/directoryCatego
 import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 import { ApiService, ProviderService } from '../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
-import {
-  Ionicons,
-  AntDesign,
-  Entypo,
-  Feather,
-  FontAwesome,
-  FontAwesome5,
-  Foundation,
-  MaterialIcons,
-  MaterialCommunityIcons,
-  Octicons,
-} from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Badge } from '../../src/components/Badge';
 import { StockService } from '../../src/services/stockService';
@@ -63,6 +52,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tabBarOuterHeight } from '../../src/components/FloatingRadialMenu';
+import { TaskMetadataGlyph } from '../../src/components/TaskMetadataGlyph';
 import { useAppContext } from '../../src/context/AppContext';
 import { API_BASE, apiFetch } from '../../src/services/auth';
 import { getOsrmBaseUrl } from '../../src/services/osrmConfig';
@@ -85,46 +75,6 @@ import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../src/
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 import MapView, { Marker, Callout, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
-
-/** Ícone do despacho (`metadata.icon` + `metadata.iconLibrary`) — paridade com o Form Builder. */
-function TaskMetadataGlyph({
-  icon,
-  iconLibrary,
-  size,
-  color,
-}: {
-  icon?: string | null;
-  iconLibrary?: string | null;
-  size: number;
-  color: string;
-}) {
-  const name = (icon && String(icon).trim()) || '';
-  if (!name) return null;
-  const lib = String(iconLibrary || 'Ionicons').trim() || 'Ionicons';
-  switch (lib) {
-    case 'AntDesign':
-      return <AntDesign name={name as any} size={size} color={color} />;
-    case 'Entypo':
-      return <Entypo name={name as any} size={size} color={color} />;
-    case 'Feather':
-      return <Feather name={name as any} size={size} color={color} />;
-    case 'FontAwesome':
-      return <FontAwesome name={name as any} size={size} color={color} />;
-    case 'FontAwesome5':
-      return <FontAwesome5 name={name as any} size={size} color={color} />;
-    case 'Foundation':
-      return <Foundation name={name as any} size={size} color={color} />;
-    case 'MaterialIcons':
-      return <MaterialIcons name={name as any} size={size} color={color} />;
-    case 'MaterialCommunityIcons':
-      return <MaterialCommunityIcons name={name as any} size={size} color={color} />;
-    case 'Octicons':
-      return <Octicons name={name as any} size={size} color={color} />;
-    case 'Ionicons':
-    default:
-      return <Ionicons name={name as any} size={size} color={color} />;
-  }
-}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -2150,7 +2100,11 @@ export default function DashboardScreen() {
                service: serviceTitle,
                formTemplateTitle,
                createdAt: createdAtDisplay,
+<<<<<<< HEAD
                dueDate: providerTaskVencimentoIso(t) ?? '',
+=======
+               dueDate: providerTaskDueIso(t),
+>>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
                __receivedSortMs,
                __osCreatedSortMs,
                __dueSortMs,
@@ -2174,6 +2128,10 @@ export default function DashboardScreen() {
                pauseReasonSummary: t.metadata?.lastPauseReasonSummary || null,
             };
          });
+<<<<<<< HEAD
+=======
+         // Ordem inicial alinhada a «Recentes»: data de recebimento no aparelho (fallback criação).
+>>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
          mapped.sort((a: any, b: any) => compareProviderTasksForList(a, b, 'NEWEST'));
 
          const cacheNow = Date.now();
@@ -3595,6 +3553,70 @@ export default function DashboardScreen() {
                 })()}
               </Pressable>
             </View>
+<<<<<<< HEAD
+=======
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, paddingBottom: 8, marginTop: 12, paddingRight: 24 }}>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('NEWEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'NEWEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'NEWEST' ? "download-outline" : "download-outline"} size={16} color={providerSortMode === 'NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'NEWEST' ? '900' : '700', color: providerSortMode === 'NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>{t('home.providerSort.recent')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('OLDEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OLDEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'OLDEST' ? "download-outline" : "download-outline"} size={16} color={providerSortMode === 'OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6, transform: [{ scaleY: -1 }] }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OLDEST' ? '900' : '700', color: providerSortMode === 'OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>{t('home.providerSort.oldestRecv')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('CREATED_NEWEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'CREATED_NEWEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'CREATED_NEWEST' ? "create" : "create-outline"} size={16} color={providerSortMode === 'CREATED_NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'CREATED_NEWEST' ? '900' : '700', color: providerSortMode === 'CREATED_NEWEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight }} numberOfLines={1}>{t('home.providerSort.createdNew')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('CREATED_OLDEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'CREATED_OLDEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'CREATED_OLDEST' ? "document-text" : "document-text-outline"} size={16} color={providerSortMode === 'CREATED_OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'CREATED_OLDEST' ? '900' : '700', color: providerSortMode === 'CREATED_OLDEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight }} numberOfLines={1}>{t('home.providerSort.createdOld')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('DUE_SOONEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'DUE_SOONEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'DUE_SOONEST' ? "alarm" : "alarm-outline"} size={16} color={providerSortMode === 'DUE_SOONEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'DUE_SOONEST' ? '900' : '700', color: providerSortMode === 'DUE_SOONEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight }} numberOfLines={1}>{t('home.providerSort.dueSoon')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => setProviderSortMode('DUE_LATEST')}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'DUE_LATEST' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+               >
+                  <Ionicons name={providerSortMode === 'DUE_LATEST' ? "hourglass" : "hourglass-outline"} size={16} color={providerSortMode === 'DUE_LATEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'DUE_LATEST' ? '900' : '700', color: providerSortMode === 'DUE_LATEST' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight }} numberOfLines={1}>{t('home.providerSort.dueLate')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => onSortRoutePress('OSRM_ROUTE')}
+                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, backgroundColor: providerSortMode === 'OSRM_ROUTE' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
+               >
+                  {osrmOptimizingMode === 'OSRM_ROUTE' ? <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ marginRight: 6 }} /> : <Ionicons name="rocket" size={16} color={providerSortMode === 'OSRM_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>{t('home.providerSort.route')}</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                  onPress={() => onSortRoutePress('OSRM_SLA_ROUTE')}
+                  disabled={isOptimizingRoute || providerTab !== 'PENDING'}
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.status.warning.bg : 'transparent', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, opacity: providerTab === 'PENDING' ? 1 : 0.5 }}
+               >
+                  {osrmOptimizingMode === 'OSRM_SLA_ROUTE' ? <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ marginRight: 6 }} /> : <Ionicons name={providerSortMode === 'OSRM_SLA_ROUTE' ? "alert-circle" : "alert-circle-outline"} size={16} color={providerSortMode === 'OSRM_SLA_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight} style={{ marginRight: 6 }} />}
+                  <Text style={{ fontSize: 11, fontWeight: providerSortMode === 'OSRM_SLA_ROUTE' ? '900' : '700', color: providerSortMode === 'OSRM_SLA_ROUTE' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight, textTransform: 'uppercase' }}>{t('home.providerSort.routeSla')}</Text>
+               </TouchableOpacity>
+               
+            </ScrollView>
+>>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
           </View>
 
           {/* Provider Content Placeholder / List */}
@@ -3614,6 +3636,7 @@ export default function DashboardScreen() {
             </Text>
           </View>
           ) : (
+<<<<<<< HEAD
             <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16 }}>
               {sortTasksForOsrmRoute(
                 providerTasks
@@ -3621,6 +3644,21 @@ export default function DashboardScreen() {
                     const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
                     return providerTabMatchesTask(providerTab, s);
                   }),
+=======
+            <View style={{ padding: 16 }}>
+              {sortTasksForOsrmRoute(
+                providerTasks.filter((t) => {
+                  const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
+                  return providerTabMatchesTask(providerTab, s);
+                }).filter(
+                  (t) =>
+                    providerSearch === '' ||
+                    t.id.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                    (t.osNumber &&
+                      String(t.osNumber).toLowerCase().includes(providerSearch.toLowerCase())) ||
+                    (t.service && t.service.toLowerCase().includes(providerSearch.toLowerCase())),
+                ),
+>>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
                 providerSortMode,
                 osrmDurations,
               ).map((order, index, arr) => {
