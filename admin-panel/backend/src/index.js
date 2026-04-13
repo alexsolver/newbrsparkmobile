@@ -38,6 +38,7 @@ const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
 const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
 const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
+const checklistsVisionRoutes = require('./routes/checklistsVision');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
 const {
@@ -123,6 +124,7 @@ app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punch
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
+app.use('/api/checklists', checklistsVisionRoutes);
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
 // /api/vision → routes/account.js (CompreFace). /api/ai-technician-profile-photo → montado acima (gate IA cadastro prestador).
 
@@ -617,8 +619,8 @@ app.use((err, _req, res, _next) => {
     }
   }
 
-  app.listen(PORT, () => {
-    console.log(`\n🚀 BrSpark Admin API running on http://localhost:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚀 BrSpark Admin API running on http://0.0.0.0:${PORT} (LAN: use o IP da máquina na mesma porta)`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Database:    ${process.env.DATABASE_URL?.split('@')[1] || 'Not configured'}\n`);
 
@@ -663,6 +665,21 @@ app.use((err, _req, res, _next) => {
           .catch((e) => console.warn('[osNumber] Backfill no arranque falhou (BD indisponível?):', e.message));
       });
     }
+  });
+
+  server.on('error', (err) => {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'EADDRINUSE') {
+      console.error(
+        `\n[BrSpark] Porta ${PORT} já está em uso — provavelmente outro \`node src/index.js\` ou \`npm run dev\` nesta máquina.\n` +
+          `  • Ver o processo:  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
+          `  • Libertar:        kill <PID>   (feche o outro terminal se for o caso)\n` +
+          `  • Outra porta:     PORT=3002 npm run dev   (ajuste EXPO_PUBLIC_API_BASE no app para …:3002)\n`,
+      );
+      process.exit(1);
+      return;
+    }
+    console.error('[BrSpark] Erro ao escutar HTTP:', err);
+    process.exit(1);
   });
 })().catch((e) => {
   console.error('Falha crítica ao iniciar API:', e);

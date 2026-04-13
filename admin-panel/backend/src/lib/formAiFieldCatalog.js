@@ -71,6 +71,22 @@ const FIELD_SPECS = [
     descPt: 'Biometria facial (CompreFace: self_verify ou identify no builder).',
   },
   {
+    type: 'vision_checklist',
+    tier: 'advanced',
+    proposalsDefault: false,
+    contextFlag: 'allowVisionChecklist',
+    descPt:
+      'Visão IA Detecção: captura só pela câmera (no builder: somente foto, somente vídeo ou foto e vídeo), perguntas sim/não; respostas com confiança via integração "Visão IA - YOLO".',
+  },
+  {
+    type: 'vision_ai_analysis',
+    tier: 'advanced',
+    proposalsDefault: false,
+    contextFlag: 'allowVisionAiAnalysis',
+    descPt:
+      'Visão de IA Análise: mesma estrutura da detecção (câmera, modo foto/vídeo, perguntas sim/não); análise no servidor via integração "Google AI Studio" (API Gemini).',
+  },
+  {
     type: 'transit_start',
     tier: 'advanced',
     proposalsDefault: false,
@@ -120,6 +136,102 @@ function buildAnalyzeFieldTypesList(formContext = {}) {
     if (s.contextFlag && ctx[s.contextFlag] === true) out.push(s.type);
   }
   return [...new Set(out)];
+}
+
+/**
+ * Lista completa de tipos de campo para o Copiloto (sem filtro por checkboxes do painel).
+ * @returns {string[]}
+ */
+function buildCopilotFieldTypesList() {
+  const out = [];
+  for (const s of FIELD_SPECS) {
+    if (s.type === 'section_break') continue;
+    out.push(s.type);
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * Conta campos reais no schema (exclui separadores de etapa).
+ * @param {unknown} schemaData
+ * @returns {number}
+ */
+function countOperationalSchemaFields(schemaData) {
+  if (!Array.isArray(schemaData)) return 0;
+  let n = 0;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    const t = f.type != null ? String(f.type).trim() : '';
+    if (t && t !== 'section_break') n += 1;
+  }
+  return n;
+}
+
+/**
+ * Infere flags de contexto a partir do que já existe no canvas (alinha lista de tipos e bloco de contexto).
+ * @param {unknown} schemaData
+ * @returns {Record<string, boolean>}
+ */
+function inferContextFlagsFromSchema(schemaData) {
+  const flags = {
+    requireStampedPhotos: false,
+    allowBarcode: false,
+    requireGps: false,
+    allowGeofence: false,
+    allowTransit: false,
+    allowFacial: false,
+    allowVisionChecklist: false,
+    allowVisionAiAnalysis: false,
+    allowCalculated: false,
+  };
+  if (!Array.isArray(schemaData)) return flags;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    const t = f.type != null ? String(f.type).trim() : '';
+    if (t === 'photo_stamped') flags.requireStampedPhotos = true;
+    if (t === 'barcode_scan') flags.allowBarcode = true;
+    if (t === 'location_pick') flags.requireGps = true;
+    if (t === 'geofence_check') {
+      flags.allowGeofence = true;
+      flags.requireGps = true;
+    }
+    if (t === 'transit_start' || t === 'transit_end') flags.allowTransit = true;
+    if (t === 'facial_recognition') flags.allowFacial = true;
+    if (t === 'vision_checklist') flags.allowVisionChecklist = true;
+    if (t === 'vision_ai_analysis') flags.allowVisionAiAnalysis = true;
+    if (t === 'calculated') flags.allowCalculated = true;
+  }
+  return flags;
+}
+
+/**
+ * Combina contexto enviado pelo painel com inferência a partir do schema (OR em booleanos).
+ * @param {Record<string, unknown>|null|undefined} formContext
+ * @param {unknown} schemaData
+ * @returns {Record<string, unknown>}
+ */
+function mergeFormContextWithSchemaInference(formContext, schemaData) {
+  const inf = inferContextFlagsFromSchema(schemaData);
+  const base = formContext && typeof formContext === 'object' && !Array.isArray(formContext) ? formContext : {};
+  const boolKeys = [
+    'requireStampedPhotos',
+    'allowBarcode',
+    'requireGps',
+    'allowGeofence',
+    'allowTransit',
+    'allowFacial',
+    'allowVisionChecklist',
+    'allowVisionAiAnalysis',
+    'allowSignature',
+    'allowCalculated',
+  ];
+  /** @type {Record<string, unknown>} */
+  const out = { ...base };
+  for (const k of boolKeys) {
+    const fromClient = base[k] === true || base[k] === 'true';
+    out[k] = fromClient || !!inf[k];
+  }
+  return out;
 }
 
 /**
@@ -177,6 +289,8 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   hidden: { icon: 'eye-off-outline', iconColor: '#94a3b8' },
   barcode_scan: { icon: 'barcode-outline', iconColor: '#475569' },
   facial_recognition: { icon: 'scan-outline', iconColor: '#7e22ce' },
+  vision_checklist: { icon: 'videocam-outline', iconColor: '#0369a1' },
+  vision_ai_analysis: { icon: 'sparkles-outline', iconColor: '#dc2626' },
   transit_start: { icon: 'rocket-outline', iconColor: '#2563eb' },
   transit_end: { icon: 'flag-outline', iconColor: '#dc2626' },
   geofence_check: { icon: 'navigate-circle-outline', iconColor: '#ea580c' },
@@ -237,6 +351,8 @@ function buildFormContextBlock(ctx) {
   if (ctx.allowGeofence) flags.push('cerca geográfica');
   if (ctx.allowTransit) flags.push('deslocamento início/fim');
   if (ctx.allowFacial) flags.push('biometria facial');
+  if (ctx.allowVisionChecklist) flags.push('visão IA detecção');
+  if (ctx.allowVisionAiAnalysis) flags.push('visão de IA análise (Gemini)');
   if (ctx.allowSignature) flags.push('assinatura');
   if (ctx.allowCalculated) flags.push('campos calculados');
   if (flags.length) lines.push(`Requisitos indicados: ${flags.join(', ')}.`);
@@ -279,6 +395,8 @@ const ANALYZE_OPTION_SHORT_PT = {
   photo_stamped: 'Foto carimbada',
   barcode_scan: 'Código barras',
   facial_recognition: 'Biometria facial',
+  vision_checklist: 'Visão IA Detecção',
+  vision_ai_analysis: 'Visão IA Análise',
   transit_start: 'Início deslocamento',
   transit_end: 'Fim deslocamento',
   geofence_check: 'Cerca (geofence)',
@@ -306,7 +424,11 @@ module.exports = {
   FIELD_SPECS,
   ALLOWED_FIELD_TYPES,
   buildAnalyzeFieldTypesList,
+  buildCopilotFieldTypesList,
   buildDefaultAnalyzeProposalOptions,
+  countOperationalSchemaFields,
+  inferContextFlagsFromSchema,
+  mergeFormContextWithSchemaInference,
   formatAnalyzeFieldTypesForPrompt,
   formatSchemaTypeDocBlock,
   formatTransitDisplacementRulesForPrompt,

@@ -3,6 +3,7 @@ import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 import { Platform, Alert } from 'react-native';
 
 async function getDeviceId(): Promise<string> {
@@ -19,11 +20,54 @@ async function getDeviceId(): Promise<string> {
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-// Altere MAC_IP para o IP da sua máquina na rede Wi‑Fi local quando testar no celular.
-// Em simulador use 'localhost'. Em Expo Go no device, use seu IP da rede (ex: 192.168.1.10).
-const MAC_IP = '192.168.15.73';          // ← altere para seu IP se necessário
 /** Porta da API (admin-panel/backend + PostgreSQL). */
 const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
+
+const ENV_DEV_HOST =
+  String(
+    (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_DEV_API_HOST) ||
+      (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_API_HOST) ||
+      '',
+  ).trim();
+
+function pushHostCandidate(out: string[], raw: unknown) {
+  if (raw && typeof raw === 'string' && raw.trim()) out.push(raw.trim());
+}
+
+/** URIs que o Expo preenche com o host do packager (LAN, túnel, etc.). */
+function collectExpoBundlerHostUris(): string[] {
+  const uris: string[] = [];
+  try {
+    pushHostCandidate(uris, Constants.expoConfig?.hostUri);
+    const m = Constants.manifest;
+    if (m && typeof m === 'object' && m !== null && 'debuggerHost' in m) {
+      pushHostCandidate(uris, (m as { debuggerHost?: string }).debuggerHost);
+    }
+    const m2 = Constants.manifest2 as { extra?: { expoClient?: { hostUri?: string } } } | null | undefined;
+    pushHostCandidate(uris, m2?.extra?.expoClient?.hostUri);
+  } catch {
+    /* ignore */
+  }
+  return uris;
+}
+
+/** Host Metro/Expo (mesmo PC que corre `expo start`) — evita IP fixo errado na Wi‑Fi. */
+function inferExpoDevLanHost(): string | null {
+  try {
+    for (const raw of collectExpoBundlerHostUris()) {
+      const host = raw.split(':')[0]?.trim();
+      if (!host || host === 'localhost' || host === '127.0.0.1') continue;
+      if (!isLikelyLocalLanApiBase(`http://${host}:${DEV_API_PORT}`)) continue;
+      return host;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+const FALLBACK_LAN_IP = '192.168.15.73';
+const MAC_IP = ENV_DEV_HOST || inferExpoDevLanHost() || FALLBACK_LAN_IP;
 
 /** Origem da API em release: só esquema+host (+porta se preciso). Sem `/api` no fim (o app acrescenta `/api/...`). */
 function normalizeProductionApiBase(raw: string | undefined): string | undefined {
@@ -42,6 +86,39 @@ const fromEnvRaw = normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE);
 const forceProductionInDev =
   __DEV__ && String(process.env.EXPO_PUBLIC_USE_PRODUCTION_API || '').trim() === '1';
 
+/**
+ * Em dispositivo físico, `http://localhost:3001` / `127.0.0.1` na API apontam para o próprio telemóvel.
+ * Se o Metro expõe um host LAN em `expoConfig.hostUri`, substituímos por esse host (mantém a porta do `.env`).
+ * Em simulador/emulador, sem host LAN do Expo, mantém-se loopback (acesso ao host da máquina).
+ * Em **dispositivo físico**, se ainda não houver host do Metro, usa `EXPO_PUBLIC_DEV_API_HOST` ou o IP fallback do projeto.
+ */
+function rewriteDevLoopbackApiBaseIfNeeded(apiBase: string): string {
+  if (!__DEV__ || Platform.OS === 'web') return apiBase;
+  try {
+    const u = new URL(String(apiBase || '').trim());
+    const h = u.hostname.toLowerCase();
+    if (h !== 'localhost' && h !== '127.0.0.1') return apiBase;
+    let lanHost = inferExpoDevLanHost();
+    if (!lanHost && Device.isDevice) {
+      const eh = ENV_DEV_HOST.replace(/^https?:\/\//i, '').split(':')[0]?.trim();
+      if (eh && eh !== 'localhost' && eh !== '127.0.0.1') lanHost = eh;
+    }
+    if (!lanHost && Device.isDevice) {
+      lanHost = FALLBACK_LAN_IP;
+    }
+    if (!lanHost) return apiBase;
+    const portPart = u.port ? `:${u.port}` : '';
+    const next = `${u.protocol}//${lanHost}${portPart}`.replace(/\/+$/, '');
+    const prev = apiBase.replace(/\/+$/, '');
+    if (next !== prev) {
+      console.warn('[BrSpark] API_BASE em loopback no dispositivo — redirecionado para o host LAN:', prev, '→', next);
+    }
+    return next;
+  } catch {
+    return apiBase;
+  }
+}
+
 function isLikelyLocalLanApiBase(url: string): boolean {
   try {
     const u = new URL(url);
@@ -59,19 +136,20 @@ function isLikelyLocalLanApiBase(url: string): boolean {
 /**
  * Base da API (origem sem `/api` no fim).
  * - **Release:** `EXPO_PUBLIC_API_BASE` (EAS / build) ou produção por defeito.
- * - **Dev:** servidor local (`MAC_IP:porta`), exceto se `fromEnv` for claramente LAN (ex.: .env com IP) ou
- *   `EXPO_PUBLIC_USE_PRODUCTION_API=1` para testar contra produção com Metro.
- *   Isto evita credenciais válidas só na BD local irem parar à API remota por `EXPO_PUBLIC_API_BASE` residual no shell.
+ * - **Dev:** se existir `EXPO_PUBLIC_API_BASE` no `.env`, usa-se sempre (LAN, VPN, https público, túnel).
+ *   Sem isso: `EXPO_PUBLIC_DEV_API_HOST` → host inferido do Metro (`expoConfig.hostUri`) → IP fallback + porta.
+ *   `EXPO_PUBLIC_USE_PRODUCTION_API=1` força produção como antes.
+ *   Se `EXPO_PUBLIC_API_BASE` for loopback e o Metro indicar host LAN, substitui-se automaticamente (evita erro no telemóvel).
  */
 const RESOLVED_API_BASE: string = (() => {
   if (__DEV__) {
     if (forceProductionInDev) {
-      return fromEnvRaw || PRODUCTION_API_DEFAULT;
+      return rewriteDevLoopbackApiBaseIfNeeded(fromEnvRaw || PRODUCTION_API_DEFAULT);
     }
-    if (fromEnvRaw && isLikelyLocalLanApiBase(fromEnvRaw)) {
-      return fromEnvRaw;
+    if (fromEnvRaw) {
+      return rewriteDevLoopbackApiBaseIfNeeded(fromEnvRaw);
     }
-    return `http://${MAC_IP}:${DEV_API_PORT}`;
+    return rewriteDevLoopbackApiBaseIfNeeded(`http://${MAC_IP}:${DEV_API_PORT}`);
   }
   return fromEnvRaw || PRODUCTION_API_DEFAULT;
 })();
@@ -564,12 +642,20 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
 
   try {
     const token = await getToken();
+    const isFormData =
+      typeof FormData !== 'undefined' && rest.body != null && rest.body instanceof FormData;
+    /** Multipart: não definir Content-Type — o runtime define boundary (RN/fetch). */
+    const baseHeaders: Record<string, string> = isFormData
+      ? { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      : {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
     const res = await fetch(`${API_BASE}${path}`, {
       ...rest,
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...baseHeaders,
         ...rest.headers,
       },
     });

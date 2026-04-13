@@ -11,6 +11,8 @@ const REVISION_SESSION_FIELD_TYPES = new Set([
   'transit_end',
   'geofence_check',
   'facial_recognition',
+  'vision_checklist',
+  'vision_ai_analysis',
 ]);
 
 function normalizeFormFieldType(t) {

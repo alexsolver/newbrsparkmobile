@@ -31,6 +31,7 @@ function parseFormContextFromOptions(raw) {
     allowGeofence: o.allowGeofence === true || o.allowGeofence === 'true',
     allowTransit: o.allowTransit === true || o.allowTransit === 'true',
     allowFacial: o.allowFacial === true || o.allowFacial === 'true',
+    allowVisionChecklist: o.allowVisionChecklist === true || o.allowVisionChecklist === 'true',
     allowSignature: o.allowSignature === true || o.allowSignature === 'true',
     allowCalculated: o.allowCalculated === true || o.allowCalculated === 'true',
     focusedCanvasField,

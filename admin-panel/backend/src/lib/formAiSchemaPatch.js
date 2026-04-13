@@ -80,6 +80,29 @@ function applySchemaPatch(schemaData, patch) {
       cur.allowMediaDescription = p.allowMediaDescription;
     }
     if (p.facialAuthMode != null) cur.facialAuthMode = String(p.facialAuthMode).trim();
+    if (cur.type === 'vision_checklist' || cur.type === 'vision_ai_analysis') {
+      if (p.visionCaptureMode != null) {
+        const m = String(p.visionCaptureMode).trim();
+        if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') {
+          cur.visionCaptureMode = m;
+        }
+      }
+      if (p.visionQuestions != null && Array.isArray(p.visionQuestions)) {
+        const vq = p.visionQuestions
+          .map((x, i) => {
+            if (!x || typeof x !== 'object') return null;
+            const id = String(x.id || `q_${i + 1}`)
+              .replace(/[^\w-]/g, '_')
+              .slice(0, 64);
+            const text = String(x.text || x.question || '').trim().slice(0, 500);
+            if (!text) return null;
+            return { id, text };
+          })
+          .filter(Boolean)
+          .slice(0, 24);
+        if (vq.length) cur.visionQuestions = vq;
+      }
+    }
   }
 
   const slice = ops.slice(0, MAX_OPS);

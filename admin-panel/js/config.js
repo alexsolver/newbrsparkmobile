@@ -133,6 +133,24 @@ function normalizeLoopbackApiOrigin(storedOrigin) {
   return String(storedOrigin).replace(/\/$/, '');
 }
 
+/**
+ * Origem gravada no PC (127.0.0.1/localhost) é inútil no telemóvel/tablet na LAN:
+ * aí `localhost` é o próprio dispositivo. Ignorar e voltar a detetar pela página.
+ */
+function storedLoopbackMismatchLanPage(storedOrigin) {
+  if (typeof window === 'undefined' || !window.location?.hostname) return false;
+  const pageH = window.location.hostname;
+  if (pageH === 'localhost' || pageH === '127.0.0.1') return false;
+  try {
+    const u = new URL(String(storedOrigin || '').replace(/\/$/, ''));
+    const sh = u.hostname;
+    if (sh === 'localhost' || sh === '127.0.0.1') return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 /** GET /api/plans sem token → API Prisma responde 401 JSON. */
 async function isPrismaAdminApi(baseUrl) {
   try {
@@ -158,15 +176,23 @@ export async function ensureAdminApiDetected() {
   const ls = localStorage.getItem(LS_API_ORIGIN);
   if (ls) {
     const origin = normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(ls));
-    if (origin !== String(ls).replace(/\/$/, '')) {
+    if (storedLoopbackMismatchLanPage(origin)) {
       try {
-        localStorage.setItem(LS_API_ORIGIN, origin);
+        localStorage.removeItem(LS_API_ORIGIN);
       } catch {
         /* ignore */
       }
+    } else {
+      if (origin !== String(ls).replace(/\/$/, '')) {
+        try {
+          localStorage.setItem(LS_API_ORIGIN, origin);
+        } catch {
+          /* ignore */
+        }
+      }
+      _apiBase = normalizeApiBaseUrl(`${origin}/api`);
+      return;
     }
-    _apiBase = normalizeApiBaseUrl(`${origin}/api`);
-    return;
   }
 
   if (window.location?.protocol !== 'file:' && window.location?.hostname) {
@@ -175,17 +201,55 @@ export async function ensureAdminApiDetected() {
       _apiBase = same;
       return;
     }
-  }
-
-  for (const port of [3001, 3000]) {
-    const base = normalizeApiBaseUrl(`http://127.0.0.1:${port}/api`);
-    if (await isPrismaAdminApi(base)) {
-      _apiBase = base;
-      localStorage.setItem(LS_API_ORIGIN, `http://127.0.0.1:${port}`);
-      return;
+    const h = window.location.hostname;
+    const proto = window.location.protocol || 'http:';
+    const pageNotLoop = h !== 'localhost' && h !== '127.0.0.1';
+    if (pageNotLoop) {
+      const p = window.location.port;
+      const tryPorts =
+        !p || p === '80' || p === '443' || (p !== '3001' && p !== '3000') ? ['3001', '3000'] : [];
+      for (const port of tryPorts) {
+        const tryOrigin = `${proto}//${h}:${port}`;
+        const tryBase = normalizeApiBaseUrl(`${tryOrigin}/api`);
+        if (await isPrismaAdminApi(tryBase)) {
+          _apiBase = tryBase;
+          try {
+            localStorage.setItem(LS_API_ORIGIN, tryOrigin);
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+      }
     }
   }
 
+  const pageH = typeof window !== 'undefined' ? window.location?.hostname || '' : '';
+  const pageIsLoopback =
+    pageH === 'localhost' || pageH === '127.0.0.1' || window.location?.protocol === 'file:';
+  if (pageIsLoopback) {
+    for (const port of [3001, 3000]) {
+      const base = normalizeApiBaseUrl(`http://127.0.0.1:${port}/api`);
+      if (await isPrismaAdminApi(base)) {
+        _apiBase = base;
+        try {
+          localStorage.setItem(LS_API_ORIGIN, `http://127.0.0.1:${port}`);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+    }
+  }
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const h = window.location.hostname;
+    if (h !== 'localhost' && h !== '127.0.0.1') {
+      const proto = window.location.protocol || 'http:';
+      _apiBase = normalizeApiBaseUrl(`${proto}//${h}:3001/api`);
+      return;
+    }
+  }
   _apiBase = normalizeApiBaseUrl('http://127.0.0.1:3001/api');
 }
 
@@ -194,15 +258,50 @@ export function resolveApiBase() {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem(LS_API_ORIGIN);
     if (custom) {
-      return normalizeApiBaseUrl(
-        `${normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(custom))}/api`
-      );
+      const norm = normalizeLoopbackApiOrigin(normalizeStoredApiOrigin(custom));
+      if (storedLoopbackMismatchLanPage(norm)) {
+        try {
+          localStorage.removeItem(LS_API_ORIGIN);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        return normalizeApiBaseUrl(`${norm}/api`);
+      }
     }
     if (window.location?.origin && window.location.protocol !== 'file:') {
       return normalizeApiBaseUrl(`${window.location.origin}/api`);
     }
+    const h = window.location?.hostname;
+    if (h && h !== 'localhost' && h !== '127.0.0.1') {
+      const proto = window.location.protocol || 'http:';
+      return normalizeApiBaseUrl(`${proto}//${h}:3001/api`);
+    }
   }
   return normalizeApiBaseUrl('http://127.0.0.1:3001/api');
+}
+
+/**
+ * Quando o browser não alcança a API (backend parado, origem errada, rede).
+ * @param {string} method
+ * @param {string} path
+ * @param {unknown} err
+ */
+function adminApiUnreachableMessage(method, path, err) {
+  const base = resolveApiBase();
+  const raw = String(err && (err.message || err)).toLowerCase();
+  const looksNetwork =
+    (err && err.name === 'TypeError') ||
+    /failed to fetch|networkerror|load failed|fetch failed|network request failed/.test(raw);
+  if (looksNetwork) {
+    return (
+      `Não foi possível contactar a API em ${base} (${method} ${path}). ` +
+      'Inicie o backend (pasta admin-panel/backend: npm run dev, porta 3001). ' +
+      'Se o painel abrir noutro host/porta, defina no navegador localStorage a chave "brspark_admin_api_origin" ' +
+      'com a origem do servidor (ex.: http://127.0.0.1:3001), sem /api no fim.'
+    );
+  }
+  return String((err && err.message) || err || 'Erro de rede.');
 }
 
 export const CONFIG = {
@@ -224,7 +323,13 @@ export const CONFIG = {
 
   /** Convenience fetch wrapper */
   async get(path) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, { headers: CONFIG.headers() });
+    let res;
+    try {
+      res = await fetch(`${CONFIG.API_BASE}${path}`, { headers: CONFIG.headers() });
+    } catch (err) {
+      console.error('[CONFIG.get]', path, err);
+      return null;
+    }
     if (res.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';
@@ -240,7 +345,18 @@ export const CONFIG = {
   },
 
   async post(path, body) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'POST', headers: CONFIG.headers(), body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetch(`${CONFIG.API_BASE}${path}`, {
+        method: 'POST',
+        headers: CONFIG.headers(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.error('[CONFIG.post]', path, err);
+      const msg = adminApiUnreachableMessage('POST', path, err);
+      return { ok: false, error: msg, message: msg };
+    }
     if (res.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';
@@ -260,11 +376,18 @@ export const CONFIG = {
   },
 
   async patch(path, body) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, {
-      method: 'PATCH',
-      headers: CONFIG.headers(),
-      body: JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(`${CONFIG.API_BASE}${path}`, {
+        method: 'PATCH',
+        headers: CONFIG.headers(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.error('[CONFIG.patch]', path, err);
+      const msg = adminApiUnreachableMessage('PATCH', path, err);
+      return { ok: false, error: msg, message: msg };
+    }
     if (res.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';
@@ -284,11 +407,18 @@ export const CONFIG = {
   },
 
   async put(path, body) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, {
-      method: 'PUT',
-      headers: CONFIG.headers(),
-      body: JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(`${CONFIG.API_BASE}${path}`, {
+        method: 'PUT',
+        headers: CONFIG.headers(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.error('[CONFIG.put]', path, err);
+      const msg = adminApiUnreachableMessage('PUT', path, err);
+      return { ok: false, error: msg, message: msg };
+    }
     if (res.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';
@@ -308,7 +438,14 @@ export const CONFIG = {
   },
 
   async del(path) {
-    const res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'DELETE', headers: CONFIG.headers() });
+    let res;
+    try {
+      res = await fetch(`${CONFIG.API_BASE}${path}`, { method: 'DELETE', headers: CONFIG.headers() });
+    } catch (err) {
+      console.error('[CONFIG.del]', path, err);
+      const msg = adminApiUnreachableMessage('DELETE', path, err);
+      return { ok: false, error: msg, message: msg };
+    }
     if (res.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';

@@ -770,6 +770,8 @@ const iconMap = {
     'photo': '<ion-icon name="camera-outline"></ion-icon>',
     'photo_stamped': '<ion-icon name="scan-outline"></ion-icon>',
     'facial_recognition': '<ion-icon name="person-outline"></ion-icon>',
+    'vision_checklist': '<ion-icon name="videocam-outline"></ion-icon>',
+    'vision_ai_analysis': '<ion-icon name="sparkles-outline"></ion-icon>',
     'barcode_scan': '<ion-icon name="barcode-outline"></ion-icon>',
     'materials_consumption': '<ion-icon name="cube-outline"></ion-icon>',
     'materials_receipt': '<ion-icon name="arrow-down-circle-outline"></ion-icon>',
@@ -1207,6 +1209,13 @@ function createNewFieldFromToolboxType(type, rawText) {
               requireOnlineValidation: false,
             }
           : {}),
+        ...(type === 'vision_checklist' || type === 'vision_ai_analysis'
+          ? {
+              visionQuestions: [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }],
+              visionCaptureMode: 'photo_and_video',
+              requireOnlineValidation: false,
+            }
+          : {}),
         ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
     };
 }
@@ -1377,6 +1386,8 @@ function buildCanvasFieldElement(f) {
         'technician_finance',
         'signature',
         'signature_summary',
+        'vision_checklist',
+        'vision_ai_analysis',
     ]);
     const multiTag =
         f.multiple && !multiFieldExcluded.has(f.type)
@@ -2061,6 +2072,49 @@ function renderProperties() {
                 <b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.
             </div>
         </div>`;
+    } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+        const isVisionAnalysis = f.type === 'vision_ai_analysis';
+        const vqLines = Array.isArray(f.visionQuestions)
+            ? f.visionQuestions
+                  .map((q) => String((q && q.text) || '').trim())
+                  .filter(Boolean)
+                  .join('\n')
+            : '';
+        const capMode =
+            f.visionCaptureMode === 'photo_only' ||
+            f.visionCaptureMode === 'video_only' ||
+            f.visionCaptureMode === 'photo_and_video'
+                ? f.visionCaptureMode
+                : 'photo_and_video';
+        const vBoxBg = isVisionAnalysis ? '#fef2f2' : '#f0f9ff';
+        const vBoxBr = isVisionAnalysis ? '#f87171' : '#38bdf8';
+        const vTitle = isVisionAnalysis
+            ? '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão IA Análise</span>'
+            : '<ion-icon name="videocam-outline"></ion-icon> Visão IA Detecção';
+        const vTitleColor = isVisionAnalysis ? '#991b1b' : '#0369a1';
+        const vBody = isVisionAnalysis
+            ? 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações) e guarda sim/não + confiança por pergunta.'
+            : 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b> e guarda sim/não + confiança por pergunta.';
+        const vBodyColor = isVisionAnalysis ? '#7f1d1d' : '#0c4a6e';
+        const vLabel = isVisionAnalysis ? '#b91c1c' : '#0369a1';
+        extraProps = `
+        <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
+            <div style="font-size:10px; color:${vBodyColor}; line-height:1.35; margin-bottom:10px;">
+              ${vBody}
+            </div>
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Tipo de captura pela câmera</label>
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.handleFieldUpdate('visionCaptureMode', this.value)">
+                <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>Somente foto</option>
+                <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>Somente vídeo</option>
+                <option value="photo_and_video" ${capMode === 'photo_and_video' ? 'selected' : ''}>Foto e vídeo</option>
+            </select>
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Perguntas (sim / não) — uma por linha, até 24</label>
+            <textarea class="prop-input" style="height:120px; font-size:12px; font-family:system-ui,sans-serif;" onblur="window.updateVisionQuestionsFromLines(this.value)">${escapeHtmlLogic(
+                vqLines,
+            )}</textarea>
+            <div style="font-size:9px; color:#64748b; margin-top:6px;">IDs são gerados automaticamente (q1, q2…). Linhas vazias são ignoradas.</div>
+        </div>`;
     } else if (f.type === 'file_upload') {
         extraProps = `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fcd34d; padding:12px; border-radius:8px; margin-top:16px;">
@@ -2089,7 +2143,9 @@ function renderProperties() {
                     o.id !== f.id &&
                     o.type !== 'section_break' &&
                     o.type !== 'signature_summary' &&
-                    o.type !== 'hidden',
+                    o.type !== 'hidden' &&
+                    o.type !== 'vision_checklist' &&
+                    o.type !== 'vision_ai_analysis',
             )
             .map((o) => {
                 const ck = ids.has(o.id) ? 'checked' : '';
@@ -2181,7 +2237,7 @@ function renderProperties() {
             </div>
         </div>
         
-        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
+        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
         <div class="prop-group">
             <label class="prop-label">Auto-Preenchimento / Valor Padrão (Opcional)</label>
             <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="Use tags como {{user.name}}, {{date}}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
@@ -2194,7 +2250,7 @@ function renderProperties() {
         </div>
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
@@ -2214,7 +2270,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['photo', 'photo_stamped', 'facial_recognition', 'file_upload'].includes(f.type) ? `
+        ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'file_upload'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
@@ -2234,12 +2290,18 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'signature', 'signature_summary', 'barcode_scan'].includes(f.type) ? `
+        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'signature', 'signature_summary', 'barcode_scan'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
                 <label for="prop-online" style="font-size:12px; font-weight:800; color:#ca8a04; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> Exigir Validação Apenas Online?</label>
-                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">${f.type === 'facial_recognition' ? 'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.' : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'}</div>
+                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">${
+                    f.type === 'facial_recognition'
+                        ? 'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.'
+                        : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis'
+                          ? 'Na visão IA: <b>desmarcado</b> permite capturar pela câmera sem rede e tentar análise quando houver rede. <b>Marcado</b> exige internet no envio ao servidor.'
+                          : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'
+                }</div>
             </div>
         </div>
         ` : ''}
@@ -2255,6 +2317,21 @@ function renderProperties() {
 // Expose pra UI HTML
 window.handleFieldUpdate = function(key, val) {
     updateField(key, val);
+};
+
+window.updateVisionQuestionsFromLines = function (text) {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || (f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis')) return;
+    const lines = String(text || '')
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 24);
+    const arr = lines.map((line, i) => ({ id: 'q' + (i + 1), text: line.slice(0, 500) }));
+    f.visionQuestions = arr.length ? arr : [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }];
+    renderCanvas();
+    renderProperties();
 };
 
 /** Inclui/remove um campo no resumo para assinatura (mantém ordem do canvas). */
@@ -2810,7 +2887,14 @@ window.previewPDF = function() {
              doc.setFontSize(8);
              doc.text("[ Placeholder onde a imagem do S3 é impressa no Backend Node.js ]", 25, currentY + 30);
              currentY += 60;
-         } 
+         }
+         else if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+             doc.setFontSize(9).setFont("helvetica", "normal");
+             doc.setTextColor(3, 105, 161);
+             doc.text('Mídia + respostas sim/não com confiança (ver execução / relatório completo).', 20, currentY + 10);
+             doc.setTextColor(0);
+             currentY += 22;
+         }
          else if(f.type === 'signature' || f.type === 'signature_summary') {
              // Linha de Assinatura com SVG futuro
              doc.setDrawColor(0);
@@ -3749,6 +3833,19 @@ function renderMobilePreview() {
         if(f.type === 'photo') inputMock = `<div style="background:#f1f5f9; border:2px dashed #cbd5e1; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#64748b; font-size:13px;"><ion-icon name="camera" style="font-size:28px; margin-bottom:4px"></ion-icon> Tocar para Fotografar</div>`;
         if(f.type === 'photo_stamped') inputMock = `<div style="background:#fffbeb; border:2px dashed #f59e0b; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#b45309; text-align:center; padding:10px;"><ion-icon name="scan" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Câmera Ao Vivo (Anti-Fraude)</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">O App inserirá GPS e Hora. Galeria bloqueada.</span></div>`;
         if(f.type === 'facial_recognition') inputMock = `<div style="background:#fff1f2; border:2px dashed #e11d48; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9f1239; text-align:center; padding:10px;"><ion-icon name="person" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Reconhecimento Facial</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Será comparado com o rosto cadastrado do técnico.</span></div>`;
+        if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+            const _cm =
+                f.visionCaptureMode === 'photo_only'
+                    ? 'Só foto'
+                    : f.visionCaptureMode === 'video_only'
+                      ? 'Só vídeo'
+                      : 'Foto ou vídeo';
+            if (f.type === 'vision_ai_analysis') {
+                inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · Google AI Studio.</span></div>`;
+            } else {
+                inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · servidor.</span></div>`;
+            }
+        }
         
         if(f.type === 'barcode_scan') inputMock = `<div style="background:#f0f9ff; border:2px solid #38bdf8; border-radius:10px; padding:16px; display:flex; align-items:center; justify-content:center; gap:8px; color:#0284c7; font-weight:800; font-size:14px;"><ion-icon name="barcode" style="font-size:24px; color:#0284c7"></ion-icon> ESCANEAR CÓDIGO</div>`;
         if(f.type === 'materials_consumption') inputMock = `<div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px; font-size:13px; color:#0369a1;"><ion-icon name="cube" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Consumo de materiais</b> — estoque técnico do app (independente de bens); baixa ao concluir.</div>`;
@@ -4548,11 +4645,6 @@ function collectCopilotFormContext() {
         objective: g('copilot-ctx-objective') ? String(g('copilot-ctx-objective').value || '').trim().slice(0, 800) : '',
         sector: '',
         formKind: 'formulario',
-        requireStampedPhotos: !!(g('copilot-ctx-stamped') && g('copilot-ctx-stamped').checked),
-        allowBarcode: !!(g('copilot-ctx-barcode') && g('copilot-ctx-barcode').checked),
-        requireGps: !!(g('copilot-ctx-gps') && g('copilot-ctx-gps').checked),
-        allowGeofence: !!(g('copilot-ctx-geofence') && g('copilot-ctx-geofence').checked),
-        allowTransit: !!(g('copilot-ctx-transit') && g('copilot-ctx-transit').checked),
     };
     const fc = window.__brsparkCopilotFocusedField;
     if (fc && fc.id) {
@@ -4741,6 +4833,8 @@ if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopi
 if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
 if (typeof window.__brsparkCopilotSpreadsheetSummary === 'undefined') window.__brsparkCopilotSpreadsheetSummary = '';
 if (typeof window.__brsparkCopilotSpreadsheetFileName === 'undefined') window.__brsparkCopilotSpreadsheetFileName = '';
+/** @type {{ fileName: string, summary: string }[]} resumos por arquivo (referência acumulada no copiloto) */
+if (typeof window.__brsparkCopilotReferenceSummaries === 'undefined') window.__brsparkCopilotReferenceSummaries = [];
 if (typeof window.__brsparkCopilotThinkingCount === 'undefined') window.__brsparkCopilotThinkingCount = 0;
 if (typeof window.__brsparkCopilotClarifyOptions === 'undefined') window.__brsparkCopilotClarifyOptions = [];
 /** @type {Record<string, { cid: string, label: string }[]>} seleções por id de pergunta (copiloto — multi-opção). */
@@ -4803,7 +4897,7 @@ function refreshCopilotThinkingDom() {
     if (clrSheet) clrSheet.disabled = dis;
     const panel = document.getElementById('ai-copilot-panel');
     if (panel) panel.setAttribute('aria-busy', on ? 'true' : 'false');
-    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-scroll');
+    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-chat-scroll');
     if (scrollHost && on) {
         try {
             scrollHost.scrollTop = scrollHost.scrollHeight;
@@ -4822,7 +4916,9 @@ function refreshCopilotThinkingDom() {
 
 function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     const parts = [];
-    parts.push('### Análise do arquivo anexado ao Copiloto (Excel, Word, PDF, imagem OCR ou JSON)');
+    parts.push(
+        '### Análise do arquivo anexado ao Copiloto (Excel, Word, PDF, imagem OCR, JSON BrSpark, JSON Google Forms / outros sistemas)',
+    );
     parts.push('Arquivo: ' + String(fileName || '—'));
     if (data && data.title) parts.push('Título sugerido pela IA: ' + String(data.title).trim());
     if (data && data.description) parts.push('Descrição sugerida: ' + String(data.description).trim());
@@ -4842,6 +4938,49 @@ function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     let s = parts.join('\n');
     if (s.length > 11800) s = s.slice(0, 11800) + '\n…[resumo truncado para o limite do copiloto]';
     return s;
+}
+
+var BRSPARK_COPILOT_REF_MAX_TOTAL = 22000;
+var BRSPARK_COPILOT_REF_MAX_FILES = 10;
+
+function brsparkCopilotReferenceFileNameOk(lowerName) {
+    var n = String(lowerName || '').toLowerCase();
+    return (
+        n.endsWith('.xlsx') ||
+        n.endsWith('.xlsm') ||
+        n.endsWith('.docx') ||
+        n.endsWith('.pdf') ||
+        n.endsWith('.png') ||
+        n.endsWith('.jpg') ||
+        n.endsWith('.jpeg') ||
+        n.endsWith('.webp') ||
+        n.endsWith('.json')
+    );
+}
+
+function rebuildCopilotSpreadsheetSummaryFromRefs() {
+    var arr = window.__brsparkCopilotReferenceSummaries || [];
+    if (!arr.length) {
+        window.__brsparkCopilotSpreadsheetSummary = '';
+        window.__brsparkCopilotSpreadsheetFileName = '';
+        return;
+    }
+    var joined = arr
+        .map(function (x) {
+            return x && x.summary ? String(x.summary) : '';
+        })
+        .filter(Boolean)
+        .join('\n\n---\n\n');
+    var summary = joined;
+    if (summary.length > BRSPARK_COPILOT_REF_MAX_TOTAL) {
+        summary = summary.slice(0, BRSPARK_COPILOT_REF_MAX_TOTAL) + '\n…[resumo total dos arquivos truncado]';
+    }
+    window.__brsparkCopilotSpreadsheetSummary = summary;
+    window.__brsparkCopilotSpreadsheetFileName = arr
+        .map(function (x) {
+            return x && x.fileName ? String(x.fileName) : 'arquivo';
+        })
+        .join(' · ');
 }
 
 function copilotSetContextDetailsOpen(shouldOpen) {
@@ -4875,7 +5014,10 @@ function renderCopilotMessages() {
     if (!root) return;
     root.innerHTML = '';
     const msgs = window.__brsparkCopilotMessages || [];
-    if (!msgs.length) {
+    const visible = msgs.filter(function (m) {
+        return m && (m.role === 'user' || m.role === 'assistant') && !m.hiddenFromUi;
+    });
+    if (!visible.length) {
         const empty = document.createElement('div');
         empty.className = 'ai-copilot-empty';
         const t1 = document.createElement('strong');
@@ -4883,12 +5025,12 @@ function renderCopilotMessages() {
         empty.appendChild(t1);
         const t2 = document.createElement('span');
         t2.textContent =
-            'Clique num campo no canvas para o focar, descreva o que quer e responda às opções do Copiloto quando ele tiver dúvidas. As alterações aplicam-se logo no formulário; use «Desfazer última alteração» se precisar reverter. Opcional: anexe Excel, Word, PDF ou imagem em «Avançado».';
+            'Em formulário novo, descreva o caso (área, quem preenche, objetivo). O Copiloto age como especialista do domínio e propõe um **primeiro rascunho amplo** (seções, muitos campos — em geral opcionais — e listas com opções), além de recursos quando fizer sentido (foto com carimbo, código de barras, GPS, etc.). Pode focar um campo no canvas para refinar. Use «Desfazer última alteração» se precisar. Opcional: anexe arquivos em «Avançado».';
         empty.appendChild(t2);
         root.appendChild(empty);
         return;
     }
-    msgs.forEach(function (m) {
+    visible.forEach(function (m) {
         if (!m || (m.role !== 'user' && m.role !== 'assistant')) return;
         const row = document.createElement('div');
         row.className = 'ai-copilot-msg-row ' + (m.role === 'user' ? 'user' : 'assistant');
@@ -4902,7 +5044,7 @@ function renderCopilotMessages() {
         row.appendChild(div);
         root.appendChild(row);
     });
-    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-scroll');
+    const scrollHost = document.querySelector('#ai-copilot-panel .ai-copilot-chat-scroll');
     if (scrollHost) {
         try {
             scrollHost.scrollTop = scrollHost.scrollHeight;
@@ -4912,6 +5054,86 @@ function renderCopilotMessages() {
     }
 }
 
+function brsparkCopilotCountOperationalFields() {
+    if (!Array.isArray(fields)) return 0;
+    var n = 0;
+    for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        if (!f || !f.type) continue;
+        if (String(f.type) !== 'section_break') n += 1;
+    }
+    return n;
+}
+
+/**
+ * Primeira mensagem automática quando o copiloto abre com canvas vazio e conversa limpa (entrevista de requisitos).
+ */
+async function brsparkCopilotMaybeAutoDiscoveryInterview() {
+    try {
+        const p = document.getElementById('ai-copilot-panel');
+        if (!p || !p.classList.contains('is-open')) return;
+        if ((window.__brsparkCopilotThinkingCount || 0) > 0) return;
+        if (window.__brsparkCopilotExcelBusy) return;
+        if (window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim()) return;
+        if (window.__brsparkCopilotReferenceSummaries && window.__brsparkCopilotReferenceSummaries.length) return;
+        var msgs = window.__brsparkCopilotMessages || [];
+        if (msgs.length) return;
+        if (brsparkCopilotCountOperationalFields() > 0) return;
+        if (!brsparkAdminBearerToken()) return;
+        var seed =
+            'Quero criar um formulário novo. Cumprimente em breve; em seguida, peça só o mínimo de contexto necessário e, **assim que souber o tipo de formulário e o público**, entregue **logo** um primeiro rascunho **denso** no schemaPatch (várias section_break, muitos campos típicos do setor, maioria opcional, opções preenchidas em escolhas). Use clarifyOptions só para bifurcações inevitáveis — não substitua um rascunho completo por perguntas genéricas.';
+        await brsparkCopilotPostChatRound(seed, { hideUserBubble: true });
+        var inpAfter = document.getElementById('ai-copilot-input');
+        if (inpAfter) {
+            try {
+                inpAfter.focus();
+            } catch (eFa) {
+                /* ignore */
+            }
+        }
+    } catch (e) {
+        console.warn('[checklists-builder] auto discovery:', e && e.message ? e.message : e);
+    }
+}
+
+/** Sincroniza rótulos ARIA e texto do botão do menu lateral do copiloto. */
+function brsparkCopilotSyncSideMenuUi() {
+    const p = document.getElementById('ai-copilot-panel');
+    const btn = document.getElementById('ai-copilot-menu-toggle-btn');
+    const menu = document.getElementById('ai-copilot-side-menu');
+    if (!p || !btn) return;
+    const collapsed = p.classList.contains('ai-copilot-menu-collapsed');
+    const menuOpen = !collapsed;
+    btn.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
+    const label = btn.querySelector('.ai-copilot-menu-toggle-label');
+    if (label) label.textContent = menuOpen ? 'Ocultar opções' : 'Opções';
+    if (menu) menu.setAttribute('aria-hidden', menuOpen ? 'false' : 'true');
+}
+
+/**
+ * Abre ou fecha a coluna «Opções e contexto».
+ * @param {boolean} [force] true = abrir; false = fechar; omitido = alternar.
+ */
+window.brsparkCopilotToggleSideMenu = function (force) {
+    const p = document.getElementById('ai-copilot-panel');
+    if (!p) return;
+    if (force === true) {
+        p.classList.remove('ai-copilot-menu-collapsed');
+    } else if (force === false) {
+        p.classList.add('ai-copilot-menu-collapsed');
+    } else {
+        p.classList.toggle('ai-copilot-menu-collapsed');
+    }
+    brsparkCopilotSyncSideMenuUi();
+};
+
+function brsparkCopilotSetSideMenuOpen(open) {
+    const p = document.getElementById('ai-copilot-panel');
+    if (!p) return;
+    p.classList.toggle('ai-copilot-menu-collapsed', !open);
+    brsparkCopilotSyncSideMenuUi();
+}
+
 window.toggleAiCopilotPanel = function () {
     const p = document.getElementById('ai-copilot-panel');
     if (!p) return;
@@ -4919,10 +5141,21 @@ window.toggleAiCopilotPanel = function () {
     p.classList.toggle('is-open', open);
     p.setAttribute('aria-hidden', open ? 'false' : 'true');
     if (open) {
+        if (typeof window.ensureBrsparkCopilotPanelsOnBody === 'function') {
+            window.ensureBrsparkCopilotPanelsOnBody();
+        }
+        brsparkCopilotBindPanelDrag();
+        requestAnimationFrame(function () {
+            brsparkCopilotApplySavedPanelPosition();
+        });
+        brsparkCopilotSyncSideMenuUi();
         renderCopilotMessages();
         updateCopilotExcelUi();
         refreshCopilotThinkingDom();
         window.refreshCopilotCanvasFocusChip();
+        if (window.__brsparkCopilotClarifyOptions && window.__brsparkCopilotClarifyOptions.length) {
+            brsparkCopilotSetSideMenuOpen(true);
+        }
         const inpFocus = document.getElementById('ai-copilot-input');
         if (inpFocus) {
             try {
@@ -4933,6 +5166,9 @@ window.toggleAiCopilotPanel = function () {
                 /* ignore */
             }
         }
+        setTimeout(function () {
+            void brsparkCopilotMaybeAutoDiscoveryInterview();
+        }, 0);
     }
 };
 
@@ -4943,12 +5179,17 @@ window.brsparkCopilotInputKeydown = function (e) {
 };
 
 window.brsparkCopilotClear = function () {
+    var prevModal = document.getElementById('copilot-schema-preview-modal');
+    if (prevModal && prevModal.classList.contains('is-open') && typeof window.brsparkCopilotCloseSchemaPreview === 'function') {
+        window.brsparkCopilotCloseSchemaPreview(false);
+    }
     window.__brsparkCopilotMessages = [];
     renderCopilotMessages();
     window.__brsparkCopilotLast = null;
     window.__brsparkCopilotLogicLast = null;
     window.__brsparkCopilotSpreadsheetSummary = '';
     window.__brsparkCopilotSpreadsheetFileName = '';
+    window.__brsparkCopilotReferenceSummaries = [];
     window.__brsparkCopilotThinkingCount = 0;
     delete window.__brsparkCopilotThinkingLabel;
     refreshCopilotThinkingDom();
@@ -4968,10 +5209,11 @@ window.brsparkCopilotClear = function () {
 window.brsparkCopilotClearSpreadsheet = function () {
     window.__brsparkCopilotSpreadsheetSummary = '';
     window.__brsparkCopilotSpreadsheetFileName = '';
+    window.__brsparkCopilotReferenceSummaries = [];
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.value = '';
     const st = document.getElementById('copilot-excel-status');
-    if (st) st.textContent = 'Arquivo removido do contexto.';
+    if (st) st.textContent = 'Arquivos de referência removidos do contexto.';
     updateCopilotExcelUi();
 };
 
@@ -5079,17 +5321,717 @@ window.brsparkCopilotSendClarifySelections = function () {
     window.brsparkCopilotSend();
 };
 
+window.ensureBrsparkCopilotPanelsOnBody = function () {
+    ['ai-copilot-panel', 'copilot-schema-preview-modal'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.parentNode !== document.body) {
+            document.body.appendChild(el);
+        }
+    });
+};
+
+var __brsparkCopilotDragState = null;
+var __brsparkCopilotDragBindDone = false;
+var __brsparkCopilotResizeTimer = null;
+var BRSPARK_COPILOT_POS_KEY = 'brsparkCopilotPanelPos';
+
+function brsparkCopilotFloatingDragEnabled() {
+    try {
+        return typeof window.matchMedia === 'function' && !window.matchMedia('(max-width: 700px)').matches;
+    } catch (eM) {
+        return true;
+    }
+}
+
+function brsparkCopilotClearPanelPositionStyles() {
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel) return;
+    ['left', 'top', 'right', 'bottom'].forEach(function (k) {
+        panel.style.removeProperty(k);
+    });
+}
+
+function brsparkCopilotClampPanelToViewport() {
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel || !panel.classList.contains('is-open')) return;
+    if (!brsparkCopilotFloatingDragEnabled()) return;
+    var margin = 8;
+    var r = panel.getBoundingClientRect();
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var nl = r.left;
+    var nt = r.top;
+    if (nl < margin) nl = margin;
+    if (nt < margin) nt = margin;
+    if (nl + r.width > vw - margin) nl = Math.max(margin, vw - r.width - margin);
+    if (nt + r.height > vh - margin) nt = Math.max(margin, vh - r.height - margin);
+    panel.style.left = Math.round(nl) + 'px';
+    panel.style.top = Math.round(nt) + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+}
+
+function brsparkCopilotResetPanelPosition() {
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel) return;
+    try {
+        sessionStorage.removeItem(BRSPARK_COPILOT_POS_KEY);
+    } catch (eR) {
+        /* ignore */
+    }
+    brsparkCopilotClearPanelPositionStyles();
+    if (brsparkCopilotFloatingDragEnabled()) {
+        requestAnimationFrame(function () {
+            brsparkCopilotClampPanelToViewport();
+        });
+    }
+}
+
+function brsparkCopilotApplySavedPanelPosition() {
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel || !panel.classList.contains('is-open')) return;
+    if (!brsparkCopilotFloatingDragEnabled()) return;
+    var raw;
+    try {
+        raw = sessionStorage.getItem(BRSPARK_COPILOT_POS_KEY);
+    } catch (eS) {
+        return;
+    }
+    if (!raw) return;
+    var o;
+    try {
+        o = JSON.parse(raw);
+    } catch (eJ) {
+        return;
+    }
+    if (typeof o.left !== 'number' || typeof o.top !== 'number') return;
+    if (!isFinite(o.left) || !isFinite(o.top)) return;
+    panel.style.left = Math.round(o.left) + 'px';
+    panel.style.top = Math.round(o.top) + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    brsparkCopilotClampPanelToViewport();
+}
+
+function brsparkCopilotSavePanelPosition() {
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel) return;
+    var r = panel.getBoundingClientRect();
+    try {
+        sessionStorage.setItem(
+            BRSPARK_COPILOT_POS_KEY,
+            JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top) })
+        );
+    } catch (eW) {
+        /* ignore */
+    }
+}
+
+function brsparkCopilotOnPanelDragMove(e) {
+    var st = __brsparkCopilotDragState;
+    if (!st || !st.panel) return;
+    var dx = e.clientX - st.startX;
+    var dy = e.clientY - st.startY;
+    var nl = st.startLeft + dx;
+    var nt = st.startTop + dy;
+    st.panel.style.left = Math.round(nl) + 'px';
+    st.panel.style.top = Math.round(nt) + 'px';
+    st.panel.style.right = 'auto';
+    st.panel.style.bottom = 'auto';
+    brsparkCopilotClampPanelToViewport();
+}
+
+function brsparkCopilotOnPanelDragEnd() {
+    var st = __brsparkCopilotDragState;
+    if (!st) return;
+    __brsparkCopilotDragState = null;
+    var panel = st.panel;
+    if (panel) {
+        panel.classList.remove('is-dragging-copilot');
+        panel.removeEventListener('pointermove', brsparkCopilotOnPanelDragMove);
+        panel.removeEventListener('pointerup', brsparkCopilotOnPanelDragEnd);
+        panel.removeEventListener('pointercancel', brsparkCopilotOnPanelDragEnd);
+        try {
+            if (st.pid != null) panel.releasePointerCapture(st.pid);
+        } catch (eC) {
+            /* ignore */
+        }
+        brsparkCopilotSavePanelPosition();
+    }
+}
+
+function brsparkCopilotOnPanelDragStart(e) {
+    if (!brsparkCopilotFloatingDragEnabled()) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    var head = e.currentTarget;
+    if (!head) return;
+    var panel = document.getElementById('ai-copilot-panel');
+    if (!panel || !panel.classList.contains('is-open')) return;
+    if (e.target.closest && e.target.closest('button')) return;
+    if (e.target.closest && e.target.closest('input, textarea, a, select')) return;
+    var r = panel.getBoundingClientRect();
+    __brsparkCopilotDragState = {
+        panel: panel,
+        startX: e.clientX,
+        startY: e.clientY,
+        startLeft: r.left,
+        startTop: r.top,
+        pid: e.pointerId,
+    };
+    panel.classList.add('is-dragging-copilot');
+    if (!panel.style.left) {
+        panel.style.left = Math.round(r.left) + 'px';
+        panel.style.top = Math.round(r.top) + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+    }
+    panel.addEventListener('pointermove', brsparkCopilotOnPanelDragMove);
+    panel.addEventListener('pointerup', brsparkCopilotOnPanelDragEnd);
+    panel.addEventListener('pointercancel', brsparkCopilotOnPanelDragEnd);
+    try {
+        panel.setPointerCapture(e.pointerId);
+    } catch (eCap) {
+        /* ignore */
+    }
+    e.preventDefault();
+}
+
+function brsparkCopilotBindPanelDrag() {
+    if (__brsparkCopilotDragBindDone) return;
+    var panel = document.getElementById('ai-copilot-panel');
+    var head = panel && panel.querySelector('.ai-copilot-head');
+    if (!panel || !head) return;
+    __brsparkCopilotDragBindDone = true;
+    head.addEventListener('pointerdown', brsparkCopilotOnPanelDragStart);
+    head.addEventListener('dblclick', function (e) {
+        if (!brsparkCopilotFloatingDragEnabled()) return;
+        if (e.target.closest && e.target.closest('button')) return;
+        e.preventDefault();
+        brsparkCopilotResetPanelPosition();
+    });
+    window.addEventListener(
+        'resize',
+        function () {
+            clearTimeout(__brsparkCopilotResizeTimer);
+            __brsparkCopilotResizeTimer = setTimeout(function () {
+                var p = document.getElementById('ai-copilot-panel');
+                if (!p || !p.classList.contains('is-open')) return;
+                if (brsparkCopilotFloatingDragEnabled()) {
+                    brsparkCopilotClampPanelToViewport();
+                } else {
+                    brsparkCopilotClearPanelPositionStyles();
+                }
+            }, 120);
+        },
+        { passive: true }
+    );
+}
+
+function brsparkCopilotDeepClone(obj) {
+    try {
+        return JSON.parse(JSON.stringify(obj));
+    } catch (e) {
+        return obj;
+    }
+}
+
+/** [type, rótulo curto pt] — alinhado ao catálogo do builder / formAiFieldCatalog. */
+var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
+    ['section_break', 'Etapa (section_break)'],
+    ['text', 'Texto'],
+    ['number', 'Número'],
+    ['phone', 'Telefone'],
+    ['email', 'E-mail'],
+    ['date', 'Data / hora'],
+    ['checkbox', 'Checkbox'],
+    ['yes_no', 'Sim / Não'],
+    ['dropdown', 'Lista (uma)'],
+    ['multiselect', 'Lista (várias)'],
+    ['rating', 'Classificação'],
+    ['file_upload', 'Anexo'],
+    ['photo', 'Foto'],
+    ['signature', 'Assinatura'],
+    ['signature_summary', 'Resumo + assinatura'],
+    ['materials_consumption', 'Consumo de materiais'],
+    ['materials_receipt', 'Recebimento de materiais'],
+    ['technician_finance', 'Financeiro técnico'],
+    ['location_pick', 'Local no mapa'],
+    ['hidden', 'Oculto'],
+    ['photo_stamped', 'Foto carimbo GPS'],
+    ['barcode_scan', 'Código de barras'],
+    ['facial_recognition', 'Biometria facial'],
+    ['vision_checklist', 'Visão IA Detecção'],
+    ['vision_ai_analysis', 'Visão de IA Análise'],
+    ['transit_start', 'Início deslocamento'],
+    ['transit_end', 'Fim deslocamento'],
+    ['geofence_check', 'Cerca / geofence'],
+    ['calculated', 'Calculado'],
+];
+
+var COPILOT_PREVIEW_ALLOWED_TYPES = (function () {
+    var s = {};
+    COPILOT_PREVIEW_FIELD_TYPE_LABELS.forEach(function (p) {
+        s[p[0]] = true;
+    });
+    return s;
+})();
+
+function brsparkCopilotPreviewTypeLabel(type) {
+    var t = String(type || '').trim();
+    for (var i = 0; i < COPILOT_PREVIEW_FIELD_TYPE_LABELS.length; i++) {
+        if (COPILOT_PREVIEW_FIELD_TYPE_LABELS[i][0] === t) return COPILOT_PREVIEW_FIELD_TYPE_LABELS[i][1];
+    }
+    return t || '—';
+}
+
+/** Recria o objeto do campo com defaults do novo tipo, preservando id e metadados editados na revisão. */
+function brsparkCopilotRehydrateFieldForTypeChange(oldField, newType, st) {
+    var nt = String(newType || '').trim();
+    if (!nt || !COPILOT_PREVIEW_ALLOWED_TYPES[nt]) return brsparkCopilotDeepClone(oldField);
+    var lab = oldField.label != null ? String(oldField.label) : 'Campo';
+    var nf = createNewFieldFromToolboxType(nt, lab);
+    nf.id = String(oldField.id);
+    if (st && st.description !== undefined && st.description !== null) {
+        nf.description = String(st.description).trim().slice(0, 500);
+    } else if (oldField.description != null) {
+        nf.description = String(oldField.description);
+    }
+    if (st) nf.required = !!st.required;
+    if (oldField.icon) nf.icon = oldField.icon;
+    if (oldField.iconLibrary) nf.iconLibrary = oldField.iconLibrary;
+    if (oldField.iconColor) nf.iconColor = oldField.iconColor;
+    nf.rules = [];
+    return nf;
+}
+
+function brsparkCopilotAppendPreviewTypeSelect(typCell, currentType) {
+    var sel = document.createElement('select');
+    sel.className = 'copilot-prev-type';
+    sel.title = 'Tipo de campo no app';
+    var cur = String(currentType || '').trim();
+    var found = false;
+    COPILOT_PREVIEW_FIELD_TYPE_LABELS.forEach(function (pair) {
+        var opt = document.createElement('option');
+        opt.value = pair[0];
+        opt.textContent = pair[1];
+        if (pair[0] === cur) {
+            opt.selected = true;
+            found = true;
+        }
+        sel.appendChild(opt);
+    });
+    if (cur && !found) {
+        var ox = document.createElement('option');
+        ox.value = cur;
+        ox.textContent = brsparkCopilotPreviewTypeLabel(cur) + ' (' + cur + ')';
+        ox.selected = true;
+        sel.insertBefore(ox, sel.firstChild);
+    }
+    if (cur === 'section_break') {
+        sel.disabled = true;
+        sel.title = 'Tipo de etapa fixo nesta revisão.';
+    }
+    typCell.appendChild(sel);
+}
+
+function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
+    var prevIds = new Set();
+    (prevFields || []).forEach(function (f) {
+        if (f && f.id) prevIds.add(String(f.id));
+    });
+    var rows = [];
+    (proposedSchema || []).forEach(function (f) {
+        if (!f || !f.id) return;
+        if (prevIds.has(String(f.id))) return;
+        rows.push({
+            id: String(f.id),
+            label: f.label != null ? String(f.label) : '',
+            type: f.type != null ? String(f.type) : '',
+            description: f.description != null ? String(f.description) : '',
+            required: !!(f.required === true || f.required === 'true'),
+        });
+    });
+    return rows;
+}
+
+function brsparkCopilotNeedsSchemaPreviewTable(data) {
+    if (!data || !Array.isArray(data.schemaData)) return false;
+    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
+    if (!rows.length) return false;
+    if (brsparkCopilotCountOperationalFields() === 0) return true;
+    if (rows.length >= 2) return true;
+    return false;
+}
+
+function brsparkCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
+    var prevIds = new Set();
+    fields.forEach(function (f) {
+        if (f && f.id) prevIds.add(String(f.id));
+    });
+    var out = [];
+    (proposed || []).forEach(function (f) {
+        if (!f || !f.id) return;
+        var id = String(f.id);
+        var copy = brsparkCopilotDeepClone(f);
+        if (!prevIds.has(id)) {
+            var st = rowMap[id];
+            if (!st || !st.include) return;
+            if (copy.type === 'section_break') {
+                if (st.description !== undefined && st.description !== null) {
+                    copy.description = String(st.description).trim().slice(0, 500);
+                }
+                out.push(copy);
+                return;
+            }
+            var wantType = st.type && String(st.type).trim() && COPILOT_PREVIEW_ALLOWED_TYPES[String(st.type).trim()]
+                ? String(st.type).trim()
+                : copy.type;
+            if (wantType !== copy.type) {
+                copy = brsparkCopilotRehydrateFieldForTypeChange(copy, wantType, st);
+            } else {
+                copy.required = !!st.required;
+                if (st.description !== undefined && st.description !== null) {
+                    copy.description = String(st.description).trim().slice(0, 500);
+                }
+            }
+        }
+        out.push(copy);
+    });
+    return out;
+}
+
+function brsparkCopilotReadPreviewRowMapFromDom() {
+    var map = {};
+    var trs = document.querySelectorAll('#copilot-schema-preview-tbody tr[data-field-id]');
+    trs.forEach(function (tr) {
+        var id = tr.getAttribute('data-field-id');
+        if (!id) return;
+        var inc = tr.querySelector('.copilot-prev-include');
+        var req = tr.querySelector('.copilot-prev-required');
+        var desc = tr.querySelector('.copilot-prev-desc');
+        var typ = tr.querySelector('.copilot-prev-type');
+        var aiNote = tr.querySelector('.copilot-prev-ai-note');
+        var typeVal = typ && !typ.disabled ? String(typ.value || '').trim() : '';
+        map[id] = {
+            include: !!(inc && (inc.checked || inc.disabled)),
+            required: !!(req && req.checked),
+            description: desc ? String(desc.value || '') : '',
+            type: typeVal,
+            aiNote: aiNote ? String(aiNote.value || '').trim() : '',
+        };
+    });
+    return map;
+}
+
+function brsparkCopilotOpenSchemaPreviewModal(data) {
+    window.ensureBrsparkCopilotPanelsOnBody();
+    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
+    var tbody = document.getElementById('copilot-schema-preview-tbody');
+    var modal = document.getElementById('copilot-schema-preview-modal');
+    var genTa = document.getElementById('copilot-schema-preview-general-note');
+    if (!tbody || !modal) return;
+    tbody.innerHTML = '';
+    if (genTa) genTa.value = '';
+    rows.forEach(function (r) {
+        var isSec = r.type === 'section_break';
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-field-id', r.id);
+        var incCell = document.createElement('td');
+        if (isSec) {
+            incCell.innerHTML =
+                '<input type="checkbox" class="copilot-prev-include" checked disabled title="Etapa — sempre incluída" />';
+        } else {
+            incCell.innerHTML = '<input type="checkbox" class="copilot-prev-include" checked />';
+        }
+        var labCell = document.createElement('td');
+        labCell.textContent = r.label || '(sem rótulo)';
+        var typCell = document.createElement('td');
+        brsparkCopilotAppendPreviewTypeSelect(typCell, r.type || '');
+        var descCell = document.createElement('td');
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'copilot-preview-desc copilot-prev-desc';
+        inp.value = r.description || '';
+        inp.placeholder = 'Descrição (opcional)';
+        descCell.appendChild(inp);
+        var aiCell = document.createElement('td');
+        var aiTa = document.createElement('textarea');
+        aiTa.className = 'copilot-prev-ai-note';
+        aiTa.rows = 2;
+        aiTa.placeholder = 'Instruções para a IA sobre este campo (opcional)';
+        aiCell.appendChild(aiTa);
+        var reqCell = document.createElement('td');
+        if (isSec) {
+            reqCell.innerHTML = '<span style="color:#94a3b8">—</span>';
+        } else {
+            var c = document.createElement('input');
+            c.type = 'checkbox';
+            c.className = 'copilot-prev-required';
+            if (r.required) c.checked = true;
+            reqCell.appendChild(c);
+        }
+        tr.appendChild(incCell);
+        tr.appendChild(labCell);
+        tr.appendChild(typCell);
+        tr.appendChild(descCell);
+        tr.appendChild(aiCell);
+        tr.appendChild(reqCell);
+        tbody.appendChild(tr);
+    });
+    window.__brsparkCopilotPreviewPayload = brsparkCopilotDeepClone(data);
+    window.__brsparkCopilotDeferredLogicSuggestions = Array.isArray(data.logicSuggestions)
+        ? data.logicSuggestions.slice()
+        : [];
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function brsparkCopilotCancelPendingCopilotProposal() {
+    var d = window.__brsparkCopilotLast;
+    if (d) {
+        d.schemaPatch = null;
+        d.logicSuggestions = [];
+        try {
+            d.schemaData = JSON.parse(JSON.stringify(fields));
+        } catch (e) {
+            d.schemaData = fields.slice();
+        }
+        d.settingsPatch = null;
+        d.templateMetadataPatch = null;
+        d.templateTitlePatch = null;
+        delete d.templateTitleResolved;
+        try {
+            d.templateSettings = JSON.parse(JSON.stringify(globalFormSettings || {}));
+        } catch (e2) {
+            /* ignore */
+        }
+    }
+    window.__brsparkCopilotLogicLast = [];
+    window.__brsparkCopilotDeferredLogicSuggestions = [];
+    delete window.__brsparkCopilotPreviewPayload;
+}
+
+window.brsparkCopilotPreviewMarkAllOptional = function () {
+    document.querySelectorAll('#copilot-schema-preview-tbody .copilot-prev-required').forEach(function (el) {
+        if (!el.disabled) el.checked = false;
+    });
+};
+
+/** Fecha só o diálogo visual — não cancela a proposta em memória (para reprocessar via IA). */
+window.brsparkCopilotHideSchemaPreviewModal = function () {
+    var modal = document.getElementById('copilot-schema-preview-modal');
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+};
+
+function brsparkCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, generalNote) {
+    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, proposedSchema);
+    var lines = [];
+    rows.forEach(function (r) {
+        var st = rowMap[r.id];
+        if (!st || !st.include) return;
+        var bits = [];
+        bits.push('tipo: `' + (st.type && COPILOT_PREVIEW_ALLOWED_TYPES[st.type] ? st.type : r.type) + '`');
+        if (st.description) bits.push('descrição: «' + String(st.description).trim().slice(0, 280) + '»');
+        bits.push('obrigatório: ' + (st.required ? 'sim' : 'não'));
+        if (st.aiNote) bits.push('instruções: «' + String(st.aiNote).trim().slice(0, 600) + '»');
+        lines.push('- **' + (r.label || r.id) + '** (`' + r.id + '`): ' + bits.join('; ') + '.');
+    });
+    var gn = String(generalNote || '').trim();
+    var merged = brsparkCopilotMergePreviewIntoSchemaData(proposedSchema, rowMap);
+    var jsonPart = '';
+    try {
+        jsonPart = JSON.stringify(merged);
+        if (jsonPart.length > 12000) jsonPart = jsonPart.slice(0, 12000) + '\n…[truncado]';
+    } catch (eJ) {
+        jsonPart = '{}';
+    }
+    return (
+        'Ainda **não** apliquei esta proposta no canvas. Com base nas instruções abaixo e no JSON (proposta já com tipo/descrição/obrigatoriedade da revisão), **devolva** um `schemaPatch` adequado (e `settingsPatch` / `logicSuggestions` / metadados se fizer sentido). **Preserve os `id`** dos campos quando possível.\n\n' +
+        (gn ? '### Comentários gerais\n' + gn + '\n\n' : '') +
+        (lines.length ? '### Por campo (só os marcados para incluir)\n' + lines.join('\n') + '\n\n' : '') +
+        '### JSON da proposta após a revisão deste modal\n```json\n' +
+        jsonPart +
+        '\n```'
+    );
+}
+
+window.brsparkCopilotReprocessSchemaPreview = async function () {
+    var base = window.__brsparkCopilotPreviewPayload || window.__brsparkCopilotLast;
+    if (!base || !Array.isArray(base.schemaData)) {
+        alert('Sem proposta carregada para reprocessar.');
+        return;
+    }
+    var rowMap = brsparkCopilotReadPreviewRowMapFromDom();
+    var genEl = document.getElementById('copilot-schema-preview-general-note');
+    var generalNote = genEl ? String(genEl.value || '') : '';
+    var hasAny =
+        generalNote.trim() ||
+        Object.keys(rowMap).some(function (kid) {
+            var st = rowMap[kid];
+            return st && String(st.aiNote || '').trim();
+        });
+    if (!hasAny) {
+        if (
+            !confirm(
+                'Não há comentários gerais nem instruções por campo. Mesmo assim enviar a proposta atual à IA para um novo rascunho?',
+            )
+        ) {
+            return;
+        }
+    }
+    var msg = brsparkCopilotBuildReprocessInstructionMessage(rowMap, base.schemaData, generalNote);
+    window.brsparkCopilotHideSchemaPreviewModal();
+    delete window.__brsparkCopilotPreviewPayload;
+    await brsparkCopilotPostChatRound(msg);
+};
+
+window.brsparkCopilotCloseSchemaPreview = function (apply) {
+    var modal = document.getElementById('copilot-schema-preview-modal');
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    if (!apply) {
+        brsparkCopilotCancelPendingCopilotProposal();
+        var ub = document.getElementById('ai-copilot-undo-btn');
+        if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+        return;
+    }
+    var base = window.__brsparkCopilotPreviewPayload || window.__brsparkCopilotLast;
+    if (!base) return;
+    var rowMap = brsparkCopilotReadPreviewRowMapFromDom();
+    var merged = brsparkCopilotMergePreviewIntoSchemaData(base.schemaData, rowMap);
+    var data = brsparkCopilotDeepClone(base);
+    data.schemaData = merged;
+    data.schemaPatch = null;
+    data.logicSuggestions = window.__brsparkCopilotDeferredLogicSuggestions || [];
+    window.__brsparkCopilotLast = data;
+    window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
+    delete window.__brsparkCopilotPreviewPayload;
+    window.__brsparkCopilotDeferredLogicSuggestions = [];
+
+    pushCopilotUndoSnapshot();
+    window.brsparkCopilotApplyPatch({ skipUndoPush: true });
+    if (window.__brsparkCopilotLogicLast && window.__brsparkCopilotLogicLast.length) {
+        window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+    }
+    var ub = document.getElementById('ai-copilot-undo-btn');
+    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+};
+
+function brsparkCopilotCountOperationalInSchema(schema) {
+    if (!Array.isArray(schema)) return 0;
+    var n = 0;
+    for (var i = 0; i < schema.length; i++) {
+        var f = schema[i];
+        if (f && f.type && String(f.type) !== 'section_break') n += 1;
+    }
+    return n;
+}
+
+function brsparkCopilotDeriveFallbackTaskTitle(schema, ctx) {
+    var firstSec = null;
+    for (var i = 0; i < (schema || []).length; i++) {
+        var f = schema[i];
+        if (f && f.type === 'section_break' && String(f.label || '').trim()) {
+            firstSec = f;
+            break;
+        }
+    }
+    if (firstSec) return String(firstSec.label).trim().slice(0, 200);
+    if (ctx && String(ctx.objective || '').trim()) return String(ctx.objective).trim().slice(0, 200);
+    for (var j = 0; j < (schema || []).length; j++) {
+        var g = schema[j];
+        if (g && g.type && String(g.type) !== 'section_break' && String(g.label || '').trim()) {
+            return String(g.label).trim().slice(0, 200);
+        }
+    }
+    return 'Formulário';
+}
+
+function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
+    var parts = [];
+    if (ctx && ctx.objective) parts.push(String(ctx.objective));
+    (schema || []).forEach(function (f) {
+        if (!f) return;
+        if (f.label) parts.push(String(f.label));
+        if (f.description) parts.push(String(f.description));
+    });
+    var blob = parts.join(' ').toLowerCase();
+    var rules = [
+        [/cirurg|pré-?op|pré op|paciente|clínico|médico|enferm|saúde|hospital|lgpd|consentimento/, 'medkit-outline'],
+        [/vistor|inspe|auditor|nr-|nr\d|qualidade|checklist/, 'clipboard-outline'],
+        [/veícul|frota|motor|carro|transport/, 'car-outline'],
+        [/segurança|epi|incêndio|risco|nr-12/, 'shield-checkmark-outline'],
+        [/manuten|os |ordem de serviço|técnico/, 'construct-outline'],
+        [/estoque|material|almox/, 'cube-outline'],
+        [/financeiro|pagamento|receita|despesa/, 'cash-outline'],
+        [/assinatura|contrato|jurídico/, 'document-text-outline'],
+        [/foto|imagem|câmera/, 'camera-outline'],
+        [/localização|gps|mapa|rota/, 'location-outline'],
+    ];
+    for (var r = 0; r < rules.length; r++) {
+        if (rules[r][0].test(blob)) return rules[r][1];
+    }
+    var types = {};
+    (schema || []).forEach(function (f) {
+        if (f && f.type) types[String(f.type)] = true;
+    });
+    if (types.signature || types.signature_summary) return 'create-outline';
+    if (types.photo || types.photo_stamped) return 'images-outline';
+    if (types.geofence_check || types.location_pick) return 'location-outline';
+    if (types.vision_ai_analysis) return 'sparkles-outline';
+    if (types.vision_checklist) return 'videocam-outline';
+    return 'document-text-outline';
+}
+
+/** Garante título e ícone do modelo quando a IA não os enviou (ou enviou título genérico). */
+function brsparkCopilotEnsureTaskBrandingFromResponse(data) {
+    if (!data || typeof data !== 'object') return;
+    var schema = Array.isArray(data.schemaData) ? data.schemaData : null;
+    if (!schema || !schema.length) return;
+    if (brsparkCopilotCountOperationalInSchema(schema) < 1) return;
+    var ctx = collectCopilotFormContext();
+    var genericTitle = function (t) {
+        var s = String(t || '').trim().toLowerCase();
+        return !s || s === 'novo formulário' || s === 'novo checklist';
+    };
+    var tr = data.templateTitleResolved != null ? String(data.templateTitleResolved).trim() : '';
+    if (!tr || genericTitle(tr)) {
+        data.templateTitleResolved = brsparkCopilotDeriveFallbackTaskTitle(schema, ctx);
+    }
+    if (!data.templateMetadata || typeof data.templateMetadata !== 'object' || Array.isArray(data.templateMetadata)) {
+        data.templateMetadata = {};
+    } else {
+        data.templateMetadata = Object.assign({}, data.templateMetadata);
+    }
+    var ic = String(data.templateMetadata.icon || '').trim();
+    if (!ic) {
+        data.templateMetadata.icon = brsparkCopilotGuessTaskIconFromSchema(schema, ctx);
+        data.templateMetadata.iconLibrary = 'Ionicons';
+    }
+}
+
 function brsparkCopilotApplyChatResponse(data) {
     window.__brsparkCopilotClarifyOptions = Array.isArray(data.clarifyOptions) ? data.clarifyOptions : [];
     renderCopilotClarifyCards();
 
+    const hasClarify = window.__brsparkCopilotClarifyOptions.length > 0;
+    if (!hasClarify) {
+        brsparkCopilotEnsureTaskBrandingFromResponse(data);
+    }
+
     window.__brsparkCopilotMessages.push({ role: 'assistant', content: data.replyText || '(sem texto)' });
     window.__brsparkCopilotLast = data;
     renderCopilotMessages();
-
-    const hasClarify = window.__brsparkCopilotClarifyOptions.length > 0;
     const ch = document.getElementById('ai-copilot-clarify-hint');
     if (ch) ch.style.display = hasClarify ? 'block' : 'none';
+    if (hasClarify) {
+        brsparkCopilotSetSideMenuOpen(true);
+    }
 
     const hasPatch =
         !hasClarify &&
@@ -5097,7 +6039,7 @@ function brsparkCopilotApplyChatResponse(data) {
         data.schemaPatch.operations &&
         data.schemaPatch.operations.length > 0;
     let schemaChanged = false;
-    if (hasPatch && Array.isArray(data.schemaData)) {
+    if (!hasClarify && Array.isArray(data.schemaData)) {
         try {
             schemaChanged = JSON.stringify(data.schemaData) !== JSON.stringify(fields);
         } catch (e3) {
@@ -5144,18 +6086,23 @@ function brsparkCopilotApplyChatResponse(data) {
     }
     const changed = schemaChanged || settingsChanged || metadataChanged || titleChanged;
 
-    window.__brsparkCopilotLogicLast = hasClarify ? [] : data.logicSuggestions || [];
-    const hasLog = !hasClarify && window.__brsparkCopilotLogicLast.length > 0;
+    var useSchemaPreview =
+        !hasClarify && schemaChanged && brsparkCopilotNeedsSchemaPreviewTable(data);
+    if (hasClarify) {
+        window.__brsparkCopilotLogicLast = [];
+    } else if (useSchemaPreview) {
+        window.__brsparkCopilotLogicLast = [];
+    } else {
+        window.__brsparkCopilotLogicLast = Array.isArray(data.logicSuggestions) ? data.logicSuggestions : [];
+    }
+    const hasLog = !hasClarify && !useSchemaPreview && window.__brsparkCopilotLogicLast.length > 0;
 
-    if (!hasClarify && (changed || hasLog)) {
+    if (!hasClarify && useSchemaPreview) {
+        brsparkCopilotOpenSchemaPreviewModal(data);
+    } else if (!hasClarify && (changed || hasLog)) {
         pushCopilotUndoSnapshot();
         if (changed) window.brsparkCopilotApplyPatch({ skipUndoPush: true });
         if (hasLog) window.brsparkCopilotApplyLogic({ skipUndoPush: true });
-        if (titleChanged && data.templateTitleResolved) {
-            currentFormTitle = String(data.templateTitleResolved).trim();
-            const ttEl = document.getElementById('tpl-title');
-            if (ttEl) ttEl.value = currentFormTitle;
-        }
     }
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
@@ -5202,11 +6149,25 @@ function brsparkCopilotApplyChatResponse(data) {
                 parts.push('Biblioteca: não foi possível carregar modelos de referência (erro no servidor).');
             }
         }
+        if (data.documentationFetch) {
+            const d = data.documentationFetch;
+            if (d.attempted && d.ok && typeof d.chars === 'number' && d.chars > 0) {
+                parts.push(
+                    'Documentação: conteúdo carregado da URL indicada (aprox. ' + d.chars + ' caracteres).'
+                );
+            } else if (d.attempted && !d.ok && d.error) {
+                parts.push('Documentação: não foi possível carregar a URL — ' + d.error);
+            }
+        }
         foot.textContent = parts.join(' ');
     }
 }
 
-async function brsparkCopilotPostChatRound(userText) {
+/**
+ * @param {string} userText
+ * @param {{ hideUserBubble?: boolean }} [opts] — se hideUserBubble, a mensagem entra no histórico enviado à API mas não aparece como bolha «Você».
+ */
+async function brsparkCopilotPostChatRound(userText, opts) {
     const token = brsparkAdminBearerToken();
     if (!token) {
         alert('Inicie sessão no painel admin (token em falta).');
@@ -5215,7 +6176,9 @@ async function brsparkCopilotPostChatRound(userText) {
     const trimmed = String(userText || '').trim();
     if (!trimmed) return;
     window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
-    window.__brsparkCopilotMessages.push({ role: 'user', content: trimmed });
+    var userEntry = { role: 'user', content: trimmed };
+    if (opts && opts.hideUserBubble) userEntry.hiddenFromUi = true;
+    window.__brsparkCopilotMessages.push(userEntry);
     window.__brsparkCopilotClarifyOptions = [];
     renderCopilotClarifyCards();
     const ch = document.getElementById('ai-copilot-clarify-hint');
@@ -5245,6 +6208,10 @@ async function brsparkCopilotPostChatRound(userText) {
                 : String(currentFormFolderId),
     };
     if (tid) chatPayload.templateId = tid;
+
+    const docUrlEl = document.getElementById('copilot-ctx-doc-url');
+    const documentationUrl = docUrlEl ? String(docUrlEl.value || '').trim() : '';
+    if (documentationUrl) chatPayload.documentationUrl = documentationUrl.slice(0, 2048);
 
     beginCopilotThinking('A IA está pensando…');
     try {
@@ -5380,7 +6347,7 @@ window.brsparkCopilotSend = async function () {
                 'Com base na planilha em contexto e no formulário atual no canvas, sugira próximos passos e melhorias úteis.';
         } else {
             alert(
-                'Escreva uma mensagem ou carregue um arquivo (Excel, Word, PDF ou imagem) no Copiloto para obter sugestões automáticas.',
+                'Escreva uma mensagem ou carregue arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Copiloto para obter sugestões automáticas.',
             );
             return;
         }
@@ -5404,76 +6371,147 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
         if (inputEl) inputEl.value = '';
         return;
     }
-    const file = inputEl && inputEl.files && inputEl.files[0];
-    if (!file) return;
-    const name = String(file.name || '').toLowerCase();
-    const okExt =
-        name.endsWith('.xlsx') ||
-        name.endsWith('.xlsm') ||
-        name.endsWith('.docx') ||
-        name.endsWith('.pdf') ||
-        name.endsWith('.png') ||
-        name.endsWith('.jpg') ||
-        name.endsWith('.jpeg') ||
-        name.endsWith('.webp');
-    if (!okExt) {
-        alert('Use um arquivo .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg ou .webp.');
-        inputEl.value = '';
-        return;
+    const rawList = inputEl && inputEl.files ? Array.prototype.slice.call(inputEl.files, 0) : [];
+    if (!rawList.length) return;
+
+    var bad = [];
+    var files = [];
+    for (var bi = 0; bi < rawList.length; bi++) {
+        var f = rawList[bi];
+        var nm = String(f && f.name ? f.name : '').toLowerCase();
+        if (!brsparkCopilotReferenceFileNameOk(nm)) bad.push(f && f.name ? f.name : '(sem nome)');
+        else files.push(f);
+    }
+    if (bad.length) {
+        alert(
+            'Extensão não suportada em: ' +
+                bad.join(', ') +
+                '. Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp ou .json.',
+        );
+        if (!files.length) {
+            inputEl.value = '';
+            return;
+        }
+    }
+    if (files.length > BRSPARK_COPILOT_REF_MAX_FILES) {
+        alert('No máximo ' + BRSPARK_COPILOT_REF_MAX_FILES + ' arquivos por vez. Serão analisados só os primeiros ' + BRSPARK_COPILOT_REF_MAX_FILES + '.');
+        files = files.slice(0, BRSPARK_COPILOT_REF_MAX_FILES);
     }
 
     copilotSetContextDetailsOpen(true);
 
     const statusEl = document.getElementById('copilot-excel-status');
-    beginCopilotThinking('Lendo e analisando o arquivo com IA…');
+    beginCopilotThinking(
+        files.length > 1
+            ? 'Lendo e analisando ' + files.length + ' arquivos com IA…'
+            : 'Lendo e analisando o arquivo com IA…',
+    );
     window.__brsparkCopilotExcelBusy = true;
     updateCopilotExcelUi();
-    if (statusEl) statusEl.textContent = 'Lendo e analisando o arquivo com IA…';
+    if (statusEl) {
+        statusEl.textContent =
+            files.length > 1
+                ? 'Analisando ' + files.length + ' arquivos com IA…'
+                : 'Lendo e analisando o arquivo com IA…';
+    }
 
     const hintEl = document.getElementById('copilot-excel-hint');
     const hint = hintEl ? String(hintEl.value || '').trim() : '';
     const opts = Object.assign({}, collectCopilotFormContext(), { hint: hint });
 
-    try {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('options', JSON.stringify(opts));
-        const res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + token },
-            body: fd,
-        });
-        let data = {};
-        try {
-            data = await res.json();
-        } catch (e2) {
-            data = {};
-        }
-        if (!res.ok) {
-            throw new Error(data.error || res.statusText || 'Falha ao analisar o arquivo');
-        }
-        const blocks = Array.isArray(data.blocks) ? data.blocks : [];
-        if (!blocks.length) {
-            throw new Error('A análise não devolveu etapas ou campos. Tente outro arquivo ou ajuste as dicas.');
-        }
-        window.__brsparkCopilotSpreadsheetSummary = buildCopilotSpreadsheetSummaryFromAnalyze(
-            data,
-            file.name || 'arquivo',
-        );
-        window.__brsparkCopilotSpreadsheetFileName = file.name || '';
-        if (statusEl) {
-            statusEl.textContent =
-                'Arquivo «' +
-                (file.name || '') +
-                '» carregado (' +
-                blocks.length +
-                ' blocos). Iniciando a conversa…';
-        }
-        updateCopilotExcelUi();
+    window.__brsparkCopilotReferenceSummaries = window.__brsparkCopilotReferenceSummaries || [];
+    const newPieces = [];
+    const errors = [];
 
-        await brsparkCopilotPostChatRound(
-            'Acabei de enviar um arquivo para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.',
-        );
+    try {
+        for (var i = 0; i < files.length; i++) {
+            const file = files[i];
+            const label = file && file.name ? file.name : 'arquivo';
+            try {
+                copilotSetThinkingMessage(
+                    files.length > 1
+                        ? 'Analisando com IA — arquivo ' + (i + 1) + ' de ' + files.length + '…'
+                        : 'Lendo e analisando o arquivo com IA…',
+                );
+                if (statusEl) {
+                    statusEl.textContent =
+                        files.length > 1
+                            ? 'Analisando «' + label + '» (' + (i + 1) + '/' + files.length + ')…'
+                            : 'Lendo e analisando «' + label + '»…';
+                }
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('options', JSON.stringify(opts));
+                const res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
+                    method: 'POST',
+                    headers: { Authorization: 'Bearer ' + token },
+                    body: fd,
+                });
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (e2) {
+                    data = {};
+                }
+                if (!res.ok) {
+                    throw new Error(data.error || res.statusText || 'Falha ao analisar o arquivo');
+                }
+                const blocks = Array.isArray(data.blocks) ? data.blocks : [];
+                if (!blocks.length) {
+                    throw new Error('A análise não devolveu etapas ou campos. Tente outro arquivo ou ajuste as dicas.');
+                }
+                const summary = buildCopilotSpreadsheetSummaryFromAnalyze(data, label);
+                newPieces.push({ fileName: label, summary: summary });
+            } catch (eOne) {
+                console.error(eOne);
+                errors.push('«' + label + '»: ' + (eOne.message || eOne));
+            }
+        }
+
+        if (newPieces.length) {
+            for (var j = 0; j < newPieces.length; j++) {
+                window.__brsparkCopilotReferenceSummaries.push(newPieces[j]);
+            }
+            rebuildCopilotSpreadsheetSummaryFromRefs();
+            if (statusEl) {
+                var names = newPieces
+                    .map(function (p) {
+                        return p.fileName;
+                    })
+                    .join(', ');
+                statusEl.textContent =
+                    newPieces.length === files.length
+                        ? newPieces.length +
+                          ' arquivo(s) carregado(s) («' +
+                          names +
+                          '»). Iniciando a conversa…'
+                        : newPieces.length +
+                          ' de ' +
+                          files.length +
+                          ' arquivo(s) OK («' +
+                          names +
+                          '»). Iniciando a conversa…';
+                if (errors.length) {
+                    statusEl.textContent += ' Aviso: ' + errors.join(' ');
+                }
+            }
+            updateCopilotExcelUi();
+            var nOk = newPieces.length;
+            var msgRound =
+                nOk === 1
+                    ? 'Acabei de enviar um arquivo para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.'
+                    : 'Acabei de enviar ' +
+                      nOk +
+                      ' arquivos de referência para análise (os resumos estão no contexto do sistema). Apresente um resumo curto de cada origem em tópicos, indique convergências ou conflitos entre eles, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.';
+            await brsparkCopilotPostChatRound(msgRound);
+        } else {
+            if (statusEl) statusEl.textContent = errors.length ? 'Erro: ' + errors.join(' | ') : 'Nenhum arquivo analisado.';
+            alert(
+                errors.length
+                    ? 'Nenhum arquivo foi analisado com sucesso.\n\n' + errors.join('\n')
+                    : 'Nenhum arquivo foi analisado.',
+            );
+        }
     } catch (e) {
         console.error(e);
         if (statusEl) statusEl.textContent = 'Erro: ' + (e.message || e);
@@ -5482,7 +6520,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
         window.__brsparkCopilotExcelBusy = false;
         endCopilotThinking();
         updateCopilotExcelUi();
-        inputEl.value = '';
+        if (inputEl) inputEl.value = '';
     }
 };
 
@@ -5494,7 +6532,12 @@ window.brsparkCopilotApplyPatch = function (opts) {
     const hasSettings = data.templateSettings && typeof data.templateSettings === 'object';
     const hasMeta =
         data.templateMetadata && typeof data.templateMetadata === 'object' && !Array.isArray(data.templateMetadata);
-    if (!hasSchema && !hasSettings && !hasMeta) return;
+    const hasTaskTitle = data.templateTitleResolved != null && String(data.templateTitleResolved).trim() !== '';
+    const hasTaskIcon =
+        hasMeta &&
+        Object.prototype.hasOwnProperty.call(data.templateMetadata, 'icon') &&
+        String(data.templateMetadata.icon || '').trim() !== '';
+    if (!hasSchema && !hasSettings && !hasMeta && !hasTaskTitle && !hasTaskIcon) return;
     if (!opts.skipUndoPush) pushCopilotUndoSnapshot();
     if (hasSchema) {
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(data.schemaData)));
@@ -5513,6 +6556,14 @@ window.brsparkCopilotApplyPatch = function (opts) {
                 ? String(data.templateMetadata.iconLibrary).trim() || 'Ionicons'
                 : 'Ionicons';
         syncBuilderTaskIconDom();
+    }
+    if (hasTaskTitle) {
+        var nt = String(data.templateTitleResolved).trim();
+        if (nt !== String(currentFormTitle || '').trim()) {
+            currentFormTitle = nt;
+            var ttEl = document.getElementById('tpl-title');
+            if (ttEl) ttEl.value = currentFormTitle;
+        }
     }
     renderCanvas();
     renderProperties();
@@ -5567,11 +6618,19 @@ window.brsparkCopilotSuggestLogic = async function () {
                 Authorization: 'Bearer ' + token,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                schemaData: fields,
-                userGoal: goal,
-                formContext: collectCopilotFormContext(),
-            }),
+            body: JSON.stringify(
+                (function () {
+                    const payload = {
+                        schemaData: fields,
+                        userGoal: goal,
+                        formContext: collectCopilotFormContext(),
+                    };
+                    const docUrlEl = document.getElementById('copilot-ctx-doc-url');
+                    const documentationUrl = docUrlEl ? String(docUrlEl.value || '').trim() : '';
+                    if (documentationUrl) payload.documentationUrl = documentationUrl.slice(0, 2048);
+                    return payload;
+                })()
+            ),
         });
         let data = {};
         try {
@@ -5582,11 +6641,14 @@ window.brsparkCopilotSuggestLogic = async function () {
         if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
 
         window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
-        const chunk =
+        let chunk =
             (data.replyText ? data.replyText + '\n\n' : '') +
             (data.logicSuggestions && data.logicSuggestions.length
                 ? 'Sugestões: ' + data.logicSuggestions.length + ' regra(s) mapeada(s) para os campos.'
                 : 'Sem regras mapeáveis — verifique os rótulos.');
+        if (Array.isArray(data.warnings) && data.warnings.length) {
+            chunk += '\n\n' + data.warnings.join(' ');
+        }
         window.__brsparkCopilotMessages.push({ role: 'assistant', content: chunk.trim() });
         renderCopilotMessages();
 
@@ -5598,6 +6660,20 @@ window.brsparkCopilotSuggestLogic = async function () {
         }
         const ub = document.getElementById('ai-copilot-undo-btn');
         if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+
+        const footSug = document.getElementById('copilot-rag-footnote');
+        if (footSug && data.documentationFetch) {
+            const d = data.documentationFetch;
+            const bits = [];
+            if (d.attempted && d.ok && typeof d.chars === 'number' && d.chars > 0) {
+                bits.push(
+                    'Documentação: conteúdo carregado da URL indicada (aprox. ' + d.chars + ' caracteres).'
+                );
+            } else if (d.attempted && !d.ok && d.error) {
+                bits.push('Documentação: não foi possível carregar a URL — ' + d.error);
+            }
+            if (bits.length) footSug.textContent = bits.join(' ');
+        }
     } catch (e) {
         console.error(e);
         alert(e.message || String(e));
@@ -5617,11 +6693,26 @@ window.brsparkCopilotApplyLogic = function (opts) {
         });
         if (!mon) return;
         if (!mon.rules) mon.rules = [];
+        const actionType = String(s.actionType || 'SHOW').toUpperCase();
+        let action;
+        if (actionType === 'API_FETCH') {
+            action = {
+                type: 'API_FETCH',
+                targetId: s.targetFieldId || '',
+                apiUrl: s.apiUrl != null ? String(s.apiUrl) : '',
+                apiMethod: String(s.apiMethod || 'POST').toUpperCase() === 'GET' ? 'GET' : 'POST',
+                apiResponsePath: s.apiResponsePath != null ? String(s.apiResponsePath) : '',
+                apiErrorMsg: s.apiErrorMsg != null ? String(s.apiErrorMsg) : '',
+                apiAllowOffline: !!(s.apiAllowOffline === true || String(s.apiAllowOffline).toLowerCase() === 'true'),
+            };
+        } else {
+            action = { type: s.actionType || 'SHOW', targetId: s.targetFieldId, value: '' };
+        }
         mon.rules.push({
             condFieldId: s.monitorFieldId,
             operator: s.operator || '==',
             value: s.value != null ? String(s.value) : '',
-            actions: [{ type: s.actionType || 'SHOW', targetId: s.targetFieldId, value: '' }],
+            actions: [action],
         });
     });
     window.__brsparkCopilotLogicLast = [];

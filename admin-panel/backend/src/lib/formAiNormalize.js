@@ -83,6 +83,14 @@ function defaultFieldShell(type, label) {
     allowTechnicianComment: false,
     allowMediaDescription: false,
     ...(t === 'section_break' ? { sectionFillMode: 'list' } : {}),
+    ...(t === 'vision_checklist' || t === 'vision_ai_analysis'
+      ? {
+          visionQuestions: [
+            { id: 'q1', text: 'A evidência visual confirma o item verificado?' },
+          ],
+          visionCaptureMode: 'photo_and_video',
+        }
+      : {}),
   };
 }
 
@@ -133,6 +141,33 @@ function normalizeSchemaItem(raw, usedIds) {
     base.summarySourceFieldIds = Array.isArray(raw.summarySourceFieldIds)
       ? raw.summarySourceFieldIds.map((x) => String(x || '').trim()).filter(Boolean)
       : [];
+  }
+  if (type === 'vision_checklist' || type === 'vision_ai_analysis') {
+    const rawVq = raw.visionQuestions ?? raw.vision_questions;
+    if (Array.isArray(rawVq) && rawVq.length) {
+      base.visionQuestions = rawVq
+        .map((x, i) => {
+          if (!x || typeof x !== 'object') return null;
+          const id = String(x.id || `q_${i + 1}`)
+            .replace(/[^\w-]/g, '_')
+            .slice(0, 64);
+          const text = String(x.text || x.question || '').trim().slice(0, 500);
+          if (!text) return null;
+          return { id, text };
+        })
+        .filter(Boolean)
+        .slice(0, 24);
+    }
+    if (!base.visionQuestions || !base.visionQuestions.length) {
+      base.visionQuestions = [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }];
+    }
+    const vcm = raw.visionCaptureMode ?? raw.vision_capture_mode;
+    if (typeof vcm === 'string') {
+      const m = vcm.trim();
+      if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') {
+        base.visionCaptureMode = m;
+      }
+    }
   }
   return base;
 }

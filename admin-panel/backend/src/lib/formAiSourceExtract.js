@@ -4,6 +4,7 @@ const mammoth = require('mammoth');
 const { extractWorkbookForAi, MAX_CANONICAL_CHARS } = require('./formAiExtract');
 const { extractPdfForAi, extractImageOcrForAi } = require('./formAiPdfImageExtract');
 const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
+const { tryExternalFormJsonToMarkdown } = require('./formAiExternalFormJson');
 
 /**
  * @param {Buffer} buffer
@@ -144,8 +145,19 @@ async function extractSourceForFormAi(buffer, ext, _originalName) {
         format: 'json',
       };
     }
+    const extForm = tryExternalFormJsonToMarkdown(buffer);
+    if (extForm && String(extForm.markdown || '').trim().length >= 3) {
+      return {
+        kind: 'document',
+        markdown: extForm.markdown,
+        truncated: !!extForm.truncated,
+        format: extForm.format || 'json_external_form',
+        columnSignals: Array.isArray(extForm.columnSignals) ? extForm.columnSignals : [],
+        extraWarnings: Array.isArray(extForm.warnings) ? extForm.warnings : [],
+      };
+    }
     const snap = extractJsonDocumentForAi(buffer);
-    return { ...snap, kind: 'document' };
+    return { ...snap, kind: 'document', extraWarnings: [] };
   }
 
   throw new Error(

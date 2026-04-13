@@ -6,6 +6,7 @@ const { buildFilledFormsRagContext } = require('./formAiExecutionRag');
 const { buildTemplateLibraryRagContext, buildCopilotRetrievalQuery } = require('./formAiTemplateLibraryRag');
 const { runFormCopilot } = require('./formAiCopilot');
 const { normalizeTemplateTitle } = require('./templateTitleUnique');
+const { fetchDocumentationForCopilot } = require('./formAiDocumentationFetch');
 
 /**
  * Executa uma rodada completa do Copiloto (RAG execução + RAG biblioteca + LLM).
@@ -131,6 +132,35 @@ async function executeCopilotChatSession(input) {
         ? null
         : String(body.templateFolderId);
 
+  let documentationFetchedText = '';
+  let documentationFetchWarning = '';
+  /** @type {{ attempted: boolean, ok: boolean, chars: number, error: string | null, url: string | null, finalUrl?: string }} */
+  const documentationFetch = {
+    attempted: false,
+    ok: false,
+    chars: 0,
+    error: null,
+    url: null,
+  };
+  const docUrl =
+    typeof body.documentationUrl === 'string' ? String(body.documentationUrl).trim().slice(0, 2048) : '';
+  if (docUrl) {
+    documentationFetch.attempted = true;
+    documentationFetch.url = docUrl;
+    prog('docs', 'A carregar documentação da URL…');
+    const r = await fetchDocumentationForCopilot(docUrl);
+    if (r.ok && r.text) {
+      documentationFetchedText = r.text;
+      documentationFetch.ok = true;
+      documentationFetch.chars = r.text.length;
+      documentationFetch.finalUrl = r.finalUrl || docUrl;
+    } else {
+      documentationFetch.ok = false;
+      documentationFetch.error = r.error || 'Falha desconhecida.';
+      documentationFetchWarning = `Documentação: não foi possível carregar a URL — ${documentationFetch.error}`;
+    }
+  }
+
   prog('llm', 'Gerando resposta com a IA…');
   const out = await runFormCopilot({
     messages,
@@ -145,10 +175,12 @@ async function executeCopilotChatSession(input) {
     templateFolderId,
     templateId: templateId || null,
     templateSiblingTitles,
+    documentationFetchedText: documentationFetchedText || undefined,
+    documentationFetchWarning: documentationFetchWarning || undefined,
   });
   prog('done', 'Resposta pronta.');
 
-  return { out, ragMeta, ragLibraryMeta };
+  return { out, ragMeta, ragLibraryMeta, documentationFetch };
 }
 
 module.exports = {

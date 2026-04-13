@@ -62,22 +62,23 @@
           </div>
         </div>
 
-        <!-- Google AI (Gemini) -->
+        <!-- Google AI Studio (Gemini API) -->
         <div class="int-card" id="card-googleai">
           <div class="int-card-header">
-            <div class="int-logo" style="background:#4285F4;color:#fff">G</div>
-            <div><div class="int-name">Google AI (Gemini)</div><div class="int-cat">AI / LLM</div></div>
+            <div class="int-logo" style="background:linear-gradient(135deg,#4285F4 0%,#8AB4F8 100%);color:#fff"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Google AI Studio</div><div class="int-cat">AI / LLM · Gemini</div></div>
             <span class="int-status inactive" id="status-googleai" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc">Gemini Pro, Gemini Flash — multimodal, longa janela de contexto.</div>
+          <div class="int-desc">Chave de API criada em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> (API <strong>Gemini</strong>). URL base padrão: Google Generative Language (<code>v1beta</code>). Modelo padrão opcional (ex.: <code>gemini-2.0-flash</code>) para uso futuro no BrSpark.</div>
           <div class="int-fields" id="fields-googleai">
-            <input class="form-control" id="key-googleai" type="password" placeholder="API Key Google AI Studio" />
-            <input class="form-control" id="model-googleai" placeholder="Modelo (ex: gemini-1.5-flash)" />
+            <input class="form-control" id="key-googleai" type="password" placeholder="API key (Google AI Studio)" autocomplete="off" />
+            <input class="form-control" id="url-googleai" placeholder="URL base da API (padrão: https://generativelanguage.googleapis.com/v1beta)" value="https://generativelanguage.googleapis.com/v1beta" />
+            <input class="form-control" id="model-googleai" placeholder="Modelo padrão opcional (ex: gemini-2.0-flash)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('googleai','AI_LLM','Google AI (Gemini)',['key-googleai','model-googleai'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-primary btn-sm" onclick="void window.saveGoogleAiStudio()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
             <button class="btn btn-success btn-sm" id="test-googleai" style="display:none" onclick="testInt('googleai')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-googleai" style="display:none" onclick="deleteIntByName('Google AI (Gemini)')">Remover</button>
+            <button class="btn btn-danger btn-sm" id="del-googleai" style="display:none" onclick="void window.deleteGoogleAiStudioInt()">Remover</button>
           </div>
         </div>
 
@@ -372,6 +373,26 @@
           </div>
         </div>
 
+        <!-- Visão IA - YOLO — proxy no BrSpark para serviço externo (YOLO / visão) -->
+        <div class="int-card" id="card-vision-checklist">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0f172a;color:#38bdf8"><ion-icon name="videocam-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Visão IA - YOLO</div><div class="int-cat">Visão IA</div></div>
+            <span class="int-status inactive" id="status-vision-checklist" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc"><strong>Só o servidor BrSpark (Node)</strong> chama este URL — o <strong>app do técnico nunca abre</strong> este endereço diretamente; o telemóvel fala sempre com a <strong>API BrSpark</strong> (<code>/api/checklists/vision/analyze</code>), e o Node reencaminha o multipart para o YOLO. Pode ser URL <strong>público</strong> (ex.: <code>http://vpn.lansolver.com:8001/analyze</code>) ou na LAN. O serviço deve aceitar <strong>POST multipart</strong> com <code>media</code>, <code>questions</code> (JSON) e <code>schemaVersion</code>. Se o teste devolver <strong>405</strong> com página <strong>nginx</strong>, o path não aceita POST ou falta <code>proxy_pass</code> para a API.</div>
+          <div class="int-fields" id="fields-vision-checklist">
+            <input class="form-control" id="url-vision-checklist" placeholder="POST completo do YOLO (ex.: https://… ou http://vpn…:8001/analyze)" />
+            <input class="form-control" id="key-vision-checklist" type="password" placeholder="Bearer token (opcional)" />
+            <input class="form-control" id="timeout-vision-checklist" placeholder="Timeout ms (opcional, padrão 120000)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveVisionChecklistInt()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-vision-checklist" style="display:none" onclick="testInt('vision-checklist')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-vision-checklist" style="display:none" onclick="deleteVisionChecklistInt()">Remover</button>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -393,7 +414,7 @@
   // Mapa: name → id do card e slug
   const CARD_MAP = {
     'OpenAI':              { slug:'openai' },
-    'Google AI (Gemini)':  { slug:'googleai' },
+    'Google AI Studio':    { slug:'googleai' },
     'DeepSeek':            { slug:'deepseek' },
     'Gmail':               { slug:'gmail' },
     'Office 365':          { slug:'office365' },
@@ -407,10 +428,22 @@
     'OSRM':                { slug:'osrm' },
     'AWS Rekognition':     { slug:'aws-rekog' },
     'Exadel CompreFace':   { slug:'compreface' },
+    'Visão IA - YOLO': { slug:'vision-checklist' },
   };
 
+  const VISION_CHECKLIST_INT_NAME = 'Visão IA - YOLO';
+  const VISION_CHECKLIST_INT_LEGACY = 'Visão IA (checklists)';
+  function activeVisionChecklistInt() {
+    return activeInts[VISION_CHECKLIST_INT_NAME] || activeInts[VISION_CHECKLIST_INT_LEGACY];
+  }
+
+  /** Integração Gemini via Google AI Studio (nome novo) ou legado «Google AI (Gemini)». */
+  function activeGoogleAiStudioInt() {
+    return activeInts['Google AI Studio'] || activeInts['Google AI (Gemini)'];
+  }
+
   // type → typeLabel legível para exibição
-  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push', MAPS:'Mapas' };
+  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push', MAPS:'Mapas', VISION:'Visão IA' };
 
   let activeInts = {};   // name → integration object
 
@@ -461,7 +494,9 @@
   // Testa a integração chamando o backend
   window.testInt = async (slug) => {
     const name = Object.keys(CARD_MAP).find(k => CARD_MAP[k].slug === slug);
-    const intObj = activeInts[name];
+    let intObj = activeInts[name];
+    if (slug === 'vision-checklist') intObj = activeVisionChecklistInt();
+    if (slug === 'googleai') intObj = activeGoogleAiStudioInt();
     if (!intObj?.id) return showToast('Salve a integração antes de testar.', false);
 
     const btn = document.getElementById(`test-${slug}`);
@@ -469,18 +504,26 @@
 
     try {
       const res = await CONFIG.post(`/integrations/${intObj.id}/test`, {});
-      const ok = res?.ok ?? false;
-      showToast(res?.message || (ok ? 'Conectado com sucesso!' : 'Falha na conexão'), ok);
+      const ok = !!(res && res.ok === true);
+      showToast(
+        res?.message || res?.error || (ok ? 'Conectado com sucesso!' : 'Falha na conexão'),
+        ok,
+      );
 
-      // Atualiza status visual baseado na resposta
+      // Atualiza status visual baseado na resposta (usa intObj.name para cartões com alias legado)
       if (res?.status) {
-        activeInts[name] = { ...intObj, status: res.status };
-        setConnected(slug, true, activeInts[name]);
+        const updated = { ...intObj, status: res.status };
+        activeInts[intObj.name] = updated;
+        setConnected(slug, true, updated);
       }
     } catch (e) {
       showToast('Erro ao testar: ' + e.message, false);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '<ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar'; }
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML =
+          '<ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar';
+      }
     }
   };
 
@@ -523,14 +566,88 @@
       prefixCf.value = m ? m[1].replace(/\/+$/g, '') : '';
     }
 
+    const urlVc = document.getElementById('url-vision-checklist');
+    const keyVc = document.getElementById('key-vision-checklist');
+    const toVc = document.getElementById('timeout-vision-checklist');
+    const vc = activeVisionChecklistInt();
+    if (urlVc) urlVc.value = vc?.baseUrl || '';
+    if (keyVc) keyVc.value = '';
+    if (toVc) {
+      const m = vc?.metadata && typeof vc.metadata === 'object' ? vc.metadata : {};
+      toVc.value = m.timeoutMs != null && String(m.timeoutMs).trim() !== '' ? String(m.timeoutMs) : '';
+    }
+
+    const urlGa = document.getElementById('url-googleai');
+    const modelGa = document.getElementById('model-googleai');
+    const keyGa = document.getElementById('key-googleai');
+    const ga = activeGoogleAiStudioInt();
+    if (keyGa) keyGa.value = '';
+    if (urlGa || modelGa) {
+      const defUrl = 'https://generativelanguage.googleapis.com/v1beta';
+      const b = ga?.baseUrl != null ? String(ga.baseUrl).trim() : '';
+      const meta = ga?.metadata && typeof ga.metadata === 'object' ? ga.metadata : {};
+      let showUrl = defUrl;
+      let showModel = meta.defaultModel != null ? String(meta.defaultModel).trim() : '';
+      if (b && /^https?:\/\//i.test(b)) {
+        showUrl = b;
+      } else if (b && !/^https?:\/\//i.test(b)) {
+        showModel = showModel || b;
+      }
+      if (urlGa) urlGa.value = showUrl;
+      if (modelGa) modelGa.value = showModel;
+    }
+
     let count = 0;
     Object.entries(CARD_MAP).forEach(([name, { slug }]) => {
-      const connected = !!activeInts[name];
+      const intForCard =
+        slug === 'vision-checklist'
+          ? activeVisionChecklistInt()
+          : slug === 'googleai'
+            ? activeGoogleAiStudioInt()
+            : activeInts[name];
+      const connected = !!intForCard;
       if (connected) count++;
-      setConnected(slug, connected, activeInts[name]);
+      setConnected(slug, connected, intForCard);
     });
     document.getElementById('active-count').textContent = `${count} ativas`;
   }
+
+  window.saveGoogleAiStudio = async () => {
+    const key = document.getElementById('key-googleai')?.value.trim() || '';
+    let base = document.getElementById('url-googleai')?.value.trim() || '';
+    const model = document.getElementById('model-googleai')?.value.trim() || '';
+    if (!key) return alert('Informe a API key do Google AI Studio.');
+    if (!base) base = 'https://generativelanguage.googleapis.com/v1beta';
+    const meta = {};
+    if (model) meta.defaultModel = model.slice(0, 120);
+    const studio = activeInts['Google AI Studio'];
+    const legacy = activeInts['Google AI (Gemini)'];
+    if (studio?.id) await CONFIG.del(`/integrations/${studio.id}`);
+    if (legacy?.id) await CONFIG.del(`/integrations/${legacy.id}`);
+    const body = {
+      type: 'AI_LLM',
+      name: 'Google AI Studio',
+      status: 'ACTIVE',
+      apiKey: key,
+      baseUrl: base,
+      metadata: Object.keys(meta).length ? meta : null,
+      description: 'Chave em https://aistudio.google.com/apikey — API Gemini (Generative Language).',
+    };
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast('Integração Google AI Studio salva!');
+    } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+  };
+
+  window.deleteGoogleAiStudioInt = async () => {
+    const intObj = activeGoogleAiStudioInt();
+    if (!intObj) return;
+    const label = intObj.name || 'Google AI Studio';
+    if (!confirm(`Remover integração "${label}"?`)) return;
+    await CONFIG.del(`/integrations/${intObj.id}`);
+    loadIntegrations();
+  };
 
   // Salva integração genérica
   window.saveInt = async (slug, type, name, fieldIds, bodyKeys) => {
@@ -649,6 +766,14 @@
     loadIntegrations();
   };
 
+  window.deleteVisionChecklistInt = async () => {
+    const intObj = activeVisionChecklistInt();
+    if (!intObj) return;
+    if (!confirm(`Remover integração "${VISION_CHECKLIST_INT_NAME}"?`)) return;
+    await CONFIG.del(`/integrations/${intObj.id}`);
+    loadIntegrations();
+  };
+
   window.saveVisionInt = async (name, slug) => {
     const body = { type: 'AI_LLM', name, status: 'ACTIVE' }; // Reusing AI_LLM to avoid schema resets
     if (slug === 'aws-rekog') {
@@ -694,6 +819,48 @@
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) { loadIntegrations(); showToast('Integração de Biometria salva!'); }
     else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+  };
+
+  /** Visão IA - YOLO — tipo VISION; URL = POST multipart completo no serviço externo. */
+  window.saveVisionChecklistInt = async () => {
+    const url = document.getElementById('url-vision-checklist').value.trim();
+    const key = document.getElementById('key-vision-checklist').value.trim();
+    const timeoutRaw = document.getElementById('timeout-vision-checklist').value.trim();
+    if (!url) return alert('Informe o URL completo do POST no serviço externo.');
+    const metadata = {};
+    if (timeoutRaw) {
+      const n = parseInt(timeoutRaw, 10);
+      if (!Number.isFinite(n) || n < 10000) return alert('Timeout inválido: use um valor ≥ 10000 ms (10 s).');
+      metadata.timeoutMs = Math.min(300000, n);
+    }
+    const existing = activeVisionChecklistInt();
+    if (existing) {
+      const patch = { baseUrl: url, status: 'ACTIVE' };
+      if (key) patch.apiKey = key;
+      patch.metadata = Object.keys(metadata).length ? metadata : existing.metadata ?? null;
+      if (existing.name === VISION_CHECKLIST_INT_LEGACY) {
+        patch.name = VISION_CHECKLIST_INT_NAME;
+      }
+      const res = await CONFIG.patch(`/integrations/${existing.id}`, patch);
+      if (res?.id || res?.name) {
+        loadIntegrations();
+        showToast('Integração "Visão IA - YOLO" atualizada!');
+      } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+      return;
+    }
+    const body = {
+      type: 'VISION',
+      name: VISION_CHECKLIST_INT_NAME,
+      status: 'ACTIVE',
+      baseUrl: url,
+      ...(key ? { apiKey: key } : {}),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    };
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast('Integração "Visão IA - YOLO" salva!');
+    } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
   };
 
   loadIntegrations();

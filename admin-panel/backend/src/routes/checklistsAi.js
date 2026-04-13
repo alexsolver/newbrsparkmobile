@@ -15,6 +15,7 @@ const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('..
 const { suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
 const { executeCopilotChatSession } = require('../lib/formAiCopilotSession');
+const { fetchDocumentationForCopilot } = require('../lib/formAiDocumentationFetch');
 
 const router = express.Router();
 
@@ -132,13 +133,14 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
       return res.status(502).json({ error: 'Falha ao analisar com IA: ' + e.message });
     }
 
+    const snapExtra = Array.isArray(snapshot.extraWarnings) ? snapshot.extraWarnings : [];
     const truncWarn = snapshot.truncated ? ['Conteúdo truncado por limite de tamanho.'] : [];
     res.json({
       ok: true,
       title: analyzed.title,
       description: analyzed.description,
       blocks: analyzed.blocks,
-      warnings: [...(analyzed.warnings || []), ...truncWarn],
+      warnings: [...snapExtra, ...(analyzed.warnings || []), ...truncWarn],
       truncated: !!snapshot.truncated,
       source: { format: snapshot.format, name: file.originalname || null },
     });
@@ -265,13 +267,18 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
       return res.status(502).json({ error: 'Falha ao gerar formulário com IA: ' + e.message });
     }
 
+    const snapExtraDraft = Array.isArray(snapshot.extraWarnings) ? snapshot.extraWarnings : [];
     res.json({
       ok: true,
       title: generated.title,
       description: generated.description,
       schemaData: generated.schemaData,
       metadata: generated.metadata && typeof generated.metadata === 'object' ? generated.metadata : {},
-      warnings: [...(generated.warnings || []), ...(snapshot.truncated ? ['Conteúdo truncado por limite de tamanho.'] : [])],
+      warnings: [
+        ...snapExtraDraft,
+        ...(generated.warnings || []),
+        ...(snapshot.truncated ? ['Conteúdo truncado por limite de tamanho.'] : []),
+      ],
       truncated: !!snapshot.truncated,
       source: { format: snapshot.format, name: file.originalname || null },
     });
@@ -283,15 +290,15 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
 
 /**
  * POST /api/checklists/ai/session/chat
- * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId?, skipTemplateLibraryRag?, skipTemplateEmbeddings? }
+ * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId?, skipTemplateLibraryRag?, skipTemplateEmbeddings?, documentationUrl? }
  */
 router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
   try {
-    const { out, ragMeta, ragLibraryMeta } = await executeCopilotChatSession({
+    const { out, ragMeta, ragLibraryMeta, documentationFetch } = await executeCopilotChatSession({
       body: req.body || {},
       admin: req.admin,
     });
-    res.json({ ok: true, ...out, ragMeta, ragLibraryMeta });
+    res.json({ ok: true, ...out, ragMeta, ragLibraryMeta, documentationFetch });
   } catch (e) {
     if (e.code === 'BAD_REQUEST') {
       return res.status(400).json({ error: e.message });
@@ -327,14 +334,14 @@ router.post('/ai/session/chat-stream', adminAuthThenPanel, async (req, res) => {
   };
 
   try {
-    const { out, ragMeta, ragLibraryMeta } = await executeCopilotChatSession({
+    const { out, ragMeta, ragLibraryMeta, documentationFetch } = await executeCopilotChatSession({
       body,
       admin: req.admin,
       onProgress: (ev) => send({ type: 'progress', ...ev }),
     });
     send({
       type: 'result',
-      payload: { ok: true, ...out, ragMeta, ragLibraryMeta },
+      payload: { ok: true, ...out, ragMeta, ragLibraryMeta, documentationFetch },
     });
     res.end();
   } catch (e) {
@@ -349,7 +356,7 @@ router.post('/ai/session/chat-stream', adminAuthThenPanel, async (req, res) => {
 
 /**
  * POST /api/checklists/ai/suggest-logic
- * JSON: { schemaData: [], userGoal: string, formContext?: {} }
+ * JSON: { schemaData: [], userGoal: string, formContext?: {}, documentationUrl?: string }
  */
 router.post('/ai/suggest-logic', adminAuthThenPanel, async (req, res) => {
   try {
@@ -362,8 +369,39 @@ router.post('/ai/suggest-logic', adminAuthThenPanel, async (req, res) => {
       return res.status(400).json({ error: 'Envie "userGoal" (texto).' });
     }
     const formContext = parseFormContextFromOptions(body.formContext || {});
-    const out = await suggestLogicRules(body.schemaData, userGoal, formContext);
-    res.json({ ok: true, ...out });
+
+    let documentationFetchedText = '';
+    let documentationFetchWarning = '';
+    const documentationFetch = {
+      attempted: false,
+      ok: false,
+      chars: 0,
+      error: null,
+      url: null,
+    };
+    const docUrl =
+      typeof body.documentationUrl === 'string' ? String(body.documentationUrl).trim().slice(0, 2048) : '';
+    if (docUrl) {
+      documentationFetch.attempted = true;
+      documentationFetch.url = docUrl;
+      const r = await fetchDocumentationForCopilot(docUrl);
+      if (r.ok && r.text) {
+        documentationFetchedText = r.text;
+        documentationFetch.ok = true;
+        documentationFetch.chars = r.text.length;
+        documentationFetch.finalUrl = r.finalUrl || docUrl;
+      } else {
+        documentationFetch.ok = false;
+        documentationFetch.error = r.error || 'Falha desconhecida.';
+        documentationFetchWarning = `Documentação: não foi possível carregar a URL — ${documentationFetch.error}`;
+      }
+    }
+
+    const out = await suggestLogicRules(body.schemaData, userGoal, formContext, {
+      documentationFetchedText: documentationFetchedText || undefined,
+      documentationFetchWarning: documentationFetchWarning || undefined,
+    });
+    res.json({ ok: true, ...out, documentationFetch });
   } catch (e) {
     if (e.code === 'NO_OPENAI_KEY') {
       return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });

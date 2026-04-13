@@ -26,7 +26,7 @@ const { sanitizeTaskIconName } = require('./formAiTemplateMetadataPatch');
  */
 function buildAnalyzeSystemPrompt(formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(formContext || {});
-  return `Você é um assistente que analisa documentos (Excel, Word, PDF ou texto vindo de OCR de imagem) e prepara um formulário BrSpark (checklist no celular).
+  return `Você é um assistente que analisa documentos (Excel, Word, PDF, texto vindo de OCR de imagem ou **JSON de formulários externos** já descrito em Markdown) e prepara um formulário BrSpark (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -99,9 +99,9 @@ Cada elemento de "blocks" tem:
 Não use "options", "recommendedOptionKey" nem "suggestedOptions".
 
 Regras estruturais:
-- O input pode ser planilha Excel (## Folha:), documento Word em Markdown, ou JSON textual — adapte a extração.
+- O input pode ser planilha Excel (## Folha:), documento Word em Markdown, JSON textual, ou **JSON de Google Forms / Microsoft Forms / Typeform** já normalizado em Markdown — adapte a extração.
 - Quando houver planilhas (## Folha:), comece cada uma com section_break (label = nome da folha), depois fields por coluna útil.
-- Em listas numeradas ou títulos no Word/JSON, cada pergunta clara pode virar um field; agrupe sob section_break quando houver capítulos.
+- Em listas numeradas ou títulos no Word/JSON, cada pergunta clara pode virar um field; agrupe sob section_break quando houver capítulos ou secções «Etapa».
 - Se houver cabeçalho de tabela na primeira linha de uma grelha, um field por coluna (ignora vazias/totais óbvios).
 - Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita).
 
@@ -203,21 +203,38 @@ function buildUserContentWithProfile(input) {
   const contentTitle =
     fmt === 'docx'
       ? 'Conteúdo extraído do documento Word:'
-      : fmt === 'json'
-        ? 'Conteúdo extraído / representado a partir do JSON:'
-        : fmt === 'pdf'
-          ? 'Conteúdo extraído do documento PDF:'
-          : fmt === 'image_ocr'
-            ? 'Conteúdo reconhecido por OCR na imagem do formulário:'
-            : 'Conteúdo extraído da planilha:';
+      : fmt === 'json_google_forms'
+        ? 'Conteúdo normalizado a partir de JSON (Google Forms ou API compatível):'
+        : fmt === 'json_ms_forms'
+          ? 'Conteúdo normalizado a partir de JSON (estrutura tipo Microsoft Forms / lista de perguntas):'
+          : fmt === 'json_typeform'
+            ? 'Conteúdo normalizado a partir de JSON (Typeform ou API semelhante):'
+            : fmt === 'json_external_form'
+              ? 'Conteúdo normalizado a partir de JSON de formulário de outro sistema:'
+              : fmt === 'json'
+                ? 'Conteúdo extraído / representado a partir do JSON:'
+                : fmt === 'pdf'
+                  ? 'Conteúdo extraído do documento PDF:'
+                  : fmt === 'image_ocr'
+                    ? 'Conteúdo reconhecido por OCR na imagem do formulário:'
+                    : 'Conteúdo extraído da planilha:';
   const profileHeading =
     fmt === 'xlsx' || fmt === 'xlsm'
       ? '### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)'
       : '### Perfil estatístico (só aplica a Excel; em Word/PDF/imagem/JSON use o texto acima)';
+  const externalJsonHint =
+    fmt === 'json_google_forms' ||
+    fmt === 'json_ms_forms' ||
+    fmt === 'json_typeform' ||
+    fmt === 'json_external_form'
+      ? '\n\n### Nota sobre a origem (JSON de outro sistema)\n' +
+        'O texto acima foi **normalizado automaticamente** a partir de um JSON exportado (Google Forms, Microsoft Forms, Typeform ou lista genérica de campos). **Não** copie identificadores técnicos da ferramenta de origem para o BrSpark. Cada «Pergunta» / «Campo» deve virar um `field` com `label` em pt-BR quando possível; quebras de página / capítulos → `section_break`. Use `suggestedType` quando o tipo original for óbvio (escolha única com poucas opções → `dropdown` ou `yes_no`; várias escolhas → `multiselect`; texto curto → `text`; parágrafo → `text`; escala numérica → `rating`; data → `date`; arquivo → `file_upload`).\n'
+      : '';
   return (
     (ctxBlock ? ctxBlock + '\n\n' : '') +
     `${contentTitle}\n\n` +
     String(input.markdown || '').slice(0, 130_000) +
+    externalJsonHint +
     `\n\n${profileHeading}\n` +
     profileBlock +
     `\n\n---\nInstruções extra do usuário: ${String(input.userHint || '').trim() || '(nenhuma)'}\n`

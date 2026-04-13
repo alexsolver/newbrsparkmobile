@@ -216,6 +216,30 @@ export function evaluateBusinessCondition(
   const targetNorm = parseToNorm(condValue);
   const targetDisplay = String(condValue ?? '').trim();
 
+  const condFieldType = String(condFieldDef?.type ?? '')
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+  if (condFieldType === 'vision_checklist' || condFieldType === 'vision_ai_analysis') {
+    const visionFilled = (() => {
+      if (rawDepVal === undefined || rawDepVal === null) return false;
+      let o: unknown = rawDepVal;
+      if (typeof rawDepVal === 'string') {
+        try {
+          o = JSON.parse(rawDepVal);
+        } catch {
+          return false;
+        }
+      }
+      if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+      const st = String((o as { status?: string }).status || '').toLowerCase();
+      const ans = (o as { answers?: unknown }).answers;
+      return st === 'completed' && Array.isArray(ans) && ans.length > 0;
+    })();
+    if (op === 'is_empty') return !visionFilled;
+    if (op === 'not_empty') return visionFilled;
+  }
+
   if (op === 'is_empty') return depNorm === '';
   if (op === 'not_empty') return depNorm !== '';
 

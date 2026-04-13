@@ -11,6 +11,18 @@ const {
   nylasApiHostname,
   grantIdFromIntegrationRow,
 } = require('./nylasCredentials');
+const {
+  buildMultipartBuffer,
+  fetchVisionPostPreservingMethod,
+  VISION_INTEGRATION_NAME,
+  VISION_INTEGRATION_LEGACY_NAME,
+} = require('./visionChecklistAnalyze');
+
+/** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
+const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l1GWDQAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 function normEnum(v) {
   return String(v ?? '')
@@ -39,7 +51,7 @@ async function testIntegration(integration) {
   // ── AI / LLM ────────────────────────────────────────────
   if (type === 'AI_LLM') {
     if (name === 'OpenAI') return testOpenAI(integration);
-    if (name === 'Google AI (Gemini)') return testGoogleAI(integration);
+    if (name === 'Google AI Studio' || name === 'Google AI (Gemini)') return testGoogleAI(integration);
     if (name === 'DeepSeek') return testDeepSeek(integration);
     if (name === 'Exadel CompreFace') return testCompreface(integration);
   }
@@ -70,7 +82,102 @@ async function testIntegration(integration) {
     return testOsrm(integration);
   }
 
+  if (type === 'VISION' && (name === VISION_INTEGRATION_NAME || name === VISION_INTEGRATION_LEGACY_NAME)) {
+    return testVisionChecklist(integration);
+  }
+
   return { ok: false, message: `Teste não implementado para "${name}"` };
+}
+
+/**
+ * Teste com POST multipart (igual ao proxy do app). GET/HEAD no mesmo URL costuma mentir para APIs só-POST.
+ */
+async function testVisionChecklist({ baseUrl, apiKey }) {
+  const u = String(baseUrl || '').trim();
+  if (!u) return { ok: false, message: 'URL do endpoint não configurada.' };
+  let parsed;
+  try {
+    parsed = new URL(u);
+  } catch {
+    return { ok: false, message: 'URL inválida.' };
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, message: 'Use http:// ou https:// na URL do endpoint.' };
+  }
+
+  const boundary = '----BrSparkVisionProbe' + Date.now().toString(36);
+  const bodyBuf = buildMultipartBuffer(boundary, [
+    {
+      name: 'media',
+      value: VISION_CHECKLIST_PROBE_PNG,
+      filename: 'probe.png',
+      contentType: 'image/png',
+    },
+    { name: 'questions', value: JSON.stringify([{ id: 'probe_q', text: 'Contém imagem?' }]) },
+    { name: 'schemaVersion', value: '1' },
+  ]);
+
+  const headers = {
+    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    ...(apiKey && String(apiKey).trim() ? { Authorization: `Bearer ${String(apiKey).trim()}` } : {}),
+  };
+
+  let postRes;
+  try {
+    postRes = await fetchVisionPostPreservingMethod(u, {
+      method: 'POST',
+      headers,
+      body: bodyBuf,
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (e) {
+    return { ok: false, message: e.message || 'Erro de rede no POST de teste (multipart).' };
+  }
+
+  const st = postRes.status;
+  if (st === 401 || st === 403) {
+    return {
+      ok: false,
+      message:
+        st === 401
+          ? 'HTTP 401: Bearer token recusado ou inválido. Confira a API key em Integrações.'
+          : 'HTTP 403: acesso negado neste URL. Confira URL, token e políticas do serviço (CORS não afeta este teste; é chamada servidor a servidor).',
+    };
+  }
+
+  if (st === 404 || st === 405) {
+    const raw = (await postRes.text()).replace(/\s+/g, ' ').slice(0, 220);
+    let nginxNote = '';
+    if (st === 405 && /nginx/i.test(raw) && /405 Not Allowed/i.test(raw)) {
+      nginxNote =
+        ' Resposta típica do nginx: o URL não está a chegar à aplicação (FastAPI/Flask/etc.). Use http://IP:PORTA_DO_UVICORN/... ou configure no nginx um location com proxy_pass para esse backend.';
+    }
+    return {
+      ok: false,
+      message: `HTTP ${st} no POST multipart (o mesmo pedido do app). Ajuste o URL no painel para o path que aceita POST com os campos "media", "questions" e "schemaVersion". Resposta do servidor: ${raw}.${nginxNote}`,
+    };
+  }
+
+  if (st >= 200 && st < 300) {
+    return {
+      ok: true,
+      message: `POST multipart aceito (HTTP ${st}). O endpoint está alinhado ao envio real do técnico.`,
+    };
+  }
+  if (st >= 400 && st < 500) {
+    return {
+      ok: true,
+      message: `POST multipart chegou ao servidor (HTTP ${st}). Validação ou contrato de resposta podem diferir do esperado; o importante é o método e o URL estarem corretos (não 404/405).`,
+    };
+  }
+  if (st >= 500) {
+    return {
+      ok: true,
+      message: `Servidor respondeu ao POST com HTTP ${st}. O endpoint aceita POST; verifique disponibilidade do modelo ou logs do serviço.`,
+    };
+  }
+
+  return { ok: false, message: `Resposta HTTP inesperada ao POST (${st}).` };
 }
 
 // ── Helpers HTTP ──────────────────────────────────────────
@@ -114,15 +221,69 @@ async function testOpenAI({ apiKey }) {
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
 }
 
-// ── Google AI ─────────────────────────────────────────────
-async function testGoogleAI({ apiKey }) {
+/**
+ * Raiz da API Gemini (chave criada no Google AI Studio) — padrão oficial Google.
+ * @param {string} [baseUrl]
+ * @returns {string}
+ */
+function normalizeGoogleGenerativeLanguageBaseUrl(baseUrl) {
+  let s = String(baseUrl || '').trim();
+  if (!s) return 'https://generativelanguage.googleapis.com/v1beta';
+  // Legado: o modelo vinha em baseUrl sem URL — ignorar e usar raiz oficial.
+  if (!/^https?:\/\//i.test(s) && !s.includes('googleapis') && !s.includes('/')) {
+    return 'https://generativelanguage.googleapis.com/v1beta';
+  }
+  s = s.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return 'https://generativelanguage.googleapis.com/v1beta';
+    }
+    let path = (u.pathname || '').replace(/\/+$/, '');
+    if (!path || path === '/') u.pathname = '/v1beta';
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return 'https://generativelanguage.googleapis.com/v1beta';
+  }
+}
+
+/**
+ * @param {{ apiKey?: string|null, baseUrl?: string|null }} integration
+ * @returns {{ hostname: string, path: string }}
+ */
+function googleGenerativeModelsListRequest(integration) {
+  const root = normalizeGoogleGenerativeLanguageBaseUrl(integration.baseUrl || '');
+  const u = new URL(root);
+  const basePath = (u.pathname || '').replace(/\/+$/, '') || '/v1beta';
+  const key = encodeURIComponent(String(integration.apiKey || '').trim());
+  return { hostname: u.hostname, path: `${basePath}/models?key=${key}` };
+}
+
+// ── Google AI Studio (Gemini API) ─────────────────────────
+async function testGoogleAI(integration) {
+  const apiKey = String(integration.apiKey || '').trim();
   if (!apiKey) return { ok: false, message: 'API Key não configurada.' };
   try {
-    const r = await httpsGet('generativelanguage.googleapis.com', `/v1beta/models?key=${apiKey}`, {});
-    if (r.status === 200) return { ok: true, message: 'Google AI (Gemini) conectado com sucesso ✓' };
-    if (r.status === 400 || r.status === 403) return { ok: false, message: 'API Key inválida ou sem permissão' };
-    return { ok: false, message: `HTTP ${r.status}` };
-  } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
+    const { hostname, path } = googleGenerativeModelsListRequest(integration);
+    const r = await httpsGet(hostname, path, {});
+    if (r.status === 200) {
+      return { ok: true, message: 'Google AI Studio (API Gemini) conectado com sucesso ✓' };
+    }
+    if (r.status === 400 || r.status === 403) {
+      return { ok: false, message: 'API Key inválida ou sem permissão (verifique a chave em aistudio.google.com/apikey).' };
+    }
+    let hint = '';
+    try {
+      const j = JSON.parse(r.body);
+      if (j && (j.error?.message || j.message)) hint = `: ${j.error?.message || j.message}`;
+    } catch (_) {
+      if (r.body) hint = `: ${String(r.body).replace(/\s+/g, ' ').slice(0, 160)}`;
+    }
+    return { ok: false, message: `HTTP ${r.status}${hint}` };
+  } catch (e) {
+    return { ok: false, message: `Erro de rede: ${e.message}` };
+  }
 }
 
 // ── DeepSeek ──────────────────────────────────────────────
@@ -640,4 +801,8 @@ async function testOsrm(integration) {
   }
 }
 
-module.exports = { testIntegration, normalizeComprefaceBaseUrl };
+module.exports = {
+  testIntegration,
+  normalizeComprefaceBaseUrl,
+  normalizeGoogleGenerativeLanguageBaseUrl,
+};

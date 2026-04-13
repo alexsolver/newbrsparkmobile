@@ -28,6 +28,8 @@ function analyzeLogicSuggestionIssues(suggestions) {
       String(s.value || ''),
       s.targetFieldId,
       String(s.actionType || ''),
+      String(s.apiUrl || ''),
+      String(s.apiMethod || ''),
     ].join('|');
     if (seen.has(key)) duplicatePairs++;
     else seen.add(key);

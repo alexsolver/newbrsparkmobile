@@ -575,6 +575,7 @@ model Integration {
   updatedAt                 DateTime @updatedAt
 }
 
+// IntType.VISION: integração «Visão IA - YOLO» (nome legado na BD: «Visão IA (checklists)») — POST multipart para serviço externo (foto/vídeo + perguntas sim/não).
 enum IntType {
   AI_LLM
   EMAIL
@@ -584,6 +585,7 @@ enum IntType {
   ERP
   PAYMENT
   MAPS
+  VISION
 }
 
 // ─────────────────────────────────────────────────────────

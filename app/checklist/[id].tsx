@@ -29,7 +29,7 @@ import { PanResponder } from 'react-native';
 import { type ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
-import { apiFetch } from '../../src/services/auth';
+import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../../src/services/auth';
 import { fetchDrivingLegEtaMinutes, fetchDrivingLegMetrics } from '../../src/services/osrmClient';
 import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -277,6 +277,8 @@ const REVISION_SESSION_FIELD_TYPES = new Set([
   'transit_end',
   'geofence_check',
   'facial_recognition',
+  'vision_checklist',
+  'vision_ai_analysis',
 ]);
 
 /**
@@ -302,6 +304,11 @@ function effectiveSchemaFieldType(f: any): string {
     if (normalized.includes(p)) return p;
   }
   return normalized[0] || '';
+}
+
+/** Campos de mídia + perguntas sim/não analisadas no servidor (YOLO ou Gemini). */
+function isVisionSimNaoMediaFieldType(t: string): boolean {
+  return t === 'vision_checklist' || t === 'vision_ai_analysis';
 }
 
 /** Assinatura, deslocamento, geofence facial, etc. — não reaproveitar na nova sessão de revisão. */
@@ -487,6 +494,73 @@ function technicianCommentKey(fieldId: string) {
   return `__comment_${fieldId}`;
 }
 
+/** Perguntas sim/não configuradas nos campos de visão IA (detecção ou análise Gemini) no builder. */
+/** Chave única por campo + linha de seção repetível (evita bloquear outras linhas durante a análise). */
+function visionAnalyzeBusyKey(fieldId: string, scope?: SectionRepeatScope | null) {
+  if (!scope) return fieldId;
+  return `${fieldId}::__r__${scope.sectionId}__${scope.rowIndex}`;
+}
+
+function getVisionQuestionsFromField(field: any): { id: string; text: string }[] {
+  const vq =
+    field?.visionQuestions ??
+    field?.vision_questions ??
+    (field?.config && typeof field.config === 'object' ? (field.config as any).visionQuestions : undefined);
+  if (!Array.isArray(vq)) return [];
+  const out: { id: string; text: string }[] = [];
+  for (let i = 0; i < vq.length; i++) {
+    const x = vq[i];
+    if (!x || typeof x !== 'object') continue;
+    const text = String((x as any).text || (x as any).question || '').trim();
+    if (!text) continue;
+    const id = String((x as any).id || `q_${i + 1}`)
+      .replace(/[^\w-]/g, '_')
+      .slice(0, 64);
+    out.push({ id, text: text.slice(0, 500) });
+  }
+  return out.slice(0, 24);
+}
+
+/** `visionCaptureMode` definido no Form Builder. */
+function getVisionCaptureMediaTypes(field: any): ImagePicker.MediaTypeOptions {
+  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
+  if (m === 'photo_only') return ImagePicker.MediaTypeOptions.Images;
+  if (m === 'video_only') return ImagePicker.MediaTypeOptions.Videos;
+  return ImagePicker.MediaTypeOptions.All;
+}
+
+function visionCaptureModeSubtitle(field: any): string {
+  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
+  if (m === 'photo_only') {
+    return 'Só foto pela câmera.';
+  }
+  if (m === 'video_only') {
+    return 'Só vídeo pela câmera (até ~1 min).';
+  }
+  return 'Foto ou vídeo curto pela câmera (até ~1 min).';
+}
+
+/** Ícone principal do cartão de captura (modo definido no builder). */
+function visionCaptureModeHeroIcon(field: any): keyof typeof Ionicons.glyphMap {
+  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
+  if (m === 'photo_only') return 'camera-outline';
+  if (m === 'video_only') return 'videocam-outline';
+  return 'scan-outline';
+}
+
+function parseVisionChecklistStored(raw: unknown): Record<string, any> | null {
+  if (raw === undefined || raw === null) return null;
+  let o: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, any>) : null;
+}
+
 /** Tipos em que "múltiplo" não se aplica (seção usa outro fluxo; calculado/transit são especiais). */
 const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'section_break',
@@ -499,6 +573,8 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'technician_finance',
   'signature',
   'signature_summary',
+  'vision_checklist',
+  'vision_ai_analysis',
 ]);
 
 function fieldAllowsMultiple(field: any) {
@@ -613,7 +689,19 @@ function isSummarySourceValueEmpty(v: unknown): boolean {
 function collectSummaryThumbnailUris(fieldDef: any | undefined, raw: unknown): string[] {
   if (!fieldDef) return [];
   const t = effectiveSchemaFieldType(fieldDef);
-  if (t !== 'photo' && t !== 'photo_stamped' && t !== 'facial_recognition' && t !== 'file_upload') return [];
+  if (
+    t !== 'photo' &&
+    t !== 'photo_stamped' &&
+    t !== 'facial_recognition' &&
+    t !== 'file_upload' &&
+    !isVisionSimNaoMediaFieldType(t)
+  )
+    return [];
+  if (isVisionSimNaoMediaFieldType(t)) {
+    const o = parseVisionChecklistStored(raw);
+    const u = o?.localUri != null ? String(o.localUri).trim() : '';
+    return u ? [u] : [];
+  }
   const arr = normalizeResponseArray(raw)
     .map((u) => String(u || '').trim())
     .filter(Boolean);
@@ -669,6 +757,20 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
   }
   if (t === 'photo' || t === 'photo_stamped' || t === 'facial_recognition' || t === 'file_upload') {
     return 'Mídia ou anexo registado (ver relatório completo)';
+  }
+  if (isVisionSimNaoMediaFieldType(t)) {
+    const o = parseVisionChecklistStored(raw);
+    if (!o || o.status !== 'completed' || !Array.isArray(o.answers)) return '—';
+    const parts = o.answers.map((a: any) => {
+      const v = String(a?.value || '').toLowerCase();
+      const lab = v === 'yes' ? 'Sim' : v === 'no' ? 'Não' : 'Indefinido';
+      const c =
+        typeof a?.confidence === 'number' && Number.isFinite(a.confidence)
+          ? Math.round(a.confidence * 100)
+          : null;
+      return c != null ? `${lab} (${c}%)` : lab;
+    });
+    return parts.length ? parts.join(' · ') : '—';
   }
   if (t === 'signature' || t === 'signature_summary') {
     const s = String(raw);
@@ -1346,6 +1448,15 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
 /** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   const ft = effectiveSchemaFieldType(field);
+  if (isVisionSimNaoMediaFieldType(ft)) {
+    const o = parseVisionChecklistStored(raw);
+    if (!o) return false;
+    if (String(o.status || '').toLowerCase() !== 'completed') return false;
+    if (!Array.isArray(o.answers) || !o.answers.length) return false;
+    const nq = getVisionQuestionsFromField(field).length;
+    if (nq > 0 && o.answers.length < nq) return false;
+    return true;
+  }
   if (!fieldAllowsMultiple(field)) {
     if (ft === 'geofence_check') {
       if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
@@ -1661,7 +1772,7 @@ export default function ChecklistEngine() {
   
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
-
+  const [visionAnalyzeBusyId, setVisionAnalyzeBusyId] = useState<string | null>(null);
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
   /** Seção repetível onde foi "Iniciar deslocamento" — o mapa finaliza com o mesmo scope. */
@@ -3007,27 +3118,6 @@ export default function ChecklistEngine() {
       } catch (e) {
          tmpl = db[realTemplateId];
          if (!tmpl) {
-            // #region agent log
-            fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd392c6' },
-              body: JSON.stringify({
-                sessionId: 'd392c6',
-                hypothesisId: 'H_tpl_miss',
-                location: 'checklist/[id].tsx:loadTemplate',
-                message: 'template_offline_miss',
-                data: {
-                  idKind: Array.isArray(id) ? 'array' : typeof id,
-                  routeTplLen: resolvedRouteTemplateId.length,
-                  realTplLen: String(realTemplateId || '').length,
-                  routeEqReal: resolvedRouteTemplateId === String(realTemplateId || ''),
-                  isRtFlow: isRoutineTaskFlow,
-                  dbKeyCount: db && typeof db === 'object' && !Array.isArray(db) ? Object.keys(db).length : -1,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {});
-            // #endregion
             Alert.alert(
               'Aviso',
               isRoutineTaskFlow
@@ -3059,6 +3149,8 @@ export default function ChecklistEngine() {
         'photo',
         'photo_stamped',
         'facial_recognition',
+        'vision_checklist',
+        'vision_ai_analysis',
         'file_upload',
         'signature',
         'signature_summary',
@@ -3587,6 +3679,198 @@ export default function ChecklistEngine() {
   };
 
   handleInputRef.current = handleInput;
+
+  const runVisionChecklistAnalyze = useCallback(
+    async (field: any, assetUri: string, mimeType: string, fileName: string, scope?: SectionRepeatScope | null) => {
+      const qs = getVisionQuestionsFromField(field);
+      if (!qs.length) {
+        Alert.alert('Configuração', 'Este campo não tem perguntas configuradas no modelo.');
+        return;
+      }
+      try {
+        const pathOnly = assetUri.split('?')[0];
+        const info = await FileSystem.getInfoAsync(pathOnly);
+        if (info.exists && typeof info.size === 'number' && info.size > 92 * 1024 * 1024) {
+          Alert.alert('Arquivo grande', 'O arquivo excede ~92 MB. Escolha outro vídeo ou reduza a duração.');
+          return;
+        }
+      } catch {
+        /* segue sem tamanho */
+      }
+
+      try {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) {
+          Alert.alert(
+            'Sem ligação',
+            'A análise de visão IA é feita no servidor. Conecte-se à internet (Wi‑Fi ou dados) e tente novamente.',
+          );
+          return;
+        }
+      } catch {
+        Alert.alert('Rede', 'Não foi possível verificar a ligação. Tente novamente.');
+        return;
+      }
+
+      const token = await getToken();
+      if (!token) {
+        Alert.alert('Sessão', 'Faça login novamente para usar a visão IA.');
+        return;
+      }
+
+      const busyKey = visionAnalyzeBusyKey(field.id, scope ?? null);
+      setVisionAnalyzeBusyId(busyKey);
+      /** Só depois de `apiFetch` devolver `Response` — evita tratar `throw new Error(msg do servidor)` como falha de rede. */
+      let visionApiReturned = false;
+      try {
+        const form = new FormData();
+        form.append(
+          'engine',
+          field.type === 'vision_ai_analysis' ? 'google_ai_studio' : 'yolo',
+        );
+        form.append('questions', JSON.stringify(qs));
+        form.append('media', {
+          uri: assetUri,
+          type: mimeType || 'application/octet-stream',
+          name: fileName || 'upload.jpg',
+        } as any);
+        const res = await apiFetch('/api/checklists/vision/analyze', {
+          method: 'POST',
+          body: form,
+          timeoutMs: 180_000,
+        });
+        visionApiReturned = true;
+        const text = await res.text();
+        let json: any;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new Error(
+            res.status >= 500
+              ? 'O servidor devolveu uma resposta inválida (não é JSON). O serviço de visão pode estar em erro — tente mais tarde ou contacte o suporte.'
+              : text.slice(0, 280),
+          );
+        }
+        if (res.status === 401) {
+          await handleUnauthorizedMaybeSessionInvalidated(res);
+        }
+        if (!res.ok) {
+          const baseErr = String(json?.error || `Erro HTTP ${res.status}`);
+          const allow = json?.allow ? ` Métodos permitidos (Allow): ${String(json.allow)}.` : '';
+          const det = json?.detail ? String(json.detail).replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+          const intT = json?.integrationTarget
+            ? `\n\nDestino na integração (painel): ${String(json.integrationTarget)}`
+            : '';
+          const extra = [allow, det ? `\n\n${det}` : '', intT].join('');
+          throw new Error(baseErr + extra);
+        }
+        if (!Array.isArray(json?.answers)) {
+          throw new Error(
+            field.type === 'vision_ai_analysis'
+              ? 'A resposta do servidor não contém a lista de respostas esperada. Verifique a integração «Google AI Studio» e o modelo configurado.'
+              : 'A resposta do servidor não contém a lista de respostas esperada. Verifique o serviço de visão (integração «Visão IA - YOLO»).',
+          );
+        }
+        const hi = handleInputRef.current;
+        const merged = {
+          ...json,
+          localUri: assetUri,
+          mediaMimeType: mimeType,
+          mediaFileName: fileName,
+        };
+        if (typeof hi === 'function') hi(field.id, merged, scope);
+      } catch (e: any) {
+        const raw = String(e?.message || e?.cause?.message || e || '').toLowerCase();
+        const looksNet =
+          !visionApiReturned &&
+          (e?.name === 'AbortError' ||
+            raw.includes('network request failed') ||
+            raw.includes('failed to fetch') ||
+            raw.includes('networkerror') ||
+            raw.includes('load failed') ||
+            (e?.name === 'TypeError' && raw.includes('fetch failed')));
+        let msg: string;
+        if (e?.name === 'AbortError') {
+          msg =
+            'Tempo esgotado ao enviar a mídia. Tente um ficheiro menor ou verifique a rede.';
+        } else if (looksNet) {
+          msg =
+            'Não foi possível contactar o servidor BrSpark (erro de rede).\n\n' +
+              'Isto é o endereço da API Node (porta típica 3001), não o URL do YOLO nas Integrações (ex.: :8001).\n\n' +
+              'No .env do app defina EXPO_PUBLIC_API_BASE com o host onde o Node está acessível a partir deste telemóvel (mesma VPN/rede). Reinicie o Metro com -c.\n\n' +
+              'Teste no browser do telemóvel: o mesmo URL + /api/config deve abrir JSON.';
+        } else {
+          msg = e?.message || 'Não foi possível analisar a mídia.';
+        }
+        Alert.alert('Visão IA', msg);
+      } finally {
+        setVisionAnalyzeBusyId(null);
+      }
+    },
+    [],
+  );
+
+  const openVisionChecklistMedia = (field: any, scope?: SectionRepeatScope | null) => {
+    if (isReadOnly) return;
+    const qs = getVisionQuestionsFromField(field);
+    if (!qs.length) {
+      Alert.alert('Modelo', 'Adicione pelo menos uma pergunta sim/não a este campo no painel.');
+      return;
+    }
+    void (async () => {
+      try {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) {
+          Alert.alert(
+            'Sem ligação',
+            'A análise de visão IA é feita no servidor. Conecte-se à internet e tente novamente.',
+          );
+          return;
+        }
+      } catch {
+        Alert.alert('Rede', 'Não foi possível verificar a ligação. Tente novamente.');
+        return;
+      }
+      await ensureOnlineValidation(field, async () => {
+        try {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert(t('common.attention'), t('checklistForm.permissionCameraDenied'));
+            return;
+          }
+          const mediaTypes = getVisionCaptureMediaTypes(field);
+          const pickerOpts: ImagePicker.ImagePickerOptions = {
+            quality: 0.65,
+            mediaTypes,
+          };
+          if (
+            mediaTypes === ImagePicker.MediaTypeOptions.All ||
+            mediaTypes === ImagePicker.MediaTypeOptions.Videos
+          ) {
+            pickerOpts.videoMaxDuration = 60;
+          }
+          const res = await ImagePicker.launchCameraAsync(pickerOpts);
+          if (res.canceled || !res.assets?.length) return;
+          const a = res.assets[0];
+          const mime =
+            a.mimeType ||
+            (a.type === 'video'
+              ? 'video/mp4'
+              : a.type === 'image'
+                ? 'image/jpeg'
+                : 'application/octet-stream');
+          const name = a.fileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg');
+          await runVisionChecklistAnalyze(field, a.uri, mime, name, scope ?? null);
+        } catch (err: any) {
+          Alert.alert(
+            t('checklistForm.cameraUnavailableTitle'),
+            err?.message || t('checklistForm.cameraUnavailableBody'),
+          );
+        }
+      });
+    })();
+  };
+
   const facialFlushBusyRef = useRef(false);
 
   const flushPendingFacialVerifications = useCallback(async () => {
@@ -6059,6 +6343,276 @@ export default function ChecklistEngine() {
                     </TouchableOpacity>
                   </View>
                 ))}
+              {(field.type === 'vision_checklist' || field.type === 'vision_ai_analysis') && (
+                <View style={{ marginTop: 6 }}>
+                  {(() => {
+                    const useGeminiAnalysis = field.type === 'vision_ai_analysis';
+                    const stored = parseVisionChecklistStored(vv(field.id));
+                    const busy = visionAnalyzeBusyId === visionAnalyzeBusyKey(field.id, scope ?? null);
+                    const isVideo =
+                      stored?.mediaMimeType != null && String(stored.mediaMimeType).startsWith('video');
+                    const thumbUri =
+                      stored?.localUri != null ? String(stored.localUri).split('?')[0] : '';
+                    return (
+                      <>
+                        {!isReadOnly && (
+                          <TouchableOpacity
+                            onPress={() => openVisionChecklistMedia(field, scope)}
+                            disabled={busy}
+                            activeOpacity={0.88}
+                            style={{
+                              borderRadius: 20,
+                              overflow: 'hidden',
+                              shadowColor: '#020617',
+                              shadowOffset: { width: 0, height: 10 },
+                              shadowOpacity: 0.22,
+                              shadowRadius: 18,
+                              elevation: 10,
+                            }}
+                          >
+                            <LinearGradient
+                              colors={
+                                useGeminiAnalysis
+                                  ? ['#1c0a0a', '#450a0a', '#7f1d1d']
+                                  : ['#0b1220', '#0f172a', '#134e4a']
+                              }
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={{
+                                paddingVertical: 22,
+                                paddingHorizontal: 18,
+                                alignItems: 'center',
+                                borderWidth: 1,
+                                borderColor: useGeminiAnalysis
+                                  ? 'rgba(248, 113, 113, 0.35)'
+                                  : 'rgba(56, 189, 248, 0.28)',
+                              }}
+                            >
+                              {busy ? (
+                                <View style={{ paddingVertical: 18 }}>
+                                  <ActivityIndicator
+                                    color={useGeminiAnalysis ? '#fecaca' : '#7dd3fc'}
+                                    size="large"
+                                  />
+                                  <Text style={{ marginTop: 12, fontSize: 13, fontWeight: '600', color: '#94a3b8' }}>
+                                    Analisando…
+                                  </Text>
+                                </View>
+                              ) : (
+                                <>
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      alignSelf: 'center',
+                                      gap: 6,
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 5,
+                                      borderRadius: 999,
+                                      backgroundColor: useGeminiAnalysis
+                                        ? 'rgba(248, 113, 113, 0.15)'
+                                        : 'rgba(56, 189, 248, 0.12)',
+                                      borderWidth: 1,
+                                      borderColor: useGeminiAnalysis
+                                        ? 'rgba(254, 202, 202, 0.45)'
+                                        : 'rgba(125, 211, 252, 0.35)',
+                                      marginBottom: 16,
+                                    }}
+                                  >
+                                    <Ionicons
+                                      name="sparkles"
+                                      size={15}
+                                      color={useGeminiAnalysis ? '#fca5a5' : '#7dd3fc'}
+                                    />
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: '800',
+                                        color: useGeminiAnalysis ? '#fecaca' : '#e0f2fe',
+                                        letterSpacing: 0.6,
+                                        textTransform: 'uppercase',
+                                      }}
+                                    >
+                                      {useGeminiAnalysis ? (
+                                        <Text>
+                                          <Text style={{ color: '#fecaca' }}>Visão IA </Text>
+                                          <Text style={{ color: '#ef4444', fontWeight: '900' }}>Análise</Text>
+                                        </Text>
+                                      ) : (
+                                        'Visão computacional'
+                                      )}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={{
+                                      width: 76,
+                                      height: 76,
+                                      borderRadius: 38,
+                                      padding: 3,
+                                      marginBottom: 14,
+                                      backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                                      borderWidth: 1,
+                                      borderColor: 'rgba(148, 163, 184, 0.25)',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                  >
+                                    <LinearGradient
+                                      colors={
+                                        useGeminiAnalysis ? ['#f87171', '#b91c1c'] : ['#22d3ee', '#6366f1']
+                                      }
+                                      start={{ x: 0, y: 0 }}
+                                      end={{ x: 1, y: 1 }}
+                                      style={{
+                                        width: 70,
+                                        height: 70,
+                                        borderRadius: 35,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                    >
+                                      <Ionicons name={visionCaptureModeHeroIcon(field)} size={34} color="#fff" />
+                                    </LinearGradient>
+                                  </View>
+                                  <Text
+                                    style={{
+                                      fontSize: 17,
+                                      fontWeight: '800',
+                                      color: '#f8fafc',
+                                      letterSpacing: -0.3,
+                                      textAlign: 'center',
+                                    }}
+                                  >
+                                    Capturar para análise
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      marginTop: 4,
+                                      fontSize: 13,
+                                      fontWeight: '700',
+                                      color: useGeminiAnalysis ? '#fecaca' : '#7dd3fc',
+                                      textAlign: 'center',
+                                    }}
+                                  >
+                                    Abrir a câmera
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      marginTop: 10,
+                                      fontSize: 12,
+                                      lineHeight: 17,
+                                      color: '#94a3b8',
+                                      textAlign: 'center',
+                                      fontWeight: '500',
+                                      paddingHorizontal: 4,
+                                    }}
+                                  >
+                                    {visionCaptureModeSubtitle(field)}
+                                  </Text>
+                                </>
+                              )}
+                            </LinearGradient>
+                          </TouchableOpacity>
+                        )}
+                        {stored?.localUri ? (
+                          <View
+                            style={{
+                              marginTop: 12,
+                              borderRadius: 12,
+                              overflow: 'hidden',
+                              borderWidth: 1,
+                              borderColor: '#e2e8f0',
+                            }}
+                          >
+                            {!isVideo && thumbUri ? (
+                              <Image
+                                source={{ uri: thumbUri }}
+                                style={{ width: '100%', height: 220 }}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <View
+                                style={{
+                                  height: 120,
+                                  backgroundColor: '#0f172a',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Ionicons name="film-outline" size={40} color="#bae6fd" />
+                                <Text style={{ color: '#e2e8f0', marginTop: 8, fontSize: 12 }}>Vídeo anexado</Text>
+                              </View>
+                            )}
+                            {stored.status === 'completed' && Array.isArray(stored.answers) ? (
+                              <View style={{ padding: 12, backgroundColor: '#f8fafc' }}>
+                                {stored.answers.map((a: any, ai: number) => {
+                                  const v = String(a?.value || '').toLowerCase();
+                                  const vl =
+                                    v === 'yes' || v === 'sim'
+                                      ? 'Sim'
+                                      : v === 'no' || v === 'não' || v === 'nao'
+                                        ? 'Não'
+                                        : v === 'unknown'
+                                          ? 'Não verificado (IA)'
+                                          : 'Indefinido';
+                                  const pct =
+                                    typeof a?.confidence === 'number' && Number.isFinite(a.confidence)
+                                      ? Math.round(a.confidence * 100)
+                                      : null;
+                                  return (
+                                    <View key={ai} style={{ marginBottom: 10 }}>
+                                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>
+                                        {String(a?.question || a?.questionId || `Pergunta ${ai + 1}`)}
+                                      </Text>
+                                      <Text style={{ fontSize: 14, color: '#0f172a', fontWeight: '700', marginTop: 2 }}>
+                                        {vl}
+                                        {pct != null ? ` · confiança ${pct}%` : ''}
+                                      </Text>
+                                      {a?.rationale ? (
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            color: '#475569',
+                                            marginTop: 4,
+                                            fontStyle: 'italic',
+                                          }}
+                                        >
+                                          {String(a.rationale).slice(0, 400)}
+                                        </Text>
+                                      ) : null}
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            ) : stored ? (
+                              <View style={{ padding: 10, backgroundColor: '#fffbeb' }}>
+                                <Text style={{ fontSize: 12, color: '#92400e' }}>
+                                  Análise ainda não concluída ou incompleta.
+                                </Text>
+                              </View>
+                            ) : null}
+                            {!isReadOnly ? (
+                              <TouchableOpacity
+                                onPress={() => hi(field.id, null)}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: 10,
+                                  gap: 6,
+                                }}
+                              >
+                                <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                                <Text style={{ color: '#dc2626', fontWeight: '700' }}>Remover</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                </View>
+              )}
               {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition' || field.type === 'file_upload') && (
                 <View>
                   {field.type === 'facial_recognition' ? (
