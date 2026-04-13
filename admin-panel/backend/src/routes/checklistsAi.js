@@ -12,9 +12,9 @@ const {
   normalizeSchemaDataFromLlm,
 } = require('../lib/formAiNormalize');
 const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('../lib/formAiLlm');
-const { runFormCopilot, suggestLogicRules } = require('../lib/formAiCopilot');
+const { suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
-const { buildFilledFormsRagContext } = require('../lib/formAiExecutionRag');
+const { executeCopilotChatSession } = require('../lib/formAiCopilotSession');
 
 const router = express.Router();
 
@@ -41,12 +41,12 @@ function titleFromBrsparkImport(snapTitle, schemaData) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 6 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
 /**
  * POST /api/checklists/ai/analyze-from-file
- * multipart: file (.xlsx, .xlsm, .docx, .json), optional "options" JSON { hint?: string }
+ * multipart: file (.xlsx, .xlsm, .docx, .pdf, imagens, .json), optional "options" JSON { hint?: string }
  * Resposta: title, description, blocks, warnings, truncated, source
  */
 router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
@@ -76,7 +76,7 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
       snapshot = await extractSourceForFormAi(file.buffer, ext, file.originalname);
     } catch (e) {
       console.error('[checklists/ai] extract source:', e);
-      return res.status(400).json({ error: e.message || 'Não foi possível ler o ficheiro.' });
+      return res.status(400).json({ error: e.message || 'Não foi possível ler o arquivo.' });
     }
 
     if (snapshot.kind === 'brspark_schema') {
@@ -94,7 +94,7 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
         blocks,
         warnings: [
           ...wNorm,
-          'Importação direta: ficheiro JSON reconhecido como schema BrSpark (sem chamada à IA).',
+          'Importação direta: arquivo JSON reconhecido como schema BrSpark (sem chamada à IA).',
         ],
         truncated: false,
         source: {
@@ -106,7 +106,7 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
     }
 
     if (!snapshot.markdown || snapshot.markdown.length < 3) {
-      return res.status(400).json({ error: 'O ficheiro parece vazio ou sem texto extraível.' });
+      return res.status(400).json({ error: 'O arquivo parece vazio ou sem texto extraível.' });
     }
 
     const formContext = parseFormContextFromOptions(options);
@@ -181,7 +181,7 @@ router.post('/ai/build-form', adminAuthThenPanel, async (req, res) => {
 
 /**
  * POST /api/checklists/ai/draft-from-file
- * multipart: file (.xlsx, .xlsm, .docx, .json), optional "options" JSON { hint?: string }
+ * multipart: file (.xlsx, .xlsm, .docx, .pdf, imagens, .json), optional "options" JSON { hint?: string }
  */
 router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), async (req, res) => {
   try {
@@ -210,7 +210,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
       snapshot = await extractSourceForFormAi(file.buffer, ext, file.originalname);
     } catch (e) {
       console.error('[checklists/ai] extract source (draft):', e);
-      return res.status(400).json({ error: e.message || 'Não foi possível ler o ficheiro.' });
+      return res.status(400).json({ error: e.message || 'Não foi possível ler o arquivo.' });
     }
 
     if (snapshot.kind === 'brspark_schema') {
@@ -239,7 +239,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
     }
 
     if (!snapshot.markdown || snapshot.markdown.length < 3) {
-      return res.status(400).json({ error: 'O ficheiro parece vazio ou sem texto extraível.' });
+      return res.status(400).json({ error: 'O arquivo parece vazio ou sem texto extraível.' });
     }
 
     const formContext = parseFormContextFromOptions(options);
@@ -283,59 +283,67 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
 
 /**
  * POST /api/checklists/ai/session/chat
- * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId? (RAG: execuções do mesmo modelo) }
+ * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId?, skipTemplateLibraryRag?, skipTemplateEmbeddings? }
  */
 router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
   try {
-    const body = req.body || {};
-    const messages = body.messages;
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: 'Envie "messages" (array não vazio).' });
-    }
-    const schemaData = Array.isArray(body.schemaData) ? body.schemaData : [];
-    const formContext = parseFormContextFromOptions(body.formContext || {});
-    const spreadsheetSummary =
-      typeof body.spreadsheetSummary === 'string' ? body.spreadsheetSummary : '';
-    const templateId = typeof body.templateId === 'string' ? body.templateId.trim() : '';
-
-    let ragFilledFormsSummary = '';
-    let ragMeta = { revisionCount: 0, skipped: 'no_template_id' };
-    if (templateId) {
-      const rag = await buildFilledFormsRagContext({
-        templateId,
-        schemaData,
-        maxRevisions: 10,
-        maxChars: 14_000,
-      });
-      ragFilledFormsSummary = rag.text || '';
-      ragMeta = rag.meta || { revisionCount: 0 };
-    }
-
-    const templateSettings =
-      body.templateSettings && typeof body.templateSettings === 'object' && !Array.isArray(body.templateSettings)
-        ? body.templateSettings
-        : {};
-    const templateMetadata =
-      body.templateMetadata && typeof body.templateMetadata === 'object' && !Array.isArray(body.templateMetadata)
-        ? body.templateMetadata
-        : {};
-
-    const out = await runFormCopilot({
-      messages,
-      schemaData,
-      formContext,
-      spreadsheetSummary,
-      ragFilledFormsSummary,
-      templateSettings,
-      templateMetadata,
+    const { out, ragMeta, ragLibraryMeta } = await executeCopilotChatSession({
+      body: req.body || {},
+      admin: req.admin,
     });
-    res.json({ ok: true, ...out, ragMeta });
+    res.json({ ok: true, ...out, ragMeta, ragLibraryMeta });
   } catch (e) {
+    if (e.code === 'BAD_REQUEST') {
+      return res.status(400).json({ error: e.message });
+    }
     if (e.code === 'NO_OPENAI_KEY') {
       return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });
     }
     console.error('[checklists/ai] session/chat:', e);
     res.status(502).json({ error: e.message || 'Falha no copiloto IA.' });
+  }
+});
+
+/**
+ * POST /api/checklists/ai/session/chat-stream
+ * Mesmo corpo que /ai/session/chat; resposta **SSE** (text/event-stream): eventos `progress` e `result` ou `error`.
+ */
+router.post('/ai/session/chat-stream', adminAuthThenPanel, async (req, res) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return res.status(400).json({ error: 'Envie "messages" (array não vazio).' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  const send = (obj) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  };
+
+  try {
+    const { out, ragMeta, ragLibraryMeta } = await executeCopilotChatSession({
+      body,
+      admin: req.admin,
+      onProgress: (ev) => send({ type: 'progress', ...ev }),
+    });
+    send({
+      type: 'result',
+      payload: { ok: true, ...out, ragMeta, ragLibraryMeta },
+    });
+    res.end();
+  } catch (e) {
+    send({
+      type: 'error',
+      error: e.message || 'Falha no copiloto IA.',
+      code: e.code || null,
+    });
+    res.end();
   }
 });
 

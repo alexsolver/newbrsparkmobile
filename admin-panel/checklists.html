@@ -1407,15 +1407,15 @@
           </div>
         </div>
         <div class="copilot-excel-strip" style="padding:12px 0 4px; margin-top:10px; border-top:1px solid #e2e8f0;">
-          <label class="prop-label" style="font-size:11px;margin-bottom:4px;">Planilha Excel (opcional)</label>
-          <p style="font-size:10px;color:#64748b;margin:0 0 8px;line-height:1.45;">Um <strong>.xlsx</strong> ou <strong>.xlsm</strong> gera um resumo no chat. Pode também pedir regras e ajustes só por texto.</p>
-          <input type="file" id="copilot-excel-file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" style="display:none;" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
+          <label class="prop-label" style="font-size:11px;margin-bottom:4px;">Arquivo de referência (opcional)</label>
+          <p style="font-size:10px;color:#64748b;margin:0 0 8px;line-height:1.45;"><strong>Excel</strong> (.xlsx, .xlsm), <strong>Word</strong> (.docx), <strong>PDF</strong> ou <strong>imagem</strong> (.png, .jpg, .webp) — imagens usam OCR. O resumo entra no chat; também pode pedir regras e ajustes só por texto.</p>
+          <input type="file" id="copilot-excel-file" accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" style="display:none;" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
           <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;">
-            <button type="button" class="btn btn-outline btn-sm" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()"><ion-icon name="document-attach-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher Excel…</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="copilot-excel-clear-btn" style="display:none;" onclick="window.brsparkCopilotClearSpreadsheet()">Remover planilha</button>
+            <button type="button" class="btn btn-outline btn-sm" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()"><ion-icon name="document-attach-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher arquivo…</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="copilot-excel-clear-btn" style="display:none;" onclick="window.brsparkCopilotClearSpreadsheet()">Remover arquivo</button>
           </div>
           <label class="prop-label" for="copilot-excel-hint" style="font-size:10px;">Dicas para a leitura (opcional)</label>
-          <textarea id="copilot-excel-hint" class="prop-input" rows="2" placeholder='Ex.: cada aba vira uma etapa' style="font-size:12px;margin-bottom:6px;resize:vertical;"></textarea>
+          <textarea id="copilot-excel-hint" class="prop-input" rows="2" placeholder='Ex.: cada aba vira uma etapa; em PDF use só a primeira parte; em fotos peça campos por secção' style="font-size:12px;margin-bottom:6px;resize:vertical;"></textarea>
           <div id="copilot-excel-status" style="font-size:11px;color:#475569;min-height:18px;line-height:1.35;"></div>
         </div>
         <p id="copilot-rag-footnote" style="font-size:10px;color:#64748b;margin:12px 0 0;line-height:1.45;"></p>

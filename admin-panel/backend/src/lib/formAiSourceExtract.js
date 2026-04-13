@@ -2,6 +2,7 @@
 
 const mammoth = require('mammoth');
 const { extractWorkbookForAi, MAX_CANONICAL_CHARS } = require('./formAiExtract');
+const { extractPdfForAi, extractImageOcrForAi } = require('./formAiPdfImageExtract');
 const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
 
 /**
@@ -72,7 +73,7 @@ function tryBrsparkJsonImport(buffer) {
  */
 function extractJsonDocumentForAi(buffer) {
   const text = buffer.toString('utf8').trim();
-  if (!text) throw new Error('Ficheiro JSON vazio.');
+  if (!text) throw new Error('Arquivo JSON vazio.');
   let obj;
   try {
     obj = JSON.parse(text);
@@ -92,7 +93,7 @@ function extractJsonDocumentForAi(buffer) {
 }
 
 /**
- * Excel | Word | JSON (schema BrSpark ou texto para IA).
+ * Excel | Word | PDF | Imagem (OCR) | JSON (schema BrSpark ou texto para IA).
  * @param {Buffer} buffer
  * @param {string} ext — ex.: ".docx"
  * @param {string} [_originalName]
@@ -106,7 +107,7 @@ function extractJsonDocumentForAi(buffer) {
 async function extractSourceForFormAi(buffer, ext, _originalName) {
   const e = String(ext || '').toLowerCase();
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    throw new Error('Ficheiro vazio.');
+    throw new Error('Arquivo vazio.');
   }
 
   if (e === '.xlsx' || e === '.xlsm') {
@@ -116,6 +117,16 @@ async function extractSourceForFormAi(buffer, ext, _originalName) {
 
   if (e === '.docx') {
     const snap = await extractDocxForAi(buffer);
+    return { ...snap, kind: 'document' };
+  }
+
+  if (e === '.pdf') {
+    const snap = await extractPdfForAi(buffer);
+    return { ...snap, kind: 'document' };
+  }
+
+  if (e === '.png' || e === '.jpg' || e === '.jpeg' || e === '.webp') {
+    const snap = await extractImageOcrForAi(buffer);
     return { ...snap, kind: 'document' };
   }
 
@@ -137,10 +148,22 @@ async function extractSourceForFormAi(buffer, ext, _originalName) {
     return { ...snap, kind: 'document' };
   }
 
-  throw new Error(`Formato não suportado (${e || 'desconhecido'}). Use .xlsx, .xlsm, .docx ou .json.`);
+  throw new Error(
+    `Formato não suportado (${e || 'desconhecido'}). Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp ou .json.`
+  );
 }
 
-const SUPPORTED_FORM_AI_EXTENSIONS = ['.xlsx', '.xlsm', '.docx', '.json'];
+const SUPPORTED_FORM_AI_EXTENSIONS = [
+  '.xlsx',
+  '.xlsm',
+  '.docx',
+  '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.json',
+];
 
 module.exports = {
   extractSourceForFormAi,

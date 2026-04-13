@@ -1,7 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
 import { loadRtCloudTasks, saveRtCloudTasks } from '../lib/cloudTasksBuckets';
-import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
+import {
+  routineTaskLocalRowMatchesTemplateNonTerminal,
+  routineTemplateKey,
+} from '../lib/routineTaskQueueUi';
 
 export type RoutineTaskAssignmentDto = {
   templateId: string;
@@ -26,81 +29,12 @@ export type RoutineTaskOpenResult = {
 };
 
 const RT_ASSIGNMENTS_CACHE_KEY = '@brspark_rt_assignments_cache_v1';
-
-// #region agent log
-function agentLogRt(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  const payload = {
-    sessionId: 'd392c6',
-    hypothesisId,
-    location,
-    message,
-    data,
-    timestamp: Date.now(),
-  };
-  if (__DEV__) {
-    console.warn('[DEBUG_RT]', JSON.stringify(payload));
-  }
-  fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd392c6' },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-
-/** Diagnóstico pick offline — sem PII (só ids booleanos e status). */
-function buildRtPickDiagnostics(rows: any[], tid: string) {
-  const rowsArr = Array.isArray(rows) ? rows : [];
-  let rowsMatchingRef = 0;
-  let afterIsRt = 0;
-  let afterNonTerm = 0;
-  let afterIds = 0;
-  const samples: { st: string; hasId: boolean; hasRn: boolean; refEq: boolean; isRt: boolean }[] = [];
-  for (const t of rowsArr) {
-    const ref = rtTemplateRefFromRow(t);
-    if (ref === tid) rowsMatchingRef += 1;
-    const isRt = taskRowIsRoutineTask(t);
-    const nt = isLocalRtRowNonTerminal(t);
-    const eid = String(t?.id || '').trim();
-    const rn = String(t?.routineTaskNumber || t?.osNumber || '').trim();
-    if (ref === tid && isRt) afterIsRt += 1;
-    if (ref === tid && isRt && nt) afterNonTerm += 1;
-    if (ref === tid && isRt && nt && eid && rn) afterIds += 1;
-    if (samples.length < 6 && ref === tid) {
-      samples.push({
-        st: statusUpper(t) || '(empty)',
-        hasId: !!eid,
-        hasRn: !!rn,
-        refEq: ref === tid,
-        isRt,
-      });
-    }
-  }
-  return {
-    tidLen: tid.length,
-    rowCount: rowsArr.length,
-    rowsMatchingRef,
-    rowsRefAndIsRt: afterIsRt,
-    rowsPickFilter: afterNonTerm,
-    rowsWithIds: afterIds,
-    samples,
-  };
-}
-// #endregion
+const TEMPLATES_STORAGE_KEY = '@brspark_templates';
 
 const RT_TERMINAL = new Set(['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED', 'DONE', 'CLOSED', 'ARCHIVED']);
 
 function statusUpper(t: any): string {
   return String(t?.status || '').toUpperCase();
-}
-
-/** Alinhado a `routineTemplateKey` em `routineTaskQueueUi.ts` — identifica o modelo RT da linha no cache. */
-function rtTemplateRefFromRow(t: any): string {
-  const m = t?.metadata;
-  const refFromMeta =
-    m && typeof m === 'object' && (m as { refId?: unknown }).refId != null
-      ? String((m as { refId?: string }).refId).trim()
-      : '';
-  return String(t?.refId || refFromMeta || t?.templateId || '').trim();
 }
 
 function mapAssignmentRow(a: RoutineTaskAssignmentDto): RoutineTaskAssignmentDto {
@@ -139,8 +73,8 @@ function deriveAssignmentsFromRtCloudTasksRows(rows: any[]): RoutineTaskAssignme
   for (const t of rows) {
     const st = statusUpper(t);
     if (RT_TERMINAL.has(st)) continue;
-    const tpl = rtTemplateRefFromRow(t);
-    if (!tpl) continue;
+    const tpl = routineTemplateKey(t);
+    if (!tpl || tpl.startsWith('__no_tpl__:')) continue;
     if (byTpl.has(tpl)) continue;
     const m = t.metadata && typeof t.metadata === 'object' ? (t.metadata as { templateTitle?: unknown; title?: unknown }) : {};
     const titleHint =
@@ -155,29 +89,13 @@ function deriveAssignmentsFromRtCloudTasksRows(rows: any[]): RoutineTaskAssignme
   return [...byTpl.values()];
 }
 
-/**
- * Mesma ideia que `countRoutineTasksInLocalRtCacheForTemplate`: RT não terminal no cache.
- * Antes só aceitávamos um subconjunto estrito de `status` — linhas com `status` vazio ou fora desse
- * conjunto contavam no badge (não terminais) mas não reabriam offline.
- */
-function isLocalRtRowNonTerminal(t: any): boolean {
-  const st = statusUpper(t);
-  if (!st) return true;
-  return !RT_TERMINAL.has(st);
-}
-
 function pickReusableLocalRtExecution(
   rows: any[],
   templateId: string
 ): { executionId: string; routineTaskNumber: string; templateId: string } | null {
   const tid = String(templateId || '').trim();
   if (!tid) return null;
-  const matches = rows.filter((t) => {
-    if (!taskRowIsRoutineTask(t)) return false;
-    if (rtTemplateRefFromRow(t) !== tid) return false;
-    if (!isLocalRtRowNonTerminal(t)) return false;
-    return true;
-  });
+  const matches = rows.filter((t) => routineTaskLocalRowMatchesTemplateNonTerminal(t, tid));
   if (matches.length === 0) return null;
   const inProg = matches.filter((t) => statusUpper(t) === 'IN_PROGRESS');
   const pool = inProg.length ? inProg : matches;
@@ -188,16 +106,16 @@ function pickReusableLocalRtExecution(
   };
   pool.sort((a, b) => ms(b) - ms(a));
   const best = pool[0];
-  const executionId = String(best.id || '').trim();
-  const routineTaskNumber = String(best.routineTaskNumber || best.osNumber || '').trim();
+  const executionId = String(
+    best?.id || (best as Record<string, unknown>)?.execution_id || (best as Record<string, unknown>)?.executionId || ''
+  ).trim();
+  const routineTaskNumber = String(
+    best?.routineTaskNumber ||
+      best?.osNumber ||
+      (best as Record<string, unknown>)?.routine_task_number ||
+      ''
+  ).trim();
   if (!executionId || !routineTaskNumber) {
-    // #region agent log
-    agentLogRt('C', 'routineTaskService.ts:pickReusableLocalRtExecution', 'pick_best_missing_ids', {
-      matchesLen: matches.length,
-      hasExecutionId: !!executionId,
-      hasRoutineTaskNumber: !!routineTaskNumber,
-    });
-    // #endregion
     return null;
   }
   return { executionId, routineTaskNumber, templateId: tid };
@@ -228,6 +146,46 @@ export async function fetchRoutineTaskAssignments(): Promise<RoutineTaskAssignme
   return derived;
 }
 
+/** Garante que o JSON do modelo existe em `@brspark_templates` (mesma chave que o checklist). */
+export async function cacheChecklistTemplateIfMissing(
+  templateId: string,
+  opts?: { timeoutMs?: number }
+): Promise<boolean> {
+  const tid = String(templateId || '').trim();
+  if (!tid) return false;
+  let db: Record<string, { schemaData?: unknown }> = {};
+  try {
+    const raw = await AsyncStorage.getItem(TEMPLATES_STORAGE_KEY);
+    db = raw ? JSON.parse(raw) : {};
+    if (!db || typeof db !== 'object' || Array.isArray(db)) db = {};
+  } catch {
+    db = {};
+  }
+  const cur = (db as Record<string, any>)[tid];
+  if (cur && cur.schemaData) return true;
+
+  const timeoutMs = opts?.timeoutMs ?? 15_000;
+  try {
+    const res = await apiFetch(
+      `/api/checklists/templates/${encodeURIComponent(tid)}?_t=${Date.now()}`,
+      { timeoutMs }
+    );
+    if (!res.ok) return false;
+    const tmpl = await res.json();
+    (db as Record<string, unknown>)[tid] = tmpl;
+    await AsyncStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(db));
+    return !!(tmpl && tmpl.schemaData);
+  } catch {
+    return false;
+  }
+}
+
+export async function prefetchRoutineTaskTemplates(assignments: RoutineTaskAssignmentDto[]): Promise<void> {
+  await Promise.allSettled(
+    assignments.map((a) => cacheChecklistTemplateIfMissing(a.templateId, { timeoutMs: 12_000 }))
+  );
+}
+
 /**
  * Abre ou reutiliza uma instância RT e regista no cache local RT (`@brspark_rt_cloud_tasks`) para o checklist.
  * Offline: reutiliza execução ativa do mesmo modelo já presente no aparelho, se existir.
@@ -240,47 +198,23 @@ export async function openRoutineTaskAndCacheCloudTask(
 
   let j = {} as RoutineTaskOpenResult & { error?: string };
   let httpOk = false;
-  let resStatus: number | string = 'no_response';
   try {
     const res = await apiFetch('/api/routine-tasks/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ templateId }),
     });
-    resStatus = res.status;
     j = (await res.json().catch(() => ({}))) as RoutineTaskOpenResult & { error?: string };
     httpOk = res.ok && !!j.executionId && !!j.routineTaskNumber;
   } catch {
     j = {} as RoutineTaskOpenResult & { error?: string };
-    resStatus = 'fetch_throw';
   }
-
-  // #region agent log
-  agentLogRt('A', 'routineTaskService.ts:openRoutineTaskAndCacheCloudTask', 'after_open_post', {
-    httpOk,
-    resStatus,
-    hasExecId: !!j.executionId,
-    hasRtNum: !!j.routineTaskNumber,
-    reusedFlag: !!j.reused,
-    errLen: typeof j.error === 'string' ? j.error.length : 0,
-  });
-  // #endregion
 
   let reused = false;
   if (!httpOk) {
     const rowsForPick = await loadRtCloudTasks();
-    // #region agent log
-    agentLogRt('B', 'routineTaskService.ts:openRoutineTaskAndCacheCloudTask', 'before_local_pick', {
-      ...buildRtPickDiagnostics(rowsForPick, String(templateId || '').trim()),
-    });
-    // #endregion
     const local = pickReusableLocalRtExecution(rowsForPick, templateId);
     if (!local) {
-      // #region agent log
-      agentLogRt('D', 'routineTaskService.ts:openRoutineTaskAndCacheCloudTask', 'local_pick_null', {
-        ...buildRtPickDiagnostics(rowsForPick, String(templateId || '').trim()),
-      });
-      // #endregion
       const serverMsg = typeof j.error === 'string' ? j.error.trim() : '';
       throw new Error(
         serverMsg ||
@@ -294,13 +228,6 @@ export async function openRoutineTaskAndCacheCloudTask(
       reused: true,
     };
     reused = true;
-    // #region agent log
-    agentLogRt('D', 'routineTaskService.ts:openRoutineTaskAndCacheCloudTask', 'local_pick_ok', {
-      reused: true,
-      execIdLen: String(local.executionId || '').length,
-      rtNumLen: String(local.routineTaskNumber || '').length,
-    });
-    // #endregion
   } else {
     reused = !!j.reused;
   }
@@ -341,6 +268,15 @@ export async function openRoutineTaskAndCacheCloudTask(
     await saveRtCloudTasks(arr);
   } catch {
     /* ignore cache errors */
+  }
+
+  const tplId = String(j.templateId || templateId).trim();
+  if (tplId) {
+    if (httpOk) {
+      await cacheChecklistTemplateIfMissing(tplId, { timeoutMs: 22_000 });
+    } else {
+      void cacheChecklistTemplateIfMissing(tplId, { timeoutMs: 6000 });
+    }
   }
 
   return {

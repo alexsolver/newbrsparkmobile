@@ -22,6 +22,7 @@ const {
     parseScheduledStartAt,
     normalizeExpectedFormDurationMinutes,
 } = require('../lib/formDurationPolicy');
+const { scheduleChecklistTemplateEmbeddingSync } = require('../lib/formAiChecklistTemplateEmbed');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -308,6 +309,7 @@ router.post('/templates', async (req, res) => {
                     where: { id },
                     data: updateData,
                 });
+                scheduleChecklistTemplateEmbeddingSync(updated.id);
                 return res.json(updated);
             }
         }
@@ -340,6 +342,7 @@ router.post('/templates', async (req, res) => {
                 folderId: createFolderId,
             },
         });
+        scheduleChecklistTemplateEmbeddingSync(created.id);
         res.json(created);
     } catch (err) {
         console.error("POST /api/checklists/templates error:", err);
@@ -355,6 +358,7 @@ router.delete('/templates/:id', async (req, res) => {
             where: { id },
             data: { isActive: false }
         });
+        prisma.checklistTemplateEmbedding.deleteMany({ where: { templateId: id } }).catch(() => {});
         res.json({ success: true, id: deleted.id });
     } catch (err) {
         console.error("DELETE /api/checklists/templates error:", err);

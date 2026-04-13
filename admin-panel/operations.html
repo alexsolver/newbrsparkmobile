@@ -1880,35 +1880,94 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
     const startLat = Number(rawStartLat);
     const startLng = Number(rawStartLng);
 
-    if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
-      try {
-        const map = L.map(mapElementId).setView([endLat, endLng], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const refLL = parseTaskRoutePolygonOps(t);
+    const zt = String(t.locationZoneType || '').toLowerCase();
+    const hasRef =
+      (zt === 'polygon' && refLL.length >= 3) ||
+      ((zt === 'route' || zt === 'segment') && refLL.length >= 2);
+    const centerLat = Number.isFinite(endLat)
+      ? endLat
+      : pathData.length
+        ? Number(pathData[pathData.length - 1][0])
+        : hasRef
+          ? refLL.reduce((s, p) => s + Number(p[0]), 0) / refLL.length
+          : NaN;
+    const centerLng = Number.isFinite(endLng)
+      ? endLng
+      : pathData.length
+        ? Number(pathData[pathData.length - 1][1])
+        : hasRef
+          ? refLL.reduce((s, p) => s + Number(p[1]), 0) / refLL.length
+          : NaN;
 
-        const { startIcon, endIcon } = buildTransitTechMapIcons(t);
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
+      mapEl.innerHTML =
+        '<div style="padding:16px;color:#64748b;font-size:13px;line-height:1.45">Sem coordenadas para centrar o mapa (registe saída/chegada ou trilha GPS).</div>';
+      return;
+    }
 
-        const polyline = L.polyline(pathData, { color: '#EA580C', weight: 5 }).addTo(map);
+    try {
+      const map = L.map(mapElementId).setView([centerLat, centerLng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(map);
 
-        if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
-          L.marker([startLat, startLng], { icon: startIcon })
-            .addTo(map)
-            .bindPopup('<b>Saída (Início do Deslocamento)</b>');
+      const { startIcon, endIcon } = buildTransitTechMapIcons(t);
+      const layers = [];
+
+      if (hasRef) {
+        if (zt === 'polygon') {
+          layers.push(
+            L.polygon(refLL, {
+              color: '#2563eb',
+              weight: 2,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.15,
+            }).addTo(map),
+          );
+        } else if (zt === 'segment' && refLL.length >= 2) {
+          layers.push(
+            L.polyline([refLL[0], refLL[1]], {
+              color: '#9333ea',
+              weight: 4,
+              dashArray: '8 6',
+            }).addTo(map),
+          );
+        } else if (zt === 'route') {
+          layers.push(
+            L.polyline(refLL, { color: '#f97316', weight: 4, dashArray: '10 6' }).addTo(map),
+          );
         }
+      }
+
+      if (pathData.length > 1) {
+        layers.push(L.polyline(pathData, { color: '#2563eb', weight: 4, opacity: 0.92 }).addTo(map));
+      }
+
+      if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
+        L.marker([startLat, startLng], { icon: startIcon })
+          .addTo(map)
+          .bindPopup('<b>Saída (início do deslocamento)</b>');
+      }
+      if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
         L.marker([endLat, endLng], { icon: endIcon })
           .addTo(map)
-          .bindPopup('<b>Chegada (Fim do Deslocamento)</b>')
+          .bindPopup('<b>Chegada (fim do deslocamento)</b>')
           .openPopup();
-
-        if (setMapRef) setMapRef(map);
-        if (pathData.length > 1) {
-          setTimeout(() => map.fitBounds(polyline.getBounds(), { padding: [20, 20] }), 250);
-        }
-      } catch (err) {
-        mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
-        if (setMapRef) setMapRef(null);
       }
-    } else {
-      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">FALHA DE RENDERIZAÇÃO: endLat is undefined.<br/>endPos = ${JSON.stringify(endPos)}</div>`;
+
+      if (setMapRef) setMapRef(map);
+
+      const fitLayers = layers.filter(Boolean);
+      if (fitLayers.length) {
+        const fg = L.featureGroup(fitLayers);
+        if (fg.getBounds && fg.getBounds().isValid()) {
+          setTimeout(() => map.fitBounds(fg.getBounds(), { padding: [22, 22], maxZoom: 17 }), 200);
+        }
+      }
+    } catch (err) {
+      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
+      if (setMapRef) setMapRef(null);
     }
   }, 150);
 }
@@ -2212,6 +2271,13 @@ function normalizePolygonVertexOps(pt) {
   if (Array.isArray(pt) && pt.length >= 2) {
     var la = Number(pt[0]);
     var ln = Number(pt[1]);
+    var firstLooksLng = la <= -20 && la >= -80;
+    var secondLooksLat = ln >= -35 && ln <= 15;
+    if (firstLooksLng && secondLooksLat) {
+      var tmp = la;
+      la = ln;
+      ln = tmp;
+    }
     if (isFinite(la) && isFinite(ln)) return [la, ln];
   }
   if (typeof pt === 'object') {
@@ -2528,9 +2594,30 @@ function computeTrajectoryOnRouteMetersPatrolPdfOps(refLatLng, trLatLng, toleran
   return Math.round(sum);
 }
 
-function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z) {
+function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z, zoneType) {
   var b = patrolDisplayedTileBoundsOps(cx, cy, z);
-  var refLine = coordsToSvgPolylineOps(refLatLng, b);
+  var zt = String(zoneType || 'route').toLowerCase();
+  var refSvg = '';
+  if (zt === 'polygon' && Array.isArray(refLatLng) && refLatLng.length >= 3) {
+    var polyPts = coordsToSvgPolylineOps(refLatLng, b);
+    if (polyPts) {
+      refSvg =
+        '<polygon fill="rgba(59,130,246,0.2)" stroke="#2563eb" stroke-width="0.55" stroke-linejoin="round" points="' +
+        polyPts +
+        '"/>';
+    }
+  } else {
+    var refLine = coordsToSvgPolylineOps(refLatLng, b);
+    if (refLine) {
+      var stroke = zt === 'segment' ? '#9333ea' : '#ea580c';
+      refSvg =
+        '<polyline fill="none" stroke="' +
+        stroke +
+        '" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="' +
+        refLine +
+        '"/>';
+    }
+  }
   var trLine = coordsToSvgPolylineOps(traversedLatLng, b);
   var markers = '';
   if (Array.isArray(traversedLatLng) && traversedLatLng.length >= 1) {
@@ -2555,14 +2642,10 @@ function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z) {
         ')"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#dc2626" stroke-width="0.5"/><rect x="-0.95" y="-0.95" width="1.9" height="1.9" rx="0.28" fill="#dc2626"/></g>';
     }
   }
-  if (!refLine && !trLine && !markers) return '';
+  if (!refSvg && !trLine && !markers) return '';
   return (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" aria-hidden="true">' +
-    (refLine
-      ? '<polyline fill="none" stroke="#ea580c" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="' +
-        refLine +
-        '"/>'
-      : '') +
+    refSvg +
     (trLine
       ? '<polyline fill="none" stroke="#2563eb" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" points="' +
         trLine +
@@ -2573,7 +2656,7 @@ function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z) {
   );
 }
 
-function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng) {
+function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng, zoneType) {
   var fit = patrolRasterFitBoundsOps(refLatLng, traversedLatLng);
   if (!fit) return null;
   var clat = fit.clat;
@@ -2598,7 +2681,20 @@ function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng) {
       );
     }
   }
-  var overlay = buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z);
+  var zt = String(zoneType || 'route').toLowerCase();
+  var overlay = buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z, zt);
+  var legend =
+    zt === 'polygon'
+      ? 'Polígono azul: área de serviço (KML) · Linha azul escura: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+        th.colorAccent +
+        ';font-weight:700">© OpenStreetMap contributors</a>.'
+      : zt === 'segment'
+        ? 'Roxo: trecho A–B (referência KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+          th.colorAccent +
+          ';font-weight:700">© OpenStreetMap contributors</a>.'
+        : 'Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+          th.colorAccent +
+          ';font-weight:700">© OpenStreetMap contributors</a>.';
   return (
     '<div style="position:relative;width:100%;border-bottom:1px solid ' +
     th.colorBorder +
@@ -2610,9 +2706,9 @@ function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng) {
     '</div>' +
     '<div style="font-size:8px;color:' +
     th.colorMuted +
-    ';padding:6px 10px;background:#f1f5f9;line-height:1.4">Laranja: referência · Azul: GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
-    th.colorAccent +
-    ';font-weight:700">© OpenStreetMap contributors</a>.</div>'
+    ';padding:6px 10px;background:#f1f5f9;line-height:1.4">' +
+    legend +
+    '</div>'
   );
 }
 
@@ -2629,7 +2725,7 @@ function escUrlAttrOps(url) {
     .replace(/"/g, '&quot;');
 }
 
-/** PDF Central: patrulha de rota (alinhado a reportPdfPreview.js). `escPdfFn` — obrigatório quando chamado desde printReport (escPdf não existe no escopo global). */
+/** PDF Central: geometria KML + trilha (alinhado a reportPdfPreview.js). */
 function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
   const escPdf =
     typeof escPdfFn === 'function'
@@ -2639,16 +2735,23 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
-  if (!task || task.locationZoneType !== 'route') return '';
+  if (!task) return '';
+  const zt = String(task.locationZoneType || '').toLowerCase();
+  if (zt !== 'route' && zt !== 'polygon' && zt !== 'segment') return '';
   const ref = parseTaskRoutePolygonOps(task);
+  const minRef = zt === 'polygon' ? 3 : 2;
   const tr = endGPS ? normalizeTraversedPathForReportOps(endGPS.traversedPath) || [] : [];
-  if (!endGPS && ref.length < 2) return '';
+  if (!endGPS && ref.length < minRef) return '';
+  const refTooShort = ref.length < minRef;
   const p =
-    endGPS && endGPS.patrolCompliance && typeof endGPS.patrolCompliance === 'object'
+    zt === 'route' &&
+    endGPS &&
+    endGPS.patrolCompliance &&
+    typeof endGPS.patrolCompliance === 'object'
       ? endGPS.patrolCompliance
       : null;
   const browseOsmUrl = buildOsmPatrolBrowseUrlOps(ref, tr);
-  const rasterMapInner = buildPatrolOsmRasterMapHtmlOps(th, ref, tr);
+  const rasterMapInner = buildPatrolOsmRasterMapHtmlOps(th, ref, tr, zt);
   const hrefAttrPatrol = (u) => String(u || '').replace(/"/g, '&quot;');
   const tol =
     task.locationRadius != null
@@ -2667,7 +2770,13 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
         ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#fee2e2;color:#991b1b">Desvio máximo acima da tolerância</span>`
         : '';
   const title =
-    p != null ? 'PATRULHA DE ROTA (certificação)' : 'PATRULHA DE ROTA (evidência)';
+    zt === 'polygon'
+      ? 'ZONA POLIGONAL (KML / mapa de serviço)'
+      : zt === 'segment'
+        ? 'TRECHO DE REFERÊNCIA (KML)'
+        : p != null
+          ? 'PATRULHA DE ROTA (certificação)'
+          : 'PATRULHA DE ROTA (evidência)';
   let metricsBlock = '';
   if (p) {
     const tolNum = Math.max(5, Number(p.toleranceM) || Number(task.locationRadius) || 100);
@@ -2699,9 +2808,14 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
         </div>
       </div>`;
   } else {
-    const refHint =
-      ref.length < 2
-        ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+    const refHint = refTooShort
+      ? zt === 'polygon'
+        ? 'O polígono de despacho tem menos de três pontos válidos — não foi possível desenhar a área de referência no mapa.'
+        : zt === 'segment'
+          ? 'O trecho de despacho precisa de dois pontos (A e B) para aparecer no mapa.'
+          : 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+      : zt === 'polygon' || zt === 'segment'
+        ? 'Geometria de despacho (KML) abaixo; a linha azul é a trilha GPS do deslocamento, quando registada.'
         : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreamento ou versão anterior do app). O mapa abaixo mostra ainda assim o trajeto planejado e a trilha registrada, se existirem.';
     const estLen = polylineLengthTraversedPdfOps(tr);
     const extraEst =
@@ -2718,12 +2832,18 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
     mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
       ${osmLinkRowPatrol}
       ${rasterMapInner}
-      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". Legenda: ${
+        zt === 'polygon'
+          ? 'polígono de serviço (KML) e trilha GPS sobre os tiles OSM.'
+          : zt === 'segment'
+            ? 'trecho A–B (KML), trilha GPS e início/fim sobre os tiles OSM.'
+            : 'rota de referência (laranja), trilha GPS (azul) e início/fim sobre os tiles OSM.'
+      }</div>
     </div>`;
   } else if (!p) {
     mapBlock =
-      ref.length < 2 && (!tr || tr.length < 1)
-        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: a rota de despacho precisa de pontos ou registe o fim de deslocamento com trilha GPS.</div>`
+      refTooShort && (!tr || tr.length < 1)
+        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: confira o polígono/rota no despacho ou registe o fim de deslocamento com trilha GPS.</div>`
         : browseOsmUrl
           ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45"><a href="${hrefAttrPatrol(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">Abrir no OpenStreetMap</a></div>`
           : '';
@@ -3363,6 +3483,18 @@ function buildReportTab(t) {
 
   // GPS deslocamento (mapa + produtividade) — alinhado ao PDF
   const { startGPS, endGPS } = extractTransitEndpointsForReport(responses);
+  let pathDataReportMap = [];
+  if (endGPS && endGPS.traversedPath) {
+    pathDataReportMap = normalizeTraversedPathForReportOps(endGPS.traversedPath) || [];
+  }
+  const refLLReport = parseTaskRoutePolygonOps(t);
+  const ztReport = String(t.locationZoneType || '').toLowerCase();
+  const hasRefReportMap =
+    (ztReport === 'polygon' && refLLReport.length >= 3) ||
+    ((ztReport === 'route' || ztReport === 'segment') && refLLReport.length >= 2);
+  const showTransitMapSection =
+    !!(startGPS || endGPS) &&
+    (hasRefReportMap || pathDataReportMap.length > 1 || (endGPS && Number.isFinite(Number(endGPS.lat))));
 
   if (!hasResp) {
     return `<div style="text-align:center;padding:40px 20px;color:var(--text3)">
@@ -3895,9 +4027,10 @@ function buildReportTab(t) {
       <div class="report-section-title"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Respostas do Formulário — ${Object.keys(responses).length} campo(s)</div>
       ${items}
     </div>
-    ${endGPS ? `
+    ${showTransitMapSection ? `
     <div class="report-section">
-      <div class="report-section-title"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Mapa Interativo de Deslocamento</div>
+      <div class="report-section-title"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Mapa de deslocamento e geometria (KML)</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;line-height:1.45">Referência do despacho (rota, trecho ou polígono) e trilha GPS quando existirem.</div>
       <div id="report-transit-map" style="width:100%; height:250px; border-radius:8px; border:1px solid #cbd5e1; margin-top:8px; z-index:1;"></div>
     </div>` : ''}
     ${t.gpsLocation ? `<div class="report-section">

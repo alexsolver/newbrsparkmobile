@@ -1580,6 +1580,17 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         await saveFtCloudTasks(processedFt);
         await saveRtCloudTasks(processedRt);
 
+        const refIdsForTemplates = new Set<string>();
+        for (const t of [...processedFt, ...processedRt]) {
+          const rid = String((t as any)?.refId ?? '').trim();
+          if (rid && rid !== 'null' && rid !== 'undefined') refIdsForTemplates.add(rid);
+        }
+        void import('./routineTaskService').then((m) =>
+          Promise.allSettled(
+            [...refIdsForTemplates].map((rid) => m.cacheChecklistTemplateIfMissing(rid, { timeoutMs: 14_000 }))
+          )
+        );
+
         // Notify backend we RECEIVED them — só FT/OS (RT não usa fila «Pendentes» do técnico).
         const unreceived = remoteFt.filter(
           (t: any) => t.status === 'PENDING' && !t.metadata?.receivedAt,

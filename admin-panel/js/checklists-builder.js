@@ -4691,12 +4691,13 @@ function pushCopilotUndoSnapshot() {
     try {
         window.__brsparkSchemaUndoStack.push(
             JSON.stringify({
-                v: 3,
+                v: 4,
                 fields: JSON.parse(JSON.stringify(fields)),
                 settings: JSON.parse(JSON.stringify(globalFormSettings || {})),
                 taskIcon: typeof currentFormIcon === 'string' ? currentFormIcon : '',
                 taskIconLibrary:
                     typeof currentFormIconLibrary === 'string' ? currentFormIconLibrary : 'Ionicons',
+                formTitle: typeof currentFormTitle === 'string' ? currentFormTitle : '',
             }),
         );
     } catch (eSnap) {
@@ -4711,13 +4712,14 @@ function pushCopilotUndoSnapshot() {
 function parseCopilotUndoEntry(raw) {
     try {
         const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (o && o.v === 3 && Array.isArray(o.fields)) {
+        if (o && (o.v === 3 || o.v === 4) && Array.isArray(o.fields)) {
             return {
                 fields: o.fields,
                 settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
                 taskIcon: o.taskIcon != null ? String(o.taskIcon) : '',
                 taskIconLibrary:
                     o.taskIconLibrary != null ? String(o.taskIconLibrary) : 'Ionicons',
+                formTitle: o.v === 4 && o.formTitle != null ? String(o.formTitle) : null,
             };
         }
         if (o && o.v === 2 && Array.isArray(o.fields)) {
@@ -4757,6 +4759,14 @@ function endCopilotThinking() {
     if (!window.__brsparkCopilotThinkingCount) {
         delete window.__brsparkCopilotThinkingLabel;
     }
+    refreshCopilotThinkingDom();
+}
+
+/** Atualiza só o rótulo da faixa «a pensar» (para SSE sem empilhar beginCopilotThinking). */
+function copilotSetThinkingMessage(msg) {
+    if ((window.__brsparkCopilotThinkingCount || 0) <= 0) return;
+    const t = String(msg || '').trim();
+    window.__brsparkCopilotThinkingLabel = t || 'A IA está pensando…';
     refreshCopilotThinkingDom();
 }
 
@@ -4812,7 +4822,7 @@ function refreshCopilotThinkingDom() {
 
 function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     const parts = [];
-    parts.push('### Análise do arquivo (anexo do Copiloto)');
+    parts.push('### Análise do arquivo anexado ao Copiloto (Excel, Word, PDF, imagem OCR ou JSON)');
     parts.push('Arquivo: ' + String(fileName || '—'));
     if (data && data.title) parts.push('Título sugerido pela IA: ' + String(data.title).trim());
     if (data && data.description) parts.push('Descrição sugerida: ' + String(data.description).trim());
@@ -4873,7 +4883,7 @@ function renderCopilotMessages() {
         empty.appendChild(t1);
         const t2 = document.createElement('span');
         t2.textContent =
-            'Clique num campo no canvas para o focar, descreva o que quer e responda às opções do Copiloto quando ele tiver dúvidas. As alterações aplicam-se logo no formulário; use «Desfazer última alteração» se precisar reverter. Opcional: planilha Excel em «Avançado».';
+            'Clique num campo no canvas para o focar, descreva o que quer e responda às opções do Copiloto quando ele tiver dúvidas. As alterações aplicam-se logo no formulário; use «Desfazer última alteração» se precisar reverter. Opcional: anexe Excel, Word, PDF ou imagem em «Avançado».';
         empty.appendChild(t2);
         root.appendChild(empty);
         return;
@@ -4961,7 +4971,7 @@ window.brsparkCopilotClearSpreadsheet = function () {
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.value = '';
     const st = document.getElementById('copilot-excel-status');
-    if (st) st.textContent = 'Planilha removida do contexto.';
+    if (st) st.textContent = 'Arquivo removido do contexto.';
     updateCopilotExcelUi();
 };
 
@@ -5123,7 +5133,16 @@ function brsparkCopilotApplyChatResponse(data) {
             metadataChanged = true;
         }
     }
-    const changed = schemaChanged || settingsChanged || metadataChanged;
+    let titleChanged = false;
+    if (
+        !hasClarify &&
+        data.templateTitleResolved &&
+        String(data.templateTitleResolved).trim() &&
+        String(data.templateTitleResolved).trim() !== String(currentFormTitle || '').trim()
+    ) {
+        titleChanged = true;
+    }
+    const changed = schemaChanged || settingsChanged || metadataChanged || titleChanged;
 
     window.__brsparkCopilotLogicLast = hasClarify ? [] : data.logicSuggestions || [];
     const hasLog = !hasClarify && window.__brsparkCopilotLogicLast.length > 0;
@@ -5132,32 +5151,58 @@ function brsparkCopilotApplyChatResponse(data) {
         pushCopilotUndoSnapshot();
         if (changed) window.brsparkCopilotApplyPatch({ skipUndoPush: true });
         if (hasLog) window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+        if (titleChanged && data.templateTitleResolved) {
+            currentFormTitle = String(data.templateTitleResolved).trim();
+            const ttEl = document.getElementById('tpl-title');
+            if (ttEl) ttEl.value = currentFormTitle;
+        }
     }
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
 
     const foot = document.getElementById('copilot-rag-footnote');
-    if (foot && data.ragMeta) {
-        const m = data.ragMeta;
-        if (m.revisionCount > 0) {
-            foot.textContent =
-                'Nesta resposta, a IA usou ' +
-                m.revisionCount +
-                ' exemplo(s) de preenchimentos concluídos deste modelo (RAG).';
-        } else if (m.skipped === 'no_completed_revisions') {
-            foot.textContent =
-                'Ainda não há preenchimentos concluídos na base para este modelo — o RAG veio vazio.';
-        } else if (m.skipped === 'template_not_found') {
-            foot.textContent =
-                'Modelo não encontrado na base — guarde o formulário na API para o RAG funcionar.';
-        } else if (m.skipped === 'invalid_template_id') {
-            foot.textContent = '';
-        } else if (m.skipped === 'no_template_id') {
-            foot.textContent =
-                'Guarde e abra um modelo com ID na nuvem para incluir histórico de preenchimentos (RAG).';
-        } else {
-            foot.textContent = '';
+    if (foot) {
+        const parts = [];
+        if (data.ragMeta) {
+            const m = data.ragMeta;
+            if (m.revisionCount > 0) {
+                parts.push(
+                    'Preenchimentos deste modelo: a IA usou ' +
+                        m.revisionCount +
+                        ' exemplo(s) concluído(s) (RAG de execução).'
+                );
+            } else if (m.skipped === 'no_completed_revisions') {
+                parts.push('Preenchimentos: ainda não há revisões concluídas na base para este modelo.');
+            } else if (m.skipped === 'template_not_found') {
+                parts.push('Preenchimentos: modelo não encontrado na base — guarde o formulário na API.');
+            } else if (m.skipped === 'invalid_template_id') {
+                /* omit */
+            } else if (m.skipped === 'no_template_id') {
+                parts.push('Preenchimentos: guarde o modelo na nuvem para incluir histórico de execução (RAG).');
+            }
         }
+        if (data.ragLibraryMeta) {
+            const lib = data.ragLibraryMeta;
+            const n = typeof lib.usedCount === 'number' ? lib.usedCount : 0;
+            if (n > 0) {
+                const mode =
+                    lib.ranking === 'embedding'
+                        ? 'RAG semântico (embeddings)'
+                        : lib.ranking === 'lexical'
+                          ? 'RAG léxico'
+                          : 'RAG da biblioteca';
+                parts.push(
+                    'Biblioteca de modelos: a IA consultou ' + n + ' formulário(s) semelhante(s) do painel (' + mode + ').'
+                );
+            } else if (lib.skipped === 'skipped_by_client') {
+                /* omit */
+            } else if (lib.skipped === 'no_templates') {
+                parts.push('Biblioteca: não há outros modelos ativos para usar como referência.');
+            } else if (lib.skipped === 'query_error') {
+                parts.push('Biblioteca: não foi possível carregar modelos de referência (erro no servidor).');
+            }
+        }
+        foot.textContent = parts.join(' ');
     }
 }
 
@@ -5193,12 +5238,23 @@ async function brsparkCopilotPostChatRound(userText) {
         spreadsheetSummary: summary,
         templateSettings: JSON.parse(JSON.stringify(globalFormSettings || {})),
         templateMetadata: buildChecklistTemplateMetadata(),
+        templateDraftTitle: typeof currentFormTitle === 'string' ? currentFormTitle : '',
+        templateFolderId:
+            currentFormFolderId === undefined || currentFormFolderId === null || currentFormFolderId === ''
+                ? null
+                : String(currentFormFolderId),
     };
     if (tid) chatPayload.templateId = tid;
 
     beginCopilotThinking('A IA está pensando…');
     try {
-        const res = await fetch(brsparkApiBase() + '/checklists/ai/session/chat', {
+        const useStream = window.__brsparkCopilotUseStream !== false;
+        const chatUrl =
+            brsparkApiBase() +
+            '/checklists/ai/session/chat' +
+            (useStream ? '-stream' : '');
+
+        const res = await fetch(chatUrl, {
             method: 'POST',
             headers: {
                 Authorization: 'Bearer ' + token,
@@ -5206,13 +5262,94 @@ async function brsparkCopilotPostChatRound(userText) {
             },
             body: JSON.stringify(chatPayload),
         });
+
         let data = {};
-        try {
-            data = await res.json();
-        } catch (e2) {
-            data = {};
+
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        const isEventStream = contentType.indexOf('text/event-stream') >= 0;
+
+        if (
+            useStream &&
+            isEventStream &&
+            res.ok &&
+            res.body &&
+            typeof res.body.getReader === 'function'
+        ) {
+            const reader = res.body.getReader();
+            const dec = new TextDecoder();
+            let buf = '';
+            let finalPayload = null;
+            let streamErr = null;
+            while (true) {
+                const step = await reader.read();
+                if (step.done) break;
+                buf += dec.decode(step.value, { stream: true });
+                const blocks = buf.split('\n\n');
+                buf = blocks.pop() || '';
+                for (let bi = 0; bi < blocks.length; bi++) {
+                    const block = blocks[bi];
+                    const lines = String(block || '')
+                        .split('\n')
+                        .map(function (l) {
+                            return l.trim();
+                        })
+                        .filter(Boolean);
+                    for (let li = 0; li < lines.length; li++) {
+                        const line = lines[li];
+                        if (line.indexOf('data:') !== 0) continue;
+                        const raw = line.slice(5).trim();
+                        let ev = null;
+                        try {
+                            ev = JSON.parse(raw);
+                        } catch (eParse) {
+                            continue;
+                        }
+                        if (!ev || typeof ev !== 'object') continue;
+                        if (ev.type === 'progress' && ev.message) {
+                            copilotSetThinkingMessage(ev.message);
+                        } else if (ev.type === 'result' && ev.payload) {
+                            finalPayload = ev.payload;
+                        } else if (ev.type === 'error') {
+                            streamErr = new Error(ev.error || 'Falha no copiloto IA.');
+                            if (ev.code === 'NO_OPENAI_KEY') streamErr.code = 'NO_OPENAI_KEY';
+                        }
+                    }
+                }
+            }
+            if (buf.trim()) {
+                const tail = buf.trim().split('\n\n');
+                for (let ti = 0; ti < tail.length; ti++) {
+                    const line = String(tail[ti] || '')
+                        .split('\n')
+                        .map(function (l) {
+                            return l.trim();
+                        })
+                        .find(function (l) {
+                            return l.indexOf('data:') === 0;
+                        });
+                    if (!line) continue;
+                    try {
+                        const ev = JSON.parse(line.slice(5).trim());
+                        if (ev.type === 'result' && ev.payload) finalPayload = ev.payload;
+                        if (ev.type === 'error') streamErr = new Error(ev.error || 'Falha no copiloto IA.');
+                    } catch (eT) {
+                        /* ignore */
+                    }
+                }
+            }
+            if (streamErr) throw streamErr;
+            if (!finalPayload) throw new Error('Resposta em fluxo incompleta do servidor.');
+            data = finalPayload;
+        } else {
+            try {
+                data = await res.json();
+            } catch (e2) {
+                data = {};
+            }
+            if (!res.ok) {
+                throw new Error(data.error || res.statusText || 'Pedido falhou');
+            }
         }
-        if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
 
         brsparkCopilotApplyChatResponse(data);
     } catch (e) {
@@ -5242,7 +5379,9 @@ window.brsparkCopilotSend = async function () {
             text =
                 'Com base na planilha em contexto e no formulário atual no canvas, sugira próximos passos e melhorias úteis.';
         } else {
-            alert('Escreva uma mensagem ou carregue uma planilha Excel para obter sugestões automáticas.');
+            alert(
+                'Escreva uma mensagem ou carregue um arquivo (Excel, Word, PDF ou imagem) no Copiloto para obter sugestões automáticas.',
+            );
             return;
         }
     }
@@ -5268,8 +5407,17 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     const file = inputEl && inputEl.files && inputEl.files[0];
     if (!file) return;
     const name = String(file.name || '').toLowerCase();
-    if (!name.endsWith('.xlsx') && !name.endsWith('.xlsm')) {
-        alert('Use um ficheiro Excel .xlsx ou .xlsm.');
+    const okExt =
+        name.endsWith('.xlsx') ||
+        name.endsWith('.xlsm') ||
+        name.endsWith('.docx') ||
+        name.endsWith('.pdf') ||
+        name.endsWith('.png') ||
+        name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        name.endsWith('.webp');
+    if (!okExt) {
+        alert('Use um arquivo .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg ou .webp.');
         inputEl.value = '';
         return;
     }
@@ -5277,10 +5425,10 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     copilotSetContextDetailsOpen(true);
 
     const statusEl = document.getElementById('copilot-excel-status');
-    beginCopilotThinking('Lendo e analisando a planilha com IA…');
+    beginCopilotThinking('Lendo e analisando o arquivo com IA…');
     window.__brsparkCopilotExcelBusy = true;
     updateCopilotExcelUi();
-    if (statusEl) statusEl.textContent = 'A ler e a analisar a planilha com IA…';
+    if (statusEl) statusEl.textContent = 'Lendo e analisando o arquivo com IA…';
 
     const hintEl = document.getElementById('copilot-excel-hint');
     const hint = hintEl ? String(hintEl.value || '').trim() : '';
@@ -5302,29 +5450,29 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             data = {};
         }
         if (!res.ok) {
-            throw new Error(data.error || res.statusText || 'Falha ao analisar o ficheiro');
+            throw new Error(data.error || res.statusText || 'Falha ao analisar o arquivo');
         }
         const blocks = Array.isArray(data.blocks) ? data.blocks : [];
         if (!blocks.length) {
-            throw new Error('A análise não devolveu etapas ou campos. Tente outro ficheiro ou ajuste as dicas.');
+            throw new Error('A análise não devolveu etapas ou campos. Tente outro arquivo ou ajuste as dicas.');
         }
         window.__brsparkCopilotSpreadsheetSummary = buildCopilotSpreadsheetSummaryFromAnalyze(
             data,
-            file.name || 'planilha.xlsx',
+            file.name || 'arquivo',
         );
         window.__brsparkCopilotSpreadsheetFileName = file.name || '';
         if (statusEl) {
             statusEl.textContent =
-                'Planilha «' +
-                (file.name || 'Excel') +
-                '» carregada (' +
+                'Arquivo «' +
+                (file.name || '') +
+                '» carregado (' +
                 blocks.length +
-                ' blocos). A iniciar a conversa…';
+                ' blocos). Iniciando a conversa…';
         }
         updateCopilotExcelUi();
 
         await brsparkCopilotPostChatRound(
-            'Acabei de enviar uma planilha Excel para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos e sugira três passos práticos para montar o formulário no canvas.',
+            'Acabei de enviar um arquivo para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.',
         );
     } catch (e) {
         console.error(e);
@@ -5387,6 +5535,11 @@ window.brsparkCopilotUndo = function () {
         currentFormIconLibrary =
             entry.taskIconLibrary != null ? String(entry.taskIconLibrary) : 'Ionicons';
         syncBuilderTaskIconDom();
+    }
+    if (entry.formTitle != null) {
+        currentFormTitle = String(entry.formTitle);
+        const tt = document.getElementById('tpl-title');
+        if (tt) tt.value = currentFormTitle;
     }
     renderCanvas();
     renderProperties();

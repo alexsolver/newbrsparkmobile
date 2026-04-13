@@ -26,7 +26,7 @@ const { sanitizeTaskIconName } = require('./formAiTemplateMetadataPatch');
  */
 function buildAnalyzeSystemPrompt(formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(formContext || {});
-  return `Você é um assistente que analisa planilhas Excel convertidas em texto e prepara um formulário BrSpark (checklist no celular).
+  return `Você é um assistente que analisa documentos (Excel, Word, PDF ou texto vindo de OCR de imagem) e prepara um formulário BrSpark (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -80,7 +80,7 @@ ${formatTransitDisplacementRulesForPrompt()}
  */
 function buildStructureExtractSystemPrompt(_formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(_formContext || {});
-  return `Você é um assistente que lê planilhas Excel convertidas em texto e extrai a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
+  return `Você é um assistente que lê documentos (Excel, Word, PDF ou texto de OCR de imagem) e extrai a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -205,11 +205,15 @@ function buildUserContentWithProfile(input) {
       ? 'Conteúdo extraído do documento Word:'
       : fmt === 'json'
         ? 'Conteúdo extraído / representado a partir do JSON:'
-        : 'Conteúdo extraído da planilha:';
+        : fmt === 'pdf'
+          ? 'Conteúdo extraído do documento PDF:'
+          : fmt === 'image_ocr'
+            ? 'Conteúdo reconhecido por OCR na imagem do formulário:'
+            : 'Conteúdo extraído da planilha:';
   const profileHeading =
     fmt === 'xlsx' || fmt === 'xlsm'
       ? '### Perfil estatístico das colunas (linha 1 = cabeçalhos; confia nestes signals para o tipo de campo)'
-      : '### Perfil estatístico (só aplica a Excel; em Word/JSON use o texto acima)';
+      : '### Perfil estatístico (só aplica a Excel; em Word/PDF/imagem/JSON use o texto acima)';
   return (
     (ctxBlock ? ctxBlock + '\n\n' : '') +
     `${contentTitle}\n\n` +

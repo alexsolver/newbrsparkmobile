@@ -816,9 +816,26 @@ model ChecklistTemplate {
   folder      ChecklistTemplateFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
+  embedding ChecklistTemplateEmbedding?
+
   executions  ChecklistExecution[]
   routineTaskAssignments RoutineTaskAssignment[]
+}
+
+/// Vetor de embedding (OpenAI etc.) para RAG semântico da biblioteca de modelos no Copiloto.
+model ChecklistTemplateEmbedding {
+  id          String            @id @default(cuid())
+  templateId  String            @unique
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  model       String
+  dims        Int
+  contentHash String
+  vector      Json
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([templateId])
 }
 
 /// Contador global por período AAAA-MM (fuso America/Sao_Paulo) para RT-AAAA-MM-NNNNNN (tarefas de rotina).

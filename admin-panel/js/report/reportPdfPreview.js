@@ -783,8 +783,16 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
 function normalizePolygonVertexPdf(pt) {
   if (!pt) return null;
   if (Array.isArray(pt) && pt.length >= 2) {
-    const la = Number(pt[0]);
-    const ln = Number(pt[1]);
+    let la = Number(pt[0]);
+    let ln = Number(pt[1]);
+    // GeoJSON / KML export [lng,lat] — heurística BR (igual à app)
+    const firstLooksLng = la <= -20 && la >= -80;
+    const secondLooksLat = ln >= -35 && ln <= 15;
+    if (firstLooksLng && secondLooksLat) {
+      const t = la;
+      la = ln;
+      ln = t;
+    }
     if (Number.isFinite(la) && Number.isFinite(ln)) return [la, ln];
   }
   if (typeof pt === 'object') {
@@ -998,9 +1006,22 @@ function coordsToSvgPolyline(coords, b) {
   return parts.join(' ');
 }
 
-function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z) {
+function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z, zoneType) {
   const b = patrolDisplayedTileBounds(cx, cy, z);
-  const refLine = coordsToSvgPolyline(refLatLng, b);
+  const zt = String(zoneType || 'route').toLowerCase();
+  let refSvg = '';
+  if (zt === 'polygon' && Array.isArray(refLatLng) && refLatLng.length >= 3) {
+    const polyPts = coordsToSvgPolyline(refLatLng, b);
+    if (polyPts) {
+      refSvg = `<polygon fill="rgba(59,130,246,0.2)" stroke="#2563eb" stroke-width="0.55" stroke-linejoin="round" points="${polyPts}"/>`;
+    }
+  } else {
+    const refLine = coordsToSvgPolyline(refLatLng, b);
+    if (refLine) {
+      const stroke = zt === 'segment' ? '#9333ea' : '#ea580c';
+      refSvg = `<polyline fill="none" stroke="${stroke}" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="${refLine}"/>`;
+    }
+  }
   const trLine = coordsToSvgPolyline(traversedLatLng, b);
   let markers = '';
   if (Array.isArray(traversedLatLng) && traversedLatLng.length >= 1) {
@@ -1015,12 +1036,8 @@ function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z) {
       markers += `<g transform="translate(${pe.u.toFixed(3)},${pe.v.toFixed(3)})"><circle cx="0" cy="0" r="2.35" fill="#ffffff" stroke="#dc2626" stroke-width="0.5"/><rect x="-0.95" y="-0.95" width="1.9" height="1.9" rx="0.28" fill="#dc2626"/></g>`;
     }
   }
-  if (!refLine && !trLine && !markers) return '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" aria-hidden="true">${
-    refLine
-      ? `<polyline fill="none" stroke="#ea580c" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="${refLine}"/>`
-      : ''
-  }${
+  if (!refSvg && !trLine && !markers) return '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" aria-hidden="true">${refSvg}${
     trLine
       ? `<polyline fill="none" stroke="#2563eb" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" points="${trLine}"/>`
       : ''
@@ -1031,7 +1048,7 @@ function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z) {
  * Mapa raster 3×3 com tiles oficiais + SVG (rota / GPS) alinhado a Web Mercator.
  * Política OSM: uso moderado; © na legenda.
  */
-function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng) {
+function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng, zoneType) {
   const fit = patrolRasterFitBounds(refLatLng, traversedLatLng);
   if (!fit) return null;
   const { clat, clng, dlat, dlng } = fit;
@@ -1048,14 +1065,21 @@ function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng) {
       );
     }
   }
-  const overlay = buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z);
+  const zt = String(zoneType || 'route').toLowerCase();
+  const overlay = buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z, zt);
+  const legend =
+    zt === 'polygon'
+      ? `Polígono azul: área de serviço (KML) · Linha azul escura: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
+      : zt === 'segment'
+        ? `Roxo: trecho A–B (referência KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
+        : `Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`;
   return `
     <div style="position:relative;width:100%;border-bottom:1px solid ${th.colorBorder};background:#d9dde0;overflow:hidden">
       <div style="display:flex;flex-wrap:wrap;width:100%;line-height:0;font-size:0">${imgs.join('')}</div>
       ${overlay}
     </div>
     <div style="font-size:8px;color:${th.colorMuted};padding:6px 10px;background:#f1f5f9;line-height:1.4">
-      Laranja: referência · Azul: GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.
+      ${legend}
     </div>`;
 }
 
@@ -1170,18 +1194,28 @@ function polylineLengthTraversedPdf(tr) {
   return sum > 0 ? sum : null;
 }
 
-/** Evidência de patrulha (OS tipo rota). Gera mesmo sem `patrolCompliance` (ex.: referência com &lt;2 pontos ou poucas amostras GPS). */
+/**
+ * Mapa raster + geometria de despacho (rota, polígono ou trecho KML) e trilha GPS no PDF.
+ * Métricas de patrulha (corredor) só para `locationZoneType === 'route'`.
+ */
 function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
-  if (!task || task.locationZoneType !== 'route') return '';
+  if (!task) return '';
+  const zt = String(task.locationZoneType || '').toLowerCase();
+  if (zt !== 'route' && zt !== 'polygon' && zt !== 'segment') return '';
   const ref = parseTaskRoutePolygonForPdf(task);
+  const minRef = zt === 'polygon' ? 3 : 2;
   const tr = endGPS ? normalizeTraversedPathForReport(endGPS.traversedPath) || [] : [];
-  if (!endGPS && ref.length < 2) return '';
+  if (!endGPS && ref.length < minRef) return '';
+  const refTooShort = ref.length < minRef;
   const p =
-    endGPS && endGPS.patrolCompliance && typeof endGPS.patrolCompliance === 'object'
+    zt === 'route' &&
+    endGPS &&
+    endGPS.patrolCompliance &&
+    typeof endGPS.patrolCompliance === 'object'
       ? endGPS.patrolCompliance
       : null;
   const browseOsmUrl = buildOsmPatrolBrowseUrl(ref, tr);
-  const rasterMapInner = buildPatrolOsmRasterMapHtml(th, ref, tr);
+  const rasterMapInner = buildPatrolOsmRasterMapHtml(th, ref, tr, zt);
   const hrefAttr = (u) => String(u || '').replace(/"/g, '&quot;');
   const tol =
     task.locationRadius != null
@@ -1200,7 +1234,13 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
         ? `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:9px;font-weight:800;background:#fee2e2;color:#991b1b">Desvio máximo acima da tolerância</span>`
         : '';
   const title =
-    p != null ? 'PATRULHA DE ROTA (certificação)' : 'PATRULHA DE ROTA (evidência)';
+    zt === 'polygon'
+      ? 'ZONA POLIGONAL (KML / mapa de serviço)'
+      : zt === 'segment'
+        ? 'TRECHO DE REFERÊNCIA (KML)'
+        : p != null
+          ? 'PATRULHA DE ROTA (certificação)'
+          : 'PATRULHA DE ROTA (evidência)';
   let metricsBlock = '';
   if (p) {
     const tolNum = Math.max(5, Number(p.toleranceM) || Number(task.locationRadius) || 100);
@@ -1232,9 +1272,14 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
         </div>
       </div>`;
   } else {
-    const refHint =
-      ref.length < 2
-        ? 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+    const refHint = refTooShort
+      ? zt === 'polygon'
+        ? 'O polígono de despacho tem menos de três pontos válidos — não foi possível desenhar a área de referência no mapa.'
+        : zt === 'segment'
+          ? 'O trecho de despacho precisa de dois pontos (A e B) para aparecer no mapa.'
+          : 'A polilinha de despacho tem menos de dois pontos, por isso não foi possível calcular cobertura/desvio nem gerar o mapa de referência.'
+      : zt === 'polygon' || zt === 'segment'
+        ? 'Geometria de despacho (KML) abaixo; a linha azul é a trilha GPS do deslocamento, quando registada.'
         : 'Não há métricas de patrulha neste registro (poucas amostras de GPS no deslocamento, interrupção do rastreamento ou versão anterior do app). O mapa abaixo mostra ainda assim o trajeto planejado e a trilha registrada, se existirem.';
     const estLen = polylineLengthTraversedPdf(tr);
     const extraEst =
@@ -1251,12 +1296,18 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
     mapBlock = `<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
       ${osmLinkRow}
       ${rasterMapInner}
-      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". O mapa acima inclui rota (laranja), GPS (azul) e início/fim sobre os tiles OSM.</div>
+      <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use "Abrir em tela cheia". Legenda: ${
+        zt === 'polygon'
+          ? 'polígono de serviço (KML) e trilha GPS sobre os tiles OSM.'
+          : zt === 'segment'
+            ? 'trecho A–B (KML), trilha GPS e início/fim sobre os tiles OSM.'
+            : 'rota de referência (laranja), trilha GPS (azul) e início/fim sobre os tiles OSM.'
+      }</div>
     </div>`;
   } else if (!p) {
     mapBlock =
-      ref.length < 2 && (!tr || tr.length < 1)
-        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: a rota de despacho precisa de pontos ou registe o fim de deslocamento com trilha GPS.</div>`
+      refTooShort && (!tr || tr.length < 1)
+        ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45">Sem coordenadas para mapa: confira o polígono/rota no despacho ou registe o fim de deslocamento com trilha GPS.</div>`
         : browseOsmUrl
           ? `<div style="margin-top:8px;font-size:9px;color:${th.colorMuted};line-height:1.45"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">Abrir no OpenStreetMap</a></div>`
           : '';

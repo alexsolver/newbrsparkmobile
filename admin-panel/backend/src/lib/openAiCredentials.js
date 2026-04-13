@@ -25,7 +25,7 @@ function normalizeOpenAiV1Base(url) {
  * Modelo: metadata.model > baseUrl (quando não é URL — o painel grava o modelo aqui) > OPENAI_MODEL > gpt-4o-mini.
  * Base URL da API: baseUrl se for URL; senão OPENAI_BASE_URL ou api.openai.com.
  *
- * @returns {Promise<{ apiKey: string, model: string, baseUrl: string, source: 'integration'|'env'|'none' }>}
+ * @returns {Promise<{ apiKey: string, model: string, baseUrl: string, source: 'integration'|'env'|'none', embeddingModel: string }>}
  */
 async function resolveOpenAiCredentials() {
   const envKey = (process.env.OPENAI_API_KEY && String(process.env.OPENAI_API_KEY).trim()) || '';
@@ -48,6 +48,10 @@ async function resolveOpenAiCredentials() {
   let baseUrl = normalizeOpenAiV1Base(envBaseRaw || DEFAULT_BASE);
   let model = envModel || DEFAULT_MODEL;
 
+  const envEmb =
+    (process.env.OPENAI_EMBEDDING_MODEL && String(process.env.OPENAI_EMBEDDING_MODEL).trim()) || '';
+  let embeddingModel = envEmb || 'text-embedding-3-small';
+
   if (row) {
     const bu = String(row.baseUrl || '').trim();
     if (looksLikeHttpUrl(bu)) {
@@ -59,11 +63,20 @@ async function resolveOpenAiCredentials() {
     if (meta && typeof meta.model === 'string' && meta.model.trim()) {
       model = meta.model.trim();
     }
+    if (meta && typeof meta.embeddingModel === 'string' && meta.embeddingModel.trim()) {
+      embeddingModel = meta.embeddingModel.trim();
+    }
   }
 
   const source = intKey ? 'integration' : envKey ? 'env' : 'none';
 
-  return { apiKey, model: model || DEFAULT_MODEL, baseUrl, source };
+  return {
+    apiKey,
+    model: model || DEFAULT_MODEL,
+    baseUrl,
+    source,
+    embeddingModel: embeddingModel || 'text-embedding-3-small',
+  };
 }
 
 module.exports = {

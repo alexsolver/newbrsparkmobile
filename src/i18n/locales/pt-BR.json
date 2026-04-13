@@ -225,7 +225,7 @@
     "a11yLogo": "BrSpark",
     "skip": "Pular",
     "termsRequiredTitle": "Confirmação necessária",
-    "termsRequiredRetention": "Ative a opção «Li e entendi a política de retenção ({{legal}})» para avançar. Essa declaração é obrigatória conforme a legislação aplicável.",
+    "termsRequiredRetention": "Ative a opção \u201cLi e entendi a política de retenção ({{legal}})\u201d para avançar. Essa declaração é obrigatória conforme a legislação aplicável.",
     "back": "Voltar",
     "continue": "Continuar",
     "confirmEnter": "Confirmar e entrar",
@@ -241,7 +241,7 @@
     "techCollectHistoryTitle": "Histórico de OS",
     "techCollectHistoryDesc": "Até {{years}} anos, conforme {{legal}}",
     "clientCollectCatalogTitle": "Catálogo e serviços",
-    "clientCollectCatalogDesc": "Pesquisa e solicitações",
+    "clientCollectCatalogDesc": "Busca e solicitações",
     "clientCollectAssetsTitle": "Seus ativos",
     "clientCollectAssetsDesc": "Cadastro e mapa dos seus bens",
     "clientCollectLocTitle": "Localização (opcional)",
@@ -265,7 +265,7 @@
     "deviceTitleTech": "Dispositivo e segurança",
     "deviceDescTech": "Informações do aparelho para confiabilidade dos dados e detecção de anomalias em contexto de campo.",
     "deviceToggleTitleTech": "Status do dispositivo",
-    "deviceToggleDescTech": "Bateria, tipo de ligação (Wi‑Fi/rede móvel) e modelo. Ajuda a entender falhas de sincronização.",
+    "deviceToggleDescTech": "Bateria, tipo de conexão (Wi‑Fi/rede móvel) e modelo. Ajuda a entender falhas de sincronização.",
     "deviceInfoTech": "Sinais de GPS simulado e relógio desajustado podem ser analisados automaticamente para proteger a operação.",
     "deviceInfoTechBold": " Não exige permissão extra",
     "deviceInfoTechSuffix": " no celular.",
@@ -864,20 +864,7 @@
     "activePortfolio": "Portfólio",
     "providerSearchPlaceholder": "Buscar por nº da OS, serviço…",
     "revisionBadge": "Revisão",
-<<<<<<< HEAD
     "providerOsAwaitingAcceptBadge": "Aguardando aceitação",
-=======
-    "providerSort": {
-      "recent": "Recentes",
-      "oldestRecv": "Antigas",
-      "createdNew": "Criação (novo)",
-      "createdOld": "Criação (antigo)",
-      "dueSoon": "Vencimento (antes)",
-      "dueLate": "Vencimento (depois)",
-      "route": "Rota",
-      "routeSla": "Rota + Vencimento"
-    },
->>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
     "osReceivedAtLabel": "Recebimento:",
     "osReceivedAtLine": "Recebimento: {{date}}",
     "osEtaChip": "ETA {{minutes}} min",
@@ -916,6 +903,9 @@
       "route": "Rota",
       "routeSla": "Rota + prazo"
     },
+    "providerCompletedLoadMore": "Carregar mais",
+    "providerCompletedShowing": "Mostrando {{shown}} de {{total}} ordens concluídas",
+    "providerCompletedAllLoaded": "Todas as {{total}} ordens concluídas estão na lista.",
     "nextAgenda": "Agenda",
     "sort": {
       "open": "Ordenar",
@@ -1104,7 +1094,7 @@
     "qrMsg": "Afixe fisicamente esta etiqueta QR no objeto para permitir fiscalizações e auditorias.",
     "exportHdImage": "Exportar Imagem HD",
     "linkExistingTitle": "Vincular Bem Filho",
-    "searchToLink": "Pesquisar para vincular...",
+    "searchToLink": "Buscar para vincular...",
     "noAssetsAvailable": "Nenhum bem disponível para vincular.",
     "confirmLink": "Confirmar Vínculo",
     "confirmLinkMsg": "Deseja que \"{{child}}\" se torne um sub-bem de \"{{parent}}\"?",
@@ -1359,7 +1349,7 @@
     "noDocumentsDesc": "Nenhum documento cadastrado. Adicione laudos, contratos e certidões."
   },
   "docs": {
-    "searchPlaceholder": "Pesquisar no acervo...",
+    "searchPlaceholder": "Buscar no acervo...",
     "photos": "Fotos",
     "cannotOpenFile": "Não foi possível abrir este arquivo.",
     "fillTitleFile": "Preencha título e anexe o arquivo.",
@@ -1550,9 +1540,9 @@
     "offlineNoMeCacheHint": "Sem configurações em cache neste aparelho. Com internet, abra esta tela ou use o menu inferior até os dados sincronizarem; depois o modo offline mostra o aviso da empresa e o histórico salvo.",
     "moduleOffTitle": "Registro indisponível",
     "hintFlagOff": "A funcionalidade está desativada na plataforma para seu espaço.",
-    "hintTenantModuleOff": "O módulo de ponto está desativado para sua empresa. Peça à administração para ativar em «Registro de horas».",
+    "hintTenantModuleOff": "O módulo de ponto está desativado para sua empresa. Peça à administração para ativar em \u201cRegistro de horas\u201d.",
     "hintUserOff": "O registro de ponto não está ativado para seu usuário. Peça à administração para ativar o rastreamento.",
-    "hintRoleClient": "Contas com perfil de cliente (papel «Usuário» / USER) não utilizam o registro de ponto. Os demais perfis precisam da flag, do módulo da empresa e desta opção ativados.",
+    "hintRoleClient": "Contas com perfil de cliente (papel \u201cUsuário\u201d / USER) não utilizam o registro de ponto. Os demais perfis precisam da flag, do módulo da empresa e desta opção ativados.",
     "clientAccountNoAccess": "O registro de ponto não está disponível para contas com perfil de cliente.",
     "faceBlockedTitle": "Biometria necessária",
     "faceBlockedBody": "Sua empresa exige verificação facial e a matrícula ainda não está concluída ou sincronizada. Conclua o cadastro facial no perfil ou contate a administração.",

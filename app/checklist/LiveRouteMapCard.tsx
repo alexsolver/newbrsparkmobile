@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
@@ -965,15 +965,13 @@ export default function LiveRouteMapCard({
     };
   }, [visible, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
 
-  /** Esconde polilinha do template quando há percurso dinâmico útil (evita duas linhas ou reta por cima da rota). */
+  /**
+   * Esconde a polilinha do template só quando o despacho tem exactamente 2 pontos e há OSRM:
+   * aí a geometria rodoviária substitui a reta entre A e B.
+   * KML / patrulha (≥3 vértices) mantém-se visível em conjunto com a OSRM (evita perder o anel no mapa).
+   */
   const suppressTemplatePolyline =
-    !!(
-      route &&
-      route.length >= 2 &&
-      dynamicRoute &&
-      dynamicRoute.length >= 2 &&
-      (route.length === 2 || dynamicRoute.length > 2)
-    );
+    !!(route && route.length === 2 && dynamicRoute && dynamicRoute.length >= 2);
 
   const dynamicRouteSplit = useMemo(() => {
     if (!dynamicRoute || dynamicRoute.length < 2 || routePaintArcM <= 0) return null;
@@ -981,7 +979,7 @@ export default function LiveRouteMapCard({
   }, [dynamicRoute, routePaintArcM]);
 
   const templateRouteSplit = useMemo(() => {
-    if (zoneType === 'segment') return null;
+    if (zoneType === 'segment' || zoneType === 'polygon') return null;
     if (dynamicRoute && dynamicRoute.length >= 2) return null;
     if (!route || route.length < 2 || routePaintArcM <= 0) return null;
     if (suppressTemplatePolyline) return null;
@@ -1388,8 +1386,24 @@ export default function LiveRouteMapCard({
           pitchEnabled={!followUser}
           rotateEnabled={!followUser}
         >
-          {route && route.length >= 2 && !suppressTemplatePolyline && zoneType !== 'segment' && (
-            templateRouteSplit ? (
+          {route &&
+            route.length >= 3 &&
+            !suppressTemplatePolyline &&
+            zoneType === 'polygon' && (
+              <Polygon
+                coordinates={route.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                fillColor="rgba(59,130,246,0.12)"
+                strokeColor="#3b82f6"
+                strokeWidth={2}
+                zIndex={780}
+              />
+            )}
+          {route &&
+            route.length >= 2 &&
+            !suppressTemplatePolyline &&
+            zoneType !== 'segment' &&
+            zoneType !== 'polygon' &&
+            (templateRouteSplit ? (
               <>
                 {templateRouteSplit.covered.length >= 2 && (
                   <Polyline
@@ -1420,8 +1434,7 @@ export default function LiveRouteMapCard({
                 zIndex={800}
                 geodesic
               />
-            )
-          )}
+            ))}
           {coveredPath && coveredPath.length >= 2 && (
             <Polyline
               coordinates={coveredPath.map((c) => ({ latitude: c[0], longitude: c[1] }))}
@@ -1432,7 +1445,10 @@ export default function LiveRouteMapCard({
             />
           )}
           
-          {zoneType !== 'segment' && route && route.length > 0 && (
+          {zoneType !== 'segment' &&
+            zoneType !== 'polygon' &&
+            route &&
+            route.length > 0 && (
             <>
               <Marker coordinate={{ latitude: route[0][0], longitude: route[0][1] }} title="Início" pinColor="#16a34a" />
               <Marker

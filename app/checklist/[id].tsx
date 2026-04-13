@@ -1460,7 +1460,7 @@ function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
 function buildRouteCoordsFromTask(task: any): number[][] {
   const rawPoly = task?.locationPolygon;
   const zt = task?.locationZoneType;
-  if ((zt !== 'route' && zt !== 'segment') || !rawPoly) return [];
+  if ((zt !== 'route' && zt !== 'segment' && zt !== 'polygon') || !rawPoly) return [];
   let parsed: any = typeof rawPoly === 'string' ? null : rawPoly;
   if (!parsed) {
     try {
@@ -1470,6 +1470,8 @@ function buildRouteCoordsFromTask(task: any): number[][] {
     }
   }
   if (!Array.isArray(parsed)) return [];
+  if (zt === 'polygon' && parsed.length < 3) return [];
+  if ((zt === 'route' || zt === 'segment') && parsed.length < 2) return [];
   return parsed.map((pt: any) => {
     if (Array.isArray(pt)) {
       const a = parseFloat(pt[0]);
@@ -2672,8 +2674,16 @@ export default function ChecklistEngine() {
       /** Só leitura: lista de concluídas, snapshot local COMPLETED/SYNCED, ou estado terminal na API (sem revisão). */
       let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
-      
-      let realTemplateId = id as string;
+
+      /** Expo pode expor `id` como `string | string[]` — normalizar para bater com `@brspark_templates`. */
+      const resolvedRouteTemplateId =
+        typeof id === 'string'
+          ? id.trim()
+          : Array.isArray(id)
+            ? String(id[0] ?? '').trim()
+            : String(id ?? '').trim();
+
+      let realTemplateId = resolvedRouteTemplateId;
       let initialRes: any = {};
       let serverPausedFlag = false;
       let remotePausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
@@ -2984,7 +2994,9 @@ export default function ChecklistEngine() {
       let tmpl = null;
       
       try {
-         const res = await apiFetch(`/api/checklists/templates/${realTemplateId}?_t=${Date.now()}`);
+         const res = await apiFetch(
+           `/api/checklists/templates/${encodeURIComponent(realTemplateId)}?_t=${Date.now()}`
+         );
          if (res.ok) {
             tmpl = await res.json();
             db[realTemplateId] = tmpl;
@@ -2995,7 +3007,33 @@ export default function ChecklistEngine() {
       } catch (e) {
          tmpl = db[realTemplateId];
          if (!tmpl) {
-            Alert.alert("Aviso", "Você esta Offline, para acessar esta Atividade você precisa estar Online");
+            // #region agent log
+            fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd392c6' },
+              body: JSON.stringify({
+                sessionId: 'd392c6',
+                hypothesisId: 'H_tpl_miss',
+                location: 'checklist/[id].tsx:loadTemplate',
+                message: 'template_offline_miss',
+                data: {
+                  idKind: Array.isArray(id) ? 'array' : typeof id,
+                  routeTplLen: resolvedRouteTemplateId.length,
+                  realTplLen: String(realTemplateId || '').length,
+                  routeEqReal: resolvedRouteTemplateId === String(realTemplateId || ''),
+                  isRtFlow: isRoutineTaskFlow,
+                  dbKeyCount: db && typeof db === 'object' && !Array.isArray(db) ? Object.keys(db).length : -1,
+                },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+            // #endregion
+            Alert.alert(
+              'Aviso',
+              isRoutineTaskFlow
+                ? 'Este modelo não está guardado neste aparelho. Com internet, abra esta tarefa de rotina uma vez (menu «Mais ações» ou a própria OS) para ficar disponível offline.'
+                : 'Você está offline. Para acessar esta atividade você precisa estar online ou já tê-la aberto antes neste aparelho.',
+            );
             router.back();
             return;
          }
@@ -5155,7 +5193,14 @@ export default function ChecklistEngine() {
       {(() => {
         const schema = template?.schemaData || [];
         const hasTransit = schema.some((f: any) => f.type === 'transit_start');
-        if (!hasTransit && currentTask?.locationZoneType !== 'route' && currentTask?.locationZoneType !== 'segment') return null;
+        if (
+          !hasTransit &&
+          currentTask?.locationZoneType !== 'route' &&
+          currentTask?.locationZoneType !== 'segment' &&
+          currentTask?.locationZoneType !== 'polygon'
+        ) {
+          return null;
+        }
 
         const routeCoords = liveRouteCoordsForMap;
 
@@ -6448,7 +6493,11 @@ export default function ChecklistEngine() {
                            ownerEmail: email || 'unknown',
                          }).catch(() => {});
                          // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))
-                         if (currentTask?.locationZoneType === 'route' || currentTask?.locationZoneType === 'segment') {
+                         if (
+                           currentTask?.locationZoneType === 'route' ||
+                           currentTask?.locationZoneType === 'segment' ||
+                           currentTask?.locationZoneType === 'polygon'
+                         ) {
                            setShowLiveMap(true);
                          }
                          void generateTrackingLink();

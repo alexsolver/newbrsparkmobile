@@ -22,10 +22,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import {
+  cacheChecklistTemplateIfMissing,
   fetchRoutineTaskAssignments,
   openRoutineTaskAndCacheCloudTask,
+  prefetchRoutineTaskTemplates,
   type RoutineTaskAssignmentDto,
 } from '../services/routineTaskService';
+import { useConnectivity } from '../hooks/useConnectivity';
 import { loadRtCloudTasks } from '../lib/cloudTasksBuckets';
 import { countRoutineTasksInLocalRtCacheForTemplate } from '../lib/routineTaskQueueUi';
 
@@ -240,6 +243,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
   const { mode } = useAppContext();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { isOnline } = useConnectivity(6000);
 
   const [isOpen, setIsOpen] = useState(false);
   const [rtAssignments, setRtAssignments] = useState<RoutineTaskAssignmentDto[]>([]);
@@ -266,40 +270,28 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
     setRtLoading(true);
     void (async () => {
       const settled = await Promise.allSettled([fetchRoutineTaskAssignments(), loadRtCloudTasks()]);
+      const list = settled[0].status === 'fulfilled' ? settled[0].value : [];
       if (!cancelled) {
-        setRtAssignments(settled[0].status === 'fulfilled' ? settled[0].value : []);
+        setRtAssignments(list);
         setRtCloudRows(settled[1].status === 'fulfilled' ? settled[1].value : []);
       }
       if (!cancelled) setRtLoading(false);
+      if (!cancelled && isOnline && list.length > 0) {
+        void prefetchRoutineTaskTemplates(list);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [mode, isOpen, user?.role]);
+  }, [mode, isOpen, user?.role, isOnline]);
 
   const handleRoutineTaskPress = (a: RoutineTaskAssignmentDto) => {
     closeMenu();
     void (async () => {
       try {
-        // #region agent log
-        const badgeCnt = countRoutineTasksInLocalRtCacheForTemplate(rtCloudRows, a.templateId);
-        const freshRows = await loadRtCloudTasks();
-        const freshCnt = countRoutineTasksInLocalRtCacheForTemplate(freshRows, a.templateId);
-        const pl = {
-          sessionId: 'd392c6',
-          hypothesisId: 'B',
-          location: 'FloatingRadialMenu.tsx:handleRoutineTaskPress',
-          message: 'badge_vs_fresh_rows',
-          data: { badgeCnt, freshCnt, tplLen: String(a.templateId || '').length },
-          timestamp: Date.now(),
-        };
-        if (__DEV__) console.warn('[DEBUG_RT]', JSON.stringify(pl));
-        fetch('http://127.0.0.1:7648/ingest/3c4839dc-67e2-4b6c-bba8-db6b907bdf66', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd392c6' },
-          body: JSON.stringify(pl),
-        }).catch(() => {});
-        // #endregion
+        if (isOnline) {
+          await cacheChecklistTemplateIfMissing(a.templateId, { timeoutMs: 18_000 });
+        }
         const r = await openRoutineTaskAndCacheCloudTask(a.templateId, { titleHint: a.title });
         if (!r) {
           Alert.alert(t('common.attention'), t('radialMenu.routineTaskOpenFailed'));

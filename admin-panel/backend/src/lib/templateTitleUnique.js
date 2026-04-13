@@ -44,9 +44,38 @@ async function findActiveDuplicateInFolder(prisma, { folderId, title, excludeId 
     return null;
 }
 
+/**
+ * Ajusta o título para não colidir com outro modelo ativo na mesma pasta.
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ folderId: string | null; desiredTitle: string; excludeId?: string | null }} p
+ * @returns {Promise<string | null>}
+ */
+async function ensureUniqueActiveTitleInFolder(prisma, { folderId, desiredTitle, excludeId }) {
+    const base = normalizeTemplateTitle(desiredTitle);
+    if (!base) return null;
+    let candidate = base;
+    let n = 0;
+    let guard = 0;
+    while ((await findActiveDuplicateInFolder(prisma, { folderId, title: candidate, excludeId })) && guard < 48) {
+        guard += 1;
+        n += 1;
+        const suffix = n === 1 ? ' (IA)' : ` (IA ${n})`;
+        candidate = (base + suffix).trim();
+        if (candidate.length > 200) {
+            candidate = (base.slice(0, Math.max(1, 200 - suffix.length)) + suffix).trim();
+        }
+    }
+    if (await findActiveDuplicateInFolder(prisma, { folderId, title: candidate, excludeId })) {
+        const tail = String(Date.now()).slice(-6);
+        candidate = (base.slice(0, 190) + ' ·' + tail).trim();
+    }
+    return candidate.length > 200 ? candidate.slice(0, 200) : candidate;
+}
+
 module.exports = {
     normalizeTemplateTitle,
     titlesConflict,
     templateTitleCompareKey,
     findActiveDuplicateInFolder,
+    ensureUniqueActiveTitleInFolder,
 };

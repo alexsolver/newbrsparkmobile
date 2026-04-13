@@ -864,20 +864,7 @@
     "activePortfolio": "Portafolio",
     "providerSearchPlaceholder": "Buscar por n.º de OT, servicio…",
     "revisionBadge": "Revisión",
-<<<<<<< HEAD
     "providerOsAwaitingAcceptBadge": "Esperando aceptación",
-=======
-    "providerSort": {
-      "recent": "Recientes",
-      "oldestRecv": "Antiguas",
-      "createdNew": "Creación (nuevo)",
-      "createdOld": "Creación (antiguo)",
-      "dueSoon": "Vencimiento (antes)",
-      "dueLate": "Vencimiento (después)",
-      "route": "Ruta",
-      "routeSla": "Ruta + venc."
-    },
->>>>>>> baca6fb (feat: enhance provider sorting functionality and localization)
     "osReceivedAtLabel": "Recepción:",
     "osReceivedAtLine": "Recepción: {{date}}",
     "osEtaChip": "ETA {{minutes}} min",
@@ -916,6 +903,9 @@
       "route": "Ruta",
       "routeSla": "Ruta + vencimiento"
     },
+    "providerCompletedLoadMore": "Cargar más",
+    "providerCompletedShowing": "Mostrando {{shown}} de {{total}} órdenes completadas",
+    "providerCompletedAllLoaded": "Las {{total}} órdenes completadas están en la lista.",
     "nextAgenda": "Disponibilidad",
     "sort": {
       "open": "Ordenar",

@@ -18,6 +18,7 @@ import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadg
 import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { cacheChecklistTemplateIfMissing } from '../../src/services/routineTaskService';
 import {
   AGENDA_DAY_SLOT_MINUTES,
   type AgendaEventInterval,
@@ -128,13 +129,22 @@ export default function AgendaScreen() {
       setAssets(getLocalAssets(undefined, { includeMobileWarehouse: false }) || []);
   }, []);
 
+  useEffect(() => {
+    const ev = activityPreview?.event;
+    if (!ev || !canOpenChecklistActivity(ev)) return;
+    void cacheChecklistTemplateIfMissing(String(ev.refId), { timeoutMs: 22_000 });
+  }, [activityPreview?.event?.id, activityPreview?.event?.refId]);
+
   const openChecklistForEvent = useCallback(
     (ev: AgendaEvent) => {
       if (!canOpenChecklistActivity(ev)) return;
-      router.push({
-        pathname: '/checklist/[id]',
-        params: { id: String(ev.refId), taskId: String(ev.id) },
-      } as any);
+      void (async () => {
+        await cacheChecklistTemplateIfMissing(String(ev.refId), { timeoutMs: 18_000 });
+        router.push({
+          pathname: '/checklist/[id]',
+          params: { id: String(ev.refId), taskId: String(ev.id) },
+        } as any);
+      })();
     },
     [router],
   );

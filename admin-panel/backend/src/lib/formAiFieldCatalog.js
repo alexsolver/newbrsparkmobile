@@ -216,7 +216,7 @@ function formatAutomaticIconRulesForPrompt() {
   return `### Ícones automáticos (obrigatório)
 - Para **cada** campo e **cada** etapa (\`section_break\`) no schema: defina **sempre** \`icon\` (Ionicons em kebab-case, preferir sufixo \`-outline\` quando existir), \`iconLibrary\`: \`Ionicons\` e \`iconColor\` (hex legível, ex.: #6366f1, #0f766e, #c2410c). Escolha pelo **tipo** e **rótulo** (ex.: foto → camera-outline; assinatura → pencil-outline; lista → list-outline).
 - **Varie** \`iconColor\` entre etapas para distinguir secções no app; mantenha coerência dentro da mesma etapa.
-- Em **schemaPatch**: em **todo** \`add_field.field\` novo inclua os três campos; em \`update_field.patch\` preencha ícones em falta quando alterar rótulo/tipo ou quando o utilizador pedir melhoria visual.
+- Em **schemaPatch**: em **todo** \`add_field.field\` novo inclua os três campos; em \`update_field.patch\` preencha ícones em falta quando alterar rótulo/tipo ou quando o usuário pedir melhoria visual.
 - **Ícone da tarefa / formulário** (lista de modelos no painel): alinhado ao título ou sector (ex.: vistoria → clipboard-outline; visita → business-outline). No **Copiloto** use **templateMetadataPatch** \`{ "icon": "<nome Ionicons>" }\` (ou omita para não alterar). Na **geração directa** de formulário (JSON raiz com title/schemaData), inclua no mesmo objecto raiz \`metadata\`: \`{ "icon": "<nome Ionicons>" }\`.`;
 }
 
@@ -250,7 +250,7 @@ function buildFormContextBlock(ctx) {
       const ilib = fc.iconLibrary != null ? String(fc.iconLibrary).trim().slice(0, 40) : '';
       const iconBit = ic ? ` · ícone atual=${ic}${ilib ? ` (${ilib})` : ''}` : '';
       lines.push(
-        `Campo em foco no builder (o utilizador indicou que a conversa é principalmente sobre este bloco): «${lab || '—'}» · tipo=${typ || '?'} · id=${id || '—'}${iconBit}. Priorize patches e explicações que afetem este campo quando o pedido for ambíguo; use o id nas operações schemaPatch quando precisar de update_field ou remove_field.`,
+        `Campo em foco no builder (o usuário indicou que a conversa é principalmente sobre este bloco): «${lab || '—'}» · tipo=${typ || '?'} · id=${id || '—'}${iconBit}. Priorize patches e explicações que afetem este campo quando o pedido for ambíguo; use o id nas operações schemaPatch quando precisar de update_field ou remove_field.`,
       );
     }
   }
