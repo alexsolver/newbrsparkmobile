@@ -451,7 +451,7 @@ router.get('/tasks', async (req, res) => {
     const tenantId = String(req.user?.tenantId || '').trim();
     const canReceiveOs = await canReceiveFieldTasksForEmail(prisma, ownerEmail, tenantId);
     if (!canReceiveOs) {
-      console.log(`[sync/tasks] ${ownerEmail} — utilizador inelegível para FT/OS neste tenant (ex.: cliente); retorno vazio.`);
+      console.log(`[sync/tasks] ${ownerEmail} — usuário inelegível para FT/OS neste tenant (ex.: cliente); retorno vazio.`);
       return res.json([]);
     }
 

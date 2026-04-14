@@ -92,6 +92,9 @@ class DataCollectionService {
   private currentOwnerEmail: string | null = null;
   private currentTenantId: string | null = null;
   private isTechnicianUserProfile: boolean = false;
+  /** Evita POST /telemetry/batch a cada leitura de GPS; o link público depende do servidor receber pontos. */
+  private lastTelemetryPushMs = 0;
+  private static readonly TELEMETRY_PUSH_MIN_INTERVAL_MS = 3500;
 
   // ── Policy ─────────────────────────────────────────────────────────────────
 
@@ -294,6 +297,15 @@ class DataCollectionService {
 
   // ── Location callback ──────────────────────────────────────────────────────
 
+  private maybePushTelemetryToServer(): void {
+    const now = Date.now();
+    if (now - this.lastTelemetryPushMs < DataCollectionService.TELEMETRY_PUSH_MIN_INTERVAL_MS) return;
+    this.lastTelemetryPushMs = now;
+    void import('./syncService')
+      .then(({ pushTelemetryBatch }) => pushTelemetryBatch())
+      .catch(() => {});
+  }
+
   private async _onLocation(loc: Location.LocationObject, type: TelemetryEventType): Promise<void> {
     const { latitude: lat, longitude: lng, accuracy, speed, heading, altitude } = loc.coords;
 
@@ -328,6 +340,10 @@ class DataCollectionService {
       deviceTimestamp: new Date(loc.timestamp).toISOString(),
       isMockLocation: isMock,
     });
+
+    if (type === 'HEARTBEAT') {
+      this.maybePushTelemetryToServer();
+    }
   }
 
   // ── Burst capture (for critical milestones) ───────────────────────────────

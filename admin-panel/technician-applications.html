@@ -9,63 +9,80 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <div>
-        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:6px" id="back-users">← Usuários</a>
-        <span class="topbar-title">Cadastro de prestadores</span>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Convites, revisão e aprovação (formulário global)</div>
-        <p style="font-size:12px;color:var(--text3);margin:10px 0 0;line-height:1.45;max-width:720px">
-          <strong>Nota:</strong> em <a href="users.html">Utilizadores</a>, «Prestador pendente» vem do <em>perfil técnico</em>.
-          Só aparece aqui quem tem <em>candidatura</em> (convite ou pedido pelo app). Utilizadores com perfil pendente
-          <em>sem</em> formulário surgem na lista como «Perfil sem candidatura» — use «Criar convite» para enviar o link.
-        </p>
-      </div>
-      <div class="topbar-actions">
-        <button type="button" class="btn btn-primary" id="btn-invite">+ Convidar por e-mail</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <a href="users.html" style="color:inherit;text-decoration:none;font-weight:600">Usuários</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Cadastro de prestadores</span>
+      </nav>
     </div>
     <div class="page-body">
+      <header class="page-hero fade-in">
+        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:10px;align-self:flex-start" id="back-users">← Voltar aos usuários</a>
+        <h1 class="page-hero-title">Cadastro de prestadores</h1>
+        <p class="page-hero-sub">
+          Convites, revisão e aprovação do formulário global. Em <a href="users.html">Usuários</a>, «Prestador pendente» vem do
+          <em>perfil técnico</em>. Esta lista mostra quem tem <em>candidatura</em> (convite ou pedido pelo app). Perfis pendentes
+          <em>sem</em> formulário aparecem como «Perfil sem candidatura» — use «Criar convite» para enviar o link.
+        </p>
+      </header>
+
       <div id="view-list">
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title">Candidaturas</span>
-            <select class="form-control" id="filter-status" style="max-width:280px;padding:6px 10px;font-size:12px">
-              <option value="">Todos (candidaturas + perfil sem formulário)</option>
-              <option value="PERFIL_SEM_CANDIDATURA">Só perfil pendente sem candidatura</option>
-              <option value="INVITED">Convidado</option>
-              <option value="DRAFT">Rascunho</option>
-              <option value="SUBMITTED">Submetido</option>
-              <option value="NEEDS_REVISION">Aguardando correção</option>
-              <option value="APPROVED">Aprovado</option>
-              <option value="REJECTED">Recusado</option>
-            </select>
+        <section class="data-shell fade-in">
+          <div class="data-toolbar">
+            <div class="data-toolbar-main">
+              <label class="filter-field" style="flex:1;max-width:420px">
+                <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon> Estado</span>
+                <select class="form-control filter-field-control" id="filter-status">
+                  <option value="">Todos (candidaturas + perfil sem formulário)</option>
+                  <option value="PERFIL_SEM_CANDIDATURA">Só perfil pendente sem candidatura</option>
+                  <option value="INVITED">Convidado</option>
+                  <option value="DRAFT">Rascunho</option>
+                  <option value="SUBMITTED">Submetido</option>
+                  <option value="NEEDS_REVISION">Aguardando correção</option>
+                  <option value="APPROVED">Aprovado</option>
+                  <option value="REJECTED">Recusado</option>
+                </select>
+              </label>
+            </div>
+            <div class="data-toolbar-actions">
+              <button type="button" class="btn btn-primary" id="btn-invite">
+                <ion-icon name="mail-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+                Convidar por e-mail
+              </button>
+            </div>
+          </div>
+          <div class="data-table-head">
+            <h2 class="data-table-title">Candidaturas</h2>
           </div>
           <div class="table-wrap">
-            <table>
+            <table class="table-data">
               <thead>
                 <tr>
                   <th>E-mail</th>
                   <th>Tenant</th>
                   <th>Estado</th>
                   <th>Atualizado</th>
-                  <th style="text-align:right">Ações</th>
+                  <th class="text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="tbody-apps">
-                <tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Carregando…</td></tr>
+                <tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       </div>
 
       <div id="view-detail" style="display:none">
-        <div class="panel">
+        <section class="data-shell fade-in">
           <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
             <span class="panel-title" id="detail-title">Candidatura</span>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-close-detail">← Voltar à lista</button>
           </div>
-          <div style="padding:16px 20px">
+          <div class="data-shell-body">
             <div id="detail-meta" style="font-size:13px;color:var(--text3);margin-bottom:16px"></div>
             <div id="detail-revision" style="display:none;margin-bottom:16px;padding:12px;border-radius:10px;background:var(--amber-dim);border:1px solid var(--border)"></div>
             <pre id="detail-json" style="font-size:11px;overflow:auto;max-height:420px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)"></pre>
@@ -75,7 +92,7 @@
             </div>
             <div id="detail-actions" style="margin-top:24px;display:flex;flex-wrap:wrap;gap:10px"></div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   </div>
@@ -92,7 +109,7 @@
         role="note"
         style="font-size:12px;line-height:1.55;color:var(--text2);padding:12px 14px;border-radius:10px;background:var(--amber-dim);border:1px solid var(--border);margin-bottom:16px"
       >
-        <strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro no separador «Criar conta» no ecrã de login do app). Se ainda não existir utilizador com esse e-mail, o convite não será criado.
+        <strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro no separador «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.
       </div>
       <div class="form-group">
         <label class="form-label">E-mail do candidato *</label>

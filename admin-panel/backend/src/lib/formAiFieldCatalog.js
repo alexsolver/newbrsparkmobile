@@ -39,7 +39,7 @@ const FIELD_SPECS = [
     type: 'signature_summary',
     tier: 'advanced',
     proposalsDefault: false,
-    descPt: 'Resumo só leitura dos campos escolhidos + assinatura no fim (cliente).',
+    descPt: 'Resumo só leitura dos campos escolhidos + assinatura no final (cliente).',
   },
   {
     type: 'materials_consumption',
@@ -104,7 +104,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no fim.',
+      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final.',
   },
   {
     type: 'transit_end',
@@ -112,7 +112,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Fim de deslocamento. Obrigatório se existir transit_start; nunca antes do início; no BrSpark ficam sempre no início do formulário (logo após transit_start), nunca no meio nem no fim.',
+      'Fim de deslocamento. Obrigatório se existir transit_start; nunca antes do início; no BrSpark ficam sempre no início do formulário (logo após transit_start), nunca no meio nem no final.',
   },
   {
     type: 'geofence_check',
@@ -368,14 +368,14 @@ function applyDefaultTypeIconsToSchemaItems(schemaData) {
 }
 
 /**
- * Regras de ícones para prompts (Copiloto, geração canónica de schema, etc.).
+ * Regras de ícones para prompts (Copiloto, geração canônica de schema, etc.).
  * @returns {string}
  */
 function formatAutomaticIconRulesForPrompt() {
   return `### Ícones automáticos (obrigatório)
 - Para **cada** campo e **cada** etapa (\`section_break\`) no schema: defina **sempre** \`icon\` (Ionicons em kebab-case, preferir sufixo \`-outline\` quando existir), \`iconLibrary\`: \`Ionicons\` e \`iconColor\` (hex legível, ex.: #6366f1, #0f766e, #c2410c). Escolha pelo **tipo** e **rótulo** (ex.: foto → camera-outline; assinatura → pencil-outline; lista → list-outline).
 - **Varie** \`iconColor\` entre etapas para distinguir secções no app; mantenha coerência dentro da mesma etapa.
-- Em **schemaPatch**: em **todo** \`add_field.field\` novo inclua os três campos; em \`update_field.patch\` preencha ícones em falta quando alterar rótulo/tipo ou quando o usuário pedir melhoria visual.
+- Em **schemaPatch**: em **todo** \`add_field.field\` novo inclua os três campos; em \`update_field.patch\` preencha ícones ausentes quando alterar rótulo/tipo ou quando o usuário pedir melhoria visual.
 - **Ícone da tarefa / formulário** (lista de modelos no painel): alinhado ao título ou sector (ex.: vistoria → clipboard-outline; visita → business-outline). No **Copiloto** use **templateMetadataPatch** \`{ "icon": "<nome Ionicons>" }\` (ou omita para não alterar). Na **geração directa** de formulário (JSON raiz com title/schemaData), inclua no mesmo objecto raiz \`metadata\`: \`{ "icon": "<nome Ionicons>" }\`.`;
 }
 

@@ -4,7 +4,7 @@
 const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'];
 
 /**
- * Prestador «clássico» = utilizador ativo com TechnicianProfile CompreFace ACTIVE.
+ * Prestador «clássico» = usuário ativo com TechnicianProfile CompreFace ACTIVE.
  * Mantido para fluxos que ainda exigem perfil técnico (ex.: identidade / algumas políticas).
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
  */
@@ -29,7 +29,7 @@ const baseEligibleWhere = (emailNorm) => ({
 });
 
 /**
- * Resolve o e-mail canónico do utilizador que pode receber FT/OS e RT (ativo, não cliente).
+ * Resolve o e-mail canônico do usuário que pode receber FT/OS e RT (ativo, não cliente).
  * @returns {Promise<string|null>} e-mail na base ou null se inelegível / ambíguo sem tenant.
  */
 async function resolveFieldTaskAssigneeEmail(db, email, tenantId) {

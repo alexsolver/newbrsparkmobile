@@ -27,7 +27,7 @@ const upload = multer({
 
 /**
  * POST /api/checklists/vision/analyze
- * multipart: media (imagem ou vídeo), questions (JSON array {id,text})
+ * multipart: media (imagem ou vídeo), questions (JSON array {id,text}), engine, opcional visionRating0To10 (1/true para nota 0–10 na raiz do JSON, só Gemini)
  * Autenticação: JWT do app (técnico).
  */
 router.post('/vision/analyze', authUser, upload.single('media'), async (req, res) => {
@@ -85,6 +85,11 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
     const engine = String((req.body && req.body.engine) || '').trim().toLowerCase();
     const useGoogleStudio =
       engine === 'google_ai_studio' || engine === 'gemini' || engine === 'google_ai';
+    const visionRating0To10 =
+      req.body &&
+      (req.body.visionRating0To10 === true ||
+        req.body.visionRating0To10 === '1' ||
+        req.body.visionRating0To10 === 'true');
 
     if (useGoogleStudio) {
       const studioInt = await findGoogleAiStudioIntegration();
@@ -106,6 +111,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
           mimetype: file.mimetype || mt,
           questions,
           integration: studioInt,
+          visionRating0To10,
         });
         if (!normalized.ok) {
           return res.status(502).json({ error: normalized.error });
@@ -116,7 +122,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
         const msg = e && e.message ? String(e.message) : String(e);
         const isTimeout = name === 'AbortError' || name === 'TimeoutError';
         const outMsg = isTimeout
-          ? 'Tempo esgotado ao contactar o Google AI Studio (Gemini).'
+          ? 'Tempo esgotado ao contatar o Google AI Studio (Gemini).'
           : msg;
         const status = isTimeout ? 502 : 500;
         console.error('[checklists/vision/analyze] google_ai_studio', {
@@ -226,9 +232,9 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
     const isUpstreamNet =
       /fetch failed|failed to fetch|econnrefused|enotfound|etimedout|socket hang up|network/i.test(lower);
     const outMsg = isTimeout
-      ? 'Tempo esgotado ao contactar o serviço de visão (integração «Visão IA - YOLO»).'
+      ? 'Tempo esgotado ao contatar o serviço de visão (integração «Visão IA - YOLO»).'
       : isUpstreamNet
-        ? `O servidor BrSpark não conseguiu contactar o URL da integração de visão (YOLO). O pedido parte do computador onde corre o Node (backend, porta 3001), não do telemóvel: esse PC tem de resolver o DNS e abrir TCP a esse host (mesma VPN que o serviço, firewall, http/https corretos). Confirme no painel a integração «Visão IA - YOLO». Detalhe: ${msg}`
+        ? `O servidor BrSpark não conseguiu contatar o URL da integração de visão (YOLO). O pedido parte do computador onde roda o Node (backend, porta 3001), não do celular: esse PC precisa resolver o DNS e abrir TCP a esse host (mesma VPN que o serviço, firewall, http/https corretos). Confirme no painel a integração «Visão IA - YOLO». Detalhe: ${msg}`
         : msg;
     const status = isTimeout || isUpstreamNet ? 502 : 500;
     console.error('[checklists/vision/analyze]', {

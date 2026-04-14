@@ -8,44 +8,84 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Dashboard</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        Painel
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Resumo</span>
+      </nav>
       <div class="topbar-actions">
-        <span style="font-size:11px;color:var(--text3);" id="last-update">Carregando…</span>
-        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Atualizar</button>
+        <span style="font-size:12px;font-weight:600;color:var(--text3);" id="last-update">Carregando…</span>
+        <button type="button" class="btn btn-outline btn-sm" onclick="loadDashboard()" title="Recarregar dados do painel">
+          <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
+          Atualizar
+        </button>
         <span class="badge badge-red pulse" id="alert-badge" style="display:none"></span>
       </div>
     </div>
     <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Dashboard</h1>
+        <p class="page-hero-sub">
+          Visão geral da plataforma: métricas principais, alertas de estoque, última atividade de auditoria e tenants recentes.
+        </p>
+      </header>
+
       <div class="stat-grid" id="stat-grid"></div>
-      <div class="grid-2">
-        <div class="panel">
+
+      <div class="grid-2 dashboard-panels-grid">
+        <section class="data-shell fade-in">
           <div class="panel-header">
-            <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="warning-outline" style="font-size:16px;color:var(--red)"></ion-icon> Alertas Críticos</span>
+            <span class="panel-title" style="display:flex;align-items:center;gap:8px">
+              <ion-icon name="warning-outline" style="font-size:18px;color:var(--red)"></ion-icon>
+              Alertas críticos
+            </span>
             <span class="badge badge-red" id="alerts-count"></span>
           </div>
-          <div class="panel-body" id="alerts-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
-        </div>
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="flash-outline" style="font-size:16px;color:var(--accent)"></ion-icon> Atividade Recente</span>
-            <button class="btn btn-ghost btn-sm" onclick="window.location.href='audit.html'">Ver tudo →</button>
+          <div class="data-shell-body" id="alerts-list">
+            <div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div>
           </div>
-          <div class="panel-body" id="activity-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
-        </div>
+        </section>
+        <section class="data-shell fade-in">
+          <div class="panel-header">
+            <span class="panel-title" style="display:flex;align-items:center;gap:8px">
+              <ion-icon name="flash-outline" style="font-size:18px;color:var(--accent)"></ion-icon>
+              Atividade recente
+            </span>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="window.location.href='audit.html'">Ver tudo</button>
+          </div>
+          <div class="data-shell-body" id="activity-list" style="padding-top:12px;padding-bottom:12px">
+            <div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div>
+          </div>
+        </section>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="business-outline" style="font-size:16px;color:var(--text3)"></ion-icon> Tenants Recentes</span>
-          <button class="btn btn-ghost btn-sm" onclick="window.location.href='tenants.html'">Gerenciar →</button>
+
+      <section class="data-shell dashboard-tenants fade-in">
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="business-outline" style="font-size:18px;color:var(--text3);opacity:0.9"></ion-icon>
+            Tenants recentes
+          </h2>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="window.location.href='tenants.html'">Gerenciar</button>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Tenant</th><th>Plano</th><th>Usuários</th><th>Bens</th><th>Status</th><th>Criado em</th></tr></thead>
-            <tbody id="tenants-tbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Plano</th>
+                <th>Usuários</th>
+                <th>Bens</th>
+                <th>Status</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody id="tenants-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
+            </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
@@ -55,11 +95,11 @@
   await initPage();
 
   const statDefs = [
-    { key: 'totalTenants', label: 'Tenants Ativos',    icon: 'business-outline', color: 'var(--accent)', fmt: 'num' },
-    { key: 'activeUsers',  label: 'Usuários',          icon: 'people-outline',       color: 'var(--green)',  fmt: 'num' },
-    { key: 'totalAssets',  label: 'Bens Cadastrados',  icon: 'cube-outline',     color: 'var(--blue)',   fmt: 'num' },
-    { key: 'stockItems',   label: 'Itens em Estoque',  icon: 'archive-outline',       color: 'var(--amber)',  fmt: 'num' },
-    { key: 'alerts',       label: 'Alertas Críticos',  icon: 'warning-outline', color: 'var(--red)',    fmt: 'num' },
+    { key: 'totalTenants', label: 'Tenants ativos',    icon: 'business-outline', color: 'var(--accent)', fmt: 'num' },
+    { key: 'activeUsers',  label: 'Usuários',          icon: 'people-outline',     color: 'var(--green)',  fmt: 'num' },
+    { key: 'totalAssets',  label: 'Bens cadastrados',  icon: 'cube-outline',       color: 'var(--blue)',   fmt: 'num' },
+    { key: 'stockItems',   label: 'Itens em estoque',  icon: 'archive-outline',    color: 'var(--amber)',  fmt: 'num' },
+    { key: 'alerts',       label: 'Alertas críticos',  icon: 'warning-outline',    color: 'var(--red)',    fmt: 'num' },
   ];
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
@@ -68,21 +108,30 @@
 
   const catIcon = { AUTH:'lock-closed-outline', DATA:'stats-chart-outline', ADMIN:'shield-outline', SYSTEM:'settings-outline' };
 
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   window.loadDashboard = async function() {
     const data = await CONFIG.get('/dashboard');
     if (!data) return;
 
     const { stats, recentTenants, recentActivity } = data;
-    document.getElementById('last-update').textContent = 'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
+    document.getElementById('last-update').textContent =
+      'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
 
-    // Alerts badge
+    const ab = document.getElementById('alert-badge');
     if ((stats.alerts || 0) > 0) {
-      const ab = document.getElementById('alert-badge');
-      ab.textContent = `${stats.alerts} alertas`;
+      ab.textContent = `${stats.alerts} alerta${stats.alerts === 1 ? '' : 's'}`;
       ab.style.display = '';
+    } else if (ab) {
+      ab.style.display = 'none';
+      ab.textContent = '';
     }
 
-    // Stat cards
     const grid = document.getElementById('stat-grid');
     grid.innerHTML = '';
     statDefs.forEach(s => {
@@ -91,52 +140,64 @@
       card.className = 'stat-card fade-in';
       card.style.setProperty('--accent-color', s.color);
       card.innerHTML = `
-        <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}-outline" style="font-size:20px"></ion-icon></div>
+        <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}" style="font-size:20px"></ion-icon></div>
         <div class="stat-value">${val.toLocaleString('pt-BR')}</div>
         <div class="stat-label">${s.label}</div>`;
       grid.appendChild(card);
-    
     });
 
-    // Recent activity (audit logs from API)
     const actList = document.getElementById('activity-list');
     if (!recentActivity || !recentActivity.length) {
-      actList.innerHTML = '<div style="color:var(--text3);text-align:center;padding:16px;font-size:12px">Nenhuma atividade registrada.</div>';
+      actList.innerHTML = `
+        <div class="empty-state-pro" style="padding:28px 16px 24px">
+          <ion-icon name="time-outline" style="font-size:44px;opacity:0.35"></ion-icon>
+          <div class="empty-state-pro-title">Nenhuma atividade recente</div>
+          <p class="empty-state-pro-sub">Quando houver eventos de auditoria, eles aparecem aqui.</p>
+        </div>`;
     } else {
       actList.innerHTML = recentActivity.map(a => `
         <div class="activity-item">
-          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${catIcon[a.category] || 'flash-outline'}-outline" style="font-size:16px;color:var(--accent)"></ion-icon></div>
+          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${(catIcon[a.category] || 'flash-outline')}" style="font-size:16px;color:var(--accent)"></ion-icon></div>
           <div class="activity-content">
-            <div class="activity-text"><strong>${a.admin?.email || a.user?.email || 'sistema'}</strong> — ${a.action} em <em>${a.resource}</em></div>
+            <div class="activity-text"><strong>${escHtml(a.admin?.email || a.user?.email || 'sistema')}</strong> — ${escHtml(a.action)} em <em>${escHtml(a.resource)}</em></div>
             <div class="activity-time">${new Date(a.createdAt).toLocaleString('pt-BR')}</div>
           </div>
         </div>`).join('');
     }
 
-    // Alerts (stock critical count as proxy)
     const alertList = document.getElementById('alerts-list');
     document.getElementById('alerts-count').textContent = stats.criticalStock ?? 0;
     if ((stats.criticalStock ?? 0) === 0) {
-      alertList.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">Nenhum alerta crítico.</div>';
+      alertList.innerHTML = `
+        <div class="empty-state-pro" style="padding:28px 16px 24px">
+          <ion-icon name="checkmark-circle-outline" style="font-size:44px;color:var(--green);opacity:0.65"></ion-icon>
+          <div class="empty-state-pro-title">Nenhum alerta crítico</div>
+          <p class="empty-state-pro-sub">Não há itens com estoque crítico no momento.</p>
+        </div>`;
     } else {
       alertList.innerHTML = `
         <div class="alert-row">
           <div class="alert-dot" style="background:var(--red)"></div>
           <div class="alert-row-content">
             <div class="alert-row-title">${stats.criticalStock} itens com estoque crítico</div>
-            <div class="alert-row-sub">Verifique o módulo de estoque dos tenants</div>
+            <div class="alert-row-sub">Verifique o módulo de estoque dos tenants.</div>
           </div>
-          <div class="alert-row-time">agora</div>
+          <div class="alert-row-time">Agora</div>
         </div>`;
     }
 
-    // Tenants table
     const tbody = document.getElementById('tenants-tbody');
     if (!recentTenants || !recentTenants.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum tenant cadastrado ainda.</td></tr>';
+      tbody.innerHTML = `
+        <tr><td colspan="6" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="business-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhum tenant cadastrado</div>
+            <p class="empty-state-pro-sub">Quando existirem contas, elas surgirão nesta tabela.</p>
+          </div>
+        </td></tr>`;
       return;
     }
-    
 
     tbody.innerHTML = recentTenants.map(t => {
       const plan = t.subscription?.plan?.name || '—';
@@ -144,8 +205,8 @@
       const assets = t._count?.assets ?? 0;
       const created = new Date(t.createdAt).toLocaleDateString('pt-BR');
       return `<tr>
-        <td class="bold">${t.name} <span style="color:var(--text3);font-weight:400;font-size:10px">${t.slug}</span></td>
-        <td><span class="badge ${planMap[plan] || 'badge-gray'}">${plan}</span></td>
+        <td class="bold">${escHtml(t.name)} <span style="color:var(--text3);font-weight:400;font-size:10px">${escHtml(t.slug)}</span></td>
+        <td><span class="badge ${planMap[plan] || 'badge-gray'}">${escHtml(plan)}</span></td>
         <td>${users}</td>
         <td>${assets.toLocaleString('pt-BR')}</td>
         <td><span class="badge ${statusMap[t.status]}">${statusLbl[t.status]}</span></td>

@@ -50,6 +50,7 @@ const telemetryRoutes        = require('./routes/telemetry');
 const metricsRoutes          = require('./routes/metrics');
 const reportsRoutes          = require('./routes/reports');
 const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
+const trackingChatModerationAdminRoutes = require('./routes/trackingChatModerationAdmin');
 const osrmProxyRoutes        = require('./routes/osrm-proxy'); // app: geometria OSRM via backend
 const {
   publicRouter: technicianRegistrationPublicRouter,
@@ -121,7 +122,7 @@ app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions
 app.use('/api/routine-tasks', require('./routes/routineTasks')); // app: tarefas de rotina (RT)
 app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formulário sem login
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
-app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punches (JWT utilizador)
+app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punches (JWT usuário)
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
@@ -220,7 +221,7 @@ const directoryPostgresFallbackEnabled = () =>
   String(process.env.DIRECTORY_POSTGRES_FALLBACK || '') === '1';
 
 /**
- * Proxy público de ficheiros `/storage/...` do Laravel — o app móvel carrega da mesma origem que a API (evita ATS iOS em HTTP LAN).
+ * Proxy público de arquivos `/storage/...` do Laravel — o app móvel carrega da mesma origem que a API (evita ATS iOS em HTTP LAN).
  * Query: path — obrigatoriamente começa por `/storage/` (sem `..`).
  */
 app.get('/api/directory-media', async (req, res) => {
@@ -592,6 +593,11 @@ app.use('/api/telemetry',          telemetryRoutes);  // sem adminAuth — aceit
 app.use('/api/metrics',            adminAuthThenPanel, metricsRoutes);
 app.use('/api/reports',            reportsRoutes); // presets: adminAuth por rota; export: admin ou REPORTS_API_KEY
 app.use('/api/tracking',           trackingRoutes);   // sem adminAuth — link público para clientes
+app.use(
+  '/api/admin/tracking-chat-moderation',
+  adminAuthThenPanel,
+  trackingChatModerationAdminRoutes
+);
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
 app.use('/api/technician-registration', adminAuthThenPanel, technicianRegistrationAdminRouter);
 

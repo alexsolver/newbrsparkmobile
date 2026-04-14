@@ -44,11 +44,12 @@ function pickGeminiModelId(metadata) {
  * Analisa imagem/vídeo com Gemini (integração Google AI Studio) e devolve o mesmo envelope
  * que o proxy YOLO após `normalizeVisionAnalyzeResponse`.
  *
- * @param {{ buffer: Buffer, mimetype: string, questions: { id: string, text: string }[], integration: object }} opts
+ * @param {{ buffer: Buffer, mimetype: string, questions: { id: string, text: string }[], integration: object, visionRating0To10?: boolean }} opts
  * @returns {Promise<{ ok: true, payload: object } | { ok: false, error: string }>}
  */
 async function analyzeWithGoogleAiStudio(opts) {
-  const { buffer, mimetype, questions, integration } = opts;
+  const { buffer, mimetype, questions, integration, visionRating0To10 } = opts;
+  const wantRating = visionRating0To10 === true;
   const apiKey = String(integration.apiKey || '').trim();
   if (!apiKey) {
     return { ok: false, error: 'Integração Google AI Studio sem API key configurada.' };
@@ -74,14 +75,27 @@ async function analyzeWithGoogleAiStudio(opts) {
   const singleStructured = questions.length === 1;
   const q0 = questions[0];
   const q0id = String(q0?.id || 'q1').replace(/"/g, '');
+  const jsonShapeSingle =
+    wantRating && singleStructured
+      ? `{"rating0To10":<inteiro 0-10 ou null>,"answers":[{"questionId":${JSON.stringify(q0id)},"value":"<string>","confidence":0.0,"rationale":"pt-BR, opcional"}]}`
+      : `{"answers":[{"questionId":${JSON.stringify(q0id)},"value":"<string>","confidence":0.0,"rationale":"pt-BR, opcional"}]}`;
+  const ratingRules =
+    wantRating && singleStructured
+      ? '\n\nNa raiz do JSON inclua "rating0To10": inteiro entre 0 e 10 (inclusivo), coerente com o critério do prompt, ou null se for impossível avaliar com segurança. Este campo é obrigatório na raiz (pode ser null).'
+      : '';
   const instruction = singleStructured
     ? 'Analise a mídia anexa (imagem ou vídeo) seguindo estritamente o prompt abaixo. Baseie-se apenas no que é visível.\n\n' +
       '--- Prompt ---\n' +
       String(q0?.text || '') +
       '\n--- Fim do prompt ---\n\n' +
       'Responda somente com JSON neste formato (sem markdown, sem texto fora do JSON):\n' +
-      `{"answers":[{"questionId":${JSON.stringify(q0id)},"value":"yes"|"no"|"unknown","confidence":0.0,"rationale":"breve pt-BR"}]}\n` +
-      'value deve ser yes, no ou unknown (sempre em inglês): resumo geral do cumprimento do prompt. confidence entre 0 e 1. Inclua exatamente uma entrada em answers (questionId igual ao indicado).'
+      jsonShapeSingle +
+      '\n' +
+      'Campo value (string curta, sem quebras de linha):\n' +
+      '- Se o prompt for estritamente sim/não, use exatamente yes, no ou unknown (inglês).\n' +
+      '- Caso contrário, coloque em value a resposta direta pedida (ex.: nota "5", "8/10", rótulo breve). Não use parágrafos em value; detalhe em rationale.\n' +
+      'confidence entre 0 e 1. Inclua exatamente uma entrada em answers (questionId igual ao indicado).' +
+      ratingRules
     : 'Analise a mídia anexa (imagem ou vídeo) e responda a cada pergunta abaixo com base apenas no que é visível.\n\n' +
       'Perguntas (use exatamente estes ids no campo questionId de cada resposta):\n' +
       qBlock +
@@ -189,7 +203,7 @@ async function analyzeWithGoogleAiStudio(opts) {
     return { ok: false, error: 'O modelo não devolveu JSON analisável com a lista "answers".' };
   }
 
-  return normalizeVisionAnalyzeResponse(inner, questions);
+  return normalizeVisionAnalyzeResponse(inner, questions, { visionRating0To10: wantRating });
 }
 
 module.exports = {

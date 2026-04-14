@@ -85,7 +85,7 @@ function resolveAdminTargetTenantId(req, queryTenantId) {
 }
 
 /**
- * Efetivo para o app móvel: flag + módulo tenant + utilizador.
+ * Efetivo para o app móvel: flag + módulo tenant + usuário.
  * @param {string} userId
  */
 async function getWorkTimeEffectiveForUser(userId) {

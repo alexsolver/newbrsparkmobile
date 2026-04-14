@@ -50,7 +50,7 @@ async function extractIdDocumentWithOpenAi(imageBuffer, opts = {}) {
   const { apiKey, model, baseUrl } = await resolveOpenAiCredentials();
   if (!apiKey || !String(apiKey).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;
@@ -190,7 +190,7 @@ async function verifyDocumentFaceMatchesProfileOpenAi(profileBuffer, documentBuf
   const { apiKey, model, baseUrl } = await resolveOpenAiCredentials();
   if (!apiKey || !String(apiKey).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;

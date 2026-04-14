@@ -8,27 +8,23 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Metatags &amp; Categorias</span>
-      <div class="topbar-actions">
-        <select class="form-control" style="width:200px;padding:7px 10px;font-size:12px" id="filter-type">
-          <option value="">Todos os tipos</option>
-          <option value="ASSET_TYPE">Tipos de Bem</option>
-          <option value="STOCK_CATEGORY">Categorias de Estoque</option>
-          <option value="SERVICE_CATEGORY">Categorias de Serviço</option>
-          <option value="EXPENSE_CATEGORY">Categorias de Despesa (bens)</option>
-          <option value="TECHNICIAN_EXPENSE_CATEGORY">Despesa do técnico</option>
-          <option value="REVENUE_CATEGORY">Categorias de Receita</option>
-          <option value="ASSET_STATUS">Status de Bens</option>
-          <option value="MEDIA_CATEGORY">Categorias de Mídia</option>
-          <option value="GLOBAL_TAG">Tags Globais</option>
-        </select>
-        <button class="btn btn-primary" onclick="openNewTag()">+ Nova Metatag</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Metatags</span>
+      </nav>
     </div>
     <div class="page-body">
 
-      <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));margin-bottom:20px">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Metatags e categorias</h1>
+        <p class="page-hero-sub">
+          Tipos de bem, estoque, serviço, despesas, receitas, mídia e tags globais usados no app e no painel. Filtre por tipo e mantenha chaves estáveis para não quebrar dados existentes.
+        </p>
+      </header>
+
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));margin-bottom:24px">
         <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="pricetags-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total</div></div>
         <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="home-outline"></ion-icon></div><div class="stat-value" id="stat-asset-types">—</div><div class="stat-label">Tipos de Bem</div></div>
         <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cube-outline"></ion-icon></div><div class="stat-value" id="stat-stock">—</div><div class="stat-label">Cat. Estoque</div></div>
@@ -40,18 +36,43 @@
         <div class="stat-card" style="--accent-color:var(--text3)"><div class="stat-icon" style="background:var(--surface2);color:var(--text3)"><ion-icon name="globe-outline"></ion-icon></div><div class="stat-value" id="stat-global">—</div><div class="stat-label">Tags Globais</div></div>
       </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Metatags Cadastradas</span>
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <label class="filter-field">
+              <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon> Tipo</span>
+              <select class="form-control filter-field-control" id="filter-type" style="min-width:220px;max-width:100%">
+                <option value="">Todos os tipos</option>
+                <option value="ASSET_TYPE">Tipos de bem</option>
+                <option value="STOCK_CATEGORY">Categorias de estoque</option>
+                <option value="SERVICE_CATEGORY">Categorias de serviço</option>
+                <option value="EXPENSE_CATEGORY">Categorias de despesa (bens)</option>
+                <option value="TECHNICIAN_EXPENSE_CATEGORY">Despesa do técnico</option>
+                <option value="REVENUE_CATEGORY">Categorias de receita</option>
+                <option value="ASSET_STATUS">Status de bens</option>
+                <option value="MEDIA_CATEGORY">Categorias de mídia</option>
+                <option value="GLOBAL_TAG">Tags globais</option>
+              </select>
+            </label>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-primary" onclick="openNewTag()">
+              <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              Nova metatag
+            </button>
+          </div>
+        </div>
+        <div class="data-table-head">
+          <h2 class="data-table-title">Metatags cadastradas</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Ícone</th><th>Tipo</th><th>Chave</th><th>PT-BR</th><th>Cor</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>
-            <tbody id="tags-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead><tr><th>Ícone</th><th>Tipo</th><th>Chave</th><th>PT-BR</th><th>Cor</th><th>Status</th><th class="text-right">Ações</th></tr></thead>
+            <tbody id="tags-tbody"><tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr></tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
@@ -61,7 +82,7 @@
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title" id="tag-modal-title">Nova Metatag</span>
-      <button class="modal-close" onclick="closeModal('tag-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" onclick="closeModal('tag-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="tag-id" />
@@ -109,8 +130,8 @@
       <div class="form-group"><label class="form-label">Ordem de exibição</label><input class="form-control" id="tag-sort" type="number" value="0" /></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('tag-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-tag-btn">Salvar Metatag</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('tag-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-tag-btn">Salvar metatag</button>
     </div>
   </div>
 </div>
@@ -146,9 +167,22 @@
     MEDIA_CATEGORY: 'badge-purple', GLOBAL_TAG: 'badge-gray'
   };
 
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function safeIonIcon(name) {
+    const n = String(name || '').trim();
+    return /^[a-z0-9._-]+$/i.test(n) ? n : 'help-outline';
+  }
+
   async function loadTags() {
     const type = document.getElementById('filter-type').value;
-    const tags  = await CONFIG.get(`/metatags${type ? `?type=${type}` : ''}`) || [];
+    const raw = await CONFIG.get(`/metatags${type ? `?type=${encodeURIComponent(type)}` : ''}`);
+    const tags = Array.isArray(raw) ? raw : [];
 
     document.getElementById('stat-total').textContent        = tags.length;
     document.getElementById('stat-asset-types').textContent  = tags.filter(t => t.type === 'ASSET_TYPE').length;
@@ -159,25 +193,33 @@
     document.getElementById('stat-revenue').textContent      = tags.filter(t => t.type === 'REVENUE_CATEGORY').length;
     document.getElementById('stat-media').textContent        = tags.filter(t => t.type === 'MEDIA_CATEGORY').length;
     document.getElementById('stat-global').textContent       = tags.filter(t => t.type === 'GLOBAL_TAG').length;
-    document.getElementById('count-badge').textContent       = `${tags.length} metatags`;
+    document.getElementById('count-badge').textContent       = `${tags.length} metatag${tags.length === 1 ? '' : 's'}`;
 
     document.getElementById('tags-tbody').innerHTML = tags.length
       ? tags.map(t => {
-          const iconHtml = t.icon ? `<ion-icon name="${t.icon}" style="color:${t.color || 'var(--accent)'}"></ion-icon>` : '—';
+          const icn = safeIonIcon(t.icon);
+          const iconColor = /^#[0-9A-Fa-f]{3,8}$/i.test(String(t.color || '').trim()) ? String(t.color).trim() : 'var(--accent)';
+          const iconHtml = t.icon ? `<ion-icon name="${icn}" style="color:${iconColor}"></ion-icon>` : '—';
+          const col = /^#[0-9A-Fa-f]{3,8}$/i.test(String(t.color || '').trim()) ? String(t.color).trim() : '#ccc';
           return `<tr>
           <td style="font-size:22px;text-align:center">${iconHtml}</td>
-          <td><span class="badge ${typeBadge[t.type] || 'badge-gray'}">${typeLabel[t.type] || t.type}</span></td>
-          <td style="font-family:monospace;font-size:11px;color:var(--text3)">${t.key}</td>
-          <td class="bold">${t.ptBr}</td>
-          <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${t.color || '#ccc'};border:1px solid var(--border)"></span></td>
+          <td><span class="badge ${typeBadge[t.type] || 'badge-gray'}">${typeLabel[t.type] || escHtml(t.type)}</span></td>
+          <td style="font-family:monospace;font-size:11px;color:var(--text3)">${escHtml(t.key)}</td>
+          <td class="bold">${escHtml(t.ptBr)}</td>
+          <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${col};border:1px solid var(--border)"></span></td>
           <td><span class="badge ${t.isActive ? 'badge-green' : 'badge-gray'}">${t.isActive ? '<ion-icon name="ellipse-outline" style="font-size:14px;vertical-align:middle;margin-right:4px"></ion-icon> Ativo' : '○ Inativo'}</span></td>
-          <td style="text-align:right;white-space:nowrap">
-            <button class="btn btn-ghost btn-sm" onclick="editTag(${JSON.stringify(t).replace(/"/g,'&quot;')})">Editar</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTag('${t.id}')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+          <td class="text-right" style="white-space:nowrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="editTag(${JSON.stringify(t).replace(/"/g,'&quot;')})">Editar</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="deleteTag('${escHtml(t.id)}')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
           </td>
         </tr>`;
       }).join('')
-      : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma metatag encontrada.</td></tr>';
+      : `<tr><td colspan="7" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="pricetags-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhuma metatag encontrada</div>
+            <p class="empty-state-pro-sub">Altere o filtro de tipo ou crie uma nova metatag.</p>
+          </div></td></tr>`;
   }
 
   const commonIcons = [

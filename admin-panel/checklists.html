@@ -1232,14 +1232,35 @@
       outline: 2px solid var(--primary, #2563eb);
       outline-offset: 2px;
     }
+    .fb-main-scroll {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .fb-builder-shell.data-shell {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin: 0 12px 12px;
+      padding: 0;
+    }
   </style>
 </head>
 <body>
 <div class="admin-layout">
-  <div class="main-content">
-    <div class="topbar">
+  <div class="main-content fb-main-scroll">
+    <div class="topbar topbar--data" style="flex-direction:column;align-items:stretch;height:auto;min-height:60px;gap:10px;padding-top:12px;padding-bottom:12px">
+      <nav class="topbar-breadcrumb" aria-label="Trilha" style="flex:none">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Forms Builder</span>
+      </nav>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;width:100%">
       <div class="topbar-title" style="display:flex; align-items:center; gap:12px;">
-        <span style="font-weight:700">Forms Builder</span>
         <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Abrir Formulário</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> Criar Novo</button>
       </div>
@@ -1256,6 +1277,7 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.configureGlobalSettings()"><ion-icon name="settings-outline" style="vertical-align:-2px"></ion-icon> Cerca Global</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.openExpectedFormDurationModal()" title="Minutos previstos só do preenchimento (sem deslocamento), usados no despacho"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Tempo do formulário</button>
         <button type="button" class="btn btn-primary btn-sm" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Schema</button>
+      </div>
       </div>
     </div>
     
@@ -1324,6 +1346,18 @@
       </div>
     </div>
 
+    <!-- flex:0 0 auto evita herdar .page-body { flex:1 } do main.css, que criava faixa branca vazia -->
+    <div class="page-body" style="padding:10px 20px 12px;flex:0 0 auto;background:var(--surface)">
+      <header class="page-hero fade-in" style="margin-bottom:0;max-width:none">
+        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px">
+          <ion-icon name="list-circle-outline" style="color:var(--accent)"></ion-icon>
+          Forms Builder
+        </h1>
+        <p class="page-hero-sub">Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Título e descrição públicos ficam na faixa abaixo.</p>
+      </header>
+    </div>
+
+    <section class="data-shell fade-in fb-builder-shell" aria-label="Área do builder">
     <div class="page-body" style="display:flex; gap:20px; flex:1; min-height:0; padding: 20px; overflow: hidden;">
       <!-- Toolbox Column -->
       <div class="panel" style="width: 250px; flex-shrink: 0; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
@@ -1387,6 +1421,7 @@
         </div>
       </div>
     </div>
+    </section>
   </div>
 </div>
 
@@ -1734,7 +1769,7 @@
           </div>
         </details>
         <div class="ai-copilot-confirm-block">
-          <p style="font-size:11px;color:#64748b;margin:0 0 10px;line-height:1.45;">O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + definições + regras sugeridas nessa mensagem).</p>
+          <p style="font-size:11px;color:#64748b;margin:0 0 10px;line-height:1.45;">O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
           <div class="ai-copilot-actions">
             <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Reverte o formulário ao estado antes da última alteração aplicada pelo Copiloto">Desfazer última alteração</button>
           </div>

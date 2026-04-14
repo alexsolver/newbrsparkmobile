@@ -8,41 +8,79 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Planos & Assinaturas</span>
-      <div class="topbar-actions">
-        <select class="form-control" style="width:140px;padding:7px 10px;font-size:12px" id="filter-status">
-          <option value="">Todos os status</option>
-          <option value="ACTIVE">Ativo</option><option value="TRIALING">Trial</option>
-          <option value="PAST_DUE">Em atraso</option><option value="CANCELLED">Cancelado</option>
-        </select>
-        <button class="btn btn-primary" onclick="openModal('assign-plan-modal')">+ Atribuir Plano</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Assinaturas</span>
+      </nav>
     </div>
     <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Planos e assinaturas</h1>
+        <p class="page-hero-sub">
+          Pacotes ativos, cotas e vínculos com tenants. Atribua planos, ajuste biometria por pacote e acompanhe o status das assinaturas.
+        </p>
+      </header>
 
-      <!-- Plan Cards pulled from DB -->
-      <div class="panel" style="margin-bottom:20px">
-        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Ativos</span><div style="display:flex;flex-wrap:wrap;gap:8px">
-          <a class="btn btn-ghost btn-sm" href="plans.html">Configurar planos</a>
-          <a class="btn btn-ghost btn-sm" href="billing.html">Ver Billing →</a>
-        </div></div>
-        <div class="panel-body"><div class="grid-3" id="plans-grid"><div style="color:var(--text3)">Carregando…</div></div></div>
-      </div>
+      <section class="data-shell fade-in" style="margin-bottom:20px">
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="clipboard-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
+            Planos ativos
+          </h2>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <a class="btn btn-ghost btn-sm" href="plans.html">Configurar planos</a>
+            <a class="btn btn-outline btn-sm" href="billing.html">Billing e MRR</a>
+          </div>
+        </div>
+        <div class="data-shell-body" style="padding-top:8px">
+          <div class="grid-3" id="plans-grid"><div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div></div>
+        </div>
+      </section>
 
-      <!-- Subscriptions Table -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Assinaturas</span>
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <label class="filter-field">
+              <span class="filter-field-label"><ion-icon name="flag-outline"></ion-icon> Status</span>
+              <select class="form-control filter-field-control" id="filter-status" style="min-width:180px">
+                <option value="">Todos os status</option>
+                <option value="ACTIVE">Ativo</option><option value="TRIALING">Trial</option>
+                <option value="PAST_DUE">Em atraso</option><option value="CANCELLED">Cancelado</option>
+              </select>
+            </label>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-primary" onclick="openModal('assign-plan-modal')">
+              <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              Atribuir plano
+            </button>
+          </div>
+        </div>
+        <div class="data-table-head">
+          <h2 class="data-table-title">Assinaturas</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Tenant</th><th>Plano</th><th>Ciclo</th><th>Status</th><th>Início</th><th>Vencimento</th><th style="text-align:right">Ações</th></tr></thead>
-            <tbody id="subs-tbody"><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Plano</th>
+                <th>Ciclo</th>
+                <th>Status</th>
+                <th>Início</th>
+                <th>Vencimento</th>
+                <th class="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="subs-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
+            </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
     </div>
   </div>
@@ -53,7 +91,7 @@
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
       <span class="modal-title"><ion-icon name="scan-outline" style="vertical-align:-2px"></ion-icon> Biometria facial — API por plano</span>
-      <button class="modal-close" onclick="closeModal('facial-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" onclick="closeModal('facial-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="facial-plan-id" />
@@ -73,8 +111,8 @@
       </p>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('facial-plan-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-facial-plan-btn">Guardar</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('facial-plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-facial-plan-btn">Salvar</button>
     </div>
   </div>
 </div>
@@ -82,17 +120,17 @@
 <!-- Assign Plan Modal -->
 <div class="modal-overlay" id="assign-plan-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title">Atribuir Plano</span><button class="modal-close" onclick="closeModal('assign-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title">Atribuir plano</span><button type="button" class="modal-close" onclick="closeModal('assign-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Tenant</label><select class="form-control" id="sub-tenant"></select></div>
       <div class="form-group"><label class="form-label">Plano</label><select class="form-control" id="sub-plan"></select></div>
-      <div class="form-group"><label class="form-label">Ciclo de Cobrança</label>
+      <div class="form-group"><label class="form-label">Ciclo de cobrança</label>
         <select class="form-control" id="sub-cycle"><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual (10% desconto)</option></select>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('assign-plan-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-sub-btn">Atribuir</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('assign-plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-sub-btn">Atribuir</button>
     </div>
   </div>
 </div>
@@ -102,11 +140,18 @@
   import { CONFIG }   from './js/config.js';
   await initPage();
 
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   const statusMap = { ACTIVE:'badge-green', TRIALING:'badge-amber', PAST_DUE:'badge-red', CANCELLED:'badge-gray' };
-  const statusLbl = { ACTIVE:'<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo', TRIALING:'◐ Trial', PAST_DUE:'<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Em Atraso', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelado' };
+  const statusLbl = { ACTIVE:'<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo', TRIALING:'◐ Trial', PAST_DUE:'<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Em atraso', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelado' };
   const cycleMap  = { MONTHLY:'Mensal', YEARLY:'Anual' };
 
-  // Load plans
   const plans = await CONFIG.get('/plans') || [];
   const plansGrid = document.getElementById('plans-grid');
   const subPlanSel = document.getElementById('sub-plan');
@@ -120,22 +165,22 @@
 
   const fmtQ = (n) => (n === -1 || n == null ? '∞' : n);
   plansGrid.innerHTML = plans.map(p => `
-    <div class="stat-card" style="--accent-color:var(--accent)">
-      <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${p.name}</div>
+    <div class="stat-card fade-in" style="--accent-color:var(--accent)">
+      <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${escHtml(p.name)}</div>
       <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">/mês</span></div>
-      <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? 'Ilimitado' : p.maxAssets} bens</div>
-      <div style="font-size:11px;color:var(--text3)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} utilizadores painel</div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? 'Ilimitado' : escHtml(String(p.maxAssets))} bens</div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : escHtml(String(p.maxUsers))} usuários no painel</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${p.maxTechnicians === -1 ? 'Ilimitado' : (p.maxTechnicians ?? '—')}</div>
       <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">IA/mês facial ${fmtQ(p.quotaAiFacialPerMonth)} · visão det. ${fmtQ(p.quotaAiVisionDetectionPerMonth)} · análise ${fmtQ(p.quotaAiVisionAnalysisPerMonth)}</div>
       <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:8px">FT ${fmtQ(p.quotaFieldTasksMonthly)}/mês · RT ${fmtQ(p.quotaRoutineTasksMonthly)}/mês · Formulários ${fmtQ(p.maxChecklistTemplates)}</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Facial: <span style="font-weight:700;color:var(--text2)">${facialProviderLabel(p.features)}</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Facial: <span style="font-weight:700;color:var(--text2)">${escHtml(facialProviderLabel(p.features))}</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <span class="badge badge-accent">${p._count?.subscriptions || 0} tenants</span>
-        <button type="button" class="btn btn-ghost btn-sm facial-plan-cfg" data-plan-id="${p.id}" title="Configurar API de reconhecimento facial">
+        <button type="button" class="btn btn-ghost btn-sm facial-plan-cfg" data-plan-id="${escHtml(p.id)}" title="Configurar API de reconhecimento facial">
           <ion-icon name="settings-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> Biometria / API
         </button>
       </div>
-    </div>`).join('') || '<div style="color:var(--text3)">Nenhum plano cadastrado.</div>';
+    </div>`).join('') || '<div class="empty-state-pro" style="padding:24px"><p class="empty-state-pro-sub">Nenhum plano cadastrado.</p></div>';
 
   plansGrid.addEventListener('click', (e) => {
     const btn = e.target.closest('.facial-plan-cfg');
@@ -160,30 +205,43 @@
     window.location.reload();
   });
 
-  plans.forEach(p => { subPlanSel.innerHTML += `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
+  plans.forEach(p => { subPlanSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
 
-  // Load tenants for modal
   const tenants = await CONFIG.get('/tenants?limit=200') || { data: [] };
-  tenants.data.forEach(t => { document.getElementById('sub-tenant').innerHTML += `<option value="${t.id}">${t.name}</option>`; });
+  tenants.data.forEach(t => { document.getElementById('sub-tenant').innerHTML += `<option value="${escHtml(t.id)}">${escHtml(t.name)}</option>`; });
 
-  // Load subscriptions
   async function loadSubs() {
     const status = document.getElementById('filter-status').value;
-    const data = await CONFIG.get(`/subscriptions${status ? `?status=${status}` : ''}`);
+    const data = await CONFIG.get(`/subscriptions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
     if (!data) return;
-    document.getElementById('count-badge').textContent = `${data.total} assinaturas`;
-    document.getElementById('subs-tbody').innerHTML = data.data.map(s => `
-      <tr>
-        <td class="bold">${s.tenant?.name || '—'}</td>
-        <td><span class="badge badge-accent">${s.plan?.name || '—'}</span></td>
-        <td>${cycleMap[s.billingCycle]}</td>
-        <td><span class="badge ${statusMap[s.status]}">${statusLbl[s.status]}</span></td>
+    const totalN = data.total ?? (data.data?.length || 0);
+    document.getElementById('count-badge').textContent = `${totalN} assinatura${totalN === 1 ? '' : 's'}`;
+    const tbody = document.getElementById('subs-tbody');
+    if (!data.data || !data.data.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="7" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:32px 20px 28px">
+            <ion-icon name="card-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhuma assinatura</div>
+            <p class="empty-state-pro-sub">Altere o filtro de status ou atribua um plano a um tenant.</p>
+          </div>
+        </td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.data.map(s => {
+      const tid = escHtml(s.id);
+      return `<tr>
+        <td class="bold">${escHtml(s.tenant?.name || '—')}</td>
+        <td><span class="badge badge-accent">${escHtml(s.plan?.name || '—')}</span></td>
+        <td>${escHtml(cycleMap[s.billingCycle] || s.billingCycle || '—')}</td>
+        <td><span class="badge ${statusMap[s.status] || 'badge-gray'}">${statusLbl[s.status] || escHtml(s.status)}</span></td>
         <td style="color:var(--text3);font-size:11px">${new Date(s.currentStart).toLocaleDateString('pt-BR')}</td>
         <td style="color:var(--text3);font-size:11px">${new Date(s.currentEnd).toLocaleDateString('pt-BR')}</td>
-        <td style="text-align:right">
-          ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick="cancelSub('${s.id}')">Cancelar</button>` : ''}
+        <td class="text-right">
+          ${s.status !== 'CANCELLED' ? `<button type="button" class="btn btn-danger btn-sm" onclick="cancelSub('${tid}')">Cancelar</button>` : ''}
         </td>
-      </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma assinatura.</td></tr>';
+      </tr>`;
+    }).join('');
   }
 
   loadSubs();

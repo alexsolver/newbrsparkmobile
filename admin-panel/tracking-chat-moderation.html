@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Segurança do chat de acompanhamento</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .callout {
+      background: var(--blue-dim, #eff6ff);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius, 10px);
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text2);
+      margin-bottom: 20px;
+      max-width: 720px;
+    }
+    .callout strong { color: var(--text); }
+    .status-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius, 10px);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .status-card h3 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stage-select {
+      font-size: 15px;
+      padding: 12px 14px;
+      max-width: 100%;
+    }
+    .stage-hint {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 8px;
+      max-width: 640px;
+      line-height: 1.5;
+    }
+    details.tech-block {
+      margin-top: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius, 10px);
+      background: var(--surface);
+    }
+    details.tech-block > summary {
+      cursor: pointer;
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text2);
+      list-style: none;
+    }
+    details.tech-block > summary::-webkit-details-marker { display: none; }
+    details.tech-block[open] > summary { border-bottom: 1px solid var(--border); }
+    .tech-block .panel-body { padding: 16px; }
+    .mod-help code { font-size: 11px; background: var(--surface3, #f1f5f9); padding: 2px 6px; border-radius: 4px; }
+    .mod-help ul { margin: 8px 0 0 18px; font-size: 12px; color: var(--text2); line-height: 1.55; }
+    #review-tbody td { font-size: 12px; vertical-align: top; }
+    .muted { color: var(--text3); font-size: 12px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
+    .section-title { font-size: 11px; font-weight: 800; color: var(--text3); text-transform: uppercase; margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Chat de acompanhamento</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in" style="max-width:820px">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:16px;width:100%">
+          <div style="flex:1;min-width:220px">
+            <h1 class="page-hero-title">Segurança do chat de acompanhamento</h1>
+            <p class="page-hero-sub" style="margin-bottom:0">
+              Defina o quanto o sistema <strong>analisa e pode intervir</strong> nas mensagens entre <strong>cliente</strong> e <strong>técnico</strong> no link da visita — reduzindo ofensas e abusos <strong>sem travar a operação</strong>.
+            </p>
+          </div>
+          <div class="data-toolbar-actions" style="padding:0;border:none;background:transparent;flex-shrink:0">
+            <button type="button" class="btn btn-ghost" id="btn-refresh-metrics">Atualizar resumo</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="data-shell fade-in" style="overflow:visible" aria-label="Configuração e revisão do chat">
+      <div class="callout">
+        <strong>Por onde começar:</strong> escolha a <strong>organização</strong> (conta) na lista. O modo
+        <strong>«Só registro»</strong> é o mais seguro para começar: o sistema aprende o que acontece e
+        <strong>não bloqueia</strong> mensagens. Quando a equipe estiver confortável, pode subir o nível de proteção.
+      </div>
+
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header"><span class="panel-title">Configuração por organização</span></div>
+        <div class="panel-body" style="padding:16px">
+          <div class="form-group">
+            <label class="form-label">Organização (conta)</label>
+            <select class="form-control" id="tenant-select" style="max-width:420px">
+              <option value="">Escolha uma organização…</option>
+            </select>
+          </div>
+          <div id="tenant-form-wrap" style="display:none;margin-top:16px">
+            <div class="status-card" id="status-card-wrap" style="display:none">
+              <h3>Situação nesta organização</h3>
+              <div id="tenant-effective-line"></div>
+            </div>
+
+            <div class="section-title" style="margin-top:8px">Nível de proteção</div>
+            <label class="form-label" for="f-stage" style="font-weight:600;color:var(--text)">
+              O que o sistema deve fazer com mensagens suspeitas?
+            </label>
+            <select class="form-control stage-select" id="f-stage">
+              <option value="">Usar só a configuração do servidor (recomendado se não tiver certeza)</option>
+              <option value="observe">Só registro — analisa e guarda informação; não bloqueia (recomendado no início)</option>
+              <option value="warn">Avisos — pode alertar e pedir que a pessoa reescreva a mensagem</option>
+              <option value="block_partial">Bloqueio em casos graves — bloqueia quando o sistema está bem seguro</option>
+              <option value="full">Máxima proteção — mais avisos e regras mais rígidas</option>
+            </select>
+            <p class="stage-hint" id="stage-dynamic-hint"></p>
+
+            <details class="tech-block">
+              <summary>Opções avançadas (opcional)</summary>
+              <div class="panel-body mod-help">
+                <p class="muted" style="margin-top:0">
+                  Estes valores são opcionais. Só altere se a equipe técnica pedir ou se tiver orientação do suporte BrSpark.
+                </p>
+                <div class="grid-2" style="margin-top:12px;max-width:640px">
+                  <div class="form-group">
+                    <label class="form-label">Rigor para bloquear (0,5 a 0,99)</label>
+                    <input type="number" class="form-control" id="f-block-conf" step="0.01" min="0.5" max="0.99" placeholder="Deixe vazio para o padrão" />
+                    <span class="muted">Valores mais altos = bloquear só com mais certeza.</span>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Tempo máximo de espera da análise automática (milissegundos)</label>
+                    <input type="number" class="form-control" id="f-ia-timeout" step="100" min="500" max="8000" placeholder="Ex.: 2500" />
+                  </div>
+                  <div class="form-group" style="grid-column:1/-1">
+                    <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;cursor:pointer;line-height:1.45">
+                      <input type="checkbox" id="f-store-full" style="margin-top:3px" />
+                      <span>Salvar trechos maiores das mensagens na auditoria interna (pode aumentar dados sensíveis; alinhe à política da empresa e à LGPD).</span>
+                    </label>
+                  </div>
+                </div>
+                <div id="env-help" class="muted" style="margin-top:16px">Referência técnica do servidor…</div>
+              </div>
+            </details>
+
+            <div class="btn-row">
+              <button type="button" class="btn btn-primary" id="btn-save-tenant">Salvar para esta organização</button>
+              <button type="button" class="btn btn-ghost" id="btn-clear-override">Voltar a usar só a configuração do servidor</button>
+            </div>
+            <p class="muted" id="save-msg" style="margin-top:12px"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:16px" id="metrics-grid"></div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Mensagens que pediram revisão humana</span>
+          <span class="badge badge-amber" id="review-badge">—</span>
+        </div>
+        <p class="muted" style="padding:12px 16px 0;margin:0">
+          Lista resumida para acompanhamento interno. Não mostra o texto completo da conversa.
+        </p>
+        <div class="table-wrap">
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Conta</th>
+                <th>Quem escreveu</th>
+                <th>Tipo de alerta</th>
+                <th>Gravidade</th>
+                <th>O que o sistema fez</th>
+                <th>Resumo</th>
+              </tr>
+            </thead>
+            <tbody id="review-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG } from './js/config.js';
+
+  await initPage();
+
+  const STAGE_HINTS = {
+    '': 'Nenhuma regra extra nesta conta: vale o que estiver definido no servidor.',
+    observe:
+      'Nada é bloqueado. O sistema regista análises para estatísticas e melhorias. Ideal para as primeiras semanas.',
+    warn:
+      'O sistema pode mostrar avisos e pedir que a mensagem seja alterada antes de enviar. Bloqueios são raros.',
+    block_partial:
+      'Mensagens claramente inadequadas podem ser bloqueadas. Mensagens ambíguas tendem a ser pedidas de novo com explicação.',
+    full: 'Mais intervenções e avisos. Use quando a equipe já estiver habituada e quiser máxima rigorosidade.',
+  };
+
+  const STAGE_TITLE = {
+    observe: 'Só registro',
+    warn: 'Avisos',
+    block_partial: 'Bloqueio em casos graves',
+    full: 'Máxima proteção',
+  };
+
+  const ACTION_PT = {
+    allow: 'Aceitou a mensagem',
+    allow_warn: 'Aceitou com aviso',
+    request_rewrite: 'Pediu para alterar antes de enviar',
+    block: 'Não enviou (bloqueio)',
+    escalate_review: 'Marcou para revisão interna',
+  };
+
+  const CATEGORY_PT = {
+    offensive: 'Linguagem ofensiva',
+    harassment: 'Assédio / humilhação',
+    threat: 'Ameaça',
+    discrimination: 'Discriminação',
+    sexual: 'Conteúdo sexual inadequado',
+    contact_solicitation: 'Pedido de contacto indevido',
+    spam: 'Spam / repetição',
+  };
+
+  const SEVERITY_PT = { low: 'Leve', medium: 'Média', high: 'Alta' };
+
+  const tenantSelect = document.getElementById('tenant-select');
+  const tenantFormWrap = document.getElementById('tenant-form-wrap');
+  const statusCardWrap = document.getElementById('status-card-wrap');
+  const tenantEffectiveLine = document.getElementById('tenant-effective-line');
+  const fStage = document.getElementById('f-stage');
+  const fBlockConf = document.getElementById('f-block-conf');
+  const fIaTimeout = document.getElementById('f-ia-timeout');
+  const fStoreFull = document.getElementById('f-store-full');
+  const stageDynamicHint = document.getElementById('stage-dynamic-hint');
+  const saveMsg = document.getElementById('save-msg');
+  const envHelp = document.getElementById('env-help');
+  const metricsGrid = document.getElementById('metrics-grid');
+  const reviewTbody = document.getElementById('review-tbody');
+  const reviewBadge = document.getElementById('review-badge');
+
+  /** Evita gravar `storeFullText` sem o usuário o ter alterado. */
+  let loadedStoreFull = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function syncStageHint() {
+    const v = fStage.value;
+    stageDynamicHint.textContent = STAGE_HINTS[v] || '';
+  }
+
+  async function loadPolicyHelp() {
+    const h = await CONFIG.get('/admin/tracking-chat-moderation/policy-help');
+    if (!h || !h.ok) {
+      envHelp.innerHTML = '<span style="color:var(--red)">Não foi possível carregar a referência técnica.</span>';
+      return;
+    }
+    const keys = (h.envKeys || [])
+      .map((k) => `<li><code>${esc(k.key)}</code> — ${esc(k.hint || '')}</li>`)
+      .join('');
+    envHelp.innerHTML = `
+      <p style="font-size:11px;margin:0 0 6px;font-weight:700;color:var(--text3)">Variáveis no servidor (para TI / hospedagem)</p>
+      <ul style="margin:0">${keys}</ul>
+    `;
+  }
+
+  async function loadTenants() {
+    const data = await CONFIG.get('/tenants?limit=300');
+    const rows = data && data.data ? data.data : [];
+    tenantSelect.innerHTML = '<option value="">Escolha uma organização…</option>';
+    for (const t of rows) {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = `${t.name || t.slug || t.id} (${t.slug || 'sem slug'})`;
+      tenantSelect.appendChild(o);
+    }
+  }
+
+  function fillTenantForm(payload) {
+    if (!payload || !payload.ok) return;
+    const eff = payload.effectivePolicy || {};
+    const ov = payload.tenantTrackChatOverride || {};
+    const stageKey = eff.stage || 'observe';
+    const title = STAGE_TITLE[stageKey] || stageKey;
+    const hasOverride = ov && typeof ov === 'object' && Object.keys(ov).length > 0;
+
+    statusCardWrap.style.display = 'block';
+    tenantEffectiveLine.innerHTML = `
+      <div style="margin-bottom:8px">
+        <strong style="color:var(--text)">${esc(title)}</strong>
+        — ${esc(STAGE_HINTS[stageKey] || '')}
+      </div>
+      <div class="muted" style="font-size:12px">
+        ${
+          hasOverride
+            ? 'Esta organização tem <strong>regras próprias</strong> (além do servidor).'
+            : 'Esta organização <strong>segue o servidor</strong> (sem regras extra nesta página).'
+        }
+        ${payload.envStageRaw ? ` Valor no servidor: <code>${esc(payload.envStageRaw)}</code>.` : ' Nenhum valor extra no servidor — usa-se o modo «Só registro».'}
+      </div>
+    `;
+
+    fStage.value = typeof ov.stage === 'string' ? ov.stage : '';
+    fBlockConf.value =
+      ov.blockHighConfidenceMin != null && Number.isFinite(Number(ov.blockHighConfidenceMin))
+        ? String(ov.blockHighConfidenceMin)
+        : '';
+    fIaTimeout.value =
+      ov.iaTimeoutMs != null && Number.isFinite(Number(ov.iaTimeoutMs)) ? String(ov.iaTimeoutMs) : '';
+    loadedStoreFull = !!ov.storeFullText;
+    fStoreFull.checked = loadedStoreFull;
+    syncStageHint();
+  }
+
+  async function loadTenantSettings() {
+    const id = tenantSelect.value;
+    saveMsg.textContent = '';
+    if (!id) {
+      tenantFormWrap.style.display = 'none';
+      return;
+    }
+    const payload = await CONFIG.get(`/admin/tracking-chat-moderation/tenant/${encodeURIComponent(id)}`);
+    if (payload && payload.error) {
+      saveMsg.textContent = payload.error;
+      tenantFormWrap.style.display = 'none';
+      return;
+    }
+    tenantFormWrap.style.display = 'block';
+    fillTenantForm(payload);
+  }
+
+  async function saveTenantOverride() {
+    const id = tenantSelect.value;
+    if (!id) return;
+    saveMsg.textContent = '';
+    const body = { trackChatModeration: {} };
+    if (fStage.value) body.trackChatModeration.stage = fStage.value;
+    if (fBlockConf.value.trim() !== '') {
+      body.trackChatModeration.blockHighConfidenceMin = Number(fBlockConf.value.replace(',', '.'));
+    }
+    if (fIaTimeout.value.trim() !== '') {
+      body.trackChatModeration.iaTimeoutMs = Number(fIaTimeout.value);
+    }
+    if (fStoreFull.checked !== loadedStoreFull) {
+      body.trackChatModeration.storeFullText = fStoreFull.checked;
+    }
+    const keys = Object.keys(body.trackChatModeration);
+    if (!keys.length) {
+      saveMsg.textContent =
+        'Escolha um nível de proteção acima ou abra «Opções avançadas» para preencher algum campo. Para desfazer tudo, use «Voltar a usar só a configuração do servidor».';
+      return;
+    }
+    const res = await CONFIG.patch(`/admin/tracking-chat-moderation/tenant/${encodeURIComponent(id)}`, body);
+    if (res && res.error) {
+      saveMsg.textContent = res.error;
+      return;
+    }
+    saveMsg.textContent = 'Alterações guardadas.';
+    fillTenantForm(res);
+  }
+
+  async function clearTenantOverride() {
+    const id = tenantSelect.value;
+    if (!id) return;
+    if (
+      !confirm(
+        'Remover todas as regras definidas aqui para esta organização? Passará a valer apenas a configuração do servidor.'
+      )
+    )
+      return;
+    saveMsg.textContent = '';
+    const res = await CONFIG.patch(`/admin/tracking-chat-moderation/tenant/${encodeURIComponent(id)}`, {
+      trackChatModeration: null,
+    });
+    if (res && res.error) {
+      saveMsg.textContent = res.error;
+      return;
+    }
+    saveMsg.textContent = 'Configuração própria removida. Esta organização usa de novo só o servidor.';
+    fStage.value = '';
+    fBlockConf.value = '';
+    fIaTimeout.value = '';
+    fStoreFull.checked = false;
+    loadedStoreFull = false;
+    fillTenantForm(res);
+  }
+
+  async function loadMetrics() {
+    const m = await CONFIG.get('/admin/tracking-chat-moderation/metrics?days=14');
+    if (!m || !m.ok) {
+      metricsGrid.innerHTML =
+        '<div class="stat-card"><div class="stat-label">Resumo indisponível</div></div>';
+      return;
+    }
+    const by = m.byFinalAction || {};
+    const parts = Object.keys(by).map((k) => {
+      const label = ACTION_PT[k] || k;
+      return `<div class="stat-card"><div class="stat-value">${by[k]}</div><div class="stat-label">${esc(label)}</div></div>`;
+    });
+    parts.unshift(
+      `<div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-value">${m.needsHumanReviewCount ?? 0}</div><div class="stat-label">Revisão sugerida (${m.days} dias)</div></div>`
+    );
+    metricsGrid.innerHTML = parts.join('');
+  }
+
+  async function loadReviewQueue() {
+    const data = await CONFIG.get('/admin/tracking-chat-moderation/needs-review?limit=40');
+    if (!data || !data.ok) {
+      reviewTbody.innerHTML =
+        '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Não foi possível carregar a lista.</td></tr>';
+      reviewBadge.textContent = '—';
+      return;
+    }
+    const items = data.items || [];
+    reviewBadge.textContent = String(items.length);
+    if (!items.length) {
+      reviewTbody.innerHTML =
+        '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum caso pendente neste momento.</td></tr>';
+      return;
+    }
+    reviewTbody.innerHTML = items
+      .map((row) => {
+        const d = row.createdAt ? new Date(row.createdAt).toLocaleString('pt-BR') : '—';
+        const who = row.actorRole === 'tech' ? 'Técnico' : row.actorRole === 'client' ? 'Cliente' : esc(row.actorRole);
+        const cat = CATEGORY_PT[row.category] || row.category || '—';
+        const sev = SEVERITY_PT[row.severity] || row.severity || '—';
+        const act = ACTION_PT[row.finalAction] || row.finalAction || '—';
+        return `<tr>
+          <td>${esc(d)}</td>
+          <td><span style="font-size:11px;word-break:break-all">${esc(row.tenantId || '—')}</span></td>
+          <td>${esc(who)}</td>
+          <td>${esc(cat)}</td>
+          <td>${esc(sev)}</td>
+          <td>${esc(act)}</td>
+          <td style="max-width:220px;word-break:break-word">${esc(row.textPreview || '—')}</td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  fStage.addEventListener('change', syncStageHint);
+  tenantSelect.addEventListener('change', () => void loadTenantSettings());
+  document.getElementById('btn-save-tenant').addEventListener('click', () => void saveTenantOverride());
+  document.getElementById('btn-clear-override').addEventListener('click', () => void clearTenantOverride());
+  document.getElementById('btn-refresh-metrics').addEventListener('click', () => {
+    void loadMetrics();
+    void loadReviewQueue();
+  });
+
+  await loadPolicyHelp();
+  await loadTenants();
+  await loadMetrics();
+  await loadReviewQueue();
+</script>
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+<script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</body>
+</html>

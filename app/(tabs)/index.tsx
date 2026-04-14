@@ -71,6 +71,10 @@ import {
 import { patchCloudTaskById } from '../../src/lib/cloudTasksBuckets';
 import { taskRowIsRoutineTask } from '../../src/lib/routineTaskQueueUi';
 import { cacheChecklistTemplateIfMissing } from '../../src/services/routineTaskService';
+import {
+  peekPendingOpenExecutionFromPush,
+  takePendingOpenExecutionFromPush,
+} from '../../src/lib/pushExecutionOpenIntent';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
@@ -1508,6 +1512,8 @@ export default function DashboardScreen() {
   const lastOsrmPendingKeyRef = useRef<string>('');
   /** Evita que o toque curto dispare logo após toque longo (Recentes / Antigas). */
   const skipReceiptTapAfterLongPress = useRef(false);
+  /** Evita vários `loadData(true)` ao abrir OS a partir de push enquanto a lista ainda não traz o id. */
+  const pushOpenLoadAttemptRef = useRef<string | null>(null);
   /** Folha de critérios alternativos: âncora do segmento que abriu o menu. */
   const [providerAltSortAnchor, setProviderAltSortAnchor] = useState<null | 'NEWEST' | 'OLDEST'>(null);
   const [providerAltSortPicked, setProviderAltSortPicked] = useState<ProviderLongPressSheetMode>('NEWEST');
@@ -2274,6 +2280,39 @@ export default function DashboardScreen() {
     });
     return loadDataChainRef.current;
   };
+
+  /** Abrir cartão da OS após toque «Ver detalhes» na notificação push. */
+  useEffect(() => {
+    if (userRole !== 'TECHNICIAN') return;
+    const tid = peekPendingOpenExecutionFromPush();
+    if (!tid) return;
+    if (mode !== 'PROVIDER') return;
+    const found = providerTasks.find((t: any) => String(t.id) === String(tid));
+    if (found) {
+      takePendingOpenExecutionFromPush();
+      setProviderTab('PENDING');
+      setSelectedTask(found);
+      setTaskModalVisible(true);
+    }
+  }, [providerTasks, mode, userRole]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userRole !== 'TECHNICIAN') return;
+      const tid = peekPendingOpenExecutionFromPush();
+      if (!tid) {
+        pushOpenLoadAttemptRef.current = null;
+        return;
+      }
+      setMode('PROVIDER');
+      const found = providerTasks.find((t: any) => String(t.id) === String(tid));
+      if (found) return;
+      if (pushOpenLoadAttemptRef.current !== tid) {
+        pushOpenLoadAttemptRef.current = tid;
+        loadData(true);
+      }
+    }, [userRole, providerTasks, loadData, setMode])
+  );
 
   // Primeira montagem: sincroniza se banco estiver vazio
   const hasMountedRef = useRef(false);

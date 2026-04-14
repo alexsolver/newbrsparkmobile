@@ -17,21 +17,34 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Documentação da API</span>
-      <div class="topbar-actions">
-        <a class="btn btn-ghost btn-sm" href="openapi.json" download="brspark-openapi.json">
-          <ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon>
-          Descarregar OpenAPI (JSON)
-        </a>
-        <a class="btn btn-ghost btn-sm" href="openapi.json" target="_blank" rel="noopener">
-          Abrir JSON
-        </a>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Documentação da API</span>
+      </nav>
     </div>
     <div class="page-body">
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Documentação da API</h1>
+        <p class="page-hero-sub">
+          Especificação OpenAPI interativa (Swagger). Autentique com JWT de admin ou de app conforme o fluxo de cada rota.
+        </p>
+      </header>
+      <div class="data-toolbar">
+        <div class="data-toolbar-main"></div>
+        <div class="data-toolbar-actions">
+          <a class="btn btn-ghost btn-sm" href="openapi.json" download="brspark-openapi.json">
+            <ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon>
+            Baixar OpenAPI (JSON)
+          </a>
+          <a class="btn btn-ghost btn-sm" href="openapi.json" target="_blank" rel="noopener">
+            Abrir JSON
+          </a>
+        </div>
+      </div>
+      <section class="data-shell fade-in" style="margin-bottom:16px">
+        <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
           <p class="api-docs-intro">
             Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code>
             e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por
@@ -44,7 +57,7 @@
             Rotas públicas não exigem cabeçalho <code>Authorization</code>.
           </p>
         </div>
-      </div>
+      </section>
       <div id="swagger-ui"></div>
     </div>
   </div>

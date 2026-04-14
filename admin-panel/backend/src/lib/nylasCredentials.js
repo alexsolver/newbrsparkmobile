@@ -5,7 +5,7 @@ const prisma = require('../db');
 const DEFAULT_API_URI = 'https://api.us.nylas.com';
 
 /**
- * Normaliza a URI base da API Nylas v3 (US, EU, etc.), sem barra no fim.
+ * Normaliza a URI base da API Nylas v3 (US, EU, etc.), sem barra no final.
  * @param {string} [raw]
  * @returns {string}
  */
@@ -48,7 +48,7 @@ function grantIdFromDescription(description) {
 }
 
 /**
- * Grant ID a partir do registo de integração no painel (metadata ou description).
+ * Grant ID a partir do registro de integração no painel (metadata ou description).
  * @param {{ metadata?: unknown, description?: string|null }|null|undefined} row
  * @returns {string}
  */

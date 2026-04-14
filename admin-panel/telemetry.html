@@ -12,7 +12,7 @@
       display: grid;
       grid-template-columns: 350px 1fr;
       gap: 20px;
-      height: calc(100vh - 150px);
+      height: calc(100vh - 260px);
     }
     @media (max-width: 1024px) {
       .telemetry-layout { grid-template-columns: 1fr; height: auto; }
@@ -125,30 +125,41 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">
-        <ion-icon name="pulse-outline" style="vertical-align:-3px;margin-right:6px;color:var(--blue)"></ion-icon>
-        Rastreamento de Telemetria
-      </span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Telemetria</span>
+      </nav>
     </div>
 
     <div class="page-body">
+      <header class="page-hero fade-in" style="max-width:900px;margin-bottom:20px">
+        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px">
+          <ion-icon name="pulse-outline" style="color:var(--blue)"></ion-icon>
+          Rastreamento de telemetria
+        </h1>
+        <p class="page-hero-sub">
+          Eventos de campo, mapa e detalhes por lote. Filtre por e-mail do técnico e intervalo de datas; use «Ao vivo» com cautela em redes lentas.
+        </p>
+      </header>
+      <section class="data-shell fade-in" style="overflow:visible" aria-label="Mapa e lista de eventos">
       <div class="telemetry-layout">
         
         <!-- SIDEBAR DE LISTA -->
         <div class="telemetry-sidebar">
           <div class="filters-header">
             <div class="filter-group">
-              <label>E-mail do Técnico</label>
+              <label>E-mail do técnico</label>
               <input type="email" id="filter-email" placeholder="ex: técnico@empresa.com" />
             </div>
             <div style="display:flex; gap:10px;">
               <div class="filter-group" style="flex:1">
-                <label>Data Inicial</label>
+                <label>Data inicial</label>
                 <input type="date" id="filter-date-from" />
               </div>
               <div class="filter-group" style="flex:1">
-                <label>Data Final</label>
+                <label>Data final</label>
                 <input type="date" id="filter-date-to" />
               </div>
             </div>
@@ -167,13 +178,13 @@
             </div>
             
             <div style="display:flex; gap:10px; margin-top:12px">
-              <button class="btn btn-primary" style="flex:1" onclick="loadTelemetry()">
+              <button type="button" class="btn btn-primary" style="flex:1" onclick="loadTelemetry()">
                 <ion-icon name="search-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Buscar
               </button>
-              <button class="btn" id="btn-live" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="toggleLive()">
+              <button type="button" class="btn" id="btn-live" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="toggleLive()">
                 <ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Ao Vivo
               </button>
-              <button class="btn" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="exportTelemetry()">
+              <button type="button" class="btn" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="exportTelemetry()">
                 <ion-icon name="download-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon> Exportar
               </button>
             </div>
@@ -206,6 +217,7 @@
         </div>
 
       </div>
+      </section>
     </div>
   </div>
 </div>

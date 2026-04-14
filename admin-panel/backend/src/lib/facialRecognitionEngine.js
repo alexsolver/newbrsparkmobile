@@ -15,7 +15,7 @@ const MIN_SIMILARITY = Math.min(
 );
 
 const FACIAL_GALLERY_SYNC_HINT =
-  'No painel: Usuários → edite o utilizador → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
+  'No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
 
 const NO_FACE_IN_IMAGE_PT_BR =
   'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; fotografias de telas, reflexos ou imagens em papel não serão validadas.';
@@ -178,7 +178,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
           /** Sem `capturedAt` — merge com auditoria pendente preserva a hora real da captura. */
           facialAuthMode: mode,
           message:
-            'Não foi possível contactar o serviço de reconhecimento facial no servidor. Tente mais tarde ou verifique a ligação.',
+            'Não foi possível contatar o serviço de reconhecimento facial no servidor. Tente mais tarde ou verifique a conexão.',
         },
       };
     }
@@ -236,7 +236,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
         at: new Date().toISOString(),
         facialAuthMode: mode,
         confidence: top.similarity,
-        message: `O rosto não corresponde ao utilizador que sincronizou a OS. ${FACIAL_GALLERY_SYNC_HINT}`,
+        message: `O rosto não corresponde ao usuário que sincronizou a OS. ${FACIAL_GALLERY_SYNC_HINT}`,
       },
     };
   }

@@ -5,7 +5,7 @@
 
 export const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
-export type RuleSchemaField = { id?: string; type?: string };
+export type RuleSchemaField = { id?: string; type?: string; visionRating0To10Enabled?: boolean };
 
 export type RuleTimingHelpers = {
   getFormElapsedSeconds: (responses: Record<string, unknown>, nowMs: number) => number;
@@ -29,6 +29,38 @@ function parseToNorm(val: unknown): string {
   if (val === undefined || val === null) return '';
   if (Array.isArray(val)) return val.map((v) => String(v).toLowerCase()).join(', ').trim();
   return String(val).toLowerCase().trim();
+}
+
+/** Resposta gravada de visão IA (objeto ou JSON string). */
+function parseVisionStoredObject(raw: unknown): Record<string, unknown> | null {
+  if (raw === undefined || raw === null) return null;
+  let o: unknown = raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  return o as Record<string, unknown>;
+}
+
+/** Nota 0–10 da análise Gemini (`rating0To10` na raiz do JSON), ou null. */
+function extractVisionAiRating0To10(raw: unknown): number | null {
+  const o = parseVisionStoredObject(raw);
+  if (!o) return null;
+  const r = o.rating0To10;
+  if (typeof r === 'number' && Number.isFinite(r)) {
+    const n = Math.round(r);
+    if (n >= 0 && n <= 10) return n;
+    return null;
+  }
+  if (r != null && String(r).trim() !== '') {
+    const n = parseInt(String(r).trim(), 10);
+    if (Number.isFinite(n) && n >= 0 && n <= 10) return n;
+  }
+  return null;
 }
 
 function parseJsonObjectArray(raw: unknown): Record<string, unknown>[] {
@@ -315,6 +347,46 @@ export function evaluateBusinessCondition(
     })();
     if (op === 'is_empty') return !visionFilled;
     if (op === 'not_empty') return visionFilled;
+  }
+
+  /** Classificação 0–10 (`rating0To10`) quando o modelo ativa `visionRating0To10Enabled` neste campo. */
+  const visionAiRatingEnabled =
+    condFieldType === 'vision_ai_analysis' &&
+    (condFieldDef as { visionRating0To10Enabled?: unknown } | undefined)?.visionRating0To10Enabled === true;
+  if (visionAiRatingEnabled) {
+    const RATING_OPS = new Set([
+      '>',
+      '<',
+      '>=',
+      '<=',
+      'between',
+      'not_between',
+      '==',
+      '!=',
+    ]);
+    if (RATING_OPS.has(op)) {
+      const rateVal = extractVisionAiRating0To10(rawDepVal);
+      if (op === 'between' || op === 'not_between') {
+        const range = parseBetween(condValue);
+        if (!range) return false;
+        if (rateVal == null) return op === 'not_between';
+        const inside = rateVal >= range[0] && rateVal <= range[1];
+        return op === 'between' ? inside : !inside;
+      }
+      const numTarget = parseNumLocalized(condValue);
+      if (numTarget == null || !Number.isFinite(numTarget)) return false;
+      if (rateVal == null) {
+        return op === '!=';
+      }
+      const rt = Math.round(numTarget);
+      if (op === '==') return rateVal === rt;
+      if (op === '!=') return rateVal !== rt;
+      if (op === '>') return rateVal > numTarget;
+      if (op === '<') return rateVal < numTarget;
+      if (op === '>=') return rateVal >= numTarget;
+      if (op === '<=') return rateVal <= numTarget;
+      return false;
+    }
   }
 
   const richFilled = richFieldValueFilled(condFieldType, condFieldDef, rawDepVal);

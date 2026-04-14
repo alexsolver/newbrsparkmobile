@@ -6,7 +6,7 @@ const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
-const { sendExpoPushToMany } = require('../services/expoPush');
+const { sendFieldTaskActivityPushToAssignee } = require('../lib/fieldTaskAssigneePush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
 const { createNextRoutineTaskAfterComplete } = require('../lib/routineTaskLifecycle');
 const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionFields');
@@ -27,6 +27,25 @@ const { consumeQuota, assertChecklistTemplateCapacity } = require('../lib/planQu
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
+
+/**
+ * Pausa de deslocamento (link público) só deve mudar com POST /api/tracking/pause|resume.
+ * O app reenvia `metadata` em cache ao sincronizar; `trackingPaused: true` velho sobrescrevia
+ * o `false` gravado no resume e o cliente via o link «preso» em pausa.
+ */
+function stripClientTrackingDisplacementFields(meta) {
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return;
+    delete meta.trackingPaused;
+    delete meta.trackingPausedAt;
+}
+
+/** `executionPaused: false` vindo do app (JSON às vezes chega como string em clientes antigos). */
+function isExecutionPausedFalseish(v) {
+    if (v === false || v === 0) return true;
+    if (v === 'false' || v === '0') return true;
+    const s = String(v ?? '').trim().toLowerCase();
+    return s === 'false' || s === '0';
+}
 
 function execMetaReopenRevisionPending(m) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return false;
@@ -478,7 +497,9 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
                 : {};
         const reqMeta = req.body.metadata;
         if (reqMeta && typeof reqMeta === 'object' && !Array.isArray(reqMeta)) {
-            mergedMeta = { ...mergedMeta, ...reqMeta };
+            const incoming = { ...reqMeta };
+            stripClientTrackingDisplacementFields(incoming);
+            mergedMeta = { ...mergedMeta, ...incoming };
         }
 
         const weights = {
@@ -493,6 +514,25 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
         };
         const newW = statusNorm ? (weights[statusNorm] || 0) : 0;
         const oldW = weights[existing.status] || 0;
+
+        const prevSt = String(existing.status || '').toUpperCase();
+        /** Retomar atendimento → limpar pausa do link (`trackingPaused`), p.ex. OS sem destino e técnico só retoma o formulário. */
+        const willInProgress =
+            statusNorm === 'IN_PROGRESS' &&
+            newW >= oldW &&
+            (prevSt === 'PAUSED' || prevSt === 'ACCEPTED' || prevSt === 'IN_PROGRESS');
+        const resumeExecFromMeta = (() => {
+            if (!reqMeta || typeof reqMeta !== 'object' || Array.isArray(reqMeta)) return false;
+            const ep = reqMeta.executionPaused;
+            if (ep === true || ep === 1 || ep === 'true' || ep === '1' || String(ep ?? '').toLowerCase() === 'true')
+                return false;
+            if (isExecutionPausedFalseish(ep)) return true;
+            return (
+                typeof reqMeta.lastResumedAt === 'string' &&
+                reqMeta.lastResumedAt.trim() !== '' &&
+                ep === undefined
+            );
+        })();
 
         if (newW >= oldW && statusNorm) {
             updateData.status = statusNorm;
@@ -530,11 +570,13 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
 
         // Pausa de atendimento: o app envia debounce só com `responses` + __form_paused_since — sem `status`.
         // Sem isto a OS ficava IN_PROGRESS na central mesmo com o técnico em pausa.
+        let formPauseApplied = false;
         if (responses && typeof responses === 'object' && !Array.isArray(responses) && responses.__form_paused_since) {
             const exSt = String(existing.status || '');
             if (!['COMPLETED', 'SYNCED', 'CANCELLED'].includes(exSt)) {
                 const pW = weights.PAUSED;
                 if (pW >= oldW) {
+                    formPauseApplied = true;
                     updateData.status = 'PAUSED';
                     mergedMeta.executionPaused = true;
                     if (!mergedMeta.lastPauseAt) mergedMeta.lastPauseAt = String(responses.__form_paused_since);
@@ -561,6 +603,11 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
                     }
                 }
             }
+        }
+
+        if ((willInProgress || resumeExecFromMeta) && !formPauseApplied) {
+            delete mergedMeta.trackingPaused;
+            delete mergedMeta.trackingPausedAt;
         }
 
         updateData.metadata = mergedMeta;
@@ -627,6 +674,7 @@ router.post('/executions', authUser, async (req, res) => {
         let execution;
         let finalTemplateId = templateId || id;
         const metaIn = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+        stripClientTrackingDisplacementFields(metaIn);
         const submissionId =
             typeof metaIn.submissionId === 'string' && metaIn.submissionId.trim() ? metaIn.submissionId.trim() : null;
         let clientRev = parseInt(String(metaIn.submissionRevision ?? req.body.submissionRevision ?? ''), 10);
@@ -696,7 +744,7 @@ router.post('/executions', authUser, async (req, res) => {
                             return res.json({ success: true, executionId: existing.id, idempotent: true });
                         }
                         return res.status(400).json({
-                            error: 'Estado da execução inconsistente (revisão em falta). Contacte o suporte.',
+                            error: 'Estado da execução inconsistente (revisão ausente). Entre em contato com o suporte.',
                             lastSubmittedRevision: lastSub,
                         });
                     } else {
@@ -933,11 +981,9 @@ router.post('/dispatch', async (req, res) => {
           scopedTenantId || undefined
         );
         if (!resolvedOwnerEmail) {
-          const scoped = scopedTenantId
-            ? ' neste inquilino/empresa'
-            : '';
+          const scoped = scopedTenantId ? ' nesta organização' : '';
           return res.status(400).json({
-            error: `O e-mail não corresponde a um utilizador ativo elegível (contas cliente não recebem OS)${scoped}. A OS não foi criada.`,
+            error: `O e-mail não corresponde a um usuário ativo elegível (contas cliente não recebem OS)${scoped}. A OS não foi criada.`,
           });
         }
 
@@ -995,68 +1041,22 @@ router.post('/dispatch', async (req, res) => {
         
         console.log(`[DISPATCH] 📍 locationZoneType=${execution.locationZoneType} | polygon.length=${Array.isArray(execution.locationPolygon) ? execution.locationPolygon.length : 'null'} | lat=${execution.locationLat}`);
         
-        // ─── Push (channelId Android = brspark-alerts) ───
-        // User é único por (email, tenantId). findFirst só por email podia apanhar o tenant
-        // errado → zero PushToken. Com tenant do template restringimos; sem tenant, todos os Users com o e-mail.
+        // ─── Push (categorias/botões no app; canais Android em fieldTaskAssigneePush) ───
         try {
             const emailRaw = String(resolvedOwnerEmail || '').trim();
-            const emailFilter = { equals: emailRaw, mode: 'insensitive' };
-
-            let userIds = [];
-            if (loadedTemplate && loadedTemplate.tenantId) {
-                const u = await prisma.user.findFirst({
-                    where: {
-                        isActive: true,
-                        tenantId: loadedTemplate.tenantId,
-                        email: emailFilter,
-                    },
-                    select: { id: true, email: true },
-                });
-                if (u) userIds = [u.id];
-            } else {
-                const users = await prisma.user.findMany({
-                    where: { isActive: true, email: emailFilter },
-                    select: { id: true, email: true },
-                });
-                userIds = users.map((x) => x.id);
-                if (users.length > 1) {
-                    console.warn(
-                        '[DISPATCH] Vários usuários ativos com o mesmo e-mail (tenant distinto); push a todos os que tiverem token:',
-                        emailRaw
-                    );
-                }
-            }
-
-            if (userIds.length === 0) {
-                console.warn('[DISPATCH] Push ignorado: nenhum usuário ativo com este e-mail:', emailRaw);
-            } else {
-                const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
-                if (pushTokens.length === 0) {
-                    console.warn(
-                        '[DISPATCH] Push ignorado: técnico sem token (app logado + notificações). email=',
-                        emailRaw,
-                        'userIds=',
-                        userIds.join(',')
-                    );
-                } else {
-                    const pushTitle = String(osTitle).slice(0, 120);
-                    const pushBody = formTemplateTitle
-                        ? String(formTemplateTitle).slice(0, 180)
-                        : 'Nova atividade na sua lista.';
-                    const pushRes = await sendExpoPushToMany(pushTokens, {
-                        title: pushTitle,
-                        body: pushBody,
-                        data: { taskId: execution.id, type: 'os_dispatched' },
-                    });
-                    if (pushRes && pushRes.ok === false) {
-                        console.error('[DISPATCH] Expo push falhou:', pushRes);
-                    } else {
-                        console.log(
-                            `[DISPATCH] Push Expo: ${pushRes?.sent ?? '?'} ok / ${pushTokens.length} token(s)`
-                        );
-                    }
-                }
-            }
+            const pushTitle = String(osTitle).slice(0, 120);
+            const pushBody = formTemplateTitle
+                ? String(formTemplateTitle).slice(0, 180)
+                : 'Nova atividade na sua lista.';
+            await sendFieldTaskActivityPushToAssignee(prisma, {
+                ownerEmail: emailRaw,
+                templateTenantId: loadedTemplate?.tenantId ?? null,
+                assigneeTenantId: null,
+                executionId: execution.id,
+                pushTitle,
+                pushBody,
+                logLabel: 'DISPATCH',
+            });
         } catch (pushErr) {
             console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }

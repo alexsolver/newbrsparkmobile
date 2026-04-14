@@ -63,7 +63,7 @@ function sanitizeDeviceInfo(raw) {
   return Object.keys(out).length ? out : null;
 }
 
-// ─── App (JWT utilizador) ───────────────────────────────────────────────────
+// ─── App (JWT usuário) ───────────────────────────────────────────────────
 
 publicRouter.get('/me', authUser, async (req, res) => {
   try {
@@ -177,7 +177,7 @@ publicRouter.post('/punches', authUser, express.json(), async (req, res) => {
     if (exceptionRegistration) {
       if (exceptionJustification.length < JUSTIFICATION_MIN) {
         return res.status(400).json({
-          error: `Justificativa obrigatória para registo por exceção (mínimo ${JUSTIFICATION_MIN} caracteres).`,
+          error: `Justificativa obrigatória para registro por exceção (mínimo ${JUSTIFICATION_MIN} caracteres).`,
           code: 'JUSTIFICATION_REQUIRED',
         });
       }
@@ -357,7 +357,7 @@ publicRouter.post('/punches', authUser, express.json(), async (req, res) => {
   }
 });
 
-/** Lista batidas do utilizador autenticado (últimos N dias). */
+/** Lista batidas do usuário autenticado (últimos N dias). */
 publicRouter.get('/punches', authUser, async (req, res) => {
   try {
     const days = Math.min(90, Math.max(1, parseInt(String(req.query.days || '31'), 10) || 31));

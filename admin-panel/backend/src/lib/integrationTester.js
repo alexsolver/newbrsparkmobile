@@ -734,7 +734,7 @@ async function testCompreface(integration) {
           ' Diagnóstico: Swagger/UI parece acessível nessa raiz, mas `/api/v1/recognition/*` devolveu 404 — confirme o contentor **compreface-api** na stack Docker e que a porta exposta é a do **frontend** (nginx), não outro serviço.';
       } else if (stRoot === 200 || stRoot === 302) {
         diag =
-          ' Diagnóstico: a raiz HTTP responde, mas não encontrámos `/api/v1/recognition/*` — possível proxy com **prefixo de path** (preencha o campo no painel), instalação incompleta ou API noutra porta.';
+          ' Diagnóstico: a raiz HTTP responde, mas não encontramos `/api/v1/recognition/*` — possível proxy com **prefixo de path** (preencha o campo no painel), instalação incompleta ou API em outra porta.';
       } else if (stRoot === 404 && stSwagger === 404) {
         diag = ` Diagnóstico: nem a raiz nem Swagger responderam em ${probeBase}/ — verifique IP, porta e se o tráfego chega ao CompreFace (não a outro serviço na mesma porta).`;
       }
@@ -744,7 +744,7 @@ async function testCompreface(integration) {
       return {
         ok: false,
         message:
-          'CompreFace devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do CompreFace, ex. http://192.168.85.113:8000 — sem /api/v1 no fim; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
+          'CompreFace devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do CompreFace, ex. http://192.168.85.113:8000 — sem /api/v1 no final; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
           prefixHint +
           diag +
           ' Último URL tentado: ' +

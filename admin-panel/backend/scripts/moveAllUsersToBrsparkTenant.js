@@ -82,7 +82,7 @@ async function main() {
   if (dryRun) {
     console.log('\nDry-run: nada foi gravado. Execute sem --dry-run para aplicar.');
   } else {
-    console.log('\nConcluído. Recomenda-se «Sincronizar com CompreFace» nos utilizadores com fotos faciais.');
+    console.log('\nConcluído. Recomenda-se «Sincronizar com CompreFace» nos usuários com fotos faciais.');
   }
 }
 

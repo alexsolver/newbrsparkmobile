@@ -20,12 +20,12 @@
       <div class="login-logo">
         <img src="img/logo.png" alt="BrSpark Logo">
         <div class="login-logo-text">
-          <p>Admin Console</p>
+          <p>Painel admin BrSpark</p>
         </div>
       </div>
 
       <h2 class="login-title">Entrar no painel</h2>
-      <p class="login-subtitle">Inicie sessão com o <strong>slug da organização</strong>, o seu e-mail e a senha.</p>
+      <p class="login-subtitle">Faça login com o <strong>slug da organização</strong>, seu e-mail e a senha.</p>
 
       <div class="login-error" id="login-error">
         <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> &nbsp;Credenciais inválidas. Tente novamente.
@@ -103,7 +103,7 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.classList.remove('show');
-      loginBtn.innerHTML = 'A validar…';
+      loginBtn.innerHTML = 'Validando…';
       loginBtn.disabled = true;
 
       try {

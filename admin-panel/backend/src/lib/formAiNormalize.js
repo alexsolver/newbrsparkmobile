@@ -93,7 +93,13 @@ function defaultFieldShell(type, label) {
           visionCaptureMode: 'photo_and_video',
         }
       : {}),
-    ...(t === 'vision_ai_analysis' ? { visionAnalysisGrid: '1x1' } : {}),
+    ...(t === 'vision_ai_analysis'
+      ? {
+          visionAnalysisGrid: '1x1',
+          visionRating0To10Enabled: false,
+          visionShowAiResponseInForm: true,
+        }
+      : {}),
     ...(t === 'leitura' ? { contentHtml: '', required: false } : {}),
     ...(t === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
     ...(t === 'image_annotation'
@@ -211,6 +217,14 @@ function normalizeSchemaItem(raw, usedIds) {
         }
       }
       if (!base.visionAnalysisGrid) base.visionAnalysisGrid = '1x1';
+      const vr = raw.visionRating0To10Enabled ?? raw.vision_rating_0_to_10_enabled;
+      base.visionRating0To10Enabled =
+        vr === true || vr === 'true' || vr === 1 || vr === '1' || vr === 'on';
+      const vsr = raw.visionShowAiResponseInForm ?? raw.vision_show_ai_response_in_form;
+      base.visionShowAiResponseInForm =
+        vsr === false || vsr === 'false' || vsr === 0 || vsr === '0' || vsr === 'off' || vsr === 'no'
+          ? false
+          : true;
     }
   }
   if (type === 'leitura') {
@@ -855,7 +869,7 @@ function buildSchemaFromProposalSelections(items, selections) {
     const optionKey = typeof s.optionKey === 'string' && s.optionKey.trim() ? s.optionKey.trim() : item.recommendedOptionKey;
     const opt = (item.options || []).find((o) => o.key === optionKey) || item.options[0];
     if (!opt) {
-      warnings.push(`Item "${item.label}": opção em falta — ignorado.`);
+      warnings.push(`Item "${item.label}": opção ausente — ignorado.`);
       continue;
     }
     if (item.kind === 'section_break') {

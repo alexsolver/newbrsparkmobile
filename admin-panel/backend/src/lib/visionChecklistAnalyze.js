@@ -1,9 +1,12 @@
 'use strict';
 
-/** Nome canónico na UI e em novas gravações. */
+/** Nome canônico na UI e em novas gravações. */
 const VISION_INTEGRATION_NAME = 'Visão IA - YOLO';
-/** Integrações antigas na BD (mesmo findFirst que o nome canónico). */
+/** Integrações antigas na BD (mesmo findFirst que o nome canônico). */
 const VISION_INTEGRATION_LEGACY_NAME = 'Visão IA (checklists)';
+
+/** Uma única pergunta/prompt: não duplicar o texto longo do prompt em `answers[].question` (UI e relatórios). */
+const VISION_SINGLE_ANSWER_QUESTION_LABEL = 'Resultado da análise';
 
 /** Cláusula Prisma: tipo VISION e nome novo ou legado. */
 function prismaWhereVisionChecklistIntegration() {
@@ -25,6 +28,69 @@ function normalizeYesNo(v) {
   if (s === 'no' || s === 'não' || s === 'nao' || s === 'false' || s === '0' || s === 'n') return 'no';
   if (s === 'unknown' || s === 'indefinido' || s === 'indeterminado') return 'unknown';
   return 'unknown';
+}
+
+/** Respostas não binárias no modo prompt único (nota, rótulo curto, etc.). */
+const MAX_VISION_FREE_TEXT_VALUE_LEN = 220;
+
+/**
+ * Normaliza `value` de cada resposta: com uma única pergunta/prompt, aceita texto livre curto
+ * (ex.: nota numérica) sem forçar yes/no; com várias perguntas mantém só sim/não (compat. YOLO).
+ * @param {unknown} val
+ * @param {boolean} singleQuestion
+ * @returns {string}
+ */
+/**
+ * Extrai nota 0–10 da raiz do JSON do modelo (Gemini).
+ * @param {unknown} raw
+ * @returns {number | null}
+ */
+function parseRating0To10(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const r = Math.round(raw);
+    return r >= 0 && r <= 10 ? r : null;
+  }
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  if (!Number.isFinite(n)) return null;
+  return n >= 0 && n <= 10 ? n : null;
+}
+
+/**
+ * @param {Record<string, unknown>} root
+ * @returns {number | null}
+ */
+function pickRating0To10FromRoot(root) {
+  if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
+  const r =
+    root.rating0To10 ??
+    root.rating_0_to_10 ??
+    root.rating0_10 ??
+    root.classification0To10 ??
+    root.classification_0_to_10;
+  return parseRating0To10(r);
+}
+
+function normalizeVisionAnswerValue(val, singleQuestion) {
+  if (!singleQuestion) {
+    return normalizeYesNo(val);
+  }
+  if (val !== undefined && val !== null) {
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return String(val).slice(0, MAX_VISION_FREE_TEXT_VALUE_LEN);
+    }
+    const str = String(val).trim();
+    if (/^\d+(\.\d+)?$/.test(str)) {
+      return str.slice(0, MAX_VISION_FREE_TEXT_VALUE_LEN);
+    }
+  }
+  const yn = normalizeYesNo(val);
+  if (yn !== 'unknown') return yn;
+  const s = String(val ?? '').trim();
+  if (!s) return 'unknown';
+  return s.slice(0, MAX_VISION_FREE_TEXT_VALUE_LEN);
 }
 
 /**
@@ -768,7 +834,14 @@ function findRawAnswerForQuestion(raw, q) {
  * @param {{ id: string, text: string }[]} questions
  * @returns {{ ok: true, payload: object } | { ok: false, error: string }}
  */
-function normalizeVisionAnalyzeResponse(body, questions) {
+/**
+ * @param {unknown} body
+ * @param {{ id: string, text: string }[]} questions
+ * @param {{ visionRating0To10?: boolean }} [options]
+ */
+function normalizeVisionAnalyzeResponse(body, questions, options) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const visionRating0To10 = opts.visionRating0To10 === true;
   let data = body;
   if (typeof body === 'string') {
     try {
@@ -802,12 +875,13 @@ function normalizeVisionAnalyzeResponse(body, questions) {
 
   const outAnswers = [];
   let matched = 0;
+  const singleVisionQuestion = questions.length === 1;
   for (const q of questions) {
     const found = findRawAnswerForQuestion(rawAnswers, q);
     if (!found || typeof found !== 'object') {
       outAnswers.push({
         questionId: q.id,
-        question: q.text,
+        question: singleVisionQuestion ? VISION_SINGLE_ANSWER_QUESTION_LABEL : String(q.text || '').slice(0, 500),
         value: 'unknown',
         confidence: 0,
         rationale: '',
@@ -816,13 +890,14 @@ function normalizeVisionAnalyzeResponse(body, questions) {
     }
     matched++;
     const val = pickAnswerValue(/** @type {Record<string, unknown>} */ (found));
+    const normVal = normalizeVisionAnswerValue(val, singleVisionQuestion);
     const fo = /** @type {any} */ (found);
     const qLabel =
       fo.question != null ? String(fo.question) : fo.questionText != null ? String(fo.questionText) : q.text;
     let confVal = normalizeConfidence(pickAnswerConfidence(/** @type {Record<string, unknown>} */ (found)));
     if (
       confVal === 0 &&
-      normalizeYesNo(val) !== 'unknown' &&
+      normalizeYesNo(normVal) !== 'unknown' &&
       typeof fo.count === 'number' &&
       Number.isFinite(fo.count)
     ) {
@@ -830,8 +905,10 @@ function normalizeVisionAnalyzeResponse(body, questions) {
     }
     outAnswers.push({
       questionId: String(q.id),
-      question: qLabel.slice(0, 500),
-      value: normalizeYesNo(val),
+      question: singleVisionQuestion
+        ? VISION_SINGLE_ANSWER_QUESTION_LABEL
+        : qLabel.slice(0, 500),
+      value: normVal,
       confidence: confVal,
       rationale:
         found.rationale != null
@@ -869,6 +946,9 @@ function normalizeVisionAnalyzeResponse(body, questions) {
     answers: outAnswers,
     media: data.media && typeof data.media === 'object' ? data.media : undefined,
   };
+  if (visionRating0To10) {
+    payload.rating0To10 = pickRating0To10FromRoot(root);
+  }
   return { ok: true, payload };
 }
 

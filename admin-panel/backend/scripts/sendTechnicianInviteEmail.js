@@ -36,7 +36,7 @@ async function pickEmployerTenantId(invitedEmail) {
     const t = await prisma.tenant.findUnique({ where: { id: envTid } });
     if (!t) throw new Error(`INVITE_TENANT_ID inválido: ${envTid}`);
     const dupe = await prisma.user.findFirst({ where: { tenantId: envTid, email: invitedEmail } });
-    if (dupe) throw new Error(`Já existe utilizador com este e-mail neste tenant (${t.name}).`);
+    if (dupe) throw new Error(`Já existe usuário com este e-mail neste tenant (${t.name}).`);
     return envTid;
   }
 
@@ -45,7 +45,7 @@ async function pickEmployerTenantId(invitedEmail) {
     const dupe = await prisma.user.findFirst({ where: { tenantId: t.id, email: invitedEmail } });
     if (!dupe) return t.id;
   }
-  throw new Error('Nenhum tenant onde este e-mail ainda não exista como utilizador (escolha INVITE_TENANT_ID).');
+  throw new Error('Nenhum tenant onde este e-mail ainda não exista como usuário (escolha INVITE_TENANT_ID).');
 }
 
 async function main() {

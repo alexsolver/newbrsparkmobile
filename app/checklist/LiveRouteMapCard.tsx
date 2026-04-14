@@ -1,17 +1,21 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   Easing,
+  FlatList,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -31,6 +35,33 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
+
+type TrackingChatRow = {
+  id: string;
+  role: string;
+  text: string;
+  at: string;
+  senderLabel?: string | null;
+  kind?: string | null;
+};
+
+function mapServerChatMessages(raw: unknown): TrackingChatRow[] {
+  if (!Array.isArray(raw)) return [];
+  const next: TrackingChatRow[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const id = typeof o.id === 'string' ? o.id : '';
+    const text = typeof o.text === 'string' ? o.text : '';
+    const at = typeof o.at === 'string' ? o.at : '';
+    const role = o.role === 'tech' ? 'tech' : o.role === 'system' ? 'system' : 'client';
+    const senderLabel = typeof o.senderLabel === 'string' ? o.senderLabel : null;
+    const kind = typeof o.kind === 'string' ? o.kind : null;
+    if (!id || !text) continue;
+    next.push({ id, text, at: at || new Date().toISOString(), role, senderLabel, kind });
+  }
+  return next;
+}
 
 /** Modal: todas as orientações usuais (tipo mutável para compatibilidade com `ModalProps`). */
 const TRANSIT_MODAL_SUPPORTED_ORIENTATIONS: NonNullable<
@@ -544,6 +575,13 @@ export default function LiveRouteMapCard({
   /** Painel de dicas na primeira vez (mapa nativo). */
   const [showTransitHints, setShowTransitHints] = useState(false);
 
+  const [trackingChatOpen, setTrackingChatOpen] = useState(false);
+  const [trackingChatMessages, setTrackingChatMessages] = useState<TrackingChatRow[]>([]);
+  const [trackingChatDraft, setTrackingChatDraft] = useState('');
+  const [trackingChatSending, setTrackingChatSending] = useState(false);
+  const [trackingChatError, setTrackingChatError] = useState<string | null>(null);
+  const trackingChatListRef = useRef<FlatList<TrackingChatRow>>(null);
+
   /** No iOS o `Modal` pode não refletir dimensões a tempo — `expo-screen-orientation` + `Dimensions`. */
   useEffect(() => {
     if (!visible || !expanded) return;
@@ -702,6 +740,33 @@ export default function LiveRouteMapCard({
       routeTracker.off('traversed_update', traversedHandler);
     };
   }, [visible, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng, zoneType, corridorToleranceM]);
+
+  const fetchTrackingChat = useCallback(async () => {
+    if (!taskId) return;
+    try {
+      const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`);
+      const j = (await r.json().catch(() => ({}))) as { messages?: unknown; error?: string };
+      if (!r.ok) {
+        setTrackingChatError(typeof j.error === 'string' ? j.error : 'Não foi possível carregar o chat.');
+        return;
+      }
+      setTrackingChatError(null);
+      setTrackingChatMessages(mapServerChatMessages(j.messages));
+    } catch {
+      setTrackingChatError('Sem ligação. Tente de novo.');
+    }
+  }, [taskId]);
+
+  useEffect(() => {
+    if (!visible) setTrackingChatOpen(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!trackingChatOpen || !taskId || !visible) return;
+    void fetchTrackingChat();
+    const tid = setInterval(() => void fetchTrackingChat(), 3500);
+    return () => clearInterval(tid);
+  }, [trackingChatOpen, taskId, visible, fetchTrackingChat]);
 
   useEffect(() => {
     if (!visible) {
@@ -1071,6 +1136,58 @@ export default function LiveRouteMapCard({
     return formatElapsedSinceTransitPt(transitStartedAtIso);
   }, [noDestinationForEta, transitStartedAtIso, elapsedTick]);
 
+  const isRouteCompleted = update?.event === 'ROUTE_COMPLETED';
+  const techHeroPulse = useRef(new Animated.Value(1)).current;
+  const [reduceMotionHero, setReduceMotionHero] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ai = AccessibilityInfo;
+    if (!ai?.isReduceMotionEnabled) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void ai.isReduceMotionEnabled().then((v) => {
+      if (!cancelled) setReduceMotionHero(!!v);
+    });
+    const sub = ai.addEventListener('reduceMotionChanged', (enabled: boolean) => {
+      setReduceMotionHero(enabled);
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !expanded || !myPos || isRouteCompleted || reduceMotionHero) {
+      techHeroPulse.stopAnimation();
+      techHeroPulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(techHeroPulse, {
+          toValue: 1.14,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(techHeroPulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [visible, expanded, myPos?.lat, myPos?.lng, isRouteCompleted, reduceMotionHero, techHeroPulse]);
+
   if (!visible) return null;
 
   const dimLandscape = windowDims.width > windowDims.height;
@@ -1231,17 +1348,249 @@ export default function LiveRouteMapCard({
     }
   };
 
+  const sendTrackingChat = async (opts?: { moderationOverrideAck?: boolean }) => {
+    const t = trackingChatDraft.trim();
+    if (!t || !taskId || trackingChatSending) return;
+    setTrackingChatSending(true);
+    try {
+      const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`, {
+        method: 'POST',
+        body: JSON.stringify(
+          opts?.moderationOverrideAck ? { text: t, ackModerationWarning: true } : { text: t }
+        ),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        messages?: unknown;
+        error?: string;
+        code?: string;
+        userMessage?: string;
+        canOverride?: boolean;
+      };
+      if (r.status === 422 && j.code === 'CHAT_MODERATION') {
+        if (Array.isArray(j.messages)) setTrackingChatMessages(mapServerChatMessages(j.messages));
+        const um =
+          typeof j.userMessage === 'string' && j.userMessage.trim()
+            ? j.userMessage.trim()
+            : 'A mensagem não foi enviada. Revise o texto.';
+        if (j.canOverride) {
+          Alert.alert(
+            'Moderação do chat',
+            `${um}\n\nSe foi um falso alarme leve, pode confirmar o reenvio.`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Enviar mesmo',
+                onPress: () => void sendTrackingChat({ moderationOverrideAck: true }),
+              },
+            ]
+          );
+        } else {
+          Alert.alert('Moderação do chat', um);
+        }
+        return;
+      }
+      if (!r.ok) {
+        Alert.alert('Chat', typeof j.error === 'string' ? j.error : 'Não foi possível enviar.');
+        return;
+      }
+      setTrackingChatDraft('');
+      setTrackingChatMessages(mapServerChatMessages(j.messages));
+    } catch {
+      Alert.alert('Chat', 'Sem ligação. Tente de novo.');
+    } finally {
+      setTrackingChatSending(false);
+    }
+  };
+
+  const formatTrackingChatTime = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const trackingChatModalEl =
+    taskId != null && String(taskId).trim() !== '' ? (
+      <Modal
+        visible={trackingChatOpen && visible}
+        animationType="slide"
+        onRequestClose={() => setTrackingChatOpen(false)}
+        supportedOrientations={TRANSIT_MODAL_SUPPORTED_ORIENTATIONS}
+      >
+        <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top + 8 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingBottom: 12,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: '#e2e8f0',
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setTrackingChatOpen(false)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Fechar chat"
+            >
+              <Ionicons name="close" size={26} color="#64748b" />
+            </TouchableOpacity>
+            <Text style={{ flex: 1, marginLeft: 12, fontSize: 17, fontWeight: '800', color: '#0f172a' }}>
+              Chat com o cliente
+            </Text>
+          </View>
+          {trackingChatError ? (
+            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+              <Text style={{ color: '#b45309', fontSize: 14 }}>{trackingChatError}</Text>
+            </View>
+          ) : null}
+          <FlatList
+            ref={trackingChatListRef}
+            data={trackingChatMessages}
+            keyExtractor={(item) => item.id}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 12, flexGrow: 1 }}
+            onContentSizeChange={() =>
+              trackingChatListRef.current?.scrollToEnd({ animated: true })
+            }
+            renderItem={({ item }) => {
+              if (item.role === 'system') {
+                const when = formatTrackingChatTime(item.at);
+                return (
+                  <View
+                    style={{
+                      alignSelf: 'center',
+                      maxWidth: '96%',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, textAlign: 'center' }}>
+                      Sistema{when ? ` · ${when}` : ''}
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: '#fef3c7',
+                        borderWidth: 1,
+                        borderColor: '#fcd34d',
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 14,
+                      }}
+                    >
+                      <Text style={{ color: '#78350f', fontSize: 14 }}>{item.text}</Text>
+                    </View>
+                  </View>
+                );
+              }
+              const mine = item.role === 'tech';
+              const who = mine ? item.senderLabel || 'Técnico' : 'Cliente';
+              const when = formatTrackingChatTime(item.at);
+              return (
+                <View
+                  style={{
+                    alignSelf: mine ? 'flex-end' : 'flex-start',
+                    maxWidth: '88%',
+                    marginBottom: 10,
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+                    {who}
+                    {when ? ` · ${when}` : ''}
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: mine ? '#ea580c' : '#f1f5f9',
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderRadius: 16,
+                    }}
+                  >
+                    <Text style={{ color: mine ? '#fff' : '#0f172a', fontSize: 15 }}>{item.text}</Text>
+                  </View>
+                </View>
+              );
+            }}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={insets.bottom + 8}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                paddingHorizontal: 12,
+                paddingTop: 10,
+                paddingBottom: Math.max(12, insets.bottom + 8),
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: '#e2e8f0',
+                gap: 8,
+                alignItems: 'flex-end',
+              }}
+            >
+              <TextInput
+                value={trackingChatDraft}
+                onChangeText={setTrackingChatDraft}
+                placeholder="Escreva uma mensagem…"
+                placeholderTextColor="#94a3b8"
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  fontSize: 15,
+                  color: '#0f172a',
+                  maxHeight: 120,
+                }}
+                multiline
+              />
+              <TouchableOpacity
+                onPress={() => void sendTrackingChat()}
+                disabled={trackingChatSending}
+                style={{
+                  backgroundColor: '#ea580c',
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  opacity: trackingChatSending ? 0.65 : 1,
+                }}
+                accessibilityLabel="Enviar mensagem"
+              >
+                {trackingChatSending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    ) : null;
+
   // Minimized view (shows inline in scrollview)
   if (!expanded) {
     return (
-      <TouchableOpacity style={styles.minimizedCard} onPress={() => setExpanded(true)}>
-        <Ionicons name="map" size={24} color="#f97316" />
-        <View style={{ flex: 1 }}>
-           <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
-           <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
-        </View>
-        <Ionicons name="expand" size={20} color="#f97316" />
-      </TouchableOpacity>
+      <>
+        <TouchableOpacity style={styles.minimizedCard} onPress={() => setExpanded(true)}>
+          <Ionicons name="map" size={24} color="#f97316" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
+            <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
+          </View>
+          <Ionicons name="expand" size={20} color="#f97316" />
+        </TouchableOpacity>
+        {trackingChatModalEl}
+      </>
     );
   }
 
@@ -1274,6 +1623,7 @@ export default function LiveRouteMapCard({
 
   // Full Screen Modal View
   return (
+    <>
     <Modal
       visible={expanded}
       animationType="slide"
@@ -1587,7 +1937,10 @@ export default function LiveRouteMapCard({
               rotation={0}
               flat={false}
             >
-              <View style={styles.navTechnicianWrap} pointerEvents="none">
+              <Animated.View
+                style={[styles.navTechnicianWrap, { transform: [{ scale: techHeroPulse }] }]}
+                pointerEvents="none"
+              >
                 <View style={styles.navAvatarRing}>
                   {avatarUri ? (
                     <Image source={{ uri: avatarUri }} style={styles.navAvatarImage} />
@@ -1597,7 +1950,7 @@ export default function LiveRouteMapCard({
                     </View>
                   )}
                 </View>
-              </View>
+              </Animated.View>
             </Marker>
           )}
         </MapView>
@@ -1608,6 +1961,15 @@ export default function LiveRouteMapCard({
                <Ionicons name="navigate" size={24} color="#fff" />
             </TouchableOpacity>
           )}
+          {taskId ? (
+            <TouchableOpacity
+              style={styles.recenterBtn}
+              onPress={() => setTrackingChatOpen(true)}
+              accessibilityLabel="Abrir chat com o cliente"
+            >
+              <Ionicons name="chatbubbles-outline" size={22} color="#475569" />
+            </TouchableOpacity>
+          ) : null}
           {embedNativeMap && (
             <TouchableOpacity
               style={[styles.recenterBtn, followUser && styles.followActiveBtn]}
@@ -1720,6 +2082,8 @@ export default function LiveRouteMapCard({
         )}
       </View>
     </Modal>
+    {trackingChatModalEl}
+    </>
   );
 }
 

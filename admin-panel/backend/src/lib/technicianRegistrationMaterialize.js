@@ -16,7 +16,7 @@ function normalizeFacePhotos(raw) {
 }
 
 /**
- * Copia fotos de /uploads/tech-registration/{appId}/ para face-enrollment do utilizador.
+ * Copia fotos de /uploads/tech-registration/{appId}/ para face-enrollment do usuário.
  * @returns {Promise<Array<{ id: string, url: string, mimeType?: string, createdAt?: string }>>}
  */
 async function copyRegistrationFacePhotosToUser(applicationId, userId, photos) {
@@ -68,7 +68,7 @@ async function unlinkPreviousPrimaryFaceFiles(userId) {
 }
 
 /**
- * Copia a foto de perfil do passo 1 (avatar na candidatura) para matrícula facial do utilizador.
+ * Copia a foto de perfil do passo 1 (avatar na candidatura) para matrícula facial do usuário.
  * @returns {Promise<object|null>}
  */
 async function copyTechRegAvatarAsPrimaryFaceEnrollment(applicationId, userId, avatarUrl) {
@@ -152,8 +152,8 @@ function buildTechnicianProfilePayload(technician) {
 }
 
 /**
- * Candidatura aprovada — utilizador já existia no tenant (ex.: «Quero ser prestador» no app).
- * Atualiza perfil, documentos e TechnicianProfile; não altera a palavra-passe da conta.
+ * Candidatura aprovada — usuário já existia no tenant (ex.: «Quero ser prestador» no app).
+ * Atualiza perfil, documentos e TechnicianProfile; não altera a senha da conta.
  */
 async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, ctx) {
   const { raw, name, addressJson, personalDocuments, technician, faceBefore } = ctx;
@@ -238,7 +238,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
   });
   if (!app) throw new Error('Candidatura não encontrada.');
   if (app.status !== 'SUBMITTED') throw new Error('Só é possível aprovar candidaturas submetidas.');
-  if (!app.passwordHash) throw new Error('Senha da candidatura em falta (reabra o fluxo).');
+  if (!app.passwordHash) throw new Error('Senha da candidatura ausente (reabra o fluxo).');
 
   const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
   const email = String(raw.email || app.invitedEmail || '')

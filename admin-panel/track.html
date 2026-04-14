@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#EA580C" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Acompanhe seu Técnico · BrSpark</title>
+  <title data-i18n-title>BrSpark</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/brspark-tokens.css" />
   
   <!-- Ionicons -->
   <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
@@ -18,14 +19,15 @@
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
     :root {
-      --brand:    #EA580C;
-      --green:    #16A34A;
-      --surface:  #FFFFFF;
-      --bg:       #F8FAFC;
-      --text:     #0F172A;
-      --text2:    #475569;
-      --text3:    #94A3B8;
-      --border:   #E2E8F0;
+      --brand:    var(--color-brand-accent);
+      --green:    var(--color-connectivity-online);
+      --surface:  var(--color-surface);
+      --bg:       var(--color-bg);
+      --text:     var(--color-slate);
+      --text2:    var(--color-text-secondary);
+      --text3:    var(--color-text-light);
+      --border:   var(--color-border);
+      --surface-low: var(--color-surface-low);
     }
 
     html, body {
@@ -49,7 +51,7 @@
     #top-nav > * { pointer-events: auto; }
     
     .nav-btn {
-      height: 48px; background: #fff;
+      height: 48px; background: var(--surface);
       border: none; border-radius: 24px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       display: flex; align-items: center; justify-content: center;
@@ -57,13 +59,23 @@
     }
     #btn-back { width: 48px; font-size: 20px; color: var(--text); }
     #btn-help { padding: 0 20px; font-size: 14px; }
+    #lang-switch {
+      display: flex; gap: 4px; align-items: center; margin-right: auto;
+      pointer-events: auto; padding-right: 8px;
+    }
+    .lang-chip {
+      border: none; border-radius: 999px; padding: 6px 10px; font-size: 11px;
+      font-weight: 800; cursor: pointer; background: var(--surface); color: var(--text2);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); letter-spacing: 0.02em;
+    }
+    .lang-chip.on { background: var(--brand); color: #fff; }
 
     /* Top Main Card */
     #top-card {
       position: fixed;
       top: calc(env(safe-area-inset-top) + 70px);
       left: 16px; right: 16px;
-      background: #fff;
+      background: var(--surface);
       border-radius: 16px;
       padding: 16px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.08);
@@ -143,15 +155,38 @@
     }
     #info-label { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
     #info-badge {
-      background: #f1f5f9; padding: 6px 12px; border-radius: 8px;
+      background: var(--surface-low); padding: 6px 12px; border-radius: 8px;
       font-size: 12px; font-weight: 800; color: var(--text);
       max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    #ft-row {
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    #ft-row.show { display: flex; }
+    #ft-label { font-size: 12px; color: var(--text2); }
+    #ft-badge {
+      background: var(--surface-low);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text);
+      max-width: 58%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* Bottom Sheet */
     #bottom-sheet {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: #fff; z-index: 20;
+      background: var(--surface); z-index: 20;
       border-radius: 24px 24px 0 0;
       box-shadow: 0 -4px 24px rgba(0,0,0,0.06);
       padding-bottom: max(20px, env(safe-area-inset-bottom));
@@ -166,23 +201,47 @@
       display: flex; align-items: center; padding: 0 20px 16px; gap: 16px;
     }
     #tech-avatar-wrap { position: relative; }
+    /** Marcador no mapa: escala no anel exterior; «aura» de sinal GPS no círculo da foto (não no rodapé). */
+    @keyframes track-map-tech-pulse-kf {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
+    .track-map-tech-pulse-outer {
+      animation: track-map-tech-pulse-kf 1.75s ease-in-out infinite;
+      transform-origin: center center;
+    }
+    body.tracking-ended .track-map-tech-pulse-outer {
+      animation: none;
+    }
+    @keyframes track-map-aura-green-kf {
+      0% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.35), 0 0 0 0 rgba(22, 163, 74, 0.55); }
+      70% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.22), 0 0 0 12px rgba(22, 163, 74, 0); }
+      100% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.35), 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
+    @keyframes track-map-aura-red-kf {
+      0% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.35), 0 0 0 0 rgba(239, 68, 68, 0.55); }
+      70% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.22), 0 0 0 12px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 2px 12px rgba(234, 88, 12, 0.35), 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .track-map-tech-face.track-map-signal-live {
+      animation: track-map-aura-green-kf 2s infinite;
+    }
+    .track-map-tech-face.track-map-signal-lost {
+      animation: track-map-aura-red-kf 2s infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .track-map-tech-pulse-outer { animation: none !important; }
+      .track-map-tech-face.track-map-signal-live,
+      .track-map-tech-face.track-map-signal-lost { animation: none !important; }
+    }
     #tech-avatar {
+      position: relative;
+      z-index: 1;
+      display: block;
       width: 52px; height: 52px; border-radius: 50%;
-      object-fit: cover; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      transition: all 0.3s ease;
-    }
-    #tech-avatar.aura-green { animation: aura-green-pulse 2s infinite; }
-    #tech-avatar.aura-red { animation: aura-red-pulse 2s infinite; }
-    
-    @keyframes aura-green-pulse {
-      0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(22,163,74, 0.6); }
-      70% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 10px rgba(22,163,74, 0); }
-      100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(22,163,74, 0); }
-    }
-    @keyframes aura-red-pulse {
-      0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(239,68,68, 0.6); }
-      70% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 10px rgba(239,68,68, 0); }
-      100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 0 0 0 rgba(239,68,68, 0); }
+      object-fit: cover;
+      border: 2px solid var(--surface);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
     #tech-info { flex: 1; }
     #tech-name { font-size: 16px; font-weight: 800; color: var(--text); }
@@ -193,13 +252,13 @@
     .btn-chat {
       width: 100%; border: none; border-radius: 16px; padding: 18px 20px;
       display: flex; align-items: center; justify-content: space-between;
-      cursor: pointer; background: #f8fafc; transition: background 0.2s;
+      cursor: pointer; background: var(--bg); transition: background 0.2s;
     }
-    .btn-chat:active { background: #f1f5f9; }
+    .btn-chat:active { background: var(--surface-low); }
     .btn-chat-left { display: flex; align-items: center; gap: 12px; }
     .btn-chat-icon { font-size: 22px; color: var(--text3); }
     .btn-chat-text { font-size: 15px; font-weight: 500; color: var(--text2); }
-    .btn-chat-right { font-size: 15px; font-weight: 700; color: #dc2626; } /* iFood red text here */
+    .btn-chat-right { font-size: 15px; font-weight: 700; color: var(--color-destructive); }
     
     #btn-share .btn-chat-right { color: var(--brand); }
 
@@ -233,7 +292,7 @@
     #expired-screen.show { display: flex; }
     #expired-icon { font-size: 64px; }
     #expired-title { font-size: 22px; font-weight: 900; color: var(--text); }
-    #expired-sub   { font-size: 14px; color: var(--text2); line-height: 1.5; }
+    #expired-sub   { font-size: 14px; color: var(--text2); line-height: 1.5; white-space: pre-line; }
 
     #loading-screen {
       position: fixed; inset: 0; z-index: 200;
@@ -247,6 +306,75 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading-text { font-size: 13px; color: var(--text2); font-weight: 600; }
+
+    /* Chat com o técnico (link público) */
+    #chat-overlay.hidden { display: none !important; }
+    #chat-overlay {
+      position: fixed; inset: 0; z-index: 60;
+      display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .chat-backdrop {
+      position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45);
+    }
+    #chat-panel {
+      position: relative;
+      background: #fff;
+      border-radius: 20px 20px 0 0;
+      max-height: min(78vh, 560px);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    .chat-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-head-title { font-size: 17px; font-weight: 800; color: var(--text); }
+    .chat-close {
+      width: 40px; height: 40px; border: none; border-radius: 20px;
+      background: var(--bg); font-size: 22px; line-height: 1; color: var(--text2);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    #chat-messages {
+      flex: 1; overflow-y: auto; padding: 12px 14px;
+      min-height: 140px; max-height: 42vh;
+      -webkit-overflow-scrolling: touch;
+    }
+    .chat-bubble-row { margin-bottom: 12px; max-width: 92%; }
+    .chat-bubble-row.from-tech { margin-left: auto; text-align: right; }
+    .chat-bubble-row.from-client { margin-right: auto; text-align: left; }
+    .chat-bubble-row.from-system {
+      margin-left: auto; margin-right: auto; text-align: center; max-width: 100%;
+    }
+    .chat-meta { font-size: 11px; color: var(--text3); margin-bottom: 4px; font-weight: 600; }
+    .chat-bubble {
+      display: inline-block; padding: 10px 14px; border-radius: 16px;
+      font-size: 15px; line-height: 1.4; word-break: break-word;
+      text-align: left;
+    }
+    .from-tech .chat-bubble { background: #EA580C; color: #fff; }
+    .from-client .chat-bubble { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .from-system .chat-meta { text-align: center; }
+    .from-system .chat-bubble {
+      background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; font-size: 14px;
+    }
+    #chat-form {
+      display: flex; gap: 8px; padding: 10px 12px 4px;
+      border-top: 1px solid var(--border); align-items: flex-end;
+    }
+    #chat-input {
+      flex: 1; border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; font-size: 15px; font-family: inherit;
+      resize: none; min-height: 46px; max-height: 120px;
+    }
+    #chat-send {
+      border: none; border-radius: 14px; padding: 0 18px; min-height: 46px;
+      background: var(--brand); color: #fff; font-weight: 800; font-size: 14px;
+      cursor: pointer;
+    }
+    #chat-send:disabled { opacity: 0.55; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -254,28 +382,50 @@
 <!-- Loading -->
 <div id="loading-screen">
   <div class="loader"></div>
-  <div id="loading-text">Conectando ao Técnico...</div>
+  <div id="loading-text"></div>
 </div>
 
 <!-- Expired -->
 <div id="expired-screen">
   <div id="expired-icon">⏰</div>
-  <div id="expired-title">Link Expirado</div>
-  <div id="expired-sub">Este rastreamento encerrou.<br>O link fica ativo por 15 minutos após a chegada.</div>
+  <div id="expired-title"></div>
+  <div id="expired-sub"></div>
 </div>
 
 <!-- Map -->
 <div id="map"></div>
 
 <!-- Top Nav Buttons -->
-<div id="top-nav" style="justify-content: flex-end;">
-  <button id="btn-help" class="nav-btn" onclick="alert('Chat indisponível nesta etapa.')">Chat</button>
+<div id="top-nav" style="justify-content: flex-end; align-items: center;">
+  <div id="lang-switch" role="group" aria-label="Idioma">
+    <button type="button" class="lang-chip" data-locale="pt-BR" onclick="setTrackLocale('pt-BR')">PT</button>
+    <button type="button" class="lang-chip" data-locale="en" onclick="setTrackLocale('en')">EN</button>
+    <button type="button" class="lang-chip" data-locale="es" onclick="setTrackLocale('es')">ES</button>
+    <button type="button" class="lang-chip" data-locale="fr" onclick="setTrackLocale('fr')">FR</button>
+  </div>
+  <button id="btn-help" type="button" class="nav-btn" onclick="openTrackingChat()"></button>
+</div>
+
+<!-- Chat overlay -->
+<div id="chat-overlay" class="hidden" aria-hidden="true">
+  <div class="chat-backdrop" onclick="closeTrackingChat()" role="presentation"></div>
+  <div id="chat-panel" role="dialog" aria-labelledby="chat-title">
+    <div class="chat-head">
+      <span id="chat-title" class="chat-head-title"></span>
+      <button type="button" class="chat-close" id="chat-close-btn" onclick="closeTrackingChat()" aria-label="">×</button>
+    </div>
+    <div id="chat-messages"></div>
+    <form id="chat-form" action="javascript:void(0)" onsubmit="event.preventDefault(); return false;">
+      <textarea id="chat-input" name="body" maxlength="900" rows="1" placeholder="" autocomplete="off"></textarea>
+      <button type="button" id="chat-send"></button>
+    </form>
+  </div>
 </div>
 
 <!-- Main Top Card -->
 <div id="top-card">
-  <div id="status-title">Aguardando início...</div>
-  <div id="pause-ribbon" role="status" aria-live="polite"><span style="font-size:18px">⏸</span> Deslocamento pausado</div>
+  <div id="status-title"></div>
+  <div id="pause-ribbon" role="status" aria-live="polite"><span style="font-size:18px">⏸</span> <span id="pause-ribbon-msg"></span></div>
   <div id="client-alert" role="status" aria-live="polite"></div>
   
   <div class="progress-bars">
@@ -285,13 +435,17 @@
   </div>
 
   <div id="eta-row">
-    <div id="eta-text">Previsão de chegada: <span id="eta-value">--</span></div>
+    <div id="eta-text"><span id="eta-prefix"></span><span id="eta-value">--</span></div>
     <ion-icon name="chevron-down-outline" style="color:var(--text3)"></ion-icon>
   </div>
 
   <div id="info-row">
-    <div id="info-label">Serviço em andamento <ion-icon name="information-circle-outline"></ion-icon></div>
+    <div id="info-label"><span id="info-label-text"></span> <ion-icon name="information-circle-outline"></ion-icon></div>
     <div id="info-badge" id="service-title-container"><span id="service-title">--</span></div>
+  </div>
+  <div id="ft-row" aria-live="polite">
+    <div id="ft-label"></div>
+    <div id="ft-badge"></div>
   </div>
 </div>
 
@@ -304,8 +458,8 @@
        <img id="tech-avatar" src="" />
     </div>
     <div id="tech-info">
-      <div id="tech-name">Técnico</div>
-      <div id="tech-role">Profissional Parceiro BrSpark</div>
+      <div id="tech-name"></div>
+      <div id="tech-role"></div>
     </div>
     <div style="display:flex; gap:8px;">
       <a id="btn-mini-call" href="#" style="display:none; background:#dcfce7; width:44px; height:44px; border-radius:22px; align-items:center; justify-content:center; text-decoration:none;">
@@ -321,12 +475,12 @@
 <!-- Arrived overlay -->
 <div id="arrived-overlay">
   <div id="arrived-crown">✅</div>
-  <div id="arrived-title">Técnico Chegou!</div>
-  <div id="arrived-sub">Sua atividade está em andamento.</div>
+  <div id="arrived-title"></div>
+  <div id="arrived-sub"></div>
 
 
 
-  <button id="arrived-close" onclick="dismissArrived()">Ver no Mapa</button>
+  <button id="arrived-close" onclick="dismissArrived()"></button>
 </div>
 
 <!-- Leaflet JS -->
@@ -338,18 +492,601 @@
   const token = new URLSearchParams(location.search).get('t');
   /** Intervalo entre fim de um ciclo e o próximo (o ciclo inclui fetch API + render + OSRM até ~10s). */
   const POLL_MS = 3000;
+  /** Estado da API (declarado cedo para i18n poder re-renderizar ao mudar idioma). */
+  let lastData = null;
+
+  // ── Idioma (prioridade: ?lang= / ?locale= → localStorage → navegador → pt-BR) ──
+  const TRACK_LOCALE_STORAGE = 'brspark_track_locale_v1';
+  const STR = {
+    'pt-BR': {
+      pageTitle: 'Acompanhe seu técnico · BrSpark',
+      loadingText: 'Conectando ao técnico…',
+      expiredTitle: 'Link expirado',
+      expiredDefault: 'Este link de rastreamento expirou.',
+      expiredGrace:
+        'Este rastreamento encerrou.\nO link fica ativo por 30 minutos após o fim do deslocamento.',
+      btnChat: 'Chat',
+      langGroupAria: 'Idioma',
+      chatTitle: 'Conversa',
+      chatClose: 'Fechar',
+      chatPlaceholder: 'Escreva uma mensagem…',
+      chatSend: 'Enviar',
+      statusWaiting: 'Aguardando início…',
+      pauseMsg: 'Deslocamento pausado',
+      etaPrefix: 'Previsão de chegada: ',
+      infoInProgress: 'Serviço em andamento',
+      ftNumberLabel: 'Número da FT',
+      rtNumberLabel: 'Número da RT',
+      rolePartner: 'Profissional parceiro BrSpark',
+      arrivedTitle: 'Técnico chegou!',
+      arrivedSub: 'Sua atividade está em andamento.',
+      arrivedBtn: 'Ver no mapa',
+      invalidToken: 'Link inválido. Solicite um novo link ao técnico.',
+      invalid404: 'Link inválido ou não encontrado.',
+      shareTitle: 'Acompanhe o técnico',
+      shareText: 'O técnico está em deslocamento! Acompanhe ao vivo:',
+      linkCopied: 'Link copiado!',
+      linkShow: 'Link:',
+      techShort: 'Técnico',
+      techPersonDefault: 'O técnico',
+      popDestination: 'Destino',
+      chatYou: 'Você',
+      chatTechDefault: 'Técnico',
+      chatSystem: 'Sistema',
+      chatSendAnywayQ: 'Deseja enviar mesmo assim? (só para casos leves / possível falso alarme)',
+      alertEndFar:
+        'O deslocamento foi encerrado antes da chegada ao destino (aprox. {dist} do endereço).',
+      alertEndUnknown:
+        'O deslocamento foi encerrado; não foi possível confirmar no mapa se o técnico chegou ao endereço (GPS ou destino indisponível).',
+      alertPauseFar:
+        'O técnico pausou o deslocamento longe do endereço de atendimento (aprox. {dist}).',
+      alertPauseUnknown:
+        'O técnico pausou o deslocamento. Não foi possível comparar a posição com o destino no mapa.',
+      signal_last_point: 'Último ponto há cerca de {n} min.',
+      signal_no_recent: 'Não recebemos posição com coordenadas recentes.',
+      signal_explain:
+        ' O técnico pode ter fechado o app, reiniciado o telefone ou ficado sem rede. O pin no mapa pode estar desatualizado (limite de frescor: {lim} min).',
+      eta_arrived: 'Chegou',
+      eta_ended: 'Encerrado',
+      eta_paused: 'Pausado pelo técnico',
+      eta_signal_mins: 'GPS desatualizado no mapa · há cerca de {n} min',
+      eta_signal_app: 'Sem posição recente do aplicativo',
+      eta_minutes: '{n} minutos',
+      eta_calculando: 'calculando…',
+      eta_sem_local: 'Sem local de atendimento definido — previsão de chegada indisponível.',
+      eta_hours_m: '{h}h {m}m',
+      status_arrived: '{name} chegou ao local',
+      status_ended: 'Deslocamento encerrado',
+      status_paused: '{name} pausou o deslocamento',
+      status_signal: '{name} — sem atualização recente do GPS no mapa',
+      status_way: '{name} está em deslocamento',
+      err_send: 'Não foi possível enviar.',
+      err_network: 'Sem conexão. Tente novamente.',
+    },
+    en: {
+      pageTitle: 'Track your technician · BrSpark',
+      loadingText: 'Connecting to technician…',
+      expiredTitle: 'Link expired',
+      expiredDefault: 'This tracking link has expired.',
+      expiredGrace:
+        'This tracking session has ended.\nThe link stays active for 30 minutes after the trip ends.',
+      btnChat: 'Chat',
+      langGroupAria: 'Language',
+      chatTitle: 'Conversation',
+      chatClose: 'Close',
+      chatPlaceholder: 'Write a message…',
+      chatSend: 'Send',
+      statusWaiting: 'Waiting to start…',
+      pauseMsg: 'Trip paused',
+      etaPrefix: 'Estimated arrival: ',
+      infoInProgress: 'Service in progress',
+      ftNumberLabel: 'Field task no.',
+      rtNumberLabel: 'Routine task no.',
+      rolePartner: 'BrSpark partner professional',
+      arrivedTitle: 'Technician has arrived!',
+      arrivedSub: 'Your service is in progress.',
+      arrivedBtn: 'View map',
+      invalidToken: 'Invalid link. Ask the technician for a new link.',
+      invalid404: 'Invalid or unknown link.',
+      shareTitle: 'Track the technician',
+      shareText: 'The technician is on the way! Track live:',
+      linkCopied: 'Link copied!',
+      linkShow: 'Link:',
+      techShort: 'Technician',
+      techPersonDefault: 'The technician',
+      popDestination: 'Destination',
+      chatYou: 'You',
+      chatTechDefault: 'Technician',
+      chatSystem: 'System',
+      chatSendAnywayQ: 'Send anyway? (borderline cases only)',
+      alertEndFar:
+        'The trip ended before reaching the destination (approx. {dist} from the address).',
+      alertEndUnknown:
+        'The trip ended; we could not confirm on the map if the technician reached the address (GPS or destination unavailable).',
+      alertPauseFar:
+        'The technician paused away from the service address (approx. {dist}).',
+      alertPauseUnknown:
+        'The technician paused the trip. We could not compare position to the destination on the map.',
+      signal_last_point: 'Last location about {n} min ago.',
+      signal_no_recent: 'We have no recent coordinates.',
+      signal_explain:
+        ' The technician may have closed the app, restarted the phone, or lost signal. The map pin may be outdated (freshness limit: {lim} min).',
+      eta_arrived: 'Arrived',
+      eta_ended: 'Ended',
+      eta_paused: 'Paused by technician',
+      eta_signal_mins: 'No recent signal · {n} min',
+      eta_signal_app: 'No signal from app',
+      eta_minutes: '{n} minutes',
+      eta_calculando: 'calculating…',
+      eta_sem_local: 'No service address on file — estimated arrival unavailable.',
+      eta_hours_m: '{h}h {m}m',
+      status_arrived: '{name} has arrived',
+      status_ended: 'Trip ended',
+      status_paused: '{name} paused the trip',
+      status_signal: '{name} — no location signal',
+      status_way: '{name} is on the way',
+      err_send: 'Could not send.',
+      err_network: 'No connection. Try again.',
+    },
+    es: {
+      pageTitle: 'Siga a su técnico · BrSpark',
+      loadingText: 'Conectando con el técnico…',
+      expiredTitle: 'Enlace caducado',
+      expiredDefault: 'Este enlace de seguimiento ha caducado.',
+      expiredGrace:
+        'Este seguimiento ha finalizado.\nEl enlace permanece activo 30 minutos después de finalizar el desplazamiento.',
+      btnChat: 'Chat',
+      langGroupAria: 'Idioma',
+      chatTitle: 'Conversación',
+      chatClose: 'Cerrar',
+      chatPlaceholder: 'Escriba un mensaje…',
+      chatSend: 'Enviar',
+      statusWaiting: 'Esperando inicio…',
+      pauseMsg: 'Desplazamiento en pausa',
+      etaPrefix: 'Llegada estimada: ',
+      infoInProgress: 'Servicio en curso',
+      ftNumberLabel: 'Número de FT',
+      rtNumberLabel: 'Número de RT',
+      rolePartner: 'Profesional asociado BrSpark',
+      arrivedTitle: '¡El técnico ha llegado!',
+      arrivedSub: 'Su actividad está en curso.',
+      arrivedBtn: 'Ver mapa',
+      invalidToken: 'Enlace no válido. Pida un nuevo enlace al técnico.',
+      invalid404: 'Enlace no válido o no encontrado.',
+      shareTitle: 'Siga al técnico',
+      shareText: '¡El técnico va en camino! Siga en vivo:',
+      linkCopied: '¡Enlace copiado!',
+      linkShow: 'Enlace:',
+      techShort: 'Técnico',
+      techPersonDefault: 'El técnico',
+      popDestination: 'Destino',
+      chatYou: 'Usted',
+      chatTechDefault: 'Técnico',
+      chatSystem: 'Sistema',
+      chatSendAnywayQ: '¿Enviar de todas formas? (solo casos leves)',
+      alertEndFar:
+        'El desplazamiento terminó antes de llegar al destino (aprox. {dist} de la dirección).',
+      alertEndUnknown:
+        'El desplazamiento terminó; no pudimos confirmar en el mapa si el técnico llegó (GPS o destino no disponible).',
+      alertPauseFar:
+        'El técnico pausó lejos de la dirección del servicio (aprox. {dist}).',
+      alertPauseUnknown:
+        'El técnico pausó el desplazamiento. No pudimos comparar la posición con el destino en el mapa.',
+      signal_last_point: 'Último punto hace unos {n} min.',
+      signal_no_recent: 'No tenemos coordenadas recientes.',
+      signal_explain:
+        ' El técnico pudo cerrar la app, reiniciar el teléfono o perder red. El pin puede estar desactualizado (límite: {lim} min).',
+      eta_arrived: 'Llegó',
+      eta_ended: 'Finalizado',
+      eta_paused: 'Pausado por el técnico',
+      eta_signal_mins: 'Sin señal reciente · hace {n} min',
+      eta_signal_app: 'Sin señal de la app',
+      eta_minutes: '{n} minutos',
+      eta_calculando: 'calculando…',
+      eta_sem_local: 'Sin dirección de servicio — llegada estimada no disponible.',
+      eta_hours_m: '{h}h {m}m',
+      status_arrived: '{name} llegó al lugar',
+      status_ended: 'Desplazamiento finalizado',
+      status_paused: '{name} pausó el desplazamiento',
+      status_signal: '{name} — sin señal de ubicación',
+      status_way: '{name} va en camino',
+      err_send: 'No se pudo enviar.',
+      err_network: 'Sin conexión. Inténtelo de nuevo.',
+    },
+    fr: {
+      pageTitle: 'Suivez votre technicien · BrSpark',
+      loadingText: 'Connexion au technicien…',
+      expiredTitle: 'Lien expiré',
+      expiredDefault: 'Ce lien de suivi a expiré.',
+      expiredGrace:
+        'Ce suivi est terminé.\nLe lien reste actif 30 minutes après la fin du déplacement.',
+      btnChat: 'Chat',
+      langGroupAria: 'Langue',
+      chatTitle: 'Conversation',
+      chatClose: 'Fermer',
+      chatPlaceholder: 'Écrivez un message…',
+      chatSend: 'Envoyer',
+      statusWaiting: 'En attente du démarrage…',
+      pauseMsg: 'Déplacement en pause',
+      etaPrefix: 'Arrivée estimée : ',
+      infoInProgress: 'Intervention en cours',
+      ftNumberLabel: 'N° FT',
+      rtNumberLabel: 'N° RT',
+      rolePartner: 'Professionnel partenaire BrSpark',
+      arrivedTitle: 'Le technicien est arrivé !',
+      arrivedSub: 'Votre prestation est en cours.',
+      arrivedBtn: 'Voir la carte',
+      invalidToken: 'Lien invalide. Demandez un nouveau lien au technicien.',
+      invalid404: 'Lien invalide ou introuvable.',
+      shareTitle: 'Suivre le technicien',
+      shareText: 'Le technicien est en route ! Suivez en direct :',
+      linkCopied: 'Lien copié !',
+      linkShow: 'Lien :',
+      techShort: 'Technicien',
+      techPersonDefault: 'Le technicien',
+      popDestination: 'Destination',
+      chatYou: 'Vous',
+      chatTechDefault: 'Technicien',
+      chatSystem: 'Système',
+      chatSendAnywayQ: 'Envoyer quand même ? (cas limites uniquement)',
+      alertEndFar:
+        'Le déplacement s’est terminé avant l’arrivée à l’adresse (env. {dist} de l’adresse).',
+      alertEndUnknown:
+        'Le déplacement est terminé ; impossible de confirmer sur la carte si le technicien est arrivé (GPS ou destination indisponible).',
+      alertPauseFar:
+        'Le technicien a mis en pause loin de l’adresse d’intervention (env. {dist}).',
+      alertPauseUnknown:
+        'Le technicien a mis en pause. Impossible de comparer la position à la destination sur la carte.',
+      signal_last_point: 'Dernier point il y a env. {n} min.',
+      signal_no_recent: 'Aucune position récente avec coordonnées.',
+      signal_explain:
+        ' Le technicien a peut-être fermé l’app, redémarré le téléphone ou perdu le réseau. L’épingle peut être obsolète (limite : {lim} min).',
+      eta_arrived: 'Arrivé',
+      eta_ended: 'Terminé',
+      eta_paused: 'En pause par le technicien',
+      eta_signal_mins: 'Pas de signal récent · il y a {n} min',
+      eta_signal_app: 'Pas de signal de l’app',
+      eta_minutes: '{n} minutes',
+      eta_calculando: 'calcul…',
+      eta_sem_local: 'Aucune adresse d’intervention — arrivée estimée indisponible.',
+      eta_hours_m: '{h}h {m}m',
+      status_arrived: '{name} est arrivé sur place',
+      status_ended: 'Déplacement terminé',
+      status_paused: '{name} a mis en pause',
+      status_signal: '{name} — pas de signal de localisation',
+      status_way: '{name} est en route',
+      err_send: 'Envoi impossible.',
+      err_network: 'Pas de connexion. Réessayez.',
+    },
+  };
+
+  function parseSupportedLocale(raw) {
+    if (raw == null) return null;
+    const t = String(raw)
+      .trim()
+      .replace(/_/g, '-')
+      .toLowerCase();
+    if (!t) return null;
+    if (t === 'pt-br' || t === 'pt' || t.startsWith('pt-')) return 'pt-BR';
+    if (t.startsWith('en')) return 'en';
+    if (t.startsWith('es')) return 'es';
+    if (t.startsWith('fr')) return 'fr';
+    return null;
+  }
+
+  function detectTrackLocale() {
+    try {
+      const qs = new URLSearchParams(location.search);
+      const fromUrl = parseSupportedLocale(qs.get('lang') || qs.get('locale'));
+      if (fromUrl) return fromUrl;
+    } catch (e) {}
+    try {
+      const fromLs = parseSupportedLocale(localStorage.getItem(TRACK_LOCALE_STORAGE));
+      if (fromLs) return fromLs;
+    } catch (e) {}
+    const navList = [];
+    if (navigator.languages && navigator.languages.length) {
+      for (let i = 0; i < navigator.languages.length; i++) navList.push(navigator.languages[i]);
+    } else if (navigator.language) {
+      navList.push(navigator.language);
+    }
+    for (let i = 0; i < navList.length; i++) {
+      const p = parseSupportedLocale(navList[i]);
+      if (p) return p;
+    }
+    return 'pt-BR';
+  }
+
+  let trackLocale = detectTrackLocale();
+
+  function T(key, params) {
+    const pack = STR[trackLocale] || STR['pt-BR'];
+    const fb = STR['pt-BR'];
+    let s = (pack && pack[key]) || (fb && fb[key]) || key;
+    if (params && typeof params === 'object') {
+      s = String(s).replace(/\{(\w+)\}/g, function (_, k) {
+        return params[k] != null ? String(params[k]) : '';
+      });
+    }
+    return s;
+  }
+
+  function htmlDocLang() {
+    if (trackLocale === 'pt-BR') return 'pt-BR';
+    return trackLocale;
+  }
+
+  function applyTrackI18n() {
+    document.documentElement.lang = htmlDocLang();
+    const tit = document.querySelector('title');
+    if (tit) tit.textContent = T('pageTitle');
+    const setTxt = function (id, text) {
+      const n = document.getElementById(id);
+      if (n) n.textContent = text;
+    };
+    setTxt('loading-text', T('loadingText'));
+    setTxt('expired-title', T('expiredTitle'));
+    setTxt('btn-help', T('btnChat'));
+    setTxt('chat-title', T('chatTitle'));
+    const chatCloseBtn = document.getElementById('chat-close-btn');
+    if (chatCloseBtn) chatCloseBtn.setAttribute('aria-label', T('chatClose'));
+    const chatInp = document.getElementById('chat-input');
+    if (chatInp) chatInp.placeholder = T('chatPlaceholder');
+    setTxt('chat-send', T('chatSend'));
+    setTxt('status-title', T('statusWaiting'));
+    setTxt('pause-ribbon-msg', T('pauseMsg'));
+    setTxt('info-label-text', T('infoInProgress'));
+    setTxt('tech-name', T('techShort'));
+    setTxt('tech-role', T('rolePartner'));
+    setTxt('arrived-title', T('arrivedTitle'));
+    setTxt('arrived-sub', T('arrivedSub'));
+    setTxt('arrived-close', T('arrivedBtn'));
+    const lg = document.getElementById('lang-switch');
+    if (lg) lg.setAttribute('aria-label', T('langGroupAria'));
+    const chips = document.querySelectorAll('.lang-chip');
+    for (let i = 0; i < chips.length; i++) {
+      const c = chips[i];
+      const loc = c.getAttribute('data-locale');
+      if (loc === trackLocale) c.classList.add('on');
+      else c.classList.remove('on');
+    }
+    if (lastData) {
+      try {
+        void render(lastData);
+      } catch (e) {}
+    } else {
+      setTxt('eta-prefix', T('etaPrefix'));
+    }
+    try {
+      const ov = document.getElementById('chat-overlay');
+      if (ov && !ov.classList.contains('hidden')) void fetchTrackingChatMessages();
+    } catch (e) {}
+  }
+
+  function setTrackLocale(locale) {
+    const p = parseSupportedLocale(locale);
+    if (!p) return;
+    trackLocale = p;
+    try {
+      localStorage.setItem(TRACK_LOCALE_STORAGE, p);
+    } catch (e) {}
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set('lang', p);
+      history.replaceState({}, '', u.pathname + u.search);
+    } catch (e) {}
+    applyTrackI18n();
+  }
+
+  applyTrackI18n();
+
+  (function wireTrackingChatSend() {
+    var sendBtn = document.getElementById('chat-send');
+    var form = document.getElementById('chat-form');
+    if (sendBtn) {
+      sendBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        void sendTrackingChatMessage(e);
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+    }
+  })();
 
   // ── State ─────────────────────────────────────────────────
-  let map, techMarker, destMarker, routeLine;
-  let lastData = null;
+  let map, techMarker, destMarker;
   let arrivedShown = false;
   let pollTimer = null;
   let pollHalted = false;
   /** Quando a aba volta ao foco, o SO atrasa setTimeout — próximo ciclo mais rápido. */
   let pollUrgent = false;
   let pollRunning = false;
-  /** Evita que um render antigo (ex.: OSRM lento) sobrescreva um mais novo */
-  let renderGeneration = 0;
+  let trackingChatPollTimer = null;
+
+  function fmtChatTime(iso) {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      const loc =
+        trackLocale === 'pt-BR'
+          ? 'pt-BR'
+          : trackLocale === 'en'
+            ? 'en-US'
+            : trackLocale === 'es'
+              ? 'es-419'
+              : 'fr-FR';
+      return d.toLocaleString(loc, {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function renderTrackingChatMessages(messages) {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    el.textContent = '';
+    const arr = Array.isArray(messages) ? messages : [];
+    for (const m of arr) {
+      if (!m || typeof m !== 'object') continue;
+      const row = document.createElement('div');
+      const role = m.role === 'tech' ? 'tech' : m.role === 'system' ? 'system' : 'client';
+      row.className =
+        'chat-bubble-row ' + (role === 'tech' ? 'from-tech' : role === 'system' ? 'from-system' : 'from-client');
+      const meta = document.createElement('div');
+      meta.className = 'chat-meta';
+      const who =
+        role === 'system'
+          ? T('chatSystem')
+          : role === 'tech'
+          ? typeof m.senderLabel === 'string' && m.senderLabel.trim()
+            ? m.senderLabel.trim()
+            : T('chatTechDefault')
+          : T('chatYou');
+      const when = typeof m.at === 'string' ? fmtChatTime(m.at) : '';
+      meta.textContent = who + (when ? ' · ' + when : '');
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      bubble.textContent = typeof m.text === 'string' ? m.text : '';
+      row.appendChild(meta);
+      row.appendChild(bubble);
+      el.appendChild(row);
+    }
+    el.scrollTop = el.scrollHeight;
+  }
+
+  async function fetchTrackingChatMessages() {
+    if (!token || pollHalted) return;
+    try {
+      const res = await fetch(
+        `${BASE}/api/tracking/${encodeURIComponent(token)}/chat?cb=${Date.now()}`,
+        { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }
+      );
+      if (res.status === 410) {
+        closeTrackingChat();
+        showExpiredGrace();
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      renderTrackingChatMessages(data.messages);
+    } catch (e) {
+      console.warn('[tracking] chat fetch', e);
+    }
+  }
+
+  function openTrackingChat() {
+    if (!token || pollHalted) return;
+    const ov = document.getElementById('chat-overlay');
+    if (!ov) return;
+    ov.classList.remove('hidden');
+    ov.setAttribute('aria-hidden', 'false');
+    void fetchTrackingChatMessages();
+    if (trackingChatPollTimer) clearInterval(trackingChatPollTimer);
+    trackingChatPollTimer = setInterval(fetchTrackingChatMessages, 3500);
+    setTimeout(() => {
+      const inp = document.getElementById('chat-input');
+      if (inp) inp.focus();
+    }, 200);
+  }
+
+  function closeTrackingChat() {
+    const ov = document.getElementById('chat-overlay');
+    if (ov) {
+      ov.classList.add('hidden');
+      ov.setAttribute('aria-hidden', 'true');
+    }
+    if (trackingChatPollTimer) {
+      clearInterval(trackingChatPollTimer);
+      trackingChatPollTimer = null;
+    }
+  }
+
+  async function sendTrackingChatMessage(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('chat-send');
+    const text = input && typeof input.value === 'string' ? input.value.trim() : '';
+    if (!text || !token) return false;
+    if (btn) btn.disabled = true;
+    if (input) input.disabled = true;
+    try {
+      const res = await fetch(`${BASE}/api/tracking/${encodeURIComponent(token)}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ text }),
+        cache: 'no-store',
+      });
+      if (res.status === 410) {
+        closeTrackingChat();
+        showExpiredGrace();
+        return false;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 422 && data && data.code === 'CHAT_MODERATION') {
+        if (Array.isArray(data.messages)) renderTrackingChatMessages(data.messages);
+        const msg =
+          typeof data.userMessage === 'string' && data.userMessage.trim()
+            ? data.userMessage.trim()
+            : T('err_send');
+        if (data.canOverride) {
+          if (window.confirm(msg + '\n\n' + T('chatSendAnywayQ'))) {
+            const res2 = await fetch(`${BASE}/api/tracking/${encodeURIComponent(token)}/chat`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+              },
+              body: JSON.stringify({ text: text, ackModerationWarning: true }),
+              cache: 'no-store',
+            });
+            const data2 = await res2.json().catch(() => ({}));
+            if (res2.status === 410) {
+              closeTrackingChat();
+              showExpiredGrace();
+              return false;
+            }
+            if (!res2.ok) {
+              alert(data2.error || T('err_send'));
+              return false;
+            }
+            if (input) input.value = '';
+            renderTrackingChatMessages(data2.messages);
+          }
+        } else {
+          alert(msg);
+        }
+        return false;
+      }
+      if (!res.ok) {
+        alert(data.error || T('err_send'));
+        return false;
+      }
+      if (input) input.value = '';
+      renderTrackingChatMessages(data.messages);
+    } catch (e) {
+      alert(T('err_network'));
+    } finally {
+      if (btn) btn.disabled = false;
+      if (input) {
+        input.disabled = false;
+        input.focus();
+      }
+    }
+    return false;
+  }
 
   /**
    * “Sem sinal” alinhado ao servidor (gpsStaleAfterSeconds).
@@ -371,6 +1108,46 @@
       return true;
     }
     return false;
+  }
+
+  /** Mesma regra que antes no avatar do rodapé: «offline» para o indicador visual. */
+  function techGpsAppearsOffline(d) {
+    if (!d || typeof d !== 'object') return false;
+    const staleSec =
+      d.gpsStaleAfterSeconds != null && isFinite(Number(d.gpsStaleAfterSeconds))
+        ? Number(d.gpsStaleAfterSeconds)
+        : 600;
+    return (
+      isTrackingSignalLost(d) ||
+      (d.gpsAgeSeconds != null &&
+        isFinite(d.gpsAgeSeconds) &&
+        d.gpsAgeSeconds > Math.min(120, staleSec))
+    );
+  }
+
+  function syncMapTechGpsIndicator(d) {
+    if (!techMarker) return;
+    const root =
+      typeof techMarker.getElement === 'function' ? techMarker.getElement() : techMarker._icon;
+    if (!root || !root.querySelector) return;
+    const face = root.querySelector('.track-map-tech-face');
+    if (!face) return;
+    const isOffline = techGpsAppearsOffline(d);
+    face.classList.remove('track-map-signal-live', 'track-map-signal-lost');
+    if (d.gpsAgeSeconds != null && !d.isEnded) {
+      if (isOffline) {
+        face.classList.add('track-map-signal-lost');
+        face.style.borderColor = '#EF4444';
+        face.style.boxShadow = '';
+      } else {
+        face.classList.add('track-map-signal-live');
+        face.style.borderColor = '#16A34A';
+        face.style.boxShadow = '';
+      }
+    } else {
+      face.style.borderColor = '#EA580C';
+      face.style.boxShadow = '0 2px 12px rgba(234, 88, 12, 0.45)';
+    }
   }
 
   /** Distância em metros até o destino, ou null se não der para calcular */
@@ -412,31 +1189,23 @@
         return;
       }
       if (m != null && m > ARRIVED_RADIUS_M) {
-        el.textContent =
-          'O deslocamento foi encerrado antes da chegada ao destino (aprox. ' +
-          formatDistancePt(m) +
-          ' do endereço).';
+        el.textContent = T('alertEndFar', { dist: formatDistancePt(m) });
         el.classList.add('show', 'warn-ended');
         return;
       }
-      el.textContent =
-        'O deslocamento foi encerrado; não foi possível confirmar no mapa se o técnico chegou ao endereço (GPS ou destino indisponível).';
+      el.textContent = T('alertEndUnknown');
       el.classList.add('show', 'warn-unknown');
       return;
     }
 
     if (d.isPaused) {
       if (m != null && m > ARRIVED_RADIUS_M) {
-        el.textContent =
-          'O técnico pausou o deslocamento longe do endereço de atendimento (aprox. ' +
-          formatDistancePt(m) +
-          ').';
+        el.textContent = T('alertPauseFar', { dist: formatDistancePt(m) });
         el.classList.add('show', 'warn-pause');
         return;
       }
       if (!hasDest || !hasTech) {
-        el.textContent =
-          'O técnico pausou o deslocamento. Não foi possível comparar a posição com o destino no mapa.';
+        el.textContent = T('alertPauseUnknown');
         el.classList.add('show', 'warn-unknown');
         return;
       }
@@ -448,13 +1217,9 @@
       const limMin = Math.round((d.gpsStaleAfterSeconds || 600) / 60);
       const ageTxt =
         d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds)
-          ? `Último ponto há cerca de ${Math.round(d.gpsAgeSeconds / 60)} min.`
-          : 'Não recebemos posição com coordenadas recentes.';
-      el.textContent =
-        ageTxt +
-        ' O técnico pode ter fechado o app, reiniciado o telefone ou ficado sem rede. O pin no mapa pode estar desatualizado (limite de frescor: ' +
-        limMin +
-        ' min).';
+          ? T('signal_last_point', { n: String(Math.round(d.gpsAgeSeconds / 60)) })
+          : T('signal_no_recent');
+      el.textContent = ageTxt + T('signal_explain', { lim: String(limMin) });
       el.classList.add('show', 'warn-unknown');
       return;
     }
@@ -464,7 +1229,7 @@
 
   // ─── Init ──────────────────────────────────────────────────
   if (!token) {
-    showExpired('Link inválido. Solicite um novo link ao técnico.');
+    showExpired(T('invalidToken'));
   } else {
     initMap();
     poll();
@@ -500,7 +1265,7 @@
       clearTimeout(to);
 
       if (res.status === 404) {
-        showExpired('Link inválido ou não encontrado.');
+        showExpired(T('invalid404'));
         return;
       }
       if (res.status === 410) {
@@ -510,7 +1275,7 @@
 
       const data = await res.json();
       hideLoading();
-      await render(data);
+      render(data);
       lastData = data;
     } catch (e) {
       console.warn('[tracking] poll error', e);
@@ -534,46 +1299,10 @@
 
   // ─── Render ────────────────────────────────────────────────
   
-  /**
-   * Geometria pelas ruas via API BrSpark (mesmo proxy do app — OSRM do painel, sem CORS no browser).
-   */
-  async function fetchOsrmRoute(startLat, startLng, endLat, endLng) {
-    const qs = new URLSearchParams({
-      oLat: String(startLat),
-      oLng: String(startLng),
-      dLat: String(endLat),
-      dLng: String(endLng),
-    });
-    const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), 90000);
-    try {
-      const res = await fetch(`${BASE}/api/osrm/route-polyline?${qs}`, {
-        signal: ac.signal,
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || !Array.isArray(data.coordinates) || data.coordinates.length < 2) {
-        return null;
-      }
-      const coords = data.coordinates.map((c) =>
-        Array.isArray(c) && c.length >= 2 ? [Number(c[0]), Number(c[1])] : null
-      ).filter(Boolean);
-      if (coords.length < 2) return null;
-      return { coords, etaMinutes: null };
-    } catch (e) {
-      console.warn('[tracking] rota via API falhou', e);
-    } finally {
-      clearTimeout(to);
-    }
-    return null;
-  }
-  async function render(d) {
-    const gen = ++renderGeneration;
+  function render(d) {
     updateTech(d);
+    updateFtRow(d);
 
-    // Atualizar título, ETA e mapa ANTES do OSRM — senão, se o router externo travar,
-    // a página fica eternamente em “Aguardando início...” / “--”.
     updateEta(d);
     updateMap(d);
     updateStatus(d);
@@ -592,53 +1321,38 @@
     }
 
     if (d.isEnded && actualArrived && !arrivedShown) showArrived();
+  }
 
-    if (d.currentLat && d.currentLng && d.destLat && d.destLng) {
-      const osrmData = await fetchOsrmRoute(d.currentLat, d.currentLng, d.destLat, d.destLng);
-      if (gen !== renderGeneration) return;
-      let changed = false;
-      if (osrmData && osrmData.etaMinutes !== null && d.etaMinutes == null) {
-        d.etaMinutes = osrmData.etaMinutes;
-        changed = true;
-      }
-      if (osrmData && osrmData.coords) {
-        d.routePolyline = osrmData.coords;
-        changed = true;
-      }
-      if (changed) {
-        updateEta(d);
-        updateMap(d);
-        updateClientAlert(d);
-      }
+  function updateFtRow(d) {
+    const row = document.getElementById('ft-row');
+    const lab = document.getElementById('ft-label');
+    const badge = document.getElementById('ft-badge');
+    if (!row || !lab || !badge) return;
+    const os = d && d.osNumber != null && String(d.osNumber).trim() ? String(d.osNumber).trim() : '';
+    const rt =
+      d && d.routineTaskNumber != null && String(d.routineTaskNumber).trim()
+        ? String(d.routineTaskNumber).trim()
+        : '';
+    if (os) {
+      lab.textContent = T('ftNumberLabel');
+      badge.textContent = os;
+      row.classList.add('show');
+    } else if (rt) {
+      lab.textContent = T('rtNumberLabel');
+      badge.textContent = rt;
+      row.classList.add('show');
+    } else {
+      lab.textContent = '';
+      badge.textContent = '';
+      row.classList.remove('show');
     }
   }
 
   function updateTech(d) {
-    document.getElementById('tech-name').textContent = d.techName || 'Técnico';
+    document.getElementById('tech-name').textContent = d.techName || T('techShort');
     document.getElementById('service-title').textContent = d.serviceTitle || '';
     const av = document.getElementById('tech-avatar');
-    
-    const staleSec =
-      d.gpsStaleAfterSeconds != null && isFinite(Number(d.gpsStaleAfterSeconds))
-        ? Number(d.gpsStaleAfterSeconds)
-        : 600;
-    const isOffline =
-      isTrackingSignalLost(d) ||
-      (d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds) && d.gpsAgeSeconds > Math.min(120, staleSec));
-    av.classList.remove('aura-green', 'aura-red');
-    if (d.gpsAgeSeconds != null && !d.isEnded) {
-      if (isOffline) {
-        av.classList.add('aura-red');
-        av.style.borderColor = '#EF4444'; 
-      } else {
-        av.classList.add('aura-green');
-        av.style.borderColor = '#16A34A'; 
-      }
-    } else {
-      av.style.borderColor = '#E2E8F0';
-    }
 
-    
     let avatarUrl = d.techAvatar;
     if (avatarUrl) {
       if (avatarUrl.startsWith('/')) {
@@ -659,14 +1373,25 @@
     } else {
       av.src = avatarFallback(d.techName);
     }
-    
+
     // Also store it back globally so makeTechIcon accesses the resolved URL
     d.techAvatar = avatarUrl;
   }
 
   function updateEta(d) {
     const etaVal = document.getElementById('eta-value');
+    const etaPre = document.getElementById('eta-prefix');
+    const setEtaPrefix = (t) => {
+      if (etaPre) etaPre.textContent = t == null ? '' : t;
+    };
+    const hasDest =
+      d.destLat != null &&
+      d.destLng != null &&
+      isFinite(Number(d.destLat)) &&
+      isFinite(Number(d.destLng));
+
     if (d.isEnded) {
+       setEtaPrefix('');
        let actualArrived = false;
        if (d.currentLat && d.destLat && map) {
            try {
@@ -674,39 +1399,54 @@
              if (dist <= 300) actualArrived = true;
            } catch(e) {}
        }
-       etaVal.textContent = actualArrived ? 'Chegou' : 'Encerrado';
+       etaVal.textContent = actualArrived ? T('eta_arrived') : T('eta_ended');
        return;
     }
 
     if (d.isPaused) {
-       etaVal.textContent = 'Pausado pelo técnico';
+       setEtaPrefix('');
+       etaVal.textContent = T('eta_paused');
        etaVal.style.color = '#DC2626';
        return;
-    } else {
-       etaVal.style.color = 'var(--text)'; // Reset color
+    }
+    etaVal.style.color = 'var(--text)';
+
+    // Sem destino geográfico: não há «previsão de chegada»; evita prefixo + texto de sinal (incoerente).
+    if (!hasDest) {
+      setEtaPrefix('');
+      etaVal.textContent = T('eta_sem_local');
+      etaVal.style.color = isTrackingSignalLost(d) ? '#92400E' : 'var(--text)';
+      return;
     }
 
     if (isTrackingSignalLost(d)) {
+      setEtaPrefix('');
       etaVal.textContent =
         d.gpsAgeSeconds != null && isFinite(d.gpsAgeSeconds)
-          ? 'Sem sinal recente · há ' + Math.round(d.gpsAgeSeconds / 60) + ' min'
-          : 'Sem sinal do aplicativo';
+          ? T('eta_signal_mins', { n: String(Math.round(d.gpsAgeSeconds / 60)) })
+          : T('eta_signal_app');
       etaVal.style.color = '#92400E';
       return;
     }
 
+    setEtaPrefix(T('etaPrefix'));
+
     if (d.etaMinutes != null) {
       const h = Math.floor(d.etaMinutes / 60);
       const m = d.etaMinutes % 60;
-      etaVal.textContent = h > 0 ? `${h}h ${m}m` : `${m} minutos`;
+      etaVal.textContent = h > 0 ? T('eta_hours_m', { h: String(h), m: String(m) }) : T('eta_minutes', { n: String(m) });
     } else {
-      etaVal.textContent = 'calculando...';
+      etaVal.textContent = T('eta_calculando');
     }
   }
 
   function updateMap(d) {
     const hasTech = d.currentLat != null && d.currentLng != null;
     const hasDest = d.destLat != null && d.destLng != null;
+
+    try {
+      document.body.classList.toggle('tracking-ended', !!d.isEnded);
+    } catch (e) {}
 
     try {
       if (map && !map._sizeFixed) {
@@ -735,6 +1475,9 @@
           } catch (e) {}
         }
       }
+      syncMapTechGpsIndicator(d);
+    } else if (techMarker) {
+      syncMapTechGpsIndicator(d);
     }
 
     // Destination marker
@@ -747,30 +1490,12 @@
       });
       destMarker = L.marker([d.destLat, d.destLng], { icon: destIcon })
         .addTo(map)
-        .bindPopup(`<b>Destino</b><br>${d.destAddress || ''}`);
-    }
-
-    // Route polyline
-    if (d.routePolyline && d.routePolyline.length >= 2) {
-      const coords = d.routePolyline.map(c => Array.isArray(c) ? [c[0], c[1]] : [c.lat, c.lng]);
-      if (routeLine) {
-        routeLine.setLatLngs(coords);
-      } else {
-        routeLine = L.polyline(coords, {
-          color: '#EA580C',
-          weight: 5,
-          opacity: 0.8,
-          dashArray: '8 8',
-        }).addTo(map);
-      }
+        .bindPopup('<b>' + T('popDestination') + '</b><br>' + (d.destAddress || ''));
     }
 
     // Fit bounds to show both tech + destination (apenas na primeira vez com os dois pontos)
     if (hasTech && hasDest) {
       const bounds = L.latLngBounds([[d.currentLat, d.currentLng], [d.destLat, d.destLng]]);
-      if (routeLine) {
-        bounds.extend(routeLine.getBounds());
-      }
       if (techMarker && !techMarker._hasFitted) {
         map.fitBounds(bounds.pad(0.3), { animate: true });
         techMarker._hasFitted = true;
@@ -790,7 +1515,7 @@
     const fill2 = document.getElementById('fill-2');
     const fill3 = document.getElementById('fill-3');
 
-    const techFirstName = (d.techName || 'O técnico').split(' ')[0];
+    const techFirstName = (d.techName || T('techPersonDefault')).split(' ')[0];
 
     // Determine if REALLY arrived
     let actualArrived = false;
@@ -805,24 +1530,24 @@
 
     if (d.isEnded) {
       if (actualArrived) {
-         title.textContent = `${techFirstName} chegou ao local`;
+         title.textContent = T('status_arrived', { name: techFirstName });
          fill2.style.width = '100%';
          fill3.style.width = '100%';
       } else {
-         title.textContent = `Deslocamento Encerrado`;
+         title.textContent = T('status_ended');
          fill2.style.width = '100%';
          fill3.style.width = '0%';
       }
     } else if (d.isPaused) {
-      title.textContent = `${techFirstName} pausou o deslocamento`;
+      title.textContent = T('status_paused', { name: techFirstName });
       fill2.style.width = '60%'; 
       fill3.style.width = '0%';
     } else if (isTrackingSignalLost(d)) {
-      title.textContent = `${techFirstName} — sem sinal de localização`;
+      title.textContent = T('status_signal', { name: techFirstName });
       fill2.style.width = '60%';
       fill3.style.width = '0%';
     } else {
-      title.textContent = `${techFirstName} está a caminho`;
+      title.textContent = T('status_way', { name: techFirstName });
       fill2.style.width = '60%'; 
       fill3.style.width = '0%';
     }
@@ -851,16 +1576,17 @@
 
   // ─── Expired States ────────────────────────────────────────
   function showExpired(msg) {
+    closeTrackingChat();
     pollHalted = true;
     clearTimeout(pollTimer);
     pollTimer = null;
     hideLoading();
-    document.getElementById('expired-sub').textContent = msg || 'Este link de rastreamento expirou.';
+    document.getElementById('expired-sub').textContent = msg || T('expiredDefault');
     document.getElementById('expired-screen').classList.add('show');
   }
 
   function showExpiredGrace() {
-    showExpired('Este rastreamento encerrou.\nO link fica ativo por 15 minutos após a chegada do técnico.');
+    showExpired(T('expiredGrace'));
   }
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -878,21 +1604,20 @@
     const imgSrc = avatarUrl || avatarFallback(name);
     return L.divIcon({
       html: `
-        <div style="
+        <div class="track-map-tech-pulse-outer" style="
           width:44px;height:44px;border-radius:50%;
-          border:3px solid #EA580C;
-          box-shadow:0 2px 12px rgba(234,88,12,0.45);
-          overflow:hidden;background:#FFF7ED;
-          position:relative;
+          display:flex;align-items:center;justify-content:center;
         ">
-          <img src="${imgSrc}" 
-               onerror="this.src='${avatarFallback(name)}'"
-               style="width:100%;height:100%;object-fit:cover" />
-          <div style="
-            position:absolute;bottom:-1px;right:-1px;
-            width:14px;height:14px;background:#16A34A;
-            border:2px solid white;border-radius:50%;
-          "></div>
+          <div class="track-map-tech-face" style="
+            width:100%;height:100%;border-radius:50%;box-sizing:border-box;
+            border:3px solid #EA580C;
+            box-shadow:0 2px 12px rgba(234,88,12,0.45);
+            overflow:hidden;background:#FFF7ED;position:relative;
+          ">
+            <img src="${imgSrc}"
+                 onerror="this.src='${avatarFallback(name)}'"
+                 style="width:100%;height:100%;object-fit:cover;display:block" />
+          </div>
         </div>`,
       iconSize:   [44, 44],
       iconAnchor: [22, 22],
@@ -905,8 +1630,8 @@
     if (navigator.share && window.isSecureContext) {
       try {
         await navigator.share({
-          title: '🚗 Acompanhe o técnico',
-          text: `O técnico está a caminho! Acompanhe ao vivo:`,
+          title: '🚗 ' + T('shareTitle'),
+          text: T('shareText'),
           url,
         });
       } catch(e) {}
@@ -924,9 +1649,9 @@
           document.execCommand("copy");
           document.body.removeChild(ta);
         }
-        alert('Link copiado! ✓');
+        alert(T('linkCopied') + ' ✓');
       } catch(e) {
-        alert('Link: ' + url);
+        alert(T('linkShow') + ' ' + url);
       }
     }
   }

@@ -5,176 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BrSpark Admin — Editar usuário</title>
   <link rel="stylesheet" href="css/main.css" />
-  <style>
-    /*
-     * Encaixar tudo na altura da janela: scroll só em .ue-scroll.
-     * Sem isto, o body cresce com o formulário e o sticky não “cola” (viewport é o body inteiro).
-     */
-    html.ue-edit-html,
-    html.ue-edit-html body {
-      height: 100%;
-      max-height: 100%;
-      overflow: hidden;
-    }
-    html.ue-edit-html #page-root.admin-layout {
-      height: 100vh;
-      height: 100dvh;
-      max-height: 100vh;
-      max-height: 100dvh;
-      min-height: 0;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-    html.ue-edit-html .main-content.ue-edit-layout {
-      min-height: 0;
-      height: 100%;
-      max-height: 100%;
-      overflow: hidden;
-    }
-    html.ue-edit-html .main-content.ue-edit-layout > .topbar {
-      flex-shrink: 0;
-    }
-    .ue-scroll {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
-    }
-    .ue-sticky-tools {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      background: var(--bg);
-      padding: 16px 28px 14px;
-      border-bottom: 1px solid var(--border);
-      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-    }
-    .ue-sticky-tools .hint-box { margin-bottom: 12px; }
-    .ue-nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 0;
-      padding: 0;
-      border: none;
-    }
-    .ue-nav a { font-size:12px; font-weight:700; color:var(--text3); padding:6px 12px; border-radius:8px; background:var(--surface2); }
-    .ue-nav a:hover { color:var(--accent); }
-    .ue-scroll-inner { padding: 24px 28px 60px; }
-    .ue-section { scroll-margin-top: 10rem; }
-    .doc-table th { font-size:11px; text-transform:uppercase; color:var(--text3); }
-    .hint-box { font-size:12px; color:var(--text3); line-height:1.45; padding:12px 14px; background:var(--surface2); border-radius:10px; border:1px solid var(--border); margin-bottom:0; }
-    .face-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:12px; margin-top:12px; }
-    .face-card { position:relative; border-radius:10px; overflow:hidden; border:1px solid var(--border); aspect-ratio:3/4; background:var(--surface2); }
-    .face-card img { width:100%; height:100%; object-fit:cover; display:block; }
-    .face-card .face-rm { position:absolute; top:6px; right:6px; z-index:2; }
-    .face-card--primary { box-shadow: 0 0 0 2px var(--accent, #2563eb); }
-    .face-card-ribbon {
-      position:absolute; left:0; right:0; bottom:0; z-index:2;
-      background: linear-gradient(transparent, rgba(15, 23, 42, 0.85));
-      color: #fff; font-size:10px; font-weight: 700; padding: 22px 6px 6px; text-align: center; line-height: 1.25;
-    }
-    .face-card-protected {
-      position:absolute; top:6px; right:6px; z-index:3; font-size:10px; font-weight:600;
-      color: var(--text2); background: var(--surface); padding: 4px 8px; border-radius: 6px;
-      border: 1px solid var(--border); max-width: 118px; text-align: center; line-height: 1.2;
-    }
-    .ue-compreface-sync {
-      margin-top: 16px;
-      padding: 16px 18px;
-      border-radius: 14px;
-      border: 1px solid var(--border2);
-      background: linear-gradient(165deg, var(--surface2) 0%, var(--surface) 100%);
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
-    }
-    .ue-compreface-sync__row {
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
-    .ue-compreface-sync__icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      background: var(--accent-dim, rgba(59, 130, 246, 0.12));
-      color: var(--accent);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .ue-compreface-sync__icon ion-icon { font-size: 24px; }
-    .ue-compreface-sync__text { flex: 1; min-width: 200px; }
-    .ue-compreface-sync__text strong {
-      display: block;
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-    .ue-compreface-sync__text span.desc {
-      font-size: 12px;
-      color: var(--text3);
-      line-height: 1.45;
-    }
-    .ue-compreface-sync__actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
-    }
-    .ue-compreface-sync__actions .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    #compreface-sync-status {
-      font-size: 12px;
-      font-weight: 600;
-      line-height: 1.4;
-      flex: 1;
-      min-width: 160px;
-    }
-    #compreface-sync-status.cf-sync--idle { color: var(--text3); font-weight: 500; }
-    #compreface-sync-status.cf-sync--loading { color: var(--accent); }
-    #compreface-sync-status.cf-sync--ok { color: var(--green, #15803d); }
-    #compreface-sync-status.cf-sync--err { color: var(--red, #dc2626); }
-    #compreface-admin-status { width: 100%; margin-top: 12px; }
-    .cf-admin-badge {
-      display: inline-flex;
-      align-items: flex-start;
-      gap: 8px;
-      flex-wrap: wrap;
-      font-size: 12px;
-      line-height: 1.45;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-    }
-    .cf-admin-badge strong { font-weight: 800; }
-    .cf-admin--muted { background: var(--surface2); color: var(--text3); }
-    .cf-admin--ok { background: #ecfdf5; border-color: #6ee7b7; color: #14532d; }
-    .cf-admin--pending { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
-    .cf-admin--err { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-  </style>
 </head>
 <body>
 <div id="page-root" class="admin-layout">
   <div class="main-content ue-edit-layout">
-    <div class="topbar">
-      <div>
-        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:6px">← Usuários</a>
-        <span class="topbar-title" id="ue-title">Carregar…</span>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px" id="ue-sub"></div>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <a href="users.html" style="color:inherit;text-decoration:none;font-weight:600">Usuários</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span id="ue-crumb-name">Editar</span>
+      </nav>
       <div class="topbar-actions">
+        <a href="users.html" class="btn btn-outline btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+          <ion-icon name="arrow-back-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
+          Voltar à lista
+        </a>
         <button type="button" class="btn btn-primary" id="btn-save">Salvar alterações</button>
       </div>
     </div>
@@ -182,9 +29,9 @@
     <div class="ue-scroll">
       <div class="ue-sticky-tools">
         <div class="hint-box">
-          <strong>UX:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica — alinhado ao modelo Multi-Location do painel.
+          <strong>Dica de uso:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica — alinhado ao modelo Multi-Location do painel.
         </div>
-        <nav class="ue-nav" aria-label="Secções do formulário">
+        <nav class="ue-nav" aria-label="Seções do formulário">
           <a href="#sec-dados">Dados pessoais</a>
           <a href="#sec-face">Reconhecimento facial</a>
           <a href="#sec-work-time">Registro de horas</a>
@@ -199,178 +46,183 @@
       </div>
 
       <div class="ue-scroll-inner">
-      <div class="panel ue-section" id="sec-dados">
-        <div class="panel-header"><span class="panel-title">Dados pessoais</span></div>
-        <div style="padding:16px 20px">
-          <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="f-name" /></div>
-            <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="f-email" type="email" /></div>
-            <div class="form-group"><label class="form-label">Telefone / WhatsApp</label><input class="form-control" id="f-phone" placeholder="+55 …" /></div>
-            <div class="form-group"><label class="form-label">URL foto de perfil</label><input class="form-control" id="f-avatar" placeholder="https://…" /></div>
-          </div>
-        </div>
-      </div>
+        <header class="page-hero page-hero--edit fade-in">
+          <h1 class="page-hero-title" id="ue-title">Carregar…</h1>
+          <p class="page-hero-sub" id="ue-sub"></p>
+        </header>
 
-      <div class="panel ue-section" id="sec-face" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Reconhecimento facial — fotos base</span></div>
-        <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fotos base para o motor de reconhecimento: <strong>JPEG, PNG ou WebP</strong> (máx. <strong>5 MB</strong> cada; até <strong>12</strong>). HEIC do iPhone não é aceite. Quem veio do <strong>cadastro em etapas</strong> traz a foto do passo 1 como referência principal (não removível aqui; só muda com novo cadastro aprovado ou exclusão do utilizador). Reforce com fotos nítidas adicionais do rosto. O campo «URL foto de perfil» em Dados pessoais é gestão administrativa (o app do colaborador <strong>não</strong> permite trocar foto nem matrícula após o perfil de prestador ficar <strong>ACTIVE</strong>).</p>
-          <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
-          <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
-          <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
-          <span id="face-upload-status" style="font-size:12px;color:var(--text3);margin-left:10px"></span>
-          <div class="face-grid" id="face-gallery"></div>
-          <div class="ue-compreface-sync" id="compreface-sync-card">
-            <div class="ue-compreface-sync__row">
-              <div class="ue-compreface-sync__icon" aria-hidden="true">
-                <ion-icon name="cloud-upload-outline"></ion-icon>
-              </div>
-              <div class="ue-compreface-sync__text">
-                <strong>Galeria CompreFace (Recognition)</strong>
-                <span class="desc">Ao adicionar ou remover fotos base, a galeria é <strong>atualizada automaticamente</strong> no CompreFace (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas). Requer integração «Exadel CompreFace» ativa em Integrações.</span>
-              </div>
-            </div>
-            <div class="ue-compreface-sync__actions">
-              <button type="button" class="btn btn-sm btn-outline" id="btn-compreface-sync">
-                <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-3px"></ion-icon>
-                Sincronizar novamente
-              </button>
-              <span id="compreface-sync-status" class="cf-sync--idle" role="status">Pronto — a sincronizar após alterar fotos.</span>
-            </div>
-            <div id="compreface-admin-status" aria-live="polite"></div>
-          </div>
-          <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no CompreFace segue o formato tenant:usuário definido pelo painel.</p>
-        </div>
-      </div>
-
-      <div class="panel ue-section" id="sec-work-time" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Registro de horas (ponto)</span></div>
-        <div style="padding:16px 20px">
-          <div class="form-group" style="margin-bottom:14px;max-width:420px">
-            <label class="form-label" for="f-employee-matricula">Matrícula funcional</label>
-            <input class="form-control" id="f-employee-matricula" maxlength="80" placeholder="Ex.: 12345, FT-00042…" autocomplete="off" />
-            <p style="font-size:11px;color:var(--text3);margin:6px 0 0;line-height:1.4">Um valor por utilizador, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).</p>
-          </div>
-          <div id="wt-user-hint" class="hint-box" style="margin-bottom:12px">
-            A carregar política do tenant…
-          </div>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-            <input type="checkbox" id="f-work-time" />
-            <span style="font-size:13px;font-weight:700">Habilitar registro de horas para este utilizador</span>
-          </label>
-          <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">
-            Efetivo no app para todos os papéis <strong>exceto cliente</strong> (papel «Usuário» / <code>USER</code>): com a flag <strong>work_time</strong>, módulo ligado em
-            <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, esta opção ativa no utilizador e matrícula facial conforme a política.
-          </p>
-          <div id="wt-face-status" style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text3)"></div>
-        </div>
-      </div>
-
-      <div class="panel ue-section" id="sec-endereco" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Endereço (JSON estruturado / multi-location)</span></div>
-        <div style="padding:16px 20px">
-          <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div class="form-group"><label class="form-label">Linha 1 (rua, nº)</label><input class="form-control" id="a-line1" /></div>
-            <div class="form-group"><label class="form-label">Linha 2 (complemento)</label><input class="form-control" id="a-line2" /></div>
-            <div class="form-group"><label class="form-label">Bairro</label><input class="form-control" id="a-district" /></div>
-            <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="a-city" /></div>
-            <div class="form-group"><label class="form-label">Estado / UF</label><input class="form-control" id="a-state" /></div>
-            <div class="form-group"><label class="form-label">CEP / Código postal</label><input class="form-control" id="a-postal" /></div>
-            <div class="form-group"><label class="form-label">País (ISO, ex. BR)</label><input class="form-control" id="a-country" maxlength="2" /></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel ue-section" id="sec-acesso" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Tipo de acesso na conta</span></div>
-        <div style="padding:16px 20px">
-          <div class="form-group"><label class="form-label">Papel na conta</label>
-            <select class="form-control" id="f-role">
-              <option value="USER">Usuário</option>
-              <option value="PROVIDER">Prestador</option>
-              <option value="MANAGER">Gestor</option>
-              <option value="TENANT_ADMIN">Administrador do tenant</option>
-              <option value="SAAS_ADMIN">Administrador SaaS (plataforma)</option>
-            </select>
-          </div>
-          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4"><strong>Prestador</strong> ativa o perfil técnico (horários, regiões, docs. profissionais). <strong>SaaS admin</strong> é para a equipe da plataforma; use só em contas que devam operar no âmbito global do serviço.</p>
-          <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer">
-            <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão no app / painel)
-          </label>
-          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4">Isto é <strong>independente</strong> do estado do prestador abaixo: uma conta pode estar ativa e o prestador <strong>inativo</strong> — nesse caso <strong>não</strong> é possível despachar OS para este e-mail.</p>
-        </div>
-      </div>
-
-      <div class="panel ue-section" id="sec-tecnico" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Prestador de serviço (técnico)</span></div>
-        <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong> (ou quando já existe perfil técnico). Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
-          <div id="tech-panel" style="display:none">
-            <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div class="form-group"><label class="form-label">Estado do prestador (habilitação para receber OS)</label>
-                <select class="form-control" id="t-status">
-                  <option value="PENDING">Pendente</option>
-                  <option value="ACTIVE">Ativo</option>
-                  <option value="INACTIVE">Inativo</option>
-                  <option value="SUSPENDED">Suspenso</option>
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Score interno</label><input class="form-control" id="t-score" type="number" step="0.1" min="0" max="10" /></div>
-              <div class="form-group"><label class="form-label">CFT / registro profissional</label><input class="form-control" id="t-cft" /></div>
-              <div class="form-group"><label class="form-label">Especialidade principal</label><input class="form-control" id="t-specialty" /></div>
-              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Habilidades (tags separadas por vírgula)</label>
-                <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
-              </div>
+        <section class="data-shell ue-section fade-in" id="sec-dados">
+          <div class="panel-header"><span class="panel-title">Dados pessoais</span></div>
+          <div class="data-shell-body">
+            <div class="grid-2">
+              <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="f-name" /></div>
+              <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="f-email" type="email" /></div>
+              <div class="form-group"><label class="form-label">Telefone / WhatsApp</label><input class="form-control" id="f-phone" placeholder="+55 …" /></div>
+              <div class="form-group"><label class="form-label">URL foto de perfil</label><input class="form-control" id="f-avatar" placeholder="https://…" /></div>
             </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="panel ue-section" id="sec-docs-p" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Documentos pessoais — escopo por base (multi-location)</span></div>
-        <div style="padding:16px 20px">
-          <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-p">+ Adicionar documento</button>
-          <div class="table-wrap" style="margin-top:12px">
-            <table class="doc-table">
-              <thead><tr>
-                <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
-              </tr></thead>
-              <tbody id="tbody-docs-personal"></tbody>
-            </table>
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-face">
+          <div class="panel-header"><span class="panel-title">Reconhecimento facial — fotos base</span></div>
+          <div class="data-shell-body">
+            <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fotos base para o motor de reconhecimento: <strong>JPEG, PNG ou WebP</strong> (máx. <strong>5 MB</strong> cada; até <strong>12</strong>). HEIC do iPhone não é aceito. Quem veio do <strong>cadastro em etapas</strong> traz a foto do passo 1 como referência principal (não removível aqui; só muda com novo cadastro aprovado ou exclusão do usuário). Reforce com fotos nítidas adicionais do rosto. O campo «URL foto de perfil» em Dados pessoais é gestão administrativa (o app do colaborador <strong>não</strong> permite trocar foto nem matrícula após o perfil de prestador ficar <strong>ACTIVE</strong>).</p>
+            <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
+            <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
+            <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
+            <span id="face-upload-status" style="font-size:12px;color:var(--text3);margin-left:10px"></span>
+            <div class="face-grid" id="face-gallery"></div>
+            <div class="ue-compreface-sync" id="compreface-sync-card">
+              <div class="ue-compreface-sync__row">
+                <div class="ue-compreface-sync__icon" aria-hidden="true">
+                  <ion-icon name="cloud-upload-outline"></ion-icon>
+                </div>
+                <div class="ue-compreface-sync__text">
+                  <strong>Galeria CompreFace (Recognition)</strong>
+                  <span class="desc">Ao adicionar ou remover fotos base, a galeria é <strong>atualizada automaticamente</strong> no CompreFace (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas). Requer integração «Exadel CompreFace» ativa em Integrações.</span>
+                </div>
+              </div>
+              <div class="ue-compreface-sync__actions">
+                <button type="button" class="btn btn-sm btn-outline" id="btn-compreface-sync">
+                  <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-3px"></ion-icon>
+                  Sincronizar novamente
+                </button>
+                <span id="compreface-sync-status" class="cf-sync--idle" role="status">Pronto — a sincronizar após alterar fotos.</span>
+              </div>
+              <div id="compreface-admin-status" aria-live="polite"></div>
+            </div>
+            <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no CompreFace segue o formato tenant:usuário definido pelo painel.</p>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="panel ue-section" id="sec-docs-pro" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Documentos profissionais (certificações, ASO, NR, etc.)</span></div>
-        <div style="padding:16px 20px">
-          <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-pro">+ Adicionar documento</button>
-          <div class="table-wrap" style="margin-top:12px">
-            <table class="doc-table">
-              <thead><tr>
-                <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
-              </tr></thead>
-              <tbody id="tbody-docs-pro"></tbody>
-            </table>
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-work-time">
+          <div class="panel-header"><span class="panel-title">Registro de horas (ponto)</span></div>
+          <div class="data-shell-body">
+            <div class="form-group" style="margin-bottom:14px;max-width:420px">
+              <label class="form-label" for="f-employee-matricula">Matrícula funcional</label>
+              <input class="form-control" id="f-employee-matricula" maxlength="80" placeholder="Ex.: 12345, FT-00042…" autocomplete="off" />
+              <p style="font-size:11px;color:var(--text3);margin:6px 0 0;line-height:1.4">Um valor por usuário, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).</p>
+            </div>
+            <div id="wt-user-hint" class="hint-box" style="margin-bottom:12px">
+              A carregar política do tenant…
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <input type="checkbox" id="f-work-time" />
+              <span style="font-size:13px;font-weight:700">Habilitar registro de horas para este usuário</span>
+            </label>
+            <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">
+              Efetivo no app para todos os papéis <strong>exceto cliente</strong> (papel «Usuário» / <code>USER</code>): com a flag <strong>work_time</strong>, módulo ligado em
+              <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, esta opção ativa no usuário e matrícula facial conforme a política.
+            </p>
+            <div id="wt-face-status" style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text3)"></div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="panel ue-section" id="sec-horarios" style="margin-top:16px">
-        <div class="panel-header"><span class="panel-title">Horários de trabalho (prestador)</span></div>
-        <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.45">Use <strong>+ Turno neste dia</strong> para vários blocos no mesmo dia (ex.: manhã numa base, tarde noutra). Cada dia pode ter turnos com <strong>regiões diferentes</strong>. Em cada turno, «Regiões» vazio significa que o turno não fixa base (continua limitado pelo universo <a href="#sec-regioes">Regiões atendidas</a> abaixo).</p>
-          <div id="schedule-rows"></div>
-        </div>
-      </div>
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-endereco">
+          <div class="panel-header"><span class="panel-title">Endereço (JSON estruturado / multi-location)</span></div>
+          <div class="data-shell-body">
+            <div class="grid-2">
+              <div class="form-group"><label class="form-label">Linha 1 (rua, nº)</label><input class="form-control" id="a-line1" /></div>
+              <div class="form-group"><label class="form-label">Linha 2 (complemento)</label><input class="form-control" id="a-line2" /></div>
+              <div class="form-group"><label class="form-label">Bairro</label><input class="form-control" id="a-district" /></div>
+              <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="a-city" /></div>
+              <div class="form-group"><label class="form-label">Estado / UF</label><input class="form-control" id="a-state" /></div>
+              <div class="form-group"><label class="form-label">CEP / Código postal</label><input class="form-control" id="a-postal" /></div>
+              <div class="form-group"><label class="form-label">País (ISO, ex. BR)</label><input class="form-control" id="a-country" maxlength="2" /></div>
+            </div>
+          </div>
+        </section>
 
-      <div class="panel ue-section" id="sec-regioes" style="margin-top:16px;margin-bottom:40px">
-        <div class="panel-header"><span class="panel-title">Regiões / bases atendidas</span></div>
-        <div style="padding:16px 20px">
-          <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Seleção múltipla das <strong>Locations</strong> do tenant onde o técnico pode operar (Ctrl/Cmd + clique).</p>
-          <select class="form-control" id="t-service-locs" multiple size="8" style="min-height:160px;font-size:13px"></select>
-        </div>
-      </div>
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-acesso">
+          <div class="panel-header"><span class="panel-title">Tipo de acesso na conta</span></div>
+          <div class="data-shell-body">
+            <div class="form-group"><label class="form-label">Papel na conta</label>
+              <select class="form-control" id="f-role">
+                <option value="USER">Usuário</option>
+                <option value="PROVIDER">Prestador</option>
+                <option value="MANAGER">Gestor</option>
+                <option value="TENANT_ADMIN">Administrador do tenant</option>
+                <option value="SAAS_ADMIN">Administrador SaaS (plataforma)</option>
+              </select>
+            </div>
+            <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4"><strong>Prestador</strong> ativa o perfil técnico (horários, regiões, docs. profissionais). <strong>SaaS admin</strong> é para a equipe da plataforma; use só em contas que devam operar no âmbito global do serviço.</p>
+            <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer">
+              <input type="checkbox" id="f-active" /> Conta ativa (pode iniciar sessão no app / painel)
+            </label>
+            <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4">Isto é <strong>independente</strong> do estado do prestador abaixo: uma conta pode estar ativa e o prestador <strong>inativo</strong> — nesse caso <strong>não</strong> é possível despachar OS para este e-mail.</p>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-tecnico">
+          <div class="panel-header"><span class="panel-title">Prestador de serviço (técnico)</span></div>
+          <div class="data-shell-body">
+            <p style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong> (ou quando já existe perfil técnico). Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
+            <div id="tech-panel" style="display:none">
+              <div class="grid-2">
+                <div class="form-group"><label class="form-label">Estado do prestador (habilitação para receber OS)</label>
+                  <select class="form-control" id="t-status">
+                    <option value="PENDING">Pendente</option>
+                    <option value="ACTIVE">Ativo</option>
+                    <option value="INACTIVE">Inativo</option>
+                    <option value="SUSPENDED">Suspenso</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Score interno</label><input class="form-control" id="t-score" type="number" step="0.1" min="0" max="10" /></div>
+                <div class="form-group"><label class="form-label">CFT / registro profissional</label><input class="form-control" id="t-cft" /></div>
+                <div class="form-group"><label class="form-label">Especialidade principal</label><input class="form-control" id="t-specialty" /></div>
+                <div class="form-group" style="grid-column:1/-1"><label class="form-label">Habilidades (tags separadas por vírgula)</label>
+                  <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-p">
+          <div class="panel-header"><span class="panel-title">Documentos pessoais — escopo por base (multi-location)</span></div>
+          <div class="data-shell-body">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-p">+ Adicionar documento</button>
+            <div class="table-wrap" style="margin-top:12px">
+              <table class="doc-table table-data">
+                <thead><tr>
+                  <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
+                </tr></thead>
+                <tbody id="tbody-docs-personal"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-pro">
+          <div class="panel-header"><span class="panel-title">Documentos profissionais (certificações, ASO, NR, etc.)</span></div>
+          <div class="data-shell-body">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-pro">+ Adicionar documento</button>
+            <div class="table-wrap" style="margin-top:12px">
+              <table class="doc-table table-data">
+                <thead><tr>
+                  <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Notas / ações</th>
+                </tr></thead>
+                <tbody id="tbody-docs-pro"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-horarios">
+          <div class="panel-header"><span class="panel-title">Horários de trabalho (prestador)</span></div>
+          <div class="data-shell-body">
+            <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.45">Use <strong>+ Turno neste dia</strong> para vários blocos no mesmo dia (ex.: manhã numa base, tarde em outra). Cada dia pode ter turnos com <strong>regiões diferentes</strong>. Em cada turno, «Regiões» vazio significa que o turno não fixa base (continua limitado pelo universo <a href="#sec-regioes">Regiões atendidas</a> abaixo).</p>
+            <div id="schedule-rows"></div>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-regioes" style="margin-bottom:40px">
+          <div class="panel-header"><span class="panel-title">Regiões / bases atendidas</span></div>
+          <div class="data-shell-body">
+            <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Seleção múltipla das <strong>Locations</strong> do tenant onde o técnico pode operar (Ctrl/Cmd + clique).</p>
+            <select class="form-control" id="t-service-locs" multiple size="8" style="min-height:160px;font-size:13px"></select>
+          </div>
+        </section>
       </div>
     </div>
   </div>

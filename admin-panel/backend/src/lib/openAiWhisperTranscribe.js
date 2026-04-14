@@ -68,7 +68,7 @@ async function transcribeAudioWithOpenAiWhisper(opts) {
     return {
       ok: false,
       error:
-        'Chave OpenAI em falta: configure a integração «OpenAI» em Integrações no painel ou OPENAI_API_KEY no servidor.',
+        'Chave OpenAI ausente: configure a integração «OpenAI» em Integrações no painel ou OPENAI_API_KEY no servidor.',
     };
   }
 

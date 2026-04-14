@@ -2,8 +2,98 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform, LogBox } from 'react-native';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from './auth';
+import { getLocalAssets, getVenueStockItemsOnly, getLocalTechStockItems } from '../database';
+import {
+  ANDROID_CHANNEL_CLIENT,
+  ANDROID_CHANNEL_TECH,
+  CLIENT_PUSH_ACTION_TRACK,
+  PUSH_CATEGORY_CLIENT_TRACKING,
+  PUSH_CATEGORY_TECH_ACTIVITY,
+  TECH_PUSH_ACTION_ACCEPT,
+  TECH_PUSH_ACTION_OPEN,
+  TECH_PUSH_ACTION_REJECT,
+} from '../constants/pushNotifications';
 
 LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
+
+/** Canais Android usados pelos pushes remotos (idempotente). */
+async function ensureAndroidPushChannels(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('brspark-alerts', {
+    name: 'BrSpark Alertas',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#2563EB',
+    sound: 'default',
+  });
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TECH, {
+    name: 'BrSpark — Atividades (prestador)',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#2563EB',
+    sound: 'default',
+  });
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_CLIENT, {
+    name: 'BrSpark — Deslocamento (cliente)',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    lightColor: '#059669',
+    sound: 'default',
+  });
+}
+
+/**
+ * Regista categorias (botões Aceitar/Recusar/…) e canais Android **antes** do login.
+ * Sem isto, o iOS pode entregar o push só com título/corpo — sem ações na notificação.
+ */
+export async function preparePushNotificationInfrastructure(): Promise<void> {
+  await ensureAndroidPushChannels();
+  await registerInteractivePushCategories();
+}
+
+/** Categorias com botões (lock screen / gaveta). Idempotente. */
+export async function registerInteractivePushCategories(): Promise<void> {
+  try {
+    await Notifications.setNotificationCategoryAsync(
+      PUSH_CATEGORY_TECH_ACTIVITY,
+      [
+        {
+          identifier: TECH_PUSH_ACTION_ACCEPT,
+          buttonTitle: 'Aceitar',
+          options: { opensAppToForeground: true },
+        },
+        {
+          identifier: TECH_PUSH_ACTION_REJECT,
+          buttonTitle: 'Recusar',
+          options: { opensAppToForeground: true, isDestructive: true },
+        },
+        {
+          identifier: TECH_PUSH_ACTION_OPEN,
+          buttonTitle: 'Ver detalhes',
+          options: { opensAppToForeground: true },
+        },
+      ],
+      {
+        showTitle: true,
+        showSubtitle: true,
+      }
+    );
+    await Notifications.setNotificationCategoryAsync(
+      PUSH_CATEGORY_CLIENT_TRACKING,
+      [
+        {
+          identifier: CLIENT_PUSH_ACTION_TRACK,
+          buttonTitle: 'Acompanhar percurso',
+          options: { opensAppToForeground: true },
+        },
+      ],
+      { showTitle: true, showSubtitle: true }
+    );
+  } catch (e) {
+    console.warn('[BrSpark] Falha ao registar categorias de notificação:', e);
+  }
+}
 
 // ─── Configuração Global do Handler ────────────────────────────────────────────
 Notifications.setNotificationHandler({
@@ -15,10 +105,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from './auth';
-import { getLocalAssets, getVenueStockItemsOnly, getLocalTechStockItems } from '../database';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 export interface AppNotification {
@@ -250,16 +336,7 @@ export const NotificationService = {
       return null;
     }
 
-    // Android: criar canal
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('brspark-alerts', {
-        name: 'BrSpark Alertas',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#2563EB',
-        sound: 'default',
-      });
-    }
+    await preparePushNotificationInfrastructure();
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;

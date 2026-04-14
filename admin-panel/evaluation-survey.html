@@ -4,26 +4,94 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avaliação de serviço — BrSpark</title>
+  <meta name="theme-color" content="#EA580C" />
+  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg: #f8fafc; --card: #fff; --accent: #ea580c; --text: #0f172a; --muted: #64748b; }
+    :root {
+      --bg: var(--color-bg);
+      --card: var(--color-surface);
+      --accent: var(--color-brand-accent);
+      --text: var(--color-slate);
+      --muted: var(--color-text-light);
+      --border: var(--color-border);
+      --ok-fg: var(--color-status-success-fg);
+      --err-fg: var(--color-status-danger-fg);
+    }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px 48px; line-height: 1.5; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px 16px 48px;
+      line-height: 1.5;
+    }
     .wrap { max-width: 520px; margin: 0 auto; }
-    h1 { font-size: 1.35rem; margin: 0 0 8px; }
+    h1 { font-size: 1.35rem; margin: 0 0 8px; letter-spacing: -0.02em; }
     .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
-    .card { background: var(--card); border-radius: 16px; padding: 18px; margin-bottom: 14px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(15,23,42,0.06); }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+    }
     label.q { display: block; font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; }
     .stars { display: flex; gap: 8px; flex-wrap: wrap; }
-    .stars button { width: 44px; height: 44px; border-radius: 12px; border: 2px solid #e2e8f0; background: #fff; font-size: 1.1rem; font-weight: 800; cursor: pointer; }
-    .stars button.on { border-color: var(--accent); background: #fff7ed; color: var(--accent); }
-    textarea { width: 100%; min-height: 100px; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 1rem; resize: vertical; }
-    .btn { width: 100%; padding: 16px; border: none; border-radius: 14px; background: var(--accent); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; margin-top: 8px; }
+    .stars button {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      background: var(--card);
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .stars button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .stars button.on { border-color: var(--accent); background: var(--color-status-warning-bg); color: var(--accent); }
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      resize: vertical;
+      font-family: inherit;
+    }
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background: var(--accent);
+      color: var(--card);
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, #fff); outline-offset: 2px; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .err { color: #b91c1c; font-size: 0.9rem; margin-top: 8px; }
-    .ok { color: #047857; font-weight: 700; padding: 16px; text-align: center; }
+    .err { color: var(--err-fg); font-size: 0.9rem; margin-top: 8px; }
+    .ok { color: var(--ok-fg); font-weight: 700; padding: 16px; text-align: center; }
     .nps { display: flex; flex-wrap: wrap; gap: 6px; }
-    .nps button { min-width: 40px; height: 40px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-weight: 700; }
-    .nps button.on { background: #fff7ed; border-color: var(--accent); color: var(--accent); }
+    .nps button {
+      min-width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .nps button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .nps button.on { background: var(--color-status-warning-bg); border-color: var(--accent); color: var(--accent); }
   </style>
 </head>
 <body>
@@ -95,8 +163,8 @@
           b.style.padding = '0 16px';
           b.style.height = '44px';
           b.style.borderRadius = '12px';
-          b.style.border = '2px solid #e2e8f0';
-          b.style.background = '#fff';
+          b.style.border = '2px solid var(--border)';
+          b.style.background = 'var(--card)';
           b.style.fontWeight = '800';
           b.style.cursor = 'pointer';
           b.onclick = () => {
@@ -109,7 +177,7 @@
         wrap.appendChild(row);
       } else if (q.type === 'TEXT') {
         const ta = document.createElement('textarea');
-        ta.placeholder = 'A sua resposta';
+        ta.placeholder = 'Sua resposta';
         ta.oninput = () => { state.answers[id] = { text: ta.value }; };
         wrap.appendChild(ta);
       } else {
@@ -139,7 +207,7 @@
         (data.questions || []).forEach((q) => root.appendChild(renderQuestion(q)));
         const comment = document.createElement('div');
         comment.className = 'card';
-        comment.innerHTML = '<label class="q">Comentário (opcional)</label>';
+        comment.innerHTML = '<label class="q">Comentário opcional</label>';
         const ta = document.createElement('textarea');
         ta.id = 'comment';
         ta.placeholder = 'Compartilhe sua experiência';
@@ -163,7 +231,7 @@
       for (const q of qs) {
         if (!q.required) continue;
         if (state.answers[q.id] == null || state.answers[q.id] === '') {
-          showErr('Responda a todas as perguntas obrigatórias.');
+          showErr('Responda todas as perguntas obrigatórias.');
           return;
         }
       }

@@ -10,7 +10,7 @@ function chatTranslationEnabled() {
 }
 
 /**
- * Normaliza para um dos locales canónicos usados no cache.
+ * Normaliza para um dos locales canônicos usados no cache.
  * @param {string|null|undefined} raw
  * @returns {string}
  */
@@ -27,7 +27,7 @@ function normalizeChatLocale(raw) {
 
 /**
  * @param {string} text
- * @param {string} targetLocale canónico (pt-BR, en-US, es-ES)
+ * @param {string} targetLocale canônico (pt-BR, en-US, es-ES)
  * @returns {Promise<string|null>} null se desativado, sem chave, ou falha
  */
 async function translateChatText(text, targetLocale) {

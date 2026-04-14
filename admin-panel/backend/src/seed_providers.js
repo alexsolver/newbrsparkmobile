@@ -9,7 +9,7 @@ const p = new PrismaClient();
 
 async function main() {
   const n = await p.serviceProvider.deleteMany({});
-  console.log(`🗑️  ServiceProvider: removidos ${n.count} registos (diretório = CMS).`);
+  console.log(`🗑️  ServiceProvider: removidos ${n.count} registros (diretório = CMS).`);
   process.exit(0);
 }
 

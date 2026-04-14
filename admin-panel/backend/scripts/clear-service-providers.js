@@ -17,7 +17,7 @@ prisma.serviceProvider
   .deleteMany({})
   .then((r) => {
     console.log(
-      `Removidos ${r.count} registo(s) em ServiceProvider (catálogo legado fora do CMS web).`,
+      `Removidos ${r.count} registro(s) em ServiceProvider (catálogo legado fora do CMS web).`,
     );
     process.exit(0);
   })

@@ -123,7 +123,7 @@ Tipos que pode usar em novos campos ou alterações (inclui avançados; escolha 
 - **Evite respostas pobres:** conjuntos mínimos de campos genéricos sem seções, sem \`description\` útil e sem **\`options\`** concretas em listas são **fracos** — prefira proposta **densa e organizada**; o usuário pode simplificar na pré-visualização ou pedir «menos campos» na mensagem seguinte.
 - Campos de escolha: **sempre** preencha \`options\` com alternativas plausíveis (várias, em pt-BR).
 
-Se incluir ou mover \`transit_start\` / \`transit_end\`, siga a seção «### Deslocamento» no fim deste prompt: no BrSpark esse par fica **sempre** no **início** do formulário (primeiro bloco operacional), nunca no meio nem no fim.
+Se incluir ou mover \`transit_start\` / \`transit_end\`, siga a seção «### Deslocamento» no final deste prompt: no BrSpark esse par fica **sempre** no **início** do formulário (primeiro bloco operacional), nunca no meio nem no final.
 
 Responda sempre em português (pt-BR), objetivo e cordial.
 
@@ -152,7 +152,7 @@ Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "clarifyOptions": array OU null. Cada item: { "id": "pergunta_1", "question": "texto curto", "choices": [ { "id": "a", "label": "…" }, … ] } com pelo menos 2 escolhas por pergunta, **até 6 perguntas** (use só o necessário). O usuário pode marcar **várias** opções na mesma pergunta antes de enviar — interprete todas as que vierem na mesma linha \`[Pergunta id]\`.
 - "schemaPatch": { "operations": [ … ] } OU null. Operações:
   - { "op": "add_field", "afterId": null|string, "field": { "type", "label", "required"?, "options"?, "description"?, "icon"?, "iconLibrary"?, "iconColor"? … } }
-  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "contentHtml" (tipo \`leitura\`), "voiceTranscribeLanguage" (tipo \`voice_note\`, ex.: pt), "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionStructuredPrompt" (texto longo único para visão IA), "visionQuestions" (legado), "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`) } }
+  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "contentHtml" (tipo \`leitura\`), "voiceTranscribeLanguage" (tipo \`voice_note\`, ex.: pt), "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionStructuredPrompt" (texto longo único para visão IA), "visionQuestions" (legado), "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`), "visionAnalysisGrid" (\`1x1\` | \`2x2\`, só \`vision_ai_analysis\`), "visionRating0To10Enabled" (boolean, só \`vision_ai_analysis\` — nota 0–10 na resposta da API), "visionShowAiResponseInForm" (boolean, só \`vision_ai_analysis\` — mostrar texto/confiança/nota no app) } }
   - { "op": "remove_field", "id": "<field_id>" } — só com pedido explícito de remoção.
 
 - "logicSuggestions": array OU null. Cada entrada **deve** identificar campos pelo **id** do JSON compacto quando possível (preferido), com **rótulo** como cópia legível.
@@ -163,7 +163,7 @@ Retorne APENAS JSON válido (sem markdown), com as chaves:
   **Limite:** **transit_start** / **transit_end** não expõem «km percorridos» nem métricas de tracking como valor único de regra — não finja que existe. Se o usuário pedir só isso, siga o ponto 2 (replyText honesto + opções; **logicSuggestions: null** ou []).
   Evite combinações contraditórias no mesmo campo alvo (ex.: SHOW e HIDE sem condições mutuamente exclusivas; HIDE com REQUIRE no mesmo alvo).
 
-- "settingsPatch": objeto com um subconjunto das chaves de definições globais acima OU null. Não envie chaves extra.
+- "settingsPatch": objeto com um subconjunto das chaves de configurações globais acima OU null. Não envie chaves extra.
 - "templateTitlePatch": string OU null — novo título do **modelo** no painel (pt-BR, curto). O servidor torna-o **único** na pasta. Ver bloco «Nome e ícone do modelo».
 - "templateMetadataPatch": objeto opcional com **apenas** \`{ "icon": "<nome Ionicons kebab-case>" }\` OU null — ícone da **tarefa** no painel (lista de formulários). Omita se não quiser mudar.
 
@@ -224,6 +224,12 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
       ['photo_only', 'video_only', 'photo_and_video'].includes(String(f.visionCaptureMode).trim())
     ) {
       o.visionCaptureMode = String(f.visionCaptureMode).trim();
+    }
+    if (f.type === 'vision_ai_analysis' && f.visionRating0To10Enabled === true) {
+      o.visionRating0To10Enabled = true;
+    }
+    if (f.type === 'vision_ai_analysis' && f.visionShowAiResponseInForm === false) {
+      o.visionShowAiResponseInForm = false;
     }
     if (f.type === 'lookup_select') {
       if (f.lookupSource) o.lookupSource = String(f.lookupSource);
@@ -297,7 +303,7 @@ async function openAiCopilotJson(systemPrompt, messages, temperature = 0.32) {
   const { apiKey: key, model, baseUrl } = await resolveOpenAiCredentials();
   if (!key || !String(key).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração "OpenAI" em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração "OpenAI" em Integrações no painel ou defina OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;
@@ -411,7 +417,7 @@ function mapLogicSuggestions(rawList, schemaData) {
       const safeUrl = sanitizeCopilotApiFetchUrl(s.apiUrl != null ? String(s.apiUrl) : '');
       if (!safeUrl) {
         warnings.push(
-          `Lógica #${i + 1} (API_FETCH): URL em falta ou não permitida — use https:// ou http:// apenas para localhost/127.0.0.1.`
+          `Lógica #${i + 1} (API_FETCH): URL ausente ou não permitida — use https:// ou http:// apenas para localhost/127.0.0.1.`
         );
         i++;
         continue;
@@ -717,7 +723,7 @@ async function suggestLogicRules(schemaData, userGoal, formContext = {}, docOpts
   const systemPrompt = `Você é especialista em regras condicionais do Form Builder BrSpark.
 Cada regra no app: monitora um campo (ou cronômetro); SE condição; ENTÃO ações (mostrar/ocultar/tornar obrigatório).
 Use apenas rótulos de campos que existam no JSON do schema enviado pelo usuário.
-Campos transit_start e transit_end (deslocamento) ficam **sempre** no **início** do formulário (primeiro bloco operacional) e em par — não sugira regras nem textos que os coloquem no meio ou no fim do fluxo.
+Campos transit_start e transit_end (deslocamento) ficam **sempre** no **início** do formulário (primeiro bloco operacional) e em par — não sugira regras nem textos que os coloquem no meio ou no final do fluxo.
 
 **Operadores suportados nas sugestões:** o motor aceita comparações de texto, números (ex.: ">", "<=", "between" com valor **min|max**), vazio/preenchido, booleanos, listas (one_of, includes_any, …), regex (matches_regex), tamanho (length_*), contagem em resposta múltipla (count_*), datas (date_*) e tempos de formulário/etapa — use o mais simples que resolver o caso. **Não** existe regra direta por «km de deslocamento» só a partir de **transit_start** / **transit_end** como número mágico. Se o pedido exigir só isso, devolva **logicSuggestions: []** e em **replyText** explique o limite e **2 a 4 alternativas** viáveis.
 

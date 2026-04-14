@@ -122,7 +122,7 @@ async function countActiveTechnicianSeats(prisma, tenantId) {
 }
 
 /**
- * Antes de criar utilizador técnico (USER/PROVIDER) ativo.
+ * Antes de criar usuário técnico (USER/PROVIDER) ativo.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} tenantId
  * @param {string} roleUpper
@@ -142,7 +142,7 @@ async function assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper) {
 }
 
 /**
- * Antes de PATCH em utilizador (mudança de papel ou ativo).
+ * Antes de PATCH em usuário (mudança de papel ou ativo).
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {{ id: string; tenantId: string; role: string; isActive: boolean }} existing
  * @param {{ role?: string; isActive?: boolean }} patch

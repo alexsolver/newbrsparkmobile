@@ -15,9 +15,9 @@ const visionRouter = require('./vision');
 router.use('/vision', visionRouter);
 
 /**
- * Tenant onde novos utilizadores do app móvel são registados (consumidor / prestador individual).
+ * Tenant onde novos usuários do app móvel são cadastrados (consumidor / prestador individual).
  * Defina APP_DEFAULT_TENANT_SLUG (ex.: brspark-app) ou APP_DEFAULT_TENANT_ID.
- * Se vazio, mantém o modo legado: um Tenant novo por registo (TENANT_ADMIN).
+ * Se vazio, mantém o modo legado: um Tenant novo por registro (TENANT_ADMIN).
  */
 async function resolveAppDefaultTenantId() {
   const idRaw = (process.env.APP_DEFAULT_TENANT_ID || '').trim();
@@ -34,7 +34,7 @@ async function resolveAppDefaultTenantId() {
 }
 
 // ─── POST /api/register ─────────────────────────────────────────────────────
-// Público — registo no app: tenant padrão (USER) ou modo legado (Tenant + TENANT_ADMIN)
+// Público — registro no app: tenant padrão (USER) ou modo legado (Tenant + TENANT_ADMIN)
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, phone, defaultLang = 'pt-BR', deviceId } = req.body;
@@ -55,11 +55,11 @@ router.post('/register', async (req, res) => {
       if (!tenant) {
         return res.status(500).json({
           error:
-            'Configuração inválida: tenant padrão do app não encontrado. Contacte o suporte.',
+            'Configuração inválida: tenant padrão do app não encontrado. Entre em contato com o suporte.',
         });
       }
       if (tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
-        return res.status(403).json({ error: 'Novos registos estão temporariamente indisponíveis.' });
+        return res.status(403).json({ error: 'Novos registros estão temporariamente indisponíveis.' });
       }
 
       const existingUser = await prisma.user.findUnique({
@@ -210,7 +210,7 @@ router.post('/login', async (req, res) => {
       return res.status(409).json({
         code: 'MULTIPLE_ACCOUNTS',
         error:
-          'Este e-mail está em mais de uma organização. Indique qual deseja aceder (tenantId) ou escolha no ecrã.',
+          'Este e-mail está em mais de uma organização. Indique qual deseja acessar (tenantId) ou escolha na tela.',
         tenants: candidates.map((u) => ({
           id: u.tenantId,
           name: u.tenant?.name || u.tenantId,
@@ -313,7 +313,7 @@ router.get('/me/directory-hero', authUser, requireTenantDirectoryManager, async 
     const email = String(req.user.email || '')
       .trim()
       .toLowerCase();
-    if (!email) return res.status(400).json({ error: 'E-mail do utilizador em falta.' });
+    if (!email) return res.status(400).json({ error: 'E-mail do usuário ausente.' });
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.user.tenantId },
@@ -380,7 +380,7 @@ router.put('/me/directory-hero', authUser, requireTenantDirectoryManager, async 
     const email = String(req.user.email || '')
       .trim()
       .toLowerCase();
-    if (!email) return res.status(400).json({ error: 'E-mail do utilizador em falta.' });
+    if (!email) return res.status(400).json({ error: 'E-mail do usuário ausente.' });
 
     const raw = req.body?.heroImageUrl;
     const heroImageUrl =

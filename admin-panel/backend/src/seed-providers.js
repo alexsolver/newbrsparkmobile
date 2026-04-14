@@ -8,7 +8,7 @@ const providers = [];
 
 async function main() {
   await p.serviceProvider.deleteMany({});
-  console.log('🗑️  ServiceProvider: todos os registos removidos (catálogo = CMS).');
+  console.log('🗑️  ServiceProvider: todos os registros removidos (catálogo = CMS).');
 
   if (!providers.length) {
     console.log('   Nada a inserir.');

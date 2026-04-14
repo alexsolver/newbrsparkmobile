@@ -32,6 +32,74 @@ function getQueryId() {
   return p.get('id') || '';
 }
 
+/**
+ * Substitui o conteúdo da ficha por um estado de erro (URL sem id ou API).
+ * Remove `ue-edit-html` para o scroll da página voltar a funcionar.
+ */
+function renderUserEditFatalUI(variant, detail) {
+  const conf =
+    variant === 'missingId'
+      ? {
+          title: 'Link incompleto',
+          description:
+            'Falta o identificador do usuário na URL. Abra a ficha a partir da lista de usuários, ou use o link «Editar» na linha correta.',
+          icon: 'link-outline',
+          iconColor: 'var(--color-status-info-fg, var(--blue))',
+        }
+      : {
+          title: 'Usuário não encontrado',
+          description:
+            'Não foi possível carregar esta conta. O registro pode ter sido removido, o ID pode estar incorreto ou a API devolveu um erro.',
+          icon: 'person-remove-outline',
+          iconColor: 'var(--amber)',
+        };
+
+  document.documentElement.classList.remove('ue-edit-html');
+  document.documentElement.classList.add('ue-edit-error-html');
+
+  const root = document.getElementById('page-root');
+  if (!root) return;
+
+  const detailHtml =
+    variant === 'notFound' && detail && String(detail).trim()
+      ? `<p class="ue-edit-error-detail" role="status">${esc(String(detail).trim().slice(0, 500))}</p>`
+      : '';
+
+  root.innerHTML = `
+    <div class="main-content ue-edit-error-main">
+      <div class="topbar topbar--data">
+        <nav class="topbar-breadcrumb" aria-label="Trilha">
+          <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+          <span class="topbar-breadcrumb-sep">/</span>
+          <a href="users.html" style="color:inherit;text-decoration:none;font-weight:600">Usuários</a>
+          <span class="topbar-breadcrumb-sep">/</span>
+          <span>Editar</span>
+        </nav>
+        <div class="topbar-actions">
+          <a href="users.html" class="btn btn-outline btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            <ion-icon name="arrow-back-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
+            Voltar à lista
+          </a>
+        </div>
+      </div>
+      <div class="page-body ue-edit-error-body">
+        <div class="data-shell ue-edit-error-card fade-in">
+          <div class="empty-state-pro" style="padding:36px 28px 40px">
+            <ion-icon name="${conf.icon}" style="font-size:52px;color:${conf.iconColor};opacity:0.88"></ion-icon>
+            <div class="empty-state-pro-title">${esc(conf.title)}</div>
+            <p class="empty-state-pro-sub">${esc(conf.description)}</p>
+            ${detailHtml}
+            <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+              <a href="users.html" class="btn btn-primary">Ir para lista de usuários</a>
+              <a href="dashboard.html" class="btn btn-outline">Painel</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function parseJsonSafe(v, fallback) {
   if (v == null || v === '') return fallback;
   if (typeof v === 'object') return v;
@@ -304,7 +372,7 @@ function paintComprefaceAdminPanel(sync) {
   if (!wrap) return;
   if (!sync || typeof sync !== 'object') {
     wrap.innerHTML =
-      '<span class="cf-admin-badge cf-admin--muted"><strong>CompreFace (registo)</strong> — sem estado guardado. Após enviar fotos ou «Sincronizar», o estado aparece aqui.</span>';
+      '<span class="cf-admin-badge cf-admin--muted"><strong>CompreFace (registro)</strong> — sem estado salvo. Após enviar fotos ou «Sincronizar», o estado aparece aqui.</span>';
     return;
   }
   const st = String(sync.status || '').toLowerCase();
@@ -453,15 +521,13 @@ export async function bootUserEditPage() {
   await initPage();
   const id = getQueryId();
   if (!id) {
-    document.getElementById('page-root').innerHTML =
-      '<p style="padding:40px;text-align:center">ID em falta. <a href="users.html">Voltar</a></p>';
+    renderUserEditFatalUI('missingId');
     return;
   }
 
   const u = await CONFIG.get('/users/' + encodeURIComponent(id));
   if (!u || u.error) {
-    document.getElementById('page-root').innerHTML =
-      `<p style="padding:40px;text-align:center">Usuário não encontrado. <a href="users.html">Voltar</a></p>`;
+    renderUserEditFatalUI('notFound', u && u.error != null ? u.error : '');
     return;
   }
 
@@ -469,7 +535,14 @@ export async function bootUserEditPage() {
   if (!Array.isArray(cachedLocations)) cachedLocations = [];
 
   document.getElementById('ue-title').textContent = u.name || u.email;
-  document.getElementById('ue-sub').textContent = u.tenant?.name || u.tenantId;
+  const subBits = [u.tenant?.name, u.tenant?.email].filter(Boolean);
+  document.getElementById('ue-sub').textContent =
+    subBits.length ? subBits.join(' · ') : (u.tenantId || '—');
+  const crumb = document.getElementById('ue-crumb-name');
+  if (crumb) {
+    const display = String(u.name || u.email || 'Editar').trim() || 'Editar';
+    crumb.textContent = display.length > 36 ? `${display.slice(0, 33)}…` : display;
+  }
 
   document.getElementById('f-name').value = u.name || '';
   document.getElementById('f-email').value = u.email || '';
@@ -497,7 +570,7 @@ export async function bootUserEditPage() {
     const cfOk = userRow.comprefaceRecognitionSync && String(userRow.comprefaceRecognitionSync.status) === 'synced';
     if (wtSet.requireFaceOnEveryPunch && (photos.length === 0 || !cfOk)) {
       parts.push(
-        'Matrícula facial incompleta ou CompreFace não sincronizado — as batidas são aceites, mas ficam marcadas como matrícula não validada até corrigir.',
+        'Matrícula facial incompleta ou CompreFace não sincronizado — as batidas são aceitas, mas ficam marcadas como matrícula não validada até corrigir.',
       );
     }
     if (String(userRow.technicianProfile?.status || '').toUpperCase() === 'ACTIVE') {

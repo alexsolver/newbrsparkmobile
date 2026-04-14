@@ -32,7 +32,7 @@ model Plan {
   priceMonthly  Decimal  @db.Decimal(10,2)
   priceYearly   Decimal  @db.Decimal(10,2)
   maxAssets     Int      // -1 = unlimited
-  maxUsers      Int      // -1 = unlimited (utilizadores do painel no geral)
+  maxUsers      Int      // -1 = unlimited (usuários do painel no geral)
   /// Cota de técnicos de campo (papéis USER e PROVIDER ativos). -1 = ilimitado.
   maxTechnicians Int     @default(5)
   storageGb     Int
@@ -69,6 +69,8 @@ model Tenant {
   locale       LocaleProfile? @relation(fields: [localeId], references: [id])
   status       TenantStatus @default(TRIAL)
   sectorCode   String?                       // telecom | utilities | saude | predial | outro
+  /// Extensões por tenant (ex.: trackChatModeration). Fusão com env no backend.
+  features     Json     @default("{}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -91,9 +93,10 @@ model Tenant {
   workTimePunches       WorkTimePunch[]
   routineTaskAssignments RoutineTaskAssignment[]
   planUsagePeriods      TenantPlanUsagePeriod[]
+  checklistTemplates     ChecklistTemplate[]
 }
 
-/// Política de registro de horas trabalhadas (ponto) — 1 registo por tenant.
+/// Política de registro de horas trabalhadas (ponto) — 1 registro por tenant.
 model WorkTimeSettings {
   id          String   @id @default(cuid())
   tenantId    String   @unique
@@ -336,7 +339,7 @@ model User {
   email      String
   name       String
   password   String   // bcrypt hash
-  /// Matrícula funcional (RH / ponto). Uma por utilizador; única por tenant quando preenchida.
+  /// Matrícula funcional (RH / ponto). Uma por usuário; única por tenant quando preenchida.
   employeeMatricula String? @map("employee_matricula")
   avatarUrl  String?
   phone      String?
@@ -358,7 +361,7 @@ model User {
   auditLogs  AuditLog[]
   pushTokens PushToken[]
   technicianProfile TechnicianProfile?
-  /// Preenchido se o utilizador foi criado por uma candidatura de prestador aprovada.
+  /// Preenchido se o usuário foi criado por uma candidatura de prestador aprovada.
   techRegistrationCreatedFrom TechnicianRegistrationApplication? @relation("TechRegCreatedUser")
   technicianRegistrationCandidacies TechnicianRegistrationApplication[] @relation("TechRegCandidateUser")
   currentSessionId String?
@@ -810,7 +813,7 @@ model ChatMessage {
   type       String   @default("text") // text, audio, video, image
   content    String?  @db.Text
   mediaUrl   String?
-  /// Cache de traduções por locale canónico: { "pt-BR": "…", "en-US": "…" }
+  /// Cache de traduções por locale canônico: { "pt-BR": "…", "en-US": "…" }
   translations Json?   @map("translations")
   createdAt  DateTime @default(now())
   
@@ -836,7 +839,8 @@ model ChecklistTemplateFolder {
 
 model ChecklistTemplate {
   id          String   @id @default(cuid())
-  tenantId    String?  
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   title       String
   description String?
   settings    Json     // Ex: { requireGlobalGeofence: true, globalGeofenceRadius: 200 }
@@ -968,9 +972,37 @@ model ChecklistExecution {
 
   evaluationInstances EvaluationInstance[]
 
+  trackingChatModerationEvents TrackingChatModerationEvent[]
+
   @@index([ownerEmail])
   @@index([status])
   @@index([ownerEmail, status])
+}
+
+/// Auditoria de moderação do chat de acompanhamento (link público + técnico). Retenção: apagar linhas antigas conforme política (TTL operacional).
+model TrackingChatModerationEvent {
+  id               String   @id @default(cuid())
+  executionId      String   @map("execution_id")
+  execution        ChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  tenantId         String?  @map("tenant_id")
+  actorRole        String   @map("actor_role")
+  textHash         String   @map("text_hash")
+  textLength       Int      @map("text_length")
+  textPreview      String?  @map("text_preview") @db.VarChar(200)
+  category         String?
+  severity         String?
+  confidence       Float?
+  prefilterJson    Json?    @map("prefilter_json")
+  iaJson           Json?    @map("ia_json")
+  finalAction      String   @map("final_action")
+  stageAtTime      String?  @map("stage_at_time")
+  needsHumanReview Boolean  @default(false) @map("needs_human_review")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([executionId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([needsHumanReview, createdAt])
+  @@map("tracking_chat_moderation_events")
 }
 
 /// Snapshot imutável por conclusão (revisita = nova linha; FT/osNumber estáveis na execução).

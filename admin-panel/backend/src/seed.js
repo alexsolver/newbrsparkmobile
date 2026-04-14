@@ -83,7 +83,7 @@ async function main() {
   const nextMonth = new Date(now);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
 
-  // Tenant padrão do app móvel (APP_DEFAULT_TENANT_SLUG=brspark-app) — utilizadores com role USER
+  // Tenant padrão do app móvel (APP_DEFAULT_TENANT_SLUG=brspark-app) — usuários com role USER
   const tenantBrsparkApp = await prisma.tenant.upsert({
     where: { slug: 'brspark-app' },
     update: { localeId: locBr.id, status: 'ACTIVE' },

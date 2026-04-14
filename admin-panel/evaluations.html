@@ -37,19 +37,35 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Qualidade — Avaliações &amp; Minha Produtividade</span>
-      <div class="topbar-actions eval-actions">
-        <select class="form-control" id="filter-tenant" style="width:220px;padding:7px 10px;font-size:12px">
-          <option value="">Todos os tenants</option>
-        </select>
-        <button type="button" class="btn btn-primary" id="btn-refresh">Atualizar</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Qualidade e avaliações</span>
+      </nav>
     </div>
     <div class="page-body">
-      <p class="hint-sm" style="margin-bottom:16px">
-        Controlo de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o mais recentemente atualizado prevalece).
-      </p>
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Avaliações e Minha Produtividade</h1>
+        <p class="page-hero-sub">
+          Controle de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o registro mais recentemente atualizado prevalece).
+        </p>
+      </header>
+
+      <section class="data-shell fade-in" aria-label="Qualidade e avaliações">
+      <div class="data-toolbar">
+        <div class="data-toolbar-main eval-actions">
+          <label class="filter-field" style="min-width:200px">
+            <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon> Tenant</span>
+            <select class="form-control filter-field-control" id="filter-tenant">
+              <option value="">Todos os tenants</option>
+            </select>
+          </label>
+        </div>
+        <div class="data-toolbar-actions">
+          <button type="button" class="btn btn-primary" id="btn-refresh">Atualizar</button>
+        </div>
+      </div>
 
       <div class="eval-tab-bar">
         <button type="button" class="eval-tab eval-tab-active" data-tab="resumo">Resumo</button>
@@ -86,7 +102,7 @@
           <div class="panel-header"><span class="panel-title">Revisões / disputas</span></div>
           <p class="hint-sm" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.</p>
           <div class="table-wrap">
-            <table><thead><tr><th>Técnico</th><th>OS / nota</th><th>Justificativa</th><th style="text-align:right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th>Técnico</th><th>OS / nota</th><th>Justificativa</th><th class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>
@@ -109,7 +125,7 @@
           <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
           <p class="hint-sm" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
           <div class="table-wrap">
-            <table><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>URL do formulário web</th><th style="text-align:right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>URL do formulário web</th><th class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
           <div id="eval-survey-preview" class="eval-survey-preview" hidden>
@@ -130,7 +146,7 @@
         <div class="panel">
           <div class="panel-header"><span class="panel-title">Templates de avaliação</span></div>
           <div class="table-wrap">
-            <table><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th><th style="text-align:right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th><th class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-tpl"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>
@@ -140,11 +156,12 @@
         <div class="panel">
           <div class="panel-header"><span class="panel-title">Média por técnico (período dos KPIs)</span></div>
           <div class="table-wrap">
-            <table><thead><tr><th>Nome</th><th>Email</th><th>Média</th><th>N avaliações</th></tr></thead>
+            <table class="table-data"><thead><tr><th>Nome</th><th>E-mail</th><th>Média</th><th>Nº avaliações</th></tr></thead>
             <tbody id="tbody-ranking"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Abra o separador Resumo para carregar dados.</td></tr></tbody></table>
           </div>
         </div>
       </div>
+      </section>
     </div>
   </div>
 </div>
@@ -189,7 +206,7 @@
     </div>
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
       <button type="button" class="btn" id="tpl-modal-cancel">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="tpl-modal-save">Guardar</button>
+      <button type="button" class="btn btn-primary" id="tpl-modal-save">Salvar</button>
     </div>
   </div>
 </div>
@@ -202,7 +219,7 @@
     <pre id="chat-transcript-body" class="chat-transcript-pre"></pre>
     <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap">
       <button type="button" class="btn" id="chat-transcript-close">Fechar</button>
-      <button type="button" class="btn btn-primary" id="chat-transcript-json">Descarregar JSON</button>
+      <button type="button" class="btn btn-primary" id="chat-transcript-json">Baixar JSON</button>
     </div>
   </div>
 </div>

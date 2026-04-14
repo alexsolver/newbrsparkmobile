@@ -22,7 +22,7 @@ async function maxSeqByPeriodFromExisting(prisma) {
 
 /**
  * Preenche osNumber FT-AAAA-MM-NNNNNNN onde falta e alinha OsSerialCounter.
- * Idempotente: se nada em falta, só faz contagens leves.
+ * Idempotente: se nada pendente, só faz contagens leves.
  * @param {import('@prisma/client').PrismaClient} prisma
  */
 async function runBackfillOsNumbers(prisma) {

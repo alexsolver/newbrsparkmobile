@@ -1,5 +1,5 @@
 /**
- * Painel — RT (tarefas de rotina): associações modelo ↔ utilizadores (exceto cliente).
+ * Painel — RT (tarefas de rotina): associações modelo ↔ usuários (exceto cliente).
  */
 import { initPage, getStoredPanelRole } from './sidebar.js';
 import { CONFIG } from './config.js';
@@ -69,7 +69,7 @@ async function ensureTenantForApi() {
     const res = await CONFIG.get('/tenants?limit=500');
     const sel = document.getElementById('rt-tenant-select');
     if (sel) {
-      sel.innerHTML = '<option value="">Selecione o tenant…</option>';
+      sel.innerHTML = '<option value="">Selecione a organização…</option>';
       (res?.data || []).forEach((t) => {
         sel.innerHTML += `<option value="${esc(t.id)}">${esc(t.name)} — ${esc(t.email)}</option>`;
       });
@@ -106,7 +106,7 @@ async function ensureTenantForApi() {
 
 function fillTemplateSelects() {
   const pickFirst = '<option value="">— Escolha o modelo —</option>';
-  const allFirst = '<option value="">(todos)</option>';
+  const allFirst = '<option value="">(todos os modelos)</option>';
   const body = cachedTemplates.map((t) => `<option value="${esc(t.id)}">${esc(t.title || t.id)}</option>`).join('');
   const bulk = document.getElementById('rt-bulk-template');
   if (bulk) bulk.innerHTML = pickFirst + body;
@@ -117,7 +117,7 @@ function fillTemplateSelects() {
 
 function fillTechnicianSelects() {
   const optsUsers =
-    '<option value="">(todos)</option>' +
+    '<option value="">(todos os prestadores)</option>' +
     cachedTechnicians.map((u) => `<option value="${esc(u.id)}">${technicianOptionLabel(u)}</option>`).join('');
   const fu = document.getElementById('rt-assign-filter-user');
   if (fu) fu.innerHTML = optsUsers;
@@ -151,7 +151,7 @@ function passesAssignmentFilters(row) {
 async function loadAssignments() {
   const tbody = document.getElementById('rt-assign-tbody');
   if (!tbody || !canQuery()) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="padding:16px;color:var(--text3)">A carregar…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="padding:16px;color:var(--text3)">Carregando…</td></tr>';
   const res = await CONFIG.get(`/admin/routine-tasks/assignments${tenantQs()}`);
   if (res?.error) {
     tbody.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--red,#b91c1c)">${esc(res.error)}</td></tr>`;
@@ -159,7 +159,8 @@ async function loadAssignments() {
   }
   const rows = Array.isArray(res?.assignments) ? res.assignments.filter(passesAssignmentFilters) : [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:16px;color:var(--text3)">Sem associações com estes filtros.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="7" style="padding:16px;color:var(--text3)">Nenhuma associação com os filtros atuais.</td></tr>';
     return;
   }
   tbody.innerHTML = rows
@@ -177,10 +178,10 @@ async function loadAssignments() {
         <td style="max-width:90px"><input type="number" class="form-control rt-asg-order" value="${esc(so)}" style="padding:6px 8px;font-size:12px" /></td>
         <td style="max-width:110px"><input type="number" class="form-control rt-asg-slots" min="1" max="20" step="1" value="${esc(
           slots
-        )}" title="Execuções RT ativas no servidor (pré-carga no app)" style="padding:6px 8px;font-size:12px" /></td>
-        <td style="white-space:nowrap">
-          <button type="button" class="btn btn-sm btn-primary rt-asg-save">Guardar</button>
-          <button type="button" class="btn btn-sm btn-secondary rt-asg-del">Remover</button>
+        )}" title="Quantidade de RT em pré-carga no app (1 a 20)" style="padding:6px 8px;font-size:12px" /></td>
+        <td class="text-right" style="white-space:nowrap">
+          <button type="button" class="btn btn-sm btn-primary rt-asg-save">Salvar</button>
+          <button type="button" class="btn btn-sm btn-secondary rt-asg-del">Excluir</button>
         </td>
       </tr>`;
     })
@@ -217,7 +218,7 @@ async function loadAssignments() {
         void loadAssignments();
       } catch (e) {
         console.error('[rt-asg-save]', e);
-        alert(e instanceof Error ? e.message : 'Falha ao guardar. Veja a consola do browser.');
+        alert(e instanceof Error ? e.message : 'Falha ao salvar. Abra a consola do navegador para detalhes.');
       } finally {
         btn.removeAttribute('disabled');
         btn.textContent = prevLabel;
@@ -228,7 +229,7 @@ async function loadAssignments() {
     btn.onclick = async () => {
       const tr = btn.closest('tr');
       const id = tr?.getAttribute('data-asg-id');
-      if (!id || !confirm('Remover esta associação RT?')) return;
+      if (!id || !confirm('Excluir esta associação de RT?')) return;
       const out = await CONFIG.del(`/admin/routine-tasks/assignments/${encodeURIComponent(id)}${tenantQs()}`);
       if (out?.error) {
         alert(out.error);
@@ -257,7 +258,7 @@ export async function bootRoutineTasksPage() {
   document.getElementById('rt-bulk-apply')?.addEventListener('click', async () => {
     const msg = document.getElementById('rt-bulk-msg');
     if (!canQuery()) {
-      alert('Selecione o tenant.');
+      alert('Selecione a organização.');
       return;
     }
     const templateId = document.getElementById('rt-bulk-template')?.value?.trim() || '';
@@ -269,10 +270,10 @@ export async function bootRoutineTasksPage() {
       return;
     }
     if (!userIds.length) {
-      alert('Selecione pelo menos um utilizador.');
+      alert('Selecione pelo menos um usuário.');
       return;
     }
-    if (msg) msg.textContent = 'A enviar…';
+    if (msg) msg.textContent = 'Enviando…';
     const body = { templateId, userIds, menuLabel };
     if (activeTenantId) body.tenantId = activeTenantId;
     const out = await CONFIG.post(`/admin/routine-tasks/assignments/bulk`, body);
@@ -295,7 +296,7 @@ export async function bootRoutineTasksPage() {
         const short = skipReasons[0].length > 160 ? `${skipReasons[0].slice(0, 157)}…` : skipReasons[0];
         msg.textContent += ` — ${short}`;
         if (skipReasons.length > 1) {
-          msg.textContent += ` (+${skipReasons.length - 1} motivo(s); passe o rato para ver tudo)`;
+          msg.textContent += ` (+${skipReasons.length - 1} motivo(s); deixe o cursor sobre o resumo para ver todos)`;
         }
       } else {
         msg.title = '';

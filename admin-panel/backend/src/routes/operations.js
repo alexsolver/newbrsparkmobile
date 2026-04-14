@@ -411,7 +411,7 @@ router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, re
       if (!resolved) {
         return res.status(400).json({
           error:
-            'O e-mail indicado não corresponde a um utilizador ativo elegível (contas cliente não recebem OS). Use o e-mail de login do app.',
+            'O e-mail indicado não corresponde a um usuário ativo elegível (contas cliente não recebem OS). Use o e-mail de login do app.',
         });
       }
       resolvedOwner = resolved;

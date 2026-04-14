@@ -36,7 +36,7 @@ function normalizeMime(mt) {
 
 /**
  * POST /api/checklists/voice/transcribe
- * multipart: campo "audio" (ficheiro). Opcional: language (pt, en, …).
+ * multipart: campo "audio" (arquivo). Opcional: language (pt, en, …).
  * JWT técnico (authUser).
  */
 router.post('/voice/transcribe', authUser, upload.single('audio'), async (req, res) => {

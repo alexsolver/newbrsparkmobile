@@ -16,7 +16,7 @@ const chartConfig = {
         labels: [],
         datasets: [
             {
-                label: 'Payloads (kb/s)',
+                label: 'Payload (kb/s)',
                 data: [],
                 borderColor: '#3b82f6',
                 backgroundColor: gradientBlue,
@@ -102,7 +102,7 @@ async function updateCockpit() {
         const consoleBox = document.getElementById('error-console');
         if (d.memory.lastErrors.length === 0) {
             // keep default text or just show a ping
-            consoleBox.innerHTML = `<div style="color:#22c55e;">[SYS] Healthy tick ${now.toISOString()}</div>`;
+            consoleBox.innerHTML = `<div style="color:#22c55e;">[SYS] Pulso OK ${now.toISOString()}</div>`;
         } else {
             consoleBox.innerHTML = d.memory.lastErrors.map(err => {
                 const ts = new Date(err.ts).toLocaleTimeString('pt-BR');
@@ -114,10 +114,12 @@ async function updateCockpit() {
             }).join('');
         }
 
-        document.getElementById('last-update').innerText = `DATA SYNCED: ${now.toLocaleTimeString('pt-BR')}`;
+        const lu = document.getElementById('last-update');
+        lu.innerText = `Dados sincronizados: ${now.toLocaleTimeString('pt-BR')}`;
+        lu.style.color = 'var(--accent-cyan)';
     } catch (e) {
         console.warn('Erro ao atualizar Cockpit', e);
-        document.getElementById('last-update').innerText = 'CONNECTION LOST. RECONNECTING...';
+        document.getElementById('last-update').innerText = 'Conexão perdida. Reconectando…';
         document.getElementById('last-update').style.color = 'var(--accent-red)';
     }
 }

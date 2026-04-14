@@ -18,7 +18,7 @@ const router = express.Router();
 router.use(authUser);
 
 /**
- * GET /api/routine-tasks/me — modelos RT associados ao utilizador (prestador) + fila no servidor.
+ * GET /api/routine-tasks/me — modelos RT associados ao usuário (prestador) + fila no servidor.
  */
 router.get('/me', async (req, res) => {
   try {

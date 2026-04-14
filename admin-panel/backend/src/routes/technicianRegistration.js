@@ -152,7 +152,7 @@ async function bindTechRegistrationCandidate(req, res, next) {
       where: { inviteToken: req.params.token },
     });
     if (!app) return res.status(404).json({ error: 'Convite inválido.' });
-    if (!req.user?.email) return res.status(401).json({ error: 'Inicie sessão no app com o e-mail do convite.' });
+    if (!req.user?.email) return res.status(401).json({ error: 'Faça login no app com o e-mail do convite.' });
     const a = String(req.user.email).trim().toLowerCase();
     const b = String(app.invitedEmail).trim().toLowerCase();
     if (a !== b) {
@@ -186,7 +186,7 @@ publicRouter.post(
 
 /**
  * Passo 1 — grava só a foto de perfil (não entra em faceEnrollmentPhotos).
- * Ao substituir a foto de perfil, remove ficheiros antigos e zera as fotos biométricas (passo 2).
+ * Ao substituir a foto de perfil, remove arquivos antigos e zera as fotos biométricas (passo 2).
  */
 publicRouter.post(
   '/:token/profile-photo',
@@ -1210,7 +1210,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
       if (elsewhere) {
         return res.status(400).json({
           error:
-            'Este e-mail existe noutra organização, mas não há utilizador com este e-mail neste tenant. Confirme o tenant ou o e-mail.',
+            'Este e-mail existe em outra organização, mas não há usuário com este e-mail neste tenant. Confirme o tenant ou o e-mail.',
         });
       }
       return res.status(400).json({

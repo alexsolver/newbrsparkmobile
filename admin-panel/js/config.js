@@ -5,12 +5,12 @@
  */
 const LS_API_ORIGIN = 'brspark_admin_api_origin';
 
-/** Cópia da sessão do painel (JWT + metadados) — partilhada entre separadores; limpa no logout e em 401. */
+/** Cópia da sessão do painel (JWT + metadados) — compartilhada entre abas; limpa no logout e em 401. */
 const LS_ADMIN_SESSION_BUNDLE = 'brspark_admin_session_bundle';
 
 /**
  * Grava no `localStorage` o mesmo conteúdo relevante do `sessionStorage` (login válido).
- * Permite abrir `operations.html` / PDF noutro separador sem perder o Bearer.
+ * Permite abrir `operations.html` / PDF em outra aba sem perder o Bearer.
  */
 export function persistAdminSessionBundleFromSessionStorage() {
   if (typeof window === 'undefined' || !window.sessionStorage || !window.localStorage) return;
@@ -134,8 +134,8 @@ function normalizeLoopbackApiOrigin(storedOrigin) {
 }
 
 /**
- * Origem gravada no PC (127.0.0.1/localhost) é inútil no telemóvel/tablet na LAN:
- * aí `localhost` é o próprio dispositivo. Ignorar e voltar a detetar pela página.
+ * Origem gravada no PC (127.0.0.1/localhost) é inútil no celular/tablet na LAN:
+ * aí `localhost` é o próprio dispositivo. Ignorar e voltar a detectar pela página.
  */
 function storedLoopbackMismatchLanPage(storedOrigin) {
   if (typeof window === 'undefined' || !window.location?.hostname) return false;
@@ -295,10 +295,10 @@ function adminApiUnreachableMessage(method, path, err) {
     /failed to fetch|networkerror|load failed|fetch failed|network request failed/.test(raw);
   if (looksNetwork) {
     return (
-      `Não foi possível contactar a API em ${base} (${method} ${path}). ` +
+      `Não foi possível contatar a API em ${base} (${method} ${path}). ` +
       'Inicie o backend (pasta admin-panel/backend: npm run dev, porta 3001). ' +
-      'Se o painel abrir noutro host/porta, defina no navegador localStorage a chave "brspark_admin_api_origin" ' +
-      'com a origem do servidor (ex.: http://127.0.0.1:3001), sem /api no fim.'
+      'Se o painel abrir em outro host/porta, defina no navegador localStorage a chave "brspark_admin_api_origin" ' +
+      'com a origem do servidor (ex.: http://127.0.0.1:3001), sem /api no final.'
     );
   }
   return String((err && err.message) || err || 'Erro de rede.');

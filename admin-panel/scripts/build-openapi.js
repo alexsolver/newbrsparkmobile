@@ -191,7 +191,7 @@ const ROUTES = [
   })],
 
   // ── Checklists IA (admin)
-  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar ficheiro Excel/Word/JSON (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
+  ['post', '/api/checklists/ai/analyze-from-file', op('Analisar arquivo Excel/Word/JSON (multipart: file)', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } } },
   })],
   ['post', '/api/checklists/ai/build-form', op('Construir formulário a partir de análise', ['Admin — Formulários IA'], bearerAdmin, {
@@ -295,6 +295,20 @@ const ROUTES = [
   ['get', '/api/tracking/{token}', op('Estado em tempo real (link público)', ['Tracking'], false, {
     parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
   })],
+  ['get', '/api/tracking/task/{taskId}/chat', op('Listar mensagens do chat de acompanhamento (técnico, JWT)', ['Tracking'], bearerApp, {
+    parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
+  })],
+  ['post', '/api/tracking/task/{taskId}/chat', op('Enviar mensagem no chat de acompanhamento (técnico, JWT)', ['Tracking'], bearerApp, {
+    parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
+    requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { text: { type: 'string' } } } } } },
+  })],
+  ['get', '/api/tracking/{token}/chat', op('Listar mensagens (cliente, token do link)', ['Tracking'], false, {
+    parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+  })],
+  ['post', '/api/tracking/{token}/chat', op('Enviar mensagem (cliente, token do link)', ['Tracking'], false, {
+    parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+    requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { text: { type: 'string' } } } } } },
+  })],
 
   // ── OSRM proxy
   ['get', '/api/osrm/route-polyline', op('Polilinha de rota (query params)', ['Público — OSRM'], false)],
@@ -323,7 +337,7 @@ const ROUTES = [
   ['post', '/api/users', op('Criar usuário', ['Admin — Usuários'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
-  ['patch', '/api/users/{id}/reset-password', op('Redefinir palavra-passe', ['Admin — Usuários'], bearerAdmin, {
+  ['patch', '/api/users/{id}/reset-password', op('Redefinir senha', ['Admin — Usuários'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['patch', '/api/users/{id}/toggle-active', op('Ativar/desativar', ['Admin — Usuários'], bearerAdmin, {

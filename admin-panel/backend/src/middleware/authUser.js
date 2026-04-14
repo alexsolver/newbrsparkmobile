@@ -34,7 +34,7 @@ module.exports = async function authUser(req, res, next) {
       return res.status(403).json({ error: 'Conta desativada.', code: 'ACCOUNT_INACTIVE' });
     }
 
-    // tenantId/role vêm sempre da BD — o JWT pode ficar desatualizado (ex.: utilizador mudou de tenant sem novo login).
+    // tenantId/role vêm sempre da BD — o JWT pode ficar desatualizado (ex.: usuário mudou de tenant sem novo login).
     req.user = { ...payload, tenantId: user.tenantId, role: user.role };
     next();
   } catch(err) {

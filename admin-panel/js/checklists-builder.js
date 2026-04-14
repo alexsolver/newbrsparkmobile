@@ -1518,7 +1518,13 @@ function createNewFieldFromToolboxType(type, rawText) {
               requireOnlineValidation: false,
             }
           : {}),
-        ...(type === 'vision_ai_analysis' ? { visionAnalysisGrid: '1x1' } : {}),
+        ...(type === 'vision_ai_analysis'
+            ? {
+                  visionAnalysisGrid: '1x1',
+                  visionRating0To10Enabled: false,
+                  visionShowAiResponseInForm: true,
+              }
+            : {}),
         ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
         ...(type === 'leitura' ? { contentHtml: '', required: false } : {}),
         ...(type === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
@@ -1999,7 +2005,7 @@ function renderCanvas() {
                 })
             );
             toolbar.appendChild(
-                mkBtn('Eliminar seção', 'trash-outline', true, () => {
+                mkBtn('Excluir seção', 'trash-outline', true, () => {
                     window.deleteSection(sf.id);
                 })
             );
@@ -2208,7 +2214,7 @@ window.cloneSection = function (sectionId) {
 window.deleteSection = function (sectionId) {
     if (
         !confirm(
-            'Eliminar esta seção e todas as perguntas dentro dela? O formulário mantém sempre pelo menos uma seção (será criada uma nova vazia se necessário).'
+            'Excluir esta seção e todas as perguntas dentro dela? O formulário mantém sempre pelo menos uma seção (será criada uma nova vazia se necessário).'
         )
     ) {
         return;
@@ -2427,9 +2433,9 @@ function renderProperties() {
             <label class="prop-label" style="color:#e11d48; font-size:10px;">Modo de validação biométrica</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('facialAuthMode', this.value)" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
                 <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>Provar identidade do usuário logado (ponto / OS)</option>
-                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer utilizador matriculado (mesmo tenant)</option>
+                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer usuário matriculado (mesmo tenant)</option>
             </select>
-            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», qualquer utilizador com sessão na app pode preencher o campo: o rosto é comparado à galeria CompreFace e o servidor devolve nome/e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa de estar logado na app.</div>
+            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», qualquer usuário com sessão na app pode preencher o campo: o rosto é comparado à galeria CompreFace e o servidor devolve nome/e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa estar logado na app.</div>
 
             <div style="font-size:9px; color:#64748b; line-height:1.35; margin-top:8px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
                 📷 A captura facial na app usa sempre a <b>câmera do sistema</b> (alta resolução).
@@ -2481,6 +2487,24 @@ function renderProperties() {
             { v: '1x1', label: '1 foto — 1×1', c: 1, r: 1 },
             { v: '2x2', label: '4 fotos — 2×2', c: 2, r: 2 },
         ];
+        const ratingEnabled = !!f.visionRating0To10Enabled;
+        const ratingPickHtml = isVisionAnalysis
+            ? `
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid ${ratingEnabled ? '#fecaca' : '#e2e8f0'};background:${ratingEnabled ? '#fff1f2' : '#fff'}">
+              <input type="checkbox" ${ratingEnabled ? 'checked' : ''} onchange="window.handleFieldUpdate('visionRating0To10Enabled', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">Classificação 0–10 (preenchida pela API após a análise)</span>
+            </label>
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.</div>`
+            : '';
+        const showAiResp = f.visionShowAiResponseInForm !== false;
+        const showAiResponseHtml = isVisionAnalysis
+            ? `
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff">
+              <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">Mostrar detalhes da resposta da IA no app</span>
+            </label>
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.</div>`
+            : '';
         const gridPickHtml = isVisionAnalysis
             ? `
             <label class="prop-label" style="color:${vLabel}; font-size:10px;">Grelha de fotos (envio único ao Gemini)</label>
@@ -2510,6 +2534,8 @@ function renderProperties() {
             <div style="font-size:10px; color:${vBodyColor}; line-height:1.35; margin-bottom:10px;">
               ${vBody}
             </div>
+            ${ratingPickHtml}
+            ${showAiResponseHtml}
             <label class="prop-label" style="color:${vLabel}; font-size:10px;">Tipo de captura pela câmera</label>
             <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.handleFieldUpdate('visionCaptureMode', this.value)">
                 <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>Somente foto</option>
@@ -2523,7 +2549,7 @@ function renderProperties() {
             )}</textarea>
             <div style="font-size:9px; color:#64748b; margin-top:6px;">Descreva critérios, formato desejado e o que a IA deve verificar na mídia. Máximo ~${MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString(
                 'pt-BR',
-            )} caracteres. A API continua a devolver JSON com uma resposta sim/não (id <code>q1</code>) para compatibilidade com o app e relatórios.</div>
+            )} caracteres. A API devolve JSON com <code>answers</code> (ex.: id <code>q1</code>) e, se ativar a classificação 0–10 acima, também <code>rating0To10</code> na raiz.</div>
         </div>`;
     } else if (f.type === 'voice_note') {
         const vLang = escapeHtmlLogic(String(f.voiceTranscribeLanguage || 'pt').slice(0, 12));
@@ -3086,7 +3112,7 @@ window.configureGlobalSettings = function () {
     const cb = document.getElementById('global-geofence-enabled');
     const radEl = document.getElementById('global-geofence-radius');
     if (!m || !cb || !radEl) {
-        console.warn('[checklists-builder] Modal Cerca Global em falta no HTML.');
+        console.warn('[checklists-builder] Modal Cerca Global ausente no HTML.');
         return;
     }
     cb.checked = !!globalFormSettings.requireGlobalGeofence;
@@ -3124,7 +3150,7 @@ window.openExpectedFormDurationModal = function () {
     const m = document.getElementById('expected-form-duration-modal');
     const durEl = document.getElementById('expected-form-duration-minutes');
     if (!m || !durEl) {
-        console.warn('[checklists-builder] Modal de tempo do formulário em falta no HTML.');
+        console.warn('[checklists-builder] Modal de tempo do formulário ausente no HTML.');
         return;
     }
     const v = globalFormSettings.expectedFormDurationMinutes;
@@ -3664,7 +3690,7 @@ window.openNewFolderModal = function () {
     const m = document.getElementById('new-folder-modal');
     const inp = document.getElementById('new-folder-name-input');
     if (!m || !inp) {
-        alert('Recarregue a página (interface "Nova pasta" em falta).');
+        alert('Recarregue a página (interface «Nova pasta» não carregou).');
         return;
     }
     inp.value = '';
@@ -3767,7 +3793,7 @@ window.promptRenameTemplateFolder = async function (folderId) {
 window.promptDeleteTemplateFolder = async function (folderId) {
     const f = builderFolders.find((x) => x.id === folderId);
     if (!f) return;
-    if (!confirm(`Eliminar a pasta "${f.name}" e todas as subpastas? Os formulários ficam na raiz (sem pasta).`)) return;
+    if (!confirm(`Excluir a pasta "${f.name}" e todas as subpastas? Os formulários ficam na raiz (sem pasta).`)) return;
     try {
         const res = await fetch(`${brsparkApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
             method: 'DELETE',
@@ -4075,7 +4101,7 @@ window.renderFormsGridFromLocal = function (db) {
                <button type="button"
                   onclick="event.stopPropagation(); window.promptDeleteTemplateFolder('${fid}')"
                   style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0;"
-                  title="Eliminar pasta">
+                  title="Excluir pasta">
                   <ion-icon name="trash-outline"></ion-icon>
                </button>
             </div>
@@ -4472,7 +4498,7 @@ function renderMobilePreview() {
                       ? 'Só vídeo'
                       : 'Foto ou vídeo';
             if (f.type === 'vision_ai_analysis') {
-                inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · Google AI Studio.</span></div>`;
+                inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · Gemini · ${f.visionRating0To10Enabled ? 'com nota 0–10' : 'resposta + confiança'}.</span></div>`;
             } else {
                 inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão de IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · servidor.</span></div>`;
             }
@@ -4493,7 +4519,7 @@ function renderMobilePreview() {
         if(f.type === 'materials_receipt') inputMock = `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; font-size:13px; color:#15803d;"><ion-icon name="arrow-down-circle" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Entrada de materiais</b> — estoque técnico; aumenta o saldo ao concluir.</div>`;
         if(f.type === 'technician_finance') inputMock = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px; font-size:13px; color:#0f766e;"><ion-icon name="cash" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Custos do técnico</b> — despesas/receitas ligadas ao atendimento; livro separado dos bens.</div>`;
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
-        if(f.type === 'signature_summary') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><div style="background:#ecfeff;border:1px solid #67e8f9;border-radius:10px;padding:12px;font-size:11px;color:#155e75;line-height:1.45"><b>Resumo</b> — valores só leitura dos campos marcados no painel; depois <b>assinatura</b> no fim do bloco.</div><div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:72px; display:flex; align-items:flex-end; padding:10px; color:#94a3b8; font-size:11px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Zona de assinatura</div></div>`;
+        if(f.type === 'signature_summary') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><div style="background:#ecfeff;border:1px solid #67e8f9;border-radius:10px;padding:12px;font-size:11px;color:#155e75;line-height:1.45"><b>Resumo</b> — valores só leitura dos campos marcados no painel; depois <b>assinatura</b> no final do bloco.</div><div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:72px; display:flex; align-items:flex-end; padding:10px; color:#94a3b8; font-size:11px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Zona de assinatura</div></div>`;
         
         if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#ea580c;font-weight:800">laranja</span> (trajeto planejado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio em relação à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
         if(f.type === 'transit_end') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button><div style="font-size:10px;color:#64748b;line-height:1.45;border-left:3px solid #ea580c;padding-left:10px">Se a OS foi despachada como <strong>Rota</strong>, o PDF pode incluir <strong>mapa estático</strong> (trajeto + GPS), <strong>cobertura %</strong>, desvio máximo e comparação com a tolerância do corredor.</div></div>`;
@@ -4785,7 +4811,17 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
     if (isFormClock) opList = FORM_CLOCK_LOGIC_OPS;
     else if (isSection) opList = SECTION_LOGIC_OPS;
 
+    const visionRatingHint =
+        fld &&
+        fld.type === 'vision_ai_analysis' &&
+        fld.visionRating0To10Enabled &&
+        !isFormClock &&
+        !isSection
+            ? `<div style="font-size:10px;color:#92400e;line-height:1.45;margin-bottom:10px;padding:9px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px"><strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, <code>Entre dois números</code> e <code>Fora do intervalo</code> comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.</div>`
+            : '';
+
     const opSelect = `
+            ${visionRatingHint}
             <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
                 ${opList
                     .map(
@@ -6734,7 +6770,7 @@ function brsparkCopilotApplyChatResponse(data) {
 async function brsparkCopilotPostChatRound(userText, opts) {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
+        alert('Faça login no painel admin (token ausente).');
         return;
     }
     const trimmed = String(userText || '').trim();
@@ -6900,7 +6936,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
 window.brsparkCopilotSend = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
+        alert('Faça login no painel admin (token ausente).');
         return;
     }
     const inp = document.getElementById('ai-copilot-input');
@@ -6931,7 +6967,7 @@ window.brsparkCopilotSend = async function () {
 window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
+        alert('Faça login no painel admin (token ausente).');
         if (inputEl) inputEl.value = '';
         return;
     }
@@ -7165,7 +7201,7 @@ window.brsparkCopilotUndo = function () {
 window.brsparkCopilotSuggestLogic = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Inicie sessão no painel admin (token em falta).');
+        alert('Faça login no painel admin (token ausente).');
         return;
     }
     const g = document.getElementById('ai-copilot-logic-goal');

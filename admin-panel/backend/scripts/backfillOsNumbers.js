@@ -8,7 +8,7 @@ const { runBackfillOsNumbers } = require('../src/lib/backfillOsNumbersLib');
 
 runBackfillOsNumbers(prisma)
   .then((r) => {
-    if (r.skipped) console.log('[backfillOsNumbers] Nada em falta — todas as OS já têm osNumber.');
+    if (r.skipped) console.log('[backfillOsNumbers] Nada pendente — todas as OS já têm osNumber.');
     else console.log(`[backfillOsNumbers] Concluído. Atualizadas: ${r.updated} (já numeradas: ${r.alreadyHad}).`);
   })
   .catch((e) => {

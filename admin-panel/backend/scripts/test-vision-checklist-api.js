@@ -6,7 +6,7 @@
  * do proxy (/api/checklists/vision/analyze → serviço YOLO/outro).
  *
  * Pedido: POST multipart/form-data
- *   - media: ficheiro (imagem PNG de teste 1×1)
+ *   - media: arquivo (imagem PNG de teste 1×1)
  *   - questions: JSON array [{ "id": string, "text": string }, ...]
  *   - schemaVersion: "1"
  * Cabeçalho opcional: Authorization: Bearer <apiKey do painel>
@@ -43,7 +43,7 @@ function printContract() {
 Método: POST
 Content-Type: multipart/form-data; boundary=...
 Partes:
-  - media       (ficheiro)  imagem ou vídeo
+  - media       (arquivo)  imagem ou vídeo
   - questions   (texto)     JSON: [{"id":"...","text":"..."}, ...] (máx. 10 no proxy)
   - schemaVersion (texto)   "1"
 Opcional: Authorization: Bearer <token configurado no painel>

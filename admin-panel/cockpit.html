@@ -32,20 +32,6 @@
       margin: 0; font-family: 'Inter', -apple-system, sans-serif;
     }
 
-    .cockpit-header {
-      background: var(--surface-dash);
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--border-dash);
-      display: flex; justify-content: space-between; align-items: center;
-      /* Removendo shadow pesada que conflita com o layout admin */
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2); 
-    }
-
-    .cockpit-title {
-      font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 12px;
-      color: #fff; letter-spacing: 0.5px;
-    }
-    
     .pulse-dot {
       width: 10px; height: 10px; background: var(--accent-green);
       border-radius: 50%; box-shadow: 0 0 10px var(--accent-green);
@@ -55,7 +41,48 @@
 
     .last-update { font-size: 12px; color: var(--accent-cyan); font-family: monospace; font-weight: 600; }
 
-    .dash-container { padding: 24px; max-width: 1600px; margin: 0 auto; overflow-y: auto; height: calc(100vh - 80px); }
+    .dash-container { padding: 20px; max-width: 1600px; margin: 0 auto; overflow-y: auto; flex: 1; min-height: 0; }
+    .cockpit-topbar {
+      background: var(--surface-dash);
+      border-bottom: 1px solid var(--border-dash);
+      flex-shrink: 0;
+    }
+    /* Trilha legível no fundo escuro (evita herdar .topbar-breadcrumb escuro do main.css) */
+    .cockpit-topbar.topbar--data .topbar-breadcrumb,
+    .cockpit-topbar.topbar--data .topbar-breadcrumb a {
+      color: #cbd5e1 !important;
+    }
+    .cockpit-topbar.topbar--data .topbar-breadcrumb a:hover {
+      color: var(--accent-cyan) !important;
+    }
+    .cockpit-topbar.topbar--data .topbar-actions {
+      color: var(--accent-cyan);
+    }
+    .cockpit-page-body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 24px 24px;
+      background: var(--bg-dash);
+    }
+    .cockpit-hero { max-width: none; margin-bottom: 16px; }
+    .cockpit-hero .page-hero-title { color: #f8fafc !important; }
+    .cockpit-hero .page-hero-sub { color: var(--text-muted) !important; max-width: 760px; }
+    .cockpit-shell.data-shell {
+      background: var(--surface-dash);
+      border-color: var(--border-dash);
+      box-shadow: var(--stat-shadow);
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin-bottom: 0;
+      padding: 0;
+    }
+    .cockpit-shell .dash-container { flex: 1; min-height: 0; }
 
     /* Main Grid */
     .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -103,25 +130,36 @@
 <body>
 <div class="admin-layout">
   <div class="main-content" style="background-color: var(--bg-dash); height: 100vh; overflow: hidden; display: flex; flex-direction: column;">
-    <div class="cockpit-header">
-      <div class="cockpit-title">
-    <div class="pulse-dot"></div>
-    <ion-icon name="planet-outline"></ion-icon>
-    <span>OP CENTER / GLOBAL COMMAND</span>
-  </div>
-  <div class="topbar-actions">
-    <span class="last-update" id="last-update">SYNCING...</span>
-  </div>
-</div>
+    <div class="topbar topbar--data cockpit-topbar">
+      <nav class="topbar-breadcrumb cockpit-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Cockpit global</span>
+      </nav>
+      <div class="topbar-actions">
+        <span class="last-update" id="last-update">Sincronizando…</span>
+      </div>
+    </div>
 
-<div class="dash-container">
+    <div class="page-body cockpit-page-body">
+      <header class="page-hero fade-in cockpit-hero">
+        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          <ion-icon name="planet-outline"></ion-icon>
+          Cockpit global — operações
+        </h1>
+        <p class="page-hero-sub">Visão em tempo quase real de sincronização, OS em pipeline e telemetria.</p>
+      </header>
+
+      <section class="data-shell fade-in cockpit-shell" aria-label="Painel operacional">
+    <div class="dash-container">
   
   <!-- ROW 1: NETWORK & INFRAHEALTH -->
-  <div class="section-title"><ion-icon name="hardware-chip-outline"></ion-icon> Network Ingress & Core Health</div>
+  <div class="section-title"><ion-icon name="hardware-chip-outline"></ion-icon> Rede (ingress) e saúde do núcleo</div>
   <div class="grid-4">
     <div class="stat-card">
       <div class="card-top">
-        <span class="card-title">Live Sync Rate</span>
+        <span class="card-title">Taxa de sync (tempo real)</span>
         <ion-icon name="swap-vertical-outline" class="card-icon cyan"></ion-icon>
       </div>
       <div class="card-value cyan"><span id="metric-rpm">0</span><small>req/min</small></div>
@@ -130,53 +168,53 @@
 
     <div class="stat-card">
       <div class="card-top">
-        <span class="card-title">Bandwidth In</span>
+        <span class="card-title">Largura de banda (entrada)</span>
         <ion-icon name="cloud-download-outline" class="card-icon blue"></ion-icon>
       </div>
       <div class="card-value blue"><span id="metric-volume">0.00</span><small>MB</small></div>
-      <div class="card-footer">Volume da Sessão Atual</div>
+      <div class="card-footer">Volume da sessão atual</div>
     </div>
 
     <div class="stat-card">
       <div class="card-top">
-        <span class="card-title">Event Failures</span>
+        <span class="card-title">Falhas de eventos</span>
         <ion-icon name="warning-outline" class="card-icon red"></ion-icon>
       </div>
       <div class="card-value red"><span id="metric-failures">0</span></div>
       <div class="card-footer">
-        <span>Taxa de Erro:</span>
+        <span>Taxa de erro:</span>
         <span class="badge-mini" style="color:var(--accent-red);" id="metric-error-rate">0.00%</span>
       </div>
     </div>
     
     <div class="stat-card">
       <div class="card-top">
-        <span class="card-title">Core Uptime</span>
+        <span class="card-title">Uptime do núcleo</span>
         <ion-icon name="server-outline" class="card-icon green"></ion-icon>
       </div>
       <div class="card-value green"><span id="metric-uptime">0s</span></div>
-      <div class="card-footer">Broker API Health: <span style="color:#10b981">100% PASS</span></div>
+      <div class="card-footer">API broker: <span style="color:#10b981">100% OK</span></div>
     </div>
   </div>
 
   <!-- ROW 2: FIELD OPERATIONS & WORKFORCE -->
-  <div class="section-title" style="margin-top: 24px;"><ion-icon name="people-outline"></ion-icon> Field Service Operations FSM</div>
+  <div class="section-title" style="margin-top: 24px;"><ion-icon name="people-outline"></ion-icon> Operações de campo (FSM)</div>
   <div class="grid-3">
     
     <div class="stat-card" style="border-top: 3px solid var(--accent-amber);">
-      <div class="card-top"><span class="card-title">Pipeline: On Devices</span><ion-icon name="phone-portrait-outline" class="card-icon amber"></ion-icon></div>
+      <div class="card-top"><span class="card-title">Pipeline: nos dispositivos</span><ion-icon name="phone-portrait-outline" class="card-icon amber"></ion-icon></div>
       <div class="card-value amber"><span id="metric-os-devices">0</span><small>OS</small></div>
-      <div class="card-footer">Em andamento / Aguardando Sync</div>
+      <div class="card-footer">Em andamento / aguardando sync</div>
     </div>
 
     <div class="stat-card" style="border-top: 3px solid var(--border-dash);">
-      <div class="card-top"><span class="card-title">Pipeline: Cloud Queue</span><ion-icon name="cloud-offline-outline" class="card-icon text-muted"></ion-icon></div>
+      <div class="card-top"><span class="card-title">Pipeline: fila na nuvem</span><ion-icon name="cloud-offline-outline" class="card-icon text-muted"></ion-icon></div>
       <div class="card-value text-muted" style="color: var(--text-muted);"><span id="metric-os-queue">0</span><small>OS</small></div>
-      <div class="card-footer">Aguardando download (Unclaimed)</div>
+      <div class="card-footer">Aguardando download (não reivindicadas)</div>
     </div>
 
     <div class="stat-card" style="border-top: 3px solid var(--accent-green);">
-      <div class="card-top"><span class="card-title">Historical Finalized</span><ion-icon name="checkmark-done-outline" class="card-icon green"></ion-icon></div>
+      <div class="card-top"><span class="card-title">Histórico finalizado</span><ion-icon name="checkmark-done-outline" class="card-icon green"></ion-icon></div>
       <div class="card-value green"><span id="metric-os-done">0</span></div>
       <div class="card-footer">Total OS fechadas com sucesso (DB)</div>
     </div>
@@ -187,7 +225,7 @@
   <div class="grid-1-2">
     <!-- Worker Stats -->
     <div class="chart-box" style="display:flex;flex-direction:column;gap:16px;">
-      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Fleet Analytics</h3>
+      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Análise da frota</h3>
       
       <div style="background:rgba(255,255,255,0.03); padding:16px; border-radius:8px; border-left: 3px solid var(--accent-blue);">
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">DISPOSITIVOS CONECTADOS HOJE</div>
@@ -195,14 +233,14 @@
       </div>
       
       <div style="background:rgba(255,255,255,0.03); padding:16px; border-radius:8px; border-left: 3px solid var(--accent-cyan);">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">TOTAL WORKERS CADASTRADOS</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">TOTAL DE TÉCNICOS CADASTRADOS</div>
         <div style="font-size:24px;font-weight:800;color:#fff;" id="metric-total-workers">0</div>
       </div>
     </div>
 
     <!-- Live Telemetry Graph -->
     <div class="chart-box">
-      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Telemetry Flow (Packets/min)</h3>
+      <h3 style="margin:0 0 16px 0;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Fluxo de telemetria (pacotes/min)</h3>
       <div style="height: 200px;">
         <canvas id="liveChart"></canvas>
       </div>
@@ -210,11 +248,13 @@
   </div>
 
   <!-- SECURITY LOGS -->
-  <div class="section-title"><ion-icon name="terminal-outline"></ion-icon> Dead Letter Queue & Drop Logs</div>
+  <div class="section-title"><ion-icon name="terminal-outline"></ion-icon> Fila morta (DLQ) e logs de perda</div>
   <div class="terminal-box" id="error-console">
-    <div style="color:#555;">[SYS] Listening for packet drops and unhandled rejections..._</div>
+    <div style="color:#555;">[SYS] Aguardando quedas de pacotes e rejeições não tratadas…</div>
   </div>
-</div>
+    </div>
+      </section>
+    </div>
   </div>
 </div>
 

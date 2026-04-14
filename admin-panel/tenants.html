@@ -8,40 +8,83 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Tenants</span>
-      <div class="topbar-actions">
-        <div class="search-wrap"><span class="search-icon"><ion-icon name="time-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></span><input type="text" placeholder="Buscar tenant…" id="search-input" /></div>
-        <select class="form-control" style="width:130px;padding:7px 10px;font-size:12px" id="filter-plan">
-          <option value="">Todos os planos</option>
-          <option>Basic</option><option>Pro</option><option>Enterprise</option>
-        </select>
-        <select class="form-control" style="width:130px;padding:7px 10px;font-size:12px" id="filter-status">
-          <option value="">Todos os status</option>
-          <option value="ACTIVE">Ativo</option>
-          <option value="TRIAL">Trial</option>
-          <option value="SUSPENDED">Suspenso</option>
-          <option value="CANCELLED">Cancelado</option>
-        </select>
-        <button class="btn btn-primary" onclick="openModal('new-tenant-modal')">+ Novo Tenant</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Tenants</span>
+      </nav>
     </div>
     <div class="page-body">
-      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px" id="tenant-stats"></div>
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Todos os Tenants</span>
-          <span class="badge badge-accent" id="count-badge">— tenants</span>
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Gestão de tenants</h1>
+        <p class="page-hero-sub">
+          Contas da plataforma, planos e status. Filtre por nome, plano ou situação; os cartões refletem o resultado atual da lista (até 200 registros).
+        </p>
+      </header>
+
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px" id="tenant-stats"></div>
+
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <div class="search-wrap search-wrap--toolbar">
+              <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+              <input type="search" placeholder="Buscar por nome ou slug…" id="search-input" autocomplete="off" />
+            </div>
+            <div class="data-toolbar-filters">
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="layers-outline"></ion-icon> Plano</span>
+                <select class="form-control filter-field-control" id="filter-plan">
+                  <option value="">Todos os planos</option>
+                  <option>Basic</option><option>Pro</option><option>Enterprise</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="flag-outline"></ion-icon> Status</span>
+                <select class="form-control filter-field-control" id="filter-status">
+                  <option value="">Todos os status</option>
+                  <option value="ACTIVE">Ativo</option>
+                  <option value="TRIAL">Trial</option>
+                  <option value="SUSPENDED">Suspenso</option>
+                  <option value="CANCELLED">Cancelado</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-primary" onclick="openModal('new-tenant-modal')">
+              <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              Novo tenant
+            </button>
+          </div>
+        </div>
+
+        <div class="data-table-head">
+          <h2 class="data-table-title">Lista de tenants</h2>
+          <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Slug</th><th>Região</th><th>Nome</th><th>Plano</th><th>Usuários</th><th>Bens</th><th>Status</th><th>Criado em</th><th style="text-align:right">Ações</th>
-            </tr></thead>
-            <tbody id="tenants-tbody"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th>Slug</th>
+                <th>Região</th>
+                <th>Nome</th>
+                <th>Plano</th>
+                <th>Usuários</th>
+                <th>Bens</th>
+                <th>Status</th>
+                <th>Criado em</th>
+                <th class="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tenants-tbody">
+              <tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
+            </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
@@ -51,7 +94,7 @@
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Novo Tenant</span>
-      <button class="modal-close" onclick="closeModal('new-tenant-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" onclick="closeModal('new-tenant-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Nome da Empresa *</label><input class="form-control" id="new-name" placeholder="Ex: Benedito Imóveis" /></div>
@@ -69,8 +112,8 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('new-tenant-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-tenant-btn">Criar Tenant</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('new-tenant-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-tenant-btn">Criar Tenant</button>
     </div>
   </div>
 </div>
@@ -92,20 +135,27 @@
   const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
   const flags     = { BR:'🇧🇷', US:'🇺🇸', ES:'🇪🇸', AR:'🇦🇷', CL:'🇨🇱', MX:'🇲🇽', PT:'🇵🇹' };
 
-  // Load plans and locales for modal
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   const [planData, localeData] = await Promise.all([
     CONFIG.get('/plans'),
     CONFIG.get('/i18n/entries?source=locales')
   ]);
-  
+
   const planSel   = document.getElementById('new-plan-id');
   const localeSel = document.getElementById('new-locale-id');
-  
-  (planData || []).forEach(p => { planSel.innerHTML += `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
-  (localeData || []).forEach(l => { localeSel.innerHTML += `<option value="${l.id}">${flags[l.countryCode] || '<ion-icon name="globe-outline" style="vertical-align:-2px"></ion-icon>'} ${l.name} (${l.countryCode})</option>`; });
+
+  (planData || []).forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
+  (localeData || []).forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
 
   async function loadTenants() {
-    const q      = document.getElementById('search-input').value;
+    const q      = document.getElementById('search-input').value.trim();
     const plan   = document.getElementById('filter-plan').value;
     const status = document.getElementById('filter-status').value;
     const params = new URLSearchParams({ limit: 200 });
@@ -123,41 +173,51 @@
     const susp   = tenants.filter(t => t.status === 'SUSPENDED').length;
 
     document.getElementById('tenant-stats').innerHTML = [
-      { label:'Total',     value:total,  icon:'<ion-icon name="business-outline" style="vertical-align:-2px"></ion-icon>', color:'var(--accent)' },
-      { label:'Ativos',    value:active, icon:'<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon>', color:'var(--green)'  },
-      { label:'Trial',     value:trial,  icon:'◐',  color:'var(--amber)'  },
-      { label:'Suspensos', value:susp,   icon:'<ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon>', color:'var(--red)'    },
-    ].map(s => `<div class="stat-card" style="--accent-color:${s.color}">
-      <div class="stat-icon" style="background:${s.color}18;color:${s.color}">${s.icon}</div>
+      { label:'Total (lista)', value: total,  icon:'business-outline', color:'var(--accent)' },
+      { label:'Ativos (lista)', value: active, icon:'checkmark-circle-outline', color:'var(--green)'  },
+      { label:'Trial (lista)', value: trial,  icon:'time-outline',  color:'var(--amber)'  },
+      { label:'Suspensos (lista)', value: susp, icon:'ban-outline', color:'var(--red)'    },
+    ].map(s => `<div class="stat-card fade-in" style="--accent-color:${s.color}">
+      <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}" style="font-size:18px;vertical-align:-2px"></ion-icon></div>
       <div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`).join('');
 
-    document.getElementById('count-badge').textContent = `${total} tenants`;
+    document.getElementById('count-badge').textContent = `${total} tenant${total === 1 ? '' : 's'}`;
 
     const tbody = document.getElementById('tenants-tbody');
     if (!tenants.length) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">Nenhum tenant cadastrado.</td></tr>';
+      tbody.innerHTML = `
+        <tr><td colspan="9" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="business-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhum tenant encontrado</div>
+            <p class="empty-state-pro-sub">Ajuste a busca ou os filtros, ou crie um novo tenant.</p>
+          </div>
+        </td></tr>`;
       return;
     }
     tbody.innerHTML = tenants.map(t => {
-      const plan    = t.subscription?.plan?.name || '—';
+      const planName = t.subscription?.plan?.name || '—';
       const users   = t._count?.users ?? 0;
       const assets  = t._count?.assets ?? 0;
-      const locale  = t.locale ? `${flags[t.locale.countryCode] || '<ion-icon name="globe-outline" style="vertical-align:-2px"></ion-icon>'} ${t.locale.name}` : '<span style="color:var(--text3)">Não definido</span>';
+      const localeHtml = t.locale
+        ? `${flags[t.locale.countryCode] || '🌐'} ${escHtml(t.locale.name)}`
+        : '<span style="color:var(--text3)">Não definido</span>';
       const created = new Date(t.createdAt).toLocaleDateString('pt-BR');
       const isActive = t.status === 'ACTIVE' || t.status === 'TRIAL';
+      const idAttr = escHtml(t.id);
       return `<tr>
-        <td class="mono" style="font-size:10px;color:var(--text3)">${t.slug}</td>
-        <td>${locale}</td>
-        <td class="bold">${t.name}</td>
-        <td><span class="badge ${planMap[plan] || 'badge-gray'}">${plan}</span></td>
+        <td class="mono" style="font-size:10px;color:var(--text3)">${escHtml(t.slug)}</td>
+        <td>${localeHtml}</td>
+        <td class="bold">${escHtml(t.name)}</td>
+        <td><span class="badge ${planMap[planName] || 'badge-gray'}">${escHtml(planName)}</span></td>
         <td>${users}</td>
         <td>${assets.toLocaleString('pt-BR')}</td>
-        <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${statusLbl[t.status] || t.status}</span></td>
+        <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${escHtml(statusLbl[t.status] || t.status)}</span></td>
         <td style="color:var(--text3);font-size:11px">${created}</td>
-        <td style="text-align:right">
+        <td class="text-right">
           ${isActive
-            ? `<button class="btn btn-danger btn-sm" onclick="toggleStatus('${t.id}','SUSPENDED')">Suspender</button>`
-            : `<button class="btn btn-success btn-sm" onclick="toggleStatus('${t.id}','ACTIVE')">Ativar</button>`}
+            ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">Suspender</button>`
+            : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">Ativar</button>`}
         </td>
       </tr>`;
     }).join('');
@@ -181,10 +241,15 @@
     if (res) { closeModal('new-tenant-modal'); loadTenants(); }
   };
 
-  loadTenants();
-  document.getElementById('search-input').addEventListener('input', loadTenants);
+  let debounce;
+  document.getElementById('search-input').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadTenants(), 300);
+  });
   document.getElementById('filter-plan').addEventListener('change', loadTenants);
   document.getElementById('filter-status').addEventListener('change', loadTenants);
+
+  loadTenants();
 </script>
 </body>
 </html>

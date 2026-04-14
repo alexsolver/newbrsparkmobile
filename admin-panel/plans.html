@@ -8,28 +8,40 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Planos (pacotes)</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Planos (pacotes)</span>
+      </nav>
       <div class="topbar-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <a class="btn btn-ghost btn-sm" href="subscriptions.html">Assinaturas</a>
-        <a class="btn btn-ghost btn-sm" href="billing.html">Billing &amp; MRR</a>
-        <button class="btn btn-primary" type="button" onclick="openNewPlanModal()">+ Novo plano</button>
+        <a class="btn btn-outline btn-sm" href="billing.html">Billing e MRR</a>
+        <button class="btn btn-primary" type="button" onclick="openNewPlanModal()">
+          <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+          Novo plano
+        </button>
       </div>
     </div>
     <div class="page-body">
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-body" style="font-size:13px;color:var(--text2);line-height:1.45">
-          Defina <strong>preços</strong>, <strong>limites</strong> e <strong>cotas mensais</strong> (IA, FT, RT, formulários) de cada pacote.
-          Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--primary);font-weight:700">assinatura</a>.
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Catálogo de planos</h1>
+        <p class="page-hero-sub">
+          Defina preços, limites e cotas mensais (IA, OS de campo, rotina, formulários). Os tenants herdam estes valores pela
+          <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>.
           <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Catálogo de planos</span>
+        </p>
+      </header>
+
+      <section class="data-shell fade-in">
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="layers-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
+            Todos os pacotes
+          </h2>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="table-data">
             <thead>
               <tr>
                 <th>Nome</th>
@@ -37,18 +49,18 @@
                 <th>R$/ano</th>
                 <th>Subs</th>
                 <th>Bens</th>
-                <th>Users</th>
+                <th>Usuários</th>
                 <th>Téc.</th>
                 <th>GB</th>
                 <th>FT/mês</th>
                 <th>Ativo</th>
-                <th style="text-align:right">Ações</th>
+                <th class="text-right">Ações</th>
               </tr>
             </thead>
-            <tbody id="plans-tbody"><tr><td colspan="11" style="text-align:center;padding:28px;color:var(--text3)">Carregando…</td></tr></tbody>
+            <tbody id="plans-tbody"><tr><td colspan="11" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr></tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
@@ -74,7 +86,7 @@
       </div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">Limite de bens (−1 = ilimitado)</label><input class="form-control" id="plan-max-assets" type="number" placeholder="100" /></div>
-        <div class="form-group"><label class="form-label">Utilizadores do painel (−1 = ilimitado)</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
+        <div class="form-group"><label class="form-label">Usuários do painel (−1 = ilimitado)</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
       </div>
       <div class="form-group"><label class="form-label">Armazenamento (GB)</label><input class="form-control" id="plan-storage" type="number" placeholder="10" /></div>
 
@@ -132,7 +144,12 @@
     allPlans = plans;
     const tb = document.getElementById('plans-tbody');
     if (!plans.length) {
-      tb.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">Nenhum plano. Crie o primeiro.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="11" style="padding:0;border:none">
+        <div class="empty-state-pro" style="padding:36px 20px 32px">
+          <ion-icon name="layers-outline"></ion-icon>
+          <div class="empty-state-pro-title">Nenhum plano cadastrado</div>
+          <p class="empty-state-pro-sub">Crie o primeiro pacote com «Novo plano».</p>
+        </div></td></tr>`;
       return;
     }
     tb.innerHTML = plans

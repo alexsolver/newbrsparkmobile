@@ -38,7 +38,7 @@ function normalizeMenuLabel(raw) {
 function requireTenant(req, res) {
   const tenantId = resolveAdminTargetTenantId(req, req.query?.tenantId || req.body?.tenantId);
   if (!tenantId) {
-    res.status(400).json({ error: 'Tenant em falta ou inválido para esta sessão.' });
+    res.status(400).json({ error: 'Tenant ausente ou inválido para esta sessão.' });
     return null;
   }
   return tenantId;
@@ -56,7 +56,7 @@ async function assertTemplateForTenant(tx, templateId, tenantId) {
   });
 }
 
-/** E-mails dos utilizadores do tenant (minúsculos) para filtrar execuções com modelo global. */
+/** E-mails dos usuários do tenant (minúsculos) para filtrar execuções com modelo global. */
 async function tenantUserEmailsLower(tenantId) {
   const rows = await prisma.user.findMany({
     where: { tenantId },
@@ -139,8 +139,8 @@ router.get('/templates', async (req, res) => {
 });
 
 /**
- * GET /api/admin/routine-tasks/technicians — todos os utilizadores da tenant (para escolher na lista).
- * A associação em massa só grava utilizadores ativos que não sejam clientes (papel ≠ USER).
+ * GET /api/admin/routine-tasks/technicians — todos os usuários da tenant (para escolher na lista).
+ * A associação em massa só grava usuários ativos que não sejam clientes (papel ≠ USER).
  */
 router.get('/technicians', async (req, res) => {
   try {
@@ -265,6 +265,27 @@ router.post('/assignments/bulk', async (req, res) => {
         created.push(row.id);
       }
     });
+
+    /** Pré-carga do buffer + push ao técnico logo após o bulk (não bloquear a resposta HTTP). */
+    const assignmentIdsToReconcile = [...new Set([...created, ...updated])].filter(Boolean);
+    if (assignmentIdsToReconcile.length) {
+      setImmediate(() => {
+        void (async () => {
+          for (const assignmentId of assignmentIdsToReconcile) {
+            try {
+              const assign = await prisma.routineTaskAssignment.findFirst({
+                where: { id: assignmentId, tenantId },
+              });
+              if (assign) {
+                await reconcileRoutineBuffersForAssignment(prisma, assign);
+              }
+            } catch (e) {
+              console.error('[admin/routine-tasks/assignments/bulk] reconcile async', assignmentId, e);
+            }
+          }
+        })();
+      });
+    }
 
     res.status(201).json({ ok: true, created, updated, skipped });
   } catch (err) {

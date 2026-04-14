@@ -8,64 +8,89 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Planos &amp; Billing</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Billing</span>
+      </nav>
       <div class="topbar-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <a class="btn btn-ghost btn-sm" href="plans.html">Pacotes e limites</a>
-        <button class="btn btn-primary" onclick="openNewPlanModal()">+ Novo Plano</button>
+        <a class="btn btn-outline btn-sm" href="subscriptions.html">Assinaturas</a>
+        <button type="button" class="btn btn-primary" onclick="openNewPlanModal()">
+          <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+          Novo plano
+        </button>
       </div>
     </div>
     <div class="page-body">
 
-      <!-- MRR Stats -->
-      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-        <div class="stat-card" style="--accent-color:var(--green)">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Planos e billing</h1>
+        <p class="page-hero-sub">
+          MRR estimado a partir das assinaturas filtradas, visão dos pacotes e tabela de contas. Os valores de MRR refletem o conjunto atual da lista (não necessariamente o total global).
+        </p>
+      </header>
+
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        <div class="stat-card fade-in" style="--accent-color:var(--green)">
           <div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cash-outline" style="vertical-align:-2px"></ion-icon></div>
           <div class="stat-value" id="stat-mrr">—</div><div class="stat-label">MRR (estimado)</div>
         </div>
-        <div class="stat-card" style="--accent-color:var(--blue)">
+        <div class="stat-card fade-in" style="--accent-color:var(--blue)">
           <div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="document-outline" style="vertical-align:-2px"></ion-icon></div>
           <div class="stat-value" id="stat-subs">—</div><div class="stat-label">Assinaturas ativas</div>
         </div>
-        <div class="stat-card" style="--accent-color:var(--amber)">
-          <div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)">⏰</div>
+        <div class="stat-card fade-in" style="--accent-color:var(--amber)">
+          <div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="font-size:18px"></ion-icon></div>
           <div class="stat-value" id="stat-trial">—</div><div class="stat-label">Em trial</div>
         </div>
-        <div class="stat-card" style="--accent-color:var(--red)">
+        <div class="stat-card fade-in" style="--accent-color:var(--red)">
           <div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
           <div class="stat-value" id="stat-overdue">—</div><div class="stat-label">Inadimplentes</div>
         </div>
       </div>
 
-      <!-- Plans -->
-      <div class="panel" style="margin-bottom:20px">
-        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Disponíveis</span></div>
-        <div class="panel-body">
-          <div class="grid-3" id="plans-grid"><div style="color:var(--text3)">Carregando…</div></div>
+      <section class="data-shell fade-in" style="margin-bottom:20px">
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="clipboard-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
+            Planos disponíveis
+          </h2>
         </div>
-      </div>
+        <div class="data-shell-body" style="padding-top:8px">
+          <div class="grid-3" id="plans-grid"><div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div></div>
+        </div>
+      </section>
 
-      <!-- Subscriptions Table -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title"><ion-icon name="card-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Assinaturas</span>
-          <div style="display:flex;gap:8px">
-            <select class="form-control" style="width:130px;padding:5px 8px;font-size:11px" id="sub-filter">
-              <option value="">Todos</option>
-              <option value="ACTIVE">Ativas</option>
-              <option value="TRIALING">Trial</option>
-              <option value="PAST_DUE">Inadimplentes</option>
-              <option value="CANCELLED">Canceladas</option>
-            </select>
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <label class="filter-field">
+              <span class="filter-field-label"><ion-icon name="flag-outline"></ion-icon> Status</span>
+              <select class="form-control filter-field-control" id="sub-filter" style="min-width:160px">
+                <option value="">Todos</option>
+                <option value="ACTIVE">Ativas</option>
+                <option value="TRIALING">Trial</option>
+                <option value="PAST_DUE">Inadimplentes</option>
+                <option value="CANCELLED">Canceladas</option>
+              </select>
+            </label>
           </div>
         </div>
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="card-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
+            Assinaturas
+          </h2>
+        </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Conta</th><th>Plano</th><th>Ciclo</th><th>Valor</th><th>Status</th><th>Vencimento</th><th style="text-align:right">Ações</th></tr></thead>
-            <tbody id="subs-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead><tr><th>Conta</th><th>Plano</th><th>Ciclo</th><th>Valor</th><th>Status</th><th>Vencimento</th><th class="text-right">Ações</th></tr></thead>
+            <tbody id="subs-tbody"><tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr></tbody>
           </table>
         </div>
-      </div>
+      </section>
 
     </div>
   </div>
@@ -99,7 +124,7 @@
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:10px;">Cotas do pacote (por tenant com este plano)</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:12px;line-height:1.35;">Use <b>−1</b> para ilimitado nos limites mensais e em formulários. Técnicos = utilizadores de campo (papéis <code>USER</code> e <code>PROVIDER</code> ativos).</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:12px;line-height:1.35;">Use <b>−1</b> para ilimitado nos limites mensais e em formulários. Técnicos = usuários de campo (papéis <code>USER</code> e <code>PROVIDER</code> ativos).</div>
         <div class="form-group"><label class="form-label">Máx. técnicos (pacote)</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label">IA — reconhecimento facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
@@ -159,7 +184,7 @@
   await initPage();
 
   const statusMap = { ACTIVE:'badge-green', TRIALING:'badge-amber', PAST_DUE:'badge-red', CANCELLED:'badge-gray' };
-  const statusLbl = { ACTIVE:'<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Ativa', TRIALING:'⏰ Trial', PAST_DUE:'<ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vencida', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelada' };
+  const statusLbl = { ACTIVE:'<ion-icon name="checkmark-circle-outline" style="color:var(--green);vertical-align:-2px"></ion-icon> Ativa', TRIALING:'<ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Trial', PAST_DUE:'<ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vencida', CANCELLED:'<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Cancelada' };
   const cycleMap  = { MONTHLY:'Mensal', YEARLY:'Anual' };
   let allPlans = [];
 
@@ -181,7 +206,7 @@
         <div style="font-size:16px;font-weight:900;color:${color};margin-bottom:4px">${p.name}</div>
         <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:12px">R$ ${Number(p.priceMonthly).toFixed(2)}<span style="font-size:11px;color:var(--text3)">/mês</span></div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Bens: ${fmt(p.maxAssets)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Utilizadores (painel): ${fmt(p.maxUsers)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Usuários (painel): ${fmt(p.maxUsers)}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${fmt(p.maxTechnicians)}</div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">IA/mês · facial ${fmtQuota(p.quotaAiFacialPerMonth)} · visão det. ${fmtQuota(p.quotaAiVisionDetectionPerMonth)} · visão análise ${fmtQuota(p.quotaAiVisionAnalysisPerMonth)}</div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">FT ${fmtQuota(p.quotaFieldTasksMonthly)}/mês · RT ${fmtQuota(p.quotaRoutineTasksMonthly)}/mês · Formulários ${fmtQuota(p.maxChecklistTemplates)}</div>
@@ -191,7 +216,7 @@
           <button class="btn btn-ghost btn-sm" onclick="openEditPlan('${p.id}')">Editar</button>
         </div>
       </div>`;
-    }).join('') || '<div style="color:var(--text3)">Nenhum plano cadastrado.</div>';
+    }).join('') || `<div class="empty-state-pro" style="padding:24px 16px"><p class="empty-state-pro-sub">Nenhum plano cadastrado.</p></div>`;
   }
 
   async function loadSubscriptions() {
@@ -229,7 +254,12 @@
             ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick="cancelSub('${s.id}')">Cancelar</button>` : ''}
           </td>
         </tr>`).join('')
-      : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma assinatura encontrada.</td></tr>';
+      : `<tr><td colspan="7" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="card-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhuma assinatura</div>
+            <p class="empty-state-pro-sub">Altere o filtro de status ou crie assinaturas em Assinaturas.</p>
+          </div></td></tr>`;
   }
 
   window.openEditPlan = async (id) => {

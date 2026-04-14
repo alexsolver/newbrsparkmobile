@@ -25,7 +25,7 @@ const TECH_REG_ID_DOC_VERIFY_MIN_SIMILARITY = Math.min(
 );
 
 /**
- * Traduz falhas do serviço de verificação (corpo JSON ou mensagem) para texto adequado ao utilizador final.
+ * Traduz falhas do serviço de verificação (corpo JSON ou mensagem) para texto adequado ao usuário final.
  * @param {Error & { status?: number }} err
  * @returns {{ ok: false, code: string, message: string } | null}
  */

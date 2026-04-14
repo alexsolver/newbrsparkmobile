@@ -548,6 +548,22 @@ function getVisionQuestionsFromField(field: any): { id: string; text: string }[]
   return [{ id: 'q1', text: joined }];
 }
 
+/** Rótulo para `answers[].value` (sim/não/unknown ou texto livre, ex. nota). */
+function formatVisionIaAnswerLabel(raw: unknown): string {
+  const s = String(raw ?? '').trim();
+  const v = s.toLowerCase();
+  if (v === 'yes' || v === 'sim') return 'Sim';
+  if (v === 'no' || v === 'não' || v === 'nao') return 'Não';
+  if (v === 'unknown' || v === 'indefinido' || v === 'indeterminado') return 'Não verificado (IA)';
+  return s || 'Indefinido';
+}
+
+/** Visão IA Análise: mostrar texto/confiança/nota no formulário (padrão: sim). */
+function visionAiShowsResponseInForm(field: any): boolean {
+  if (effectiveSchemaFieldType(field) !== 'vision_ai_analysis') return true;
+  return field?.visionShowAiResponseInForm !== false;
+}
+
 /** `visionCaptureMode` definido no Form Builder. */
 function getVisionCaptureMediaTypes(field: any): ImagePicker.MediaTypeOptions {
   const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
@@ -838,6 +854,77 @@ function resolveSummarySourceValue(
   return direct;
 }
 
+/**
+ * HTML mostrado no bloco Leitura: valor em `responses` (ex.: regra «Definir valor»)
+ * substitui o `contentHtml` estático do schema. Texto sem tags vira um `<p>` com entidades escapadas.
+ */
+function effectiveLeituraContentHtml(responseVal: unknown, schemaContentHtml?: string): string | undefined {
+  const trimmed = responseVal == null ? '' : String(responseVal).trim();
+  if (trimmed) {
+    if (/[<>]/.test(trimmed)) return trimmed;
+    const escaped = trimmed
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return `<p>${escaped}</p>`;
+  }
+  return schemaContentHtml;
+}
+
+function collectLeituraFieldIds(schemaData: any[] | undefined): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(schemaData)) return ids;
+  for (const f of schemaData) {
+    if (effectiveSchemaFieldType(f) === 'leitura' && f?.id) ids.add(String(f.id));
+  }
+  return ids;
+}
+
+/**
+ * Remove valores de campos «leitura» em `responses` (só costumam existir por regra «Definir valor»).
+ * Assim o rascunho local não mostra texto da regra até as condições voltarem a ser avaliadas.
+ */
+function stripLeituraKeysFromResponsesCopy(
+  responses: Record<string, any> | undefined | null,
+  schemaData: any[] | undefined
+): { out: Record<string, any>; changed: boolean } {
+  const src = responses && typeof responses === 'object' && !Array.isArray(responses) ? responses : {};
+  const out: Record<string, any> = { ...src };
+  let changed = false;
+  const leituraIds = collectLeituraFieldIds(schemaData);
+  for (const lid of leituraIds) {
+    if (Object.prototype.hasOwnProperty.call(out, lid)) {
+      delete out[lid];
+      changed = true;
+    }
+  }
+  if (!Array.isArray(schemaData)) return { out, changed };
+  for (const f of schemaData) {
+    if (f?.type !== 'section_break' || !f?.multiple || !f?.id) continue;
+    const rkey = sectionRepeatStorageKey(f.id);
+    const rows = out[rkey];
+    if (!Array.isArray(rows)) continue;
+    let rowBlockChanged = false;
+    const nextRows = rows.map((row: any) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+      const nr = { ...row };
+      for (const lid of leituraIds) {
+        if (Object.prototype.hasOwnProperty.call(nr, lid)) {
+          delete nr[lid];
+          rowBlockChanged = true;
+        }
+      }
+      return nr;
+    });
+    if (rowBlockChanged) {
+      out[rkey] = nextRows;
+      changed = true;
+    }
+  }
+  return { out, changed };
+}
+
 /** Texto só leitura para o resumo (evita HTML e URLs longas). */
 function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unknown): string {
   if (!fieldDef) {
@@ -890,15 +977,24 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     }
     if (o.status !== 'completed' || !Array.isArray(o.answers)) return '—';
     const parts = o.answers.map((a: any) => {
-      const v = String(a?.value || '').toLowerCase();
-      const lab = v === 'yes' ? 'Sim' : v === 'no' ? 'Não' : 'Indefinido';
+      const lab = formatVisionIaAnswerLabel(a?.value);
       const c =
         typeof a?.confidence === 'number' && Number.isFinite(a.confidence)
           ? Math.round(a.confidence * 100)
           : null;
       return c != null ? `${lab} (${c}%)` : lab;
     });
-    return parts.length ? parts.join(' · ') : '—';
+    const joined = parts.length ? parts.join(' · ') : '—';
+    if (
+      t === 'vision_ai_analysis' &&
+      fieldDef?.visionRating0To10Enabled === true &&
+      typeof (o as any).rating0To10 === 'number' &&
+      Number.isFinite((o as any).rating0To10)
+    ) {
+      const r = Math.max(0, Math.min(10, Math.round((o as any).rating0To10)));
+      return joined !== '—' ? `Nota ${r}/10 · ${joined}` : `Nota ${r}/10`;
+    }
+    return joined;
   }
   if (t === 'signature' || t === 'signature_summary') {
     const s = String(raw);
@@ -3430,6 +3526,23 @@ export default function ChecklistEngine() {
       
       setTemplate(tmpl);
 
+      // Rascunho local guardava o texto aplicado por «Definir valor» na Leitura — reaparecia ao abrir antes do gatilho.
+      if (!readOnlyMode && Array.isArray(tmpl.schemaData)) {
+        const { out: resSemLeitura, changed: leituraDraftSanitized } = stripLeituraKeysFromResponsesCopy(
+          initialRes,
+          tmpl.schemaData
+        );
+        if (leituraDraftSanitized) {
+          initialRes = resSemLeitura;
+          const draftKeySan = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+          try {
+            await AsyncStorage.setItem(draftKeySan, JSON.stringify(initialRes));
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
       // Nova visita de revisão explícita (metadata): zerar cronômetros e limpar assinatura/deslocamento/geofence dessa sessão.
       // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" — apagava transit_start/end em execuções ainda ativas
       // (ex.: PATCH atrasado, outro dispositivo, cache) e o relatório ficava sem deslocamento.
@@ -4079,6 +4192,12 @@ export default function ChecklistEngine() {
           'engine',
           field.type === 'vision_ai_analysis' ? 'google_ai_studio' : 'yolo',
         );
+        if (
+          effectiveSchemaFieldType(field) === 'vision_ai_analysis' &&
+          field.visionRating0To10Enabled === true
+        ) {
+          form.append('visionRating0To10', '1');
+        }
         form.append('questions', JSON.stringify(qs));
         form.append('media', {
           uri: assetUri,
@@ -6397,7 +6516,9 @@ export default function ChecklistEngine() {
                     />
                   ) : null}
 
-                  {field.type === 'leitura' ? <LeituraBlock contentHtml={field.contentHtml} /> : null}
+                  {field.type === 'leitura' ? (
+                    <LeituraBlock contentHtml={effectiveLeituraContentHtml(vv(field.id), field.contentHtml)} />
+                  ) : null}
                   
                   {validatingFieldId === field.id && (
                       <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 6, marginBottom: 12}}>
@@ -7002,6 +7123,7 @@ export default function ChecklistEngine() {
                 <View style={{ marginTop: 6 }}>
                   {(() => {
                     const useGeminiAnalysis = field.type === 'vision_ai_analysis';
+                    const showAiResponseInForm = visionAiShowsResponseInForm(field);
                     const stored = parseVisionChecklistStored(vv(field.id));
                     const busy = visionAnalyzeBusyId === visionAnalyzeBusyKey(field.id, scope ?? null);
                     const isVideo =
@@ -7375,44 +7497,89 @@ export default function ChecklistEngine() {
                             )}
                             {stored.status === 'completed' && Array.isArray(stored.answers) ? (
                               <View style={{ padding: 12, backgroundColor: '#f8fafc' }}>
-                                {stored.answers.map((a: any, ai: number) => {
-                                  const v = String(a?.value || '').toLowerCase();
-                                  const vl =
-                                    v === 'yes' || v === 'sim'
-                                      ? 'Sim'
-                                      : v === 'no' || v === 'não' || v === 'nao'
-                                        ? 'Não'
-                                        : v === 'unknown'
-                                          ? 'Não verificado (IA)'
-                                          : 'Indefinido';
-                                  const pct =
-                                    typeof a?.confidence === 'number' && Number.isFinite(a.confidence)
-                                      ? Math.round(a.confidence * 100)
-                                      : null;
-                                  return (
-                                    <View key={ai} style={{ marginBottom: 10 }}>
-                                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>
-                                        {String(a?.question || a?.questionId || `Critério ${ai + 1}`)}
-                                      </Text>
-                                      <Text style={{ fontSize: 14, color: '#0f172a', fontWeight: '700', marginTop: 2 }}>
-                                        {vl}
-                                        {pct != null ? ` · confiança ${pct}%` : ''}
-                                      </Text>
-                                      {a?.rationale ? (
-                                        <Text
-                                          style={{
-                                            fontSize: 11,
-                                            color: '#475569',
-                                            marginTop: 4,
-                                            fontStyle: 'italic',
-                                          }}
-                                        >
-                                          {String(a.rationale).slice(0, 400)}
+                                {useGeminiAnalysis && !showAiResponseInForm ? (
+                                  <View>
+                                    <Text style={{ fontSize: 13, color: '#334155', fontWeight: '800' }}>
+                                      Análise concluída.
+                                    </Text>
+                                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6, lineHeight: 1.4 }}>
+                                      Os detalhes da resposta da IA estão ocultos neste modelo.
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <>
+                                    {useGeminiAnalysis &&
+                                    effectiveSchemaFieldType(field) === 'vision_ai_analysis' &&
+                                    field.visionRating0To10Enabled === true ? (
+                                      <View
+                                        style={{
+                                          marginBottom: 12,
+                                          paddingVertical: 10,
+                                          paddingHorizontal: 12,
+                                          borderRadius: 10,
+                                          backgroundColor: '#fff7ed',
+                                          borderWidth: 1,
+                                          borderColor: '#fed7aa',
+                                        }}
+                                      >
+                                        <Text style={{ fontSize: 11, color: '#9a3412', fontWeight: '800' }}>
+                                          Classificação (0–10)
                                         </Text>
-                                      ) : null}
-                                    </View>
-                                  );
-                                })}
+                                        {typeof (stored as any).rating0To10 === 'number' &&
+                                        Number.isFinite((stored as any).rating0To10) ? (
+                                          <Text
+                                            style={{ fontSize: 20, color: '#7c2d12', fontWeight: '900', marginTop: 2 }}
+                                          >
+                                            {Math.max(0, Math.min(10, Math.round((stored as any).rating0To10)))}
+                                            <Text style={{ fontSize: 14, color: '#b45309', fontWeight: '700' }}>/10</Text>
+                                          </Text>
+                                        ) : (
+                                          <Text
+                                            style={{ fontSize: 12, color: '#92400e', marginTop: 4, fontStyle: 'italic' }}
+                                          >
+                                            A IA não atribuiu nota nesta análise.
+                                          </Text>
+                                        )}
+                                      </View>
+                                    ) : null}
+                                    {stored.answers.map((a: any, ai: number) => {
+                                      const vl = formatVisionIaAnswerLabel(a?.value);
+                                      const pct =
+                                        typeof a?.confidence === 'number' && Number.isFinite(a.confidence)
+                                          ? Math.round(a.confidence * 100)
+                                          : null;
+                                      const answerHeading =
+                                        Array.isArray(stored.answers) && stored.answers.length === 1
+                                          ? 'Resultado da análise'
+                                          : String(a?.question || a?.questionId || `Critério ${ai + 1}`);
+                                      return (
+                                        <View key={ai} style={{ marginBottom: 10 }}>
+                                          <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>
+                                            {answerHeading}
+                                          </Text>
+                                          <Text
+                                            style={{ fontSize: 14, color: '#0f172a', fontWeight: '700', marginTop: 2 }}
+                                          >
+                                            {vl}
+                                            {pct != null ? ` · confiança ${pct}%` : ''}
+                                          </Text>
+                                          {a?.rationale ? (
+                                            <Text
+                                              style={{
+                                                fontSize: 11,
+                                                color: '#475569',
+                                                marginTop: 4,
+                                                fontStyle: 'italic',
+                                              }}
+                                            >
+                                              {String(a.rationale).slice(0, 400)}
+                                            </Text>
+                                          ) : null}
+                                        </View>
+                                      );
+                                    })}
+                                  </>
+                                )}
                               </View>
                             ) : stored ? (
                               <View style={{ padding: 10, backgroundColor: '#fffbeb' }}>

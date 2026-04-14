@@ -36,6 +36,18 @@ Usar `colors.status.{success|warning|danger|info}` com `{ fg, bg, border }` para
 - Variáveis geradas: [`admin-panel/css/brspark-tokens.css`](../../admin-panel/css/brspark-tokens.css) (gerar com `npm run theme:export-css` após alterar `webCssVariableMap` em `colors.ts`).
 - [`admin-panel/css/main.css`](../../admin-panel/css/main.css) importa `brspark-tokens.css`. Preferir `var(--color-…)` a hex em páginas novas ou refactors (ex.: `reports.html`).
 
+### Anatomia das páginas HTML do painel (shell canônico)
+
+Todas as telas internas autenticadas devem seguir o mesmo esqueleto que [`admin-panel/users.html`](../../admin-panel/users.html) (e equivalentes já migrados):
+
+1. `div.admin-layout` → `div.main-content`
+2. `div.topbar.topbar--data` com `nav.topbar-breadcrumb` (trilha em pt-BR)
+3. `div.page-body`
+4. `header.page-hero` → `h1.page-hero-title` + `p.page-hero-sub`
+5. **Conteúdo de trabalho** dentro de `section.data-shell` (pode haver mais de uma seção). Listagens: `div.data-toolbar` + `table.table-data` + `div.pagination-pro` quando aplicável. Blocos só leitura ou formulários densos: `div.data-shell-body` opcional.
+
+**Exceções explícitas:** `index.html` (login), `track.html` (mapa visita), `evaluation-survey.html` (formulário público) — mesma marca e tokens onde couber, sem obrigar sidebar nem o mesmo fluxo de scroll do painel.
+
 ## Checklist de PR (UI)
 
 1. Substituí hex por tokens ou mapas exportados?
@@ -49,3 +61,6 @@ Usar `colors.status.{success|warning|danger|info}` com `{ fg, bg, border }` para
 |------------|--------|
 | 2026-04-08 | Versão inicial: tokens semânticos, Button/Chip/ThemedSwitch, CSS export, legenda de tags de mídia. |
 | 2026-04-09 | Idioma (pt-BR): norma e glossário para cópias; alinhamento com regras do Cursor. |
+| 2026-04-14 | Admin HTML: anatomia do shell canônico (`page-hero` + `data-shell`) e exceções. |
+| 2026-04-14 | Fase C: `reports.html`, `checklists.html` e `cockpit.html` alinhados ao esqueleto; cockpit mantém tema NOC com classes `cockpit-*` nos tokens locais. |
+| 2026-04-14 | Fase D: `index.html` (cópia login), `track.html` e `evaluation-survey.html` com `brspark-tokens.css` onde aplicável; contraste da trilha no `cockpit.html`. |

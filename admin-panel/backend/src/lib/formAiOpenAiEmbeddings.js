@@ -18,7 +18,7 @@ async function createEmbeddingVector(inputText) {
   const { apiKey, baseUrl, embeddingModel } = await resolveOpenAiCredentials();
   if (!apiKey || !String(apiKey).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração "OpenAI" em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração "OpenAI" em Integrações no painel ou defina OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;

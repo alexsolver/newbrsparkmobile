@@ -23,7 +23,7 @@ function resolveTechAndClientEmails(execution, technicianEmail) {
   const warnings = [];
   const tech = String(technicianEmail || '').trim().toLowerCase();
   if (!tech) {
-    return { techEmail: '', clientEmail: null, warnings: ['E-mail do técnico em falta.'] };
+    return { techEmail: '', clientEmail: null, warnings: ['E-mail do técnico ausente.'] };
   }
   if (!execution) {
     return {

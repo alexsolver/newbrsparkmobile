@@ -8,22 +8,31 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Configurações do Sistema</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Sistema</span>
+      </nav>
     </div>
     <div class="page-body">
-      <div class="grid-2">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Configurações do sistema</h1>
+        <p class="page-hero-sub">
+          Feature flags globais, estado da API e parâmetros gerais da plataforma. Alterações críticas devem ser coordenadas com a equipe técnica.
+        </p>
+      </header>
 
-        <!-- Feature Flags -->
-        <div class="panel">
-          <div class="panel-header"><span class="panel-title"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Feature Flags Globais</span><span class="badge badge-accent" id="flags-count">—</span></div>
-          <div class="panel-body" id="flags-list"><div style="color:var(--text3);font-size:12px">Carregando…</div></div>
-        </div>
+      <div class="grid-2" style="align-items:start">
 
-        <!-- System Info -->
-        <div class="panel">
-          <div class="panel-header"><span class="panel-title"><ion-icon name="information-circle-outline" style="vertical-align:-2px"></ion-icon> Informações do Sistema</span></div>
-          <div class="panel-body">
+        <section class="data-shell fade-in">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="flash-outline" style="font-size:18px;vertical-align:middle;margin-right:8px"></ion-icon> Feature flags globais</span><span class="badge badge-accent" id="flags-count">—</span></div>
+          <div class="data-shell-body" id="flags-list" style="padding-top:8px;padding-bottom:8px"><div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div></div>
+        </section>
+
+        <section class="data-shell fade-in">
+          <div class="panel-header"><span class="panel-title"><ion-icon name="information-circle-outline" style="font-size:18px;vertical-align:-2px"></ion-icon> Informações do sistema</span></div>
+          <div class="data-shell-body">
             <div class="flag-item" style="border-bottom:1px solid var(--border)">
               <span class="flag-icon"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon></span>
               <div class="flag-info"><div class="flag-name">Versão do App</div><div class="flag-desc">BrSpark Mobile v2.4.1</div></div>
@@ -41,30 +50,29 @@
               <div class="flag-info"><div class="flag-name">Servidor</div><div class="flag-desc" id="server-time">—</div></div>
             </div>
           </div>
-        </div>
+        </section>
 
       </div>
 
-      <!-- Global Config -->
-      <div class="panel">
-        <div class="panel-header"><span class="panel-title"><ion-icon name="settings-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Configurações Globais</span><button class="btn btn-primary btn-sm" id="save-config-btn">Salvar</button></div>
-        <div class="panel-body">
+      <section class="data-shell fade-in" style="margin-top:20px">
+        <div class="panel-header"><span class="panel-title"><ion-icon name="settings-outline" style="font-size:18px;vertical-align:middle;margin-right:8px"></ion-icon> Configurações globais</span><button type="button" class="btn btn-primary btn-sm" id="save-config-btn">Salvar</button></div>
+        <div class="data-shell-body">
           <div class="grid-3">
             <div class="form-group">
-              <label class="form-label">Idioma Padrão</label>
+              <label class="form-label">Idioma padrão</label>
               <select class="form-control" id="cfg-lang"><option value="pt-BR">Português (pt-BR)</option><option value="en-US">English (en-US)</option><option value="es-ES">Español (es-ES)</option></select>
             </div>
             <div class="form-group">
-              <label class="form-label">Retenção de Logs (dias)</label>
+              <label class="form-label">Retenção de logs (dias)</label>
               <input class="form-control" type="number" id="cfg-retention" value="365" />
             </div>
             <div class="form-group">
-              <label class="form-label">Período de Trial (dias)</label>
+              <label class="form-label">Período de trial (dias)</label>
               <input class="form-control" type="number" id="cfg-trial" value="14" />
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
@@ -77,14 +85,15 @@
   fetch(`${CONFIG.API_BASE.replace('/api','')}/health`)
     .then(r => r.json())
     .then(data => {
-      document.getElementById('api-status').innerHTML = '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Online';
+      document.getElementById('api-status').innerHTML = '<ion-icon name="checkmark-circle-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Online';
       document.getElementById('api-status').className = 'badge badge-green';
       document.getElementById('server-time').textContent = new Date(data.ts).toLocaleString('pt-BR');
       document.getElementById('db-info').textContent = 'PostgreSQL — conectado';
     })
     .catch(() => {
-      document.getElementById('api-status').textContent = '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Offline';
-      document.getElementById('api-status').className = 'badge badge-red';
+      const el = document.getElementById('api-status');
+      el.innerHTML = '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Offline';
+      el.className = 'badge badge-red';
     });
 
   // Load flags

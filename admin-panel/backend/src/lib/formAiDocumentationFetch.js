@@ -55,7 +55,7 @@ async function fetchDocumentationForCopilot(rawUrl) {
     return { ok: false, text: '', error: 'Só são permitidas URLs HTTPS (documentação pública).' };
   }
   if (u.username || u.password) {
-    return { ok: false, text: '', error: 'A URL não pode incluir utilizador ou palavra-passe.' };
+    return { ok: false, text: '', error: 'A URL não pode incluir usuário e senha (credenciais embutidas).' };
   }
   if (isBlockedHostname(u.hostname)) {
     return { ok: false, text: '', error: 'Esse host não é permitido (rede interna ou localhost).' };

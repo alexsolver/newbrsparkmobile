@@ -41,23 +41,45 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Compliance &amp; LGPD</span>
-      <div class="topbar-actions">
-        <button class="btn btn-primary" onclick="openEditor(null)">+ Nova Versão</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Compliance</span>
+      </nav>
     </div>
     <div class="page-body">
 
-      <!-- Stats -->
-      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="shield-checkmark-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-docs">—</div><div class="stat-label">Versões Totais</div></div>
-        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Docs Ativos</div></div>
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label">Aceitações registradas</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="calendar-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-last">—</div><div class="stat-label">Última Publicação</div></div>
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Compliance e LGPD</h1>
+        <p class="page-hero-sub">
+          Versões de termos, políticas e DPA; histórico por tipo e aceitações registradas. Publique apenas após revisão jurídica.
+        </p>
+      </header>
+
+      <div class="data-toolbar">
+        <div class="data-toolbar-main"></div>
+        <div class="data-toolbar-actions">
+          <button type="button" class="btn btn-primary" onclick="openEditor(null)">
+            <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+            Nova versão
+          </button>
+        </div>
       </div>
 
-      <div id="docs-list"><div style="color:var(--text3);text-align:center;padding:40px">Carregando…</div></div>
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="shield-checkmark-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-docs">—</div><div class="stat-label">Versões totais</div></div>
+        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Docs ativos</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label">Aceitações registradas</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="calendar-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-last">—</div><div class="stat-label">Última publicação</div></div>
+      </div>
+
+      <section class="data-shell fade-in">
+        <div class="data-table-head">
+          <h2 class="data-table-title">Documentos legais</h2>
+        </div>
+        <div class="data-shell-body" style="padding-top:8px;padding-bottom:8px" id="docs-list"><div style="color:var(--text3);text-align:center;padding:40px;font-size:13px;font-weight:500">Carregando…</div></div>
+      </section>
     </div>
   </div>
 </div>
@@ -66,10 +88,10 @@
 <div class="editor-overlay" id="editor-overlay">
   <div style="max-width:820px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-      <button class="btn btn-ghost" onclick="closeEditor()">← Voltar</button>
-      <h2 style="flex:1;font-size:18px;font-weight:900" id="editor-title">Nova Versão</h2>
-      <button class="btn btn-ghost btn-sm" id="btn-save-draft">Salvar Rascunho</button>
-      <button class="btn btn-primary" id="btn-publish">Publicar</button>
+      <button type="button" class="btn btn-ghost" onclick="closeEditor()">← Voltar</button>
+      <h2 style="flex:1;font-size:18px;font-weight:900" id="editor-title">Nova versão</h2>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-save-draft">Salvar rascunho</button>
+      <button type="button" class="btn btn-primary" id="btn-publish">Publicar</button>
     </div>
     <div id="editor-error" style="display:none;background:var(--red-dim);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:16px"></div>
     <input type="hidden" id="editor-doc-id" />

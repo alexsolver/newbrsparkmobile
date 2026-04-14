@@ -56,7 +56,7 @@ function actionsCellHtml(r) {
     const uid = escapeHtml(r.orphanUserId);
     const em = escapeHtml(r.invitedEmail || '');
     return `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">
-      <a class="btn btn-sm btn-outline" href="user-edit.html?id=${uid}">Utilizador</a>
+      <a class="btn btn-sm btn-outline" href="user-edit.html?id=${uid}">Usuário</a>
       <button type="button" class="btn btn-sm btn-primary" data-invite-email="${em}" data-invite-tenant="${escapeHtml(r.tenantId || '')}">Criar convite</button>
     </div>`;
   }
@@ -77,13 +77,17 @@ async function loadList() {
   const tb = document.getElementById('tbody-apps');
   if (!tb) return;
   if (res?.error) {
-    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--red)">${res.error}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="5" style="padding:0;border:none"><div class="empty-state-pro" style="padding:28px 16px 24px"><div class="empty-state-pro-title" style="color:var(--red)">Erro ao carregar</div><p class="empty-state-pro-sub" style="color:var(--red)">${escapeHtml(res.error)}</p></div></td></tr>`;
     return;
   }
   const rows = res?.data || [];
   if (!rows.length) {
-    tb.innerHTML =
-      '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Nenhuma linha neste filtro.</td></tr>';
+    tb.innerHTML = `<tr><td colspan="5" style="padding:0;border:none">
+      <div class="empty-state-pro" style="padding:36px 20px 32px">
+        <ion-icon name="document-text-outline"></ion-icon>
+        <div class="empty-state-pro-title">Nenhuma candidatura neste filtro</div>
+        <p class="empty-state-pro-sub">Altere o estado ou envie um convite com «Convidar por e-mail».</p>
+      </div></td></tr>`;
     return;
   }
   tb.innerHTML = rows
@@ -173,7 +177,7 @@ async function loadDetail(id) {
       <button type="button" class="btn btn-outline" id="act-revision">Pedir ajustes</button>
       <button type="button" class="btn btn-danger" id="act-reject">Recusar</button>`;
     document.getElementById('act-approve').onclick = async () => {
-      if (!confirm('Aprovar esta candidatura? Será criado o utilizador prestador com os dados submetidos.')) return;
+      if (!confirm('Aprovar esta candidatura? Será criado o usuário prestador com os dados submetidos.')) return;
       const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/approve`, {});
       if (out?.error) {
         alert(out.error);
@@ -203,7 +207,7 @@ async function loadDetail(id) {
     actions.innerHTML =
       '<p style="font-size:12px;color:var(--text3)">Aguardando submissão do candidato (link com token enviado no convite).</p>';
   } else if (res.status === 'APPROVED' && res.createdUser) {
-    actions.innerHTML = `<a class="btn btn-sm btn-primary" href="user-edit.html?id=${encodeURIComponent(res.createdUser.id)}">Abrir utilizador criado</a>`;
+    actions.innerHTML = `<a class="btn btn-sm btn-primary" href="user-edit.html?id=${encodeURIComponent(res.createdUser.id)}">Abrir usuário criado</a>`;
   }
 }
 

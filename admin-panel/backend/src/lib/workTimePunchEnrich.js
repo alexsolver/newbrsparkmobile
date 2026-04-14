@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Matrícula profissional / identificador exibido ao colaborador: campo dedicado no utilizador; senão CFT, primeiro documento com identificador, ou ID interno.
+ * Matrícula profissional / identificador exibido ao colaborador: campo dedicado no usuário; senão CFT, primeiro documento com identificador, ou ID interno.
  * @param {{ id?: string, employeeMatricula?: string | null, personalDocuments?: unknown, technicianProfile?: { cft?: string | null } | null } | null} u
  */
 function deriveEmployeeMatriculaFromUser(u) {

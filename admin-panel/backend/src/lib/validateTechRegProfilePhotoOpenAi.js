@@ -36,7 +36,7 @@ async function validateTechRegProfilePhotoOpenAi(imageBuffer) {
   const { apiKey, model, baseUrl } = await resolveOpenAiCredentials();
   if (!apiKey || !String(apiKey).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração «OpenAI» no painel ou OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;
@@ -54,7 +54,7 @@ async function validateTechRegProfilePhotoOpenAi(imageBuffer) {
 Política: só rejeita quando a imagem é claramente inadequada. Não exijas iluminação de estúdio nem foco perfeito.
 
 Critérios — approved só pode ser true se TODOS os checks forem true:
-- singleClearHumanFace: exatamente um rosto humano real (não boneco, ilustração óbvia, foto de ecrã ilegível).
+- singleClearHumanFace: exatamente um rosto humano real (não boneco, ilustração óbvia, foto de tela ilegível).
 - fullFaceVisibleForRecognition: rosto suficientemente visível para identificação no dia a dia: testa, olhos e nariz reconhecíveis; pode haver leve corte de cabelo/chapéu se o rosto continua claramente identificável.
 - noBlockingAccessories: ÓCULOS DE GRAU são sempre permitidos (armação fina ou grossa, lentes com anti-reflexo, leve tonalidade — conta como grau, não como sol). Só reprova acessórios que ESCONDEM o rosto para identificação: óculos de sol escuros/espelhados tipo “óculos de sol”, máscara em boca/nariz, viseira/capuz que cubra testa e olhos. Boné fino ou chapéu que não tape os olhos: permitido.
 - sharpAndLit: aceita iluminação natural ou interior comum, sombras leves no rosto, e nitidez “boa o suficiente” para ver quem é. Reprova APENAS casos extremos: rosto quase invisível por escuridade, desfoque forte que impede ver olhos/nariz, ou tremor que torna o rosto ilegível. Se consegues identificar claramente a pessoa, sharpAndLit = true.
@@ -63,7 +63,7 @@ Critérios — approved só pode ser true se TODOS os checks forem true:
 Regra extra: se estiveres indeciso entre reprovar por “luz baixa” ou “desfocado” mas o rosto ainda é reconhecível, marca os checks como true e approved true.
 
 Responde JSON com este formato exato:
-{"approved":boolean,"userMessagePtBr":"uma frase curta em português do Brasil para o utilizador","checks":{"singleClearHumanFace":boolean,"fullFaceVisibleForRecognition":boolean,"noBlockingAccessories":boolean,"sharpAndLit":boolean,"appropriateContent":boolean},"rejectReasonsPtBr":[]}
+{"approved":boolean,"userMessagePtBr":"uma frase curta em português do Brasil para o usuário","checks":{"singleClearHumanFace":boolean,"fullFaceVisibleForRecognition":boolean,"noBlockingAccessories":boolean,"sharpAndLit":boolean,"appropriateContent":boolean},"rejectReasonsPtBr":[]}
 
 Se approved for false, preenche rejectReasonsPtBr com 1 a 4 frases curtas em pt-BR.`;
 

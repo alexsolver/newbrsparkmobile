@@ -146,7 +146,7 @@ async function openAiJsonObjectChat(systemPrompt, userContent, temperature = 0.2
   const { apiKey: key, model, baseUrl } = await resolveOpenAiCredentials();
   if (!key || !String(key).trim()) {
     const err = new Error(
-      'Chave OpenAI em falta: configure a integração "OpenAI" em Integrações no painel, ou defina OPENAI_API_KEY no servidor.'
+      'Chave OpenAI ausente: configure a integração "OpenAI" em Integrações no painel ou defina OPENAI_API_KEY no servidor.'
     );
     err.code = 'NO_OPENAI_KEY';
     throw err;

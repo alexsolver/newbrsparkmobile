@@ -7,7 +7,7 @@
   <style>
     .int-catalog { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
     .int-card {
-      background:var(--surface1); border:1.5px solid var(--border); border-radius:var(--radius);
+      background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius);
       padding:20px; display:flex; flex-direction:column; gap:12px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
@@ -15,7 +15,7 @@
     .int-card.connected { border-color:var(--green); background: var(--green-dim,#F0FDF4); }
     .int-card-header { display:flex; align-items:center; gap:12px; }
     .int-logo { width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
-    .int-name { font-size:14px; font-weight:800; color:var(--text1); }
+    .int-name { font-size:14px; font-weight:800; color:var(--text); }
     .int-cat  { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-top:1px; }
     .int-desc { font-size:12px; color:var(--text3); line-height:1.5; }
     .int-fields { display:flex; flex-direction:column; gap:8px; }
@@ -31,14 +31,26 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Integrações</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Integrações</span>
+      </nav>
       <div class="topbar-actions">
         <span id="active-count" class="badge badge-green" style="font-size:12px">— ativas</span>
       </div>
     </div>
     <div class="page-body">
 
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Integrações</h1>
+        <p class="page-hero-sub">
+          Chaves de API e serviços externos (IA, e-mail, mapas, CompreFace, etc.). Campos sensíveis não são mostrados em claro após gravar — use «Testar» ou «Salvar» para validar.
+        </p>
+      </header>
+
+      <section class="data-shell fade-in" aria-label="Catálogo de integrações">
       <!-- ── IA & LLM ──────────────────────────────────────────── -->
       <div class="section-title"><ion-icon name="bulb-outline" style="vertical-align:-2px"></ion-icon> Inteligência Artificial / LLM</div>
       <div class="int-catalog" id="ai-catalog">
@@ -380,7 +392,7 @@
             <div><div class="int-name">Visão IA - YOLO</div><div class="int-cat">Visão IA</div></div>
             <span class="int-status inactive" id="status-vision-checklist" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc"><strong>Só o servidor BrSpark (Node)</strong> chama este URL — o <strong>app do técnico nunca abre</strong> este endereço diretamente; o telemóvel fala sempre com a <strong>API BrSpark</strong> (<code>/api/checklists/vision/analyze</code>), e o Node reencaminha o multipart para o YOLO. Pode ser URL <strong>público</strong> (ex.: <code>http://vpn.lansolver.com:8001/analyze</code>) ou na LAN. O serviço deve aceitar <strong>POST multipart</strong> com <code>media</code>, <code>questions</code> (JSON) e <code>schemaVersion</code>. Se o teste devolver <strong>405</strong> com página <strong>nginx</strong>, o path não aceita POST ou falta <code>proxy_pass</code> para a API.</div>
+          <div class="int-desc"><strong>Só o servidor BrSpark (Node)</strong> chama este URL — o <strong>app do técnico nunca abre</strong> este endereço diretamente; o celular fala sempre com a <strong>API BrSpark</strong> (<code>/api/checklists/vision/analyze</code>), e o Node reencaminha o multipart para o YOLO. Pode ser URL <strong>público</strong> (ex.: <code>http://vpn.lansolver.com:8001/analyze</code>) ou na LAN. O serviço deve aceitar <strong>POST multipart</strong> com <code>media</code>, <code>questions</code> (JSON) e <code>schemaVersion</code>. Se o teste devolver <strong>405</strong> com página <strong>nginx</strong>, o path não aceita POST ou falta <code>proxy_pass</code> para a API.</div>
           <div class="int-fields" id="fields-vision-checklist">
             <input class="form-control" id="url-vision-checklist" placeholder="POST completo do YOLO (ex.: https://… ou http://vpn…:8001/analyze)" />
             <input class="form-control" id="key-vision-checklist" type="password" placeholder="Bearer token (opcional)" />
@@ -394,6 +406,8 @@
         </div>
 
       </div>
+
+      </section>
 
     </div>
   </div>

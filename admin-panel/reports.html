@@ -11,9 +11,34 @@
     .report-builder-page {
       display: flex;
       flex-direction: column;
-      min-height: calc(100vh - 24px);
+      flex: 1;
+      min-height: 0;
+      height: calc(100vh - 96px);
       /* Sem margem negativa à esquerda — empurra conteúdo por baixo do menu fixo */
       margin: -8px -12px 0 0;
+    }
+    .report-page-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 12px 16px 16px;
+    }
+    .report-shell.data-shell {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin-bottom: 0;
+      padding: 0;
+    }
+    .report-shell .report-builder-page {
+      margin: 0;
+      height: auto;
+      flex: 1;
+      min-height: 0;
     }
     .report-builder-topbar {
       display: flex;
@@ -524,11 +549,29 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
+    <div class="topbar topbar--data" style="flex-shrink:0">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Relatórios PDF</span>
+      </nav>
+    </div>
+    <div class="page-body report-page-body">
+      <header class="page-hero fade-in" style="max-width:920px;margin-bottom:14px">
+        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <ion-icon name="color-wand-outline" style="font-size:1em;color:var(--accent)"></ion-icon>
+          Construtor de relatório PDF
+        </h1>
+        <p class="page-hero-sub">
+          Presets alinhados à Central de Operações; pré-visualização A4 em tempo quase real. O editor compacto fica abaixo.
+        </p>
+      </header>
+      <section class="data-shell fade-in report-shell" aria-label="Editor do relatório PDF">
     <div class="report-builder-page">
       <div class="report-builder-topbar">
         <div class="topbar-title-wrap">
           <div class="report-topbar-heading">
-            <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Construtor PDF <span class="report-badge-live">WYSIWYG</span></h1>
+            <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Editor <span class="report-badge-live">WYSIWYG</span></h1>
             <details class="report-compact-help">
               <summary><span class="report-help-chevron">▸</span> Notas + API</summary>
               <div class="report-help-body">
@@ -541,8 +584,8 @@
         <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex-shrink:0;align-self:center">
           <select id="preset-select" class="form-control" style="min-width:200px;font-size:12px;padding:6px 10px"></select>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-new-preset">+ Novo</button>
-          <button type="button" class="btn btn-primary btn-sm" id="ed-save">Guardar</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="ed-delete" style="display:none;color:var(--red)">Eliminar</button>
+          <button type="button" class="btn btn-primary btn-sm" id="ed-save">Salvar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="ed-delete" style="display:none;color:var(--red)">Excluir</button>
         </div>
       </div>
 
@@ -681,6 +724,8 @@
           </div>
         </main>
       </div>
+    </div>
+      </section>
     </div>
   </div>
 </div>
@@ -1100,7 +1145,7 @@ document.getElementById('ed-save').addEventListener('click', async () => {
 
 document.getElementById('ed-delete').addEventListener('click', async () => {
   const id = document.getElementById('ed-id').value.trim();
-  if (!id || !confirm('Eliminar este preset?')) return;
+  if (!id || !confirm('Excluir este preset?')) return;
   try {
     const r = await fetch(`${CONFIG.API_BASE}/reports/presets/${encodeURIComponent(id)}`, {
       method: 'DELETE',

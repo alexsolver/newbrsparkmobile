@@ -44,7 +44,7 @@ async function submitClientEvaluationByToken(publicToken, payload) {
   for (const q of questions) {
     if (!q.required) continue;
     if (!(q.id in answers) || answers[q.id] === '' || answers[q.id] == null) {
-      const e = new Error(`Resposta obrigatória em falta: ${q.text || q.id}`);
+      const e = new Error(`Resposta obrigatória ausente: ${q.text || q.id}`);
       e.statusCode = 400;
       throw e;
     }

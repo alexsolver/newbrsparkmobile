@@ -559,32 +559,51 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <div class="topbar-title" style="display:flex;align-items:center;gap:10px;">
-        <ion-icon name="git-branch-outline" style="font-size:20px;color:var(--accent)"></ion-icon>
-        Central de Operações
-        <span class="live-dot" title="Auto-refresh ativo"></span>
-      </div>
-      <div class="topbar-actions">
-        <select class="filter-input" id="filter-scope" onchange="onOpsScopeFilterChange()" style="min-width:200px" title="O que mostrar no quadro">
-          <option value="os" selected>Apenas OS (FT)</option>
-          <option value="rt">Apenas RT</option>
-          <option value="all">OS e RT (todas)</option>
-        </select>
-        <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
-          <option value="">Todos os técnicos</option>
-        </select>
-        <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" oninput="applyFilters()" style="min-width:240px" />
-        <button class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ Atualizar</button>
-        <button class="btn btn-primary btn-sm" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Central de operações</span>
+      </nav>
     </div>
 
     <div class="page-body" style="overflow-y:auto; max-height:calc(100vh - 60px); padding:20px 24px 48px;">
 
-      <!-- Stat Summary Row -->
-      <div class="stat-grid" id="ops-stats" style="margin-bottom:20px;"></div>
+      <header class="page-hero fade-in" style="max-width:none;margin-bottom:16px">
+        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <ion-icon name="git-branch-outline" style="font-size:1.1em;color:var(--accent)"></ion-icon>
+          Central de operações
+          <span class="live-dot" title="Auto-refresh ativo"></span>
+        </h1>
+        <p class="page-hero-sub">Quadro de OS e tarefas de rotina (RT), filtros por escopo e técnico, despacho e atualização em tempo quase real.</p>
+      </header>
 
+      <div class="stat-grid" id="ops-stats" style="margin-bottom:24px;"></div>
+
+      <section class="data-shell fade-in" aria-labelledby="ops-board-title">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main" style="align-items:flex-end">
+            <select class="filter-input" id="filter-scope" onchange="onOpsScopeFilterChange()" style="min-width:200px" title="O que mostrar no quadro">
+              <option value="os" selected>Apenas OS (FT)</option>
+              <option value="rt">Apenas RT</option>
+              <option value="all">OS e RT (todas)</option>
+            </select>
+            <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
+              <option value="">Todos os técnicos</option>
+            </select>
+            <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" oninput="applyFilters()" style="min-width:200px;flex:1;max-width:360px" />
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ Atualizar</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
+          </div>
+        </div>
+
+        <div class="data-table-head">
+          <h2 id="ops-board-title" class="data-table-title">Quadro de OS e RT</h2>
+        </div>
+
+        <div class="table-wrap" style="padding:0 20px 18px">
       <!-- Kanban Board -->
       <div class="kanban-board" id="kanban-board">
         <div class="kanban-col col-pending">
@@ -648,6 +667,8 @@
           <div class="kanban-col-body" id="col-cancelled"></div>
         </div>
       </div>
+        </div>
+      </section>
 
     </div>
   </div>
@@ -1280,7 +1301,7 @@ window.closeReopenRevisionModal = function () {
 window.openReopenRevisionModal = async function (taskId) {
   const tid = taskId != null ? String(taskId).trim() : '';
   if (!tid) {
-    alert('ID da OS em falta. Actualize o quadro (F5) e tente de novo.');
+    alert('ID da OS ausente. Atualize o quadro (F5) e tente de novo.');
     return;
   }
   reopenRevisionTaskId = tid;
@@ -1290,7 +1311,7 @@ window.openReopenRevisionModal = async function (taskId) {
   if (!task) {
     reopenRevisionTaskId = null;
     if (modalEl) modalEl.dataset.reopenTaskId = '';
-    alert('Tarefa não encontrada. Actualize o quadro (F5).');
+    alert('Tarefa não encontrada. Atualize o quadro (F5).');
     return;
   }
   const isRoutineTask =
@@ -3798,22 +3819,33 @@ function buildReportTab(t) {
       if (ansV.length) {
         vh +=
           '<div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0"><div style="font-size:10px;font-weight:800;color:#64748b;margin-bottom:8px">Respostas da IA</div>';
+        if (typeof vo.rating0To10 === 'number' && isFinite(vo.rating0To10)) {
+          var _rcl = Math.max(0, Math.min(10, Math.round(vo.rating0To10)));
+          vh +=
+            '<div style="font-size:13px;font-weight:800;color:#9a3412;margin-bottom:10px;padding:8px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px">' +
+            escHtml('Classificação: ' + _rcl + '/10') +
+            '</div>';
+        }
         ansV.forEach(function (a, ai) {
           if (!a || typeof a !== 'object') return;
-          const vv = String(a.value != null ? a.value : '').toLowerCase();
-          const lb =
+          var rawAns = String(a.value != null ? a.value : '').trim();
+          var vv = rawAns.toLowerCase();
+          var lb =
             vv === 'yes' || vv === 'sim'
               ? 'Sim'
               : vv === 'no' || vv === 'não' || vv === 'nao'
                 ? 'Não'
-                : vv === 'unknown'
+                : vv === 'unknown' || vv === 'indefinido' || vv === 'indeterminado'
                   ? 'Não verificado (IA)'
-                  : '—';
+                  : rawAns || '—';
           const pc =
             typeof a.confidence === 'number' && isFinite(a.confidence)
               ? Math.round(a.confidence * 100)
               : null;
-          const qq = escHtml(String(a.question || a.questionId || 'Pergunta ' + (ai + 1)));
+          const qq =
+            ansV.length === 1
+              ? escHtml('Resultado da análise')
+              : escHtml(String(a.question || a.questionId || 'Pergunta ' + (ai + 1)));
           const rt = a.rationale != null ? escHtml(String(a.rationale).slice(0, 500)) : '';
           vh += '<div style="margin-bottom:8px;font-size:12px"><div style="font-weight:700;color:#334155">' + qq + '</div>';
           vh +=
@@ -5377,7 +5409,7 @@ window.printReport = async function() {
                       '" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src=\'https://placehold.co/400x300?text=Foto\'"/>';
                   } else if (singleVal) {
                     imgInnerHtml =
-                      '<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este ficheiro.</div>';
+                      '<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este arquivo.</div>';
                   } else {
                     imgInnerHtml =
                       '<img src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" style="max-width:100%;max-height:220px;object-fit:contain;display:block"/>';

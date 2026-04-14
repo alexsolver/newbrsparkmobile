@@ -15,6 +15,20 @@ export function parsePauseHistoryFromResponses(responses) {
   return Array.isArray(h) ? h : [];
 }
 
+/**
+ * Rótulo legível para `answers[].value` da visão IA (sim/não ou resposta livre, ex. nota).
+ * @param {unknown} raw
+ * @returns {string}
+ */
+export function formatVisionIaAnswerLabel(raw) {
+  const s = String(raw ?? '').trim();
+  const v = s.toLowerCase();
+  if (v === 'yes' || v === 'sim') return 'Sim';
+  if (v === 'no' || v === 'não' || v === 'nao') return 'Não';
+  if (v === 'unknown' || v === 'indefinido' || v === 'indeterminado') return 'Não verificado (IA)';
+  return s || '—';
+}
+
 export function sumPauseDurationSeconds(pauseHist) {
   let total = 0;
   if (!Array.isArray(pauseHist)) return 0;
@@ -245,22 +259,24 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
 
   if (answers.length) {
     html += `<div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0"><div style="font-size:10px;font-weight:800;color:#64748b;margin-bottom:8px">Respostas da IA</div>`;
+    const r10 = o.rating0To10;
+    if (typeof r10 === 'number' && Number.isFinite(r10)) {
+      const clamped = Math.max(0, Math.min(10, Math.round(r10)));
+      html += `<div style="font-size:13px;font-weight:800;color:#9a3412;margin-bottom:10px;padding:8px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px">${escHtml(
+        `Classificação: ${clamped}/10`,
+      )}</div>`;
+    }
     answers.forEach((a, ai) => {
       if (!a || typeof a !== 'object') return;
-      const v = String(a.value != null ? a.value : '').toLowerCase();
-      const lab =
-        v === 'yes' || v === 'sim'
-          ? 'Sim'
-          : v === 'no' || v === 'não' || v === 'nao'
-            ? 'Não'
-            : v === 'unknown'
-              ? 'Não verificado (IA)'
-              : '—';
+      const lab = formatVisionIaAnswerLabel(a.value);
       const pct =
         typeof a.confidence === 'number' && Number.isFinite(a.confidence)
           ? Math.round(a.confidence * 100)
           : null;
-      const q = escHtml(String(a.question || a.questionId || `Pergunta ${ai + 1}`));
+      const q =
+        answers.length === 1
+          ? escHtml('Resultado da análise')
+          : escHtml(String(a.question || a.questionId || `Pergunta ${ai + 1}`));
       const rat = a.rationale != null ? escHtml(String(a.rationale).slice(0, 500)) : '';
       html += `<div style="margin-bottom:8px;font-size:12px"><div style="font-weight:700;color:#334155">${q}</div>`;
       html += `<div style="color:#0f172a;font-weight:800">${escHtml(lab)}${pct != null ? ` · confiança ${pct}%` : ''}</div>`;

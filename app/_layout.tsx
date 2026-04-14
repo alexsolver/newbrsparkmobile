@@ -17,7 +17,8 @@ import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
-import { NotificationService } from '../src/services/notifications';
+import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
+import { PushNotificationResponseBridge } from '../src/components/PushNotificationResponseBridge';
 import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 
@@ -171,6 +172,7 @@ function MainLayout() {
 
   return (
     <RouteGuard>
+      <PushNotificationResponseBridge />
       <AppInitializer />
       {!inAuth && !isAgendaLandscape && <Header />}
       <Stack screenOptions={{ 
@@ -191,6 +193,10 @@ function MainLayout() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    void preparePushNotificationInfrastructure().catch(() => {});
+  }, []);
+
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>

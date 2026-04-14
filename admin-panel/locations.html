@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Multi-Location (Países &amp; Idiomas)</title>
+  <title>BrSpark Admin — Multi-location (países e idiomas)</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
     .country-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
@@ -50,17 +50,23 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title"><ion-icon name="earth-outline" style="vertical-align:-2px"></ion-icon> Multi-Location — Países &amp; Idiomas</span>
-      <div class="topbar-actions">
-        <div class="search-wrap"><span class="search-icon"><ion-icon name="time-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></span><input type="text" placeholder="Buscar país…" id="search-input" /></div>
-        <button class="btn btn-primary" onclick="openModal('new-country-modal')">+ Adicionar País</button>
-      </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Multi-location</span>
+      </nav>
     </div>
 
     <div class="page-body">
 
-      <!-- Stats -->
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Países, regiões e idiomas</h1>
+        <p class="page-hero-sub">
+          Locales ativos na plataforma, idiomas suportados e estatísticas agregadas por tenant. Use a busca para filtrar cartões; a tabela abaixo resume a cobertura de idiomas.
+        </p>
+      </header>
+
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
         <div class="stat-card" style="--accent-color:var(--accent)">
           <div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="earth-outline" style="vertical-align:-2px"></ion-icon></div>
@@ -84,33 +90,45 @@
         </div>
       </div>
 
-      <!-- Countries grid -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Regiões Habilitadas</span>
-          <span class="badge badge-accent" id="count-badge">—</span>
-        </div>
-        <div class="panel-body">
-          <div class="country-grid" id="country-grid">
-            <div style="color:var(--text3);text-align:center;padding:40px;grid-column:1/-1">Carregando…</div>
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <div class="search-wrap search-wrap--toolbar">
+              <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+              <input type="search" placeholder="Buscar país ou código…" id="search-input" autocomplete="off" />
+            </div>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-primary" onclick="openModal('new-country-modal')">
+              <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              Adicionar país
+            </button>
           </div>
         </div>
-      </div>
+        <div class="data-table-head">
+          <h2 class="data-table-title">Regiões habilitadas</h2>
+          <span class="badge badge-accent" id="count-badge">—</span>
+        </div>
+        <div class="data-shell-body" style="padding-top:0">
+          <div class="country-grid" id="country-grid">
+            <div style="color:var(--text3);text-align:center;padding:40px;grid-column:1/-1;font-size:13px;font-weight:500">Carregando…</div>
+          </div>
+        </div>
+      </section>
 
-      <!-- Language coverage table -->
-      <div class="panel" style="margin-top:20px">
-        <div class="panel-header">
-          <span class="panel-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> Cobertura de Idiomas na Plataforma</span>
+      <section class="data-shell fade-in" style="margin-top:20px">
+        <div class="data-table-head">
+          <h2 class="data-table-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px;font-size:18px"></ion-icon> Cobertura de idiomas na plataforma</h2>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="table-data">
             <thead><tr>
-              <th>Idioma</th><th>Código</th><th>Países</th><th>Usuários</th><th>Tradução App</th><th>Tradução Admin</th><th>Status</th>
+              <th>Idioma</th><th>Código</th><th>Países</th><th>Usuários</th><th>Tradução app</th><th>Tradução admin</th><th>Status</th>
             </tr></thead>
             <tbody id="lang-table-body"></tbody>
           </table>
         </div>
-      </div>
+      </section>
 
     </div>
   </div>
@@ -120,8 +138,8 @@
 <div class="modal-overlay" id="new-country-modal">
   <div class="modal" style="max-width:480px">
     <div class="modal-header">
-      <span class="modal-title">Adicionar País / Região</span>
-      <button class="modal-close" onclick="closeModal('new-country-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <span class="modal-title">Adicionar país ou região</span>
+      <button type="button" class="modal-close" onclick="closeModal('new-country-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <div class="grid-2">
@@ -175,8 +193,8 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('new-country-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-country-btn">Adicionar País</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('new-country-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-country-btn">Adicionar país</button>
     </div>
   </div>
 </div>
@@ -268,7 +286,11 @@
     const grid = document.getElementById('country-grid');
     grid.innerHTML = filtered.length
       ? filtered.map(renderCountryCard).join('')
-      : '<div style="color:var(--text3);text-align:center;padding:40px;grid-column:1/-1">Nenhuma região encontrada.</div>';
+      : `<div class="empty-state-pro" style="padding:36px 20px 32px;grid-column:1/-1">
+          <ion-icon name="earth-outline"></ion-icon>
+          <div class="empty-state-pro-title">Nenhuma região encontrada</div>
+          <p class="empty-state-pro-sub">Ajuste o termo de busca ou limpe o filtro para ver todos os países.</p>
+        </div>`;
 
     // Language coverage: derive from active locales
     const tbody = document.getElementById('lang-table-body');

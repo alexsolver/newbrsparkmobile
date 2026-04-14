@@ -134,6 +134,18 @@ function applySchemaPatch(schemaData, patch) {
           cur.visionAnalysisGrid = g;
         }
       }
+      if (
+        cur.type === 'vision_ai_analysis' &&
+        (p.visionRating0To10Enabled === true || p.visionRating0To10Enabled === false)
+      ) {
+        cur.visionRating0To10Enabled = !!p.visionRating0To10Enabled;
+      }
+      if (
+        cur.type === 'vision_ai_analysis' &&
+        (p.visionShowAiResponseInForm === true || p.visionShowAiResponseInForm === false)
+      ) {
+        cur.visionShowAiResponseInForm = !!p.visionShowAiResponseInForm;
+      }
     }
     if (cur.type === 'image_annotation') {
       if (p.annotationPenColor != null) {

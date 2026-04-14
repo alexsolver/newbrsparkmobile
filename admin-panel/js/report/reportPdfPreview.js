@@ -1735,7 +1735,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
         } else if (singleVal.startsWith('file://')) {
           imgInnerHtml = `<div style="padding:20px;text-align:center;color:#78350f;font-size:10px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local. Sincronize para incluir a imagem no PDF.</div>`;
         } else if (singleVal) {
-          imgInnerHtml = `<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este ficheiro.</div>`;
+          imgInnerHtml = `<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este arquivo.</div>`;
         } else {
           imgInnerHtml = `<img src="https://placehold.co/360x200/f1f5f9/94a3b8?text=Foto" alt="" style="max-width:100%;max-height:220px;object-fit:contain;display:block" />`;
         }

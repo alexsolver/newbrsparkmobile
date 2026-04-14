@@ -14,7 +14,7 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Última transcrição carregada (para descarregar JSON). */
+/** Última transcrição carregada (para exportar/baixar JSON). */
 let lastChatTranscriptPayload = null;
 
 function formatChatTranscriptText(data) {
@@ -37,7 +37,7 @@ function formatChatTranscriptText(data) {
     msgs.forEach((m) => {
       const head = `[${m.createdAt}] ${m.senderName} <${m.senderId}> (${m.type})`;
       const body = m.content ? String(m.content) : '';
-      const media = m.mediaUrl ? `\n  [ficheiro] ${m.mediaUrl}` : '';
+      const media = m.mediaUrl ? `\n  [arquivo] ${m.mediaUrl}` : '';
       lines.push(head + (body ? `\n  ${body.replace(/\n/g, '\n  ')}` : '') + media, '');
     });
   }

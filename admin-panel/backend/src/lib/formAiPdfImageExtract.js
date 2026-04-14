@@ -18,7 +18,7 @@ async function extractPdfForAi(buffer) {
   }
   if (!text) {
     text =
-      '(Nenhum texto extraível neste PDF — pode ser só imagens digitalizadas. Experimente exportar como imagem e enviar o ficheiro de imagem para OCR.)';
+      '(Nenhum texto extraível neste PDF — pode ser só imagens digitalizadas. Experimente exportar como imagem e enviar o arquivo de imagem para OCR.)';
   }
   let markdown = '## Documento PDF\n\n' + text;
   let truncated = false;
@@ -30,7 +30,7 @@ async function extractPdfForAi(buffer) {
 }
 
 /**
- * OCR em imagem (formulário em papel, captura de ecrã, etc.).
+ * OCR em imagem (formulário em papel, captura de tela, etc.).
  * @param {Buffer} buffer
  * @param {string} [mimeHint] ex.: image/png
  * @returns {Promise<{ markdown: string, truncated: boolean, format: string, columnSignals: object[] }>}

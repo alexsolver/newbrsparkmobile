@@ -1,83 +1,102 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>BrSpark Admin — Config. Regionais</title>
+  <title>BrSpark Admin — Traduções e regionais</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
-<body class="admin-body">
+<body>
+<div class="admin-layout">
   <div class="main-content">
-    <div class="container">
-      <header class="page-header">
-        <div>
-          <h1 class="page-title">Configurações Regionais</h1>
-          <p class="page-subtitle">Gerencie moeda, formato de data, fuso horário e idiomas por localidade.</p>
-        </div>
-        <div class="header-actions">
-          <button class="btn btn-primary" id="save-all-btn">
-            <ion-icon name="save-outline" style="margin-right:8px"></ion-icon>
-            Salvar Alterações
-          </button>
-          <button class="btn btn-ghost" id="ai-translate-btn" title="Traduz campos vazios com IA" style="display:flex;align-items:center;gap:6px;border:1px solid var(--accent);color:var(--accent)">
-            <ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Traduzir com IA
-          </button>
-        </div>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Traduções e regionais</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Traduções e configurações regionais</h1>
+        <p class="page-hero-sub">
+          Dicionário do app, metatags, flags, perfis de locale e overrides por tenant. Salve após editar; a tradução com IA preenche só campos vazios.
+        </p>
       </header>
 
-      <div class="search-bar" style="margin-bottom:20px; display:flex; gap:12px; align-items:center;">
-        <div style="flex:1; position:relative">
-          <ion-icon name="search-outline" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)"></ion-icon>
-          <input type="text" id="search-input" class="form-control" placeholder="Buscar por chave ou conteúdo..." style="padding-left:36px">
+      <div class="data-toolbar">
+        <div class="data-toolbar-main" style="align-items:flex-end;flex:1;min-width:0">
+          <div class="search-wrap search-wrap--toolbar" style="flex:1;min-width:200px;max-width:480px">
+            <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+            <input type="search" id="search-input" class="form-control" placeholder="Buscar por chave ou conteúdo…" autocomplete="off" />
+          </div>
+          <label class="filter-field" style="min-width:160px">
+            <span class="filter-field-label"><ion-icon name="layers-outline"></ion-icon> Fonte</span>
+            <select id="source-filter" class="form-control filter-field-control">
+              <option value="app">Dicionário do app</option>
+              <option value="db-metatags">Metatags (categorias)</option>
+              <option value="db-flags">Feature flags</option>
+              <option value="locales">Configurações regionais</option>
+              <option value="overrides">Customização por tenant</option>
+            </select>
+          </label>
+          <label class="filter-field" id="tenant-selector-wrap" style="min-width:180px;display:none">
+            <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon> Tenant</span>
+            <select class="form-control filter-field-control" id="tenant-selector">
+              <option value="">Selecione o tenant…</option>
+            </select>
+          </label>
+          <span class="badge badge-accent" id="counter-badge">0 entradas</span>
         </div>
-        <select id="source-filter" class="form-control" style="width:200px">
-          <option value="app">Dicionário do App</option>
-          <option value="db-metatags">Metatags (Categorias)</option>
-          <option value="db-flags">Feature Flags</option>
-          <option value="locales">Configurações Regionais</option>
-          <option value="overrides">Customização por Tenant</option>
-        </select>
-        <select class="form-control" id="tenant-selector" style="display:none;width:200px">
-          <option value="">Selecione o Tenant...</option>
-        </select>
-        <div class="badge badge-accent" id="counter-badge">0 entradas</div>
+        <div class="data-toolbar-actions">
+          <button type="button" class="btn btn-ghost" id="ai-translate-btn" title="Traduz campos vazios com IA" style="display:flex;align-items:center;gap:6px;border:1px solid var(--accent);color:var(--accent)">
+            <ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Traduzir com IA
+          </button>
+          <button type="button" class="btn btn-primary" id="save-all-btn">
+            <ion-icon name="save-outline" style="margin-right:8px;vertical-align:-2px"></ion-icon>
+            Salvar alterações
+          </button>
+        </div>
       </div>
 
-      <div class="panel" id="table-panel">
-        <div class="table-wrap" style="max-height: calc(100vh - 280px); overflow-y: auto;">
-          <table style="table-layout: fixed; width: 100%;">
-            <thead id="i18n-thead" style="position: sticky; top: 0; background: var(--surface); z-index: 10;">
+      <section class="data-shell fade-in" id="table-panel">
+        <div class="data-table-head">
+          <h2 class="data-table-title">Entradas</h2>
+        </div>
+        <div class="table-wrap" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+          <table class="table-data" style="table-layout: fixed; width: 100%;">
+            <thead id="i18n-thead" style="position: sticky; top: 0; z-index: 10;">
               <tr>
                 <th style="width: 25%;">Chave / ID</th>
-                <th>Português (PT-BR)</th>
-                <th>Inglês (EN-US)</th>
-                <th>Espanhol (ES-ES)</th>
+                <th>Português (pt-BR)</th>
+                <th>Inglês (en-US)</th>
+                <th>Espanhol (es-ES)</th>
               </tr>
             </thead>
             <tbody id="i18n-tbody">
-              <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text3)">Carregando traduções...</td></tr>
+              <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text3);font-size:13px;font-weight:500">Carregando traduções…</td></tr>
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <!-- Regional Profiles Card View (Alternative if selected) -->
-      <div id="locales-grid" style="display:none; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+      <div id="locales-grid" style="display:none; margin-top:20px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
         <!-- Card templates injected here -->
       </div>
     </div>
   </div>
+</div>
 
   <!-- AI Progress Modal -->
   <div id="ai-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
     <div style="background:var(--surface);border-radius:16px;padding:32px;width:420px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <div style="font-size:20px;font-weight:900;margin-bottom:4px"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Traducão com IA</div>
+      <div style="font-size:20px;font-weight:900;margin-bottom:4px"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Tradução com IA</div>
       <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Preenchendo campos vazios via MyMemory API...</div>
       <div style="background:var(--border);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px">
         <div id="ai-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
       </div>
       <div id="ai-progress-txt" style="font-size:12px;color:var(--text3);text-align:center">0 / 0</div>
       <div id="ai-log" style="font-size:11px;margin-top:12px;max-height:120px;overflow-y:auto;color:var(--text2)"></div>
-      <button id="ai-cancel-btn" class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%">Cancelar</button>
+      <button type="button" id="ai-cancel-btn" class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%">Cancelar</button>
     </div>
   </div>
 
@@ -90,6 +109,7 @@
     let modifiedEntries = new Set();
     const sourceFilter = document.getElementById('source-filter');
     const tenantSelector = document.getElementById('tenant-selector');
+    const tenantSelectorWrap = document.getElementById('tenant-selector-wrap');
     const tbody = document.getElementById('i18n-tbody');
     const localesGrid = document.getElementById('locales-grid');
     const tablePanel = document.getElementById('table-panel');
@@ -107,7 +127,7 @@
 
     async function loadEntries() {
       const source = sourceFilter.value;
-      tenantSelector.style.display = (source === 'overrides') ? 'block' : 'none';
+      if (tenantSelectorWrap) tenantSelectorWrap.style.display = source === 'overrides' ? 'block' : 'none';
       
       if (source === 'locales') {
         tablePanel.style.display = 'none';

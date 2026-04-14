@@ -18,7 +18,7 @@ function timingSafeEqual(a, b) {
 
 /**
  * POST /api/internal/laravel-evaluations-bridge
- * Chamado apenas pelo servidor Laravel (secret partilhado). Emite JWT compatíveis com a API de avaliações.
+ * Chamado apenas pelo servidor Laravel (secret compartilhado). Emite JWT compatíveis com a API de avaliações.
  */
 router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
   try {

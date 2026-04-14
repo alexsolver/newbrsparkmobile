@@ -8,85 +8,170 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar">
-      <span class="topbar-title">Log de Auditoria</span>
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Auditoria</span>
+      </nav>
       <div class="topbar-actions">
-        <select class="form-control" style="width:140px;padding:7px 10px;font-size:12px" id="filter-cat">
-          <option value="">Todas as ações</option>
-          <option value="AUTH">Autenticação</option><option value="DATA">Dados</option>
-          <option value="ADMIN">Admin</option><option value="SYSTEM">Sistema</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" id="export-btn"><ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Exportar CSV</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="loadLogs()" title="Recarregar eventos">
+          <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
+          Atualizar
+        </button>
       </div>
     </div>
     <div class="page-body">
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">Eventos do Sistema</span>
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Log de auditoria</h1>
+        <p class="page-hero-sub">
+          Eventos de autenticação, dados, administração e sistema. Filtre por categoria e exporte para análise externa (CSV respeita o filtro atual).
+        </p>
+      </header>
+
+      <section class="data-shell fade-in">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main">
+            <label class="filter-field">
+              <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon> Categoria</span>
+              <select class="form-control filter-field-control" id="filter-cat" style="min-width:200px">
+                <option value="">Todas as ações</option>
+                <option value="AUTH">Autenticação</option>
+                <option value="DATA">Dados</option>
+                <option value="ADMIN">Admin</option>
+                <option value="SYSTEM">Sistema</option>
+              </select>
+            </label>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-outline" id="export-btn">
+              <ion-icon name="download-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              Exportar CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="data-table-head">
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
+            <ion-icon name="time-outline" style="font-size:18px;color:var(--text3);opacity:0.9"></ion-icon>
+            Eventos do sistema
+          </h2>
           <span class="badge badge-accent" id="count-badge">Carregando…</span>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Timestamp</th><th>Ator</th><th>Ação</th><th>Recurso</th><th>Tenant</th><th>Categoria</th></tr></thead>
-            <tbody id="audit-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Carregando…</td></tr></tbody>
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th>Data e hora</th>
+                <th>Ator</th>
+                <th>Ação</th>
+                <th>Recurso</th>
+                <th>Tenant</th>
+                <th>Categoria</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
+            </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </div>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG } from './js/config.js';
+  import { CONFIG } from './config.js';
   await initPage();
 
   const catMap   = { AUTH:'badge-blue', DATA:'badge-green', ADMIN:'badge-accent', SYSTEM:'badge-amber' };
   const catLabel = { AUTH:'<ion-icon name="lock-closed-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Auth', DATA:'<ion-icon name="stats-chart-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Dados', ADMIN:'<ion-icon name="shield-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin', SYSTEM:'<ion-icon name="settings-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Sistema' };
 
-  async function loadLogs() {
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function csvEscape(v) {
+    const t = String(v ?? '').replace(/"/g, '""');
+    return /[",\n\r]/.test(t) ? `"${t}"` : t;
+  }
+
+  window.loadLogs = async function loadLogs() {
     const cat = document.getElementById('filter-cat').value;
-    const url = `/audit${cat ? `?category=${cat}` : ''}`;
+    const url = `/audit${cat ? `?category=${encodeURIComponent(cat)}` : ''}`;
     const data = await CONFIG.get(url);
     if (!data) return;
-    document.getElementById('count-badge').textContent = `${data.total} eventos`;
-    document.getElementById('audit-tbody').innerHTML = data.data.map(l => {
-      const actor = l.admin?.email || l.user?.email || 'sistema';
+
+    const rows = Array.isArray(data.data) ? data.data : [];
+    const total = data.total ?? rows.length;
+    document.getElementById('count-badge').textContent = `${total} evento${total === 1 ? '' : 's'}`;
+
+    const tbody = document.getElementById('audit-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="6" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="document-text-outline"></ion-icon>
+            <div class="empty-state-pro-title">Nenhum evento encontrado</div>
+            <p class="empty-state-pro-sub">Altere o filtro de categoria ou aguarde novos registros de auditoria.</p>
+          </div>
+        </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(l => {
+      const actor = escHtml(l.admin?.email || l.user?.email || 'sistema');
       const ts = new Date(l.createdAt).toLocaleString('pt-BR');
+      const action = escHtml(l.action || '');
+      const resource = escHtml(l.resource || '');
+      const tenant = escHtml(l.tenant?.name || '—');
+      const catKey = l.category;
+      const badge = catLabel[catKey] || escHtml(catKey || '—');
+      const badgeClass = catMap[catKey] || 'badge-gray';
       return `<tr>
-        <td class="mono" style="font-size:10px;color:var(--text3);white-space:nowrap">${ts}</td>
+        <td class="mono" style="font-size:10px;color:var(--text3);white-space:nowrap">${escHtml(ts)}</td>
         <td style="font-size:11px">${actor}</td>
-        <td><code style="font-size:10px;background:var(--surface3);padding:2px 6px;border-radius:4px;color:var(--text);font-weight:700">${l.action}</code></td>
-        <td style="font-size:11px;color:var(--text2)">${l.resource}</td>
-        <td style="font-size:11px;color:var(--text3)">${l.tenant?.name || '—'}</td>
-        <td><span class="badge ${catMap[l.category]}">${catLabel[l.category]}</span></td>
+        <td><code style="font-size:10px;background:var(--surface3);padding:2px 6px;border-radius:4px;color:var(--text);font-weight:700">${action}</code></td>
+        <td style="font-size:11px;color:var(--text2)">${resource}</td>
+        <td style="font-size:11px;color:var(--text3)">${tenant}</td>
+        <td><span class="badge ${badgeClass}">${badge}</span></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Nenhum evento encontrado.</td></tr>';
-  }
+    }).join('');
+  };
 
   loadLogs();
   document.getElementById('filter-cat').addEventListener('change', loadLogs);
-  
-  document.getElementById('export-btn').onclick = async () => {
-    const data = await CONFIG.get('/audit?limit=1000');
-    if (!data?.data) return;
-    
-    const headers = ['Timestamp', 'Ator', 'Ação', 'Recurso', 'Tenant', 'Categoria'];
-    const rows = data.data.map(l => [
-      new Date(l.createdAt).toLocaleString('pt-BR'),
-      l.admin?.email || l.user?.email || 'sistema',
-      l.action,
-      l.resource,
-      l.tenant?.name || '---',
-      l.category
-    ]);
 
-    const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  document.getElementById('export-btn').onclick = async () => {
+    const cat = document.getElementById('filter-cat').value;
+    const q = cat ? `?limit=1000&category=${encodeURIComponent(cat)}` : '?limit=1000';
+    const data = await CONFIG.get(`/audit${q}`);
+    if (!data?.data || !Array.isArray(data.data)) return;
+
+    const headers = ['Timestamp', 'Ator', 'Ação', 'Recurso', 'Tenant', 'Categoria'];
+    const lines = [headers.map(csvEscape).join(',')];
+    for (const l of data.data) {
+      lines.push([
+        csvEscape(new Date(l.createdAt).toLocaleString('pt-BR')),
+        csvEscape(l.admin?.email || l.user?.email || 'sistema'),
+        csvEscape(l.action),
+        csvEscape(l.resource),
+        csvEscape(l.tenant?.name || '—'),
+        csvEscape(l.category),
+      ].join(','));
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.href = url;
     link.download = `brspark_audit_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
+    URL.revokeObjectURL(url);
   };
 </script>
 </body>
