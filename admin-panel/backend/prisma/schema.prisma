@@ -32,9 +32,20 @@ model Plan {
   priceMonthly  Decimal  @db.Decimal(10,2)
   priceYearly   Decimal  @db.Decimal(10,2)
   maxAssets     Int      // -1 = unlimited
-  maxUsers      Int      // -1 = unlimited
+  maxUsers      Int      // -1 = unlimited (utilizadores do painel no geral)
+  /// Cota de técnicos de campo (papéis USER e PROVIDER ativos). -1 = ilimitado.
+  maxTechnicians Int     @default(5)
   storageGb     Int
   features      Json     // { stock, vault, ai, facialVisionProvider: COMPREFACE|AUTO|AWS, ... }
+  /// Requisições de IA por mês (fuso período: calendário UTC ou ver uso futuro). -1 = ilimitado.
+  quotaAiFacialPerMonth           Int @default(-1)
+  quotaAiVisionDetectionPerMonth  Int @default(-1)
+  quotaAiVisionAnalysisPerMonth   Int @default(-1)
+  /// Limite mensal de OS de campo (FT) e de tarefas de rotina (RT) criadas/concluídas — -1 = ilimitado.
+  quotaFieldTasksMonthly          Int @default(-1)
+  quotaRoutineTasksMonthly        Int @default(-1)
+  /// Modelos no Form Builder (ChecklistTemplate). -1 = ilimitado.
+  maxChecklistTemplates           Int @default(-1)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -79,6 +90,7 @@ model Tenant {
   workTimeSettings      WorkTimeSettings?
   workTimePunches       WorkTimePunch[]
   routineTaskAssignments RoutineTaskAssignment[]
+  planUsagePeriods      TenantPlanUsagePeriod[]
 }
 
 /// Política de registro de horas trabalhadas (ponto) — 1 registo por tenant.
@@ -294,6 +306,24 @@ enum InvoiceStatus {
   PAID
   OVERDUE
   VOID
+}
+
+/// Consumo mensal por tenant (faturação / quotas do plano). periodKey = AAAA-MM em America/Sao_Paulo.
+model TenantPlanUsagePeriod {
+  id                       String   @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  periodKey                String
+  aiFacialCount            Int        @default(0)
+  aiVisionDetectionCount   Int        @default(0)
+  aiVisionAnalysisCount    Int        @default(0)
+  fieldTasksCount          Int        @default(0)
+  routineTasksCount        Int        @default(0)
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+
+  @@unique([tenantId, periodKey])
+  @@index([tenantId])
 }
 
 // ─────────────────────────────────────────────────────────

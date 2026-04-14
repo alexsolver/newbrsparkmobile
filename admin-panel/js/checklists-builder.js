@@ -33,6 +33,10 @@ function absoluteUploadUrl(path) {
   return brsparkServerOrigin() + (path.startsWith('/') ? path : '/' + path);
 }
 
+/** Alinhado a `admin-panel/backend/src/constants/visionSimNaoQuestions.js`. */
+const MAX_VISION_SIMNAO_QUESTIONS = 10;
+const MAX_VISION_STRUCTURED_PROMPT_CHARS = 12000;
+
 /** URL da imagem no preview do builder: origem da página se a porta for a da API (corrige localhost vs 127.0.0.1). */
 function helpImageDisplayUrl(pathOrUrl) {
   if (!pathOrUrl) return pathOrUrl;
@@ -92,6 +96,48 @@ function fileToBase64(file) {
 window.fieldHelpQuill = null;
 /** ID do campo cujo texto está actualmente no Quill (evita perder edições ao re-renderizar o painel). */
 window.quillBoundFieldId = null;
+window.fieldReadingQuill = null;
+window.quillReadingBoundFieldId = null;
+
+/** Remove links e conteúdo perigoso do HTML da Leitura (só browser / painel). */
+function stripReadingHtml(html) {
+  const s = String(html || '');
+  if (!s.trim()) return '';
+  try {
+    const doc = new DOMParser().parseFromString('<div id="__rroot">' + s + '</div>', 'text/html');
+    const root = doc.getElementById('__rroot');
+    if (!root) return s;
+    root.querySelectorAll('script, iframe, object, embed, form, button, input, select, textarea').forEach((n) => n.remove());
+    root.querySelectorAll('a').forEach((a) => {
+      const span = doc.createElement('span');
+      span.innerHTML = a.innerHTML;
+      a.replaceWith(span);
+    });
+    root.querySelectorAll('*').forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const n = attr.name.toLowerCase();
+        if (n.startsWith('on')) el.removeAttribute(attr.name);
+        if ((n === 'href' || n === 'src') && /^javascript:/i.test(String(attr.value))) el.removeAttribute(attr.name);
+      });
+    });
+    return root.innerHTML;
+  } catch (e) {
+    return s
+      .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+      .replace(/<a\b[^>]*>/gi, '<span>')
+      .replace(/<\/a>/gi, '</span>');
+  }
+}
+
+function flushReadingQuillToBoundField() {
+  const quill = window.fieldReadingQuill;
+  const bid = window.quillReadingBoundFieldId;
+  if (!quill || !bid) return;
+  const f = fields.find((x) => x.id === bid);
+  if (f) {
+    f.contentHtml = stripReadingHtml(quill.root.innerHTML);
+  }
+}
 
 function flushQuillToBoundField() {
   const quill = window.fieldHelpQuill;
@@ -128,9 +174,23 @@ function ensureShowFieldInstructionsFlag(f) {
   return base;
 }
 
+/** Visão IA Análise: só 1×1 e 2×2; valores antigos migram para 2×2. */
+function normalizeVisionAnalysisGridStored(f) {
+  if (!f || f.type !== 'vision_ai_analysis') return f;
+  const raw = String(f.visionAnalysisGrid || '1x1')
+    .trim()
+    .toLowerCase()
+    .replace(/\*/g, 'x');
+  let g = '1x1';
+  if (raw === '1x1' || raw === '2x2') g = raw;
+  else if (['2x1', '3x1', '3x2', '3x3'].includes(raw)) g = '2x2';
+  if (g === String(f.visionAnalysisGrid || '').trim().toLowerCase().replace(/\*/g, 'x')) return f;
+  return { ...f, visionAnalysisGrid: g };
+}
+
 function ensureSchemaInstructionFlags(schema) {
   if (!Array.isArray(schema)) return schema;
-  return schema.map((x) => ensureShowFieldInstructionsFlag(x));
+  return schema.map((x) => normalizeVisionAnalysisGridStored(ensureShowFieldInstructionsFlag(x)));
 }
 
 /**
@@ -172,6 +232,13 @@ window.destroyFieldHelpEditor = function () {
   window.fieldHelpQuill = null;
   window.quillBoundFieldId = null;
   const el = document.getElementById('field-help-editor');
+  if (el) el.innerHTML = '';
+};
+
+window.destroyFieldReadingEditor = function () {
+  window.fieldReadingQuill = null;
+  window.quillReadingBoundFieldId = null;
+  const el = document.getElementById('field-reading-editor');
   if (el) el.innerHTML = '';
 };
 
@@ -272,6 +339,90 @@ function fieldHelpImageHandler() {
   }
 }
 
+function fieldReadingImageHandler() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.setAttribute('aria-hidden', 'true');
+  input.style.cssText = 'position:fixed;left:-2000px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(input);
+  const cleanup = () => {
+    try {
+      if (input.parentNode) input.parentNode.removeChild(input);
+    } catch (e) { /* ignore */ }
+  };
+  input.addEventListener(
+    'change',
+    async () => {
+      const file = input.files && input.files[0];
+      cleanup();
+      if (!file) return;
+      try {
+        const fileBase64 = await fileToBase64(file);
+        const res = await fetch(`${brsparkApiBase()}/checklists/help-image`, {
+          method: 'POST',
+          headers: adminJsonHeaders(),
+          body: JSON.stringify({ fileBase64, mimeType: file.type || 'image/jpeg' }),
+        });
+        const rawText = await res.text();
+        let data = {};
+        try {
+          data = rawText ? JSON.parse(rawText) : {};
+        } catch (_) {
+          data = { error: rawText.slice(0, 200) || 'Resposta inválida do servidor' };
+        }
+        if (!res.ok) {
+          alert(data.error || 'Upload recusado.');
+          return;
+        }
+        const url = data.url;
+        if (!url) {
+          alert('Servidor não devolveu a URL da imagem.');
+          return;
+        }
+        const quill = window.fieldReadingQuill;
+        if (!quill) {
+          alert('Editor não está pronto. Clique de novo no campo e tente inserir a imagem.');
+          return;
+        }
+        const imgSrc = helpImageDisplayUrl(url);
+        quill.focus();
+        const sel = quill.getSelection(true);
+        const len = quill.getLength();
+        let index = sel && typeof sel.index === 'number' ? sel.index : Math.max(0, len - 1);
+        index = Math.max(0, Math.min(index, Math.max(0, len - 1)));
+        const snippet = `<p><img src="${escapeHtmlAttr(imgSrc)}" alt="" /></p>`;
+        try {
+          quill.clipboard.dangerouslyPasteHTML(index, snippet, 'user');
+        } catch (e1) {
+          try {
+            const Delta = Quill.import('delta');
+            quill.updateContents(new Delta().retain(index).insert({ image: imgSrc }).insert('\n'), 'user');
+          } catch (e2) {
+            console.error('[reading-image] paste', e1, e2);
+            alert('Não foi possível inserir a imagem no editor.');
+            return;
+          }
+        }
+        const after = Math.min(quill.getLength(), index + 2);
+        quill.setSelection(after, 0, 'silent');
+      } catch (err) {
+        console.error(err);
+        alert('Falha ao enviar imagem: ' + (err.message || err));
+      }
+    },
+    { once: true }
+  );
+  input.addEventListener('cancel', () => cleanup(), { once: true });
+  try {
+    input.click();
+  } catch (e) {
+    cleanup();
+    console.error('[reading-image] file picker', e);
+    alert('Não foi possível abrir o seletor de arquivos.');
+  }
+}
+
 function refocusCanvasTitleInputIfRequested(field) {
   const refocusId = window.__brsparkLabelInputRefocusId;
   if (!field || !refocusId || refocusId !== field.id) return;
@@ -284,6 +435,8 @@ function refocusCanvasTitleInputIfRequested(field) {
 }
 
 window.initFieldHelpEditor = function (field) {
+  flushReadingQuillToBoundField();
+  if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
   flushQuillToBoundField();
   window.destroyFieldHelpEditor();
   if (typeof Quill === 'undefined') {
@@ -334,6 +487,60 @@ window.initFieldHelpEditor = function (field) {
       } catch (e2) {
         console.warn('[builder] helpHtml load', e1, e2);
         quill.setText(field.description || '', 'silent');
+      }
+    }
+  }
+  refocusCanvasTitleInputIfRequested(field);
+};
+
+window.initFieldReadingEditor = function (field) {
+  flushReadingQuillToBoundField();
+  window.destroyFieldReadingEditor();
+  if (typeof Quill === 'undefined') {
+    console.warn('[builder] Quill não disponível (CDN).');
+    refocusCanvasTitleInputIfRequested(field);
+    return;
+  }
+  const host = document.getElementById('field-reading-editor');
+  if (!host) {
+    refocusCanvasTitleInputIfRequested(field);
+    return;
+  }
+  const quill = new Quill('#field-reading-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: [
+          ['bold', 'italic', 'underline'],
+          [{ color: [] }, { background: [] }],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['image'],
+        ],
+        handlers: { image: fieldReadingImageHandler },
+      },
+    },
+    placeholder: 'Texto formatado exibido no app (só leitura). Hiperlinks não são permitidos.',
+  });
+  window.fieldReadingQuill = quill;
+  window.quillReadingBoundFieldId = field.id;
+  quill.on('text-change', function () {
+    const bid = window.quillReadingBoundFieldId;
+    if (!bid) return;
+    const f = fields.find((x) => x.id === bid);
+    if (!f) return;
+    f.contentHtml = stripReadingHtml(quill.root.innerHTML);
+    if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
+  });
+  const initial = field.contentHtml && String(field.contentHtml).trim() ? field.contentHtml : '';
+  if (initial) {
+    try {
+      quill.clipboard.dangerouslyPasteHTML(0, initial, 'silent');
+    } catch (e1) {
+      try {
+        quill.setContents(quill.clipboard.convert({ html: initial }), 'silent');
+      } catch (e2) {
+        console.warn('[builder] contentHtml load', e1, e2);
+        quill.setText('', 'silent');
       }
     }
   }
@@ -667,6 +874,7 @@ window.openSectionStepEditModal = function (sectionId) {
     const m = document.getElementById('section-step-edit-modal');
     const inp = document.getElementById('section-step-edit-title');
     if (!m || !inp) return;
+    if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
     window.selectField(sf.id);
     window.__sectionStepEditDraft = {
         sectionId: sf.id,
@@ -738,13 +946,80 @@ window.applySectionStepEditModal = function () {
     window.closeSectionStepEditModal();
     flushQuillToBoundField();
     renderCanvas();
-    if (selectedFieldId === sf.id) renderProperties();
+    if (selectedFieldId === sf.id && window.fieldPropertiesModalOpen) renderProperties();
     if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
 };
 
 const elToolbox = document.getElementById('toolbox');
 const elCanvas = document.getElementById('canvas');
-const elPropsBody = document.getElementById('properties-body');
+const elPropsBody = document.getElementById('field-properties-modal-body');
+
+/** Modal de propriedades; quando false, clicar só no cartão não re-renderiza o painel. */
+window.fieldPropertiesModalOpen = false;
+
+function syncFieldPropertiesModalSubtitle() {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    const sub = document.getElementById('field-properties-modal-subtitle');
+    if (sub && f) {
+        const kind = f.type === 'section_break' ? 'Etapa / seção' : String(f.type || '').replace(/_/g, ' ');
+        sub.textContent = `${f.label || f.id} · ${kind}`;
+    }
+}
+
+window.showFieldPropertiesModal = function () {
+    if (!elPropsBody || !selectedFieldId) return;
+    const logicM = document.getElementById('logic-modal');
+    if (logicM && logicM.style.display === 'flex' && typeof window.hideLogicModal === 'function') {
+        window.hideLogicModal();
+    }
+    syncFieldPropertiesModalSubtitle();
+    const shell = document.getElementById('field-properties-modal');
+    if (shell) {
+        window.fieldPropertiesModalOpen = true;
+        shell.style.display = 'flex';
+        shell.style.justifyContent = 'center';
+        shell.style.alignItems = 'center';
+        try {
+            document.body.style.overflow = 'hidden';
+        } catch (e) {
+            /* ignore */
+        }
+        try {
+            elPropsBody.scrollTop = 0;
+        } catch (e2) {
+            /* ignore */
+        }
+    }
+};
+
+window.closeFieldPropertiesModal = function () {
+    const shell = document.getElementById('field-properties-modal');
+    flushReadingQuillToBoundField();
+    if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
+    flushQuillToBoundField();
+    if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
+    window.fieldPropertiesModalOpen = false;
+    if (shell) shell.style.display = 'none';
+    try {
+        document.body.style.overflow = '';
+    } catch (e) {
+        /* ignore */
+    }
+};
+
+if (!window.__fieldPropertiesModalEscapeHook) {
+    window.__fieldPropertiesModalEscapeHook = true;
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape' || !window.fieldPropertiesModalOpen) return;
+        const logicM = document.getElementById('logic-modal');
+        if (logicM && logicM.style.display === 'flex') return;
+        const secM = document.getElementById('section-step-edit-modal');
+        if (secM && secM.style.display === 'flex') return;
+        ev.preventDefault();
+        window.closeFieldPropertiesModal();
+    });
+}
 
 // Mapeamento de emojis por tipo para embelezamento
 // Mapeamento de ion-icons por tipo para embelezamento
@@ -777,7 +1052,13 @@ const iconMap = {
     'materials_receipt': '<ion-icon name="arrow-down-circle-outline"></ion-icon>',
     'technician_finance': '<ion-icon name="cash-outline"></ion-icon>',
     'signature': '<ion-icon name="create-outline"></ion-icon>',
-    'signature_summary': '<ion-icon name="reader-outline"></ion-icon>'
+    'signature_summary': '<ion-icon name="reader-outline"></ion-icon>',
+    'leitura': '<ion-icon name="book-outline"></ion-icon>',
+    'voice_note': '<ion-icon name="mic-outline"></ion-icon>',
+    'image_annotation': '<ion-icon name="brush-outline"></ion-icon>',
+    'lookup_select': '<ion-icon name="cloud-download-outline"></ion-icon>',
+    'repeatable_matrix': '<ion-icon name="grid-outline"></ion-icon>',
+    'opinion_scale': '<ion-icon name="analytics-outline"></ion-icon>',
 };
 
 /** Estado de seções colapsadas no canvas (id do grupo: __preamble__ ou id do section_break). */
@@ -1145,7 +1426,7 @@ function installNativePaletteDropOnCanvas() {
             const newField = createNewFieldFromToolboxType(type, rawText);
             fields.splice(Math.max(0, Math.min(globalIx, fields.length)), 0, newField);
             renderCanvas();
-            selectField(newField.id);
+            selectField(newField.id, { openPropertiesModal: true });
         },
         false
     );
@@ -1155,6 +1436,19 @@ function installNativePaletteDropOnCanvas() {
  * Se o Sortable deixar um clone da palette no DOM sem converter, absorve **um** nó no array `fields`.
  * Chamar em ciclo até retornar false se houver vários órfãos.
  */
+/** Pré-visualização em miniatura da grelha (Form Builder — Visão IA Análise). */
+function miniVisionAnalysisGridPreview(cols, rows) {
+    const total = cols * rows;
+    const cells = [];
+    for (let i = 0; i < total; i++) {
+        cells.push('<div style="background:#fecdd3;border-radius:2px;min-width:0;min-height:0"></div>');
+    }
+    const h = Math.max(22, Math.round((48 * rows) / Math.max(1, cols)));
+    return `<div aria-hidden="true" style="display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:3px;width:48px;height:${h}px;flex-shrink:0;border:1px solid #fca5a5;padding:3px;border-radius:6px;background:#fff7f7">${cells.join(
+        '',
+    )}</div>`;
+}
+
 function absorbStrayPaletteItemsIntoFields() {
     if (!elCanvas) return false;
     const node = elCanvas.querySelector('.canvas-section-body > [data-type]:not(.canvas-item)');
@@ -1178,11 +1472,18 @@ function canvasHasStrayPaletteNodes() {
     return !!elCanvas.querySelector('.canvas-section-body > [data-type]:not(.canvas-item)');
 }
 
+/** Rótulo inicial ao adicionar da toolbox — igual ao nome do item no menu (pt-BR). */
+function defaultLabelForNewToolboxField(type, rawText) {
+    if (type === 'vision_checklist') return 'Visão de IA Detecção';
+    if (type === 'vision_ai_analysis') return 'Visão de IA Análise';
+    return rawText;
+}
+
 function createNewFieldFromToolboxType(type, rawText) {
     return {
         id: 'field_' + Math.floor(Math.random() * 99999),
         type: type,
-        label: `${rawText}`,
+        label: `${defaultLabelForNewToolboxField(type, rawText)}`,
         required: false,
         multiple: false,
         minItems: '',
@@ -1210,13 +1511,47 @@ function createNewFieldFromToolboxType(type, rawText) {
             }
           : {}),
         ...(type === 'vision_checklist' || type === 'vision_ai_analysis'
-          ? {
+            ? {
+              visionStructuredPrompt: 'A evidência visual confirma o item verificado?',
               visionQuestions: [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }],
               visionCaptureMode: 'photo_and_video',
               requireOnlineValidation: false,
             }
           : {}),
+        ...(type === 'vision_ai_analysis' ? { visionAnalysisGrid: '1x1' } : {}),
         ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
+        ...(type === 'leitura' ? { contentHtml: '', required: false } : {}),
+        ...(type === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
+        ...(type === 'image_annotation'
+            ? {
+                  annotationPenColor: '#dc2626',
+                  annotationStrokeWidth: 4,
+              }
+            : {}),
+        ...(type === 'lookup_select'
+            ? {
+                  lookupSource: 'preset',
+                  lookupPreset: 'equipamentos_demo',
+                  lookupInlineJson: '',
+              }
+            : {}),
+        ...(type === 'repeatable_matrix'
+            ? {
+                  matrixColumns: [
+                      { id: 'c1', label: 'Item', cellType: 'text' },
+                      { id: 'c2', label: 'Valor', cellType: 'number' },
+                  ],
+                  matrixMinRows: '0',
+                  matrixMaxRows: '20',
+              }
+            : {}),
+        ...(type === 'opinion_scale'
+            ? {
+                  opinionScaleMode: 'nps',
+                  likertLabels:
+                      'Discordo totalmente\nDiscordo\nNeutro\nConcordo\nConcordo totalmente',
+              }
+            : {}),
     };
 }
 
@@ -1388,6 +1723,12 @@ function buildCanvasFieldElement(f) {
         'signature_summary',
         'vision_checklist',
         'vision_ai_analysis',
+        'leitura',
+        'voice_note',
+        'image_annotation',
+        'lookup_select',
+        'repeatable_matrix',
+        'opinion_scale',
     ]);
     const multiTag =
         f.multiple && !multiFieldExcluded.has(f.type)
@@ -1409,8 +1750,12 @@ function buildCanvasFieldElement(f) {
                     </div>
                 </div>
                 <div class="canvas-item-toolbar" onclick="event.stopPropagation();">
-                    <button type="button" title="Propriedades do campo" onclick="window.selectField('${f.id}')"><ion-icon name="settings-outline"></ion-icon></button>
-                    <button type="button" class="${f.required ? 'is-req-active' : ''}" title="${f.required ? 'Obrigatório — clique para opcional' : 'Opcional — clique para obrigatório'}" onclick="window.toggleInlineRequired(event, '${f.id}')"><ion-icon name="${f.required ? 'checkmark-circle-outline' : 'ellipse-outline'}"></ion-icon></button>
+                    <button type="button" title="Propriedades do campo" onclick="window.selectField('${f.id}', { openPropertiesModal: true })"><ion-icon name="settings-outline"></ion-icon></button>
+                    ${
+                        f.type === 'leitura'
+                            ? ''
+                            : `<button type="button" class="${f.required ? 'is-req-active' : ''}" title="${f.required ? 'Obrigatório — clique para opcional' : 'Opcional — clique para obrigatório'}" onclick="window.toggleInlineRequired(event, '${f.id}')"><ion-icon name="${f.required ? 'checkmark-circle-outline' : 'ellipse-outline'}"></ion-icon></button>`
+                    }
                     <button type="button" title="Lógica e regras" onclick="window.openLogicModal(event, '${f.id}')"><ion-icon name="options-outline"></ion-icon></button>
                     <button type="button" title="Duplicar" onclick="window.cloneField('${f.id}')"><ion-icon name="copy-outline"></ion-icon></button>
                     <button type="button" title="Excluir" class="danger canvas-item-delete" onclick="window.deleteField('${f.id}')"><ion-icon name="trash-outline"></ion-icon></button>
@@ -1627,7 +1972,7 @@ function renderCanvas() {
             };
             toolbar.appendChild(
                 mkBtn('Propriedades da seção', 'settings-outline', false, () => {
-                    window.selectField(sf.id);
+                    window.selectField(sf.id, { openPropertiesModal: true });
                 })
             );
             const reqSec = document.createElement('button');
@@ -1727,11 +2072,12 @@ window.handleInlineLabelUpdate = function(e, id) {
 window.toggleInlineRequired = function(e, id) {
     if(e) e.stopPropagation();
     const f = fields.find(x => x.id === id);
+    if (f && f.type === 'leitura') return;
     if(f) {
         f.required = !f.required;
         window.renderCanvas(); // Redraws the tag to show updated visual state
-        if (selectedFieldId === id) {
-            window.renderProperties(); // Update the sidebar checkbox
+        if (selectedFieldId === id && window.fieldPropertiesModalOpen) {
+            window.renderProperties();
         }
         if(typeof window.renderMobilePreview === 'function') {
             window.renderMobilePreview();
@@ -1774,7 +2120,13 @@ window.selectField = function(id, opts) {
         applyCopilotCanvasFollow();
         return;
     }
-    renderProperties();
+    const shouldRenderProps = opts.openPropertiesModal || window.fieldPropertiesModalOpen;
+    if (shouldRenderProps) {
+        renderProperties();
+    }
+    if (opts.openPropertiesModal) {
+        window.showFieldPropertiesModal();
+    }
     applyCopilotCanvasFollow();
 };
 
@@ -1788,7 +2140,7 @@ window.triggerIconPickerForField = function(evt, id) {
             fields[idx].iconLibrary = iconLib;
             fields[idx].iconColor = iconColor;
             renderCanvas();
-            renderProperties();
+            if (window.fieldPropertiesModalOpen) renderProperties();
         }
     });
 };
@@ -1850,6 +2202,7 @@ window.cloneSection = function (sectionId) {
     selectedFieldId = clone[0].id;
     renderCanvas();
     renderProperties();
+    window.showFieldPropertiesModal();
 };
 
 window.deleteSection = function (sectionId) {
@@ -1884,6 +2237,7 @@ window.builderAddSectionAfterLast = function () {
     selectedFieldId = nf.id;
     renderCanvas();
     renderProperties();
+    window.showFieldPropertiesModal();
 };
 
 // Ações na Janela / Global Scope
@@ -1892,6 +2246,8 @@ window.deleteField = function(id) {
     if (fDel && fDel.type === 'section_break') {
         return window.deleteSection(id);
     }
+    flushReadingQuillToBoundField();
+    if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
     flushQuillToBoundField();
     fields = fields.filter(f => f.id !== id);
     if (fields.length === 0) {
@@ -1911,6 +2267,8 @@ window.cloneField = function(id) {
     }
     const fIndex = fields.findIndex(f => f.id === id);
     if(fIndex === -1) return;
+    flushReadingQuillToBoundField();
+    if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
     flushQuillToBoundField();
     const f = fields[fIndex];
     const newId = 'field_' + Math.floor(Math.random() * 99999);
@@ -1923,6 +2281,7 @@ window.cloneField = function(id) {
     selectedFieldId = newId;
     renderCanvas();
     renderProperties();
+    window.showFieldPropertiesModal();
 };
 
 function updateField(key, val, opts) {
@@ -1935,21 +2294,28 @@ function updateField(key, val, opts) {
 }
 
 function renderProperties() {
+    if (!elPropsBody) return;
     if(!selectedFieldId) {
+        flushReadingQuillToBoundField();
+        if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
         flushQuillToBoundField();
         if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.</div>';
+        if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
         return;
     }
 
     // Gravar instruções Quill no campo ANTES de apagar o DOM do editor (senão perde-se helpHtml ao trocar de campo / re-renderizar)
+    flushReadingQuillToBoundField();
+    if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
     flushQuillToBoundField();
     if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
 
     const f = fields.find(x => x.id === selectedFieldId);
     if (!f) {
         selectedFieldId = null;
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.</div>';
+        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.</div>';
+        if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
         return;
     }
     
@@ -2074,12 +2440,19 @@ function renderProperties() {
         </div>`;
     } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
         const isVisionAnalysis = f.type === 'vision_ai_analysis';
-        const vqLines = Array.isArray(f.visionQuestions)
-            ? f.visionQuestions
-                  .map((q) => String((q && q.text) || '').trim())
-                  .filter(Boolean)
-                  .join('\n')
-            : '';
+        const defaultVisionPrompt = 'A evidência visual confirma o item verificado?';
+        const promptDisplay = (() => {
+            const sp = String(f.visionStructuredPrompt || '').trim();
+            if (sp) return sp;
+            if (Array.isArray(f.visionQuestions)) {
+                const joined = f.visionQuestions
+                    .map((q) => String((q && q.text) || '').trim())
+                    .filter(Boolean)
+                    .join('\n\n');
+                if (joined) return joined;
+            }
+            return defaultVisionPrompt;
+        })();
         const capMode =
             f.visionCaptureMode === 'photo_only' ||
             f.visionCaptureMode === 'video_only' ||
@@ -2090,13 +2463,47 @@ function renderProperties() {
         const vBoxBr = isVisionAnalysis ? '#f87171' : '#38bdf8';
         const vTitle = isVisionAnalysis
             ? '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão IA Análise</span>'
-            : '<ion-icon name="videocam-outline"></ion-icon> Visão IA Detecção';
+            : '<ion-icon name="videocam-outline"></ion-icon> Visão de IA Detecção';
         const vTitleColor = isVisionAnalysis ? '#991b1b' : '#0369a1';
         const vBody = isVisionAnalysis
-            ? 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações) e guarda sim/não + confiança por pergunta.'
-            : 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b> e guarda sim/não + confiança por pergunta.';
+            ? 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.'
+            : 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.';
         const vBodyColor = isVisionAnalysis ? '#7f1d1d' : '#0c4a6e';
         const vLabel = isVisionAnalysis ? '#b91c1c' : '#0369a1';
+        const curGridRaw = String(f.visionAnalysisGrid || '1x1')
+            .trim()
+            .toLowerCase()
+            .replace(/\*/g, 'x');
+        let curGridNorm = '1x1';
+        if (curGridRaw === '1x1' || curGridRaw === '2x2') curGridNorm = curGridRaw;
+        else if (['2x1', '3x1', '3x2', '3x3'].includes(curGridRaw)) curGridNorm = '2x2';
+        const gridOpts = [
+            { v: '1x1', label: '1 foto — 1×1', c: 1, r: 1 },
+            { v: '2x2', label: '4 fotos — 2×2', c: 2, r: 2 },
+        ];
+        const gridPickHtml = isVisionAnalysis
+            ? `
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Grelha de fotos (envio único ao Gemini)</label>
+            <div style="font-size:9px;color:#64748b;margin:-2px 0 10px;line-height:1.35">
+              Só <b>1×1</b> ou <b>2×2</b>. Com mais de uma célula, a app exige <b>todas</b> as fotos (câmera) antes de analisar; só <b>foto</b> (sem vídeo). Modelos antigos com grelha maior passam a <b>2×2</b> ao gravar.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+                ${gridOpts
+                    .map(
+                        (o) => `
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid ${
+                    curGridNorm === o.v ? '#dc2626' : '#e2e8f0'
+                };background:${curGridNorm === o.v ? '#fff1f2' : '#fff'}">
+                  <input type="radio" name="visionAnalysisGrid_${escapeHtmlAttr(f.id)}" value="${o.v}" ${
+                            curGridNorm === o.v ? 'checked' : ''
+                        } onchange="window.handleFieldUpdate('visionAnalysisGrid', this.value); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;flex-shrink:0" />
+                  ${miniVisionAnalysisGridPreview(o.c, o.r)}
+                  <span style="font-size:12px;font-weight:700;color:#450a0a">${escapeHtmlLogic(o.label)}</span>
+                </label>`,
+                    )
+                    .join('')}
+            </div>`
+            : '';
         extraProps = `
         <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
@@ -2109,17 +2516,111 @@ function renderProperties() {
                 <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>Somente vídeo</option>
                 <option value="photo_and_video" ${capMode === 'photo_and_video' ? 'selected' : ''}>Foto e vídeo</option>
             </select>
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Perguntas (sim / não) — uma por linha, até 24</label>
-            <textarea class="prop-input" style="height:120px; font-size:12px; font-family:system-ui,sans-serif;" onblur="window.updateVisionQuestionsFromLines(this.value)">${escapeHtmlLogic(
-                vqLines,
+            ${gridPickHtml}
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Prompt estruturado (único)</label>
+            <textarea class="prop-input" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="window.updateVisionStructuredPrompt(this.value)">${escapeHtmlLogic(
+                promptDisplay,
             )}</textarea>
-            <div style="font-size:9px; color:#64748b; margin-top:6px;">IDs são gerados automaticamente (q1, q2…). Linhas vazias são ignoradas.</div>
+            <div style="font-size:9px; color:#64748b; margin-top:6px;">Descreva critérios, formato desejado e o que a IA deve verificar na mídia. Máximo ~${MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString(
+                'pt-BR',
+            )} caracteres. A API continua a devolver JSON com uma resposta sim/não (id <code>q1</code>) para compatibilidade com o app e relatórios.</div>
+        </div>`;
+    } else if (f.type === 'voice_note') {
+        const vLang = escapeHtmlLogic(String(f.voiceTranscribeLanguage || 'pt').slice(0, 12));
+        extraProps = `
+        <div class="prop-group" style="background:#f5f3ff;border:1px solid #c4b5fd;padding:12px;border-radius:8px;margin-top:16px;">
+            <div style="font-size:11px;font-weight:800;color:#5b21b6;margin-bottom:8px;"><ion-icon name="mic-outline"></ion-icon> Nota de voz</div>
+            <div style="font-size:10px;color:#6b21a8;line-height:1.4;margin-bottom:10px;">
+              A transcrição usa <b>OpenAI Whisper</b> no servidor (mesma <b>API key</b> da integração «OpenAI» em Integrações). O técnico precisa de <b>internet</b> ao tocar em «Parar e transcrever».
+            </div>
+            <label class="prop-label" style="font-size:10px;color:#5b21b6;">Idioma (Whisper)</label>
+            <input class="prop-input" type="text" maxlength="12" placeholder="pt" value="${vLang}" onchange="window.handleFieldUpdate('voiceTranscribeLanguage', this.value)" />
+            <div style="font-size:9px;color:#64748b;margin-top:6px;">Ex.: <code>pt</code>, <code>en</code>, <code>es</code>. Opcional mas ajuda com sotaque e ruído.</div>
         </div>`;
     } else if (f.type === 'file_upload') {
         extraProps = `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fcd34d; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px"><ion-icon name="document-attach-outline"></ion-icon> Anexar Arquivo (app)</div>
             <div style="font-size:10px; color:#92400e; line-height:1.35;">Máximo <b>50 MB</b> por arquivo. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e arquivos correntes (PDF, Office, imagens, ZIP, etc.) são aceitos.</div>
+        </div>`;
+    } else if (f.type === 'image_annotation') {
+        const pen = escapeHtmlAttr(String(f.annotationPenColor || '#dc2626'));
+        const sw = String(f.annotationStrokeWidth != null ? f.annotationStrokeWidth : 4);
+        extraProps = `
+        <div class="prop-group" style="background:#fff7ed; border:1px solid #fdba74; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:#9a3412; margin-bottom:6px"><ion-icon name="brush-outline"></ion-icon> Foto com anotações</div>
+            <div style="font-size:10px; color:#7c2d12; line-height:1.35; margin-bottom:10px;">No app, o técnico escolhe câmera ou galeria e pode desenhar por cima da imagem. O valor guardado é JSON (URI local + traços normalizados).</div>
+            <label class="prop-label" style="color:#c2410c; font-size:10px;">Cor do traço</label>
+            <input class="prop-input" type="color" value="${pen}" onchange="window.handleFieldUpdate('annotationPenColor', this.value)" style="max-width:120px;height:36px;padding:2px;" />
+            <label class="prop-label" style="color:#c2410c; font-size:10px; margin-top:10px;">Espessura (1–24)</label>
+            <input class="prop-input" type="number" min="1" max="24" value="${escapeHtmlLogic(sw)}" onchange="window.handleFieldUpdate('annotationStrokeWidth', parseInt(this.value,10)||4)" />
+        </div>`;
+    } else if (f.type === 'lookup_select') {
+        const src = f.lookupSource === 'inline_json' ? 'inline_json' : 'preset';
+        const preset = escapeHtmlLogic(String(f.lookupPreset || 'equipamentos_demo'));
+        const inlineEsc = escapeHtmlLogic(String(f.lookupInlineJson || ''));
+        extraProps = `
+        <div class="prop-group" style="background:#eff6ff; border:1px solid #93c5fd; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:#1e40af; margin-bottom:6px"><ion-icon name="cloud-download-outline"></ion-icon> Lista dinâmica</div>
+            <label class="prop-label" style="color:#1d4ed8; font-size:10px;">Origem</label>
+            <select class="prop-input" onchange="window.handleFieldUpdate('lookupSource', this.value); if(typeof renderProperties==='function')renderProperties();" style="font-size:12px; margin-bottom:10px;">
+                <option value="preset" ${src === 'preset' ? 'selected' : ''}>Preset no servidor (GET com sessão)</option>
+                <option value="inline_json" ${src === 'inline_json' ? 'selected' : ''}>JSON no modelo (sem rede)</option>
+            </select>
+            <div style="display:${src === 'preset' ? 'block' : 'none'}">
+                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">Preset</label>
+                <select class="prop-input" onchange="window.handleFieldUpdate('lookupPreset', this.value)" style="font-size:12px;">
+                    <option value="equipamentos_demo" ${preset === 'equipamentos_demo' ? 'selected' : ''}>equipamentos_demo</option>
+                    <option value="tecnicos_demo" ${preset === 'tecnicos_demo' ? 'selected' : ''}>tecnicos_demo</option>
+                    <option value="prioridades_demo" ${preset === 'prioridades_demo' ? 'selected' : ''}>prioridades_demo</option>
+                </select>
+            </div>
+            <div style="display:${src === 'inline_json' ? 'block' : 'none'}; margin-top:8px;">
+                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">JSON (array de { value, label })</label>
+                <textarea class="prop-input" style="height:100px;font-family:monospace;font-size:11px;" onblur="window.handleFieldUpdate('lookupInlineJson', this.value)">${inlineEsc}</textarea>
+            </div>
+        </div>`;
+    } else if (f.type === 'repeatable_matrix') {
+        const colsJson = JSON.stringify(Array.isArray(f.matrixColumns) ? f.matrixColumns : [], null, 2);
+        const colsEsc = escapeHtmlLogic(colsJson);
+        const minR = escapeHtmlLogic(String(f.matrixMinRows != null && f.matrixMinRows !== '' ? f.matrixMinRows : '0'));
+        const maxR = escapeHtmlLogic(String(f.matrixMaxRows != null && f.matrixMaxRows !== '' ? f.matrixMaxRows : '20'));
+        extraProps = `
+        <div class="prop-group" style="background:#ecfdf5; border:1px solid #6ee7b7; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:6px"><ion-icon name="grid-outline"></ion-icon> Matriz repetível</div>
+            <div style="font-size:10px; color:#065f46; line-height:1.35; margin-bottom:10px;">Colunas (até 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. O app guarda um array JSON de linhas.</div>
+            <label class="prop-label" style="color:#0f766e; font-size:10px;">Colunas (JSON)</label>
+            <textarea class="prop-input" style="height:140px;font-family:monospace;font-size:11px;" onblur="window.applyRepeatableMatrixColumnsJson(this.value)">${colsEsc}</textarea>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                <div style="flex:1; min-width:100px;">
+                    <label class="prop-label" style="font-size:10px; color:#047857;">Mín. linhas</label>
+                    <input class="prop-input" type="number" min="0" value="${minR}" onchange="window.handleFieldUpdate('matrixMinRows', this.value)" />
+                </div>
+                <div style="flex:1; min-width:100px;">
+                    <label class="prop-label" style="font-size:10px; color:#047857;">Máx. linhas</label>
+                    <input class="prop-input" type="number" min="1" value="${maxR}" onchange="window.handleFieldUpdate('matrixMaxRows', this.value)" />
+                </div>
+            </div>
+        </div>`;
+    } else if (f.type === 'opinion_scale') {
+        const mode = f.opinionScaleMode === 'likert' ? 'likert' : 'nps';
+        const likLines =
+            typeof f.likertLabels === 'string'
+                ? f.likertLabels
+                : Array.isArray(f.likertLabels)
+                  ? f.likertLabels.join('\n')
+                  : '';
+        const likEsc = escapeHtmlLogic(likLines);
+        extraProps = `
+        <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:#6b21a8; margin-bottom:6px"><ion-icon name="analytics-outline"></ion-icon> Escala NPS / Likert</div>
+            <label class="prop-label" style="color:#7c3aed; font-size:10px;">Modo</label>
+            <select class="prop-input" onchange="window.handleFieldUpdate('opinionScaleMode', this.value)" style="font-size:12px; margin-bottom:10px;">
+                <option value="nps" ${mode === 'nps' ? 'selected' : ''}>NPS (0 a 10)</option>
+                <option value="likert" ${mode === 'likert' ? 'selected' : ''}>Likert (5 níveis)</option>
+            </select>
+            <label class="prop-label" style="color:#7c3aed; font-size:10px;">Rótulos Likert (um por linha, até 5)</label>
+            <textarea class="prop-input" style="height:100px;font-size:12px;" onblur="window.handleFieldUpdate('likertLabels', this.value)">${likEsc}</textarea>
         </div>`;
     } else if (f.type === 'dropdown' || f.type === 'multiselect') {
         extraProps = `
@@ -2145,7 +2646,9 @@ function renderProperties() {
                     o.type !== 'signature_summary' &&
                     o.type !== 'hidden' &&
                     o.type !== 'vision_checklist' &&
-                    o.type !== 'vision_ai_analysis',
+                    o.type !== 'vision_ai_analysis' &&
+                    o.type !== 'leitura' &&
+                    o.type !== 'voice_note',
             )
             .map((o) => {
                 const ck = ids.has(o.id) ? 'checked' : '';
@@ -2223,6 +2726,20 @@ function renderProperties() {
             </div>
         </div>`;
         })() : ''}
+        ${
+            f.type === 'leitura'
+                ? `
+        <div class="prop-group">
+            <label class="prop-label">Texto da Leitura (rich text)</label>
+            <div style="font-size:10px;color:#64748b;margin-bottom:8px;line-height:1.35;">
+              Exibido no app como <strong>só leitura</strong> (scroll com o formulário). <strong>Hiperligações não são permitidas</strong> — são removidas ao editar.
+            </div>
+            <div id="field-reading-editor-host" style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              <div id="field-reading-editor"></div>
+            </div>
+        </div>
+        `
+                : `
         <div class="prop-group">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
                 <label class="prop-label" style="margin:0; flex:1; min-width:160px;">Instruções ao técnico (rich text, opcional)</label>
@@ -2236,21 +2753,27 @@ function renderProperties() {
               <div id="field-help-editor"></div>
             </div>
         </div>
+        `
+        }
         
-        ${f.type !== 'section_break' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' ? `
+        ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
         <div class="prop-group">
             <label class="prop-label">Auto-Preenchimento / Valor Padrão (Opcional)</label>
             <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="Use tags como {{user.name}}, {{date}}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
         </div>
         ` : ''}
 
-        <div class="prop-group" style="display:flex; align-items:center; gap:8px;">
+        ${
+            f.type === 'leitura'
+                ? `<div class="prop-group" style="font-size:12px;color:#64748b;line-height:1.4;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).</div>`
+                : `<div class="prop-group" style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="prop-req" ${reqChecked} onchange="window.handleFieldUpdate('required', this.checked)" />
             <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">Resposta Obrigatória?</label>
-        </div>
+        </div>`
+        }
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'leitura', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
@@ -2270,7 +2793,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'file_upload'].includes(f.type) ? `
+        ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'file_upload', 'image_annotation'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
@@ -2280,7 +2803,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${f.type !== 'section_break' && f.type !== 'hidden' ? `
+        ${f.type !== 'section_break' && f.type !== 'hidden' && f.type !== 'leitura' ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:4px; background:#f0f9ff; border:1px solid #bae6fd; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} onchange="window.handleFieldUpdate('allowTechnicianComment', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
@@ -2290,7 +2813,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'signature', 'signature_summary', 'barcode_scan'].includes(f.type) ? `
+        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
@@ -2300,7 +2823,11 @@ function renderProperties() {
                         ? 'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.'
                         : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis'
                           ? 'Na visão IA: <b>desmarcado</b> permite capturar pela câmera sem rede e tentar análise quando houver rede. <b>Marcado</b> exige internet no envio ao servidor.'
-                          : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'
+                          : f.type === 'voice_note'
+                            ? 'Nota de voz: a transcrição (Whisper) é <b>sempre no servidor</b>. <b>Desmarcado</b> = pode gravar offline mas precisa de rede ao «Parar e transcrever». <b>Marcado</b> = exige internet no envio.'
+                            : f.type === 'lookup_select'
+                              ? 'Com preset no servidor: <b>desmarcado</b> permite abrir o campo offline se as opções já tiverem sido obtidas antes. <b>Marcado</b> exige internet ao abrir o campo para carregar o preset.'
+                              : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'
                 }</div>
             </div>
         </div>
@@ -2309,32 +2836,84 @@ function renderProperties() {
         ${extraProps}
     `;
 
+    if (window.fieldPropertiesModalOpen) {
+        syncFieldPropertiesModalSubtitle();
+    }
+
     setTimeout(function () {
-        if (typeof window.initFieldHelpEditor === 'function') window.initFieldHelpEditor(f);
+        if (f.type === 'leitura') {
+            if (typeof window.initFieldReadingEditor === 'function') window.initFieldReadingEditor(f);
+        } else if (typeof window.initFieldHelpEditor === 'function') {
+            window.initFieldHelpEditor(f);
+        }
     }, 0);
 }
 
 // Expose pra UI HTML
 window.handleFieldUpdate = function(key, val) {
+    if (selectedFieldId && key === 'required') {
+        const sf = fields.find((x) => x.id === selectedFieldId);
+        if (sf && sf.type === 'leitura') return;
+    }
     updateField(key, val);
 };
 
-window.updateVisionQuestionsFromLines = function (text) {
+window.updateVisionStructuredPrompt = function (text) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
     if (!f || (f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis')) return;
-    const lines = String(text || '')
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .slice(0, 24);
-    const arr = lines.map((line, i) => ({ id: 'q' + (i + 1), text: line.slice(0, 500) }));
-    f.visionQuestions = arr.length ? arr : [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }];
+    const raw = String(text || '').trim();
+    const s = raw.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+    const fallback = 'A evidência visual confirma o item verificado?';
+    const finalText = s || fallback;
+    f.visionStructuredPrompt = finalText;
+    f.visionQuestions = [{ id: 'q1', text: finalText }];
+    renderCanvas();
+    if (window.fieldPropertiesModalOpen) renderProperties();
+};
+
+/** @deprecated — mantido por compatibilidade com HTML antigo em cache */
+window.updateVisionQuestionsFromLines = window.updateVisionStructuredPrompt;
+
+/** Inclui/remove um campo no resumo para assinatura (mantém ordem do canvas). */
+window.applyRepeatableMatrixColumnsJson = function (text) {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'repeatable_matrix') return;
+    let parsed;
+    try {
+        parsed = JSON.parse(String(text || '').trim());
+    } catch (e) {
+        alert('JSON inválido nas colunas.');
+        return;
+    }
+    if (!Array.isArray(parsed)) {
+        alert('As colunas devem ser um array JSON.');
+        return;
+    }
+    const next = [];
+    for (let i = 0; i < parsed.length && next.length < 8; i++) {
+        const x = parsed[i];
+        if (!x || typeof x !== 'object') continue;
+        const id = String(x.id || `c${next.length + 1}`)
+            .replace(/[^\w-]/g, '_')
+            .slice(0, 48);
+        const label = String(x.label || x.title || id)
+            .trim()
+            .slice(0, 120);
+        const ct = String(x.cellType || 'text').toLowerCase();
+        const cellType = ct === 'number' || ct === 'yes_no' ? ct : 'text';
+        if (label) next.push({ id, label, cellType });
+    }
+    if (!next.length) {
+        alert('Nenhuma coluna válida. Ex.: [{"id":"c1","label":"Item","cellType":"text"}]');
+        return;
+    }
+    f.matrixColumns = next;
     renderCanvas();
     renderProperties();
 };
 
-/** Inclui/remove um campo no resumo para assinatura (mantém ordem do canvas). */
 window.toggleSignatureSummarySource = function (sourceId, checked) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
@@ -2894,6 +3473,34 @@ window.previewPDF = function() {
              doc.text('Mídia + respostas sim/não com confiança (ver execução / relatório completo).', 20, currentY + 10);
              doc.setTextColor(0);
              currentY += 22;
+         }
+         else if(f.type === 'image_annotation') {
+             doc.setFontSize(9).setFont("helvetica", "normal");
+             doc.setTextColor(154, 52, 18);
+             doc.text('Foto com anotações (JSON no relatório).', 20, currentY + 10);
+             doc.setTextColor(0);
+             currentY += 18;
+         }
+         else if(f.type === 'lookup_select') {
+             doc.setFontSize(9).setFont("helvetica", "normal");
+             doc.setTextColor(37, 99, 235);
+             doc.text('Lista dinâmica (valor selecionado no relatório).', 20, currentY + 10);
+             doc.setTextColor(0);
+             currentY += 18;
+         }
+         else if(f.type === 'repeatable_matrix') {
+             doc.setFontSize(9).setFont("helvetica", "normal");
+             doc.setTextColor(22, 101, 52);
+             doc.text('Matriz repetível (tabela no relatório).', 20, currentY + 10);
+             doc.setTextColor(0);
+             currentY += 18;
+         }
+         else if(f.type === 'opinion_scale') {
+             doc.setFontSize(9).setFont("helvetica", "normal");
+             doc.setTextColor(91, 33, 182);
+             doc.text('Escala NPS ou Likert (valor numérico no relatório).', 20, currentY + 10);
+             doc.setTextColor(0);
+             currentY += 18;
          }
          else if(f.type === 'signature' || f.type === 'signature_summary') {
              // Linha de Assinatura com SVG futuro
@@ -3788,8 +4395,10 @@ function renderMobilePreview() {
     }
     
     previewFields.forEach((f, idx) => {
-        const fi = fields.filter((x) => x.type !== 'section_break').findIndex((x) => x.id === f.id);
-        const num = fi >= 0 ? fi + 1 : idx + 1;
+        const fi = fields
+            .filter((x) => x.type !== 'section_break' && x.type !== 'leitura')
+            .findIndex((x) => x.id === f.id);
+        const num = f.type === 'leitura' ? null : fi >= 0 ? fi + 1 : idx + 1;
         let relatedRules = globalFormSettings.rules ? globalFormSettings.rules.filter(r => r.actions && r.actions.some(a => a.targetId === f.id)) : [];
         let isCond = relatedRules.length > 0;
         let wrapperStyle = `background:#ffffff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:10px;`;
@@ -3801,15 +4410,20 @@ function renderMobilePreview() {
         const iconCol = hasCustomIcon
             ? `<div style="width:44px;height:44px;flex-shrink:0;border-radius:10px;background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;margin-right:12px;margin-top:2px;">${iconHtml}</div>`
             : '';
-        const labelText = hasCustomIcon ? String(f.label || '') : `${num}. ${String(f.label || '')}`;
-        const labelHtml = `<div style="font-size:15px;font-weight:800;color:#0F172A;line-height:1.3;">${escapeHtmlLogic(labelText)}${f.required ? '<span style="color:#EF4444"> *</span>' : ''}</div>`;
+        const labelText =
+            hasCustomIcon || f.type === 'leitura'
+                ? String(f.label || '')
+                : `${num}. ${String(f.label || '')}`;
+        const labelHtml = `<div style="font-size:15px;font-weight:800;color:#0F172A;line-height:1.3;">${escapeHtmlLogic(labelText)}${
+            f.required && f.type !== 'leitura' ? '<span style="color:#EF4444"> *</span>' : ''
+        }</div>`;
         let condBadge = isCond ? `<div style="font-size:10px; background:#f3e8ff; color:#7e22ce; font-weight:700; padding:4px 8px; border-radius:6px; align-self:flex-start;"><ion-icon name="color-wand-outline"></ion-icon> Ativado por ${relatedRules.length} Regra(s)</div>` : '';
         const helpPlain = (f.description || '').replace(/<[^>]+>/g, '').trim();
         const helpHtmlStr = f.helpHtml || '';
         const helpRich = helpHtmlStr.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
         const helpHasImg = /<img\b[^>]*\bsrc\s*=\s*["'][^"']+["']/i.test(helpHtmlStr);
         const hasHelpContent = helpRich.length > 0 || helpPlain.length > 0 || helpHasImg;
-        const showHelpInApp = f.showFieldInstructions !== false && hasHelpContent;
+        const showHelpInApp = f.type !== 'leitura' && f.showFieldInstructions !== false && hasHelpContent;
         const helpMock = showHelpInApp
           ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin-bottom:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:11px;font-weight:700;color:#1e40af;"><ion-icon name="document-text-outline" style="font-size:14px;"></ion-icon> Instruções</div>`
           : '';
@@ -3828,6 +4442,23 @@ function renderMobilePreview() {
         if(f.type === 'rating') inputMock = `<div style="display:flex; gap:8px; font-size:26px; color:#cbd5e1; justify-content:center"><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star-outline"></ion-icon><ion-icon name="star-outline"></ion-icon></div>`;
         if(f.type === 'calculated') inputMock = `<div style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px; font-size:14px; color:#7c3aed; font-family:monospace; text-align:right">R$ 0,00 [Cálculo Auto]</div>`;
         if(f.type === 'hidden') inputMock = `<div style="background:#f1f5f9; border:1px dashed #94a3b8; border-radius:8px; padding:12px; font-size:12px; color:#64748b; text-align:center;"><ion-icon name="eye-off"></ion-icon> Este campo ficará invisível no Celular</div>`;
+        if (f.type === 'leitura') {
+            const raw = String(f.contentHtml || '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 280);
+            inputMock = raw
+                ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:12px;font-size:13px;color:#312e81;line-height:1.45;max-height:120px;overflow:hidden;">${escapeHtmlLogic(raw)}</div>`
+                : `<div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:12px;font-size:12px;color:#94a3b8;font-style:italic;">Configure o texto no painel à direita.</div>`;
+        }
+        if (f.type === 'voice_note') {
+            inputMock = `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#5b21b6;"><ion-icon name="mic" style="font-size:20px;color:#7c3aed"></ion-icon> Gravar · Parar e transcrever</div>
+              <div style="font-size:11px;color:#6b21a8;line-height:1.4;">OpenAI Whisper no servidor (integração OpenAI).</div>
+              <div style="font-size:11px;color:#64748b;width:100%;padding:8px;background:#fff;border-radius:8px;border:1px solid #e9d5ff;">Transcrição aparece aqui no app…</div>
+            </div>`;
+        }
         
         if(f.type === 'file_upload') inputMock = `<button disabled style="background:#f1f5f9; border:2px dashed #cbd5e1; color:#64748b; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="document-attach" style="font-size:20px"></ion-icon> Anexar Arquivo</button>`;
         if(f.type === 'photo') inputMock = `<div style="background:#f1f5f9; border:2px dashed #cbd5e1; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#64748b; font-size:13px;"><ion-icon name="camera" style="font-size:28px; margin-bottom:4px"></ion-icon> Tocar para Fotografar</div>`;
@@ -3843,10 +4474,20 @@ function renderMobilePreview() {
             if (f.type === 'vision_ai_analysis') {
                 inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · Google AI Studio.</span></div>`;
             } else {
-                inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · servidor.</span></div>`;
+                inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão de IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · servidor.</span></div>`;
             }
         }
         
+        if(f.type === 'lookup_select') {
+            const src = f.lookupSource === 'inline_json' ? 'inline_json' : 'preset';
+            inputMock = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px;font-size:13px;color:#1e40af;"><b>Lista dinâmica</b> — ${src === 'preset' ? 'preset «' + escapeHtmlLogic(String(f.lookupPreset||'equipamentos_demo')) + '»' : 'opções em JSON no modelo'}.</div>`;
+        }
+        if(f.type === 'repeatable_matrix') inputMock = `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:10px;padding:12px;font-size:12px;color:#166534;"><b>Matriz</b> — linhas editáveis no app (até ${escapeHtmlLogic(String(f.matrixMaxRows||'?'))}).</div>`;
+        if(f.type === 'opinion_scale') {
+            const m = f.opinionScaleMode === 'likert' ? 'Likert (5)' : 'NPS 0–10';
+            inputMock = `<div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;padding:12px;font-size:13px;color:#5b21b6;"><b>${escapeHtmlLogic(m)}</b> — escolha única.</div>`;
+        }
+        if(f.type === 'image_annotation') inputMock = `<div style="background:#fff7ed;border:2px dashed #fb923c;border-radius:10px;height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#9a3412;text-align:center;padding:10px;"><ion-icon name="brush" style="font-size:28px;margin-bottom:4px"></ion-icon><b>Foto com anotações</b><span style="font-size:10px;line-height:1.2;margin-top:2px;">Câmera ou galeria + desenho.</span></div>`;
         if(f.type === 'barcode_scan') inputMock = `<div style="background:#f0f9ff; border:2px solid #38bdf8; border-radius:10px; padding:16px; display:flex; align-items:center; justify-content:center; gap:8px; color:#0284c7; font-weight:800; font-size:14px;"><ion-icon name="barcode" style="font-size:24px; color:#0284c7"></ion-icon> ESCANEAR CÓDIGO</div>`;
         if(f.type === 'materials_consumption') inputMock = `<div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px; font-size:13px; color:#0369a1;"><ion-icon name="cube" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Consumo de materiais</b> — estoque técnico do app (independente de bens); baixa ao concluir.</div>`;
         if(f.type === 'materials_receipt') inputMock = `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; font-size:13px; color:#15803d;"><ion-icon name="arrow-down-circle" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Entrada de materiais</b> — estoque técnico; aumenta o saldo ao concluir.</div>`;
@@ -3921,94 +4562,6 @@ window.bindAppSectionNavRadios = function () {
         window.openNewFolderModal();
     });
 })();
-
-window.sendTestForm = function() {
-    if(fields.length === 0) {
-        alert("O formulário atual está vazio. Arraste blocos primeiro!");
-        return;
-    }
-    // Reset email field to avoid concatenation bug
-    const emailInput = document.getElementById('test-dispatch-email');
-    if (emailInput) emailInput.value = '';
-    document.getElementById('test-dispatch-modal').style.display = 'flex';
-    setTimeout(() => emailInput && emailInput.focus(), 100);
-};
-
-window.confirmTestDispatch = async function() {
-    try {
-        const email = document.getElementById('test-dispatch-email').value;
-        if(!email) {
-            alert("Informe o e-mail do técnico.");
-            return;
-        }
-
-        document.getElementById('test-dispatch-modal').style.display = 'none';
-
-        // Garante que a form tenha ID salvo primeiro
-        if(!currentFormId || currentFormId === 'temp_new') {
-            await window.saveChecklist(); 
-        }
-
-        // Se mesmo após forçar salvamento não tiver ID, reportar falha nativa
-        if(!currentFormId) {
-            console.error("Falha ao gerar ID de formulário em Runtime.");
-            alert("Falha interna ao gerar ID do Formulário.");
-            return;
-        }
-
-        // Se o currentFormId já estava ali antes, força uma atualização do schema pro banco ser 100% fiel
-        await window.saveChecklist();
-
-        const payload = {
-            ownerEmail: email,
-            refId: currentFormId,
-            title: `Formulário novo (${new Date().toLocaleTimeString('pt-BR')})`,
-            description: 'Enviado de forma manual para vistoria.',
-            scheduledStartAt: new Date().toISOString(),
-            metadata: buildChecklistTemplateMetadata(),
-        };
-        const ef = globalFormSettings && globalFormSettings.expectedFormDurationMinutes;
-        if (ef != null && Number.isFinite(Number(ef)) && Number(ef) >= 5) {
-            payload.expectedFormDurationMinutes = Math.floor(Number(ef));
-        }
-
-        const res = await fetch(`${brsparkApiBase()}/checklists/dispatch`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-
-        const raw = await res.text();
-        let data = {};
-        try {
-            data = raw ? JSON.parse(raw) : {};
-        } catch (parseErr) {
-            console.error('Resposta não-JSON do despacho:', res.status, raw?.slice?.(0, 300));
-            alert(
-                `O servidor respondeu com erro (HTTP ${res.status}). Verifique se o backend está atualizado e a base migrada.`,
-            );
-            return;
-        }
-
-        if (!res.ok || !data.success) {
-            const msg =
-                (data && typeof data.error === 'string' && data.error) ||
-                (data && data.error && String(data.error)) ||
-                `Pedido falhou (HTTP ${res.status}).`;
-            alert(msg);
-            return;
-        }
-
-        console.log("🚀 PAYLOAD ENVIADO AO BACKEND:", payload);
-        alert(
-            `Envio concluído.\n\nO servidor despachou uma OS com o formulário [${currentFormId}] para [${email}].\n\nAbra o app na aba Agenda para verificar.`
-        );
-
-    } catch(err) {
-        console.error("Erro no envio local de teste:", err);
-        alert("Ocorreu um problema ao despachar para o Servidor Local: " + err.message);
-    }
-};
 
 // ==========================================
 // 🚀 AUTOMATIONS & RULES ENGINE (IF/THEN)
@@ -4325,6 +4878,7 @@ window.hideLogicModal = function () {
 
 window.openLogicModal = function(evt, fieldId) {
     if(evt) evt.stopPropagation();
+    if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
     currentLogicFieldId = fieldId;
     
     const field = fields.find(f => f.id === fieldId);
@@ -5538,6 +6092,8 @@ function brsparkCopilotDeepClone(obj) {
 /** [type, rótulo curto pt] — alinhado ao catálogo do builder / formAiFieldCatalog. */
 var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['section_break', 'Etapa (section_break)'],
+    ['leitura', 'Leitura (só texto)'],
+    ['voice_note', 'Nota de voz'],
     ['text', 'Texto'],
     ['number', 'Número'],
     ['phone', 'Telefone'],
@@ -5560,8 +6116,12 @@ var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['photo_stamped', 'Foto carimbo GPS'],
     ['barcode_scan', 'Código de barras'],
     ['facial_recognition', 'Biometria facial'],
-    ['vision_checklist', 'Visão IA Detecção'],
+    ['vision_checklist', 'Visão de IA Detecção'],
     ['vision_ai_analysis', 'Visão de IA Análise'],
+    ['image_annotation', 'Foto com anotações'],
+    ['lookup_select', 'Lista dinâmica'],
+    ['repeatable_matrix', 'Matriz repetível'],
+    ['opinion_scale', 'Escala NPS / Likert'],
     ['transit_start', 'Início deslocamento'],
     ['transit_end', 'Fim deslocamento'],
     ['geofence_check', 'Cerca / geofence'],
@@ -5985,6 +6545,10 @@ function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
     if (types.geofence_check || types.location_pick) return 'location-outline';
     if (types.vision_ai_analysis) return 'sparkles-outline';
     if (types.vision_checklist) return 'videocam-outline';
+    if (types.opinion_scale) return 'analytics-outline';
+    if (types.repeatable_matrix) return 'grid-outline';
+    if (types.lookup_select) return 'cloud-download-outline';
+    if (types.image_annotation) return 'brush-outline';
     return 'document-text-outline';
 }
 

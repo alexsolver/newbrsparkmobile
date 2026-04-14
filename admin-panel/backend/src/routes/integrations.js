@@ -2,7 +2,11 @@
 const router = require('express').Router();
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
-const { testIntegration, normalizeComprefaceBaseUrl } = require('../lib/integrationTester');
+const {
+  testIntegration,
+  normalizeComprefaceBaseUrl,
+  normalizeGoogleGenerativeLanguageBaseUrl,
+} = require('../lib/integrationTester');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
 
@@ -72,6 +76,8 @@ router.post('/', async (req, res) => {
       resolvedBase = normalizeComprefaceBaseUrl(baseUrl);
     } else if (name === 'Nylas' && baseUrl) {
       resolvedBase = normalizeNylasApiUri(baseUrl);
+    } else if ((name === 'Google AI Studio' || name === 'Google AI (Gemini)') && baseUrl) {
+      resolvedBase = normalizeGoogleGenerativeLanguageBaseUrl(baseUrl);
     }
     const integration = await prisma.integration.create({
       data: {
@@ -113,6 +119,11 @@ router.patch('/:id', async (req, res) => {
       data = { ...data, baseUrl: normalizeComprefaceBaseUrl(data.baseUrl) };
     } else if (existing.name === 'Nylas' && data.baseUrl) {
       data = { ...data, baseUrl: normalizeNylasApiUri(data.baseUrl) };
+    } else if (
+      (existing.name === 'Google AI Studio' || existing.name === 'Google AI (Gemini)') &&
+      data.baseUrl
+    ) {
+      data = { ...data, baseUrl: normalizeGoogleGenerativeLanguageBaseUrl(data.baseUrl) };
     }
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({

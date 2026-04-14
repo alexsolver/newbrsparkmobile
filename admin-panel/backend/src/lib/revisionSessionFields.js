@@ -13,6 +13,10 @@ const REVISION_SESSION_FIELD_TYPES = new Set([
   'facial_recognition',
   'vision_checklist',
   'vision_ai_analysis',
+  'image_annotation',
+  'lookup_select',
+  'repeatable_matrix',
+  'opinion_scale',
 ]);
 
 function normalizeFormFieldType(t) {

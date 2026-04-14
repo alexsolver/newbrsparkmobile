@@ -3716,6 +3716,122 @@ function buildReportTab(t) {
         '</tbody></table></div>'
       );
     }
+    if (fieldType === 'vision_checklist' || fieldType === 'vision_ai_analysis') {
+      let vo = null;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) vo = val;
+      else if (typeof val === 'string' && val.trim().startsWith('{')) {
+        try {
+          vo = JSON.parse(val);
+        } catch (e) {
+          vo = null;
+        }
+      }
+      if (!vo) return '<em style="color:var(--text3)">(sem dados de visão IA)</em>';
+      let vh = '';
+      const vStatus = String(vo.status || '').toLowerCase();
+      if (vStatus === 'pending_analysis') {
+        vh +=
+          '<div style="padding:10px 12px;margin-bottom:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12px;color:#9a3412;font-weight:700;line-height:1.45">' +
+          escHtml(
+            'Análise de visão IA pendente no servidor (mídia guardada; a análise completa após o envio).',
+          ) +
+          '</div>';
+      }
+      const vLocal = vo.localUri != null ? String(vo.localUri).trim() : '';
+      const rawSlotsV = Array.isArray(vo.gridSlotUris) ? vo.gridSlotUris : [];
+      const slotsV = rawSlotsV
+        .map(function (u) {
+          return String(u || '').trim();
+        })
+        .filter(function (u) {
+          return u.startsWith('http') || u.startsWith('file://');
+        });
+      const ansV = Array.isArray(vo.answers) ? vo.answers : [];
+      if (fieldType === 'vision_ai_analysis' && slotsV.length > 1) {
+        vh +=
+          '<div style="font-size:10px;font-weight:800;color:#991b1b;margin:0 0 8px;letter-spacing:0.02em">' +
+          escHtml('Fotos individuais da grelha (' + slotsV.length + ')') +
+          '</div>';
+        vh += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">';
+        slotsV.forEach(function (u, i) {
+          const cl = u.split('?')[0].replace(/"/g, '%22');
+          const hrf = u.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+          vh +=
+            '<div style="flex:0 0 auto;width:140px;max-width:32%"><div style="font-size:9px;color:#64748b;margin-bottom:4px;font-weight:700">' +
+            escHtml('Célula ' + (i + 1)) +
+            '</div>';
+          vh +=
+            '<img src="' +
+            cl +
+            '" alt="" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;border:1px solid #fecaca;display:block" onerror="this.style.display=\'none\'"/>';
+          vh +=
+            '<div style="font-size:9px;margin-top:4px"><a href="' +
+            hrf +
+            '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Abrir foto</a></div></div>';
+        });
+        vh += '</div>';
+      }
+      if (vLocal) {
+        const isVid =
+          vo.mediaMimeType != null && String(vo.mediaMimeType).toLowerCase().startsWith('video');
+        const clM = vLocal.split('?')[0].replace(/"/g, '%22');
+        const hrfM = vLocal.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const ttl =
+          fieldType === 'vision_ai_analysis' && slotsV.length > 1
+            ? 'Imagem enviada à análise (composta)'
+            : 'Mídia analisada';
+        vh += '<div style="font-size:10px;font-weight:800;color:#0f172a;margin:0 0 6px">' + escHtml(ttl) + '</div>';
+        if (!isVid) {
+          vh +=
+            '<div style="margin-top:8px"><img src="' +
+            clM +
+            '" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display=\'none\'"/><div style="font-size:11px;margin-top:4px"><a href="' +
+            hrfM +
+            '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir mídia</a></div></div>';
+        } else {
+          vh +=
+            '<div style="padding:10px;background:#0f172a;border-radius:8px;color:#e2e8f0;font-size:12px"><ion-icon name="film-outline"></ion-icon> Vídeo anexado — <a href="' +
+            hrfM +
+            '" target="_blank" style="color:#7dd3fc">Abrir</a></div>';
+        }
+      }
+      if (ansV.length) {
+        vh +=
+          '<div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0"><div style="font-size:10px;font-weight:800;color:#64748b;margin-bottom:8px">Respostas da IA</div>';
+        ansV.forEach(function (a, ai) {
+          if (!a || typeof a !== 'object') return;
+          const vv = String(a.value != null ? a.value : '').toLowerCase();
+          const lb =
+            vv === 'yes' || vv === 'sim'
+              ? 'Sim'
+              : vv === 'no' || vv === 'não' || vv === 'nao'
+                ? 'Não'
+                : vv === 'unknown'
+                  ? 'Não verificado (IA)'
+                  : '—';
+          const pc =
+            typeof a.confidence === 'number' && isFinite(a.confidence)
+              ? Math.round(a.confidence * 100)
+              : null;
+          const qq = escHtml(String(a.question || a.questionId || 'Pergunta ' + (ai + 1)));
+          const rt = a.rationale != null ? escHtml(String(a.rationale).slice(0, 500)) : '';
+          vh += '<div style="margin-bottom:8px;font-size:12px"><div style="font-weight:700;color:#334155">' + qq + '</div>';
+          vh +=
+            '<div style="color:#0f172a;font-weight:800">' +
+            escHtml(lb) +
+            (pc != null ? ' · confiança ' + pc + '%' : '') +
+            '</div>';
+          if (rt) {
+            vh +=
+              '<div style="font-size:10px;color:#475569;font-style:italic;margin-top:4px">' + rt + '</div>';
+          }
+          vh += '</div>';
+        });
+        vh += '</div>';
+      }
+      if (!vh) return '<em style="color:var(--text3)">(sem dados de visão IA)</em>';
+      return vh;
+    }
     const str = String(val);
     if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);

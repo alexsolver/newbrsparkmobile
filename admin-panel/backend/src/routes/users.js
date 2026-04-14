@@ -10,6 +10,7 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { syncUserToCompreface } = require('../lib/comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
 const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
+const { assertTechnicianSeatForNewUser, assertTechnicianSeatForUserPatch } = require('../lib/planQuotaService');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -123,6 +124,11 @@ router.post('/', async (req, res) => {
       const dup = await prisma.user.findFirst({ where: { tenantId, employeeMatricula } });
       if (dup) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
     }
+    const seat = await assertTechnicianSeatForNewUser(prisma, tenantId, role);
+    if (!seat.ok) {
+      return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
+    }
+
     const hash = await bcrypt.hash(password, 10);
     const user = await prisma.$transaction(async (tx) => {
       const u = await tx.user.create({
@@ -576,6 +582,11 @@ router.patch('/:id', express.json(), async (req, res) => {
         });
         if (dupM) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
       }
+    }
+
+    const seatPatch = await assertTechnicianSeatForUserPatch(prisma, existing, { role, isActive });
+    if (!seatPatch.ok) {
+      return res.status(403).json({ error: seatPatch.error, code: seatPatch.code || 'PLAN_MAX_TECHNICIANS' });
     }
 
     await prisma.$transaction(async (tx) => {

@@ -10,6 +10,18 @@
 /** @type {FieldSpec[]} */
 const FIELD_SPECS = [
   { type: 'section_break', tier: 'core', proposalsDefault: false, descPt: 'Separador de etapa/página no app.' },
+  {
+    type: 'leitura',
+    tier: 'core',
+    proposalsDefault: true,
+    descPt: 'Bloco só leitura (rich text) no app — contratos, avisos; sem resposta nem links.',
+  },
+  {
+    type: 'voice_note',
+    tier: 'core',
+    proposalsDefault: true,
+    descPt: 'Nota de voz: gravação no app e transcrição no servidor (OpenAI Whisper; integração OpenAI).',
+  },
   { type: 'text', tier: 'core', proposalsDefault: true, descPt: 'Texto livre.' },
   { type: 'number', tier: 'core', proposalsDefault: true, descPt: 'Valor numérico.' },
   { type: 'phone', tier: 'core', proposalsDefault: true, descPt: 'Telefone.' },
@@ -76,7 +88,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowVisionChecklist',
     descPt:
-      'Visão IA Detecção: captura só pela câmera (no builder: somente foto, somente vídeo ou foto e vídeo), perguntas sim/não; respostas com confiança via integração "Visão IA - YOLO".',
+      'Visão de IA Detecção: captura só pela câmera (no builder: somente foto, somente vídeo ou foto e vídeo), perguntas sim/não; respostas com confiança via integração "Visão IA - YOLO".',
   },
   {
     type: 'vision_ai_analysis',
@@ -84,7 +96,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowVisionAiAnalysis',
     descPt:
-      'Visão de IA Análise: mesma estrutura da detecção (câmera, modo foto/vídeo, perguntas sim/não); análise no servidor via integração "Google AI Studio" (API Gemini).',
+      'Visão de IA Análise: câmera, perguntas sim/não, grelha opcional 1×1 ou 2×2 (todas as fotos obrigatórias antes de analisar; só foto); análise no servidor via integração "Google AI Studio" (API Gemini).',
   },
   {
     type: 'transit_start',
@@ -115,6 +127,33 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowCalculated',
     descPt: 'Valor calculado por fórmula (configurar no builder).',
+  },
+  {
+    type: 'image_annotation',
+    tier: 'advanced',
+    proposalsDefault: false,
+    descPt:
+      'Foto ou imagem da galeria com desenho por cima (setas, traços) no app; guarda imagem + traços em JSON.',
+  },
+  {
+    type: 'lookup_select',
+    tier: 'advanced',
+    proposalsDefault: false,
+    descPt:
+      'Lista única (dropdown) com opções fixas em JSON no modelo ou carregadas do servidor (GET /api/checklists/lookup-options/:preset com JWT).',
+  },
+  {
+    type: 'repeatable_matrix',
+    tier: 'advanced',
+    proposalsDefault: false,
+    descPt:
+      'Tabela repetível: várias colunas (texto, número ou sim/não) e linhas adicionáveis no app (valor = array de objetos).',
+  },
+  {
+    type: 'opinion_scale',
+    tier: 'advanced',
+    proposalsDefault: false,
+    descPt: 'Escala de opinião: NPS 0–10 ou Likert 5 níveis (rótulos configuráveis no builder).',
   },
 ];
 
@@ -267,6 +306,8 @@ function formatTransitDisplacementRulesForPrompt() {
 /** Ícones Ionicons por tipo quando o modelo não enviou icon (fallback no servidor). */
 const DEFAULT_BRSPARK_TYPE_ICONS = {
   section_break: { icon: 'albums-outline', iconColor: '#7c3aed' },
+  leitura: { icon: 'book-outline', iconColor: '#4338ca' },
+  voice_note: { icon: 'mic-outline', iconColor: '#7c3aed' },
   text: { icon: 'text-outline', iconColor: '#475569' },
   number: { icon: 'keypad-outline', iconColor: '#0369a1' },
   phone: { icon: 'call-outline', iconColor: '#0d9488' },
@@ -295,6 +336,10 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   transit_end: { icon: 'flag-outline', iconColor: '#dc2626' },
   geofence_check: { icon: 'navigate-circle-outline', iconColor: '#ea580c' },
   calculated: { icon: 'calculator-outline', iconColor: '#8b5cf6' },
+  image_annotation: { icon: 'brush-outline', iconColor: '#c2410c' },
+  lookup_select: { icon: 'cloud-download-outline', iconColor: '#2563eb' },
+  repeatable_matrix: { icon: 'grid-outline', iconColor: '#0f766e' },
+  opinion_scale: { icon: 'analytics-outline', iconColor: '#7c3aed' },
 };
 
 const SECTION_ICON_COLORS = ['#6366f1', '#0ea5e9', '#16a34a', '#ca8a04', '#ea580c', '#db2777', '#7c3aed'];
@@ -376,6 +421,8 @@ function buildFormContextBlock(ctx) {
 
 /** Rótulos curtos para botões no assistente "analisar planilha". */
 const ANALYZE_OPTION_SHORT_PT = {
+  leitura: 'Leitura (só texto)',
+  voice_note: 'Nota de voz',
   text: 'Texto livre',
   number: 'Número',
   phone: 'Telefone',
@@ -395,7 +442,7 @@ const ANALYZE_OPTION_SHORT_PT = {
   photo_stamped: 'Foto carimbada',
   barcode_scan: 'Código barras',
   facial_recognition: 'Biometria facial',
-  vision_checklist: 'Visão IA Detecção',
+  vision_checklist: 'Visão de IA Detecção',
   vision_ai_analysis: 'Visão IA Análise',
   transit_start: 'Início deslocamento',
   transit_end: 'Fim deslocamento',
@@ -404,6 +451,10 @@ const ANALYZE_OPTION_SHORT_PT = {
   materials_consumption: 'Materiais / consumo',
   materials_receipt: 'Materiais / entrada',
   technician_finance: 'Custos do técnico',
+  image_annotation: 'Foto com anotações',
+  lookup_select: 'Lista dinâmica',
+  repeatable_matrix: 'Matriz repetível',
+  opinion_scale: 'Escala NPS / Likert',
 };
 
 /**

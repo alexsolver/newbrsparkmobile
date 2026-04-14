@@ -12,6 +12,11 @@ const {
   fetchVisionPostPreservingMethod,
 } = require('../lib/visionChecklistAnalyze');
 const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('../lib/visionStudioAnalyze');
+const { consumeQuota } = require('../lib/planQuotaService');
+const {
+  MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_STRUCTURED_PROMPT_CHARS,
+} = require('../constants/visionSimNaoQuestions');
 
 const router = express.Router();
 
@@ -40,13 +45,20 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       try {
         const parsed = JSON.parse(rawQ);
         if (Array.isArray(parsed)) {
-          questions = parsed
+          const mapped = parsed
             .map((x, i) => {
               if (!x || typeof x !== 'object') return null;
               const id = String(x.id || `q_${i + 1}`).replace(/[^\w-]/g, '_').slice(0, 64);
-              const text = String(x.text || x.question || '').trim().slice(0, 500);
+              return { id, rawText: String(x.text || x.question || '').trim() };
+            })
+            .filter((x) => x && x.rawText);
+          const textMax =
+            mapped.length <= 1 ? MAX_VISION_STRUCTURED_PROMPT_CHARS : 500;
+          questions = mapped
+            .map((x) => {
+              const text = x.rawText.slice(0, textMax);
               if (!text) return null;
-              return { id, text };
+              return { id: x.id, text };
             })
             .filter(Boolean);
         }
@@ -57,8 +69,10 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
     if (!questions.length) {
       return res.status(400).json({ error: 'Indique pelo menos uma pergunta (questions).' });
     }
-    if (questions.length > 24) {
-      return res.status(400).json({ error: 'Máximo de 24 perguntas por análise.' });
+    if (questions.length > MAX_VISION_SIMNAO_QUESTIONS) {
+      return res.status(400).json({
+        error: `Máximo de ${MAX_VISION_SIMNAO_QUESTIONS} perguntas por análise.`,
+      });
     }
 
     const mt = String(file.mimetype || '').toLowerCase();
@@ -79,6 +93,12 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
           error:
             'Integração "Google AI Studio" não configurada ou sem API key. Configure em Integrações no painel admin.',
         });
+      }
+      if (req.user?.tenantId) {
+        const q = await consumeQuota(prisma, req.user.tenantId, 'AI_VISION_ANALYSIS', 1);
+        if (!q.ok) {
+          return res.status(403).json({ error: q.error, code: q.code || 'PLAN_QUOTA_EXCEEDED' });
+        }
       }
       try {
         const normalized = await analyzeWithGoogleAiStudio({
@@ -121,6 +141,13 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
 
     const baseUrl = String(integration.baseUrl).trim().replace(/\/+$/, '');
     const apiKey = integration.apiKey != null ? String(integration.apiKey).trim() : '';
+
+    if (req.user?.tenantId) {
+      const q = await consumeQuota(prisma, req.user.tenantId, 'AI_VISION_DETECTION', 1);
+      if (!q.ok) {
+        return res.status(403).json({ error: q.error, code: q.code || 'PLAN_QUOTA_EXCEEDED' });
+      }
+    }
 
     try {
       const u = new URL(baseUrl);

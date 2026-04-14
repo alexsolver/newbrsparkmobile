@@ -23,6 +23,7 @@ const {
     normalizeExpectedFormDurationMinutes,
 } = require('../lib/formDurationPolicy');
 const { scheduleChecklistTemplateEmbeddingSync } = require('../lib/formAiChecklistTemplateEmbed');
+const { consumeQuota, assertChecklistTemplateCapacity } = require('../lib/planQuotaService');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -205,6 +206,44 @@ router.patch('/templates/:id/folder', async (req, res) => {
   }
 });
 
+/** Pré-definições de opções para campo `lookup_select` (app: GET com JWT). */
+const LOOKUP_OPTION_PRESETS = {
+  equipamentos_demo: [
+    { value: 'bomba_01', label: 'Bomba hidráulica #01' },
+    { value: 'motor_a', label: 'Motor principal A' },
+    { value: 'painel_e2', label: 'Painel elétrico E2' },
+  ],
+  tecnicos_demo: [
+    { value: 'equipa_a', label: 'Equipe A — manutenção' },
+    { value: 'equipa_b', label: 'Equipe B — inspeção' },
+  ],
+  prioridades_demo: [
+    { value: 'crit', label: 'Crítica' },
+    { value: 'alta', label: 'Alta' },
+    { value: 'media', label: 'Média' },
+    { value: 'baixa', label: 'Baixa' },
+  ],
+};
+
+// GET /api/checklists/lookup-options/:preset — opções para lista dinâmica (lookup_select)
+router.get('/lookup-options/:preset', authUser, (req, res) => {
+  try {
+    const key = String(req.params.preset || '').trim();
+    const list = LOOKUP_OPTION_PRESETS[key];
+    if (!Array.isArray(list)) {
+      return res.status(404).json({
+        error:
+          'Preset não encontrado. Valores: equipamentos_demo, tecnicos_demo, prioridades_demo.',
+        options: [],
+      });
+    }
+    res.json({ preset: key, options: list });
+  } catch (err) {
+    console.error('[checklists/lookup-options]', err);
+    res.status(500).json({ error: err.message || 'Erro ao carregar opções.' });
+  }
+});
+
 // --- Checklist Templates (O Construtor Salva Aqui, O Celular Lê Daqui) ---
 
 // GET /api/checklists/templates (Mobile puxa os modelos)
@@ -331,6 +370,20 @@ router.post('/templates', async (req, res) => {
             return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
         }
 
+        const tenantIdForTpl =
+            (req.body && req.body.tenantId != null && String(req.body.tenantId).trim()
+                ? String(req.body.tenantId).trim()
+                : null) ||
+            (req.query && req.query.tenantId != null && String(req.query.tenantId).trim()
+                ? String(req.query.tenantId).trim()
+                : null);
+        if (tenantIdForTpl) {
+            const cap = await assertChecklistTemplateCapacity(prisma, tenantIdForTpl);
+            if (!cap.ok) {
+                return res.status(403).json({ error: cap.error, code: cap.code || 'PLAN_MAX_TEMPLATES' });
+            }
+        }
+
         const created = await prisma.checklistTemplate.create({
             data: {
                 id: id && typeof id === 'string' ? id : undefined,
@@ -340,6 +393,7 @@ router.post('/templates', async (req, res) => {
                 schemaData,
                 metadata: metadata || {},
                 folderId: createFolderId,
+                ...(tenantIdForTpl ? { tenantId: tenantIdForTpl } : {}),
             },
         });
         scheduleChecklistTemplateEmbeddingSync(created.id);
@@ -753,6 +807,15 @@ router.post('/executions', authUser, async (req, res) => {
             }
             const resolvedOwner =
               ownerEmail && sameOwnerEmail(ownerEmail, authEmail) ? ownerEmail : authEmail;
+            if (req.user.tenantId) {
+                const ftQ = await consumeQuota(prisma, req.user.tenantId, 'FIELD_TASK', 1);
+                if (!ftQ.ok) {
+                    return res.status(403).json({
+                        error: ftQ.error,
+                        code: ftQ.code || 'PLAN_QUOTA_EXCEEDED',
+                    });
+                }
+            }
             const osNumber = await allocateNextFtOsNumber(prisma);
             const businessSnapAdHoc = computeExecutionBusinessMetrics({
                 responses: responses || {},
@@ -883,6 +946,16 @@ router.post('/dispatch', async (req, res) => {
             return res.status(400).json({
                 error: 'Informe scheduledStartAt (data e hora de início na agenda do técnico), em ISO 8601.',
             });
+        }
+
+        if (scopedTenantId) {
+            const ftQ = await consumeQuota(prisma, scopedTenantId, 'FIELD_TASK', 1);
+            if (!ftQ.ok) {
+                return res.status(403).json({
+                    error: ftQ.error,
+                    code: ftQ.code || 'PLAN_QUOTA_EXCEEDED',
+                });
+            }
         }
         const tplSettings =
             loadedTemplate && loadedTemplate.settings && typeof loadedTemplate.settings === 'object'

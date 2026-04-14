@@ -5,6 +5,7 @@ const {
   buildDefaultAnalyzeProposalOptions,
   applyDefaultTypeIconsToSchemaItems,
 } = require('./formAiFieldCatalog');
+const { MAX_VISION_STRUCTURED_PROMPT_CHARS } = require('../constants/visionSimNaoQuestions');
 
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
@@ -85,10 +86,44 @@ function defaultFieldShell(type, label) {
     ...(t === 'section_break' ? { sectionFillMode: 'list' } : {}),
     ...(t === 'vision_checklist' || t === 'vision_ai_analysis'
       ? {
+          visionStructuredPrompt: 'A evidência visual confirma o item verificado?',
           visionQuestions: [
             { id: 'q1', text: 'A evidência visual confirma o item verificado?' },
           ],
           visionCaptureMode: 'photo_and_video',
+        }
+      : {}),
+    ...(t === 'vision_ai_analysis' ? { visionAnalysisGrid: '1x1' } : {}),
+    ...(t === 'leitura' ? { contentHtml: '', required: false } : {}),
+    ...(t === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
+    ...(t === 'image_annotation'
+      ? {
+          annotationPenColor: '#dc2626',
+          annotationStrokeWidth: 4,
+        }
+      : {}),
+    ...(t === 'lookup_select'
+      ? {
+          lookupSource: 'preset',
+          lookupPreset: 'equipamentos_demo',
+          lookupInlineJson: '',
+        }
+      : {}),
+    ...(t === 'repeatable_matrix'
+      ? {
+          matrixColumns: [
+            { id: 'c1', label: 'Item', cellType: 'text' },
+            { id: 'c2', label: 'Valor', cellType: 'number' },
+          ],
+          matrixMinRows: '0',
+          matrixMaxRows: '20',
+        }
+      : {}),
+    ...(t === 'opinion_scale'
+      ? {
+          opinionScaleMode: 'nps',
+          likertLabels:
+            'Discordo totalmente\nDiscordo\nNeutro\nConcordo\nConcordo totalmente',
         }
       : {}),
   };
@@ -143,24 +178,21 @@ function normalizeSchemaItem(raw, usedIds) {
       : [];
   }
   if (type === 'vision_checklist' || type === 'vision_ai_analysis') {
-    const rawVq = raw.visionQuestions ?? raw.vision_questions;
-    if (Array.isArray(rawVq) && rawVq.length) {
-      base.visionQuestions = rawVq
-        .map((x, i) => {
-          if (!x || typeof x !== 'object') return null;
-          const id = String(x.id || `q_${i + 1}`)
-            .replace(/[^\w-]/g, '_')
-            .slice(0, 64);
-          const text = String(x.text || x.question || '').trim().slice(0, 500);
-          if (!text) return null;
-          return { id, text };
-        })
-        .filter(Boolean)
-        .slice(0, 24);
+    let structured =
+      raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
+    if (!structured) {
+      const rawVq = raw.visionQuestions ?? raw.vision_questions;
+      if (Array.isArray(rawVq) && rawVq.length) {
+        structured = rawVq
+          .map((x) => String(x?.text || x?.question || '').trim())
+          .filter(Boolean)
+          .join('\n\n');
+      }
     }
-    if (!base.visionQuestions || !base.visionQuestions.length) {
-      base.visionQuestions = [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }];
-    }
+    if (!structured) structured = 'A evidência visual confirma o item verificado?';
+    structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+    base.visionStructuredPrompt = structured;
+    base.visionQuestions = [{ id: 'q1', text: structured }];
     const vcm = raw.visionCaptureMode ?? raw.vision_capture_mode;
     if (typeof vcm === 'string') {
       const m = vcm.trim();
@@ -168,6 +200,77 @@ function normalizeSchemaItem(raw, usedIds) {
         base.visionCaptureMode = m;
       }
     }
+    if (type === 'vision_ai_analysis') {
+      const grid = raw.visionAnalysisGrid ?? raw.vision_analysis_grid;
+      if (typeof grid === 'string') {
+        const g = grid.trim().toLowerCase().replace(/\*/g, 'x');
+        if (g === '1x1' || g === '2x2') {
+          base.visionAnalysisGrid = g;
+        } else if (['2x1', '3x1', '3x2', '3x3'].includes(g)) {
+          base.visionAnalysisGrid = '2x2';
+        }
+      }
+      if (!base.visionAnalysisGrid) base.visionAnalysisGrid = '1x1';
+    }
+  }
+  if (type === 'leitura') {
+    base.required = false;
+    if (raw.contentHtml != null) base.contentHtml = String(raw.contentHtml).slice(0, 500000);
+  }
+  if (type === 'voice_note') {
+    const lang = raw.voiceTranscribeLanguage ?? raw.voice_transcribe_language;
+    if (typeof lang === 'string' && lang.trim()) {
+      base.voiceTranscribeLanguage = String(lang).trim().slice(0, 12);
+    }
+  }
+  if (type === 'image_annotation') {
+    if (raw.annotationPenColor != null) base.annotationPenColor = String(raw.annotationPenColor).trim().slice(0, 20);
+    if (raw.annotationStrokeWidth != null) {
+      const sw = parseInt(String(raw.annotationStrokeWidth), 10);
+      if (Number.isFinite(sw) && sw >= 1 && sw <= 24) base.annotationStrokeWidth = sw;
+    }
+  }
+  if (type === 'lookup_select') {
+    const src = raw.lookupSource ?? raw.lookup_source;
+    if (src === 'inline_json' || src === 'preset') base.lookupSource = String(src);
+    if (raw.lookupPreset != null) base.lookupPreset = String(raw.lookupPreset).trim().slice(0, 80);
+    if (raw.lookupInlineJson != null) base.lookupInlineJson = String(raw.lookupInlineJson).slice(0, 120000);
+  }
+  if (type === 'repeatable_matrix') {
+    const mc = raw.matrixColumns ?? raw.matrix_columns;
+    if (Array.isArray(mc) && mc.length) {
+      base.matrixColumns = mc
+        .map((x, i) => {
+          if (!x || typeof x !== 'object') return null;
+          const id = String(x.id || `c${i + 1}`)
+            .replace(/[^\w-]/g, '_')
+            .slice(0, 48);
+          const label = String(x.label || x.title || '').trim().slice(0, 120);
+          const ct = String(x.cellType || x.cell_type || 'text')
+            .trim()
+            .toLowerCase();
+          const cellType = ct === 'number' || ct === 'yes_no' ? ct : 'text';
+          if (!label) return null;
+          return { id, label, cellType };
+        })
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+    if (!base.matrixColumns || !base.matrixColumns.length) {
+      base.matrixColumns = [
+        { id: 'c1', label: 'Item', cellType: 'text' },
+        { id: 'c2', label: 'Valor', cellType: 'number' },
+      ];
+    }
+    const minR = raw.matrixMinRows ?? raw.matrix_min_rows;
+    const maxR = raw.matrixMaxRows ?? raw.matrix_max_rows;
+    if (minR != null) base.matrixMinRows = String(minR).trim().slice(0, 8);
+    if (maxR != null) base.matrixMaxRows = String(maxR).trim().slice(0, 8);
+  }
+  if (type === 'opinion_scale') {
+    const mode = raw.opinionScaleMode ?? raw.opinion_scale_mode;
+    if (mode === 'likert' || mode === 'nps') base.opinionScaleMode = String(mode);
+    if (raw.likertLabels != null) base.likertLabels = String(raw.likertLabels).slice(0, 2000);
   }
   return base;
 }

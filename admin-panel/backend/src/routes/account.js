@@ -8,6 +8,7 @@ const { initialTechRegistrationResponsesJson } = require('../lib/techRegistratio
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
 const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = require('../lib/technicianIdentityLock');
+const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
 
 // /api/vision/* — biometria de campo / checklists (CompreFace conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
 const visionRouter = require('./vision');
@@ -66,6 +67,11 @@ router.post('/register', async (req, res) => {
       });
       if (existingUser) {
         return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+      }
+
+      const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
+      if (!seat.ok) {
+        return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
       }
 
       const result = await prisma.$transaction(async (tx) => {

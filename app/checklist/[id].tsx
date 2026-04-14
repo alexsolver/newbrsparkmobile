@@ -22,6 +22,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Network from 'expo-network';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -41,6 +42,15 @@ import { routeTracker } from '../../src/services/routeTrackingService';
 import { computePatrolCompliance } from '../../src/services/patrolRouteMetrics';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
+import { LeituraBlock } from '../../src/components/LeituraBlock';
+import { ChecklistImageAnnotationField } from '../../src/components/ChecklistImageAnnotationField';
+import {
+  ChecklistLookupSelectField,
+  ChecklistOpinionScaleField,
+  ChecklistRepeatableMatrixField,
+} from '../../src/components/ChecklistExtendedFieldWidgets';
+import { ChecklistVisionGridComposeRunner } from '../../src/components/ChecklistVisionGridComposeRunner';
+import { ChecklistVoiceNoteField, voiceNoteValueIsFilled } from '../../src/components/ChecklistVoiceNoteField';
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
@@ -279,6 +289,10 @@ const REVISION_SESSION_FIELD_TYPES = new Set([
   'facial_recognition',
   'vision_checklist',
   'vision_ai_analysis',
+  'image_annotation',
+  'lookup_select',
+  'repeatable_matrix',
+  'opinion_scale',
 ]);
 
 /**
@@ -306,7 +320,7 @@ function effectiveSchemaFieldType(f: any): string {
   return normalized[0] || '';
 }
 
-/** Campos de mídia + perguntas sim/não analisadas no servidor (YOLO ou Gemini). */
+/** Campos de mídia + prompt estruturado (sim/não) analisados no servidor (YOLO ou Gemini). */
 function isVisionSimNaoMediaFieldType(t: string): boolean {
   return t === 'vision_checklist' || t === 'vision_ai_analysis';
 }
@@ -494,7 +508,9 @@ function technicianCommentKey(fieldId: string) {
   return `__comment_${fieldId}`;
 }
 
-/** Perguntas sim/não configuradas nos campos de visão IA (detecção ou análise Gemini) no builder. */
+/** Tamanho máximo do prompt estruturado de visão IA; alinhado ao backend `visionSimNaoQuestions.js`. */
+const MAX_VISION_STRUCTURED_PROMPT_CHARS = 12000;
+
 /** Chave única por campo + linha de seção repetível (evita bloquear outras linhas durante a análise). */
 function visionAnalyzeBusyKey(fieldId: string, scope?: SectionRepeatScope | null) {
   if (!scope) return fieldId;
@@ -502,23 +518,34 @@ function visionAnalyzeBusyKey(fieldId: string, scope?: SectionRepeatScope | null
 }
 
 function getVisionQuestionsFromField(field: any): { id: string; text: string }[] {
+  const cfg =
+    field?.config && typeof field.config === 'object' ? (field.config as Record<string, unknown>) : undefined;
+  const structured = String(
+    field?.visionStructuredPrompt ??
+      field?.vision_structured_prompt ??
+      cfg?.visionStructuredPrompt ??
+      cfg?.vision_structured_prompt ??
+      '',
+  ).trim();
+  if (structured) {
+    return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
+  }
   const vq =
     field?.visionQuestions ??
     field?.vision_questions ??
-    (field?.config && typeof field.config === 'object' ? (field.config as any).visionQuestions : undefined);
-  if (!Array.isArray(vq)) return [];
-  const out: { id: string; text: string }[] = [];
+    (cfg?.visionQuestions as unknown[] | undefined);
+  if (!Array.isArray(vq) || !vq.length) return [];
+  const parts: string[] = [];
   for (let i = 0; i < vq.length; i++) {
     const x = vq[i];
     if (!x || typeof x !== 'object') continue;
     const text = String((x as any).text || (x as any).question || '').trim();
     if (!text) continue;
-    const id = String((x as any).id || `q_${i + 1}`)
-      .replace(/[^\w-]/g, '_')
-      .slice(0, 64);
-    out.push({ id, text: text.slice(0, 500) });
+    parts.push(text);
   }
-  return out.slice(0, 24);
+  if (!parts.length) return [];
+  const joined = parts.join('\n\n').slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+  return [{ id: 'q1', text: joined }];
 }
 
 /** `visionCaptureMode` definido no Form Builder. */
@@ -561,6 +588,61 @@ function parseVisionChecklistStored(raw: unknown): Record<string, any> | null {
   return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, any>) : null;
 }
 
+const VISION_ANALYSIS_GRID_KEYS = ['1x1', '2x2'] as const;
+type VisionAnalysisGridKey = (typeof VISION_ANALYSIS_GRID_KEYS)[number];
+
+/** Só 1×1 e 2×2 são suportados; grelhas antigas (2×1, 3×1, …) migram para 2×2. */
+function normalizeVisionAnalysisGridKey(raw: unknown): VisionAnalysisGridKey {
+  const s = String(raw ?? '1x1')
+    .trim()
+    .toLowerCase()
+    .replace(/\*/g, 'x');
+  if (s === '1x1' || s === '2x2') return s;
+  if (s === '2x1' || s === '3x1' || s === '3x2' || s === '3x3') return '2x2';
+  return '1x1';
+}
+
+/** Grelha só para `vision_ai_analysis` (Gemini): 1 foto ou 2×2 (4 fotos). */
+function getVisionAnalysisGridLayout(field: any): { key: VisionAnalysisGridKey; cols: number; rows: number; count: number } {
+  if (effectiveSchemaFieldType(field) !== 'vision_ai_analysis') {
+    return { key: '1x1', cols: 1, rows: 1, count: 1 };
+  }
+  const key = normalizeVisionAnalysisGridKey(field?.visionAnalysisGrid ?? field?.vision_analysis_grid);
+  const map: Record<VisionAnalysisGridKey, readonly [number, number]> = {
+    '1x1': [1, 1],
+    '2x2': [2, 2],
+  };
+  const [cols, rows] = map[key];
+  return { key, cols, rows, count: cols * rows };
+}
+
+function normalizeVisionGridSlotUris(raw: unknown, count: number): string[] {
+  const out = Array.from({ length: count }, () => '');
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < count && i < raw.length; i++) {
+    const u = raw[i];
+    out[i] = u != null && String(u).trim() ? String(u).trim() : '';
+  }
+  return out;
+}
+
+const VISION_STATUS_PENDING_ANALYSIS = 'pending_analysis';
+
+function isVisionPendingAnalysisRecord(o: Record<string, any> | null | undefined): boolean {
+  if (!o) return false;
+  return String(o.status || '').toLowerCase() === VISION_STATUS_PENDING_ANALYSIS;
+}
+
+/** Mídia pronta para envio à API (1×1 ou grelha com todas as células + composto em `localUri`). */
+function visionStoredHasRunnableMedia(field: any, o: Record<string, any>): boolean {
+  const localUri = o.localUri != null ? String(o.localUri).trim() : '';
+  if (!localUri) return false;
+  const layout = getVisionAnalysisGridLayout(field);
+  if (layout.count <= 1) return true;
+  const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+  return slots.every((u) => u.length > 0);
+}
+
 /** Tipos em que "múltiplo" não se aplica (seção usa outro fluxo; calculado/transit são especiais). */
 const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'section_break',
@@ -575,6 +657,12 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'signature_summary',
   'vision_checklist',
   'vision_ai_analysis',
+  'leitura',
+  'voice_note',
+  'image_annotation',
+  'lookup_select',
+  'repeatable_matrix',
+  'opinion_scale',
 ]);
 
 function fieldAllowsMultiple(field: any) {
@@ -694,13 +782,33 @@ function collectSummaryThumbnailUris(fieldDef: any | undefined, raw: unknown): s
     t !== 'photo_stamped' &&
     t !== 'facial_recognition' &&
     t !== 'file_upload' &&
+    t !== 'image_annotation' &&
     !isVisionSimNaoMediaFieldType(t)
   )
     return [];
+  if (t === 'image_annotation') {
+    let o: unknown = raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        o = JSON.parse(raw);
+      } catch {
+        return [];
+      }
+    }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return [];
+    const u = String((o as Record<string, unknown>).imageUri || (o as Record<string, unknown>).uri || '').trim();
+    return u ? [u] : [];
+  }
   if (isVisionSimNaoMediaFieldType(t)) {
     const o = parseVisionChecklistStored(raw);
     const u = o?.localUri != null ? String(o.localUri).trim() : '';
-    return u ? [u] : [];
+    if (u) return [u];
+    const slots = o?.gridSlotUris;
+    if (Array.isArray(slots)) {
+      const first = slots.map((x) => String(x || '').trim()).find(Boolean);
+      return first ? [first] : [];
+    }
+    return [];
   }
   const arr = normalizeResponseArray(raw)
     .map((u) => String(u || '').trim())
@@ -758,9 +866,29 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
   if (t === 'photo' || t === 'photo_stamped' || t === 'facial_recognition' || t === 'file_upload') {
     return 'Mídia ou anexo registado (ver relatório completo)';
   }
+  if (t === 'image_annotation') {
+    return isImageAnnotationAnswerFilled(raw) ? 'Foto com anotações registada' : '—';
+  }
+  if (t === 'lookup_select') {
+    const s = String(raw ?? '').trim();
+    return s || '—';
+  }
+  if (t === 'opinion_scale') {
+    const mode = String(fieldDef?.opinionScaleMode || 'nps').toLowerCase() === 'likert' ? 'Likert' : 'NPS';
+    const s = String(raw ?? '').trim();
+    return s ? `${mode}: ${s}` : '—';
+  }
+  if (t === 'repeatable_matrix') {
+    const n = parseJsonMatrixRows(raw).length;
+    return n ? `${n} linha(s) na matriz` : '—';
+  }
   if (isVisionSimNaoMediaFieldType(t)) {
     const o = parseVisionChecklistStored(raw);
-    if (!o || o.status !== 'completed' || !Array.isArray(o.answers)) return '—';
+    if (!o) return '—';
+    if (isVisionPendingAnalysisRecord(o) && visionStoredHasRunnableMedia(fieldDef, o)) {
+      return 'Mídia registada — análise IA pendente (envio automático com rede)';
+    }
+    if (o.status !== 'completed' || !Array.isArray(o.answers)) return '—';
     const parts = o.answers.map((a: any) => {
       const v = String(a?.value || '').toLowerCase();
       const lab = v === 'yes' ? 'Sim' : v === 'no' ? 'Não' : 'Indefinido';
@@ -798,6 +926,24 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     const p = parseTechnicianFinanceValue(raw);
     const n = p.lines.filter((l) => l.amount > 0).length;
     return `${n} lançamento(s) financeiros`;
+  }
+  if (t === 'voice_note') {
+    if (typeof raw === 'string') {
+      const s = raw.trim();
+      if (!s) return '—';
+      try {
+        const j = JSON.parse(s);
+        const tr = j && typeof j === 'object' ? String((j as any).transcript || '').trim() : '';
+        return tr || '—';
+      } catch {
+        return s;
+      }
+    }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const tr = String((raw as any).transcript || '').trim();
+      return tr || '—';
+    }
+    return '—';
   }
   if (t === 'transit_start' || t === 'transit_end') {
     return 'Registo de deslocamento';
@@ -1028,6 +1174,44 @@ function getFirstBlockingPendingFacialFieldLabel(
       if (!(audit as { pending?: boolean } | null)?.pending) return null;
       const uriRaw = getScopedFieldValue(res, scope, f.id);
       if (!firstFacialMediaUri(uriRaw)) return null;
+      return String(f.label || f.id);
+    };
+
+    if (!curSecRepeat) {
+      const hit = checkScope(null);
+      if (hit) return hit;
+    } else if (currentSectionId) {
+      const rows = getRepeatRows(res, currentSectionId);
+      for (let ri = 0; ri < rows.length; ri++) {
+        const hit = checkScope({ sectionId: currentSectionId, rowIndex: ri });
+        if (hit) return hit;
+      }
+    }
+  }
+  return null;
+}
+
+/** Visão IA com `requireOnlineValidation`: só concluir OS com análise já feita (não `pending_analysis`). */
+function getFirstBlockingVisionPendingRequiringOnline(
+  res: Record<string, any>,
+  schema: any[],
+): string | null {
+  if (!Array.isArray(schema)) return null;
+  let currentSectionId: string | null = null;
+  let curSecRepeat = false;
+  for (const f of schema) {
+    if (f.type === 'section_break') {
+      currentSectionId = f.id;
+      curSecRepeat = sectionAllowsRepeat(f);
+      continue;
+    }
+    if (!isVisionSimNaoMediaFieldType(effectiveSchemaFieldType(f))) continue;
+    if (!schemaFieldRequiresOnlineValidation(f)) continue;
+
+    const checkScope = (scope: SectionRepeatScope | null): string | null => {
+      const raw = getScopedFieldValue(res, scope, f.id);
+      const o = parseVisionChecklistStored(raw);
+      if (!isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return null;
       return String(f.label || f.id);
     };
 
@@ -1424,6 +1608,22 @@ function normalizeResponseArray(raw: any): any[] {
 
 function isMultiItemFilled(val: any, fieldType: string): boolean {
   if (val === undefined || val === null) return false;
+  if (fieldType === 'lookup_select') return String(val ?? '').trim() !== '';
+  if (fieldType === 'opinion_scale') {
+    const s = String(val ?? '').trim();
+    if (!s) return false;
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 10;
+  }
+  if (fieldType === 'image_annotation') return isImageAnnotationAnswerFilled(val);
+  if (fieldType === 'repeatable_matrix') {
+    if (!val || typeof val !== 'object' || Array.isArray(val)) return false;
+    return Object.keys(val as object).some((k) => {
+      const v = (val as Record<string, unknown>)[k];
+      if (v === true || v === false) return true;
+      return v != null && String(v).trim() !== '';
+    });
+  }
   if (fieldType === 'location_pick') return isLocationPickAnswerValid(val);
   if (fieldType === 'geofence_check') {
     try {
@@ -1445,17 +1645,101 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
   return true;
 }
 
+function parseJsonMatrixRows(raw: unknown): Record<string, unknown>[] {
+  if (raw === undefined || raw === null) return [];
+  let v: unknown = raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(v)) return [];
+  return v.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) as Record<string, unknown>[];
+}
+
+function matrixColumnIdsFromField(field: any): string[] {
+  const mc = field?.matrixColumns;
+  if (!Array.isArray(mc) || !mc.length) return ['c1', 'c2'];
+  return mc
+    .map((c: any, i: number) => String(c?.id || `c${i + 1}`).trim() || `c${i + 1}`)
+    .slice(0, 8);
+}
+
+function rowObjectHasAnyCell(row: Record<string, unknown>, colIds: string[]): boolean {
+  for (const id of colIds) {
+    const val = row[id];
+    if (val === true || val === false) return true;
+    if (val != null && String(val).trim() !== '') return true;
+  }
+  return false;
+}
+
+function isRepeatableMatrixAnswerFilled(raw: unknown, field: any): boolean {
+  const required = !!field?.required;
+  const minR = (() => {
+    const n = parseInt(String(field?.matrixMinRows ?? '0'), 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  })();
+  const rows = parseJsonMatrixRows(raw);
+  if (rows.length < minR) return false;
+  if (rows.length === 0) {
+    if (minR > 0) return false;
+    return !required;
+  }
+  const colIds = matrixColumnIdsFromField(field);
+  return rows.every((r) => rowObjectHasAnyCell(r, colIds));
+}
+
+function isImageAnnotationAnswerFilled(raw: unknown): boolean {
+  if (raw === undefined || raw === null) return false;
+  let o: unknown = raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+  }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+  const uri = String((o as Record<string, unknown>).imageUri || (o as Record<string, unknown>).uri || '').trim();
+  return !!uri;
+}
+
+function isOpinionScaleValueFilled(raw: unknown, field: any): boolean {
+  if (raw === undefined || raw === null) return false;
+  const s = String(raw).trim();
+  if (!s) return false;
+  const mode = String(field?.opinionScaleMode || 'nps').toLowerCase() === 'likert' ? 'likert' : 'nps';
+  const n = parseInt(s, 10);
+  if (!Number.isFinite(n)) return false;
+  if (mode === 'likert') return n >= 1 && n <= 5;
+  return n >= 0 && n <= 10;
+}
+
 /** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   const ft = effectiveSchemaFieldType(field);
+  if (ft === 'leitura') return true;
+  if (ft === 'voice_note') {
+    if (!field.required) return true;
+    return voiceNoteValueIsFilled(raw);
+  }
   if (isVisionSimNaoMediaFieldType(ft)) {
     const o = parseVisionChecklistStored(raw);
     if (!o) return false;
-    if (String(o.status || '').toLowerCase() !== 'completed') return false;
-    if (!Array.isArray(o.answers) || !o.answers.length) return false;
-    const nq = getVisionQuestionsFromField(field).length;
-    if (nq > 0 && o.answers.length < nq) return false;
-    return true;
+    const st = String(o.status || '').toLowerCase();
+    if (st === 'completed') {
+      if (!Array.isArray(o.answers) || !o.answers.length) return false;
+      const nq = getVisionQuestionsFromField(field).length;
+      if (nq > 0 && o.answers.length < nq) return false;
+      return true;
+    }
+    if (st === VISION_STATUS_PENDING_ANALYSIS && visionStoredHasRunnableMedia(field, o)) {
+      return true;
+    }
+    return false;
   }
   if (!fieldAllowsMultiple(field)) {
     if (ft === 'geofence_check') {
@@ -1474,6 +1758,10 @@ function isFieldAnswerFilled(field: any, raw: any): boolean {
       }
     }
     if (ft === 'location_pick') return isLocationPickAnswerValid(raw);
+    if (ft === 'lookup_select') return String(raw ?? '').trim() !== '';
+    if (ft === 'opinion_scale') return isOpinionScaleValueFilled(raw, field);
+    if (ft === 'image_annotation') return isImageAnnotationAnswerFilled(raw);
+    if (ft === 'repeatable_matrix') return isRepeatableMatrixAnswerFilled(raw, field);
     if (ft === 'materials_consumption' || ft === 'materials_receipt') {
       const p = parseMaterialsValue(raw);
       const hasQty = p.lines.some((l) => l.qty > 0);
@@ -1773,6 +2061,14 @@ export default function ChecklistEngine() {
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
   const [visionAnalyzeBusyId, setVisionAnalyzeBusyId] = useState<string | null>(null);
+  const [visionGridCompose, setVisionGridCompose] = useState<{
+    uris: string[];
+    cols: number;
+    rows: number;
+    field: any;
+    scope: SectionRepeatScope | null;
+    slotUrisForPersist: string[];
+  } | null>(null);
   // Live route map state (após Iniciar Deslocamento)
   const [showLiveMap, setShowLiveMap]       = useState(false);
   /** Seção repetível onde foi "Iniciar deslocamento" — o mapa finaliza com o mesmo scope. */
@@ -1994,7 +2290,10 @@ export default function ChecklistEngine() {
   };
 
   const ensureOnlineValidation = async (field: any, action: () => void | Promise<void>) => {
-    if (schemaFieldRequiresOnlineValidation(field)) {
+    const ft = effectiveSchemaFieldType(field);
+    const isVisionDeferredField = ft === 'vision_checklist' || ft === 'vision_ai_analysis';
+    /** Visão IA: permite captura offline; a análise no servidor fica pendente até haver rede (submit continua a exigir análise concluída quando `requireOnlineValidation`). */
+    if (schemaFieldRequiresOnlineValidation(field) && !isVisionDeferredField) {
       try {
         const netState = await Network.getNetworkStateAsync();
         if (!netState.isConnected) {
@@ -3160,6 +3459,12 @@ export default function ChecklistEngine() {
         'transit_end',
         'hidden',
         'technician_finance',
+        'leitura',
+        'voice_note',
+        'image_annotation',
+        'lookup_select',
+        'repeatable_matrix',
+        'opinion_scale',
       ]);
       if (!readOnlyMode && tmpl.schemaData) {
         tmpl.schemaData.forEach((f: any) => {
@@ -3681,45 +3986,91 @@ export default function ChecklistEngine() {
   handleInputRef.current = handleInput;
 
   const runVisionChecklistAnalyze = useCallback(
-    async (field: any, assetUri: string, mimeType: string, fileName: string, scope?: SectionRepeatScope | null) => {
+    async (
+      field: any,
+      assetUri: string,
+      mimeType: string,
+      fileName: string,
+      scope?: SectionRepeatScope | null,
+      opts?: { persistExtras?: Record<string, unknown>; quiet?: boolean },
+    ) => {
+      const quiet = !!opts?.quiet;
       const qs = getVisionQuestionsFromField(field);
       if (!qs.length) {
-        Alert.alert('Configuração', 'Este campo não tem perguntas configuradas no modelo.');
+        if (!quiet) {
+          Alert.alert('Configuração', 'Este campo não tem prompt de análise configurado no modelo.');
+        }
         return;
       }
       try {
         const pathOnly = assetUri.split('?')[0];
         const info = await FileSystem.getInfoAsync(pathOnly);
         if (info.exists && typeof info.size === 'number' && info.size > 92 * 1024 * 1024) {
-          Alert.alert('Arquivo grande', 'O arquivo excede ~92 MB. Escolha outro vídeo ou reduza a duração.');
+          if (!quiet) {
+            Alert.alert('Arquivo grande', 'O arquivo excede ~92 MB. Escolha outro vídeo ou reduza a duração.');
+          }
           return;
         }
       } catch {
         /* segue sem tamanho */
       }
 
+      const persistPendingVision = () => {
+        const hi0 = handleInputRef.current;
+        const ext =
+          opts?.persistExtras && typeof opts.persistExtras === 'object' ? opts.persistExtras : {};
+        if (typeof hi0 !== 'function') return;
+        hi0(
+          field.id,
+          {
+            ...ext,
+            status: VISION_STATUS_PENDING_ANALYSIS,
+            localUri: assetUri,
+            mediaMimeType: mimeType,
+            mediaFileName: fileName,
+            pendingSince: new Date().toISOString(),
+          },
+          scope,
+        );
+      };
+
       try {
         const netState = await Network.getNetworkStateAsync();
         if (netState.isConnected === false) {
-          Alert.alert(
-            'Sem ligação',
-            'A análise de visão IA é feita no servidor. Conecte-se à internet (Wi‑Fi ou dados) e tente novamente.',
-          );
+          persistPendingVision();
+          if (!quiet) {
+            Alert.alert(
+              'Guardado',
+              'Sem ligação à internet. A mídia ficou no rascunho e a análise de visão IA corre automaticamente quando houver rede.',
+            );
+          }
           return;
         }
       } catch {
-        Alert.alert('Rede', 'Não foi possível verificar a ligação. Tente novamente.');
+        persistPendingVision();
+        if (!quiet) {
+          Alert.alert(
+            'Guardado',
+            'Não foi possível confirmar a rede. A mídia ficou no rascunho para análise automática quando houver ligação.',
+          );
+        }
         return;
       }
 
       const token = await getToken();
       if (!token) {
-        Alert.alert('Sessão', 'Faça login novamente para usar a visão IA.');
+        persistPendingVision();
+        if (!quiet) {
+          Alert.alert(
+            'Sessão',
+            'Faça login quando houver rede para enviar a análise. A mídia foi mantida no rascunho.',
+          );
+        }
         return;
       }
 
       const busyKey = visionAnalyzeBusyKey(field.id, scope ?? null);
-      setVisionAnalyzeBusyId(busyKey);
+      if (!quiet) setVisionAnalyzeBusyId(busyKey);
       /** Só depois de `apiFetch` devolver `Response` — evita tratar `throw new Error(msg do servidor)` como falha de rede. */
       let visionApiReturned = false;
       try {
@@ -3772,11 +4123,14 @@ export default function ChecklistEngine() {
           );
         }
         const hi = handleInputRef.current;
+        const extra =
+          opts?.persistExtras && typeof opts.persistExtras === 'object' ? opts.persistExtras : {};
         const merged = {
           ...json,
           localUri: assetUri,
           mediaMimeType: mimeType,
           mediaFileName: fileName,
+          ...extra,
         };
         if (typeof hi === 'function') hi(field.id, merged, scope);
       } catch (e: any) {
@@ -3790,47 +4144,60 @@ export default function ChecklistEngine() {
             raw.includes('load failed') ||
             (e?.name === 'TypeError' && raw.includes('fetch failed')));
         let msg: string;
-        if (e?.name === 'AbortError') {
+        if (!visionApiReturned && (e?.name === 'AbortError' || looksNet)) {
+          persistPendingVision();
           msg =
-            'Tempo esgotado ao enviar a mídia. Tente um ficheiro menor ou verifique a rede.';
-        } else if (looksNet) {
-          msg =
-            'Não foi possível contactar o servidor BrSpark (erro de rede).\n\n' +
-              'Isto é o endereço da API Node (porta típica 3001), não o URL do YOLO nas Integrações (ex.: :8001).\n\n' +
-              'No .env do app defina EXPO_PUBLIC_API_BASE com o host onde o Node está acessível a partir deste telemóvel (mesma VPN/rede). Reinicie o Metro com -c.\n\n' +
-              'Teste no browser do telemóvel: o mesmo URL + /api/config deve abrir JSON.';
+            e?.name === 'AbortError'
+              ? 'Tempo esgotado ao enviar. A mídia foi guardada — a análise será tentada de novo automaticamente com rede.'
+              : 'Sem ligação ou servidor inacessível. A mídia foi guardada para análise automática quando a rede voltar.';
         } else {
           msg = e?.message || 'Não foi possível analisar a mídia.';
         }
-        Alert.alert('Visão IA', msg);
+        if (!quiet) Alert.alert('Visão IA', msg);
       } finally {
-        setVisionAnalyzeBusyId(null);
+        if (!quiet) setVisionAnalyzeBusyId(null);
       }
     },
     [],
+  );
+
+  const retryVisionPendingAnalysisField = useCallback(
+    (field: any, scope?: SectionRepeatScope | null) => {
+      const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
+      const o = parseVisionChecklistStored(raw);
+      if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(field, o)) return;
+      const uri = String(o.localUri || '').trim();
+      if (!uri) return;
+      const mime = String(o.mediaMimeType || 'application/octet-stream');
+      const name = String(
+        o.mediaFileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg'),
+      );
+      const layout = getVisionAnalysisGridLayout(field);
+      const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+      void runVisionChecklistAnalyze(
+        field,
+        uri,
+        mime,
+        name,
+        scope ?? null,
+        layout.count > 1 ? { persistExtras: { gridSlotUris: slots } } : undefined,
+      );
+    },
+    [runVisionChecklistAnalyze],
   );
 
   const openVisionChecklistMedia = (field: any, scope?: SectionRepeatScope | null) => {
     if (isReadOnly) return;
     const qs = getVisionQuestionsFromField(field);
     if (!qs.length) {
-      Alert.alert('Modelo', 'Adicione pelo menos uma pergunta sim/não a este campo no painel.');
+      Alert.alert('Modelo', 'Configure o prompt estruturado deste campo no painel.');
+      return;
+    }
+    const gridLayout = getVisionAnalysisGridLayout(field);
+    if (effectiveSchemaFieldType(field) === 'vision_ai_analysis' && gridLayout.count > 1) {
       return;
     }
     void (async () => {
-      try {
-        const netState = await Network.getNetworkStateAsync();
-        if (netState.isConnected === false) {
-          Alert.alert(
-            'Sem ligação',
-            'A análise de visão IA é feita no servidor. Conecte-se à internet e tente novamente.',
-          );
-          return;
-        }
-      } catch {
-        Alert.alert('Rede', 'Não foi possível verificar a ligação. Tente novamente.');
-        return;
-      }
       await ensureOnlineValidation(field, async () => {
         try {
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -3869,6 +4236,87 @@ export default function ChecklistEngine() {
         }
       });
     })();
+  };
+
+  const openVisionAnalysisGridSlot = (field: any, scope: SectionRepeatScope | null | undefined, slotIndex: number) => {
+    if (isReadOnly) return;
+    const qs = getVisionQuestionsFromField(field);
+    if (!qs.length) {
+      Alert.alert('Modelo', 'Configure o prompt estruturado deste campo no painel.');
+      return;
+    }
+    const layout = getVisionAnalysisGridLayout(field);
+    if (layout.count <= 1 || slotIndex < 0 || slotIndex >= layout.count) return;
+    void (async () => {
+      await ensureOnlineValidation(field, async () => {
+        try {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert(t('common.attention'), t('checklistForm.permissionCameraDenied'));
+            return;
+          }
+          const pickerOpts: ImagePicker.ImagePickerOptions = {
+            quality: 0.65,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          };
+          const res = await ImagePicker.launchCameraAsync(pickerOpts);
+          if (res.canceled || !res.assets?.length) return;
+          const a = res.assets[0];
+          const uri = a.uri;
+          const hi = handleInputRef.current;
+          if (typeof hi !== 'function') return;
+          const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
+          const prev = parseVisionChecklistStored(raw);
+          const slots = normalizeVisionGridSlotUris(prev?.gridSlotUris, layout.count);
+          slots[slotIndex] = uri;
+          const nextObj: Record<string, unknown> = {
+            gridSlotUris: slots,
+            status: 'draft',
+          };
+          hi(field.id, JSON.stringify(nextObj), scope ?? null);
+        } catch (err: any) {
+          Alert.alert(
+            t('checklistForm.cameraUnavailableTitle'),
+            err?.message || t('checklistForm.cameraUnavailableBody'),
+          );
+        }
+      });
+    })();
+  };
+
+  const startVisionGridAnalyze = (field: any, scope?: SectionRepeatScope | null) => {
+    if (visionGridCompose) return;
+    const layout = getVisionAnalysisGridLayout(field);
+    if (layout.count <= 1) return;
+    const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
+    const prev = parseVisionChecklistStored(raw);
+    if (
+      prev &&
+      isVisionPendingAnalysisRecord(prev) &&
+      visionStoredHasRunnableMedia(field, prev)
+    ) {
+      const uri = String(prev.localUri || '').trim();
+      const mime = String(prev.mediaMimeType || 'image/png');
+      const name = String(prev.mediaFileName || 'grelha-visao.png');
+      const slotsForExtras = normalizeVisionGridSlotUris(prev.gridSlotUris, layout.count);
+      void runVisionChecklistAnalyze(field, uri, mime, name, scope ?? null, {
+        persistExtras: { gridSlotUris: slotsForExtras },
+      });
+      return;
+    }
+    const slots = normalizeVisionGridSlotUris(prev?.gridSlotUris, layout.count);
+    if (!slots.every((u) => u.length > 0)) {
+      Alert.alert('Fotos em falta', `Capture as ${layout.count} fotos da grelha antes de analisar.`);
+      return;
+    }
+    setVisionGridCompose({
+      uris: slots.slice(),
+      cols: layout.cols,
+      rows: layout.rows,
+      field,
+      scope: scope ?? null,
+      slotUrisForPersist: slots.slice(),
+    });
   };
 
   const facialFlushBusyRef = useRef(false);
@@ -3995,14 +4443,90 @@ export default function ChecklistEngine() {
     }
   }, [isReadOnly, loading]);
 
+  const visionFlushBusyRef = useRef(false);
+
+  const flushPendingVisionAnalyses = useCallback(async () => {
+    if (isReadOnly || loading) return;
+    if (visionFlushBusyRef.current) return;
+    const tmpl = templateRefForFacial.current;
+    if (!tmpl?.schemaData?.length) return;
+    try {
+      const netState = await Network.getNetworkStateAsync();
+      if (netState.isConnected === false) return;
+    } catch {
+      return;
+    }
+    const token = await getToken();
+    if (!token) return;
+    const res = responsesRefForFacial.current;
+    visionFlushBusyRef.current = true;
+    try {
+      let currentSectionId: string | null = null;
+      let curSecRepeat = false;
+      for (const f of tmpl.schemaData) {
+        if (f.type === 'section_break') {
+          currentSectionId = f.id;
+          curSecRepeat = sectionAllowsRepeat(f);
+          continue;
+        }
+        const ft = effectiveSchemaFieldType(f);
+        if (!isVisionSimNaoMediaFieldType(ft)) continue;
+
+        const runForScope = async (scope: SectionRepeatScope | null) => {
+          const raw = getScopedFieldValue(res, scope, f.id);
+          const o = parseVisionChecklistStored(raw);
+          if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return;
+          const uri = String(o.localUri || '').trim();
+          if (!uri) return;
+          const pathOnly = uri.split('?')[0];
+          try {
+            const info = await FileSystem.getInfoAsync(pathOnly);
+            if (!info.exists) return;
+          } catch {
+            return;
+          }
+          const mime = String(o.mediaMimeType || 'application/octet-stream');
+          const name = String(
+            o.mediaFileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg'),
+          );
+          const layout = getVisionAnalysisGridLayout(f);
+          const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+          await runVisionChecklistAnalyze(
+            f,
+            uri,
+            mime,
+            name,
+            scope,
+            layout.count > 1
+              ? { persistExtras: { gridSlotUris: slots }, quiet: true }
+              : { quiet: true },
+          );
+        };
+
+        if (!curSecRepeat) {
+          await runForScope(null);
+        } else if (currentSectionId) {
+          const rows = getRepeatRows(res, currentSectionId);
+          for (let ri = 0; ri < rows.length; ri++) {
+            await runForScope({ sectionId: currentSectionId, rowIndex: ri });
+          }
+        }
+      }
+    } finally {
+      visionFlushBusyRef.current = false;
+    }
+  }, [isReadOnly, loading, runVisionChecklistAnalyze]);
+
   useFocusEffect(
     useCallback(() => {
       if (loading || isReadOnly) return undefined;
       const t = setTimeout(() => {
-        void flushPendingFacialVerifications();
+        void flushPendingFacialVerifications().then(() => {
+          void flushPendingVisionAnalyses();
+        });
       }, 700);
       return () => clearTimeout(t);
-    }, [loading, isReadOnly, flushPendingFacialVerifications])
+    }, [loading, isReadOnly, flushPendingFacialVerifications, flushPendingVisionAnalyses])
   );
 
   const mergeMediaUriIntoField = (fieldId: string, uri: string, scope?: SectionRepeatScope | null) => {
@@ -4206,6 +4730,32 @@ export default function ChecklistEngine() {
       }
     } catch {
       /* se a checagem de rede falhar, segue o fluxo legado */
+    }
+
+    await flushPendingVisionAnalyses();
+    await new Promise<void>((r) => setTimeout(r, 120));
+    try {
+      const pendingVisionLabel = getFirstBlockingVisionPendingRequiringOnline(
+        responsesRefForFacial.current,
+        template?.schemaData || [],
+      );
+      if (pendingVisionLabel) {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) {
+          Alert.alert(
+            'Visão IA pendente',
+            `O campo «${pendingVisionLabel}» exige análise no servidor antes de concluir. Está sem rede ou a análise ainda não terminou — conecte-se à internet e use «Tentar análise agora» no campo, ou aguarde o envio automático.`,
+          );
+        } else {
+          Alert.alert(
+            'Visão IA pendente',
+            `O campo «${pendingVisionLabel}» exige análise no servidor antes de concluir. Toque em «Tentar análise agora» no campo ou aguarde alguns segundos. Se o problema continuar, verifique a sessão e a conexão.`,
+          );
+        }
+        return;
+      }
+    } catch {
+      /* segue */
     }
 
     const schemaAll = template?.schemaData || [];
@@ -4739,6 +5289,7 @@ export default function ChecklistEngine() {
   };
 
   const isFieldRequired = (field: any) => {
+      if (effectiveSchemaFieldType(field) === 'leitura') return false;
       let isReq = field.required;
       const rules = getAllRules();
       
@@ -4801,7 +5352,11 @@ export default function ChecklistEngine() {
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
     } else if (schT !== 'technician_finance') {
-      _curFields.push({ ...f, _globalIdx: _globalIndex++ });
+      if (schT === 'leitura') {
+        _curFields.push({ ...f, _globalIdx: undefined });
+      } else {
+        _curFields.push({ ...f, _globalIdx: _globalIndex++ });
+      }
     }
   });
   if (_curFields.length > 0 || rawPages.length === 0) {
@@ -4931,7 +5486,11 @@ export default function ChecklistEngine() {
     let g = 1;
     const emit = () => {
       if (pendingFields.length === 0) return;
-      const withIdx = pendingFields.map((f) => ({ ...f, _globalIdx: g++ }));
+      const withIdx = pendingFields.map((f) => {
+        const t = effectiveSchemaFieldType(f);
+        if (t === 'leitura') return { ...f, _globalIdx: undefined as number | undefined };
+        return { ...f, _globalIdx: g++ };
+      });
       if (sectionHeader?.multiple) {
         chunks.push({ kind: 'repeat', sectionField: sectionHeader, fields: withIdx });
       } else {
@@ -5394,6 +5953,57 @@ export default function ChecklistEngine() {
 
   return (
     <View style={styles.container}>
+      {visionGridCompose ? (
+        <ChecklistVisionGridComposeRunner
+          key={visionGridCompose.uris.join('|')}
+          uris={visionGridCompose.uris}
+          cols={visionGridCompose.cols}
+          rows={visionGridCompose.rows}
+          onDone={async (b64) => {
+            const job = visionGridCompose;
+            if (!job) return;
+            try {
+              const base = FileSystem.cacheDirectory;
+              if (!base) throw new Error('Cache do dispositivo indisponível.');
+              const out = `${base}vision_grid_${Date.now()}.png`;
+              await FileSystem.writeAsStringAsync(out, b64, { encoding: 'base64' });
+              setVisionGridCompose(null);
+              let uploadUri = out;
+              let uploadMime = 'image/png';
+              let uploadName = 'grelha-visao.png';
+              try {
+                const jpeg = await ImageManipulator.manipulateAsync(
+                  out,
+                  [{ resize: { width: 1600 } }],
+                  { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+                );
+                if (jpeg?.uri) {
+                  uploadUri = jpeg.uri;
+                  uploadMime = 'image/jpeg';
+                  uploadName = 'grelha-visao.jpg';
+                }
+              } catch {
+                /* mantém PNG composto (já limitado no runner) */
+              }
+              await runVisionChecklistAnalyze(
+                job.field,
+                uploadUri,
+                uploadMime,
+                uploadName,
+                job.scope,
+                { persistExtras: { gridSlotUris: job.slotUrisForPersist } },
+              );
+            } catch (e: any) {
+              setVisionGridCompose(null);
+              Alert.alert('Visão IA', e?.message || 'Não foi possível preparar a grelha.');
+            }
+          }}
+          onError={(e) => {
+            setVisionGridCompose(null);
+            Alert.alert('Visão IA', e.message);
+          }}
+        />
+      ) : null}
       <LinearGradient 
         colors={['#EA580C', '#F97316']}
         start={{ x: 0, y: 0 }}
@@ -5758,6 +6368,7 @@ export default function ChecklistEngine() {
                       styles.label,
                       {
                         marginBottom:
+                          field.type !== 'leitura' &&
                           field.description?.trim() &&
                           isFieldInstructionsVisible(field) &&
                           !String(field.helpHtml || '').trim()
@@ -5769,17 +6380,24 @@ export default function ChecklistEngine() {
                       },
                     ]}
                   >
-                      {field.icon ? '' : `${field._globalIdx}. `}{field.label}
+                      {field.icon
+                        ? ''
+                        : field.type === 'leitura' || field._globalIdx == null
+                          ? ''
+                          : `${field._globalIdx}. `}
+                      {field.label}
                       {fieldMustAnswerForProgress(field) ? (
                         <Text style={{ color: '#EF4444' }}> *</Text>
                       ) : null}
                   </Text>
-                  {isFieldInstructionsVisible(field) ? (
+                  {field.type !== 'leitura' && isFieldInstructionsVisible(field) ? (
                     <FieldHelpInstructions
                       plainDescription={field.description}
                       helpHtml={field.helpHtml}
                     />
                   ) : null}
+
+                  {field.type === 'leitura' ? <LeituraBlock contentHtml={field.contentHtml} /> : null}
                   
                   {validatingFieldId === field.id && (
                       <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 6, marginBottom: 12}}>
@@ -6238,6 +6856,43 @@ export default function ChecklistEngine() {
                     ))}
                   </View>
                 ))}
+              {field.type === 'lookup_select' && (
+                <ChecklistLookupSelectField
+                  field={field}
+                  value={vv(field.id)}
+                  onChange={(s) => hi(field.id, s)}
+                  readOnly={isReadOnly}
+                  strictOnline={schemaFieldRequiresOnlineValidation(field)}
+                />
+              )}
+              {field.type === 'repeatable_matrix' && (
+                <ChecklistRepeatableMatrixField
+                  field={field}
+                  value={vv(field.id)}
+                  onChange={(s) => hi(field.id, s)}
+                  readOnly={isReadOnly}
+                />
+              )}
+              {field.type === 'opinion_scale' && (
+                <ChecklistOpinionScaleField
+                  field={field}
+                  value={vv(field.id)}
+                  onChange={(s) => hi(field.id, s)}
+                  readOnly={isReadOnly}
+                />
+              )}
+              {field.type === 'image_annotation' && (
+                <ChecklistImageAnnotationField
+                  value={vv(field.id)}
+                  onChange={(s) => hi(field.id, s)}
+                  readOnly={isReadOnly}
+                  penColor={String(field.annotationPenColor || '#dc2626')}
+                  strokeWidth={Math.min(
+                    24,
+                    Math.max(1, parseInt(String(field.annotationStrokeWidth ?? 4), 10) || 4),
+                  )}
+                />
+              )}
               {field.type === 'calculated' && (() => {
                  let rawFormula = field.calcFormula || '';
                  Object.keys(responses).forEach(key => {
@@ -6353,9 +7008,29 @@ export default function ChecklistEngine() {
                       stored?.mediaMimeType != null && String(stored.mediaMimeType).startsWith('video');
                     const thumbUri =
                       stored?.localUri != null ? String(stored.localUri).split('?')[0] : '';
+                    const gridLayout = getVisionAnalysisGridLayout(field);
+                    const multiGeminiGrid = useGeminiAnalysis && gridLayout.count > 1;
+                    const analysisDone =
+                      stored?.status === 'completed' && Array.isArray(stored?.answers) && stored.answers.length > 0;
+                    const pendingAnalysis = Boolean(
+                      stored &&
+                        isVisionPendingAnalysisRecord(stored) &&
+                        visionStoredHasRunnableMedia(field, stored),
+                    );
+                    const slotUris = normalizeVisionGridSlotUris(stored?.gridSlotUris, gridLayout.count);
+                    const sc = scope ?? null;
+                    const composingThisField = Boolean(
+                      visionGridCompose &&
+                        visionGridCompose.field?.id === field.id &&
+                        ((!visionGridCompose.scope && !sc) ||
+                          (visionGridCompose.scope &&
+                            sc &&
+                            visionGridCompose.scope.sectionId === sc.sectionId &&
+                            visionGridCompose.scope.rowIndex === sc.rowIndex)),
+                    );
                     return (
                       <>
-                        {!isReadOnly && (
+                        {!isReadOnly && !(multiGeminiGrid && !analysisDone) && !pendingAnalysis && (
                           <TouchableOpacity
                             onPress={() => openVisionChecklistMedia(field, scope)}
                             disabled={busy}
@@ -6514,6 +7189,161 @@ export default function ChecklistEngine() {
                             </LinearGradient>
                           </TouchableOpacity>
                         )}
+                        {!isReadOnly && multiGeminiGrid && !analysisDone ? (
+                          <View style={{ marginTop: 10 }}>
+                            {pendingAnalysis ? (
+                              <View
+                                style={{
+                                  marginBottom: 12,
+                                  padding: 12,
+                                  backgroundColor: '#fff7ed',
+                                  borderRadius: 12,
+                                  borderWidth: 1,
+                                  borderColor: '#fed7aa',
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    color: '#9a3412',
+                                    fontWeight: '700',
+                                    lineHeight: 18,
+                                  }}
+                                >
+                                  Análise pendente: a mídia está guardada e será enviada automaticamente quando houver
+                                  rede. Também pode forçar o envio agora.
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => retryVisionPendingAnalysisField(field, scope)}
+                                  disabled={busy}
+                                  activeOpacity={0.88}
+                                  style={{
+                                    marginTop: 10,
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 14,
+                                    borderRadius: 12,
+                                    backgroundColor: busy ? '#cbd5e1' : '#ea580c',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                                    Tentar análise agora
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#64748b',
+                                marginBottom: 10,
+                                lineHeight: 17,
+                              }}
+                            >
+                              Grelha {gridLayout.cols}×{gridLayout.rows}: são necessárias{' '}
+                              <Text style={{ fontWeight: '800', color: '#0f172a' }}>{gridLayout.count} fotos</Text> pela
+                              câmera (sem galeria). Junte todas antes de tocar em «Analisar com IA».
+                            </Text>
+                            {Array.from({ length: gridLayout.rows }).map((_, rowIdx) => (
+                              <View
+                                key={`vr_${rowIdx}`}
+                                style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}
+                              >
+                                {Array.from({ length: gridLayout.cols }).map((__, colIdx) => {
+                                  const cellIdx = rowIdx * gridLayout.cols + colIdx;
+                                  const cellUri = slotUris[cellIdx] || '';
+                                  return (
+                                    <TouchableOpacity
+                                      key={`vc_${cellIdx}`}
+                                      onPress={() => openVisionAnalysisGridSlot(field, scope, cellIdx)}
+                                      disabled={busy || composingThisField}
+                                      activeOpacity={0.88}
+                                      style={{
+                                        flex: 1,
+                                        aspectRatio: 1,
+                                        borderRadius: 12,
+                                        overflow: 'hidden',
+                                        borderWidth: 2,
+                                        borderColor: cellUri ? '#fecaca' : '#e2e8f0',
+                                        backgroundColor: cellUri ? '#fff' : '#f8fafc',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                    >
+                                      {cellUri ? (
+                                        <Image
+                                          source={{ uri: cellUri.split('?')[0] }}
+                                          style={{ width: '100%', height: '100%' }}
+                                          resizeMode="cover"
+                                        />
+                                      ) : (
+                                        <>
+                                          <Ionicons name="camera-outline" size={28} color="#94a3b8" />
+                                          <Text
+                                            style={{
+                                              marginTop: 4,
+                                              fontSize: 11,
+                                              fontWeight: '700',
+                                              color: '#64748b',
+                                            }}
+                                          >
+                                            Foto {cellIdx + 1}
+                                          </Text>
+                                        </>
+                                      )}
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            ))}
+                            <TouchableOpacity
+                              onPress={() => startVisionGridAnalyze(field, scope)}
+                              disabled={busy || composingThisField || !slotUris.every(Boolean)}
+                              activeOpacity={0.88}
+                              style={{
+                                marginTop: 6,
+                                paddingVertical: 14,
+                                paddingHorizontal: 16,
+                                borderRadius: 14,
+                                backgroundColor:
+                                  !slotUris.every(Boolean) || composingThisField ? '#cbd5e1' : '#dc2626',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {composingThisField || busy ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                  <ActivityIndicator color="#fff" />
+                                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                                    {composingThisField ? 'A preparar grelha…' : 'Analisando…'}
+                                  </Text>
+                                </View>
+                              ) : (
+                                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                                  Analisar com IA
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                            {slotUris.some(Boolean) ? (
+                              <TouchableOpacity
+                                onPress={() => hi(field.id, null)}
+                                style={{
+                                  marginTop: 10,
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  paddingVertical: 8,
+                                }}
+                              >
+                                <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                                <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>
+                                  Limpar fotos da grelha
+                                </Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        ) : null}
                         {stored?.localUri ? (
                           <View
                             style={{
@@ -6562,7 +7392,7 @@ export default function ChecklistEngine() {
                                   return (
                                     <View key={ai} style={{ marginBottom: 10 }}>
                                       <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>
-                                        {String(a?.question || a?.questionId || `Pergunta ${ai + 1}`)}
+                                        {String(a?.question || a?.questionId || `Critério ${ai + 1}`)}
                                       </Text>
                                       <Text style={{ fontSize: 14, color: '#0f172a', fontWeight: '700', marginTop: 2 }}>
                                         {vl}
@@ -6587,8 +7417,29 @@ export default function ChecklistEngine() {
                             ) : stored ? (
                               <View style={{ padding: 10, backgroundColor: '#fffbeb' }}>
                                 <Text style={{ fontSize: 12, color: '#92400e' }}>
-                                  Análise ainda não concluída ou incompleta.
+                                  {pendingAnalysis
+                                    ? 'Análise pendente: a mídia está no dispositivo e será enviada com rede (ou use o botão abaixo).'
+                                    : 'Análise ainda não concluída ou incompleta.'}
                                 </Text>
+                                {pendingAnalysis && !isReadOnly && !multiGeminiGrid ? (
+                                  <TouchableOpacity
+                                    onPress={() => retryVisionPendingAnalysisField(field, scope)}
+                                    disabled={busy}
+                                    activeOpacity={0.88}
+                                    style={{
+                                      marginTop: 10,
+                                      paddingVertical: 12,
+                                      paddingHorizontal: 14,
+                                      borderRadius: 12,
+                                      backgroundColor: busy ? '#cbd5e1' : '#ea580c',
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                                      Tentar análise agora
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : null}
                               </View>
                             ) : null}
                             {!isReadOnly ? (
@@ -6611,6 +7462,16 @@ export default function ChecklistEngine() {
                       </>
                     );
                   })()}
+                </View>
+              )}
+              {field.type === 'voice_note' && (
+                <View style={{ marginTop: 6 }}>
+                  <ChecklistVoiceNoteField
+                    value={vv(field.id)}
+                    readOnly={isReadOnly}
+                    transcribeLanguage={String(field.voiceTranscribeLanguage || 'pt').slice(0, 12)}
+                    onChange={(next) => hi(field.id, next)}
+                  />
                 </View>
               )}
               {(field.type === 'photo' || field.type === 'photo_stamped' || field.type === 'facial_recognition' || field.type === 'file_upload') && (
@@ -7445,7 +8306,7 @@ export default function ChecklistEngine() {
                   userEmail={user?.email}
                 />
               )}
-              {field.type !== 'hidden' && field.allowTechnicianComment ? (
+              {field.type !== 'hidden' && field.type !== 'leitura' && field.allowTechnicianComment ? (
                 <View style={{ marginTop: 14 }}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 6 }}>
                     Comentário do técnico <Text style={{ fontWeight: '500', color: '#94a3b8' }}>(opcional)</Text>

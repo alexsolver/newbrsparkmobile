@@ -21,6 +21,10 @@ const {
   compactTemplateMetadataForPrompt,
 } = require('./formAiTemplateMetadataPatch');
 const { analyzeLogicSuggestionIssues } = require('./formAiLogicConflicts');
+const {
+  MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_STRUCTURED_PROMPT_CHARS,
+} = require('../constants/visionSimNaoQuestions');
 const prisma = require('../db');
 const { ensureUniqueActiveTitleInFolder, normalizeTemplateTitle } = require('./templateTitleUnique');
 /**
@@ -148,7 +152,7 @@ Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "clarifyOptions": array OU null. Cada item: { "id": "pergunta_1", "question": "texto curto", "choices": [ { "id": "a", "label": "…" }, … ] } com pelo menos 2 escolhas por pergunta, **até 6 perguntas** (use só o necessário). O usuário pode marcar **várias** opções na mesma pergunta antes de enviar — interprete todas as que vierem na mesma linha \`[Pergunta id]\`.
 - "schemaPatch": { "operations": [ … ] } OU null. Operações:
   - { "op": "add_field", "afterId": null|string, "field": { "type", "label", "required"?, "options"?, "description"?, "icon"?, "iconLibrary"?, "iconColor"? … } }
-  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionQuestions", "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`) } }
+  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "contentHtml" (tipo \`leitura\`), "voiceTranscribeLanguage" (tipo \`voice_note\`, ex.: pt), "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionStructuredPrompt" (texto longo único para visão IA), "visionQuestions" (legado), "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`) } }
   - { "op": "remove_field", "id": "<field_id>" } — só com pedido explícito de remoção.
 
 - "logicSuggestions": array OU null. Cada entrada **deve** identificar campos pelo **id** do JSON compacto quando possível (preferido), com **rótulo** como cópia legível.
@@ -195,6 +199,15 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
     }
     if (
       (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
+      f.visionStructuredPrompt != null &&
+      String(f.visionStructuredPrompt).trim()
+    ) {
+      o.visionStructuredPrompt = String(f.visionStructuredPrompt)
+        .trim()
+        .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+    }
+    if (
+      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
       Array.isArray(f.visionQuestions)
     ) {
       o.visionQuestions = f.visionQuestions
@@ -203,7 +216,7 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
           text: String(q?.text || '').slice(0, 220),
         }))
         .filter((q) => q.text)
-        .slice(0, 24);
+        .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
     }
     if (
       (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
@@ -211,6 +224,29 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
       ['photo_only', 'video_only', 'photo_and_video'].includes(String(f.visionCaptureMode).trim())
     ) {
       o.visionCaptureMode = String(f.visionCaptureMode).trim();
+    }
+    if (f.type === 'lookup_select') {
+      if (f.lookupSource) o.lookupSource = String(f.lookupSource);
+      if (f.lookupPreset) o.lookupPreset = String(f.lookupPreset).slice(0, 80);
+    }
+    if (f.type === 'repeatable_matrix' && Array.isArray(f.matrixColumns)) {
+      o.matrixColumns = f.matrixColumns
+        .map((c) => ({
+          id: String(c?.id || '').slice(0, 48),
+          label: String(c?.label || '').slice(0, 120),
+          cellType: String(c?.cellType || 'text'),
+        }))
+        .filter((c) => c.id && c.label)
+        .slice(0, 8);
+      if (f.matrixMinRows != null) o.matrixMinRows = String(f.matrixMinRows).slice(0, 8);
+      if (f.matrixMaxRows != null) o.matrixMaxRows = String(f.matrixMaxRows).slice(0, 8);
+    }
+    if (f.type === 'opinion_scale') {
+      if (f.opinionScaleMode) o.opinionScaleMode = String(f.opinionScaleMode).slice(0, 16);
+    }
+    if (f.type === 'image_annotation') {
+      if (f.annotationPenColor) o.annotationPenColor = String(f.annotationPenColor).slice(0, 20);
+      if (f.annotationStrokeWidth != null) o.annotationStrokeWidth = f.annotationStrokeWidth;
     }
     if (f.dependsOnId != null && String(f.dependsOnId).trim()) o.dependsOnId = String(f.dependsOnId).trim();
     if (f.dependsOnOperator) o.dependsOnOperator = String(f.dependsOnOperator);

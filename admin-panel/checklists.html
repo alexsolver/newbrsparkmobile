@@ -1252,7 +1252,6 @@
         </button>
         <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
 
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.sendTestForm()" style="color:var(--text); background:#f1f5f9;"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar Teste</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> Preview no App</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.configureGlobalSettings()"><ion-icon name="settings-outline" style="vertical-align:-2px"></ion-icon> Cerca Global</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="window.openExpectedFormDurationModal()" title="Minutos previstos só do preenchimento (sem deslocamento), usados no despacho"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Tempo do formulário</button>
@@ -1343,6 +1342,10 @@
            <div class="toolbox-item" data-type="dropdown" style="border-left: 3px solid #6366f1;"><ion-icon name="list-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Lista (Dropdown)</div>
            <div class="toolbox-item" data-type="multiselect" style="border-left: 3px solid #6366f1;"><ion-icon name="list-circle-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Múltipla Escolha</div>
            <div class="toolbox-item" data-type="rating" style="border-left: 3px solid #6366f1;"><ion-icon name="star-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Avaliação (Estrelas)</div>
+           <div class="toolbox-item" data-type="lookup_select" style="border-left: 3px solid #2563eb;"><ion-icon name="cloud-download-outline" style="margin-right:6px; font-size:16px; color:#2563eb;"></ion-icon>Lista dinâmica (servidor / JSON)</div>
+           <div class="toolbox-item" data-type="repeatable_matrix" style="border-left: 3px solid #0f766e;"><ion-icon name="grid-outline" style="margin-right:6px; font-size:16px; color:#0f766e;"></ion-icon>Matriz repetível (tabela)</div>
+           <div class="toolbox-item" data-type="opinion_scale" style="border-left: 3px solid #7c3aed;"><ion-icon name="analytics-outline" style="margin-right:6px; font-size:16px; color:#7c3aed;"></ion-icon>Escala NPS / Likert</div>
+           <div class="toolbox-item" data-type="image_annotation" style="border-left: 3px solid #c2410c;"><ion-icon name="brush-outline" style="margin-right:6px; font-size:16px; color:#c2410c;"></ion-icon>Foto com anotações</div>
            <div class="toolbox-item" data-type="calculated" style="border-left: 3px solid #8b5cf6;"><ion-icon name="calculator-outline" style="margin-right:6px; font-size:16px; color:#8b5cf6;"></ion-icon>Campo Calculado (Math)</div>
            <div class="toolbox-item" data-type="hidden" style="border-left: 3px solid #94a3b8;"><ion-icon name="eye-off-outline" style="margin-right:6px; font-size:16px; color:#94a3b8;"></ion-icon>Campo Oculto</div>
            
@@ -1351,11 +1354,6 @@
            <div class="toolbox-item" data-type="transit_end" style="border-left: 3px solid #3b82f6;"><ion-icon name="flag-outline" style="margin-right:6px; font-size:16px; color:#3b82f6;"></ion-icon>Finalizar Deslocamento</div>
            <div class="toolbox-item" data-type="geofence_check" style="border-left: 3px solid #10b981;"><ion-icon name="location-outline" style="margin-right:6px; font-size:16px; color:#10b981;"></ion-icon>Validar Cerca (Geofence)</div>
            <div class="toolbox-item" data-type="location_pick" style="border-left: 3px solid #0ea5e9;"><ion-icon name="map-outline" style="margin-right:6px; font-size:16px; color:#0ea5e9;"></ion-icon>Localização (GPS + mapa)</div>
-           
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px; letter-spacing:0.02em;">Inteligência Artificial</div>
-           <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
-           <div class="toolbox-item" data-type="vision_checklist" style="border-left: 3px solid #0369a1; background:#f0f9ff"><ion-icon name="videocam-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Visão IA Detecção</div>
-           <div class="toolbox-item" data-type="vision_ai_analysis" style="border-left: 3px solid #dc2626; background:#fef2f2"><ion-icon name="sparkles-outline" style="margin-right:6px; font-size:16px; color:#b91c1c;"></ion-icon><span style="color:#991b1b;font-weight:800">Visão de IA Análise</span></div>
 
            <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">AUDITORIA E PROVAS</div>
            <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Anexar Arquivo</div>
@@ -1367,6 +1365,13 @@
            <div class="toolbox-item" data-type="technician_finance" style="border-left: 3px solid #0f766e;"><ion-icon name="cash-outline" style="margin-right:6px; font-size:16px; color:#0f766e;"></ion-icon>Custos do técnico (financeiro técnico)</div>
            <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
            <div class="toolbox-item" data-type="signature_summary" style="border-left: 3px solid #0e7490;"><ion-icon name="reader-outline" style="margin-right:6px; font-size:16px; color:#0e7490;"></ion-icon>Resumo para assinatura</div>
+           <div class="toolbox-item" data-type="leitura" style="border-left: 3px solid #4338ca;"><ion-icon name="book-outline" style="margin-right:6px; font-size:16px; color:#4338ca;"></ion-icon>Leitura</div>
+           <div class="toolbox-item" data-type="voice_note" style="border-left: 3px solid #7c3aed; background:#faf5ff"><ion-icon name="mic-outline" style="margin-right:6px; font-size:16px; color:#7c3aed;"></ion-icon>Nota de voz</div>
+
+           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px; letter-spacing:0.02em;">Inteligência Artificial</div>
+           <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
+           <div class="toolbox-item" data-type="vision_checklist" style="border-left: 3px solid #0369a1; background:#f0f9ff"><ion-icon name="videocam-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Visão de IA Detecção</div>
+           <div class="toolbox-item" data-type="vision_ai_analysis" style="border-left: 3px solid #dc2626; background:#fef2f2"><ion-icon name="sparkles-outline" style="margin-right:6px; font-size:16px; color:#b91c1c;"></ion-icon><span style="color:#991b1b;font-weight:800">Visão de IA Análise</span></div>
         </div>
       </div>
       
@@ -1381,16 +1386,23 @@
            </div>
         </div>
       </div>
-      
-      <!-- Properties Panel -->
-      <div class="panel" id="properties-panel" style="width: 300px; flex-shrink: 0; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
-         <div class="panel-header"><span class="panel-title">Propriedades do Campo</span></div>
-         <div class="panel-body" id="properties-body" style="flex:1; overflow-y:auto;">
-            <div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">
-              Clique em uma pergunta no canvas ou use o ícone de configurações no cabeçalho de uma seção.
-            </div>
-         </div>
+    </div>
+  </div>
+</div>
+
+<!-- Propriedades do campo (modal — abre pela engrenagem no cartão ou ao criar/clonar campo) -->
+<div id="field-properties-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.82); z-index:99990; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:16px;" onclick="if(event.target===this)window.closeFieldPropertiesModal()">
+  <div role="dialog" aria-modal="true" aria-labelledby="field-properties-modal-title" style="width:min(560px,100%); max-height:min(90vh,920px); background:#fff; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+    <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-shrink:0; background:linear-gradient(180deg,#f8fafc 0%,#fff 100%);">
+      <div style="min-width:0;">
+        <div id="field-properties-modal-title" style="font-size:16px; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">Propriedades do campo</div>
+        <div id="field-properties-modal-subtitle" style="font-size:12px; color:#64748b; margin-top:4px; line-height:1.4; word-break:break-word;"></div>
       </div>
+      <button type="button" class="btn btn-ghost" style="flex-shrink:0; padding:8px 12px; font-size:20px; line-height:1; border-radius:10px;" title="Fechar" aria-label="Fechar" onclick="window.closeFieldPropertiesModal()">&times;</button>
+    </div>
+    <div id="field-properties-modal-body" class="panel-body" style="flex:1; overflow-y:auto; overflow-x:hidden; padding:16px 18px 16px; min-height:120px;"></div>
+    <div style="flex-shrink:0; padding:12px 18px 16px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:flex-end; gap:10px;">
+      <button type="button" class="btn btn-primary" style="min-width:100px; font-weight:700;" onclick="window.closeFieldPropertiesModal()">OK</button>
     </div>
   </div>
 </div>
@@ -1439,29 +1451,6 @@
     <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('new-checklist-modal').style.display='none'">Cancelar</button>
       <button type="button" class="btn btn-primary" onclick="window.confirmCreateNewChecklist()">Criar Painel Limpo</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Confirm Test Sending -->
-<div id="test-dispatch-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
-  <div style="width: 420px; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar Formulário para Técnico</h3>
-    <label style="display:block; font-size:13px; font-weight:600; color:#64748b; margin-bottom:8px; margin-top:20px;">E-mail do Técnico Destino *</label>
-    <div style="font-size:11px; color:#94a3b8; margin-bottom:12px">O técnico receberá uma OS no app com este formulário vinculado.</div>
-    <input 
-      type="email" 
-      id="test-dispatch-email" 
-      placeholder="tecnico@empresa.com"
-      autocomplete="off"
-      style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; margin-bottom:8px; box-sizing:border-box;"
-      onfocus="this.select()"
-    />
-    <div style="font-size:10px; color:#94a3b8; margin-bottom:20px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> O email deve ser exatamente igual ao cadastrado no app móvel.</div>
-    
-    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
-      <button type="button" class="btn btn-ghost" onclick="document.getElementById('test-dispatch-modal').style.display='none'; document.getElementById('test-dispatch-email').value='';">Cancelar</button>
-      <button type="button" class="btn btn-primary" onclick="window.confirmTestDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS ao Técnico</button>
     </div>
   </div>
 </div>

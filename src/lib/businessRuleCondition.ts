@@ -31,6 +31,83 @@ function parseToNorm(val: unknown): string {
   return String(val).toLowerCase().trim();
 }
 
+function parseJsonObjectArray(raw: unknown): Record<string, unknown>[] {
+  if (raw === undefined || raw === null) return [];
+  let v: unknown = raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(v)) return [];
+  return v.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) as Record<string, unknown>[];
+}
+
+function matrixColumnIdsFromRuleField(def: RuleSchemaField | undefined): string[] {
+  const raw = (def as { matrixColumns?: unknown } | undefined)?.matrixColumns;
+  if (!Array.isArray(raw) || !raw.length) return ['c1', 'c2'];
+  return raw
+    .map((c: unknown, i: number) => {
+      if (!c || typeof c !== 'object') return `c${i + 1}`;
+      const id = String((c as { id?: unknown }).id ?? `c${i + 1}`).trim();
+      return id || `c${i + 1}`;
+    })
+    .slice(0, 8);
+}
+
+function rowHasMatrixValue(row: Record<string, unknown>, colIds: string[]): boolean {
+  for (const id of colIds) {
+    const val = row[id];
+    if (val === true || val === false) return true;
+    if (val != null && String(val).trim() !== '') return true;
+  }
+  return false;
+}
+
+/** Valor «preenchido» para is_empty / not_empty em tipos compostos (paridade com o app). */
+function richFieldValueFilled(condFieldType: string, def: RuleSchemaField | undefined, raw: unknown): boolean | null {
+  if (condFieldType === 'image_annotation') {
+    let o: unknown = raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        o = JSON.parse(raw);
+      } catch {
+        return false;
+      }
+    }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+    const uri = String(
+      (o as { imageUri?: unknown; uri?: unknown }).imageUri ??
+        (o as { imageUri?: unknown; uri?: unknown }).uri ??
+        '',
+    ).trim();
+    return !!uri;
+  }
+  if (condFieldType === 'lookup_select') {
+    return String(raw ?? '').trim() !== '';
+  }
+  if (condFieldType === 'opinion_scale') {
+    const s = String(raw ?? '').trim();
+    if (!s) return false;
+    const n = parseInt(s, 10);
+    if (!Number.isFinite(n)) return false;
+    const mode = String((def as { opinionScaleMode?: unknown } | undefined)?.opinionScaleMode ?? 'nps')
+      .toLowerCase()
+      .trim();
+    if (mode === 'likert') return n >= 1 && n <= 5;
+    return n >= 0 && n <= 10;
+  }
+  if (condFieldType === 'repeatable_matrix') {
+    const rows = parseJsonObjectArray(raw);
+    if (!rows.length) return false;
+    const colIds = matrixColumnIdsFromRuleField(def);
+    return rows.some((r) => rowHasMatrixValue(r, colIds));
+  }
+  return null;
+}
+
 function parseNumLocalized(raw: unknown): number | null {
   const s = responseDisplayString(raw).trim().replace(/\s/g, '').replace(',', '.');
   if (s === '') return null;
@@ -238,6 +315,12 @@ export function evaluateBusinessCondition(
     })();
     if (op === 'is_empty') return !visionFilled;
     if (op === 'not_empty') return visionFilled;
+  }
+
+  const richFilled = richFieldValueFilled(condFieldType, condFieldDef, rawDepVal);
+  if (richFilled !== null) {
+    if (op === 'is_empty') return !richFilled;
+    if (op === 'not_empty') return richFilled;
   }
 
   if (op === 'is_empty') return depNorm === '';

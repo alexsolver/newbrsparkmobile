@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Planos (pacotes)</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Planos (pacotes)</span>
+      <div class="topbar-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <a class="btn btn-ghost btn-sm" href="subscriptions.html">Assinaturas</a>
+        <a class="btn btn-ghost btn-sm" href="billing.html">Billing &amp; MRR</a>
+        <button class="btn btn-primary" type="button" onclick="openNewPlanModal()">+ Novo plano</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-body" style="font-size:13px;color:var(--text2);line-height:1.45">
+          Defina <strong>preços</strong>, <strong>limites</strong> e <strong>cotas mensais</strong> (IA, FT, RT, formulários) de cada pacote.
+          Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--primary);font-weight:700">assinatura</a>.
+          <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Catálogo de planos</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>R$/mês</th>
+                <th>R$/ano</th>
+                <th>Subs</th>
+                <th>Bens</th>
+                <th>Users</th>
+                <th>Téc.</th>
+                <th>GB</th>
+                <th>FT/mês</th>
+                <th>Ativo</th>
+                <th style="text-align:right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="plans-tbody"><tr><td colspan="11" style="text-align:center;padding:28px;color:var(--text3)">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="plan-modal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title" id="plan-modal-title">Novo plano</span>
+      <button class="modal-close" type="button" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
+      <input type="hidden" id="plan-id" />
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="plan-is-active" checked style="transform:scale(1.15)" />
+          <span>Plano ativo (visível para novas assinaturas)</span>
+        </label>
+      </div>
+      <div class="form-group"><label class="form-label">Nome do plano *</label><input class="form-control" id="plan-name" placeholder="Ex.: Pro" /></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Preço mensal (R$) *</label><input class="form-control" id="plan-price-monthly" type="number" step="0.01" placeholder="99.00" /></div>
+        <div class="form-group"><label class="form-label">Preço anual (R$) *</label><input class="form-control" id="plan-price-yearly" type="number" step="0.01" placeholder="990.00" /></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Limite de bens (−1 = ilimitado)</label><input class="form-control" id="plan-max-assets" type="number" placeholder="100" /></div>
+        <div class="form-group"><label class="form-label">Utilizadores do painel (−1 = ilimitado)</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Armazenamento (GB)</label><input class="form-control" id="plan-storage" type="number" placeholder="10" /></div>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Cotas por tenant neste plano</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35;">Técnicos = papéis <code>USER</code> e <code>PROVIDER</code> ativos. <strong>−1</strong> = ilimitado.</div>
+        <div class="form-group"><label class="form-label">Máx. técnicos</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">IA — facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label">IA — visão detecção / mês</label><input class="form-control" id="plan-quota-ai-vision-det" type="number" placeholder="-1" /></div>
+        </div>
+        <div class="form-group"><label class="form-label">IA — visão análise (Gemini) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">OS campo (FT) / mês</label><input class="form-control" id="plan-quota-ft" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label">Rotina (RT) / mês</label><input class="form-control" id="plan-quota-rt" type="number" placeholder="-1" /></div>
+        </div>
+        <div class="form-group"><label class="form-label">Máx. formulários (tenantId no modelo)</label><input class="form-control" id="plan-max-templates" type="number" placeholder="-1" /></div>
+      </div>
+
+      <div class="form-group"><label class="form-label">Features (JSON)</label>
+        <textarea class="form-control" id="plan-features" rows="4" placeholder='{"stock":true,"facialVisionProvider":"COMPREFACE"}'></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" type="button" onclick="closeModal('plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" type="button" id="save-plan-btn">Salvar plano</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach((o) =>
+    o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('open'); })
+  );
+</script>
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG } from './js/config.js';
+  await initPage();
+
+  let allPlans = [];
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+  }
+  const fmt = (n) => (n === -1 || n === null || n === undefined ? '∞' : n);
+
+  async function loadPlans() {
+    const plans = await CONFIG.get('/plans') || [];
+    allPlans = plans;
+    const tb = document.getElementById('plans-tbody');
+    if (!plans.length) {
+      tb.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">Nenhum plano. Crie o primeiro.</td></tr>';
+      return;
+    }
+    tb.innerHTML = plans
+      .map(
+        (p) => `<tr>
+        <td class="bold">${esc(p.name)}</td>
+        <td>R$ ${Number(p.priceMonthly).toFixed(2)}</td>
+        <td>R$ ${Number(p.priceYearly).toFixed(2)}</td>
+        <td><span class="badge badge-accent">${p._count?.subscriptions ?? 0}</span></td>
+        <td>${fmt(p.maxAssets)}</td>
+        <td>${fmt(p.maxUsers)}</td>
+        <td>${fmt(p.maxTechnicians)}</td>
+        <td>${esc(p.storageGb)}</td>
+        <td>${fmt(p.quotaFieldTasksMonthly)}</td>
+        <td>${p.isActive === false ? '<span class="badge badge-gray">Não</span>' : '<span class="badge badge-green">Sim</span>'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">Editar</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">Duplicar</button>
+        </td>
+      </tr>`,
+      )
+      .join('');
+  }
+
+  window.openEditPlan = (id) => {
+    const p = allPlans.find((x) => x.id === id);
+    if (!p) return;
+    document.getElementById('plan-id').value = p.id;
+    document.getElementById('plan-modal-title').textContent = 'Editar: ' + p.name;
+    document.getElementById('plan-is-active').checked = p.isActive !== false;
+    document.getElementById('plan-name').value = p.name;
+    document.getElementById('plan-price-monthly').value = p.priceMonthly;
+    document.getElementById('plan-price-yearly').value = p.priceYearly;
+    document.getElementById('plan-max-assets').value = p.maxAssets;
+    document.getElementById('plan-max-users').value = p.maxUsers;
+    document.getElementById('plan-storage').value = p.storageGb;
+    document.getElementById('plan-max-technicians').value = p.maxTechnicians ?? 5;
+    document.getElementById('plan-quota-ai-facial').value = p.quotaAiFacialPerMonth ?? -1;
+    document.getElementById('plan-quota-ai-vision-det').value = p.quotaAiVisionDetectionPerMonth ?? -1;
+    document.getElementById('plan-quota-ai-vision-anal').value = p.quotaAiVisionAnalysisPerMonth ?? -1;
+    document.getElementById('plan-quota-ft').value = p.quotaFieldTasksMonthly ?? -1;
+    document.getElementById('plan-quota-rt').value = p.quotaRoutineTasksMonthly ?? -1;
+    document.getElementById('plan-max-templates').value = p.maxChecklistTemplates ?? -1;
+    document.getElementById('plan-features').value = JSON.stringify(p.features || {}, null, 2);
+    openModal('plan-modal');
+  };
+
+  window.openNewPlanModal = () => {
+    document.getElementById('plan-id').value = '';
+    document.getElementById('plan-modal-title').textContent = 'Novo plano';
+    document.getElementById('plan-is-active').checked = true;
+    [
+      'plan-name',
+      'plan-price-monthly',
+      'plan-price-yearly',
+      'plan-max-assets',
+      'plan-max-users',
+      'plan-storage',
+      'plan-features',
+    ].forEach((hid) => {
+      const el = document.getElementById(hid);
+      if (el) el.value = '';
+    });
+    document.getElementById('plan-max-technicians').value = '5';
+    document.getElementById('plan-quota-ai-facial').value = '-1';
+    document.getElementById('plan-quota-ai-vision-det').value = '-1';
+    document.getElementById('plan-quota-ai-vision-anal').value = '-1';
+    document.getElementById('plan-quota-ft').value = '-1';
+    document.getElementById('plan-quota-rt').value = '-1';
+    document.getElementById('plan-max-templates').value = '-1';
+    openModal('plan-modal');
+  };
+
+  window.duplicatePlan = async (id) => {
+    const p = allPlans.find((x) => x.id === id);
+    if (!p) return;
+    if (!confirm(`Criar um plano novo copiando limites de «${p.name}»?`)) return;
+    const base = String(p.name || 'Plano').trim();
+    let name = `${base} (cópia)`;
+    let n = 2;
+    while (allPlans.some((x) => String(x.name).trim() === name)) {
+      name = `${base} (cópia ${n})`;
+      n += 1;
+    }
+    const body = {
+      name,
+      priceMonthly: Number(p.priceMonthly),
+      priceYearly: Number(p.priceYearly),
+      maxAssets: Number(p.maxAssets),
+      maxUsers: Number(p.maxUsers),
+      storageGb: Number(p.storageGb),
+      maxTechnicians: Number(p.maxTechnicians ?? 5),
+      quotaAiFacialPerMonth: Number(p.quotaAiFacialPerMonth ?? -1),
+      quotaAiVisionDetectionPerMonth: Number(p.quotaAiVisionDetectionPerMonth ?? -1),
+      quotaAiVisionAnalysisPerMonth: Number(p.quotaAiVisionAnalysisPerMonth ?? -1),
+      quotaFieldTasksMonthly: Number(p.quotaFieldTasksMonthly ?? -1),
+      quotaRoutineTasksMonthly: Number(p.quotaRoutineTasksMonthly ?? -1),
+      maxChecklistTemplates: Number(p.maxChecklistTemplates ?? -1),
+      isActive: false,
+      features: p.features && typeof p.features === 'object' ? { ...p.features } : {},
+    };
+    const res = await CONFIG.post('/plans', body);
+    if (res?.id || res?.name) {
+      await loadPlans();
+      alert('Plano duplicado. Fica inativo por padrão — edite e ative quando quiser.');
+    } else alert('Erro: ' + (res?.error || 'Falha ao duplicar.'));
+  };
+
+  document.getElementById('save-plan-btn').addEventListener('click', async () => {
+    const id = document.getElementById('plan-id').value;
+    let features = {};
+    try {
+      features = JSON.parse(document.getElementById('plan-features').value || '{}');
+    } catch {
+      alert('JSON de features inválido.');
+      return;
+    }
+    const parseSigned = (hid, def) => {
+      const raw = document.getElementById(hid).value;
+      if (raw === '' || raw == null) return def;
+      const x = parseInt(String(raw).trim(), 10);
+      return Number.isFinite(x) ? x : def;
+    };
+    const body = {
+      name: document.getElementById('plan-name').value.trim(),
+      priceMonthly: parseFloat(document.getElementById('plan-price-monthly').value),
+      priceYearly: parseFloat(document.getElementById('plan-price-yearly').value),
+      maxAssets: parseSigned('plan-max-assets', 100),
+      maxUsers: parseSigned('plan-max-users', 5),
+      storageGb: parseSigned('plan-storage', 10),
+      maxTechnicians: parseSigned('plan-max-technicians', 5),
+      quotaAiFacialPerMonth: parseSigned('plan-quota-ai-facial', -1),
+      quotaAiVisionDetectionPerMonth: parseSigned('plan-quota-ai-vision-det', -1),
+      quotaAiVisionAnalysisPerMonth: parseSigned('plan-quota-ai-vision-anal', -1),
+      quotaFieldTasksMonthly: parseSigned('plan-quota-ft', -1),
+      quotaRoutineTasksMonthly: parseSigned('plan-quota-rt', -1),
+      maxChecklistTemplates: parseSigned('plan-max-templates', -1),
+      isActive: document.getElementById('plan-is-active').checked,
+      features,
+    };
+    if (!body.name) {
+      alert('Nome é obrigatório.');
+      return;
+    }
+    const res = id ? await CONFIG.patch(`/plans/${id}`, body) : await CONFIG.post('/plans', body);
+    if (res?.id || res?.name) {
+      closeModal('plan-modal');
+      await loadPlans();
+    } else alert('Erro: ' + (res?.error || 'Falha ao salvar.'));
+  });
+
+  await loadPlans();
+</script>
+</body>
+</html>

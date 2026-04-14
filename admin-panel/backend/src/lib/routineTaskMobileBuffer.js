@@ -2,6 +2,7 @@
 
 const { allocateNextRtNumber } = require('./rtSerialNumber');
 const { routineTaskMetadataFromTemplate } = require('./routineTaskMetadata');
+const { consumeQuota } = require('./planQuotaService');
 
 const MIN_SLOTS = 1;
 const MAX_SLOTS = 20;
@@ -61,6 +62,10 @@ async function ensureRoutineTaskMobileBuffer(prisma, assignment) {
   let guard = 0;
   while ((await countActiveRtForTemplate(prisma, email, assignment.templateId)) < slots && guard < MAX_SLOTS * 3) {
     guard += 1;
+    const q = await consumeQuota(prisma, assignment.tenantId, 'ROUTINE_TASK', 1);
+    if (!q.ok) {
+      break;
+    }
     const rt = await allocateNextRtNumber(prisma);
     const meta = {
       ...routineTaskMetadataFromTemplate(tpl, assignment.templateId, { menuLabel: assignment.menuLabel }),

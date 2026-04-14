@@ -1,5 +1,9 @@
 'use strict';
 
+const {
+  MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_STRUCTURED_PROMPT_CHARS,
+} = require('../constants/visionSimNaoQuestions');
 const { normalizeSchemaItem } = require('./formAiNormalize');
 
 const MAX_OPS = 30;
@@ -54,6 +58,10 @@ function applySchemaPatch(schemaData, patch) {
     }
     if (p.defaultValue != null) cur.defaultValue = String(p.defaultValue).trim();
     if (p.helpHtml != null) cur.helpHtml = String(p.helpHtml);
+    if (p.contentHtml != null && cur.type === 'leitura') cur.contentHtml = String(p.contentHtml).slice(0, 500000);
+    if (p.voiceTranscribeLanguage != null && cur.type === 'voice_note') {
+      cur.voiceTranscribeLanguage = String(p.voiceTranscribeLanguage).trim().slice(0, 12);
+    }
     if (p.showFieldInstructions === true || p.showFieldInstructions === false) {
       cur.showFieldInstructions = p.showFieldInstructions;
     }
@@ -87,6 +95,11 @@ function applySchemaPatch(schemaData, patch) {
           cur.visionCaptureMode = m;
         }
       }
+      if (p.visionStructuredPrompt != null) {
+        const s = String(p.visionStructuredPrompt).trim().slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+        cur.visionStructuredPrompt = s;
+        if (s) cur.visionQuestions = [{ id: 'q1', text: s }];
+      }
       if (p.visionQuestions != null && Array.isArray(p.visionQuestions)) {
         const vq = p.visionQuestions
           .map((x, i) => {
@@ -99,9 +112,75 @@ function applySchemaPatch(schemaData, patch) {
             return { id, text };
           })
           .filter(Boolean)
-          .slice(0, 24);
-        if (vq.length) cur.visionQuestions = vq;
+          .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
+        if (vq.length) {
+          cur.visionQuestions = vq;
+          if (!p.visionStructuredPrompt) {
+            const merged = vq
+              .map((q) => String(q.text || '').trim())
+              .filter(Boolean)
+              .join('\n\n')
+              .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+            if (merged) cur.visionStructuredPrompt = merged;
+          }
+        }
       }
+      if (cur.type === 'vision_ai_analysis' && p.visionAnalysisGrid != null) {
+        const g = String(p.visionAnalysisGrid)
+          .trim()
+          .toLowerCase()
+          .replace(/\*/g, 'x');
+        if (g === '1x1' || g === '2x2') {
+          cur.visionAnalysisGrid = g;
+        }
+      }
+    }
+    if (cur.type === 'image_annotation') {
+      if (p.annotationPenColor != null) {
+        cur.annotationPenColor = String(p.annotationPenColor).trim().slice(0, 20);
+      }
+      if (p.annotationStrokeWidth != null) {
+        const sw = parseInt(String(p.annotationStrokeWidth), 10);
+        if (Number.isFinite(sw) && sw >= 1 && sw <= 24) cur.annotationStrokeWidth = sw;
+      }
+    }
+    if (cur.type === 'lookup_select') {
+      if (p.lookupSource != null) {
+        const s = String(p.lookupSource).trim();
+        if (s === 'preset' || s === 'inline_json') cur.lookupSource = s;
+      }
+      if (p.lookupPreset != null) cur.lookupPreset = String(p.lookupPreset).trim().slice(0, 80);
+      if (p.lookupInlineJson != null) cur.lookupInlineJson = String(p.lookupInlineJson).slice(0, 120000);
+    }
+    if (cur.type === 'repeatable_matrix') {
+      if (p.matrixColumns != null && Array.isArray(p.matrixColumns)) {
+        const mc = p.matrixColumns
+          .map((x, i) => {
+            if (!x || typeof x !== 'object') return null;
+            const id = String(x.id || `c${i + 1}`)
+              .replace(/[^\w-]/g, '_')
+              .slice(0, 48);
+            const label = String(x.label || x.title || '').trim().slice(0, 120);
+            const ct = String(x.cellType || x.cell_type || 'text')
+              .trim()
+              .toLowerCase();
+            const cellType = ct === 'number' || ct === 'yes_no' ? ct : 'text';
+            if (!label) return null;
+            return { id, label, cellType };
+          })
+          .filter(Boolean)
+          .slice(0, 8);
+        if (mc.length) cur.matrixColumns = mc;
+      }
+      if (p.matrixMinRows != null) cur.matrixMinRows = String(p.matrixMinRows).trim().slice(0, 8);
+      if (p.matrixMaxRows != null) cur.matrixMaxRows = String(p.matrixMaxRows).trim().slice(0, 8);
+    }
+    if (cur.type === 'opinion_scale') {
+      if (p.opinionScaleMode != null) {
+        const m = String(p.opinionScaleMode).trim();
+        if (m === 'nps' || m === 'likert') cur.opinionScaleMode = m;
+      }
+      if (p.likertLabels != null) cur.likertLabels = String(p.likertLabels).slice(0, 2000);
     }
   }
 

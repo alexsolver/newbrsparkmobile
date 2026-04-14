@@ -39,6 +39,7 @@ const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
 const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const checklistsVisionRoutes = require('./routes/checklistsVision');
+const checklistsVoiceNoteRoutes = require('./routes/checklistsVoiceNote');
 const cockpitRoutes       = require('./routes/cockpit');
 const collectionPolicyRoutes = require('./routes/collection-policy');
 const {
@@ -125,6 +126,7 @@ app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInput
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/checklists', checklistsVisionRoutes);
+app.use('/api/checklists', checklistsVoiceNoteRoutes);
 app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
 // /api/vision → routes/account.js (CompreFace). /api/ai-technician-profile-photo → montado acima (gate IA cadastro prestador).
 

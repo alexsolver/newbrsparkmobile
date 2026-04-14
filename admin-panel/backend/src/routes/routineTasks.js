@@ -12,6 +12,7 @@ const {
   clampSlots,
   ACTIVE_STATUSES,
 } = require('../lib/routineTaskMobileBuffer');
+const { consumeQuota } = require('../lib/planQuotaService');
 
 const router = express.Router();
 router.use(authUser);
@@ -140,6 +141,10 @@ router.post('/open', express.json(), async (req, res) => {
       });
     }
 
+    const q = await consumeQuota(prisma, tenantId, 'ROUTINE_TASK', 1);
+    if (!q.ok) {
+      return res.status(403).json({ error: q.error, code: q.code || 'PLAN_QUOTA_EXCEEDED' });
+    }
     const rt = await allocateNextRtNumber(prisma);
     const meta = routineTaskMetadataFromTemplate(tpl, templateId, { menuLabel: assign.menuLabel });
     const created = await prisma.checklistExecution.create({

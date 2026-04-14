@@ -57,4 +57,28 @@ router.patch('/:id/cancel', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PATCH /api/subscriptions/:id — alterar plano, ciclo ou estado (billing.html)
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { planId, billingCycle, status, cancelledAt } = req.body;
+    const data = {};
+    if (planId) data.planId = String(planId);
+    if (billingCycle === 'MONTHLY' || billingCycle === 'YEARLY') data.billingCycle = billingCycle;
+    if (status === 'ACTIVE' || status === 'PAST_DUE' || status === 'CANCELLED' || status === 'TRIALING') {
+      data.status = status;
+    }
+    if (cancelledAt !== undefined) {
+      data.cancelledAt = cancelledAt ? new Date(cancelledAt) : null;
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo válido para atualizar (planId, billingCycle, status).' });
+    }
+    const sub = await prisma.subscription.update({ where: { id }, data });
+    res.json(sub);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -7,6 +7,7 @@ const router = require('express').Router();
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { stripDataUrlBase64, verifyFacialImageBuffer } = require('../lib/facialRecognitionEngine');
+const { consumeQuota } = require('../lib/planQuotaService');
 
 // POST /api/vision/verify-face
 // Payload: { imageBase64, facialAuthMode?: 'self_verify' | 'identify' }
@@ -58,6 +59,17 @@ router.post('/verify-face', authUser, async (req, res) => {
     }
 
     const a = result.audit;
+    if (req.user.tenantId) {
+      const q = await consumeQuota(prisma, req.user.tenantId, 'AI_FACIAL', 1);
+      if (!q.ok) {
+        return res.status(403).json({
+          error: q.error,
+          code: q.code || 'PLAN_QUOTA_EXCEEDED',
+          match: false,
+          engine: 'server',
+        });
+      }
+    }
     if (a.facialAuthMode === 'identify' && a.identifiedUser) {
       return res.json({
         engine: 'server',

@@ -23,7 +23,10 @@
 
       <!-- Plan Cards pulled from DB -->
       <div class="panel" style="margin-bottom:20px">
-        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Ativos</span><button class="btn btn-ghost btn-sm" onclick="window.location.href='billing.html'">Ver Billing →</button></div>
+        <div class="panel-header"><span class="panel-title"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Planos Ativos</span><div style="display:flex;flex-wrap:wrap;gap:8px">
+          <a class="btn btn-ghost btn-sm" href="plans.html">Configurar planos</a>
+          <a class="btn btn-ghost btn-sm" href="billing.html">Ver Billing →</a>
+        </div></div>
         <div class="panel-body"><div class="grid-3" id="plans-grid"><div style="color:var(--text3)">Carregando…</div></div></div>
       </div>
 
@@ -115,12 +118,16 @@
     return 'CompreFace';
   }
 
+  const fmtQ = (n) => (n === -1 || n == null ? '∞' : n);
   plansGrid.innerHTML = plans.map(p => `
     <div class="stat-card" style="--accent-color:var(--accent)">
       <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${p.name}</div>
       <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">/mês</span></div>
       <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? 'Ilimitado' : p.maxAssets} bens</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} usuários</div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? 'Ilimitado' : p.maxUsers} utilizadores painel</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${p.maxTechnicians === -1 ? 'Ilimitado' : (p.maxTechnicians ?? '—')}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">IA/mês facial ${fmtQ(p.quotaAiFacialPerMonth)} · visão det. ${fmtQ(p.quotaAiVisionDetectionPerMonth)} · análise ${fmtQ(p.quotaAiVisionAnalysisPerMonth)}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:8px">FT ${fmtQ(p.quotaFieldTasksMonthly)}/mês · RT ${fmtQ(p.quotaRoutineTasksMonthly)}/mês · Formulários ${fmtQ(p.maxChecklistTemplates)}</div>
       <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Facial: <span style="font-weight:700;color:var(--text2)">${facialProviderLabel(p.features)}</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <span class="badge badge-accent">${p._count?.subscriptions || 0} tenants</span>

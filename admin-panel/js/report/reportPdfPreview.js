@@ -20,6 +20,7 @@ import {
 import {
   collectSectionTimingRowsForPreview,
   buildPauseProductivityPdfFragment,
+  buildVisionChecklistReportHtml,
 } from './pdfStandardBlocks.js';
 import { buildPreviewPdfEntries } from './pdfPreviewFormEntries.js';
 import { formatServiceLocationInnerHtml } from './serviceLocationFormat.js';
@@ -541,6 +542,11 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
   const asObj = tryParseObject(val);
   if (asObj && isTransitPayload(asObj)) {
     return formatTransitPayloadHtml(asObj, th);
+  }
+
+  if (fType === 'vision_checklist' || fType === 'vision_ai_analysis') {
+    const vh = buildVisionChecklistReportHtml(val, fType, esc);
+    if (vh) return vh;
   }
 
   if (asObj && typeof asObj === 'object' && !Array.isArray(asObj) && !isTransitPayload(asObj)) {

@@ -30,6 +30,7 @@
           "es"
         ],
         "CFBundleDevelopmentRegion": "pt",
+        "NSMicrophoneUsageDescription": "O app usa o microfone para gravar notas de voz nas tarefas (transcrição no servidor).",
         "UIBackgroundModes": [
           "location",
           "fetch",

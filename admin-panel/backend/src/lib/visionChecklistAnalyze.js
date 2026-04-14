@@ -264,6 +264,35 @@ const QUESTION_CLASS_HINTS = [
     re: /mancha|manchas|sujo|derrame|n(o|ó)doa|engordurado/,
     labels: ['stain', 'spot', 'dirt', 'damage', 'rust', 'mold', 'mancha', 'nodo'],
   },
+  /** COCO / YOLO em inglês — perguntas comuns em PT no app. */
+  {
+    re: /celular|celulares|smartphone|telefone(\s+m[oó]vel)?|\biphone\b|\bandroid\b/i,
+    labels: [
+      'cell phone',
+      'mobile phone',
+      'phone',
+      'smartphone',
+      'telephone',
+      'telefone',
+      'celular',
+    ],
+  },
+  {
+    re: /copo|copos|x[ií]cara|xicaras|ch[ií]cara|chicara|caneca|canecas|ta(ç|c)a|ta(ç|c)as/i,
+    labels: [
+      'cup',
+      'wine glass',
+      'wineglass',
+      'mug',
+      'glass',
+      'tumbler',
+      'bowl',
+      'bottle',
+      'copo',
+      'xícara',
+      'caneca',
+    ],
+  },
 ];
 
 function classHintMatchesQuestion(qtNorm, labelNorm) {
@@ -307,7 +336,7 @@ function answersFromDetectionsEnvelope(root, questions) {
           (typeof d.text === 'string' ? d.text : '') ??
           nested ??
           '',
-      ),
+      ).replace(/_/g, ' '),
     );
   };
 
@@ -368,13 +397,16 @@ function answersFromDetectionsEnvelope(root, questions) {
     ];
   }
 
+  const asksQuantity = (qtNorm) =>
+    /\bquant(os|as)\b|\bquantidade\b|\bquant\b|\bcuantos\b|\bcuantas\b/i.test(String(qtNorm || ''));
+
   const out = [];
   let anyMatched = false;
   for (const q of questions) {
     const qt = normQuestionText(q.text);
-    let best = null;
-    let bestScore = 0;
-    let bestFromHint = false;
+    const qtyQ = asksQuantity(qt);
+    /** @type {{ o: any, sc: number, hitHint: boolean }[]} */
+    const hits = [];
     for (const d of detections) {
       if (!d || typeof d !== 'object') continue;
       const o = /** @type {any} */ (d);
@@ -388,35 +420,45 @@ function answersFromDetectionsEnvelope(root, questions) {
       const hitHint = classHintMatchesQuestion(qt, lab);
       if (hitText || hitHint) {
         const sc = normalizeConfidence(o.confidence ?? o.score ?? 0.72);
-        if (sc >= bestScore) {
-          bestScore = sc;
-          best = o;
-          bestFromHint = Boolean(hitHint && !hitText);
-        }
+        hits.push({ o, sc, hitHint: Boolean(hitHint && !hitText) });
       }
     }
-    if (best) {
+    if (hits.length) {
       anyMatched = true;
-      out.push({
+      const best = hits.reduce((a, b) => (b.sc >= a.sc ? b : a));
+      const n = hits.length;
+      const rationaleParts = [
+        String(best.o.label ?? best.o.class ?? '').slice(0, 100),
+        best.hitHint ? '(mapeamento heurístico PT↔classes do modelo)' : '',
+      ];
+      if (qtyQ && n > 0) {
+        rationaleParts.push(`${n} deteção(ões) compatível(is).`);
+      }
+      /** @type {Record<string, unknown>} */
+      const row = {
         questionId: q.id,
         question: q.text,
         value: 'yes',
-        confidence: Math.max(0.5, bestScore || 0.72),
-        rationale: [
-          String((/** @type {any} */ (best)).label ?? (/** @type {any} */ (best)).class ?? '').slice(0, 100),
-          bestFromHint ? '(mapeamento heurístico PT↔classes do modelo)' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .slice(0, 200),
-      });
+        confidence: Math.max(0.5, best.sc || 0.72),
+        rationale: rationaleParts.filter(Boolean).join(' ').slice(0, 200),
+      };
+      if (qtyQ) row.count = n;
+      out.push(row);
     } else {
+      const fallback =
+        qtyQ && any
+          ? {
+              value: 'no',
+              confidence: confNo,
+              rationale: 'Nenhuma deteção com classe compatível com esta pergunta (contagem = 0).',
+            }
+          : { value: 'unknown', confidence: 0, rationale: '' };
       out.push({
         questionId: q.id,
         question: q.text,
-        value: 'unknown',
-        confidence: 0,
-        rationale: '',
+        value: fallback.value,
+        confidence: fallback.confidence,
+        rationale: fallback.rationale,
       });
     }
   }
