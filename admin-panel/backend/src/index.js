@@ -27,6 +27,7 @@ const integrationRoutes   = require('./routes/integrations');
 const complianceRoutes    = require('./routes/compliance');
 const notificationRoutes  = require('./routes/notifications');
 const dashboardRoutes     = require('./routes/dashboard');
+const stockCriticalRoutes   = require('./routes/stockCritical');
 const i18nRoutes          = require('./routes/i18n');
 const storageRoutes       = require('./routes/storage');
 const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile (custos, seguros, vault…)
@@ -128,8 +129,8 @@ app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInput
 app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/checklists', checklistsVisionRoutes);
 app.use('/api/checklists', checklistsVoiceNoteRoutes);
-app.use('/api/operations', require('./routes/operations')); // admin: kanban OS monitoring
-// /api/vision → routes/account.js (CompreFace). /api/ai-technician-profile-photo → montado acima (gate IA cadastro prestador).
+app.use('/api/operations', require('./routes/operations')); // painel + POST reject (app JWT) — ver middleware em operations.js
+// /api/vision → routes/account.js (FaceMatch). /api/ai-technician-profile-photo → montado acima (gate IA cadastro prestador).
 
 // Public: effective collection policy for mobile app (no auth)
 app.get('/api/collection-policy/effective', collectionPolicyRoutes.effectiveHandler);
@@ -573,6 +574,7 @@ app.use('/api/i18n', i18nRoutes);
 // ── Protected routes (require admin JWT) ──────────────────
 app.use('/api/admin/evaluations', adminAuthThenPanel, evaluationsAdminRoutes);
 app.use('/api/dashboard',     adminAuthThenPanel, dashboardRoutes);
+app.use('/api/stock-critical', adminAuthThenPanel, stockCriticalRoutes);
 app.use('/api/tenants',       adminAuthThenPanel, tenantRoutes);
 app.use('/api/users',         adminAuthThenPanel, userRoutes);
 app.use('/api/plans',         adminAuthThenPanel, planRoutes);

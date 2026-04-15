@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Estoque abaixo do mínimo</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600" id="sc-bc-panel">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span id="sc-bc-here">Estoque abaixo do mínimo</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title" id="sc-hero-title">Estoque abaixo do mínimo</h1>
+        <p class="page-hero-sub" id="sc-hero-sub">
+          Lista consolidada de linhas de estoque em ou abaixo do mínimo configurado. Filtre por tenant, pesquise por SKU ou nome e exporte CSV até 5000 linhas.
+        </p>
+      </header>
+
+      <div class="stat-grid sc-kpi-grid" id="sc-kpi" style="display:none">
+        <div class="stat-card" style="--accent-color:var(--red)">
+          <div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle" aria-hidden="true"></ion-icon></div>
+          <div class="stat-value" id="sc-kpi-total">—</div>
+          <div class="stat-label" id="sc-kpi-total-lbl">Total em alerta</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--blue)">
+          <div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="layers-outline" style="font-size:16px;vertical-align:middle" aria-hidden="true"></ion-icon></div>
+          <div class="stat-value" id="sc-kpi-shown">—</div>
+          <div class="stat-label" id="sc-kpi-shown-lbl">Linhas nesta página</div>
+        </div>
+      </div>
+
+      <section class="data-shell fade-in" aria-labelledby="sc-table-title">
+        <div class="data-toolbar">
+          <div class="data-toolbar-main" style="flex-wrap:wrap;gap:12px">
+            <div class="search-wrap search-wrap--toolbar" style="min-width:200px;flex:1;max-width:420px">
+              <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle" aria-hidden="true"></ion-icon></span>
+              <input type="search" id="sc-search" class="form-control" placeholder="Buscar…" autocomplete="off" />
+            </div>
+            <label class="filter-field" id="sc-tenant-field" style="display:none">
+              <span class="filter-field-label" id="sc-lbl-tenant">Tenant</span>
+              <select class="form-control filter-field-control" id="sc-filter-tenant" style="min-width:200px">
+                <option value="">Todos os tenants</option>
+              </select>
+            </label>
+            <label class="filter-field">
+              <span class="filter-field-label" id="sc-lbl-limit">Por página</span>
+              <select class="form-control filter-field-control" id="sc-limit" style="width:100px">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </label>
+          </div>
+          <div class="data-toolbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="sc-refresh-btn" title="Recarregar lista">
+              <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
+              <span class="sc-refresh-label">Atualizar</span>
+            </button>
+            <button type="button" class="btn btn-outline" id="sc-export-btn">
+              <ion-icon name="download-outline" style="font-size:18px;vertical-align:-3px" aria-hidden="true"></ion-icon>
+              <span class="sc-export-label">Exportar CSV</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="data-table-head">
+          <h2 class="data-table-title" id="sc-table-title">Itens abaixo do mínimo</h2>
+          <span class="badge badge-accent" id="sc-count-badge">—</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th id="sc-th-tenant">Tenant</th>
+                <th id="sc-th-asset">Bem</th>
+                <th id="sc-th-item">Item</th>
+                <th id="sc-th-sku">SKU</th>
+                <th id="sc-th-current">Atual</th>
+                <th id="sc-th-min">Mín.</th>
+                <th id="sc-th-gap">Déficit</th>
+                <th id="sc-th-unit">Un.</th>
+              </tr>
+            </thead>
+            <tbody id="sc-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="data-toolbar" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+          <div class="data-toolbar-main" style="align-items:center;gap:12px">
+            <span style="font-size:12px;font-weight:600;color:var(--text3)" id="sc-page-label"></span>
+          </div>
+          <div class="data-toolbar-actions" style="gap:8px">
+            <button type="button" class="btn btn-outline btn-sm" id="sc-prev-btn" disabled>‹</button>
+            <button type="button" class="btn btn-outline btn-sm" id="sc-next-btn" disabled>›</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initPage, getStoredPanelRole } from './js/sidebar.js';
+  import { CONFIG } from './js/config.js';
+  import { applyStockCriticalPageI18n, scT, scFmtNum } from './js/stock-critical-i18n.js';
+
+  await initPage();
+  applyStockCriticalPageI18n();
+
+  const role = getStoredPanelRole();
+  const isTenantScoped = role === 'TENANT_ADMIN';
+
+  let page = 1;
+  let totalPages = 1;
+  let total = 0;
+  let debounce;
+
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function applyUrlToFilters() {
+    try {
+      const sp = new URL(window.location.href).searchParams;
+      const q = sp.get('q');
+      if (q != null) document.getElementById('sc-search').value = q;
+      const tid = sp.get('tenantId');
+      const sel = document.getElementById('sc-filter-tenant');
+      if (tid && sel && !isTenantScoped) sel.value = tid;
+      const lim = sp.get('limit');
+      if (lim && document.getElementById('sc-limit').querySelector(`option[value="${lim}"]`)) {
+        document.getElementById('sc-limit').value = lim;
+      }
+      const p = parseInt(sp.get('page') || '1', 10);
+      if (Number.isFinite(p) && p > 0) page = p;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function syncListUrl() {
+    try {
+      const params = new URLSearchParams();
+      const q = document.getElementById('sc-search').value.trim();
+      if (q) params.set('q', q);
+      const tid = document.getElementById('sc-filter-tenant')?.value;
+      if (tid && !isTenantScoped) params.set('tenantId', tid);
+      const lim = document.getElementById('sc-limit').value;
+      if (lim && lim !== '50') params.set('limit', lim);
+      if (page > 1) params.set('page', String(page));
+      const u = new URL(window.location.href);
+      window.history.replaceState({}, '', u.pathname + (params.toString() ? `?${params}` : '') + u.hash);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function loadStockList() {
+    const lim = Math.min(200, Math.max(1, parseInt(document.getElementById('sc-limit').value, 10) || 50));
+    const q = document.getElementById('sc-search').value.trim();
+    const tenantId = isTenantScoped ? '' : (document.getElementById('sc-filter-tenant')?.value || '');
+    const params = new URLSearchParams({ page: String(page), limit: String(lim) });
+    if (q) params.set('q', q);
+    if (tenantId) params.set('tenantId', tenantId);
+
+    const data = await CONFIG.get(`/stock-critical?${params}`);
+    const tbody = document.getElementById('sc-tbody');
+    if (!data || data.error) {
+      const kpiErr = document.getElementById('sc-kpi');
+      if (kpiErr) kpiErr.style.display = 'none';
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--red);font-size:13px">${escHtml(scT('sc_load_err'))}</td></tr>`;
+      return;
+    }
+
+    const rows = data.data || [];
+    total = data.total ?? 0;
+    totalPages = data.totalPages ?? 1;
+
+    const kpi = document.getElementById('sc-kpi');
+    const kpiTotal = document.getElementById('sc-kpi-total');
+    const kpiShown = document.getElementById('sc-kpi-shown');
+    if (kpi && kpiTotal && kpiShown) {
+      kpi.style.display = 'grid';
+      kpiTotal.textContent = scFmtNum(total);
+      kpiShown.textContent = scFmtNum(rows.length);
+    }
+
+    document.getElementById('sc-count-badge').textContent =
+      total === 1 ? scT('sc_count_one') : scT('sc_count_many', { n: scFmtNum(total) });
+    document.getElementById('sc-page-label').textContent = scT('sc_page_of', {
+      page: String(page),
+      total: String(totalPages),
+    });
+    document.getElementById('sc-prev-btn').disabled = page <= 1;
+    document.getElementById('sc-next-btn').disabled = page >= totalPages;
+
+    if (!rows.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="8" style="padding:0;border:none">
+          <div class="empty-state-pro" style="padding:36px 20px 32px">
+            <ion-icon name="archive-outline" aria-hidden="true"></ion-icon>
+            <div class="empty-state-pro-title">${escHtml(scT('sc_empty_title'))}</div>
+            <p class="empty-state-pro-sub">${escHtml(scT('sc_empty_sub'))}</p>
+          </div>
+        </td></tr>`;
+      syncListUrl();
+      return;
+    }
+
+    tbody.innerHTML = rows.map((r) => `
+      <tr>
+        <td class="bold" style="max-width:180px;word-break:break-word">${escHtml(r.tenantName)}</td>
+        <td style="max-width:200px;word-break:break-word;color:var(--text2)">${escHtml(r.assetTitle)}</td>
+        <td style="max-width:160px;word-break:break-word">${escHtml(r.itemName)}</td>
+        <td class="mono" style="font-size:11px">${escHtml(r.sku)}</td>
+        <td style="font-variant-numeric:tabular-nums">${scFmtNum(r.currentStock)}</td>
+        <td style="font-variant-numeric:tabular-nums">${scFmtNum(r.minStock)}</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--red)">${scFmtNum(r.gap)}</td>
+        <td style="color:var(--text3);font-size:11px">${escHtml(r.unit || '—')}</td>
+      </tr>`).join('');
+    syncListUrl();
+  }
+
+  async function exportCsv() {
+    const lim = '5000';
+    const q = document.getElementById('sc-search').value.trim();
+    const tenantId = isTenantScoped ? '' : (document.getElementById('sc-filter-tenant')?.value || '');
+    const params = new URLSearchParams({ format: 'csv', limit: lim });
+    if (q) params.set('q', q);
+    if (tenantId) params.set('tenantId', tenantId);
+    const res = await fetch(`${CONFIG.API_BASE}/stock-critical?${params}`, { headers: CONFIG.headers() });
+    if (!res.ok) {
+      alert(scT('sc_load_err'));
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'brspark-estoque-critico.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  if (!isTenantScoped) {
+    const field = document.getElementById('sc-tenant-field');
+    field.style.display = '';
+    const tenants = await CONFIG.get('/tenants?limit=500');
+    const sel = document.getElementById('sc-filter-tenant');
+    (tenants?.data || []).forEach((t) => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = `${t.name || t.slug || t.id}`;
+      sel.appendChild(o);
+    });
+    sel.options[0].textContent = scT('sc_filter_all_tenants');
+  }
+
+  applyUrlToFilters();
+  document.getElementById('sc-refresh-btn').addEventListener('click', () => loadStockList());
+  document.getElementById('sc-export-btn').addEventListener('click', () => exportCsv());
+  document.getElementById('sc-prev-btn').addEventListener('click', () => {
+    if (page > 1) {
+      page -= 1;
+      loadStockList();
+    }
+  });
+  document.getElementById('sc-next-btn').addEventListener('click', () => {
+    if (page < totalPages) {
+      page += 1;
+      loadStockList();
+    }
+  });
+  document.getElementById('sc-limit').addEventListener('change', () => {
+    page = 1;
+    loadStockList();
+  });
+  document.getElementById('sc-filter-tenant')?.addEventListener('change', () => {
+    page = 1;
+    loadStockList();
+  });
+  document.getElementById('sc-search').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      page = 1;
+      loadStockList();
+    }, 350);
+  });
+
+  loadStockList();
+</script>
+</body>
+</html>

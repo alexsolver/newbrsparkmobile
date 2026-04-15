@@ -126,7 +126,8 @@ async function analyzeWithGoogleAiStudio(opts) {
     },
   };
 
-  const timeoutMs = 180000;
+  /** Alinhado ao `timeoutMs` do app em `app/checklist/[id].tsx` (visão IA — análise). */
+  const timeoutMs = 360000;
 
   async function postGemini(payload) {
     const res = await fetch(url, {

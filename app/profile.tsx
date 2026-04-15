@@ -776,7 +776,7 @@ export default function ProfileScreen() {
               <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
                 {isTechnicianProfileActive(user)
                   ? 'Alterne entre Cliente Regular e Prestador (ativa política severa de rastreamento).'
-                  : 'Conta interna: use Prestador para OS, tarefas de rotina e sincronização de campo (sem cadastro CompreFace).'}
+                  : 'Conta interna: use Prestador para OS, tarefas de rotina e sincronização de campo (sem cadastro FaceMatch).'}
               </Text>
             </View>
             <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>

@@ -139,8 +139,8 @@ router.get('/templates', async (req, res) => {
 });
 
 /**
- * GET /api/admin/routine-tasks/technicians — todos os usuários da tenant (para escolher na lista).
- * A associação em massa só grava usuários ativos que não sejam clientes (papel ≠ USER).
+ * GET /api/admin/routine-tasks/technicians — contas da tenant para o painel (rótulo: prestadores).
+ * A associação em massa só grava contas ativas que não sejam clientes (papel ≠ USER).
  */
 router.get('/technicians', async (req, res) => {
   try {
@@ -187,7 +187,7 @@ router.get('/assignments', async (req, res) => {
   }
 });
 
-/** POST /api/admin/routine-tasks/assignments/bulk — associa um modelo a vários técnicos */
+/** POST /api/admin/routine-tasks/assignments/bulk — associa um modelo a vários prestadores */
 router.post('/assignments/bulk', async (req, res) => {
   try {
     const tenantId = requireTenant(req, res);
@@ -266,7 +266,7 @@ router.post('/assignments/bulk', async (req, res) => {
       }
     });
 
-    /** Pré-carga do buffer + push ao técnico logo após o bulk (não bloquear a resposta HTTP). */
+    /** Pré-carga do buffer + push ao prestador logo após o bulk (não bloquear a resposta HTTP). */
     const assignmentIdsToReconcile = [...new Set([...created, ...updated])].filter(Boolean);
     if (assignmentIdsToReconcile.length) {
       setImmediate(() => {
@@ -476,7 +476,7 @@ router.get('/report/export.csv', async (req, res) => {
         });
         if (!u) {
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-          return res.send('\uFEFF' + escapeCsvCell('RT') + ',' + escapeCsvCell('E-mail técnico') + '\n');
+          return res.send('\uFEFF' + escapeCsvCell('RT') + ',' + escapeCsvCell('E-mail do prestador') + '\n');
         }
         ownerEmailExact = String(u.email || '').trim();
       }
@@ -505,7 +505,7 @@ router.get('/report/export.csv', async (req, res) => {
       },
     });
 
-    const header = ['RT', 'E-mail técnico', 'Estado', 'Concluído em', 'Criado em', 'Modelo'];
+    const header = ['RT', 'E-mail do prestador', 'Estado', 'Concluído em', 'Criado em', 'Modelo'];
     const lines = [header.map(escapeCsvCell).join(',')];
     for (const r of rows) {
       lines.push(

@@ -1,5 +1,6 @@
 'use strict';
-const router  = require('express').Router();
+const express = require('express');
+const router = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
@@ -9,8 +10,80 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
 const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = require('../lib/technicianIdentityLock');
 const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
+const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
 
-// /api/vision/* — biometria de campo / checklists (CompreFace conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
+/**
+ * Atualiza sessão de um utilizador do app, regista auditoria e devolve JWT + payload de /api/login.
+ */
+async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
+  const newSessionId = crypto.randomUUID();
+
+  const prevDevice = user.currentDeviceId != null ? String(user.currentDeviceId) : '';
+  const nextDevice = deviceId != null ? String(deviceId) : '';
+  const shouldNotifyOtherDevice = user.currentSessionId && prevDevice !== nextDevice;
+  if (shouldNotifyOtherDevice) {
+    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+    if (tokens.length > 0) {
+      sendExpoPushToMany(tokens, {
+        data: { type: 'FORCE_LOGOUT', reason: 'NEW_LOGIN' },
+      }).catch((err) => console.error('[login_kickout]', err));
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      lastLogin: new Date(),
+      currentSessionId: newSessionId,
+      currentDeviceId: deviceId || null,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'USER_LOGIN',
+      resource: auditResource,
+      category: 'AUTH',
+    },
+  });
+
+  const fresh = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: { tenant: true, technicianProfile: true },
+  });
+
+  const token = jwt.sign(
+    {
+      id: fresh.id,
+      tenantId: fresh.tenantId,
+      email: fresh.email,
+      role: fresh.role,
+      sessionId: newSessionId,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+  );
+
+  return {
+    token,
+    user: {
+      id: fresh.id,
+      name: fresh.name,
+      email: fresh.email,
+      role: fresh.role,
+      avatarUrl: fresh.avatarUrl,
+      preferredChatLocale: fresh.preferredChatLocale ?? null,
+      employeeMatricula: fresh.employeeMatricula ?? null,
+      tenantId: fresh.tenantId,
+      tenant: { id: fresh.tenant.id, name: fresh.tenant.name, status: fresh.tenant.status },
+      technicianProfile: fresh.technicianProfile,
+    },
+  };
+}
+
+// /api/vision/* — biometria de campo / checklists (FaceMatch conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
 const visionRouter = require('./vision');
 router.use('/vision', visionRouter);
 
@@ -229,59 +302,170 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
-    // Handle single-device session
     const { deviceId } = req.body;
-    const newSessionId = crypto.randomUUID();
+    const out = await issueAppJwtAfterLogin(user, deviceId, emailNorm);
+    res.json(out);
+  } catch (err) {
+    console.error('[login]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    // Notificar outros dispositivos: sessão anterior existia e o deviceId mudou (ou antes era desconhecido)
-    const prevDevice = user.currentDeviceId != null ? String(user.currentDeviceId) : '';
-    const nextDevice = deviceId != null ? String(deviceId) : '';
-    const shouldNotifyOtherDevice = user.currentSessionId && prevDevice !== nextDevice;
-    if (shouldNotifyOtherDevice) {
-      const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
-      if (tokens.length > 0) {
-        sendExpoPushToMany(tokens, {
-          data: { type: 'FORCE_LOGOUT', reason: 'NEW_LOGIN' }
-        }).catch(err => console.error('[login_kickout]', err));
+// ─── POST /api/login/oauth ─────────────────────────────────────────────────
+// Público — identidade validada no Laravel; emite JWT do Node (app móvel).
+router.post('/login/oauth', async (req, res) => {
+  try {
+    const p = String(req.body.provider || '')
+      .trim()
+      .toLowerCase();
+    if (!['google', 'facebook', 'apple'].includes(p)) {
+      return res.status(400).json({ error: 'Provedor inválido.' });
+    }
+
+    const verified = await verifyOAuthWithLaravel({
+      provider: p,
+      idToken: req.body.idToken != null ? String(req.body.idToken) : undefined,
+      accessToken: req.body.accessToken != null ? String(req.body.accessToken) : undefined,
+    });
+
+    if (!verified.ok) {
+      if (verified.reason === 'not_configured') {
+        return res.status(503).json({
+          error:
+            'Login social indisponível: configure CMS_DIRECTORY_BASE_URL e CMS_INTERNAL_API_TOKEN (Laravel).',
+        });
+      }
+      const st = verified.status && verified.status >= 400 && verified.status < 600 ? verified.status : 502;
+      const msg =
+        (verified.body && (verified.body.message || verified.body.error)) ||
+        'Não foi possível validar o token no servidor.';
+      return res.status(st).json({ error: String(msg) });
+    }
+
+    const profile = verified.profile;
+    const emailNorm = String(profile.email || '')
+      .trim()
+      .toLowerCase();
+    if (!emailNorm) {
+      return res.status(422).json({ error: 'E-mail não disponível neste login social.' });
+    }
+
+    const displayName =
+      profile.name && String(profile.name).trim()
+        ? String(profile.name).trim()
+        : emailNorm.split('@')[0] || 'Utilizador';
+
+    let candidates = await prisma.user.findMany({
+      where: { email: emailNorm },
+      include: { tenant: true, technicianProfile: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!candidates.length) {
+      const defaultTenantId = await resolveAppDefaultTenantId();
+      if (!defaultTenantId) {
+        return res.status(404).json({
+          error:
+            'Nenhuma conta com este e-mail. Crie uma conta no app ou peça ao administrador para configurar APP_DEFAULT_TENANT_SLUG.',
+        });
+      }
+
+      const tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
+      if (!tenant) {
+        return res.status(500).json({
+          error: 'Configuração inválida: tenant padrão do app não encontrado.',
+        });
+      }
+      if (tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
+        return res.status(403).json({ error: 'Novos registros estão temporariamente indisponíveis.' });
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email_tenantId: { email: emailNorm, tenantId: defaultTenantId } },
+      });
+      if (existingUser) {
+        candidates = await prisma.user.findMany({
+          where: { email: emailNorm },
+          include: { tenant: true, technicianProfile: true },
+          orderBy: { createdAt: 'asc' },
+        });
+      } else {
+        const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
+        if (!seat.ok) {
+          return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
+        }
+
+        const hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+        await prisma.$transaction(async (tx) => {
+          const u = await tx.user.create({
+            data: {
+              name: displayName,
+              email: emailNorm,
+              password: hash,
+              tenantId: defaultTenantId,
+              phone: null,
+              role: 'USER',
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              tenantId: defaultTenantId,
+              userId: u.id,
+              action: 'USER_REGISTER_OAUTH',
+              resource: emailNorm,
+              category: 'AUTH',
+            },
+          });
+        });
+
+        candidates = await prisma.user.findMany({
+          where: { email: emailNorm },
+          include: { tenant: true, technicianProfile: true },
+          orderBy: { createdAt: 'asc' },
+        });
       }
     }
 
-    await prisma.user.update({ 
-      where: { id: user.id }, 
-      data: { 
-        lastLogin: new Date(),
-        currentSessionId: newSessionId,
-        currentDeviceId: deviceId || null 
-      } 
-    });
+    const tenantIdPick =
+      req.body.tenantId != null && String(req.body.tenantId).trim() !== ''
+        ? String(req.body.tenantId).trim()
+        : null;
 
-    await prisma.auditLog.create({
-      data: { tenantId: user.tenantId, userId: user.id, action: 'USER_LOGIN', resource: email, category: 'AUTH' }
-    });
+    let user;
+    if (candidates.length === 1) {
+      user = candidates[0];
+    } else if (tenantIdPick) {
+      user = candidates.find((u) => u.tenantId === tenantIdPick);
+      if (!user) {
+        return res.status(400).json({ error: 'Organização inválida para este e-mail.' });
+      }
+    } else {
+      return res.status(409).json({
+        code: 'MULTIPLE_ACCOUNTS',
+        error:
+          'Este e-mail está em mais de uma organização. Indique qual deseja acessar (tenantId) ou escolha na tela.',
+        tenants: candidates.map((u) => ({
+          id: u.tenantId,
+          name: u.tenant?.name || u.tenantId,
+        })),
+      });
+    }
 
-    const token = jwt.sign(
-      { id: user.id, tenantId: user.tenantId, email: user.email, role: user.role, sessionId: newSessionId },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
-    );
+    if (!user.tenant) return res.status(401).json({ error: 'Conta inválida.' });
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatarUrl: user.avatarUrl,
-        preferredChatLocale: user.preferredChatLocale ?? null,
-        employeeMatricula: user.employeeMatricula ?? null,
-        tenantId: user.tenantId,
-        tenant: { id: user.tenant.id, name: user.tenant.name, status: user.tenant.status },
-        technicianProfile: user.technicianProfile,
-      },
-    });
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Conta suspensa. Entre em contato com o suporte.' });
+    }
+
+    if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED') {
+      return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
+    }
+
+    const { deviceId } = req.body;
+    const out = await issueAppJwtAfterLogin(user, deviceId, emailNorm);
+    res.json(out);
   } catch (err) {
-    console.error('[login]', err);
+    console.error('[login/oauth]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -610,6 +794,51 @@ router.post('/me/technician', authUser, async (req, res) => {
       techRegistrationStatus,
     });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Público — POST /api/verify-email — confirma e-mail com token (48 h) gerado pelo painel
+router.post('/verify-email', express.json(), async (req, res) => {
+  try {
+    const token = String(req.body?.token || '').trim();
+    if (!token || token.length < 32) {
+      return res.status(400).json({ error: 'Token inválido.' });
+    }
+    const user = await prisma.user.findFirst({
+      where: { emailVerificationToken: token },
+    });
+    if (!user) {
+      return res.status(400).json({ error: 'Token inválido ou já utilizado.' });
+    }
+    const exp = user.emailVerificationExpiresAt;
+    if (!exp || new Date(exp).getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Link expirado. Solicite um novo e-mail no painel.' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerifiedAt: new Date(),
+          emailVerificationToken: null,
+          emailVerificationExpiresAt: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          action: 'USER_EMAIL_VERIFIED',
+          resource: user.email,
+          category: 'AUTH',
+        },
+      });
+    });
+
+    res.json({ ok: true, message: 'E-mail confirmado.' });
+  } catch (err) {
+    console.error('POST /verify-email', err);
     res.status(500).json({ error: err.message });
   }
 });

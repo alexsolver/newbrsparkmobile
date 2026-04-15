@@ -56,7 +56,7 @@ async function ensureRoutineTaskMobileBuffer(prisma, assignment) {
     where: { id: assignment.templateId },
     select: { title: true, description: true, tenantId: true },
   });
-  // Modelos globais têm template.tenantId null; o tenant efetivo vem da associação (técnico).
+  // Modelos globais têm template.tenantId null; o tenant efetivo vem da associação (prestador).
   if (!tpl) return { created: 0, slots };
 
   let created = 0;
@@ -151,7 +151,7 @@ async function reconcileRoutineBuffersForAssignment(prisma, assignment) {
   return ensureRoutineTaskMobileBuffer(prisma, assignment);
 }
 
-/** Ao remover associação RT: cancela todas as execuções RT ativas desse modelo para o técnico. */
+/** Ao remover associação RT: cancela todas as execuções RT ativas desse modelo para o prestador. */
 async function cancelActiveRoutinesForAssignmentRemoval(prisma, assignment) {
   const user = await prisma.user.findUnique({
     where: { id: assignment.userId },

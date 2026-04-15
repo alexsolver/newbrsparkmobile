@@ -43,16 +43,16 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Compliance</span>
+        <span id="mpc-bc-here">Compliance</span>
       </nav>
     </div>
     <div class="page-body">
 
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Compliance e LGPD</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Compliance e LGPD</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Versões de termos, políticas e DPA; histórico por tipo e aceitações registradas. Publique apenas após revisão jurídica.
         </p>
       </header>
@@ -60,7 +60,7 @@
       <div class="data-toolbar">
         <div class="data-toolbar-main"></div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" onclick="openEditor(null)">
+          <button type="button" class="btn btn-primary" id="cmp-btn-new" onclick="openEditor(null)">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Nova versão
           </button>
@@ -68,15 +68,15 @@
       </div>
 
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="shield-checkmark-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-docs">—</div><div class="stat-label">Versões totais</div></div>
-        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Docs ativos</div></div>
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label">Aceitações registradas</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="calendar-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-last">—</div><div class="stat-label">Última publicação</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="shield-checkmark-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-docs">—</div><div class="stat-label" id="cmp-stat-versions">Versões totais</div></div>
+        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label" id="cmp-stat-active">Docs ativos</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-acceptances">—</div><div class="stat-label" id="cmp-stat-accept">Aceitações registradas</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="calendar-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-last">—</div><div class="stat-label" id="cmp-stat-last">Última publicação</div></div>
       </div>
 
       <section class="data-shell fade-in">
         <div class="data-table-head">
-          <h2 class="data-table-title">Documentos legais</h2>
+          <h2 class="data-table-title" id="cmp-table-title">Documentos legais</h2>
         </div>
         <div class="data-shell-body" style="padding-top:8px;padding-bottom:8px" id="docs-list"><div style="color:var(--text3);text-align:center;padding:40px;font-size:13px;font-weight:500">Carregando…</div></div>
       </section>
@@ -88,15 +88,15 @@
 <div class="editor-overlay" id="editor-overlay">
   <div style="max-width:820px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-      <button type="button" class="btn btn-ghost" onclick="closeEditor()">← Voltar</button>
-      <h2 style="flex:1;font-size:18px;font-weight:900" id="editor-title">Nova versão</h2>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-save-draft">Salvar rascunho</button>
-      <button type="button" class="btn btn-primary" id="btn-publish">Publicar</button>
+      <button type="button" class="btn btn-ghost" id="cmp-editor-back" onclick="closeEditor()">← Voltar</button>
+      <h2 style="flex:1;font-size:18px;font-weight:900" id="cmp-editor-title">Nova versão</h2>
+      <button type="button" class="btn btn-ghost btn-sm" id="cmp-btn-draft">Salvar rascunho</button>
+      <button type="button" class="btn btn-primary" id="cmp-btn-publish">Publicar</button>
     </div>
     <div id="editor-error" style="display:none;background:var(--red-dim);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:16px"></div>
     <input type="hidden" id="editor-doc-id" />
-    <div class="grid-2" style="margin-bottom:16px">
-      <div class="form-group"><label class="form-label">Tipo</label>
+      <div class="grid-2" style="margin-bottom:16px">
+      <div class="form-group"><label class="form-label" id="cmp-lbl-type">Tipo</label>
         <select class="form-control" id="editor-type">
           <option value="TERMS_OF_USE">Termos de Uso</option>
           <option value="PRIVACY_POLICY">Política de Privacidade</option>
@@ -104,20 +104,21 @@
           <option value="COOKIE_POLICY">Política de Cookies</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Versão</label><input class="form-control" id="editor-version" placeholder="Ex: 2.0" /></div>
+      <div class="form-group"><label class="form-label" id="cmp-lbl-version">Versão</label><input class="form-control" id="editor-version" placeholder="Ex: 2.0" /></div>
     </div>
-    <div class="form-group"><label class="form-label">Título</label><input class="form-control" id="editor-doc-title" placeholder="Título completo do documento" /></div>
-    <div class="form-group"><label class="form-label">Conteúdo (Markdown)</label><textarea class="editor" id="editor-content" placeholder="# Título&#10;&#10;Escreva o conteúdo em Markdown..."></textarea></div>
+    <div class="form-group"><label class="form-label" id="cmp-lbl-doc-title">Título</label><input class="form-control" id="editor-doc-title" placeholder="Título completo do documento" /></div>
+    <div class="form-group"><label class="form-label" id="cmp-lbl-content">Conteúdo (Markdown)</label><textarea class="editor" id="editor-content" placeholder="# Título&#10;&#10;Escreva o conteúdo em Markdown..."></textarea></div>
   </div>
 </div>
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
+  import { applyCompliancePageI18n, complianceTypeLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
   await initPage();
+  applyCompliancePageI18n();
 
   const typeMap = { TERMS_OF_USE:'badge-green', PRIVACY_POLICY:'badge-blue', LGPD_DPA:'badge-accent', COOKIE_POLICY:'badge-amber' };
-  const typeLbl = { TERMS_OF_USE:'Termos de Uso', PRIVACY_POLICY:'Política de Privacidade', LGPD_DPA:'DPA LGPD', COOKIE_POLICY:'Cookies' };
 
   // ── Group docs by type ───────────────────────────────────────────────────────
   function groupByType(docs) {
@@ -139,7 +140,7 @@
         </span>
         <span class="hist-title">${d.title}</span>
         <span class="hist-accepts">${d._count?.acceptances || 0} aceitações</span>
-        <span class="hist-date">${d.publishedAt ? new Date(d.publishedAt).toLocaleDateString('pt-BR') : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString('pt-BR')}</span>
+        <span class="hist-date">${d.publishedAt ? new Date(d.publishedAt).toLocaleDateString(mpIntlLocale()) : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString(mpIntlLocale())}</span>
         <div class="hist-actions">
           <button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="editDoc('${d.id}')">Editar</button>
           ${!d.isActive ? `<button class="btn btn-success btn-sm" style="font-size:10px" onclick="publish('${d.id}', this)">Publicar</button>` : ''}
@@ -158,7 +159,7 @@
       return `
         <div class="type-section">
           <div class="type-section-header">
-            <span class="badge ${typeMap[type]}">${typeLbl[type]}</span>
+            <span class="badge ${typeMap[type]}">${complianceTypeLabel(type)}</span>
             <span class="type-section-title">${active ? active.title : 'Sem versão ativa'}</span>
             <span style="font-size:11px;color:var(--text3);margin-right:4px">${versionsCount} versão${versionsCount > 1 ? 'ões' : ''}</span>
             ${active ? `<span class="badge badge-green" style="font-size:10px"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente: v${active.version}</span>` : '<span class="badge badge-amber" style="font-size:10px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Sem versão ativa</span>'}
@@ -175,7 +176,7 @@
                   <span style="font-size:9px;color:var(--text3)">v${active.version}</span>
                 </div>
                 <div style="font-size:10px;color:var(--text3)">
-                  Publicado: ${active.publishedAt ? new Date(active.publishedAt).toLocaleDateString('pt-BR') : '—'}
+                  Publicado: ${active.publishedAt ? new Date(active.publishedAt).toLocaleDateString(mpIntlLocale()) : '—'}
                   &nbsp;·&nbsp; ${active._count?.acceptances || 0} aceitações registradas
                 </div>
               </div>
@@ -187,7 +188,7 @@
           <!-- Histórico de versões (colapsável) -->
           <div class="history-panel" id="hist-${type}">
             <div style="font-size:11px;font-weight:800;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
-              Histórico de Vigência — ${typeLbl[type]}
+              Histórico de Vigência — ${complianceTypeLabel(type)}
             </div>
             <div style="display:flex;gap:6px;font-size:10px;font-weight:700;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px">
               <span style="min-width:56px">Versão</span>
@@ -211,7 +212,7 @@
     document.getElementById('stat-active').textContent = docs.filter(d => d.isActive).length;
     document.getElementById('stat-acceptances').textContent = docs.reduce((s, d) => s + (d._count?.acceptances || 0), 0);
     const published = docs.filter(d => d.publishedAt).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-    document.getElementById('stat-last').textContent = published[0] ? new Date(published[0].publishedAt).toLocaleDateString('pt-BR') : '—';
+    document.getElementById('stat-last').textContent = published[0] ? new Date(published[0].publishedAt).toLocaleDateString(mpIntlLocale()) : '—';
     document.getElementById('docs-list').innerHTML = renderDocs(docs);
   }
 
@@ -246,7 +247,7 @@
     if (btn.dataset.confirming) {
       btn.disabled = true; btn.textContent = '…';
       const res = await CONFIG.delete(`/compliance/${id}`);
-      if (res?.error) { alert('Erro: ' + res.error); btn.disabled = false; btn.textContent = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon>'; delete btn.dataset.confirming; return; }
+      if (res?.error) { alert(mpT('cmp_alert_err', { detail: res.error })); btn.disabled = false; btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon>'; delete btn.dataset.confirming; return; }
       loadDocs();
     } else {
       btn.dataset.confirming = '1'; btn.textContent = '<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> Excluir?';
@@ -265,7 +266,7 @@
     const doc = await CONFIG.get(`/compliance/${id}`);
     if (!doc) return;
     document.getElementById('editor-doc-id').value     = doc.id;
-    document.getElementById('editor-title').textContent = 'Editando: ' + doc.title;
+    document.getElementById('cmp-editor-title').textContent = mpT('cmp_editor_editing', { title: doc.title });
     document.getElementById('editor-type').value       = doc.type;
     document.getElementById('editor-version').value    = doc.version;
     document.getElementById('editor-doc-title').value  = doc.title;
@@ -277,7 +278,7 @@
   // ── Open for new version ─────────────────────────────────────────────────────
   window.openEditor = (presetType) => {
     document.getElementById('editor-doc-id').value     = '';
-    document.getElementById('editor-title').textContent = 'Nova Versão';
+    document.getElementById('cmp-editor-title').textContent = mpT('cmp_editor_new_title');
     document.getElementById('editor-type').value       = presetType || 'TERMS_OF_USE';
     document.getElementById('editor-type').disabled    = !!presetType;
     document.getElementById('editor-version').value    = '';
@@ -300,8 +301,8 @@
     const content = document.getElementById('editor-content').value.trim();
     const type    = document.getElementById('editor-type').value;
     const errEl   = document.getElementById('editor-error');
-    const pubBtn  = document.getElementById('btn-publish');
-    const dftBtn  = document.getElementById('btn-save-draft');
+    const pubBtn  = document.getElementById('cmp-btn-publish');
+    const dftBtn  = document.getElementById('cmp-btn-draft');
 
     errEl.style.display = 'none';
     if (!version || !title || !content) {
@@ -337,8 +338,8 @@
     }
   }
 
-  document.getElementById('btn-save-draft').addEventListener('click', () => saveDoc(false));
-  document.getElementById('btn-publish').addEventListener('click', () => saveDoc(true));
+  document.getElementById('cmp-btn-draft').addEventListener('click', () => saveDoc(false));
+  document.getElementById('cmp-btn-publish').addEventListener('click', () => saveDoc(true));
 </script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 const router = require('express').Router();
 const prisma  = require('../db');
 const { auditActor } = require('../lib/auditActor');
-const { adminAuthThenPanel } = require('../middleware/auth');
+const { adminAuthThenPanel, rejectOsAuth } = require('../middleware/auth');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
@@ -11,10 +11,99 @@ const {
 } = require('../lib/revisionSessionFields');
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
 const { resolveFieldTaskAssigneeEmail } = require('../lib/technicianEligibility');
+
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
   Math.max(120, Number(process.env.TRACKING_GPS_STALE_SEC) || 600)
 );
+
+/**
+ * Painel: TENANT_ADMIN / MANAGER (e outros não-SaaS) só veem execuções cujo formulário pertence ao tenant do JWT.
+ * SAAS_ADMIN: sem filtro. Admin legado (`!panelUser`): sem filtro.
+ */
+function panelOperationsTenantPrismaFilter(req) {
+  const a = req.admin;
+  if (!a || !a.panelUser) return null;
+  const role = String(a.role || '').trim().toUpperCase();
+  if (role === 'SAAS_ADMIN') return null;
+  const tid = a.tenantId != null && String(a.tenantId).trim() !== '' ? String(a.tenantId).trim() : null;
+  if (!tid) return null;
+  return { template: { tenantId: tid } };
+}
+
+function mergeExecutionWhere(baseWhere, req) {
+  const t = panelOperationsTenantPrismaFilter(req);
+  if (!t) return baseWhere;
+  const empty = !baseWhere || Object.keys(baseWhere).length === 0;
+  if (empty) return t;
+  return { AND: [baseWhere, t] };
+}
+
+/** `tenantId` do painel quando a listagem deve restringir utilizadores (avatares) ao mesmo tenant. */
+function panelTenantIdForUserScope(req) {
+  const a = req.admin;
+  if (!a || !a.panelUser) return null;
+  if (String(a.role || '').trim().toUpperCase() === 'SAAS_ADMIN') return null;
+  const tid = a.tenantId != null && String(a.tenantId).trim() !== '' ? String(a.tenantId).trim() : null;
+  return tid;
+}
+
+// ─── POST /api/operations/tasks/:id/reject (app móvel Live Activity / painel) ──
+// Registado **antes** de `router.use(adminAuthThenPanel)` para aceitar JWT de utilizador do app.
+router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    let ex;
+    if (req.appUser) {
+      ex = await prisma.checklistExecution.findFirst({
+        where: {
+          id,
+          ownerEmail: { equals: String(req.appUser.email || '').trim(), mode: 'insensitive' },
+          template: { tenantId: String(req.appUser.tenantId || '').trim() },
+        },
+      });
+    } else {
+      ex = await prisma.checklistExecution.findFirst({
+        where: mergeExecutionWhere({ id }, req),
+      });
+    }
+    if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
+
+    let meta = typeof ex.metadata === 'object' && ex.metadata ? ex.metadata : {};
+    meta = { ...meta, rejectionReason: reason, rejectedAt: new Date().toISOString() };
+
+    await prisma.checklistExecution.update({
+      where: { id },
+      data: { status: 'REJECTED', metadata: meta },
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...(req.appUser
+            ? {
+                adminId: null,
+                userId: req.appUser.id,
+                tenantId: req.appUser.tenantId,
+              }
+            : auditActor(req)),
+          action: 'OS_REJECTED',
+          resource: 'ChecklistExecution',
+          category: 'DATA',
+          metadata: { executionId: id, ownerEmail: ex.ownerEmail, reason },
+        },
+      })
+      .catch(() => {});
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[operations/tasks/reject POST]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.use(adminAuthThenPanel);
 
 /** Respostas de negócio preservadas; tempos de formulário/pausas/etapas limpos para nova sessão. */
 function stripProductivityFromResponses(raw) {
@@ -45,11 +134,14 @@ function stripResponsesForRevision(raw, templateSchemaData) {
 }
 
 // ─── GET /api/operations/tasks ─────────────────────────────────
-// Returns ALL ChecklistExecutions (all statuses) for Kanban monitoring
-// No ownerEmail filter — shows ALL operations to admin for troubleshooting
+// Kanban: execuções por estado. Admin legado / SAAS_ADMIN: todas as organizações.
+// TENANT_ADMIN / MANAGER: só execuções cujo `ChecklistTemplate.tenantId` coincide com o JWT.
 router.get('/tasks', async (req, res) => {
   try {
     const { email, status, id, limit = 200 } = req.query;
+    let take = parseInt(String(limit), 10);
+    if (!Number.isFinite(take) || take < 1) take = 200;
+    if (take > 500) take = 500;
     const idNorm = id != null && String(id).trim() !== '' ? String(id).trim() : '';
     const includeSchemaRaw = Boolean(idNorm);
 
@@ -88,6 +180,8 @@ router.get('/tasks', async (req, res) => {
       where = { AND: [innerWhere, routineClause] };
     }
 
+    where = mergeExecutionWhere(where, req);
+
     const executions = await prisma.checklistExecution.findMany({
       where,
       include: {
@@ -99,13 +193,17 @@ router.get('/tasks', async (req, res) => {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
+      take,
     });
 
     const emails = [...new Set(executions.map(e => e.ownerEmail).filter(Boolean))];
+    const scopeTenantId = panelTenantIdForUserScope(req);
     const users = await prisma.user.findMany({
-       where: { email: { in: emails } },
-       select: { email: true, avatarUrl: true }
+      where: {
+        email: { in: emails },
+        ...(scopeTenantId ? { tenantId: scopeTenantId } : {}),
+      },
+      select: { email: true, avatarUrl: true },
     });
     const userMap = users.reduce((acc, u) => { acc[u.email] = u; return acc; }, {});
 
@@ -178,8 +276,8 @@ router.get('/tasks/:id/revisions/export', async (req, res) => {
       req.query.includeResponses === 'true' ||
       req.query.full === '1';
 
-    const ex = await prisma.checklistExecution.findUnique({
-      where: { id },
+    const ex = await prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
       select: { id: true, osNumber: true },
     });
     if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
@@ -250,8 +348,8 @@ router.get('/tasks/:id/revisions/:revision', async (req, res) => {
       return res.status(404).json({ error: 'Revisão inválida.' });
     }
 
-    const ex = await prisma.checklistExecution.findUnique({
-      where: { id },
+    const ex = await prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
       select: { id: true, osNumber: true },
     });
     if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
@@ -286,8 +384,8 @@ router.get('/tasks/:id/revisions/:revision', async (req, res) => {
 router.get('/tasks/:id/revisions', async (req, res) => {
   try {
     const { id } = req.params;
-    const ex = await prisma.checklistExecution.findUnique({
-      where: { id },
+    const ex = await prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
       select: { id: true },
     });
     if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
@@ -317,7 +415,9 @@ router.get('/tasks/:id/revisions', async (req, res) => {
 router.delete('/tasks/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const ex = await prisma.checklistExecution.findUnique({ where: { id } });
+    const ex = await prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
+    });
     if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
 
     await prisma.checklistExecution.update({ 
@@ -342,47 +442,13 @@ router.delete('/tasks/:id', async (req, res) => {
   }
 });
 
-// ─── POST /api/operations/tasks/:id/reject ─────────────────────────
-// Rejects an OS
-router.post('/tasks/:id/reject', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason } = req.body;
-    const ex = await prisma.checklistExecution.findUnique({ where: { id } });
-    if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
-
-    let meta = typeof ex.metadata === 'object' && ex.metadata ? ex.metadata : {};
-    meta = { ...meta, rejectionReason: reason, rejectedAt: new Date().toISOString() };
-
-    await prisma.checklistExecution.update({ 
-       where: { id },
-       data: { status: 'REJECTED', metadata: meta }
-    });
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        action:   'OS_REJECTED',
-        resource: 'ChecklistExecution',
-        category: 'DATA',
-        metadata: { executionId: id, ownerEmail: ex.ownerEmail, reason },
-      }
-    }).catch(() => {});
-
-    res.json({ success: true });
-  } catch(err) {
-    console.error('[operations/tasks/reject POST]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── POST /api/operations/tasks/:id/reopen-for-revision ───────
 // Admin: reabre FT concluída para o destinatário (nova revisão; mesma FT). O app móvel não tem este endpoint.
-router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, res) => {
+router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.checklistExecution.findUnique({
-      where: { id },
+    const existing = await prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
       include: { template: { select: { schemaData: true, tenantId: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'OS não encontrada.' });
@@ -534,9 +600,17 @@ router.post('/tasks/:id/reopen-for-revision', adminAuthThenPanel, async (req, re
             typeof mergedMeta.title === 'string' && mergedMeta.title.trim()
               ? mergedMeta.title.trim()
               : 'Ordem de serviço';
+          const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
+          const bodyLine = `A administração pediu uma nova revisão: ${taskTitle}`;
+          const body =
+            (osNum ? `${osNum} · ${bodyLine}` : bodyLine).slice(0, 200);
+          /** Mesma categoria que o despacho de FT — botões Aceitar / Recusar / OK no iOS (expandir notificação). */
           const pushRes = await sendExpoPushToMany(pushTokens, {
             title: 'Nova revisão pedida',
-            body: `A administração pediu uma nova revisão: ${taskTitle}`.slice(0, 200),
+            body,
+            subtitle: 'Deslize para baixo — Aceitar, Recusar ou OK.',
+            interruptionLevel: 'active',
+            categoryId: 'BRSPARK_TECH_ACTIVITY',
             data: { taskId: id, type: 'os_reopened_revision' },
           });
           if (pushRes && pushRes.ok === false) {

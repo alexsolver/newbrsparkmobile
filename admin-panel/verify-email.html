@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirmar e-mail — BrSpark</title>
+  <meta name="theme-color" content="#EA580C" />
+  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: var(--color-bg);
+      --card: var(--color-surface);
+      --accent: var(--color-brand-accent);
+      --text: var(--color-slate);
+      --muted: var(--color-text-light);
+      --border: var(--color-border);
+      --ok-fg: var(--color-status-success-fg);
+      --err-fg: var(--color-status-danger-fg);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px 16px 48px;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 1.35rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid var(--border);
+    }
+    .ok { color: var(--ok-fg); font-weight: 600; }
+    .err { color: var(--err-fg); font-weight: 600; }
+    .muted { color: var(--muted); font-size: 0.85rem; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="title">Confirmar e-mail</h1>
+    <p class="sub" id="sub">Processando…</p>
+    <div class="card" id="card">
+      <p id="msg">Aguarde um instante.</p>
+      <p class="muted" id="hint" style="display:none"></p>
+    </div>
+  </div>
+  <script>
+    const LS_API_ORIGIN = 'brspark_admin_api_origin';
+
+    function normalizeApiBase(fullBase) {
+      let s = String(fullBase || '').trim().replace(/\/+$/, '');
+      if (!s) return 'http://127.0.0.1:3001/api';
+      while (/\/api$/i.test(s)) s = s.slice(0, -4);
+      return s + '/api';
+    }
+
+    function resolveApiBase() {
+      const params = new URLSearchParams(window.location.search);
+      const override = params.get('api');
+      if (override) return normalizeApiBase(override);
+
+      try {
+        const raw = localStorage.getItem(LS_API_ORIGIN);
+        if (raw) {
+          let s = String(raw).trim().replace(/\/+$/, '');
+          if (s) {
+            try {
+              const u = new URL(s);
+              const path = (u.pathname || '').replace(/\/+$/, '');
+              if (path.toLowerCase() === '/api') {
+                u.pathname = '';
+                s = u.origin;
+              }
+            } catch { /* ignore */ }
+            if (/^https?:\/\/.+\/api$/i.test(s)) s = s.slice(0, -4);
+            return normalizeApiBase(s);
+          }
+        }
+      } catch { /* ignore */ }
+
+      const { protocol, hostname, port } = window.location;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        if (port === '3001' || port === '') {
+          return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
+        }
+        return `${protocol}//${hostname}:3001/api`;
+      }
+      return `${window.location.origin.replace(/\/+$/, '')}/api`;
+    }
+
+    const API = resolveApiBase();
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    function setState(title, sub, msg, ok, err, hint) {
+      document.getElementById('title').textContent = title;
+      document.getElementById('sub').textContent = sub;
+      const m = document.getElementById('msg');
+      m.textContent = msg;
+      m.className = ok ? 'ok' : err ? 'err' : '';
+      const h = document.getElementById('hint');
+      if (hint) {
+        h.style.display = 'block';
+        h.textContent = hint;
+      } else {
+        h.style.display = 'none';
+        h.textContent = '';
+      }
+    }
+
+    async function run() {
+      if (!token || token.length < 32) {
+        setState(
+          'Link inválido',
+          'Não foi possível confirmar o e-mail.',
+          'Este link está incompleto ou expirou. Peça ao administrador um novo e-mail de verificação no painel.',
+          false,
+          true,
+          'Se estiver testando em desenvolvimento, confirme que abriu o link com ?token=… completo.',
+        );
+        return;
+      }
+
+      setState('Confirmar e-mail', 'Comunicando com o servidor…', 'Aguarde.', false, false, '');
+
+      try {
+        const res = await fetch(API + '/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || 'Não foi possível confirmar o e-mail.');
+        }
+        setState(
+          'E-mail confirmado',
+          'Sua conta foi atualizada.',
+          data.message || 'E-mail confirmado com sucesso.',
+          true,
+          false,
+          'Você já pode fechar esta página e voltar ao app BrSpark.',
+        );
+      } catch (e) {
+        const msg = e && e.message ? String(e.message) : 'Erro de rede ou servidor.';
+        setState(
+          'Não foi possível confirmar',
+          'Tente novamente ou peça um novo link.',
+          msg,
+          false,
+          true,
+          'Em desenvolvimento com Live Server, defina no navegador localStorage "brspark_admin_api_origin" como http://127.0.0.1:3001 ou use ?api=http://127.0.0.1:3001 na URL.',
+        );
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

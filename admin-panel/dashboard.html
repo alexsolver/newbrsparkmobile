@@ -10,49 +10,54 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        Painel
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600" id="dash-bc-panel">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Resumo</span>
+        <span id="dash-bc-summary">Resumo</span>
       </nav>
-      <div class="topbar-actions">
-        <span style="font-size:12px;font-weight:600;color:var(--text3);" id="last-update">Carregando…</span>
-        <button type="button" class="btn btn-outline btn-sm" onclick="loadDashboard()" title="Recarregar dados do painel">
-          <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
-          Atualizar
-        </button>
-        <span class="badge badge-red pulse" id="alert-badge" style="display:none"></span>
-      </div>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Dashboard</h1>
-        <p class="page-hero-sub">
-          Visão geral da plataforma: métricas principais, alertas de estoque, última atividade de auditoria e tenants recentes.
+        <h1 class="page-hero-title" id="dash-hero-title">Dashboard</h1>
+        <p class="page-hero-sub" id="dash-hero-sub">
+          Visão geral da plataforma: métricas principais, última atividade de auditoria e tenants recentes.
         </p>
       </header>
 
+      <div class="data-toolbar" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:600;color:var(--text3);" id="last-update">Carregando…</span>
+          <a href="audit.html?category=SYSTEM" id="dash-system-events-chip" class="badge badge-gray" style="display:none;text-decoration:none;font-weight:700"></a>
+        </div>
+        <div class="data-toolbar-actions" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <label class="filter-field" style="margin:0;display:flex;align-items:center;gap:8px">
+            <span class="filter-field-label" style="margin:0;font-size:11px;white-space:nowrap" id="dash-auto-refresh-lbl">Atualização automática</span>
+            <select class="form-control filter-field-control" id="dash-auto-refresh" style="min-width:120px;padding:6px 10px;font-size:12px">
+              <option value="0">Desligada</option>
+              <option value="60">1 min</option>
+              <option value="120">2 min</option>
+              <option value="300">5 min</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-outline btn-sm" id="dash-refresh-btn" onclick="loadDashboard()" title="Recarregar dados do painel">
+            <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
+            <span class="dash-refresh-label">Atualizar</span>
+          </button>
+        </div>
+      </div>
+
       <div class="stat-grid" id="stat-grid"></div>
 
-      <div class="grid-2 dashboard-panels-grid">
-        <section class="data-shell fade-in">
+      <div class="dashboard-panels-grid">
+        <section class="data-shell fade-in" aria-labelledby="dash-panel-activity-title">
           <div class="panel-header">
             <span class="panel-title" style="display:flex;align-items:center;gap:8px">
-              <ion-icon name="warning-outline" style="font-size:18px;color:var(--red)"></ion-icon>
-              Alertas críticos
+              <ion-icon name="flash-outline" style="font-size:18px;color:var(--accent)" aria-hidden="true"></ion-icon>
+              <span id="dash-panel-activity-title">Atividade recente</span>
             </span>
-            <span class="badge badge-red" id="alerts-count"></span>
-          </div>
-          <div class="data-shell-body" id="alerts-list">
-            <div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div>
-          </div>
-        </section>
-        <section class="data-shell fade-in">
-          <div class="panel-header">
-            <span class="panel-title" style="display:flex;align-items:center;gap:8px">
-              <ion-icon name="flash-outline" style="font-size:18px;color:var(--accent)"></ion-icon>
-              Atividade recente
+            <span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-all-btn" onclick="window.location.href='audit.html'">Ver tudo</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-system-btn" onclick="window.location.href='audit.html?category=SYSTEM'">Só sistema</button>
             </span>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="window.location.href='audit.html'">Ver tudo</button>
           </div>
           <div class="data-shell-body" id="activity-list" style="padding-top:12px;padding-bottom:12px">
             <div style="color:var(--text3);font-size:13px;font-weight:500">Carregando…</div>
@@ -60,24 +65,24 @@
         </section>
       </div>
 
-      <section class="data-shell dashboard-tenants fade-in">
+      <section class="data-shell dashboard-tenants fade-in" aria-labelledby="dash-tenants-section-title">
         <div class="data-table-head">
           <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
-            <ion-icon name="business-outline" style="font-size:18px;color:var(--text3);opacity:0.9"></ion-icon>
-            Tenants recentes
+            <ion-icon name="business-outline" style="font-size:18px;color:var(--text3);opacity:0.9" aria-hidden="true"></ion-icon>
+            <span id="dash-tenants-section-title">Tenants recentes</span>
           </h2>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="window.location.href='tenants.html'">Gerenciar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="dash-tenants-manage-btn" onclick="window.location.href='tenants.html'">Gerenciar</button>
         </div>
         <div class="table-wrap">
           <table class="table-data">
             <thead>
               <tr>
-                <th>Tenant</th>
-                <th>Plano</th>
-                <th>Usuários</th>
-                <th>Bens</th>
-                <th>Status</th>
-                <th>Criado em</th>
+                <th id="dash-th-tenant">Tenant</th>
+                <th id="dash-th-plan">Plano</th>
+                <th id="dash-th-users">Usuários</th>
+                <th id="dash-th-assets">Bens</th>
+                <th id="dash-th-status">Status</th>
+                <th id="dash-th-created">Criado em</th>
               </tr>
             </thead>
             <tbody id="tenants-tbody">
@@ -92,18 +97,25 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import {
+    applyDashboardStaticI18n,
+    dashT,
+    dashFormatDate,
+    dashFormatDateOnly,
+    dashFormatTimeOnly,
+    dashFormatNumber,
+    dashStatusLabel,
+  } from './js/dashboard-i18n.js';
+
   await initPage();
+  applyDashboardStaticI18n();
 
   const statDefs = [
-    { key: 'totalTenants', label: 'Tenants ativos',    icon: 'business-outline', color: 'var(--accent)', fmt: 'num' },
-    { key: 'activeUsers',  label: 'Usuários',          icon: 'people-outline',     color: 'var(--green)',  fmt: 'num' },
-    { key: 'totalAssets',  label: 'Bens cadastrados',  icon: 'cube-outline',       color: 'var(--blue)',   fmt: 'num' },
-    { key: 'stockItems',   label: 'Itens em estoque',  icon: 'archive-outline',    color: 'var(--amber)',  fmt: 'num' },
-    { key: 'alerts',       label: 'Alertas críticos',  icon: 'warning-outline',    color: 'var(--red)',    fmt: 'num' },
+    { key: 'totalTenants', dashLabelKey: 'dash_stat_tenants', icon: 'business-outline', color: 'var(--accent)', href: 'tenants.html', titleKey: 'dash_stat_go_tenants' },
+    { key: 'activeUsers', dashLabelKey: 'dash_stat_users', icon: 'people-outline', color: 'var(--green)', href: 'users.html?active=1', titleKey: 'dash_stat_go_users' },
+    { key: 'totalAssets', dashLabelKey: 'dash_stat_assets', icon: 'cube-outline', color: 'var(--blue)', href: null, titleKey: 'dash_stat_go_assets' },
   ];
 
-  const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
-  const statusLbl = { TRIAL:'Trial', ACTIVE:'<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo', SUSPENDED:'Suspenso', CANCELLED:'Cancelado' };
   const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
 
   const catIcon = { AUTH:'lock-closed-outline', DATA:'stats-chart-outline', ADMIN:'shield-outline', SYSTEM:'settings-outline' };
@@ -115,75 +127,135 @@
       .replace(/>/g, '&gt;');
   }
 
+  function statStatusClass(status) {
+    const s = String(status || '').trim();
+    if (s === 'TRIAL') return 'badge-amber';
+    if (s === 'ACTIVE') return 'badge-green';
+    if (s === 'SUSPENDED') return 'badge-red';
+    if (s === 'CANCELLED') return 'badge-gray';
+    return 'badge-gray';
+  }
+
+  const DASH_AUTO_LS = 'brspark_dashboard_autorefresh_sec';
+  let dashAutoInt = null;
+  function readDashAutoSec() {
+    try {
+      const v = parseInt(localStorage.getItem(DASH_AUTO_LS) || '0', 10);
+      return [0, 60, 120, 300].includes(v) ? v : 0;
+    } catch {
+      return 0;
+    }
+  }
+  function armDashAutoTimer() {
+    clearInterval(dashAutoInt);
+    dashAutoInt = null;
+    const sec = readDashAutoSec();
+    if (sec > 0) dashAutoInt = setInterval(() => { loadDashboard(); }, sec * 1000);
+  }
+
+  const dashAutoSel = document.getElementById('dash-auto-refresh');
+  if (dashAutoSel) {
+    dashAutoSel.value = String(readDashAutoSec());
+    dashAutoSel.addEventListener('change', () => {
+      const v = parseInt(dashAutoSel.value, 10);
+      try {
+        if ([0, 60, 120, 300].includes(v)) localStorage.setItem(DASH_AUTO_LS, String(v));
+      } catch {
+        /* ignore */
+      }
+      armDashAutoTimer();
+    });
+  }
+
+  function buildStatCard(s, val) {
+    const label = dashT(s.dashLabelKey);
+    const title = dashT(s.titleKey);
+    const inner = `
+        <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}" style="font-size:20px" aria-hidden="true"></ion-icon></div>
+        <div class="stat-value">${dashFormatNumber(val)}</div>
+        <div class="stat-label">${escHtml(label)}</div>`;
+    if (s.href) {
+      const a = document.createElement('a');
+      a.className = 'stat-card stat-card--link fade-in';
+      a.href = s.href;
+      a.style.setProperty('--accent-color', s.color);
+      a.setAttribute('title', title);
+      a.innerHTML = inner;
+      return a;
+    }
+    const div = document.createElement('div');
+    div.className = 'stat-card fade-in';
+    div.style.setProperty('--accent-color', s.color);
+    div.setAttribute('role', 'group');
+    div.setAttribute('aria-label', `${label}: ${dashFormatNumber(val)}`);
+    div.title = title;
+    div.innerHTML = inner;
+    return div;
+  }
+
   window.loadDashboard = async function() {
+    const lu = document.getElementById('last-update');
+    try {
     const data = await CONFIG.get('/dashboard');
-    if (!data) return;
+    if (!data || data.error) {
+      if (lu) lu.textContent = dashT('dash_load_error');
+      const chipErr = document.getElementById('dash-system-events-chip');
+      if (chipErr) chipErr.style.display = 'none';
+      return;
+    }
 
-    const { stats, recentTenants, recentActivity } = data;
-    document.getElementById('last-update').textContent =
-      'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
+    const { stats, recentTenants, recentActivity, generatedAt } = data;
+    const serverTs = generatedAt ? dashFormatDate(generatedAt) : '—';
+    const localClock = dashFormatTimeOnly(new Date());
+    if (lu) {
+      lu.textContent =
+        dashT('dash_last_update_server', { datetime: serverTs }) +
+        ' · ' +
+        dashT('dash_last_update_local', { time: localClock });
+    }
 
-    const ab = document.getElementById('alert-badge');
-    if ((stats.alerts || 0) > 0) {
-      ab.textContent = `${stats.alerts} alerta${stats.alerts === 1 ? '' : 's'}`;
-      ab.style.display = '';
-    } else if (ab) {
-      ab.style.display = 'none';
-      ab.textContent = '';
+    const sysChip = document.getElementById('dash-system-events-chip');
+    if (sysChip) {
+      const sysN = Number(stats.systemAuditEvents24h ?? 0);
+      sysChip.href = `audit.html?category=${encodeURIComponent('SYSTEM')}`;
+      sysChip.textContent = dashT('dash_system_events_24h', { count: dashFormatNumber(sysN) });
+      sysChip.title = dashT('dash_system_events_24h_title');
+      sysChip.className = sysN > 0 ? 'badge badge-amber' : 'badge badge-gray';
+      sysChip.style.display = 'inline-flex';
+      sysChip.style.alignItems = 'center';
     }
 
     const grid = document.getElementById('stat-grid');
     grid.innerHTML = '';
     statDefs.forEach(s => {
       const val = stats[s.key] ?? 0;
-      const card = document.createElement('div');
-      card.className = 'stat-card fade-in';
-      card.style.setProperty('--accent-color', s.color);
-      card.innerHTML = `
-        <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}" style="font-size:20px"></ion-icon></div>
-        <div class="stat-value">${val.toLocaleString('pt-BR')}</div>
-        <div class="stat-label">${s.label}</div>`;
-      grid.appendChild(card);
+      grid.appendChild(buildStatCard(s, val));
     });
 
     const actList = document.getElementById('activity-list');
     if (!recentActivity || !recentActivity.length) {
       actList.innerHTML = `
         <div class="empty-state-pro" style="padding:28px 16px 24px">
-          <ion-icon name="time-outline" style="font-size:44px;opacity:0.35"></ion-icon>
-          <div class="empty-state-pro-title">Nenhuma atividade recente</div>
-          <p class="empty-state-pro-sub">Quando houver eventos de auditoria, eles aparecem aqui.</p>
+          <ion-icon name="time-outline" style="font-size:44px;opacity:0.35" aria-hidden="true"></ion-icon>
+          <div class="empty-state-pro-title">${escHtml(dashT('dash_activity_empty_title'))}</div>
+          <p class="empty-state-pro-sub">${escHtml(dashT('dash_activity_empty_sub'))}</p>
         </div>`;
     } else {
-      actList.innerHTML = recentActivity.map(a => `
+      actList.innerHTML = recentActivity.map(a => {
+        const tenantName = a.tenant?.name ? String(a.tenant.name) : '';
+        const tenantLine = tenantName
+          ? `<div class="activity-tenant" style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:2px">${escHtml(dashT('dash_activity_tenant', { name: tenantName }))}</div>`
+          : '';
+        return `
         <div class="activity-item">
-          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${(catIcon[a.category] || 'flash-outline')}" style="font-size:16px;color:var(--accent)"></ion-icon></div>
+          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${(catIcon[a.category] || 'flash-outline')}" style="font-size:16px;color:var(--accent)" aria-hidden="true"></ion-icon></div>
           <div class="activity-content">
-            <div class="activity-text"><strong>${escHtml(a.admin?.email || a.user?.email || 'sistema')}</strong> — ${escHtml(a.action)} em <em>${escHtml(a.resource)}</em></div>
-            <div class="activity-time">${new Date(a.createdAt).toLocaleString('pt-BR')}</div>
+            ${tenantLine}
+            <div class="activity-text"><strong>${escHtml(a.admin?.email || a.user?.email || '—')}</strong> — ${escHtml(a.action)} · <em>${escHtml(a.resource)}</em></div>
+            <div class="activity-time">${escHtml(dashFormatDate(a.createdAt))}</div>
           </div>
-        </div>`).join('');
-    }
-
-    const alertList = document.getElementById('alerts-list');
-    document.getElementById('alerts-count').textContent = stats.criticalStock ?? 0;
-    if ((stats.criticalStock ?? 0) === 0) {
-      alertList.innerHTML = `
-        <div class="empty-state-pro" style="padding:28px 16px 24px">
-          <ion-icon name="checkmark-circle-outline" style="font-size:44px;color:var(--green);opacity:0.65"></ion-icon>
-          <div class="empty-state-pro-title">Nenhum alerta crítico</div>
-          <p class="empty-state-pro-sub">Não há itens com estoque crítico no momento.</p>
         </div>`;
-    } else {
-      alertList.innerHTML = `
-        <div class="alert-row">
-          <div class="alert-dot" style="background:var(--red)"></div>
-          <div class="alert-row-content">
-            <div class="alert-row-title">${stats.criticalStock} itens com estoque crítico</div>
-            <div class="alert-row-sub">Verifique o módulo de estoque dos tenants.</div>
-          </div>
-          <div class="alert-row-time">Agora</div>
-        </div>`;
+      }).join('');
     }
 
     const tbody = document.getElementById('tenants-tbody');
@@ -191,9 +263,9 @@
       tbody.innerHTML = `
         <tr><td colspan="6" style="padding:0;border:none">
           <div class="empty-state-pro" style="padding:36px 20px 32px">
-            <ion-icon name="business-outline"></ion-icon>
-            <div class="empty-state-pro-title">Nenhum tenant cadastrado</div>
-            <p class="empty-state-pro-sub">Quando existirem contas, elas surgirão nesta tabela.</p>
+            <ion-icon name="business-outline" aria-hidden="true"></ion-icon>
+            <div class="empty-state-pro-title">${escHtml(dashT('dash_tenants_empty_title'))}</div>
+            <p class="empty-state-pro-sub">${escHtml(dashT('dash_tenants_empty_sub'))}</p>
           </div>
         </td></tr>`;
       return;
@@ -203,16 +275,25 @@
       const plan = t.subscription?.plan?.name || '—';
       const users = t._count?.users ?? 0;
       const assets = t._count?.assets ?? 0;
-      const created = new Date(t.createdAt).toLocaleDateString('pt-BR');
+      const created = dashFormatDateOnly(t.createdAt);
+      const stLabel = dashStatusLabel(t.status);
+      const usersHref = t.id ? `users.html?tenantId=${encodeURIComponent(t.id)}` : '';
+      const ut = escHtml(dashT('dash_tenant_row_open_users'));
+      const nameCell = t.id
+        ? `<a href="${escHtml(usersHref)}" title="${ut}" style="color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:2px">${escHtml(t.name)}</a>`
+        : `<span style="font-weight:700">${escHtml(t.name)}</span>`;
       return `<tr>
-        <td class="bold">${escHtml(t.name)} <span style="color:var(--text3);font-weight:400;font-size:10px">${escHtml(t.slug)}</span></td>
+        <td class="bold">${nameCell} <span style="color:var(--text3);font-weight:400;font-size:10px">${escHtml(t.slug)}</span></td>
         <td><span class="badge ${planMap[plan] || 'badge-gray'}">${escHtml(plan)}</span></td>
-        <td>${users}</td>
-        <td>${assets.toLocaleString('pt-BR')}</td>
-        <td><span class="badge ${statusMap[t.status]}">${statusLbl[t.status]}</span></td>
-        <td style="color:var(--text3);font-size:11px">${created}</td>
+        <td>${dashFormatNumber(users)}</td>
+        <td>${dashFormatNumber(assets)}</td>
+        <td><span class="badge ${statStatusClass(t.status)}">${escHtml(stLabel)}</span></td>
+        <td style="color:var(--text3);font-size:11px">${escHtml(created)}</td>
       </tr>`;
     }).join('');
+    } finally {
+      armDashAutoTimer();
+    }
   };
 
   loadDashboard();

@@ -4,7 +4,7 @@
 const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'];
 
 /**
- * Prestador «clássico» = usuário ativo com TechnicianProfile CompreFace ACTIVE.
+ * Prestador «clássico» = usuário ativo com TechnicianProfile em estado ACTIVE.
  * Mantido para fluxos que ainda exigem perfil técnico (ex.: identidade / algumas políticas).
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
  */

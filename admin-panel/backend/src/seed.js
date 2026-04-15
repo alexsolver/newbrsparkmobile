@@ -158,10 +158,8 @@ async function main() {
 
   // Tenant BrSpark (SaaS admin — login por organização no painel)
   try {
-    const saasPwd =
-      process.env.SAAS_PANEL_PASSWORD ||
-      process.env.ADMIN_PASSWORD ||
-      'admin123';
+    /** Utilizadores `User` do tenant org `brspark` (app). Não reutiliza `ADMIN_PASSWORD` (é só da tabela `Admin`). */
+    const saasPwd = process.env.SAAS_PANEL_PASSWORD || '123456';
     const saasHash = await bcrypt.hash(saasPwd, 10);
     const brsparkTenant = await prisma.tenant.upsert({
       where: { slug: 'brspark' },
@@ -187,6 +185,7 @@ async function main() {
         role: 'SAAS_ADMIN',
         isActive: true,
         name: 'Administrador SaaS',
+        password: saasHash,
       },
       create: {
         tenantId: brsparkTenant.id,
@@ -204,7 +203,7 @@ async function main() {
           tenantId: brsparkTenant.id,
         },
       },
-      update: { role: 'MANAGER', isActive: true, name: 'Gestor (demo)' },
+      update: { role: 'MANAGER', isActive: true, name: 'Gestor (demo)', password: saasHash },
       create: {
         tenantId: brsparkTenant.id,
         email: 'gestor@brspark.com',
@@ -226,6 +225,7 @@ async function main() {
         isActive: true,
         role: 'PROVIDER',
         name: 'Alex (técnico demo)',
+        password: saasHash,
       },
       create: {
         tenantId: brsparkTenant.id,
@@ -250,7 +250,7 @@ async function main() {
       );
     }
     console.log(
-      '✅ Tenant brspark + admin + gestor + alex@brspark.com (PROVIDER, perfil ACTIVE; mesma senha env)'
+      `✅ Tenant brspark + admin + gestor + alex@brspark.com (PROVIDER, perfil ACTIVE; senha User tenant = SAAS_PANEL_PASSWORD ou "123456")`
     );
   } catch (e) {
     console.warn('⚠️  Seed tenant brspark:', e.message);

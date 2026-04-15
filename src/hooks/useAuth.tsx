@@ -19,6 +19,12 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string, tenantId?: string | null) => Promise<void>;
+  loginWithOAuth: (params: {
+    provider: 'google' | 'facebook' | 'apple';
+    idToken?: string;
+    accessToken?: string;
+    tenantId?: string | null;
+  }) => Promise<void>;
   register: (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -203,6 +209,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
+      // Idioma do chat no servidor: não gravar só em cache local — o GET usa a BD e a tradução ficaria errada.
+      if (partial.preferredChatLocale !== undefined) throw e;
       console.warn('[Auth] patchMe falhou; a gravar alterações só no armazenamento local', e);
     }
     const next = await AuthService.patchUserInStorage(partial);
@@ -219,6 +227,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-login failed:', err));
+  };
+
+  const loginWithOAuth = async (params: {
+    provider: 'google' | 'facebook' | 'apple';
+    idToken?: string;
+    accessToken?: string;
+    tenantId?: string | null;
+  }) => {
+    const u = await AuthService.loginWithOAuth(params);
+    setUser(u);
+    runAvatarWarm(u);
+    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
+    _setUserRole(defaultRole);
+    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
+    ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-login OAuth falhou:', err));
   };
 
   const completeLoginWithOtp = async (challengeToken: string, otp: string) => {
@@ -265,7 +289,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, deleteAccount, completeLoginWithOtp, userRole, setUserRole, patchUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        loginWithOAuth,
+        register,
+        logout,
+        deleteAccount,
+        completeLoginWithOtp,
+        userRole,
+        setUserRole,
+        patchUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

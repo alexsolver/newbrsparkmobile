@@ -59,6 +59,7 @@ async function testIntegration(integration) {
   // ── E-mail ───────────────────────────────────────────────
   if (type === 'EMAIL') {
     if (name === 'Nylas') return testNylas(integration);
+    if (name === 'MailerSend') return testMailerSend(integration);
     if (name === 'Gmail' || name === 'Office 365' || name === 'SMTP Genérico') {
       return testSmtp(integration);
     }
@@ -296,6 +297,79 @@ async function testDeepSeek({ apiKey, baseUrl }) {
     if (r.status === 401) return { ok: false, message: 'API Key inválida (401 Unauthorized)' };
     return { ok: false, message: `HTTP ${r.status}` };
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
+}
+
+/**
+ * Raiz da API REST MailerSend (mailersend.com) — padrão https://api.mailersend.com/v1
+ * Ignora valores legados tipo smtp.mailersend.net:587 guardados como baseUrl.
+ * @param {string|null|undefined} raw
+ * @returns {string}
+ */
+function normalizeMailerSendApiBaseUrl(raw) {
+  const def = 'https://api.mailersend.com/v1';
+  const s0 = String(raw || '').trim();
+  if (!s0) return def;
+  if (/smtp\.mailersend\.net/i.test(s0) || /^[\w.-]+:\d{2,5}$/.test(s0)) return def;
+  let s = s0.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    const host = (u.hostname || '').toLowerCase();
+    if (!host.endsWith('mailersend.com')) return def;
+    let p = (u.pathname || '').replace(/\/+$/, '');
+    if (!p || p === '/') p = '/v1';
+    if (!/\/v\d+/i.test(p)) p = `${p}/v1`.replace(/\/+/g, '/');
+    return `${u.protocol}//${u.host}${p}`;
+  } catch {
+    return def;
+  }
+}
+
+/** Teste real: GET /v1/domains com Bearer (documentação developers.mailersend.com). */
+async function testMailerSend(integration) {
+  const token = String(integration.apiKey || '').trim();
+  if (!token) {
+    return { ok: false, message: 'API Token da MailerSend não configurado (painel → Integrações → API tokens).' };
+  }
+  const root = normalizeMailerSendApiBaseUrl(integration.baseUrl);
+  let u;
+  try {
+    u = new URL(root);
+  } catch {
+    return { ok: false, message: 'URL base da API MailerSend inválida.' };
+  }
+  const basePath = (u.pathname || '').replace(/\/+$/, '') || '/v1';
+  const path = `${basePath}/domains`.replace(/\/+/g, '/');
+  try {
+    const r = await httpsGet(u.hostname, path, {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'BrSpark-Admin-Integrations/1',
+    });
+    if (r.status === 200) {
+      let extra = '';
+      try {
+        const j = JSON.parse(r.body);
+        if (j && Array.isArray(j.data)) extra = ` — ${j.data.length} domínio(s) na conta`;
+      } catch (_) {
+        /* ignore */
+      }
+      return { ok: true, message: `MailerSend (api.mailersend.com) OK ✓${extra}` };
+    }
+    if (r.status === 401) {
+      return { ok: false, message: 'API Token inválido ou sem permissão (401). Gere um token em mailersend.com → API tokens.' };
+    }
+    let hint = '';
+    try {
+      const j = JSON.parse(r.body);
+      if (j && (j.message || j.error)) hint = `: ${String(j.message || j.error).slice(0, 200)}`;
+    } catch (_) {
+      if (r.body) hint = `: ${String(r.body).replace(/\s+/g, ' ').slice(0, 160)}`;
+    }
+    return { ok: false, message: `MailerSend HTTP ${r.status}${hint}` };
+  } catch (e) {
+    return { ok: false, message: `Erro de rede ao contatar api.mailersend.com: ${e.message}` };
+  }
 }
 
 // ── Nylas (e-mail / calendário / contatos — API v3) ───────
@@ -566,7 +640,7 @@ async function probeComprefaceHttp(url) {
   }
 }
 
-/** JPEG mínimo para POST de teste em Detection / Verification (CompreFace exige multipart). */
+/** JPEG mínimo para POST de teste em Detection / Verification (FaceMatch exige multipart). */
 const COMPREFACE_PROBE_JPEG_B64 =
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAr/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAB/9k=';
 
@@ -612,7 +686,7 @@ async function testComprefaceVerificationPost(root, apiKey) {
   return { status: r.status, url };
 }
 
-// ── Exadel CompreFace (Recognition API) — vários GET com x-api-key ──
+// ── FaceMatch / Exadel CompreFace (Recognition API) — vários GET com x-api-key ──
 async function testCompreface(integration) {
   const { baseUrl, apiKey, description, comprefaceDetectionKey, comprefaceVerificationKey } = integration;
   if (!baseUrl || !String(baseUrl).trim()) {
@@ -660,7 +734,7 @@ async function testCompreface(integration) {
                 return {
                   ok: false,
                   message:
-                    'Recognition OK, mas a API Key de **Detection** foi recusada (401/403). Use a chave da aplicação Detection no CompreFace.',
+                    'Recognition OK, mas a API Key de **Detection** foi recusada (401/403). Use a chave da aplicação Detection no FaceMatch.',
                 };
               }
               if (d.status === 404) {
@@ -681,7 +755,7 @@ async function testCompreface(integration) {
                 return {
                   ok: false,
                   message:
-                    'Recognition OK, mas a API Key de **Verification** foi recusada (401/403). Use a chave da aplicação Verification no CompreFace.',
+                    'Recognition OK, mas a API Key de **Verification** foi recusada (401/403). Use a chave da aplicação Verification no FaceMatch.',
                 };
               }
               if (v.status === 404) {
@@ -697,27 +771,27 @@ async function testCompreface(integration) {
           }
           return {
             ok: true,
-            message: `Exadel CompreFace conectado — ${bits.join(' · ')}`,
+            message: `FaceMatch conectado — ${bits.join(' · ')}`,
           };
         }
         if (r.status === 401 || r.status === 403) {
           return {
             ok: false,
             message:
-              'API Key inválida ou não é do serviço **Recognition** (401/403). No CompreFace, crie/use a chave do app de reconhecimento, não a de Detection.',
+              'API Key inválida ou não é do serviço **Recognition** (401/403). No FaceMatch, crie/use a chave do app de reconhecimento, não a de Detection.',
           };
         }
         if (r.status === 301 || r.status === 302 || r.status === 307 || r.status === 308) {
           return {
             ok: false,
-            message: `CompreFace respondeu redirecionamento HTTP ${r.status} em ${url} — use a URL final que abre a UI/API (ex.: http://ip:8000 sem proxy errado).`,
+            message: `FaceMatch respondeu redirecionamento HTTP ${r.status} em ${url} — use a URL final que abre a UI/API (ex.: http://ip:8000 sem proxy errado).`,
           };
         }
         if (r.status !== 404) {
           const hint = lastBody ? lastBody.replace(/\s+/g, ' ').slice(0, 200) : '';
           return {
             ok: false,
-            message: `CompreFace HTTP ${r.status} em ${url}${hint ? ` — ${hint}` : ''}`,
+            message: `FaceMatch HTTP ${r.status} em ${url}${hint ? ` — ${hint}` : ''}`,
           };
         }
       }
@@ -736,15 +810,15 @@ async function testCompreface(integration) {
         diag =
           ' Diagnóstico: a raiz HTTP responde, mas não encontramos `/api/v1/recognition/*` — possível proxy com **prefixo de path** (preencha o campo no painel), instalação incompleta ou API em outra porta.';
       } else if (stRoot === 404 && stSwagger === 404) {
-        diag = ` Diagnóstico: nem a raiz nem Swagger responderam em ${probeBase}/ — verifique IP, porta e se o tráfego chega ao CompreFace (não a outro serviço na mesma porta).`;
+        diag = ` Diagnóstico: nem a raiz nem Swagger responderam em ${probeBase}/ — verifique IP, porta e se o tráfego chega ao FaceMatch (não a outro serviço na mesma porta).`;
       }
       const prefixHint = getComprefacePathPrefix(description)
         ? ''
-        : ' Se o CompreFace estiver atrás de um reverse proxy (ex.: /compreface), use o campo **Prefixo de path** ao salvar.';
+        : ' Se o FaceMatch estiver atrás de um reverse proxy (ex.: /compreface), use o campo **Prefixo de path** ao salvar.';
       return {
         ok: false,
         message:
-          'CompreFace devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do CompreFace, ex. http://192.168.85.113:8000 — sem /api/v1 no final; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
+          'FaceMatch devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do serviço, ex. http://192.168.85.113:8000 — sem /api/v1 no final; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
           prefixHint +
           diag +
           ' Último URL tentado: ' +
@@ -756,12 +830,12 @@ async function testCompreface(integration) {
     const hint = lastBody ? lastBody.replace(/\s+/g, ' ').slice(0, 200) : '';
     return {
       ok: false,
-      message: `CompreFace HTTP ${lastStatus}${hint ? `: ${hint}` : ''}`,
+      message: `FaceMatch HTTP ${lastStatus}${hint ? `: ${hint}` : ''}`,
     };
   } catch (e) {
     return {
       ok: false,
-      message: `Erro de rede ao contatar o CompreFace: ${e.message}`,
+      message: `Erro de rede ao contatar o FaceMatch: ${e.message}`,
     };
   }
 }
@@ -805,4 +879,5 @@ module.exports = {
   testIntegration,
   normalizeComprefaceBaseUrl,
   normalizeGoogleGenerativeLanguageBaseUrl,
+  normalizeMailerSendApiBaseUrl,
 };

@@ -151,18 +151,41 @@ function storedLoopbackMismatchLanPage(storedOrigin) {
   return false;
 }
 
+/** Timeout curto: várias sondas em sequência bloqueavam o `await` do login/init antes dos listeners de clique. */
+const ADMIN_API_PROBE_MS = 3200;
+
 /** GET /api/plans sem token → API Prisma responde 401 JSON. */
 async function isPrismaAdminApi(baseUrl) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ADMIN_API_PROBE_MS);
   try {
     const r = await fetch(`${baseUrl}/plans`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      signal: ctrl.signal,
     });
     const ct = (r.headers.get('content-type') || '').includes('application/json');
     return ct && (r.status === 401 || r.status === 403 || r.status === 200);
   } catch {
     return false;
+  } finally {
+    clearTimeout(t);
   }
+}
+
+/** Primeira base que responder como API admin; sondas em paralelo (só até o timeout da mais lenta). */
+async function firstMatchingApiBase(candidates) {
+  const bases = [];
+  const seen = new Set();
+  for (const c of candidates || []) {
+    const b = normalizeApiBaseUrl(c);
+    if (!b || seen.has(b)) continue;
+    seen.add(b);
+    bases.push(b);
+  }
+  if (!bases.length) return null;
+  const hits = await Promise.all(bases.map(async (base) => ((await isPrismaAdminApi(base)) ? base : null)));
+  return hits.find(Boolean) || null;
 }
 
 /**
@@ -190,8 +213,17 @@ export async function ensureAdminApiDetected() {
           /* ignore */
         }
       }
-      _apiBase = normalizeApiBaseUrl(`${origin}/api`);
-      return;
+      const tryBase = normalizeApiBaseUrl(`${origin}/api`);
+      if (await isPrismaAdminApi(tryBase)) {
+        _apiBase = tryBase;
+        return;
+      }
+      try {
+        localStorage.removeItem(LS_API_ORIGIN);
+      } catch {
+        /* ignore */
+      }
+      /* origem salva inválida ou API fora do ar — continua a deteção abaixo */
     }
   }
 
@@ -208,18 +240,16 @@ export async function ensureAdminApiDetected() {
       const p = window.location.port;
       const tryPorts =
         !p || p === '80' || p === '443' || (p !== '3001' && p !== '3000') ? ['3001', '3000'] : [];
-      for (const port of tryPorts) {
-        const tryOrigin = `${proto}//${h}:${port}`;
-        const tryBase = normalizeApiBaseUrl(`${tryOrigin}/api`);
-        if (await isPrismaAdminApi(tryBase)) {
-          _apiBase = tryBase;
-          try {
-            localStorage.setItem(LS_API_ORIGIN, tryOrigin);
-          } catch {
-            /* ignore */
-          }
-          return;
+      const lanBases = tryPorts.map((port) => normalizeApiBaseUrl(`${proto}//${h}:${port}/api`));
+      const hitLan = await firstMatchingApiBase(lanBases);
+      if (hitLan) {
+        _apiBase = hitLan;
+        try {
+          localStorage.setItem(LS_API_ORIGIN, new URL(hitLan).origin);
+        } catch {
+          /* ignore */
         }
+        return;
       }
     }
   }
@@ -228,17 +258,16 @@ export async function ensureAdminApiDetected() {
   const pageIsLoopback =
     pageH === 'localhost' || pageH === '127.0.0.1' || window.location?.protocol === 'file:';
   if (pageIsLoopback) {
-    for (const port of [3001, 3000]) {
-      const base = normalizeApiBaseUrl(`http://127.0.0.1:${port}/api`);
-      if (await isPrismaAdminApi(base)) {
-        _apiBase = base;
-        try {
-          localStorage.setItem(LS_API_ORIGIN, `http://127.0.0.1:${port}`);
-        } catch {
-          /* ignore */
-        }
-        return;
+    const loopBases = [3001, 3000].map((port) => normalizeApiBaseUrl(`http://127.0.0.1:${port}/api`));
+    const hitLoop = await firstMatchingApiBase(loopBases);
+    if (hitLoop) {
+      _apiBase = hitLoop;
+      try {
+        localStorage.setItem(LS_API_ORIGIN, new URL(hitLoop).origin);
+      } catch {
+        /* ignore */
       }
+      return;
     }
   }
 

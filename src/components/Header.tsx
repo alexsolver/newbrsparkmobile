@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Text, Animated, Platform, useWindowDimensions } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Text,
+  Animated,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useSegments, useLocalSearchParams } from 'expo-router';
+import { useRouter, useSegments, useLocalSearchParams, usePathname } from 'expo-router';
 import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
 import { getLocalAssets } from '../database';
 import { Asset } from '../types/asset';
@@ -112,6 +121,7 @@ interface HeaderProps {
 export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }: HeaderProps) {
   const router = useRouter();
   const segments = useSegments() as string[];
+  const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { colors: C } = useTheme();
@@ -155,7 +165,12 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
-  const isTabs = segments[0] === '(tabs)';
+  /** Rotas em que o cabeçalho global aparece — `useSegments` por vezes omite o grupo `(tabs)` no arranque. */
+  const isTabs =
+    segments[0] === '(tabs)' ||
+    pathname.startsWith('/(tabs)') ||
+    pathname === '/' ||
+    pathname === '/index';
 
   // O Header global (injetado no _layout.tsx) não recebe `title`.
   // Devemos escondê-lo completamente se não estivermos nas abas principais, no perfil ou no detalhe do ativo.
@@ -191,7 +206,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   /** Largura um pouco maior com 2 segmentos para "PRESTADOR" + "BENS" sem apertar o texto. */
   const idealBadgeWidth = badgeSegmentCount <= 1 ? 122 : badgeSegmentCount === 2 ? 186 : 228;
   /** Espaço entre logo (≈100) + margem, alertas + avatar à direita — evita sobrepor o logo com absolute center. */
-  const headerSideReserve = 32 + 108 + 100;
+  const headerSideReserve = 32 + 108 + 104;
   const maxBadgeByScreen = Math.max(104, windowWidth - headerSideReserve);
   const badgeWidth = Math.min(idealBadgeWidth, maxBadgeByScreen);
 
@@ -371,7 +386,13 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
     return (
       <SafeAreaView
         edges={['top']}
-        style={{ backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}
+        style={{
+          backgroundColor: C.cardWhite,
+          borderBottomWidth: 1,
+          borderBottomColor: C.border,
+          zIndex: 30,
+          elevation: 30,
+        }}
       >
         <View style={{ height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
           {/* Left: Back + Title */}
@@ -438,7 +459,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                 />
               </View>
             ) : (
-              <View style={{ width: 40 }} />
+              <View style={{ width: 44 }} />
             )}
           </View>
         </View>
@@ -447,7 +468,10 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   }
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: C.cardWhite }]}>
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.safeArea, { backgroundColor: C.cardWhite, zIndex: 30, elevation: 30 }]}
+    >
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
         {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}
         <View style={{ flexShrink: 0, marginRight: 8 }}>

@@ -74,7 +74,8 @@
     "orders": "Pedidos",
     "scanner": "Escáner",
     "providerOsSearch": "Buscar OT",
-    "workTime": "Fichaje"
+    "workTime": "Fichaje",
+    "workTimeBrPj": "Registro"
   },
   "radialMenu": {
     "productivity": "Mi productividad",
@@ -219,7 +220,11 @@
     "alertConsentRequired": "Debe aceptar los Términos y la Política de Privacidad para continuar. (LGPD/GDPR obligatorio)",
     "errorLogin": "Error al iniciar sesión",
     "errorRegister": "Error al crear cuenta",
-    "errorConnection": "Verifique su conexión e inténtelo de nuevo."
+    "errorConnection": "Verifique su conexión e inténtelo de nuevo.",
+    "oauthOrContinue": "o continuar con",
+    "oauthGoogle": "Continuar con Google",
+    "oauthFacebook": "Continuar con Facebook",
+    "oauthApple": "Continuar con Apple"
   },
   "consentFlow": {
     "a11yLogo": "BrSpark",
@@ -1439,7 +1444,11 @@
     "galleryUnavailableBody": "No se pudo abrir la galería.",
     "mediaCaptureError": "Error general al capturar contenido.",
     "hardwareSimulatorTitle": "Aviso de hardware",
-    "hardwareSimulatorBody": "En el simulador la captura puede fallar. En el móvil funciona con normalidad."
+    "hardwareSimulatorBody": "En el simulador la captura puede fallar. En el móvil funciona con normalidad.",
+    "visionVideoTooLongTitle": "Vídeo demasiado largo",
+    "visionVideoTooLongBody": "Este campo admite vídeos de hasta {{seconds}} segundos. Grabe un clip más corto.",
+    "visionYoloVideoFrameTitle": "Vídeo",
+    "visionYoloVideoFrameBody": "El servicio de detección (YOLO) solo acepta imagen. No se pudo extraer un fotograma del vídeo. Haga una foto o inténtelo de nuevo."
   },
   "pause": {
     "pickCategory": "Motivo de la pausa",
@@ -1545,13 +1554,13 @@
     "hintRoleClient": "Las cuentas de cliente final (rol «Usuario») no usan el fichaje. Los demás roles siguen necesitando el flag, el módulo del tenant y la opción por usuario.",
     "clientAccountNoAccess": "El fichaje no está disponible para cuentas de cliente final.",
     "faceBlockedTitle": "Biometría necesaria",
-    "faceBlockedBody": "Su empresa exige verificación facial y el registro aún no está completo o sincronizado. Complete el registro facial en el perfil o contacte a gestión.",
+    "faceBlockedBody": "Su empresa exige verificación facial y el registro aún no está completo. Complete el registro facial en el perfil o contacte a gestión.",
     "noticeTitle": "Aviso de la empresa",
     "refreshA11y": "Actualizar",
     "historyTitle": "Últimos fichajes",
     "historyEmpty": "Aún no hay fichajes en los últimos días.",
     "punchSaved": "Fichaje registrado.",
-    "punchSavedFaceInvalid": "El fichaje se guardó correctamente. El registro facial del perfil sigue incompleto: faltan fotos base y/o la sincronización en el servidor de biometría aún no ha terminado. Actualice el perfil o inténtelo más tarde.",
+    "punchSavedFaceInvalid": "El fichaje se guardó correctamente. El registro facial aún no es válido para validación plena (faltan fotos base en el perfil o la biometría de la empresa no aceptó la galería). Actualice el perfil o contacte a gestión.",
     "historyMatriculaNaoValidada": "Registro facial no validado en este fichaje.",
     "detailName": "Nombre completo",
     "detailMatricula": "Matrícula",
@@ -1571,6 +1580,7 @@
     "punchStatusSuccess": "Registro conforme",
     "punchStatusCaution": "Registro con salvedad",
     "dayJourneyTitle": "Tiempo acumulado del día",
+    "dayJourneyTitleBrPj": "Horas registradas hoy",
     "dayJourneyWorked": "Hasta este registro, ya había trabajado {{time}} hoy.",
     "gpsRequired": "Active la ubicación y permita el acceso al GPS para fichar.",
     "faceVerifyFailed": "No fue posible validar la biometría.",

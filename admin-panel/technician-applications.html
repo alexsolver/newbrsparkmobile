@@ -11,30 +11,35 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600" id="tp-bc-panel">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <a href="users.html" style="color:inherit;text-decoration:none;font-weight:600">Usuários</a>
+        <a href="users.html" style="color:inherit;text-decoration:none;font-weight:600" id="tp-bc-users">Usuários</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Cadastro de prestadores</span>
+        <span id="tp-bc-here">Cadastro de prestadores</span>
       </nav>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <a href="users.html" class="btn btn-ghost btn-sm" style="margin-bottom:10px;align-self:flex-start" id="back-users">← Voltar aos usuários</a>
-        <h1 class="page-hero-title">Cadastro de prestadores</h1>
-        <p class="page-hero-sub">
-          Convites, revisão e aprovação do formulário global. Em <a href="users.html">Usuários</a>, «Prestador pendente» vem do
-          <em>perfil técnico</em>. Esta lista mostra quem tem <em>candidatura</em> (convite ou pedido pelo app). Perfis pendentes
-          <em>sem</em> formulário aparecem como «Perfil sem candidatura» — use «Criar convite» para enviar o link.
-        </p>
+        <h1 class="page-hero-title" id="tp-hero-title">Cadastro de prestadores</h1>
+        <p class="page-hero-sub" id="tp-hero-sub"></p>
       </header>
+
+      <div class="data-toolbar" id="tech-apps-user-nav" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="min-width:0"></div>
+        <div class="data-toolbar-actions">
+          <a href="users.html" class="btn btn-outline btn-sm" id="tp-back-users" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            <ion-icon name="arrow-back-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
+            Voltar aos usuários
+          </a>
+        </div>
+      </div>
 
       <div id="view-list">
         <section class="data-shell fade-in">
-          <div class="data-toolbar">
-            <div class="data-toolbar-main">
-              <label class="filter-field" style="flex:1;max-width:420px">
-                <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon> Estado</span>
+          <div class="data-toolbar" style="flex-wrap:wrap">
+            <div class="data-toolbar-main" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;min-width:0">
+              <label class="filter-field" style="flex:1;min-width:200px;max-width:420px">
+                <span class="filter-field-label" id="tp-filter-state-lbl"></span>
                 <select class="form-control filter-field-control" id="filter-status">
                   <option value="">Todos (candidaturas + perfil sem formulário)</option>
                   <option value="PERFIL_SEM_CANDIDATURA">Só perfil pendente sem candidatura</option>
@@ -46,30 +51,34 @@
                   <option value="REJECTED">Recusado</option>
                 </select>
               </label>
+              <label class="filter-field" style="flex:1;min-width:220px;max-width:360px">
+                <span class="filter-field-label" id="tp-search-lbl"></span>
+                <input type="search" class="form-control filter-field-control" id="filter-search" autocomplete="off" />
+              </label>
             </div>
             <div class="data-toolbar-actions">
               <button type="button" class="btn btn-primary" id="btn-invite">
-                <ion-icon name="mail-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+                <ion-icon name="mail-outline" style="font-size:18px;vertical-align:-3px" aria-hidden="true"></ion-icon>
                 Convidar por e-mail
               </button>
             </div>
           </div>
           <div class="data-table-head">
-            <h2 class="data-table-title">Candidaturas</h2>
+            <h2 class="data-table-title" id="tp-table-title">Candidaturas</h2>
           </div>
           <div class="table-wrap">
             <table class="table-data">
               <thead>
                 <tr>
-                  <th>E-mail</th>
-                  <th>Tenant</th>
-                  <th>Estado</th>
-                  <th>Atualizado</th>
-                  <th class="text-right">Ações</th>
+                  <th id="tp-th-email">E-mail</th>
+                  <th id="tp-th-tenant">Tenant</th>
+                  <th id="tp-th-state">Estado</th>
+                  <th id="tp-th-updated">Atualizado</th>
+                  <th class="text-right" id="tp-th-actions">Ações</th>
                 </tr>
               </thead>
               <tbody id="tbody-apps">
-                <tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr>
+                <tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500" id="tp-tbody-loading">Carregando…</td></tr>
               </tbody>
             </table>
           </div>
@@ -85,9 +94,13 @@
           <div class="data-shell-body">
             <div id="detail-meta" style="font-size:13px;color:var(--text3);margin-bottom:16px"></div>
             <div id="detail-revision" style="display:none;margin-bottom:16px;padding:12px;border-radius:10px;background:var(--amber-dim);border:1px solid var(--border)"></div>
-            <pre id="detail-json" style="font-size:11px;overflow:auto;max-height:420px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)"></pre>
+            <div id="detail-summary" class="stat-grid" style="margin-bottom:16px;display:none"></div>
+            <details id="detail-json-wrap" style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);padding:0 12px 12px">
+              <summary id="detail-json-summary" style="cursor:pointer;padding:12px 0;font-weight:700;font-size:13px;color:var(--text2);outline-offset:2px"></summary>
+              <pre id="detail-json" style="font-size:11px;overflow:auto;max-height:420px;padding:12px;margin:0;background:var(--surface);border-radius:8px;border:1px solid var(--border)"></pre>
+            </details>
             <div style="margin-top:16px">
-              <span class="panel-title" style="font-size:13px">Histórico</span>
+              <span class="panel-title" style="font-size:13px" id="tp-hist-title">Histórico</span>
               <ul id="detail-events" style="margin:8px 0 0 16px;font-size:12px;color:var(--text3)"></ul>
             </div>
             <div id="detail-actions" style="margin-top:24px;display:flex;flex-wrap:wrap;gap:10px"></div>
@@ -101,24 +114,23 @@
 <div class="modal-overlay" id="modal-invite">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Convidar prestador</span>
-      <button type="button" class="modal-close" data-close-invite><ion-icon name="close-outline"></ion-icon></button>
+      <span class="modal-title" id="modal-invite-title">Convidar prestador</span>
+      <button type="button" class="modal-close" data-close-invite><ion-icon name="close-outline" aria-hidden="true"></ion-icon></button>
     </div>
     <div class="modal-body">
       <div
+        id="tp-invite-note"
         role="note"
         style="font-size:12px;line-height:1.55;color:var(--text2);padding:12px 14px;border-radius:10px;background:var(--amber-dim);border:1px solid var(--border);margin-bottom:16px"
-      >
-        <strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro no separador «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.
-      </div>
+      ></div>
       <div class="form-group">
-        <label class="form-label">E-mail do candidato *</label>
+        <label class="form-label" id="tp-lbl-invite-email">E-mail do candidato *</label>
         <input type="email" class="form-control" id="invite-email" placeholder="tecnico@exemplo.com" />
       </div>
       <div class="form-group" id="wrap-invite-tenant" style="display:none">
-        <label class="form-label">Tenant (conta) *</label>
+        <label class="form-label" id="tp-lbl-invite-tenant">Tenant (conta) *</label>
         <select class="form-control" id="invite-tenant"></select>
-        <p style="font-size:11px;color:var(--text3);margin-top:6px">Necessário no modo global da plataforma.</p>
+        <p style="font-size:11px;color:var(--text3);margin-top:6px" id="tp-hint-invite-tenant">Necessário no modo global da plataforma.</p>
       </div>
     </div>
     <div class="modal-footer">
@@ -131,8 +143,8 @@
 <div class="modal-overlay" id="modal-revision">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Pedir ajustes ao candidato</span>
-      <button type="button" class="modal-close" data-close-rev><ion-icon name="close-outline"></ion-icon></button>
+      <span class="modal-title" id="modal-revision-title">Pedir ajustes ao candidato</span>
+      <button type="button" class="modal-close" data-close-rev><ion-icon name="close-outline" aria-hidden="true"></ion-icon></button>
     </div>
     <div class="modal-body">
       <textarea class="form-control" id="revision-msg" rows="5" placeholder="Descreva o que falta ou deve ser corrigido…"></textarea>

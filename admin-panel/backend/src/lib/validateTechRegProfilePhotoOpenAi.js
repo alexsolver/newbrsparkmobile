@@ -3,7 +3,7 @@
 /**
  * Validação por modelo multimodal (visão) para o **passo 1 do cadastro de prestador**.
  *
- * Isto não usa CompreFace, não usa `/api/vision/verify-face` e não substitui a biometria dos checklists.
+ * Isto não usa FaceMatch, não usa `/api/vision/verify-face` e não substitui a biometria dos checklists.
  * Implementação atual: OpenAI. Previsto: alternativa ou fallback Google (Vertex / Vision API) no mesmo contrato
  * de saída (approved, userMessagePtBr, checks, rejectReasonsPtBr).
  */

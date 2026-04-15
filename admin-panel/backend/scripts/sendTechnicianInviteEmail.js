@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Cria convite de prestador (se necessário) e envia o e-mail via Nylas.
+ * Cria convite de prestador (se necessário) e envia o e-mail (MailerSend ou Nylas).
  * Uso: node scripts/sendTechnicianInviteEmail.js [email]
- * Env: DATABASE_URL, JWT_SECRET (não usado aqui), Nylas; opcional INVITE_TENANT_ID (tenant empregador).
+ * Env: DATABASE_URL, JWT_SECRET (não usado aqui), MailerSend ou Nylas; opcional INVITE_TENANT_ID (tenant empregador).
  */
 'use strict';
 
@@ -11,7 +11,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const crypto = require('crypto');
 
 const prisma = require('../src/db');
-const { sendEmailViaNylas } = require('../src/lib/nylasSendEmail');
+const { sendTransactionalEmailWithFallback } = require('../src/lib/transactionalEmailSend');
 
 function defaultEmptySchedule() {
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -142,7 +142,7 @@ async function main() {
 <p><a href="${escapeHtml(deepLinkHint)}">Abrir convite no app</a></p>
 <p style="font-size:12px;color:#555">Se o botão não funcionar, copie o link acima para o navegador ou abra o app manualmente após iniciar sessão.</p>`;
 
-  const send = await sendEmailViaNylas({
+  const { send, provider } = await sendTransactionalEmailWithFallback({
     to: { email: em },
     subject: `Convite BrSpark — cadastro de prestador (${tenant.name})`,
     text: textBody,
@@ -150,18 +150,18 @@ async function main() {
   });
 
   if (send.skipped) {
-    console.error('Nylas não configurado:', send.reason);
+    console.error('MailerSend/Nylas não configurados:', send.reason);
     console.log('Token (envio manual):', token);
     console.log('Deep link:', deepLinkHint);
     process.exit(2);
   }
   if (!send.ok) {
-    console.error('Falha Nylas:', send.error);
+    console.error('Falha no envio (' + provider + '):', send.error);
     console.log('Token:', token);
     process.exit(3);
   }
 
-  console.log('E-mail enviado com sucesso para', em);
+  console.log('E-mail enviado com sucesso para', em, '(', provider, ')');
   console.log('HTTP', send.status);
   process.exit(0);
 }

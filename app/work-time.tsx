@@ -216,6 +216,8 @@ export default function WorkTimeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [me, setMe] = useState<WorkTimeMeOk | null>(null);
+  const dayJourneyTitleKey: 'workTime.dayJourneyTitleBrPj' | 'workTime.dayJourneyTitle' =
+    me?.workTimeBrazilRegime === 'PJ' ? 'workTime.dayJourneyTitleBrPj' : 'workTime.dayJourneyTitle';
   const [usingOfflineWorkTimeConfig, setUsingOfflineWorkTimeConfig] = useState(false);
   const [punches, setPunches] = useState<WorkTimePunchRow[]>([]);
   const [submitting, setSubmitting] = useState<WorkTimePunchType | null>(null);
@@ -834,7 +836,7 @@ export default function WorkTimeScreen() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                               <Ionicons name="time-outline" size={16} color={C.textLight} />
                               <Text style={[styles.punchDetailLabel, { color: C.textLight, marginBottom: 0 }]}>
-                                {t('workTime.dayJourneyTitle')}
+                                {t(dayJourneyTitleKey)}
                               </Text>
                             </View>
                             <Text style={[styles.punchDetailValue, { color: C.slate }]}>

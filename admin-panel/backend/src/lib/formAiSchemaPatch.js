@@ -3,6 +3,7 @@
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
+  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
 const { normalizeSchemaItem } = require('./formAiNormalize');
 
@@ -101,27 +102,46 @@ function applySchemaPatch(schemaData, patch) {
         if (s) cur.visionQuestions = [{ id: 'q1', text: s }];
       }
       if (p.visionQuestions != null && Array.isArray(p.visionQuestions)) {
-        const vq = p.visionQuestions
+        const rawItems = p.visionQuestions
           .map((x, i) => {
             if (!x || typeof x !== 'object') return null;
             const id = String(x.id || `q_${i + 1}`)
               .replace(/[^\w-]/g, '_')
               .slice(0, 64);
-            const text = String(x.text || x.question || '').trim().slice(0, 500);
-            if (!text) return null;
-            return { id, text };
+            const rawText = String(x.text || x.question || '').trim();
+            if (!rawText) return null;
+            return { id, text: rawText };
           })
           .filter(Boolean)
           .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
-        if (vq.length) {
-          cur.visionQuestions = vq;
-          if (!p.visionStructuredPrompt) {
-            const merged = vq
-              .map((q) => String(q.text || '').trim())
-              .filter(Boolean)
+        if (!rawItems.length) {
+          /* mantém estado anterior */
+        } else if (cur.type === 'vision_ai_analysis') {
+          if (rawItems.length === 1) {
+            const text = rawItems[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+            cur.visionQuestions = [{ id: rawItems[0].id || 'q1', text }];
+            if (p.visionStructuredPrompt == null) {
+              cur.visionStructuredPrompt = text;
+            }
+          } else {
+            const merged = rawItems
+              .map((q) => q.text)
               .join('\n\n')
               .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-            if (merged) cur.visionStructuredPrompt = merged;
+            cur.visionQuestions = [{ id: 'q1', text: merged }];
+            cur.visionStructuredPrompt = merged;
+          }
+        } else if (rawItems.length >= 2) {
+          cur.visionQuestions = rawItems.map((q, i) => ({
+            id: q.id || `q${i + 1}`,
+            text: q.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
+          }));
+          cur.visionStructuredPrompt = '';
+        } else {
+          const text = rawItems[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+          cur.visionQuestions = [{ id: rawItems[0].id || 'q1', text }];
+          if (p.visionStructuredPrompt == null && text) {
+            cur.visionStructuredPrompt = text;
           }
         }
       }

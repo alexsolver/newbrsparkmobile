@@ -17,6 +17,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
+import { createVideoPlayer } from 'expo-video';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,6 +27,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Network from 'expo-network';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PanResponder } from 'react-native';
@@ -510,6 +514,20 @@ function technicianCommentKey(fieldId: string) {
 
 /** Tamanho máximo do prompt estruturado de visão IA; alinhado ao backend `visionSimNaoQuestions.js`. */
 const MAX_VISION_STRUCTURED_PROMPT_CHARS = 12000;
+/** Com mais de uma pergunta sim/não, o texto por pergunta — alinhado a `checklistsVision.js`. */
+const MAX_VISION_MULTI_SIMNAO_TEXT_CHARS = 500;
+const MAX_VISION_SIMNAO_QUESTIONS = 10;
+
+function sanitizeVisionQuestionId(raw: unknown, index: number): string {
+  const fallback = `q${index + 1}`;
+  const s = String(raw ?? '').trim();
+  if (!s) return fallback;
+  const cleaned = s.replace(/[^\w-]/g, '_').slice(0, 64);
+  return cleaned || fallback;
+}
+
+/** Duração máxima de vídeo nos campos Visão de IA (detecção e análise) — `videoMaxDuration` do ImagePicker + validação. */
+const VISION_CAMERA_VIDEO_MAX_SECONDS = 10;
 
 /** Chave única por campo + linha de seção repetível (evita bloquear outras linhas durante a análise). */
 function visionAnalyzeBusyKey(fieldId: string, scope?: SectionRepeatScope | null) {
@@ -527,25 +545,66 @@ function getVisionQuestionsFromField(field: any): { id: string; text: string }[]
       cfg?.vision_structured_prompt ??
       '',
   ).trim();
-  if (structured) {
-    return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
-  }
+
   const vq =
     field?.visionQuestions ??
     field?.vision_questions ??
     (cfg?.visionQuestions as unknown[] | undefined);
-  if (!Array.isArray(vq) || !vq.length) return [];
-  const parts: string[] = [];
-  for (let i = 0; i < vq.length; i++) {
-    const x = vq[i];
-    if (!x || typeof x !== 'object') continue;
-    const text = String((x as any).text || (x as any).question || '').trim();
-    if (!text) continue;
-    parts.push(text);
+
+  const items: { id: string; text: string }[] = [];
+  if (Array.isArray(vq)) {
+    for (let i = 0; i < vq.length; i++) {
+      const x = vq[i];
+      if (!x || typeof x !== 'object') continue;
+      const text = String((x as any).text || (x as any).question || '').trim();
+      if (!text) continue;
+      const id = String((x as any).id || '').trim();
+      items.push({ id, text });
+    }
   }
-  if (!parts.length) return [];
-  const joined = parts.join('\n\n').slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-  return [{ id: 'q1', text: joined }];
+
+  const ft = effectiveSchemaFieldType(field);
+
+  /** Análise (Gemini): manter um único critério `q1` com texto longo (comportamento legado). */
+  if (ft === 'vision_ai_analysis') {
+    if (structured) {
+      return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
+    }
+    if (!items.length) return [];
+    if (items.length >= 2) {
+      const joined = items
+        .map((it) => it.text)
+        .join('\n\n')
+        .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      return joined ? [{ id: 'q1', text: joined }] : [];
+    }
+    return [
+      {
+        id: sanitizeVisionQuestionId(items[0].id, 0),
+        text: items[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS),
+      },
+    ];
+  }
+
+  /** Detecção (YOLO): até 10 perguntas sim/não distintas quando há 2+ linhas persistidas. */
+  if (items.length >= 2) {
+    return items.slice(0, MAX_VISION_SIMNAO_QUESTIONS).map((it, idx) => ({
+      id: sanitizeVisionQuestionId(it.id, idx),
+      text: it.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
+    }));
+  }
+  if (items.length === 1) {
+    return [
+      {
+        id: sanitizeVisionQuestionId(items[0].id, 0),
+        text: items[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS),
+      },
+    ];
+  }
+  if (structured) {
+    return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
+  }
+  return [];
 }
 
 /** Rótulo para `answers[].value` (sim/não/unknown ou texto livre, ex. nota). */
@@ -564,31 +623,115 @@ function visionAiShowsResponseInForm(field: any): boolean {
   return field?.visionShowAiResponseInForm !== false;
 }
 
+/** Alinha ao Form Builder: `photo_only` | `video_only` | `photo_and_video` (padrão). */
+function normalizeVisionCaptureMode(field: any): 'photo_only' | 'video_only' | 'photo_and_video' {
+  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
+  if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') return m;
+  return 'photo_and_video';
+}
+
 /** `visionCaptureMode` definido no Form Builder. */
 function getVisionCaptureMediaTypes(field: any): ImagePicker.MediaTypeOptions {
-  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
-  if (m === 'photo_only') return ImagePicker.MediaTypeOptions.Images;
-  if (m === 'video_only') return ImagePicker.MediaTypeOptions.Videos;
+  const mode = normalizeVisionCaptureMode(field);
+  if (mode === 'photo_only') return ImagePicker.MediaTypeOptions.Images;
+  if (mode === 'video_only') return ImagePicker.MediaTypeOptions.Videos;
   return ImagePicker.MediaTypeOptions.All;
 }
 
+/** Subtítulo do cartão de captura — espelha «Somente foto / Somente vídeo / Foto e vídeo» do builder (detecção e análise). */
 function visionCaptureModeSubtitle(field: any): string {
-  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
-  if (m === 'photo_only') {
-    return 'Só foto pela câmera.';
+  const mode = normalizeVisionCaptureMode(field);
+  const sec = VISION_CAMERA_VIDEO_MAX_SECONDS;
+  if (mode === 'photo_only') return 'Somente foto pela câmera.';
+  if (mode === 'video_only') return `Somente vídeo pela câmera (até ${sec} s).`;
+  return `Foto e vídeo pela câmera (vídeo até ${sec} s).`;
+}
+
+/** Duração do vídeo em ms: metadado do ImagePicker (ms) ou sonda via `expo-video` quando vier vazio. */
+async function probeVisionRecordedVideoDurationMs(uri: string): Promise<number | null> {
+  if (!uri) return null;
+  let player: ReturnType<typeof createVideoPlayer> | null = null;
+  try {
+    player = createVideoPlayer(uri);
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      if (player.status === 'error') return null;
+      if (player.status === 'readyToPlay') {
+        const s = player.duration;
+        if (Number.isFinite(s) && s > 0) return Math.round(s * 1000);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const s = player.duration;
+    if (Number.isFinite(s) && s > 0) return Math.round(s * 1000);
+    return null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      player?.release();
+    } catch {
+      /* ignore */
+    }
   }
-  if (m === 'video_only') {
-    return 'Só vídeo pela câmera (até ~1 min).';
+}
+
+async function assertVisionCameraVideoWithinMaxSeconds(
+  asset: ImagePicker.ImagePickerAsset,
+  uri: string,
+  mime: string,
+): Promise<boolean> {
+  if (!String(mime).startsWith('video')) return true;
+  const maxMs = VISION_CAMERA_VIDEO_MAX_SECONDS * 1000;
+  const slackMs = 350;
+  let durMs: number | null = null;
+  const raw = asset.duration;
+  if (raw != null && Number.isFinite(raw) && raw > 0) {
+    durMs = raw;
+  } else {
+    durMs = await probeVisionRecordedVideoDurationMs(uri);
   }
-  return 'Foto ou vídeo curto pela câmera (até ~1 min).';
+  if (durMs != null && durMs > maxMs + slackMs) {
+    Alert.alert(
+      i18n.t('checklistForm.visionVideoTooLongTitle'),
+      i18n.t('checklistForm.visionVideoTooLongBody', { seconds: VISION_CAMERA_VIDEO_MAX_SECONDS }),
+    );
+    return false;
+  }
+  return true;
 }
 
 /** Ícone principal do cartão de captura (modo definido no builder). */
 function visionCaptureModeHeroIcon(field: any): keyof typeof Ionicons.glyphMap {
-  const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
-  if (m === 'photo_only') return 'camera-outline';
-  if (m === 'video_only') return 'videocam-outline';
+  const mode = normalizeVisionCaptureMode(field);
+  if (mode === 'photo_only') return 'camera-outline';
+  if (mode === 'video_only') return 'videocam-outline';
   return 'scan-outline';
+}
+
+/** RN por vezes omite `mimeType` ou envia octet-stream; o backend exige image/* ou video/*. */
+function inferMimeFromVisionCameraAsset(a: ImagePicker.ImagePickerAsset): string {
+  const explicit = a.mimeType != null ? String(a.mimeType).trim() : '';
+  if (explicit && explicit.toLowerCase() !== 'application/octet-stream') return explicit;
+  const path = (a.uri || '').split('?')[0].toLowerCase();
+  if (a.type === 'video') {
+    if (path.endsWith('.mov') || path.endsWith('.qt')) return 'video/quicktime';
+    if (path.endsWith('.webm')) return 'video/webm';
+    if (path.endsWith('.3gp') || path.endsWith('.3gpp')) return 'video/3gpp';
+    return 'video/mp4';
+  }
+  if (a.type === 'image') {
+    if (path.endsWith('.png')) return 'image/png';
+    if (path.endsWith('.webp')) return 'image/webp';
+    if (path.endsWith('.heic') || path.endsWith('.heif')) return 'image/heic';
+    return 'image/jpeg';
+  }
+  if (/\.(mov|qt)$/i.test(path)) return 'video/quicktime';
+  if (/\.(mp4|m4v)$/i.test(path)) return 'video/mp4';
+  if (/\.(webm)$/i.test(path)) return 'video/webm';
+  if (/\.(png)$/i.test(path)) return 'image/png';
+  if (/\.(jpe?g)$/i.test(path)) return 'image/jpeg';
+  return explicit || 'application/octet-stream';
 }
 
 function parseVisionChecklistStored(raw: unknown): Record<string, any> | null {
@@ -602,6 +745,57 @@ function parseVisionChecklistStored(raw: unknown): Record<string, any> | null {
     }
   }
   return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, any>) : null;
+}
+
+/**
+ * URI da captura atual: no modal «Instruções», substitui as imagens de referência do modelo
+ * (desenho/exemplo) pela fotografia já registada no campo.
+ */
+function helpInstructionCapturePreviewUri(field: any, raw: unknown): string | null {
+  const ft = effectiveSchemaFieldType(field);
+  if (ft === 'image_annotation') {
+    if (raw === undefined || raw === null) return null;
+    let o: unknown = raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        o = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+    const rec = o as Record<string, unknown>;
+    const uri = String(rec.imageUri || rec.uri || '').trim();
+    if (uri && (uri.startsWith('http') || uri.startsWith('file:'))) return uri;
+    return null;
+  }
+  if (ft === 'vision_checklist' || ft === 'vision_ai_analysis') {
+    const o = parseVisionChecklistStored(raw);
+    const u = o?.localUri != null ? String(o.localUri).trim() : '';
+    if (u && (u.startsWith('http') || u.startsWith('file:'))) return u;
+    return null;
+  }
+  if (ft === 'photo' || ft === 'photo_stamped' || ft === 'facial_recognition' || ft === 'file_upload') {
+    const looksLikeImageUri = (u: string) => {
+      const path = u.split('?')[0].toLowerCase();
+      return /\.(jpe?g|png|gif|webp|heic|heif)(\b|$)/i.test(path);
+    };
+    const pick = (u: string) => {
+      const t = u.trim();
+      if (!t || (!t.startsWith('http') && !t.startsWith('file:'))) return null;
+      if (ft === 'file_upload' && !looksLikeImageUri(t)) return null;
+      return t;
+    };
+    if (Array.isArray(raw)) {
+      for (let i = raw.length - 1; i >= 0; i--) {
+        const got = pick(String(raw[i] ?? ''));
+        if (got) return got;
+      }
+      return null;
+    }
+    return pick(String(raw ?? ''));
+  }
+  return null;
 }
 
 const VISION_ANALYSIS_GRID_KEYS = ['1x1', '2x2'] as const;
@@ -2152,8 +2346,15 @@ export default function ChecklistEngine() {
   const [geoMapChecked, setGeoMapChecked]   = useState(false);
   const [geofenceFailMode, setGeofenceFailMode] = useState<'block'|'warn'>('warn');
   
-  // Scanner Modal & Virtual Camera State
-  
+  /** Leitor de código de barras / QR no campo `barcode_scan` (expo-camera). */
+  const [checklistBarcodeModalOpen, setChecklistBarcodeModalOpen] = useState(false);
+  const checklistBarcodeTargetRef = useRef<{
+    fieldId: string;
+    scope: SectionRepeatScope | null;
+  } | null>(null);
+  const barcodeScanLockRef = useRef(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
   const [visionAnalyzeBusyId, setVisionAnalyzeBusyId] = useState<string | null>(null);
@@ -2565,20 +2766,29 @@ export default function ChecklistEngine() {
   // --- Location handler (Transit + Geofence) ---
   // --- Tracking Link ──────────────────────────────────────────────
   const generateTrackingLink = async () => {
-    if (!taskId) return;
+    const tid = String(resolvedTaskId || '').trim();
+    if (!tid) return;
     try {
-      const res = await apiFetch(`/api/tracking/start/${taskId}`, { method: 'POST' });
+      const res = await apiFetch(`/api/tracking/start/${encodeURIComponent(tid)}`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (data?.url) setTrackingUrl(data.url);
+      if (res.ok && data?.url) {
+        setTrackingUrl(data.url);
+      } else if (!res.ok) {
+        console.warn('[tracking] start falhou', res.status, data?.error || data);
+      }
     } catch (e) {
       console.warn('[tracking] could not generate link', e);
     }
   };
 
   const endTrackingLink = async () => {
-    if (!taskId) return;
-    try { await apiFetch(`/api/tracking/end/${taskId}`, { method: 'POST' }); }
-    catch(e) { console.warn('[tracking] could not end link', e); }
+    const tid = String(resolvedTaskId || '').trim();
+    if (!tid) return;
+    try {
+      await apiFetch(`/api/tracking/end/${encodeURIComponent(tid)}`, { method: 'POST' });
+    } catch (e) {
+      console.warn('[tracking] could not end link', e);
+    }
   };
   // ───────────────────────────────────────────────────
 
@@ -4098,6 +4308,27 @@ export default function ChecklistEngine() {
 
   handleInputRef.current = handleInput;
 
+  const closeChecklistBarcodeModal = useCallback(() => {
+    checklistBarcodeTargetRef.current = null;
+    setChecklistBarcodeModalOpen(false);
+  }, []);
+
+  const onChecklistBarcodeScanned = useCallback(({ data }: { data: string }) => {
+    if (barcodeScanLockRef.current) return;
+    const tgt = checklistBarcodeTargetRef.current;
+    if (!tgt) return;
+    const s = String(data ?? '').trim();
+    if (!s) return;
+    barcodeScanLockRef.current = true;
+    const hi = handleInputRef.current;
+    if (typeof hi === 'function') hi(tgt.fieldId, s, tgt.scope);
+    checklistBarcodeTargetRef.current = null;
+    setChecklistBarcodeModalOpen(false);
+    setTimeout(() => {
+      barcodeScanLockRef.current = false;
+    }, 1200);
+  }, []);
+
   const runVisionChecklistAnalyze = useCallback(
     async (
       field: any,
@@ -4187,6 +4418,39 @@ export default function ChecklistEngine() {
       /** Só depois de `apiFetch` devolver `Response` — evita tratar `throw new Error(msg do servidor)` como falha de rede. */
       let visionApiReturned = false;
       try {
+        /** YOLO (detecção) só aceita imagem: extrair 1.º frame do vídeo antes do multipart. */
+        let uploadUri = assetUri;
+        let uploadMime = mimeType || 'application/octet-stream';
+        let uploadName = fileName || 'upload.jpg';
+        if (
+          effectiveSchemaFieldType(field) === 'vision_checklist' &&
+          String(uploadMime).toLowerCase().startsWith('video/')
+        ) {
+          try {
+            const videoSrc = assetUri.split('?')[0];
+            const { uri: frameUri } = await VideoThumbnails.getThumbnailAsync(videoSrc, {
+              time: 0,
+              quality: 0.88,
+            });
+            uploadUri = frameUri;
+            uploadMime = 'image/jpeg';
+            const stem =
+              (fileName && String(fileName).replace(/\.[^.]+$/i, '')) ||
+              `vision_${String(field?.id || 'campo')
+                .replace(/[^\w-]+/g, '_')
+                .slice(0, 48)}`;
+            uploadName = `${stem}-frame.jpg`;
+          } catch {
+            if (!quiet) {
+              Alert.alert(
+                i18n.t('checklistForm.visionYoloVideoFrameTitle'),
+                i18n.t('checklistForm.visionYoloVideoFrameBody'),
+              );
+            }
+            return;
+          }
+        }
+
         const form = new FormData();
         form.append(
           'engine',
@@ -4200,14 +4464,15 @@ export default function ChecklistEngine() {
         }
         form.append('questions', JSON.stringify(qs));
         form.append('media', {
-          uri: assetUri,
-          type: mimeType || 'application/octet-stream',
-          name: fileName || 'upload.jpg',
+          uri: uploadUri,
+          type: uploadMime,
+          name: uploadName,
         } as any);
         const res = await apiFetch('/api/checklists/vision/analyze', {
           method: 'POST',
           body: form,
-          timeoutMs: 180_000,
+          /** Análise Gemini pode demorar; manter ≥ timeout do servidor (`visionStudioAnalyze`). */
+          timeoutMs: 360_000,
         });
         visionApiReturned = true;
         const text = await res.text();
@@ -4333,19 +4598,20 @@ export default function ChecklistEngine() {
             mediaTypes === ImagePicker.MediaTypeOptions.All ||
             mediaTypes === ImagePicker.MediaTypeOptions.Videos
           ) {
-            pickerOpts.videoMaxDuration = 60;
+            pickerOpts.videoMaxDuration = VISION_CAMERA_VIDEO_MAX_SECONDS;
           }
           const res = await ImagePicker.launchCameraAsync(pickerOpts);
           if (res.canceled || !res.assets?.length) return;
           const a = res.assets[0];
-          const mime =
-            a.mimeType ||
-            (a.type === 'video'
-              ? 'video/mp4'
-              : a.type === 'image'
-                ? 'image/jpeg'
-                : 'application/octet-stream');
-          const name = a.fileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg');
+          const mime = inferMimeFromVisionCameraAsset(a);
+          if (!(await assertVisionCameraVideoWithinMaxSeconds(a, a.uri, mime))) return;
+          const pathLower = (a.uri || '').split('?')[0].toLowerCase();
+          const defaultVideoName = pathLower.endsWith('.mov') || pathLower.endsWith('.qt')
+            ? 'video.mov'
+            : 'video.mp4';
+          const name =
+            a.fileName ||
+            (String(mime).startsWith('video') ? defaultVideoName : 'foto.jpg');
           await runVisionChecklistAnalyze(field, a.uri, mime, name, scope ?? null);
         } catch (err: any) {
           Alert.alert(
@@ -6277,9 +6543,12 @@ export default function ChecklistEngine() {
           }
         }
 
+        const keepScreenAwake = startField?.transitKeepScreenAwake === true;
+
         return <LiveRouteMapCard 
                   route={routeCoords} 
                   visible={isVisible}
+                  keepScreenAwake={keepScreenAwake}
                   zoneType={currentTask?.locationZoneType}
                   corridorToleranceM={corridorTol}
                   targetLoc={
@@ -6513,6 +6782,7 @@ export default function ChecklistEngine() {
                     <FieldHelpInstructions
                       plainDescription={field.description}
                       helpHtml={field.helpHtml}
+                      capturedPreviewUri={helpInstructionCapturePreviewUri(field, vv(field.id))}
                     />
                   ) : null}
 
@@ -7150,9 +7420,16 @@ export default function ChecklistEngine() {
                             visionGridCompose.scope.sectionId === sc.sectionId &&
                             visionGridCompose.scope.rowIndex === sc.rowIndex)),
                     );
+                    /** Detecção: cartão «Detectar»; análise: «Analisar». Só enquanto não há mídia; com foto/vídeo a pré-visualização abaixo substitui o bloco. */
+                    const showVisionCaptureHero =
+                      !thumbUri &&
+                      !isReadOnly &&
+                      !(multiGeminiGrid && !analysisDone) &&
+                      !pendingAnalysis;
+
                     return (
                       <>
-                        {!isReadOnly && !(multiGeminiGrid && !analysisDone) && !pendingAnalysis && (
+                        {showVisionCaptureHero ? (
                           <TouchableOpacity
                             onPress={() => openVisionChecklistMedia(field, scope)}
                             disabled={busy}
@@ -7236,7 +7513,10 @@ export default function ChecklistEngine() {
                                           <Text style={{ color: '#ef4444', fontWeight: '900' }}>Análise</Text>
                                         </Text>
                                       ) : (
-                                        'Visão computacional'
+                                        <Text>
+                                          <Text style={{ color: '#e0f2fe' }}>Visão de IA </Text>
+                                          <Text style={{ color: '#38bdf8', fontWeight: '900' }}>Detecção</Text>
+                                        </Text>
                                       )}
                                     </Text>
                                   </View>
@@ -7280,7 +7560,7 @@ export default function ChecklistEngine() {
                                       textAlign: 'center',
                                     }}
                                   >
-                                    Capturar para análise
+                                    {useGeminiAnalysis ? 'Analisar' : 'Detectar'}
                                   </Text>
                                   <Text
                                     style={{
@@ -7310,7 +7590,7 @@ export default function ChecklistEngine() {
                               )}
                             </LinearGradient>
                           </TouchableOpacity>
-                        )}
+                        ) : null}
                         {!isReadOnly && multiGeminiGrid && !analysisDone ? (
                           <View style={{ marginTop: 10 }}>
                             {pendingAnalysis ? (
@@ -8007,14 +8287,79 @@ export default function ChecklistEngine() {
                    })()}
                 </View>
               )}
-              {field.type === 'barcode_scan' && (
-                <TouchableOpacity style={[styles.cameraBox, {borderColor: '#0284c7', backgroundColor: '#f0f9ff'}]} onPress={() => ensureOnlineValidation(field, () => {
-                  Alert.alert("Scanner", "Iniciando Expo Barcode Scanner...");
-                })}>
-                  <Ionicons name="barcode" size={32} color="#0284c7" />
-                  <Text style={[styles.cameraText, {color: '#0284c7'}]}>LER CÓDIGO DO EQUIPAMENTO</Text>
-                </TouchableOpacity>
-              )}
+              {field.type === 'barcode_scan' &&
+                (isReadOnly ? (
+                  <View
+                    style={[
+                      styles.cameraBox,
+                      { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+                    ]}
+                  >
+                    <Ionicons name="barcode-outline" size={28} color="#64748b" />
+                    <Text
+                      style={[styles.cameraText, { color: '#334155', fontSize: 14 }]}
+                      selectable
+                    >
+                      {String(vv(field.id) ?? '').trim() || '—'}
+                    </Text>
+                  </View>
+                ) : (
+                  <View>
+                    {!!String(vv(field.id) ?? '').trim() && (
+                      <View
+                        style={{
+                          marginBottom: 10,
+                          padding: 12,
+                          borderRadius: 10,
+                          backgroundColor: '#ecfdf5',
+                          borderWidth: 1,
+                          borderColor: '#a7f3d0',
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857', marginBottom: 4 }}>
+                          Código lido
+                        </Text>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: '#065f46' }} selectable>
+                          {String(vv(field.id)).trim()}
+                        </Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={[
+                        styles.cameraBox,
+                        { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
+                      ]}
+                      onPress={() =>
+                        ensureOnlineValidation(field, async () => {
+                          if (!cameraPermission?.granted) {
+                            const res = await requestCameraPermission();
+                            if (!res.granted) {
+                              Alert.alert(t('common.accessDenied'), t('common.allowCamera'));
+                              return;
+                            }
+                          }
+                          checklistBarcodeTargetRef.current = { fieldId: field.id, scope };
+                          setChecklistBarcodeModalOpen(true);
+                        })
+                      }
+                    >
+                      <Ionicons name="barcode" size={32} color="#0284c7" />
+                      <Text style={[styles.cameraText, { color: '#0284c7' }]}>
+                        LER CÓDIGO DO EQUIPAMENTO
+                      </Text>
+                    </TouchableOpacity>
+                    {!!String(vv(field.id) ?? '').trim() && (
+                      <TouchableOpacity
+                        onPress={() => hi(field.id, '')}
+                        style={{ marginTop: 10, alignSelf: 'flex-start' }}
+                      >
+                        <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '700' }}>
+                          Limpar código
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
               {(field.type === 'transit_start' || field.type === 'transit_end') && (() => {
                  let isBlocked = false;
                  if (field.type === 'transit_end') {
@@ -8074,6 +8419,9 @@ export default function ChecklistEngine() {
                            executionId: String(taskId || ''),
                            ownerEmail: email || 'unknown',
                          }).catch(() => {});
+                         // Garantir token no servidor antes de abrir o mapa/chat — evita GET /tracking/task/…/chat 400
+                         // («deslocamento não iniciado») se o técnico abrir o chat antes do POST /tracking/start concluir.
+                         await generateTrackingLink();
                          // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))
                          if (
                            currentTask?.locationZoneType === 'route' ||
@@ -8082,7 +8430,6 @@ export default function ChecklistEngine() {
                          ) {
                            setShowLiveMap(true);
                          }
-                         void generateTrackingLink();
                        } else {
                          lastTransitScopeRef.current = null;
                          dataCollectionService.setState('ARRIVED', {
@@ -8951,6 +9298,94 @@ export default function ChecklistEngine() {
           </View>
         </View>
       )}
+
+      <Modal
+        visible={checklistBarcodeModalOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={closeChecklistBarcodeModal}
+      >
+        <View style={{ flex: 1, backgroundColor: '#0f172a' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: insets.top + 8,
+              paddingHorizontal: 16,
+              paddingBottom: 10,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5 }}>
+              {t('stock.scannerTitle')}
+            </Text>
+            <TouchableOpacity onPress={closeChecklistBarcodeModal} hitSlop={12} accessibilityLabel="Fechar">
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.88)',
+              paddingHorizontal: 16,
+              paddingBottom: 12,
+              fontSize: 13,
+              lineHeight: 18,
+            }}
+          >
+            {t('stock.scanHint')}
+          </Text>
+          <View
+            style={{
+              flex: 1,
+              marginHorizontal: 14,
+              marginBottom: Math.max(insets.bottom, 12) + 8,
+              borderRadius: 14,
+              overflow: 'hidden',
+              backgroundColor: '#000',
+            }}
+          >
+            {checklistBarcodeModalOpen ? (
+              <CameraView
+                style={StyleSheet.absoluteFill}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
+                }}
+                onBarcodeScanned={onChecklistBarcodeScanned}
+              />
+            ) : null}
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
+            >
+              <View
+                style={{
+                  width: '78%',
+                  maxWidth: 300,
+                  aspectRatio: 1.65,
+                  borderWidth: 2,
+                  borderColor: '#38bdf8',
+                  borderRadius: 12,
+                  backgroundColor: 'transparent',
+                }}
+              />
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={closeChecklistBarcodeModal}
+            style={{
+              marginHorizontal: 16,
+              marginBottom: Math.max(insets.bottom, 16),
+              paddingVertical: 14,
+              borderRadius: 12,
+              backgroundColor: 'rgba(255,255,255,0.12)',
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{t('common.cancel')}</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* Modals removed: Tracking modal was removed (handled by backoffice) */}
 

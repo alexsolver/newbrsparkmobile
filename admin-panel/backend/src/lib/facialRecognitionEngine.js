@@ -3,7 +3,7 @@
 const {
   stripDataUrlBase64,
   recognizeWithIntegration,
-  isCompreFaceNoFaceInImageError,
+  isFaceMatchNoFaceInImageError,
   pickTopRecognitionMatch,
   parseComprefaceSubjectName,
 } = require('./comprefaceClient');
@@ -158,13 +158,13 @@ async function verifyFacialImageBuffer(prisma, opts) {
   try {
     recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
   } catch (e1) {
-    if (isCompreFaceNoFaceInImageError(e1)) {
+    if (isFaceMatchNoFaceInImageError(e1)) {
       return { ok: false, audit: auditNoFaceInImage(mode, engine) };
     }
     try {
       recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
     } catch (e) {
-      if (isCompreFaceNoFaceInImageError(e)) {
+      if (isFaceMatchNoFaceInImageError(e)) {
         return { ok: false, audit: auditNoFaceInImage(mode, engine) };
       }
       console.error('[facialRecognitionEngine] recognize', e);

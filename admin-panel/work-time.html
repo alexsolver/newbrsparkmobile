@@ -40,9 +40,9 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Registro de horas</span>
+        <span id="mpc-bc-here">Registro de horas</span>
       </nav>
     </div>
     <div class="page-body">
@@ -51,14 +51,14 @@
           <div style="flex:1;min-width:220px;max-width:720px">
             <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px">
               <ion-icon name="time-outline" style="font-size:1.15em;color:var(--accent)"></ion-icon>
-              Registro de horas trabalhadas
+              <span id="mpc-hero-title">Registro de horas trabalhadas</span>
             </h1>
-            <p class="page-hero-sub">
+            <p class="page-hero-sub" id="mpc-hero-sub">
               Política de ponto por organização: módulo, obrigatoriedades de face/GPS/endereço e integridade. O app respeita também a flag global e a habilitação por usuário.
             </p>
           </div>
           <div class="data-toolbar-actions" style="padding:0;border:none;background:transparent;flex-shrink:0">
-            <button type="button" class="btn btn-primary" id="btn-save-wt">Salvar</button>
+            <button type="button" class="btn btn-primary" id="wt-btn-save">Salvar</button>
           </div>
         </div>
       </header>
@@ -76,7 +76,7 @@
         <ion-icon name="information-circle-outline" style="font-size: 18px; flex-shrink: 0"></ion-icon>
         <span>
           No app, o ponto fica disponível para <strong>qualquer papel exceto cliente</strong> (não se aplica a contas «Usuário» / <code>USER</code>), desde que estejam ativos a
-          <strong>flag global «work_time»</strong>, o interruptor abaixo e a <strong>habilitação por usuário</strong> (editar usuário → Registro de horas). Reconhecimento facial e geocoding dependem das integrações (CompreFace, rede para Nominatim).
+          <strong>flag global «work_time»</strong>, o interruptor abaixo e a <strong>habilitação por usuário</strong> (editar usuário → Registro de horas). Reconhecimento facial e geocoding dependem das integrações (FaceMatch, rede para Nominatim).
         </span>
       </div>
 
@@ -101,7 +101,7 @@
         <div class="wt-toggle-row">
           <div class="wt-toggle-label">
             <strong>Reconhecimento facial obrigatório</strong>
-            <span>Cada batida deve incluir verificação facial (1:1 com a galeria CompreFace).</span>
+            <span>Cada batida deve incluir verificação facial (1:1 com a galeria FaceMatch).</span>
           </div>
           <label class="wt-toggle">
             <input type="checkbox" id="wt-req-face" checked />
@@ -234,10 +234,12 @@
 </div>
 <script type="module">
   import { initPage } from './js/sidebar.js';
+  import { applyWorkTimePageChrome, mpT } from './js/menu-pages-i18n.js';
   import { CONFIG, ensureAdminApiDetected, clearAdminSessionFully } from './js/config.js';
 
   await ensureAdminApiDetected();
   await initPage();
+  applyWorkTimePageChrome();
 
   const role = (sessionStorage.getItem('brspark_admin_role') || '').trim();
 
@@ -429,7 +431,7 @@
   async function exportPunchesCsv() {
     const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) {
-      alert('Selecione o tenant.');
+      alert(mpT('wt_alert_pick_tenant'));
       return;
     }
     const params = buildReportQuery(tid, { includePaging: false });
@@ -537,10 +539,10 @@
     void loadPunches(1);
   }
 
-  document.getElementById('btn-save-wt').onclick = async () => {
+  document.getElementById('wt-btn-save').onclick = async () => {
     const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) {
-      alert('Selecione o tenant.');
+      alert(mpT('wt_alert_pick_tenant'));
       return;
     }
     const minAccRaw = document.getElementById('wt-acc').value.trim();
@@ -560,7 +562,7 @@
       alert(res.error);
       return;
     }
-    alert('Configurações guardadas.');
+    alert(mpT('wt_alert_saved'));
     fillForm(res);
   };
 

@@ -332,6 +332,82 @@ async function uploadOneLocalMediaField(
   return upRes?.url || null;
 }
 
+/**
+ * Visão IA / foto com anotações: URIs ficam dentro de objetos (`localUri`, `gridSlotUris`, `imageUri`),
+ * não como string no topo — o upload plano não as captava e o relatório recebia só `file://`.
+ */
+async function maybeUploadNestedChecklistFieldMedia(
+  fieldKey: string,
+  nested: Record<string, unknown>,
+  payload: { taskId?: string; templateId?: string; ownerEmail?: string }
+): Promise<Record<string, unknown> | null> {
+  const o: Record<string, unknown> = { ...nested };
+  let changed = false;
+
+  const lu = o.localUri;
+  if (typeof lu === 'string' && isLocalMediaUri(lu)) {
+    try {
+      const url = await uploadOneLocalMediaField(lu, payload, fieldKey, '_vision');
+      if (url) {
+        o.localUri = appendPreservedMediaQuery(url, lu);
+        changed = true;
+        console.log(`[SYNC] Campo ${fieldKey}.localUri → URL remota`);
+      }
+    } catch (e: any) {
+      console.warn(`[SYNC] Falha upload ${fieldKey}.localUri:`, e?.message || e);
+    }
+  }
+
+  const slotsRaw = o.gridSlotUris;
+  if (Array.isArray(slotsRaw)) {
+    const next: unknown[] = [];
+    let slotChanged = false;
+    for (let i = 0; i < slotsRaw.length; i++) {
+      const item = slotsRaw[i];
+      if (typeof item === 'string' && isLocalMediaUri(item)) {
+        try {
+          const url = await uploadOneLocalMediaField(item, payload, fieldKey, `_grid${i}`);
+          if (url) {
+            next.push(appendPreservedMediaQuery(url, item));
+            slotChanged = true;
+            continue;
+          }
+        } catch (e: any) {
+          console.warn(`[SYNC] Falha upload ${fieldKey}.gridSlotUris[${i}]:`, e?.message || e);
+        }
+      }
+      next.push(item);
+    }
+    if (slotChanged) {
+      o.gridSlotUris = next;
+      changed = true;
+    }
+  }
+
+  const annUriRaw =
+    typeof o.imageUri === 'string' && String(o.imageUri).trim()
+      ? String(o.imageUri).trim()
+      : typeof o.uri === 'string' && String(o.uri).trim() && Array.isArray(o.strokes)
+        ? String(o.uri).trim()
+        : '';
+  if (annUriRaw && isLocalMediaUri(annUriRaw)) {
+    try {
+      const url = await uploadOneLocalMediaField(annUriRaw, payload, fieldKey, '_annot');
+      if (url) {
+        const withQ = appendPreservedMediaQuery(url, annUriRaw);
+        o.imageUri = withQ;
+        if (typeof o.uri === 'string' && String(o.uri).trim() === annUriRaw) o.uri = withQ;
+        changed = true;
+        console.log(`[SYNC] Campo ${fieldKey} (foto com anotações) → URL remota`);
+      }
+    } catch (e: any) {
+      console.warn(`[SYNC] Falha upload anotações ${fieldKey}:`, e?.message || e);
+    }
+  }
+
+  return changed ? o : null;
+}
+
 /** Upload de mídia local num mapa plano de respostas (raiz ou uma linha de secção repetível). */
 async function uploadLocalMediaInFlatResponseRecord(
   record: Record<string, unknown>,
@@ -375,6 +451,16 @@ async function uploadLocalMediaInFlatResponseRecord(
         next.push(item);
       }
       if (anyChange) record[key] = next;
+      continue;
+    }
+
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const updated = await maybeUploadNestedChecklistFieldMedia(
+        key,
+        val as Record<string, unknown>,
+        payload,
+      );
+      if (updated) record[key] = updated;
     }
   }
 }

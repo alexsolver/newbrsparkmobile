@@ -16,6 +16,12 @@ Evitar, entre outros: *equipa* → **equipe**; *ficheiro* → **arquivo**; *util
 
 A regra do Cursor em `.cursor/rules/language-pt-br.mdc` reforça o mesmo para respostas de agentes e novos textos.
 
+### Traduções e cópias em código (`*-i18n.js`, JSON de locale, HTML estático)
+
+- A chave **`pt-BR`** em dicionários do painel (ex.: `admin-panel/js/checklists-i18n.js`, `user-pages-i18n.js`) e strings visíveis em **HTML** do admin devem usar **sempre** vocabulário e ortografia **brasileiros**, alinhados ao glossário desta secção.
+- **Não** copiar blocos de `pt-PT` nem de produtos europeus: erros típicos são *guardar* (persistir) em vez de **salvar**, *ficheiro* em vez de **arquivo**, *secção* em vez de **seção**, *eliminar* (UI) em vez de **excluir**, *actual* em vez de **atual**.
+- Em revisão de PR: se o locale é `pt-BR`, conferir mentalmente os pares do glossário nos arquivos alterados.
+
 ## Semântica de estado
 
 Usar `colors.status.{success|warning|danger|info}` com `{ fg, bg, border }` para badges, alertas e chips de estado. Os tokens legacy `success` / `warning` (background/text) mantêm-se por compatibilidade; preferir `status.*` em código novo.
@@ -64,3 +70,5 @@ Todas as telas internas autenticadas devem seguir o mesmo esqueleto que [`admin-
 | 2026-04-14 | Admin HTML: anatomia do shell canônico (`page-hero` + `data-shell`) e exceções. |
 | 2026-04-14 | Fase C: `reports.html`, `checklists.html` e `cockpit.html` alinhados ao esqueleto; cockpit mantém tema NOC com classes `cockpit-*` nos tokens locais. |
 | 2026-04-14 | Fase D: `index.html` (cópia login), `track.html` e `evaluation-survey.html` com `brspark-tokens.css` onde aplicável; contraste da trilha no `cockpit.html`. |
+| 2026-04-14 | Fase E: `checklists.html` — estilos locais do builder (toolbox/canvas/estados vazios) alinhados a variáveis de `brspark-tokens.css` (neutros e destrutivo); mantêm-se hex de acento (índigo/violeta do copiloto) até export de tokens dedicados. |
+| 2026-04-15 | Idioma (pt-BR): subsecção explícita para `*-i18n.js` / HTML estático — evitar cópias em português de Portugal na chave `pt-BR`. |

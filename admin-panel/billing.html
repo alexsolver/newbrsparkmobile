@@ -14,14 +14,6 @@
         <span class="topbar-breadcrumb-sep">/</span>
         <span>Billing</span>
       </nav>
-      <div class="topbar-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-        <a class="btn btn-ghost btn-sm" href="plans.html">Pacotes e limites</a>
-        <a class="btn btn-outline btn-sm" href="subscriptions.html">Assinaturas</a>
-        <button type="button" class="btn btn-primary" onclick="openNewPlanModal()">
-          <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-          Novo plano
-        </button>
-      </div>
     </div>
     <div class="page-body">
 
@@ -31,6 +23,19 @@
           MRR estimado a partir das assinaturas filtradas, visão dos pacotes e tabela de contas. Os valores de MRR refletem o conjunto atual da lista (não necessariamente o total global).
         </p>
       </header>
+
+      <div class="data-toolbar" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <a class="btn btn-ghost btn-sm" href="plans.html">Pacotes e limites</a>
+          <a class="btn btn-outline btn-sm" href="subscriptions.html">Assinaturas</a>
+        </div>
+        <div class="data-toolbar-actions">
+          <button type="button" class="btn btn-primary" onclick="openNewPlanModal()">
+            <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+            Novo plano
+          </button>
+        </div>
+      </div>
 
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
         <div class="stat-card fade-in" style="--accent-color:var(--green)">

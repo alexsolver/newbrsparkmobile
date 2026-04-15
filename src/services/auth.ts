@@ -79,7 +79,7 @@ function normalizeProductionApiBase(raw: string | undefined): string | undefined
   return u.length > 0 ? u : undefined;
 }
 
-const PRODUCTION_API_DEFAULT = 'https://brsparks.wstrategy.com.br';
+const PRODUCTION_API_DEFAULT = 'https://api.brspark.com';
 
 const fromEnvRaw = normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE);
 /** Em dev, permite forçar produção: `EXPO_PUBLIC_USE_PRODUCTION_API=1` no .env (e `EXPO_PUBLIC_API_BASE` se quiser outro host). */
@@ -332,6 +332,52 @@ export class AuthService {
     // Fluxo 2FA: backend pede confirmação via OTP
     if (data.requiresTwoFactor && data.challengeToken) {
       throw new TwoFactorRequired(data.challengeToken);
+    }
+
+    await AuthService.wipeLocalDataBeforeNewSession();
+    await AsyncStorage.setItem(TOKEN_KEY, data.token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    return data.user as User;
+  }
+
+  /**
+   * Login social — identidade validada no Laravel; sessão emitida pelo Node (`POST /api/login/oauth`).
+   * Envie `idToken` (Google / Apple) ou `accessToken` (Facebook) conforme o SDK nativo.
+   */
+  static async loginWithOAuth(params: {
+    provider: 'google' | 'facebook' | 'apple';
+    idToken?: string;
+    accessToken?: string;
+    tenantId?: string | null;
+  }): Promise<User> {
+    const deviceId = await getDeviceId();
+    const body: Record<string, unknown> = {
+      provider: params.provider,
+      deviceId,
+    };
+    if (params.idToken && String(params.idToken).trim()) {
+      body.idToken = String(params.idToken).trim();
+    }
+    if (params.accessToken && String(params.accessToken).trim()) {
+      body.accessToken = String(params.accessToken).trim();
+    }
+    if (params.tenantId && String(params.tenantId).trim()) {
+      body.tenantId = String(params.tenantId).trim();
+    }
+
+    const res = await fetch(`${API_BASE}/api/login/oauth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 409 && data?.code === 'MULTIPLE_ACCOUNTS' && Array.isArray(data?.tenants)) {
+        throw new MultipleAccountsError(data.tenants as LoginTenantOption[]);
+      }
+      throw new Error(data.error || 'Erro ao fazer login social.');
     }
 
     await AuthService.wipeLocalDataBeforeNewSession();

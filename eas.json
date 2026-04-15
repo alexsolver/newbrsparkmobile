@@ -16,12 +16,18 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://brsparks.wstrategy.com.br"
+        "EXPO_PUBLIC_API_BASE": "https://api.brspark.com"
+      }
+    },
+    "preview-lan": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "http://192.168.15.73:3001"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://brsparks.wstrategy.com.br"
+        "EXPO_PUBLIC_API_BASE": "https://api.brspark.com"
       }
     }
   },

@@ -33,17 +33,61 @@ const recordSync = (deviceId, success, payloadSize, errorDetails = null) => {
   }
 };
 
+/** Contagens globais do quadro OS/RT (mesma regra da antiga Central de operações, sem limite de 200 linhas). */
+async function aggregateOperationsBoard(prisma) {
+  const rows = await prisma.checklistExecution.groupBy({
+    by: ['status'],
+    _count: { _all: true },
+  });
+  const by = rows.reduce((acc, r) => {
+    acc[r.status] = r._count._all;
+    return acc;
+  }, {});
+  const n = (s) => by[s] || 0;
+  const pending = n('PENDING');
+  const progress =
+    n('RECEIVED') + n('ACCEPTED') + n('IN_PROGRESS') + n('PAUSED');
+  const completed = n('COMPLETED') + n('SYNCED');
+  const cancelled = n('CANCELLED');
+  const terminalOk = new Set([
+    'PENDING',
+    'RECEIVED',
+    'ACCEPTED',
+    'IN_PROGRESS',
+    'PAUSED',
+    'COMPLETED',
+    'SYNCED',
+    'CANCELLED',
+  ]);
+  let errors = 0;
+  let total = 0;
+  for (const r of rows) {
+    total += r._count._all;
+    if (!terminalOk.has(r.status)) errors += r._count._all;
+  }
+  return { total, pending, progress, completed, cancelled, errors };
+}
+
 const getMetrics = async (prisma) => {
   let pendingTasks = 0;
   let onDevicesTasks = 0;
   let activeUsers = 0;
   let historicalSyncs = 0;
-  
+  let operationsBoard = {
+    total: 0,
+    pending: 0,
+    progress: 0,
+    completed: 0,
+    cancelled: 0,
+    errors: 0,
+  };
+
   try {
     activeUsers = await prisma.user.count({ where: { isActive: true } });
     pendingTasks = await prisma.checklistExecution.count({ where: { status: 'PENDING' } });
     onDevicesTasks = await prisma.checklistExecution.count({ where: { status: { in: ['RECEIVED', 'ACCEPTED', 'IN_PROGRESS'] } } });
     historicalSyncs = await prisma.checklistExecution.count({ where: { status: { in: ['COMPLETED', 'SYNCED'] } } });
+    operationsBoard = await aggregateOperationsBoard(prisma);
   } catch(e) {
     console.warn('[Cockpit] Failed to fetch DB stats:', e.message);
   }
@@ -52,6 +96,7 @@ const getMetrics = async (prisma) => {
   
   return {
     uptimeSeconds,
+    operationsBoard,
     memory: {
       syncAttempts: metrics.syncAttempts,
       syncSuccess: metrics.syncSuccess,

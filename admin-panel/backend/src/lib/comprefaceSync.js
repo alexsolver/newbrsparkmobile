@@ -46,17 +46,17 @@ async function bufferFromPublicOrUrl(ref, publicRoot) {
 }
 
 /**
- * Cria/atualiza subject no CompreFace e envia avatar + fotos de matrícula.
+ * Cria/atualiza subject no motor FaceMatch e envia avatar + fotos de matrícula.
  * @returns {Promise<{ ok: boolean, subject?: string, faces?: number, root?: string, error?: string }>}
  */
 async function syncUserToCompreface(prisma, userId) {
   const integration = await findActiveCompreface(prisma);
   if (!integration?.apiKey) {
-    return { ok: false, error: 'Nenhuma integração Exadel CompreFace ativa com API Key.' };
+    return { ok: false, error: 'Nenhuma integração FaceMatch (Exadel CompreFace) ativa com API Key.' };
   }
   const meta = parseVisionMeta(integration.metadata);
   if (!meta || meta.category !== 'COMPUTER_VISION' || meta.engine !== 'compreface') {
-    return { ok: false, error: 'Integração CompreFace inválida ou inativa.' };
+    return { ok: false, error: 'Integração FaceMatch inválida ou inativa.' };
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -161,7 +161,7 @@ async function syncUserToCompreface(prisma, userId) {
     }
   }
 
-  return { ok: false, error: lastErr || 'Falha ao contatar o CompreFace em todas as URLs tentadas.' };
+  return { ok: false, error: lastErr || 'Falha ao contatar o FaceMatch em todas as URLs tentadas.' };
 }
 
 module.exports = { syncUserToCompreface, findActiveCompreface };

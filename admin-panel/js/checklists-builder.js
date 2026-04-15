@@ -36,6 +36,9 @@ function absoluteUploadUrl(path) {
 /** Alinhado a `admin-panel/backend/src/constants/visionSimNaoQuestions.js`. */
 const MAX_VISION_SIMNAO_QUESTIONS = 10;
 const MAX_VISION_STRUCTURED_PROMPT_CHARS = 12000;
+/** Alinhado a `checklistsVision.js` / `visionSimNaoQuestions.js` quando há mais de uma pergunta. */
+const MAX_VISION_MULTI_SIMNAO_TEXT_CHARS = 500;
+const MAX_VISION_SIMNAO_QUESTIONS = 10;
 
 /** URL da imagem no preview do builder: origem da página se a porta for a da API (corrige localhost vs 127.0.0.1). */
 function helpImageDisplayUrl(pathOrUrl) {
@@ -69,6 +72,35 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function fbStr(key, vars, fallbackPt) {
+  try {
+    if (typeof window.fbT === 'function') {
+      const s = window.fbT(key, vars);
+      if (s && s !== key) return s;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  return fallbackPt != null ? String(fallbackPt) : String(key);
+}
+
+function fbAlert(key, vars, fallbackPt) {
+  alert(fbStr(key, vars, fallbackPt));
+}
+
+/** Rótulo de `section_break` no canvas: reconhece «Etapa N» / «Step N» / marcadores por defeito em qualquer idioma. */
+function translateStepLabelForCanvasDisplay(rawLabel) {
+  const s = String(rawLabel || '').trim();
+  if (!s) return fbStr('fb_canvas_new_step', null, 'Nova etapa');
+  const mEt = s.match(/^Etapa\s+(\d+)$/i);
+  if (mEt) return fbStr('fb_canvas_step_n', { n: mEt[1] }, 'Etapa ' + mEt[1]);
+  const mSt = s.match(/^Step\s+(\d+)$/i);
+  if (mSt) return fbStr('fb_canvas_step_n', { n: mSt[1] }, 'Step ' + mSt[1]);
+  const u = s.toUpperCase();
+  if (u === 'NOVA ETAPA' || u === 'NEW STEP') return fbStr('fb_canvas_new_step', null, 'Nova etapa');
+  return s;
 }
 
 function adminJsonHeaders() {
@@ -275,21 +307,24 @@ function fieldHelpImageHandler() {
         data = { error: rawText.slice(0, 200) || 'Resposta inválida do servidor' };
       }
       if (!res.ok) {
-        const hint =
-          res.status === 401
-            ? ' Faça login no painel (ex.: index.html na mesma máquina) e abra o Form Builder pela URL do servidor Node (ex.: http://localhost:3001/checklists.html), não pelo Live Server.'
-            : '';
-        alert((data.error || 'Upload recusado.') + hint);
+        const hint401 =
+          res.status === 401 ? fbStr('fb_alert_help_image_401_hint', null, '') : '';
+        const base = data.error || fbStr('fb_alert_upload_rejected', null, 'Upload recusado.');
+        alert(base + hint401);
         return;
       }
       const url = data.url;
       if (!url) {
-        alert('Servidor não devolveu a URL da imagem.');
+        fbAlert('fb_alert_no_image_url', null, 'O servidor não devolveu o URL da imagem.');
         return;
       }
       const quill = window.fieldHelpQuill;
       if (!quill) {
-        alert('Editor não está pronto. Clique de novo no campo e tente inserir a imagem.');
+        fbAlert(
+          'fb_alert_editor_not_ready',
+          null,
+          'O editor não está pronto. Clique de novo no campo e tente inserir a imagem.'
+        );
         return;
       }
       const imgSrc = helpImageDisplayUrl(url);
@@ -309,7 +344,11 @@ function fieldHelpImageHandler() {
           quill.updateContents(new Delta().retain(index).insert({ image: imgSrc }).insert('\n'), 'user');
         } catch (e2) {
           console.error('[help-image] paste', e1, e2);
-          alert('Não foi possível inserir a imagem no editor. Atualize a página e tente de novo.');
+          fbAlert(
+            'fb_alert_image_insert_fail',
+            null,
+            'Não foi possível inserir a imagem no editor. Actualize a página e tente de novo.'
+          );
           return;
         }
       }
@@ -318,7 +357,11 @@ function fieldHelpImageHandler() {
       quill.setSelection(after, 0, 'silent');
     } catch (err) {
       console.error(err);
-      alert('Falha ao enviar imagem: ' + (err.message || err));
+      fbAlert(
+        'fb_alert_image_send_fail',
+        { detail: String(err && err.message ? err.message : err) },
+        'Falha ao enviar imagem: ' + (err.message || err)
+      );
     }
     },
     { once: true }
@@ -335,7 +378,11 @@ function fieldHelpImageHandler() {
   } catch (e) {
     cleanup();
     console.error('[help-image] file picker', e);
-    alert('Não foi possível abrir o seletor de arquivos. Tente outro browser ou permissões de arquivos.');
+    fbAlert(
+      'fb_alert_file_picker',
+      null,
+      'Não foi possível abrir o seletor de arquivos. Tente outro navegador ou permissões de arquivos.'
+    );
   }
 }
 
@@ -372,17 +419,21 @@ function fieldReadingImageHandler() {
           data = { error: rawText.slice(0, 200) || 'Resposta inválida do servidor' };
         }
         if (!res.ok) {
-          alert(data.error || 'Upload recusado.');
+          fbAlert('fb_alert_upload_rejected', null, data.error || 'Upload recusado.');
           return;
         }
         const url = data.url;
         if (!url) {
-          alert('Servidor não devolveu a URL da imagem.');
+          fbAlert('fb_alert_no_image_url', null, 'O servidor não devolveu o URL da imagem.');
           return;
         }
         const quill = window.fieldReadingQuill;
         if (!quill) {
-          alert('Editor não está pronto. Clique de novo no campo e tente inserir a imagem.');
+          fbAlert(
+            'fb_alert_editor_not_ready',
+            null,
+            'O editor não está pronto. Clique de novo no campo e tente inserir a imagem.'
+          );
           return;
         }
         const imgSrc = helpImageDisplayUrl(url);
@@ -400,7 +451,11 @@ function fieldReadingImageHandler() {
             quill.updateContents(new Delta().retain(index).insert({ image: imgSrc }).insert('\n'), 'user');
           } catch (e2) {
             console.error('[reading-image] paste', e1, e2);
-            alert('Não foi possível inserir a imagem no editor.');
+            fbAlert(
+              'fb_alert_image_insert_fail',
+              null,
+              'Não foi possível inserir a imagem no editor. Actualize a página e tente de novo.'
+            );
             return;
           }
         }
@@ -408,7 +463,11 @@ function fieldReadingImageHandler() {
         quill.setSelection(after, 0, 'silent');
       } catch (err) {
         console.error(err);
-        alert('Falha ao enviar imagem: ' + (err.message || err));
+        fbAlert(
+          'fb_alert_image_send_fail',
+          { detail: String(err && err.message ? err.message : err) },
+          'Falha ao enviar imagem: ' + (err.message || err)
+        );
       }
     },
     { once: true }
@@ -419,7 +478,11 @@ function fieldReadingImageHandler() {
   } catch (e) {
     cleanup();
     console.error('[reading-image] file picker', e);
-    alert('Não foi possível abrir o seletor de arquivos.');
+    fbAlert(
+      'fb_alert_file_picker',
+      null,
+      'Não foi possível abrir o seletor de arquivos. Tente outro navegador ou permissões de arquivos.'
+    );
   }
 }
 
@@ -461,7 +524,11 @@ window.initFieldHelpEditor = function (field) {
         handlers: { image: fieldHelpImageHandler },
       },
     },
-    placeholder: 'Texto e imagens que o técnico consulta no app (botão "Instruções").',
+    placeholder: fbStr(
+      'fb_quill_help_placeholder',
+      null,
+      'Texto e imagens que o técnico consulta no app (botão «Instruções»).'
+    ),
   });
   window.fieldHelpQuill = quill;
   window.quillBoundFieldId = field.id;
@@ -519,7 +586,11 @@ window.initFieldReadingEditor = function (field) {
         handlers: { image: fieldReadingImageHandler },
       },
     },
-    placeholder: 'Texto formatado exibido no app (só leitura). Hiperlinks não são permitidos.',
+    placeholder: fbStr(
+      'fb_quill_reading_placeholder',
+      null,
+      'Texto formatado exibido no app (só leitura). Hiperlinks não são permitidos.'
+    ),
   });
   window.fieldReadingQuill = quill;
   window.quillReadingBoundFieldId = field.id;
@@ -550,8 +621,37 @@ window.initFieldReadingEditor = function (field) {
 // 1. Initialize State
 let fields = [];
 let selectedFieldId = null;
+/** Usado pelo i18n do builder para re-renderizar o painel de propriedades ao mudar o idioma. */
+window.__fbHasSelectedFieldForProps = function () {
+    return Boolean(selectedFieldId);
+};
 let currentFormId = null;
-let currentFormTitle = 'Novo formulário';
+let currentFormTitle = '';
+
+/** Título ainda não personalizado (valor inicial / mudança de idioma). */
+function isGenericDefaultFormTitle(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return true;
+    const t = s.toLowerCase();
+    return (
+        t === 'novo formulário' ||
+        t === 'novo formulario' ||
+        t === 'novo checklist' ||
+        t === 'new form' ||
+        t === 'new checklist'
+    );
+}
+
+/** Chamado pelo i18n do builder: preenche #tpl-title e `currentFormTitle` com o título padrão no idioma atual. */
+window.__fbApplyLocalizedDefaultFormTitle = function () {
+    const el = document.getElementById('tpl-title');
+    if (!el) return;
+    if (!isGenericDefaultFormTitle(el.value)) return;
+    const nt = fbStr('mdl_new_form_title', null, 'Novo formulário');
+    el.value = nt;
+    currentFormTitle = nt;
+};
+
 let currentFormDesc = '';
 let currentFormIcon = '';
 /** Biblioteca do ícone do modelo (`metadata.iconLibrary`) — paridade com o app e com `renderWebIcon`. */
@@ -950,8 +1050,216 @@ window.applySectionStepEditModal = function () {
     if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
 };
 
-const elToolbox = document.getElementById('toolbox');
-const elCanvas = document.getElementById('canvas');
+/** O builder é carregado por `<script src>` injectado no `<head>`; sem re-resolver, estes refs podem ficar `null` para sempre. */
+let elToolbox = document.getElementById('toolbox');
+let elCanvas = document.getElementById('canvas');
+
+function ensureBuilderToolboxEl() {
+    if (!elToolbox) elToolbox = document.getElementById('toolbox');
+    return elToolbox;
+}
+
+function ensureBuilderCanvasEl() {
+    if (!elCanvas) elCanvas = document.getElementById('canvas');
+    return elCanvas;
+}
+
+/** Baseline JSON para detetar alterações não guardadas (evita `rebuildFieldsOrderFromCanvas` aqui — risco de reentrância em `renderCanvas`). */
+let __fbPersistBaseline = null;
+let __fbDirtyTimer = null;
+
+function getBuilderPersistFingerprint(opts) {
+    opts = opts || {};
+    try {
+        flushQuillToBoundField();
+    } catch (e) {
+        /* ignore */
+    }
+    try {
+        if (window.readAppSectionNavFromRadios) window.readAppSectionNavFromRadios();
+    } catch (e2) {
+        /* ignore */
+    }
+    if (opts.rebuildBefore) {
+        try {
+            rebuildFieldsOrderFromCanvas();
+        } catch (eRb) {
+            /* ignore */
+        }
+    }
+    let settingsCopy = {};
+    try {
+        settingsCopy = JSON.parse(JSON.stringify(globalFormSettings || {}));
+    } catch (e3) {
+        settingsCopy = globalFormSettings || {};
+    }
+    let fieldsCopy = [];
+    try {
+        fieldsCopy = JSON.parse(JSON.stringify(fields || []));
+    } catch (e4) {
+        fieldsCopy = fields || [];
+    }
+    const tit = document.getElementById('tpl-title');
+    const desc = document.getElementById('tpl-desc');
+    const ic = document.getElementById('tpl-icon');
+    const icl = document.getElementById('tpl-icon-library');
+    return JSON.stringify({
+        folderId: currentFormFolderId == null ? null : String(currentFormFolderId),
+        formId: currentFormId == null ? null : String(currentFormId),
+        title: tit ? String(tit.value || '') : '',
+        desc: desc ? String(desc.value || '') : '',
+        icon: ic ? String(ic.value || '') : '',
+        iconLib: icl ? String(icl.value || '') : 'Ionicons',
+        settings: settingsCopy,
+        schema: fieldsCopy,
+    });
+}
+
+function updateFbUnsavedBadge() {
+    const badge = document.getElementById('fb-unsaved-badge');
+    if (!badge) return;
+    if (window.__fbHasUnsavedChanges) {
+        badge.style.display = 'inline-flex';
+        try {
+            if (window.fbT) badge.textContent = window.fbT('fb_unsaved');
+        } catch (e) {
+            /* manter texto */
+        }
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function recomputeBuilderDirtyState() {
+    let cur = '';
+    try {
+        cur = getBuilderPersistFingerprint();
+    } catch (e) {
+        cur = '';
+    }
+    const dirty = __fbPersistBaseline != null && cur !== __fbPersistBaseline;
+    window.__fbHasUnsavedChanges = !!dirty;
+    updateFbUnsavedBadge();
+}
+
+window.syncBuilderPersistBaseline = function () {
+    if (__fbDirtyTimer) {
+        clearTimeout(__fbDirtyTimer);
+        __fbDirtyTimer = null;
+    }
+    try {
+        __fbPersistBaseline = getBuilderPersistFingerprint();
+    } catch (e) {
+        __fbPersistBaseline = '';
+    }
+    window.__fbHasUnsavedChanges = false;
+    updateFbUnsavedBadge();
+};
+
+window.scheduleBuilderDirtyRecompute = function () {
+    if (__fbDirtyTimer) clearTimeout(__fbDirtyTimer);
+    __fbDirtyTimer = setTimeout(function () {
+        __fbDirtyTimer = null;
+        recomputeBuilderDirtyState();
+    }, 250);
+};
+
+function validateChecklistLightBeforeSave() {
+    const out = [];
+    let emptyLabel = false;
+    for (const f of fields || []) {
+        if (!f || f.type === 'section_break') continue;
+        if (!String(f.label || '').trim()) emptyLabel = true;
+    }
+    if (emptyLabel) {
+        out.push(
+            fbStr(
+                'fb_val_empty_labels',
+                null,
+                'Há campos sem rótulo (etapas ignoradas). Corrija antes de salvar.'
+            )
+        );
+    }
+    const seen = new Map();
+    for (const f of fields || []) {
+        if (!f || !f.id) continue;
+        const id = String(f.id);
+        seen.set(id, (seen.get(id) || 0) + 1);
+    }
+    const dups = [...seen.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+    if (dups.length) {
+        out.push(
+            fbStr(
+                'fb_val_dup_ids',
+                { ids: dups.join(', ') },
+                'IDs de campo duplicados: ' + dups.join(', ') + '. Corrija antes de salvar.'
+            )
+        );
+    }
+    return out.length ? out : null;
+}
+
+window.initBuilderDirtyTracking = function () {
+    if (window.initBuilderDirtyTracking.__done) return;
+    window.initBuilderDirtyTracking.__done = true;
+    window.addEventListener('beforeunload', function (ev) {
+        let dirty = false;
+        try {
+            const cur = getBuilderPersistFingerprint({ rebuildBefore: true });
+            dirty = __fbPersistBaseline != null && cur !== __fbPersistBaseline;
+        } catch (e) {
+            dirty = !!window.__fbHasUnsavedChanges;
+        }
+        if (!dirty) return;
+        let msg = 'Tem alterações não guardadas. Sair mesmo assim?';
+        try {
+            if (window.fbT) msg = window.fbT('fb_unsaved_leave');
+        } catch (e) {
+            /* pt por defeito */
+        }
+        ev.preventDefault();
+        ev.returnValue = msg;
+        return msg;
+    });
+    window.addEventListener(
+        'keydown',
+        function (ev) {
+            const k = String(ev.key || '').toLowerCase();
+            if (!(ev.ctrlKey || ev.metaKey) || k !== 's') return;
+            ev.preventDefault();
+            if (typeof window.saveChecklist === 'function') void window.saveChecklist();
+        },
+        true
+    );
+    const root = document.querySelector('.fb-page-chrome') || document.body;
+    root.addEventListener(
+        'input',
+        function (ev) {
+            const t = ev.target;
+            if (!t || !t.id) return;
+            if (t.id === 'fb-toolbox-filter') return;
+            if (t.id === 'tpl-title' || t.id === 'tpl-desc') {
+                if (window.scheduleBuilderDirtyRecompute) window.scheduleBuilderDirtyRecompute();
+            }
+        },
+        true
+    );
+    root.addEventListener(
+        'change',
+        function (ev) {
+            const t = ev.target;
+            if (!t || !t.id) return;
+            if (t.id === 'tpl-icon' || t.id === 'tpl-icon-library') {
+                if (window.scheduleBuilderDirtyRecompute) window.scheduleBuilderDirtyRecompute();
+            }
+        },
+        true
+    );
+    setTimeout(function () {
+        if (window.syncBuilderPersistBaseline) window.syncBuilderPersistBaseline();
+    }, 0);
+};
+
 const elPropsBody = document.getElementById('field-properties-modal-body');
 
 /** Modal de propriedades; quando false, clicar só no cartão não re-renderiza o painel. */
@@ -962,8 +1270,18 @@ function syncFieldPropertiesModalSubtitle() {
     const f = fields.find((x) => x.id === selectedFieldId);
     const sub = document.getElementById('field-properties-modal-subtitle');
     if (sub && f) {
-        const kind = f.type === 'section_break' ? 'Etapa / seção' : String(f.type || '').replace(/_/g, ' ');
-        sub.textContent = `${f.label || f.id} · ${kind}`;
+        const typeKey = 'fb_tb_' + String(f.type || '').trim();
+        const kind =
+            f.type === 'section_break'
+                ? fbStr('fb_props_kind_section', null, 'Etapa / seção')
+                : fbStr(typeKey, null, String(f.type || '').replace(/_/g, ' '));
+        const head =
+            f.type === 'section_break'
+                ? String(f.label || '').trim()
+                    ? translateStepLabelForCanvasDisplay(String(f.label).trim())
+                    : f.id
+                : f.label || f.id;
+        sub.textContent = `${head} · ${kind}`;
     }
 }
 
@@ -1012,6 +1330,7 @@ if (!window.__fieldPropertiesModalEscapeHook) {
     window.__fieldPropertiesModalEscapeHook = true;
     document.addEventListener('keydown', function (ev) {
         if (ev.key !== 'Escape' || !window.fieldPropertiesModalOpen) return;
+        if (document.getElementById('vision-ai-prompt-examples-modal')) return;
         const logicM = document.getElementById('logic-modal');
         if (logicM && logicM.style.display === 'flex') return;
         const secM = document.getElementById('section-step-edit-modal');
@@ -1144,7 +1463,8 @@ function makeSectionHeadDragGrip() {
  * Reordena `fields` conforme a ordem dos `.canvas-section-group` dentro do stack.
  */
 function applySectionGroupOrderFromDom(stackEl) {
-    const stack = stackEl || (elCanvas && elCanvas.querySelector('.canvas-section-groups-stack'));
+    const stack =
+        stackEl || (ensureBuilderCanvasEl() && elCanvas.querySelector('.canvas-section-groups-stack'));
     if (!stack) return;
     const wraps = stack.querySelectorAll(':scope > .canvas-section-group');
     const orderedIds = Array.from(wraps).map((w) => w.dataset.groupId);
@@ -1174,7 +1494,8 @@ function applySectionGroupOrderFromDom(stackEl) {
 }
 
 function initCanvasGroupsSortable() {
-    const stack = elCanvas && elCanvas.querySelector('.canvas-section-groups-stack');
+    if (typeof Sortable === 'undefined') return;
+    const stack = ensureBuilderCanvasEl() && elCanvas.querySelector('.canvas-section-groups-stack');
     if (!stack) return;
     destroyCanvasGroupsSortable();
     const n = stack.querySelectorAll(':scope > .canvas-section-group').length;
@@ -1185,6 +1506,9 @@ function initCanvasGroupsSortable() {
         handle: '.canvas-section-head__section-drag',
         draggable: '.canvas-section-group',
         direction: 'vertical',
+        forceFallback: true,
+        fallbackOnBody: true,
+        fallbackTolerance: 4,
         ghostClass: 'hover-ghost',
         chosenClass: 'canvas-sortable-chosen',
         dragClass: 'canvas-sortable-drag',
@@ -1203,28 +1527,58 @@ function initCanvasGroupsSortable() {
     });
 }
 
+/**
+ * Reconstrói `fields` a partir do DOM (grupos de seção + ordem dos cartões).
+ * As etapas (`section_break`) não são `.canvas-item`; a versão antiga só lia o corpo
+ * e reapendava todas as seções no fim, corrompendo o schema e quebrando drag/salvamento.
+ */
 function rebuildFieldsOrderFromCanvas() {
+    const stack = ensureBuilderCanvasEl() && elCanvas.querySelector('.canvas-section-groups-stack');
+    if (!stack) return;
+
+    const prevGroups = buildCanvasSectionGroups(fields);
+    const groupById = new Map(prevGroups.map((g) => [g.id, g]));
+
     const next = [];
-    elCanvas.querySelectorAll('.canvas-section-body').forEach((b) => {
-        b.querySelectorAll(':scope > .canvas-item').forEach((item) => {
+    stack.querySelectorAll(':scope > .canvas-section-group').forEach((wrap) => {
+        const groupId = wrap.dataset.groupId;
+        const prevGroup = groupById.get(groupId);
+        const body = wrap.querySelector(':scope > .canvas-section-body');
+        if (!body || !prevGroup) return;
+
+        if (prevGroup.kind === 'preamble') {
+            body.querySelectorAll(':scope > .canvas-item').forEach((item) => {
+                const id = item.dataset.id;
+                if (!id) return;
+                const f = fields.find((x) => x.id === id);
+                if (f) next.push(f);
+            });
+            return;
+        }
+
+        const sec = prevGroup.sectionField;
+        if (sec && sec.type === 'section_break') {
+            next.push(sec);
+        }
+        body.querySelectorAll(':scope > .canvas-item').forEach((item) => {
             const id = item.dataset.id;
             if (!id) return;
             const f = fields.find((x) => x.id === id);
             if (f) next.push(f);
         });
     });
-    if (next.length !== fields.length) {
-        const seen = new Set(next.map((x) => x.id));
-        fields.forEach((f) => {
-            if (!seen.has(f.id)) next.push(f);
-        });
-    }
+
+    const seen = new Set(next.map((x) => x.id));
+    fields.forEach((f) => {
+        if (!seen.has(f.id)) next.push(f);
+    });
+
     const prevSig = fields.map((f) => f.id).join('\0');
     const nextSig = next.map((f) => f.id).join('\0');
     if (prevSig === nextSig) return;
     fields.splice(0, fields.length, ...next);
     if (fields.length === 0) {
-        fields.push(createDefaultSectionField());
+        fields.push(createDefaultSectionField(fields));
     } else {
         normalizeFieldsRequireSections(fields);
     }
@@ -1250,6 +1604,7 @@ function scheduleRebuildFieldsOrderFromCanvas() {
  * IMPORTANTE: nunca use `return` dentro de `forEach` pensando que sai da função — só saía do callback.
  */
 function computeToolboxInsertIndex(targetBody, droppedEl, sortableEvt) {
+    if (!ensureBuilderCanvasEl()) return 0;
     let prefix = 0;
     const groups = elCanvas.querySelectorAll('.canvas-section-group');
     for (let gi = 0; gi < groups.length; gi++) {
@@ -1282,8 +1637,12 @@ function computeToolboxInsertIndex(targetBody, droppedEl, sortableEvt) {
     return prefix;
 }
 
-/** Índice no array `fields` onde inserir, a partir do body alvo e posição local (0 = topo). */
+/**
+ * Ordem linear entre **cartões** do canvas (só `.canvas-item`), ignorando `section_break` no array `fields`.
+ * Não é índice do array `fields` — use `mapCanvasOrdinalToFieldsSpliceIndex` antes de `splice`.
+ */
 function computeGlobalFieldInsertIndex(targetBody, localIndex) {
+    if (!ensureBuilderCanvasEl()) return 0;
     let prefix = 0;
     const groups = elCanvas.querySelectorAll('.canvas-section-group');
     for (let gi = 0; gi < groups.length; gi++) {
@@ -1299,6 +1658,35 @@ function computeGlobalFieldInsertIndex(targetBody, localIndex) {
     return prefix;
 }
 
+/**
+ * Converte posição 0…N entre cartões do canvas no índice correcto para `fields.splice` (inclui etapas).
+ * @param {number} canvasOrdinal — 0 = antes do 1.º cartão; N = depois do último (N = contagem de `.canvas-item`).
+ */
+function mapCanvasOrdinalToFieldsSpliceIndex(canvasOrdinal) {
+    const stack = ensureBuilderCanvasEl() && elCanvas.querySelector('.canvas-section-groups-stack');
+    if (!stack || !Array.isArray(fields) || fields.length === 0) {
+        return 0;
+    }
+    const prevGroups = buildCanvasSectionGroups(fields);
+    const groupById = new Map(prevGroups.map((g) => [g.id, g]));
+    const idxs = [];
+    stack.querySelectorAll(':scope > .canvas-section-group').forEach((wrap) => {
+        const g = groupById.get(wrap.dataset.groupId);
+        const body = wrap.querySelector(':scope > .canvas-section-body');
+        if (!g || !body) return;
+        body.querySelectorAll(':scope > .canvas-item').forEach((item) => {
+            const fid = item.dataset.id;
+            const fi = fields.findIndex((f) => f.id === fid);
+            if (fi >= 0) idxs.push(fi);
+        });
+    });
+    const n = idxs.length;
+    const ord = Math.max(0, Math.min(Number(canvasOrdinal) || 0, n));
+    if (n === 0) return fields.length;
+    if (ord >= n) return idxs[n - 1] + 1;
+    return idxs[ord];
+}
+
 /** Posição de inserção local (0…n) a partir da coordenada Y do rato. */
 function computeDropLocalIndexFromPointer(body, clientY) {
     const items = body.querySelectorAll(':scope > .canvas-item');
@@ -1308,6 +1696,54 @@ function computeDropLocalIndexFromPointer(body, clientY) {
         if (clientY < r.top + r.height / 2) return i;
     }
     return items.length;
+}
+
+function clearPaletteDropIndicator() {
+    document.querySelectorAll('.canvas-section-body.fb-palette-drop-target').forEach((b) => {
+        b.classList.remove('fb-palette-drop-target');
+        b.querySelectorAll(':scope > .fb-palette-drop-line').forEach((n) => n.remove());
+    });
+    try {
+        window.__brsparkPaletteDropInd = null;
+    } catch (e) {
+        /* ignore */
+    }
+}
+
+/** Linha luminosa de inserção ao arrastar campo da palette sobre o canvas. */
+function updatePaletteDropIndicator(body, clientY) {
+    if (!body || !body.classList.contains('canvas-section-body')) return;
+    const items = body.querySelectorAll(':scope > .canvas-item');
+    const localIx = computeDropLocalIndexFromPointer(body, clientY);
+    const prev = window.__brsparkPaletteDropInd;
+    if (prev && prev.body === body && prev.localIx === localIx) return;
+
+    clearPaletteDropIndicator();
+
+    const line = document.createElement('div');
+    line.className = 'fb-palette-drop-line';
+    line.setAttribute('aria-hidden', 'true');
+
+    const br = body.getBoundingClientRect();
+    let y = 14;
+    if (!items.length) {
+        y = Math.max(18, body.clientHeight / 2);
+    } else if (localIx <= 0) {
+        const r = items[0].getBoundingClientRect();
+        y = r.top - br.top;
+    } else if (localIx >= items.length) {
+        const r = items[items.length - 1].getBoundingClientRect();
+        y = r.bottom - br.top;
+    } else {
+        const r = items[localIx].getBoundingClientRect();
+        y = r.top - br.top;
+    }
+    y = Math.max(6, Math.min(y, Math.max(8, br.height - 6)));
+    line.style.top = `${y}px`;
+
+    body.appendChild(line);
+    body.classList.add('fb-palette-drop-target');
+    window.__brsparkPaletteDropInd = { body, localIx };
 }
 
 const BRSPARK_FIELD_MIME = 'application/x-brspark-field-type';
@@ -1320,6 +1756,7 @@ function setPaletteDragPayload(type, rawText) {
 }
 
 function clearPaletteDragPayload() {
+    clearPaletteDropIndicator();
     try {
         delete window.__brsparkPaletteDragPayload;
     } catch (e) {
@@ -1328,7 +1765,7 @@ function clearPaletteDragPayload() {
 }
 
 function bindToolboxNativeDragSources() {
-    if (!elToolbox) return;
+    if (!ensureBuilderToolboxEl()) return;
     if (!window.__brsparkToolboxDragEndBound) {
         window.__brsparkToolboxDragEndBound = true;
         elToolbox.addEventListener('dragend', clearPaletteDragPayload);
@@ -1341,6 +1778,7 @@ function bindToolboxNativeDragSources() {
         el.dataset.brsparkDragBound = '1';
         el.setAttribute('draggable', 'true');
         el.addEventListener('dragstart', (e) => {
+            clearPaletteDropIndicator();
             const type = el.getAttribute('data-type');
             if (!type) return;
             const rawText = el.textContent.trim();
@@ -1359,7 +1797,7 @@ function bindToolboxNativeDragSources() {
 }
 
 function installNativePaletteDropOnCanvas() {
-    if (!elCanvas || window.__brsparkNativeCanvasDrop) return;
+    if (!ensureBuilderCanvasEl() || window.__brsparkNativeCanvasDrop) return;
     window.__brsparkNativeCanvasDrop = true;
     elCanvas.addEventListener(
         'dragover',
@@ -1376,6 +1814,16 @@ function installNativePaletteDropOnCanvas() {
             if (!ok) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
+            updatePaletteDropIndicator(body, e.clientY);
+        },
+        false
+    );
+    elCanvas.addEventListener(
+        'dragleave',
+        (e) => {
+            const rel = e.relatedTarget;
+            if (rel && elCanvas.contains(rel)) return;
+            clearPaletteDropIndicator();
         },
         false
     );
@@ -1415,18 +1863,23 @@ function installNativePaletteDropOnCanvas() {
             e.preventDefault();
             e.stopPropagation();
             const localIx = computeDropLocalIndexFromPointer(body, e.clientY);
-            const globalIx = computeGlobalFieldInsertIndex(body, localIx);
+            const canvasOrd = computeGlobalFieldInsertIndex(body, localIx);
+            const insertAt = mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
             if (type === 'transit_end') {
-                const nStart = countTransitStartsBeforeGlobalIndex(fields, globalIx);
+                const nStart = countTransitStartsBeforeGlobalIndex(fields, insertAt);
                 if (nStart === 0) {
-                    alert(TRANSIT_MSG_END_BEFORE_START);
+                    fbAlert(
+                        'fb_alert_transit_end',
+                        null,
+                        'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento».'
+                    );
                     return;
                 }
             }
             const newField = createNewFieldFromToolboxType(type, rawText);
-            fields.splice(Math.max(0, Math.min(globalIx, fields.length)), 0, newField);
+            fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
             renderCanvas();
-            selectField(newField.id, { openPropertiesModal: true });
+            selectField(newField.id);
         },
         false
     );
@@ -1450,7 +1903,7 @@ function miniVisionAnalysisGridPreview(cols, rows) {
 }
 
 function absorbStrayPaletteItemsIntoFields() {
-    if (!elCanvas) return false;
+    if (!ensureBuilderCanvasEl()) return false;
     const node = elCanvas.querySelector('.canvas-section-body > [data-type]:not(.canvas-item)');
     if (!node) return false;
     const t = node.getAttribute('data-type');
@@ -1459,7 +1912,8 @@ function absorbStrayPaletteItemsIntoFields() {
     if (!b || !b.classList.contains('canvas-section-body')) return false;
     const rawText = node.textContent.trim();
     const evtStub = { newIndex: Array.prototype.indexOf.call(b.children, node) };
-    const insertAt = computeToolboxInsertIndex(b, node, evtStub);
+    const canvasOrd = computeToolboxInsertIndex(b, node, evtStub);
+    const insertAt = mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
     const newField = createNewFieldFromToolboxType(t, rawText);
     fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
     fixTransitDisplacementViolations(fields);
@@ -1468,7 +1922,7 @@ function absorbStrayPaletteItemsIntoFields() {
 }
 
 function canvasHasStrayPaletteNodes() {
-    if (!elCanvas) return false;
+    if (!ensureBuilderCanvasEl()) return false;
     return !!elCanvas.querySelector('.canvas-section-body > [data-type]:not(.canvas-item)');
 }
 
@@ -1558,11 +2012,28 @@ function createNewFieldFromToolboxType(type, rawText) {
                       'Discordo totalmente\nDiscordo\nNeutro\nConcordo\nConcordo totalmente',
               }
             : {}),
+        ...(type === 'transit_start' ? { transitKeepScreenAwake: false } : {}),
     };
 }
 
-function createDefaultSectionField() {
-    return createNewFieldFromToolboxType('section_break', 'Etapa 1');
+function countSectionBreaksInArray(fieldArr) {
+    if (!Array.isArray(fieldArr)) return 0;
+    return fieldArr.filter((f) => f && f.type === 'section_break').length;
+}
+
+/** Próximo rótulo «Etapa N» com base nas secções já presentes em `fieldArr` (antes de inserir a nova). */
+function nextSectionBreakLabel(fieldArr) {
+    const n = String(countSectionBreaksInArray(fieldArr) + 1);
+    return fbStr('fb_canvas_step_n', { n }, 'Etapa ' + n);
+}
+
+/**
+ * Nova secção inicial (section_break).
+ * @param {Array|undefined} fieldArr — array de referência para contar secções (omite → usa `fields`).
+ */
+function createDefaultSectionField(fieldArr) {
+    const arr = fieldArr !== undefined ? fieldArr : fields;
+    return createNewFieldFromToolboxType('section_break', nextSectionBreakLabel(arr));
 }
 
 /**
@@ -1578,7 +2049,7 @@ function normalizeFieldsRequireSections(fieldArr) {
     const leading = fieldArr.slice(0, i);
     const rest = fieldArr.slice(i);
     if (rest.length === 0) {
-        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(), ...leading);
+        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(leading), ...leading);
         return;
     }
     const segments = [];
@@ -1598,23 +2069,24 @@ function normalizeFieldsRequireSections(fieldArr) {
         segments.push({ section: s, items });
     }
     if (segments.length === 0) {
-        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(), ...leading, ...rest);
+        fieldArr.splice(
+            0,
+            fieldArr.length,
+            createDefaultSectionField(leading.concat(rest)),
+            ...leading,
+            ...rest
+        );
         return;
     }
     const rebuilt = [];
     if (leading.length > 0) {
-        rebuilt.push(createDefaultSectionField(), ...leading);
+        rebuilt.push(createDefaultSectionField(rebuilt), ...leading);
     }
     segments.forEach((seg) => {
         rebuilt.push(seg.section, ...seg.items);
     });
     fieldArr.splice(0, fieldArr.length, ...rebuilt);
 }
-
-const TRANSIT_MSG_END_BEFORE_START =
-    'O campo "Finalizar deslocamento" não pode ficar antes de "Iniciar deslocamento". Coloque primeiro o início ou arraste o fim para depois do início.';
-const TRANSIT_MSG_START_WITHOUT_END =
-    'Com "Iniciar deslocamento" no formulário, também é obrigatório incluir "Finalizar deslocamento".';
 
 /**
  * @param {Array<{ type?: string }>} fieldArr
@@ -1626,11 +2098,23 @@ function transitDisplacementSchemaErrorMessage(fieldArr) {
     for (const f of fieldArr) {
         if (!f) continue;
         if (f.type === 'transit_start') seenStart = true;
-        if (f.type === 'transit_end' && !seenStart) return TRANSIT_MSG_END_BEFORE_START;
+        if (f.type === 'transit_end' && !seenStart) {
+            return fbStr(
+                'fb_alert_transit_end',
+                null,
+                'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento».'
+            );
+        }
     }
     const hasStart = fieldArr.some((f) => f && f.type === 'transit_start');
     const hasEnd = fieldArr.some((f) => f && f.type === 'transit_end');
-    if (hasStart && !hasEnd) return TRANSIT_MSG_START_WITHOUT_END;
+    if (hasStart && !hasEnd) {
+        return fbStr(
+            'fb_alert_transit_start',
+            null,
+            'Com «Iniciar deslocamento» no formulário, também é obrigatório incluir «Finalizar deslocamento».'
+        );
+    }
     return null;
 }
 
@@ -1681,7 +2165,7 @@ function countTransitStartsBeforeGlobalIndex(fieldArr, globalIndex) {
 
 function ensureCanvasSchemaHasSection() {
     if (fields.length === 0) {
-        fields.push(createDefaultSectionField());
+        fields.push(createDefaultSectionField(fields));
     }
     normalizeFieldsRequireSections(fields);
 }
@@ -1691,6 +2175,7 @@ function ensureCanvasSchemaHasSection() {
  * A palette usa arrasto nativo (HTML5) — aqui só reordenação entre .canvas-item.
  */
 function processCanvasSortEnd(evt) {
+    if (!evt || !evt.item) return;
     if (canvasHasStrayPaletteNodes()) {
         renderCanvas();
         return;
@@ -1779,7 +2264,7 @@ function buildCanvasFieldElement(f) {
 
 /** Remove estilos inline que o Sortable deixa no cartão (largura estreita → layout “comprimido”). */
 function normalizeCanvasItemLayoutForSortable() {
-    if (!elCanvas) return;
+    if (!ensureBuilderCanvasEl()) return;
     elCanvas.querySelectorAll('.canvas-section-body > .canvas-item').forEach((el) => {
         el.style.removeProperty('width');
         el.style.removeProperty('min-width');
@@ -1789,6 +2274,13 @@ function normalizeCanvasItemLayoutForSortable() {
 }
 
 function initCanvasSectionSortables() {
+    if (typeof Sortable === 'undefined') {
+        console.error(
+            '[checklists-builder] SortableJS não está disponível (verifique o script no checklists.html).'
+        );
+        return;
+    }
+    if (!ensureBuilderCanvasEl()) return;
     window._brsparkBodySortables = window._brsparkBodySortables || [];
     elCanvas.querySelectorAll('.canvas-section-body').forEach((body) => {
         const s = new Sortable(body, {
@@ -1802,6 +2294,10 @@ function initCanvasSectionSortables() {
             /** Força lista vertical (evita deteção errada com flex/grid). */
             direction: 'vertical',
             handle: '.canvas-drag-handle',
+            /** Melhor em painéis com `overflow: auto` / WebKit (listas partilhadas entre secções). */
+            forceFallback: true,
+            fallbackOnBody: true,
+            fallbackTolerance: 4,
             animation: 150,
             ghostClass: 'hover-ghost',
             chosenClass: 'canvas-sortable-chosen',
@@ -1838,12 +2334,19 @@ function initCanvasSectionSortables() {
     });
 }
 
-// 2. Palette → canvas: arrasto nativo (evita clones Sortable / cartões “comprimidos”).
-installNativePaletteDropOnCanvas();
-bindToolboxNativeDragSources();
+// 2. Palette → canvas: `installNativePaletteDropOnCanvas` + `bindToolboxNativeDragSources` são chamados
+//    no início de `renderCanvas()` quando `#canvas` / `#toolbox` já existem (script injectado no head).
 
 // 3. Funções de Renderização Interativa (Declarative-style in Vanilla JS)
 function renderCanvas() {
+    if (!ensureBuilderCanvasEl()) {
+        console.error('[checklists-builder] #canvas não encontrado — Form Builder não pode renderizar.');
+        return;
+    }
+    ensureBuilderToolboxEl();
+    bindToolboxNativeDragSources();
+    installNativePaletteDropOnCanvas();
+
     destroyCanvasGroupsSortable();
     destroyCanvasBodySortables();
     while (absorbStrayPaletteItemsIntoFields()) {
@@ -1884,7 +2387,10 @@ function renderCanvas() {
         chev.innerHTML = '<ion-icon name="chevron-down-outline"></ion-icon>';
         chev.setAttribute('role', 'button');
         chev.setAttribute('tabindex', '0');
-        chev.setAttribute('aria-label', 'Colapsar ou expandir');
+        chev.setAttribute(
+            'aria-label',
+            fbStr('fb_canvas_aria_toggle_section', null, 'Recolher ou expandir esta seção')
+        );
         chev.style.cursor = 'pointer';
         chev.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1908,8 +2414,12 @@ function renderCanvas() {
 
         if (isPreamble) {
             titleEl.innerHTML =
-                '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:#64748b;"></ion-icon> Antes da primeira seção';
-            badge.textContent = answerableCount + (answerableCount === 1 ? ' campo' : ' campos');
+                '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:var(--color-text-light);"></ion-icon> ' +
+                escapeHtml(fbStr('fb_canvas_preamble_title', null, 'Antes da primeira seção'));
+            badge.textContent =
+                answerableCount === 1
+                    ? fbStr('fb_canvas_fields_one', { n: String(answerableCount) }, answerableCount + ' campo')
+                    : fbStr('fb_canvas_fields_many', { n: String(answerableCount) }, answerableCount + ' campos');
             if (canReorderSections) head.appendChild(makeSectionHeadDragGrip());
             head.appendChild(chev);
             head.appendChild(titleEl);
@@ -1918,7 +2428,11 @@ function renderCanvas() {
             const sf = group.sectionField;
             const stepTarget = document.createElement('div');
             stepTarget.className = 'canvas-section-head__step-edit-target';
-            stepTarget.title = 'Clique para editar o nome e o ícone desta etapa';
+            stepTarget.title = fbStr(
+                'fb_canvas_step_edit_title',
+                null,
+                'Clique para editar o nome e o ícone desta etapa'
+            );
             stepTarget.style.display = 'flex';
             stepTarget.style.alignItems = 'center';
             stepTarget.style.gap = '8px';
@@ -1932,14 +2446,14 @@ function renderCanvas() {
             iconBox.className = 'canvas-section-head__step-icon';
             iconBox.innerHTML = sectionStepIconCanvasHtml(sf);
             const labSp = document.createElement('span');
-            labSp.textContent = 'Seção · ';
+            labSp.textContent = fbStr('fb_canvas_section_prefix', null, 'Seção ·');
             labSp.style.flexShrink = '0';
             labSp.style.color = '#64748b';
             labSp.style.fontWeight = '600';
             labSp.style.fontSize = '12px';
             const nameSp = document.createElement('span');
             nameSp.className = 'canvas-section-head__step-name';
-            nameSp.textContent = (sf.label || 'NOVA ETAPA').trim() || 'NOVA ETAPA';
+            nameSp.textContent = translateStepLabelForCanvasDisplay((sf.label || '').trim());
             nameSp.style.fontWeight = '800';
             nameSp.style.color = '#4c1d95';
             nameSp.style.textTransform = 'uppercase';
@@ -1958,8 +2472,11 @@ function renderCanvas() {
             titleEl.appendChild(stepTarget);
 
             const innerCount = Math.max(0, group.items.length - 1);
-            let badgeTxt = innerCount + (innerCount === 1 ? ' pergunta' : ' perguntas');
-            if (sf.multiple) badgeTxt += ' · lista';
+            let badgeTxt =
+                innerCount === 1
+                    ? fbStr('fb_canvas_questions_one', { n: String(innerCount) }, innerCount + ' pergunta')
+                    : fbStr('fb_canvas_questions_many', { n: String(innerCount) }, innerCount + ' perguntas');
+            if (sf.multiple) badgeTxt += fbStr('fb_canvas_questions_list_suffix', null, ' · lista');
             badge.textContent = badgeTxt;
 
             const toolbar = document.createElement('div');
@@ -1977,15 +2494,28 @@ function renderCanvas() {
                 return b;
             };
             toolbar.appendChild(
-                mkBtn('Propriedades da seção', 'settings-outline', false, () => {
+                mkBtn(
+                    fbStr('fb_canvas_section_props', null, 'Propriedades da seção'),
+                    'settings-outline',
+                    false,
+                    () => {
                     window.selectField(sf.id, { openPropertiesModal: true });
-                })
+                    }
+                )
             );
             const reqSec = document.createElement('button');
             reqSec.type = 'button';
             reqSec.title = sf.required
-                ? 'Etapa obrigatória — clique para opcional'
-                : 'Etapa opcional — clique para tornar obrigatória';
+                ? fbStr(
+                      'fb_canvas_step_req_required',
+                      null,
+                      'Etapa obrigatória — clique para tornar opcional'
+                  )
+                : fbStr(
+                      'fb_canvas_step_req_optional',
+                      null,
+                      'Etapa opcional — clique para tornar obrigatória'
+                  );
             if (sf.required) reqSec.classList.add('is-req-active');
             reqSec.innerHTML =
                 '<ion-icon name="' + (sf.required ? 'checkmark-circle-outline' : 'ellipse-outline') + '"></ion-icon>';
@@ -1995,17 +2525,17 @@ function renderCanvas() {
             });
             toolbar.appendChild(reqSec);
             toolbar.appendChild(
-                mkBtn('Lógica e regras', 'options-outline', false, () => {
+                mkBtn(fbStr('fb_canvas_section_logic', null, 'Lógica e regras'), 'options-outline', false, () => {
                     window.openLogicModal(null, sf.id);
                 })
             );
             toolbar.appendChild(
-                mkBtn('Duplicar seção', 'copy-outline', false, () => {
+                mkBtn(fbStr('fb_canvas_section_dup', null, 'Duplicar seção'), 'copy-outline', false, () => {
                     window.cloneSection(sf.id);
                 })
             );
             toolbar.appendChild(
-                mkBtn('Excluir seção', 'trash-outline', true, () => {
+                mkBtn(fbStr('fb_canvas_section_del', null, 'Excluir seção'), 'trash-outline', true, () => {
                     window.deleteSection(sf.id);
                 })
             );
@@ -2045,7 +2575,9 @@ function renderCanvas() {
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'btn btn-outline btn-sm';
-    addBtn.innerHTML = '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Nova seção';
+    addBtn.innerHTML =
+        '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> ' +
+        escapeHtml(fbStr('fb_canvas_add_section', null, 'Nova seção'));
     addBtn.addEventListener('click', () => window.builderAddSectionAfterLast());
     addSecBar.appendChild(addBtn);
     elCanvas.appendChild(addSecBar);
@@ -2056,6 +2588,9 @@ function renderCanvas() {
 
     if (typeof renderMobilePreview === 'function') {
         renderMobilePreview();
+    }
+    if (typeof window.scheduleBuilderDirtyRecompute === 'function') {
+        window.scheduleBuilderDirtyRecompute();
     }
 }
 
@@ -2203,6 +2738,9 @@ window.cloneSection = function (sectionId) {
         f.id = newId;
     });
     remapCloneFieldRefs(clone, idMap);
+    if (clone[0] && clone[0].type === 'section_break') {
+        clone[0].label = nextSectionBreakLabel(fields);
+    }
     fields.splice(j, 0, ...clone);
     fixTransitDisplacementViolations(fields);
     selectedFieldId = clone[0].id;
@@ -2227,7 +2765,7 @@ window.deleteSection = function (sectionId) {
     fields.splice(i, j - i);
     if (!fields.some((f) => f.id === selectedFieldId)) selectedFieldId = null;
     if (fields.length === 0) {
-        fields.push(createDefaultSectionField());
+        fields.push(createDefaultSectionField(fields));
     } else {
         normalizeFieldsRequireSections(fields);
     }
@@ -2237,8 +2775,7 @@ window.deleteSection = function (sectionId) {
 
 window.builderAddSectionAfterLast = function () {
     flushQuillToBoundField();
-    const n = fields.filter((f) => f.type === 'section_break').length + 1;
-    const nf = createNewFieldFromToolboxType('section_break', 'Etapa ' + n);
+    const nf = createNewFieldFromToolboxType('section_break', nextSectionBreakLabel(fields));
     fields.push(nf);
     selectedFieldId = nf.id;
     renderCanvas();
@@ -2257,7 +2794,7 @@ window.deleteField = function(id) {
     flushQuillToBoundField();
     fields = fields.filter(f => f.id !== id);
     if (fields.length === 0) {
-        fields.push(createDefaultSectionField());
+        fields.push(createDefaultSectionField(fields));
     } else {
         normalizeFieldsRequireSections(fields);
     }
@@ -2299,6 +2836,32 @@ function updateField(key, val, opts) {
     }
 }
 
+/** Texto do textarea «Visão de IA — detecção»: várias linhas (até 10) ou prompt único legado. */
+function getVisionChecklistPromptEditorText(f) {
+    const defaultVisionPrompt = fbStr(
+        'fb_prop_vision_default_structured_prompt',
+        null,
+        'A evidência visual confirma o item verificado?',
+    );
+    const arr = Array.isArray(f?.visionQuestions) ? f.visionQuestions : [];
+    const lines = [];
+    for (let i = 0; i < arr.length; i++) {
+        const q = arr[i];
+        const text =
+            q && typeof q === 'object'
+                ? String(q.text || q.question || '')
+                      .replace(/\r\n/g, '\n')
+                      .trim()
+                : '';
+        if (text) lines.push(text);
+    }
+    if (lines.length >= 2) return lines.slice(0, MAX_VISION_SIMNAO_QUESTIONS).join('\n');
+    if (lines.length === 1) return lines[0];
+    const sp = String(f?.visionStructuredPrompt || '').trim();
+    if (sp) return sp;
+    return defaultVisionPrompt;
+}
+
 function renderProperties() {
     if (!elPropsBody) return;
     if(!selectedFieldId) {
@@ -2306,7 +2869,9 @@ function renderProperties() {
         if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
         flushQuillToBoundField();
         if (typeof window.destroyFieldHelpEditor === 'function') window.destroyFieldHelpEditor();
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.</div>';
+        elPropsBody.innerHTML = `<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">${escapeHtmlLogic(
+            fbStr('fb_prop_pick_gear_hint', null, 'Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.')
+        )}</div>`;
         if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
         return;
     }
@@ -2320,17 +2885,23 @@ function renderProperties() {
     const f = fields.find(x => x.id === selectedFieldId);
     if (!f) {
         selectedFieldId = null;
-        elPropsBody.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.</div>';
+        elPropsBody.innerHTML = `<div style="color:var(--text3); font-size:12px; text-align:center; padding:20px;">${escapeHtmlLogic(
+            fbStr('fb_prop_pick_gear_hint', null, 'Clique na engrenagem de um campo ou de uma etapa para editar as propriedades.')
+        )}</div>`;
         if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
         return;
     }
     
     // Bloquear circular dependency
-    let depOptions = '<option value="">(Nenhuma Condição - Sempre visível)</option>';
-    fields.forEach(other => {
-        if(other.id !== f.id) {
-            let sel = f.dependsOnId === other.id ? 'selected' : '';
-            depOptions += `<option value="${other.id}" ${sel}>${other.label} (ID: ${other.id})</option>`;
+    let depOptions =
+        '<option value="">' +
+        escapeHtmlLogic(fbStr('fb_prop_depends_none_option', null, '(Nenhuma condição — sempre visível)')) +
+        '</option>';
+    fields.forEach((other) => {
+        if (other.id !== f.id) {
+            const sel = f.dependsOnId === other.id ? 'selected' : '';
+            const idSuf = escapeHtmlLogic(fbStr('fb_prop_depends_id_suffix', { id: other.id }, ' (ID: ' + other.id + ')'));
+            depOptions += `<option value="${other.id}" ${sel}>${escapeHtmlLogic(other.label)}${idSuf}</option>`;
         }
     });
 
@@ -2342,123 +2913,183 @@ function renderProperties() {
     `;
 
     if (f.type === 'technician_finance') {
+        const tfTitle = escapeHtmlLogic(fbStr('fb_prop_tech_finance_title', null, 'PDF e compartilhamento com o cliente'));
+        const tfHelp = fbStr(
+            'fb_prop_tech_finance_help_html',
+            null,
+            'Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de compartilhar.',
+        );
         extraProps += `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fde68a; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="font-size:12px; font-weight:800; color:#92400e; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                <ion-icon name="document-text-outline"></ion-icon> PDF e compartilhamento com o cliente
+                <ion-icon name="document-text-outline"></ion-icon> ${tfTitle}
             </div>
             <div style="font-size:10px; color:#78350f; line-height:1.45;">
-                Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de compartilhar.
+                ${tfHelp}
             </div>
         </div>`;
     }
 
     if(f.type === 'text' || f.type === 'number' || f.type === 'phone') {
+        const tmTitle = escapeHtmlLogic(fbStr('fb_prop_textmask_title', null, 'Máscara dinâmica (opcional)'));
+        const tmPh = escapeHtmlAttr(fbStr('fb_prop_textmask_ph', null, 'Ex.: ##/##/#### (data)'));
+        const tmHint = escapeHtmlLogic(fbStr('fb_prop_textmask_hint', null, 'Use "#" para cada dígito ou letra que o app tentará formatar enquanto o técnico digita. Deixe vazio para texto livre.'));
         extraProps += `
-        <div class="prop-group" style="background:#f0fdf4; border:1px solid #22c55e; padding:12px; border-radius:8px; margin-top:16px;">
-            <label class="prop-label" style="color:#15803d;"><ion-icon name="color-wand"></ion-icon> Máscara Dinâmica (Opcional)</label>
-            <input class="prop-input" type="text" placeholder="Ex: ###.###.###-## para CPF" value="${f.textMask || ''}" onchange="window.handleFieldUpdate('textMask', this.value)" />
-            <div style="font-size:10px; color:#15803d; margin-top:4px; line-height:1.2">Use '#' para representar números ou letras que o App tentará formatar ao vivo. Deixe em branco para livre.</div>
+        <div class="prop-group" style="background:var(--surface2); border:1px solid var(--border); padding:12px; border-radius:8px; margin-top:16px;">
+            <label class="prop-label" style="color:var(--text2);"><ion-icon name="color-wand" style="vertical-align:-2px;color:var(--accent)"></ion-icon> ${tmTitle}</label>
+            <input class="prop-input" type="text" placeholder="${tmPh}" value="${escapeHtmlAttr(f.textMask || '')}" onchange="window.handleFieldUpdate('textMask', this.value)" />
+            <div style="font-size:10px; color:var(--text3); margin-top:4px; line-height:1.35">${tmHint}</div>
         </div>`;
     }
 
     if(f.type === 'geofence_check') {
+        const geoHint =
+            (f.geofenceType || 'radius') === 'radius'
+                ? fbStr(
+                      'fb_prop_geofence_hint_radius',
+                      null,
+                      'O app calcula a distância entre o GPS do técnico e o ponto central da OS.',
+                  )
+                : fbStr(
+                      'fb_prop_geofence_hint_polygon',
+                      null,
+                      'O app verifica se o técnico está dentro do polígono definido na OS.',
+                  );
+        const geoErrPh = escapeHtmlAttr(
+            fbStr('fb_prop_geofence_error_msg_ph', null, 'Ex.: Você está fora da área de serviço autorizada.'),
+        );
         extraProps = `
         <div style="background:#ecfdf5; border:1px solid #10b981; padding:14px; border-radius:10px; margin-top:16px; display:flex; flex-direction:column; gap:12px;">
             <div style="font-size:12px; font-weight:800; color:#047857; display:flex; align-items:center; gap:6px;">
-                <ion-icon name="location" style="font-size:16px;"></ion-icon> Configurações da Cerca Eletrônica
+                <ion-icon name="location" style="font-size:16px;"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_geofence_title', null, 'Configurações da cerca eletrônica'))}
             </div>
             
             <!-- Tipo de Zona -->
             <div>
-                <label class="prop-label" style="color:#047857; font-size:10px;">Tipo de Zona</label>
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_zone_type_lbl', null, 'Tipo de zona'))}</label>
                 <select class="prop-input" onchange="window.handleFieldUpdate('geofenceType', this.value)" style="font-size:12px;">
-                    <option value="radius" ${(f.geofenceType||'radius') === 'radius' ? 'selected' : ''}>📍 Ponto + Raio (Haversine)</option>
-                    <option value="polygon" ${f.geofenceType === 'polygon' ? 'selected' : ''}>🔷 Polígono (Definido na OS)</option>
+                    <option value="radius" ${(f.geofenceType||'radius') === 'radius' ? 'selected' : ''}>📍 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_radius', null, 'Ponto + raio (Haversine)'))}</option>
+                    <option value="polygon" ${f.geofenceType === 'polygon' ? 'selected' : ''}>🔷 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_polygon', null, 'Polígono (definido na OS)'))}</option>
                 </select>
                 <div style="font-size:10px; color:#059669; margin-top:3px; line-height:1.3">
-                    ${(f.geofenceType||'radius') === 'radius' 
-                        ? 'O app calculará a distância entre o GPS do técnico e o ponto central da OS.' 
-                        : 'O app verificará se o técnico está dentro do polígono definido na OS.'}
+                    ${escapeHtmlLogic(geoHint)}
                 </div>
             </div>
 
             <!-- Raio (só se radius) -->
             <div id="geofence-radius-block">
-                <label class="prop-label" style="color:#047857; font-size:10px;">Raio de Aceitação (Metros)</label>
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_radius_lbl', null, 'Raio de aceitação (metros)'))}</label>
                 <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceRadius || 150}" onkeyup="window.handleFieldUpdate('geofenceRadius', this.value)" />
                 <div style="font-size:10px; color:#059669; margin-top:3px;">
-                    A OS pode sobrescrever este raio. Este é o padrão do formulário.
+                    ${escapeHtmlLogic(fbStr('fb_prop_geofence_radius_help', null, 'A OS pode sobrescrever este raio. Este é o padrão do formulário.'))}
                 </div>
             </div>
 
             <!-- Modo de Falha -->
             <div>
-                <label class="prop-label" style="color:#047857; font-size:10px;">Modo de Falha</label>
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_mode_lbl', null, 'Modo de falha'))}</label>
                 <select class="prop-input" onchange="window.handleFieldUpdate('geofenceFailMode', this.value)" style="font-size:12px;">
-                    <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 Bloquear — Impede avanço do formulário</option>
-                    <option value="warn" ${f.geofenceFailMode === 'warn' ? 'selected' : ''}>⚠️ Apenas Alertar — Registra desvio e continua</option>
+                    <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_block', null, 'Bloquear — impede avanço do formulário'))}</option>
+                    <option value="warn" ${f.geofenceFailMode === 'warn' ? 'selected' : ''}>⚠️ ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_warn', null, 'Apenas alertar — registra desvio e continua'))}</option>
                 </select>
             </div>
 
             <!-- Mensagem customizada -->
             <div>
-                <label class="prop-label" style="color:#047857; font-size:10px;">Mensagem de Erro Customizada (Opcional)</label>
-                <input class="prop-input" type="text" placeholder="Ex: Você está fora da área de serviço autorizada." value="${f.geofenceErrorMsg || ''}" oninput="window.handleFieldUpdate('geofenceErrorMsg', this.value)" />
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_error_msg_lbl', null, 'Mensagem de erro customizada (opcional)'))}</label>
+                <input class="prop-input" type="text" placeholder="${geoErrPh}" value="${escapeHtmlAttr(f.geofenceErrorMsg || '')}" oninput="window.handleFieldUpdate('geofenceErrorMsg', this.value)" />
+            </div>
+        </div>`;
+    } else if (f.type === 'transit_start') {
+        const keepAwake = f.transitKeepScreenAwake === true;
+        const trHelp = fbStr(
+            'fb_prop_transit_keep_awake_help_html',
+            null,
+            'O equipamento pode consumir mais bateria, mas tende a aumentar a precisão e a continuidade da coleta de GPS enquanto o deslocamento estiver em curso (mapa visível ou minimizado). A opção desliga automaticamente ao tocar em <strong>Finalizar deslocamento</strong>.',
+        );
+        extraProps = `
+        <div style="background:#eff6ff;border:1px solid #3b82f6;padding:14px;border-radius:10px;margin-top:16px;display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:12px;font-weight:800;color:#1d4ed8;display:flex;align-items:center;gap:6px;">
+                <ion-icon name="phone-portrait-outline" style="font-size:16px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_transit_screen_title', null, 'Tela durante o deslocamento'))}
+            </div>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+                <input type="checkbox" ${keepAwake ? 'checked' : ''} onchange="window.handleFieldUpdate('transitKeepScreenAwake', this.checked); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#2563eb;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <span style="font-size:12px;font-weight:700;color:#1e3a8a;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_keep_awake_lbl', null, 'Manter a tela sempre acesa até finalizar o deslocamento'))}</span>
+            </label>
+            <div style="font-size:10px;color:#1e40af;line-height:1.45;">
+                ${trHelp}
             </div>
         </div>`;
     } else if (f.type === 'location_pick') {
         extraProps = `
         <div class="prop-group" style="background:#f0f9ff; border:1px solid #0ea5e9; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#0369a1; margin-bottom:4px"><ion-icon name="map-outline"></ion-icon> Localização (GPS + mapa)</div>
-            <div style="font-size:10px; color:#0c4a6e; line-height:1.35;">No app, o técnico obtém o GPS do dispositivo e pode mover o alfinete no mapa. A resposta guarda as duas posições em JSON (relatório e exportações).</div>
+            <div style="font-size:11px; font-weight:800; color:#0369a1; margin-bottom:4px"><ion-icon name="map-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_location_pick_title', null, 'Localização (GPS + mapa)'))}</div>
+            <div style="font-size:10px; color:#0c4a6e; line-height:1.35;">${escapeHtmlLogic(fbStr('fb_prop_location_pick_help', null, 'No app, o técnico obtém o GPS do dispositivo e pode mover o alfinete no mapa. A resposta guarda as duas posições em JSON (relatório e exportações).'))}</div>
         </div>`;
     } else if (f.type === 'photo_stamped') {
          extraProps = `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #f59e0b; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px">⚠️ MODO ANTI-FRAUDE OBRIGATÓRIO</div>
-            <div style="font-size:10px; color:#b45309; line-height:1.2;">A Galeria do celular ficará bloqueada. Câmera Ao Vivo exigida.</div>
+            <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px">⚠️ ${escapeHtmlLogic(fbStr('fb_prop_photo_stamped_warn_title', null, 'Modo anti-fraude obrigatório'))}</div>
+            <div style="font-size:10px; color:#b45309; line-height:1.2;">${escapeHtmlLogic(fbStr('fb_prop_photo_stamped_warn_body', null, 'A galeria do celular ficará bloqueada. Câmera ao vivo exigida.'))}</div>
         </div>`;
     } else if (f.type === 'facial_recognition') {
+        const facEngine = fbStr(
+            'fb_prop_facial_engine_note_html',
+            null,
+            'O motor de reconhecimento (FaceMatch, automático ou AWS) é definido por <b>plano</b> em <b>Planos e assinaturas</b> → botão «Biometria / API» em cada cartão de plano. Padrão: FaceMatch.',
+        );
+        const facOnline = fbStr(
+            'fb_prop_facial_online_note_html',
+            null,
+            '<b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.',
+        );
          extraProps = `
         <div class="prop-group" style="background:#fff1f2; border:1px solid #e11d48; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#9f1239; margin-bottom:4px">🧑‍💻 BIOMETRIA & IA OBRIGATÓRIA</div>
-            <div style="font-size:10px; color:#9f1239; line-height:1.2; margin-bottom:12px;">A foto tirada será comparada com a foto de perfil do técnico usando o motor de IA selecionado nas Integrações do sistema.</div>
+            <div style="font-size:11px; font-weight:800; color:#9f1239; margin-bottom:4px">🧑‍💻 ${escapeHtmlLogic(fbStr('fb_prop_facial_title', null, 'Biometria e IA obrigatórias'))}</div>
+            <div style="font-size:10px; color:#9f1239; line-height:1.2; margin-bottom:12px;">${escapeHtmlLogic(fbStr('fb_prop_facial_intro', null, 'A foto tirada será comparada com a foto de perfil do técnico usando o motor de IA selecionado nas integrações do sistema.'))}</div>
             
             <div style="font-size:9px; color:#64748b; line-height:1.35; margin-bottom:10px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
-              O motor de reconhecimento (CompreFace, automático ou AWS) é definido por <b>plano</b> em
-              <b>Planos &amp; Assinaturas</b> → botão «Biometria / API» em cada cartão de plano. Padrão: CompreFace.
+              ${facEngine}
             </div>
 
-            <label class="prop-label" style="color:#e11d48; font-size:10px;">Modo de validação biométrica</label>
+            <label class="prop-label" style="color:#e11d48; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_facial_mode_lbl', null, 'Modo de validação biométrica'))}</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('facialAuthMode', this.value)" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
-                <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>Provar identidade do usuário logado (ponto / OS)</option>
-                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>Identificar qualquer usuário matriculado (mesmo tenant)</option>
+                <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_facial_mode_self', null, 'Provar identidade do usuário logado (ponto / OS)'))}</option>
+                <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_facial_mode_identify', null, 'Identificar qualquer usuário matriculado (mesmo tenant)'))}</option>
             </select>
-            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">Em «identificar», qualquer usuário com sessão na app pode preencher o campo: o rosto é comparado à galeria CompreFace e o servidor devolve nome/e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa estar logado na app.</div>
+            <div style="font-size:9px;color:#9f1239;line-height:1.35;margin:-4px 0 10px">${fbStr(
+                'fb_prop_facial_identify_help',
+                null,
+                'Em «identificar», qualquer usuário com sessão na app pode preencher o campo: o rosto é comparado à galeria FaceMatch e o servidor devolve nome e e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa estar logado na app.',
+            )}</div>
 
             <div style="font-size:9px; color:#64748b; line-height:1.35; margin-top:8px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
-                📷 A captura facial na app usa sempre a <b>câmera do sistema</b> (alta resolução).
+                📷 ${escapeHtmlLogic(fbStr('fb_prop_facial_camera_note', null, 'A captura facial na app usa sempre a câmera do sistema (alta resolução).'))}
             </div>
             <div style="font-size:9px; color:#9f1239; line-height:1.35; margin-top:12px; padding:8px; background:#fff7ed; border-radius:6px; border:1px solid #fed7aa;">
-                <b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.
+                ${facOnline}
             </div>
         </div>`;
     } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
         const isVisionAnalysis = f.type === 'vision_ai_analysis';
-        const defaultVisionPrompt = 'A evidência visual confirma o item verificado?';
-        const promptDisplay = (() => {
-            const sp = String(f.visionStructuredPrompt || '').trim();
-            if (sp) return sp;
-            if (Array.isArray(f.visionQuestions)) {
-                const joined = f.visionQuestions
-                    .map((q) => String((q && q.text) || '').trim())
-                    .filter(Boolean)
-                    .join('\n\n');
-                if (joined) return joined;
-            }
-            return defaultVisionPrompt;
-        })();
+        const promptDisplay = isVisionAnalysis
+            ? (() => {
+                  const sp = String(f.visionStructuredPrompt || '').trim();
+                  if (sp) return sp;
+                  if (Array.isArray(f.visionQuestions)) {
+                      const joined = f.visionQuestions
+                          .map((q) => String((q && q.text) || '').trim())
+                          .filter(Boolean)
+                          .join('\n\n');
+                      if (joined) return joined;
+                  }
+                  return fbStr(
+                      'fb_prop_vision_default_structured_prompt',
+                      null,
+                      'A evidência visual confirma o item verificado?',
+                  );
+              })()
+            : getVisionChecklistPromptEditorText(f);
         const capMode =
             f.visionCaptureMode === 'photo_only' ||
             f.visionCaptureMode === 'video_only' ||
@@ -2468,12 +3099,28 @@ function renderProperties() {
         const vBoxBg = isVisionAnalysis ? '#fef2f2' : '#f0f9ff';
         const vBoxBr = isVisionAnalysis ? '#f87171' : '#38bdf8';
         const vTitle = isVisionAnalysis
-            ? '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão IA Análise</span>'
-            : '<ion-icon name="videocam-outline"></ion-icon> Visão de IA Detecção';
+            ? fbStr(
+                  'fb_prop_vision_title_analysis_html',
+                  null,
+                  '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão de IA — análise</span>',
+              )
+            : fbStr(
+                  'fb_prop_vision_title_detection_html',
+                  null,
+                  '<ion-icon name="videocam-outline"></ion-icon> Visão de IA — detecção',
+              );
         const vTitleColor = isVisionAnalysis ? '#991b1b' : '#0369a1';
         const vBody = isVisionAnalysis
-            ? 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.'
-            : 'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.';
+            ? fbStr(
+                  'fb_prop_vision_body_analysis_html',
+                  null,
+                  'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
+              )
+            : fbStr(
+                  'fb_prop_vision_body_detection_html',
+                  null,
+                  'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.',
+              );
         const vBodyColor = isVisionAnalysis ? '#7f1d1d' : '#0c4a6e';
         const vLabel = isVisionAnalysis ? '#b91c1c' : '#0369a1';
         const curGridRaw = String(f.visionAnalysisGrid || '1x1')
@@ -2484,32 +3131,50 @@ function renderProperties() {
         if (curGridRaw === '1x1' || curGridRaw === '2x2') curGridNorm = curGridRaw;
         else if (['2x1', '3x1', '3x2', '3x3'].includes(curGridRaw)) curGridNorm = '2x2';
         const gridOpts = [
-            { v: '1x1', label: '1 foto — 1×1', c: 1, r: 1 },
-            { v: '2x2', label: '4 fotos — 2×2', c: 2, r: 2 },
+            {
+                v: '1x1',
+                label: fbStr('fb_prop_vision_grid_opt_1x1', null, '1 foto — 1×1'),
+                c: 1,
+                r: 1,
+            },
+            {
+                v: '2x2',
+                label: fbStr('fb_prop_vision_grid_opt_2x2', null, '4 fotos — 2×2'),
+                c: 2,
+                r: 2,
+            },
         ];
         const ratingEnabled = !!f.visionRating0To10Enabled;
         const ratingPickHtml = isVisionAnalysis
             ? `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid ${ratingEnabled ? '#fecaca' : '#e2e8f0'};background:${ratingEnabled ? '#fff1f2' : '#fff'}">
               <input type="checkbox" ${ratingEnabled ? 'checked' : ''} onchange="window.handleFieldUpdate('visionRating0To10Enabled', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
-              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">Classificação 0–10 (preenchida pela API após a análise)</span>
+              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_rating_chk_lbl', null, 'Classificação 0–10 (preenchida pela API após a análise)'))}</span>
             </label>
-            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.</div>`
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${fbStr(
+                'fb_prop_vision_rating_hint_html',
+                null,
+                'Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
+            )}</div>`
             : '';
         const showAiResp = f.visionShowAiResponseInForm !== false;
         const showAiResponseHtml = isVisionAnalysis
             ? `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff">
               <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
-              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">Mostrar detalhes da resposta da IA no app</span>
+              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_chk_lbl', null, 'Mostrar detalhes da resposta da IA no app'))}</span>
             </label>
-            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.</div>`
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_hint', null, 'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.'))}</div>`
             : '';
         const gridPickHtml = isVisionAnalysis
             ? `
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Grelha de fotos (envio único ao Gemini)</label>
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_grid_lbl', null, 'Grade de fotos (envio único ao Gemini)'))}</label>
             <div style="font-size:9px;color:#64748b;margin:-2px 0 10px;line-height:1.35">
-              Só <b>1×1</b> ou <b>2×2</b>. Com mais de uma célula, a app exige <b>todas</b> as fotos (câmera) antes de analisar; só <b>foto</b> (sem vídeo). Modelos antigos com grelha maior passam a <b>2×2</b> ao gravar.
+              ${fbStr(
+                  'fb_prop_vision_grid_help',
+                  null,
+                  'Só <b>1×1</b> ou <b>2×2</b>. Com mais de uma célula, o app exige <b>todas</b> as fotos (câmera) antes de analisar; só <b>foto</b> (sem vídeo). Modelos antigos com grade maior passam a <b>2×2</b> ao gravar.',
+              )}
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
                 ${gridOpts
@@ -2528,6 +3193,47 @@ function renderProperties() {
                     .join('')}
             </div>`
             : '';
+        const visionPromptLabelRow = isVisionAnalysis
+            ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(fbStr('fb_prop_vision_prompt_lbl', null, 'Prompt estruturado (único)'))}</label>
+            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:#fecaca;color:#b91c1c;" onclick="window.openVisionAiStructuredPromptExamplesModal()" title="${escapeHtmlAttr(
+                fbStr('fb_vision_prompt_ex_btn_title', null, 'Modelos de prompt para serviços de campo (Visão de IA — análise)'),
+            )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
+          </div>`
+            : `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(
+                  fbStr('fb_prop_vision_detection_prompt_lbl', null, 'Perguntas (sim/não)'),
+              )}</label>`;
+        const visionPromptBlurHandler = isVisionAnalysis
+            ? 'window.updateVisionStructuredPrompt(this.value)'
+            : 'window.updateVisionDetectionQuestions(this.value)';
+        const visionPromptHintBlock = isVisionAnalysis
+            ? fbStr(
+                  'fb_prop_vision_ai_structured_prompt_hint',
+                  {
+                      max:
+                          typeof window.fbFormatInt === 'function'
+                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
+                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
+                  },
+                  'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de ' +
+                      MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
+                      ' caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
+              )
+            : fbStr(
+                  'fb_prop_vision_detection_prompt_hint',
+                  {
+                      maxPer:
+                          typeof window.fbFormatInt === 'function'
+                              ? window.fbFormatInt(MAX_VISION_MULTI_SIMNAO_TEXT_CHARS)
+                              : String(MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
+                      maxLines: String(MAX_VISION_SIMNAO_QUESTIONS),
+                      maxSingle:
+                          typeof window.fbFormatInt === 'function'
+                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
+                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
+                  },
+                  'Uma <b>linha</b> por pergunta (sim/não), até 10 linhas. Com várias linhas, cada texto tem até 500 caracteres; com uma única linha, até 12.000. A API devolve JSON com <code>answers</code> e <code>questionId</code> (<code>q1</code>…<code>q10</code>).',
+              );
         extraProps = `
         <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
@@ -2536,49 +3242,69 @@ function renderProperties() {
             </div>
             ${ratingPickHtml}
             ${showAiResponseHtml}
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Tipo de captura pela câmera</label>
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_capture_lbl', null, 'Tipo de captura pela câmera'))}</label>
             <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.handleFieldUpdate('visionCaptureMode', this.value)">
-                <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>Somente foto</option>
-                <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>Somente vídeo</option>
-                <option value="photo_and_video" ${capMode === 'photo_and_video' ? 'selected' : ''}>Foto e vídeo</option>
+                <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_photo_only', null, 'Somente foto'))}</option>
+                <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_video_only', null, 'Somente vídeo'))}</option>
+                <option value="photo_and_video" ${capMode === 'photo_and_video' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_photo_video', null, 'Foto e vídeo'))}</option>
             </select>
+            <div style="font-size:9px; color:#64748b; line-height:1.35; margin-top:4px; margin-bottom:10px;">${escapeHtmlLogic(
+                fbStr(
+                    'fb_prop_vision_video_max_hint',
+                    null,
+                    'Na app, em campos de Visão de IA (detecção ou análise), cada vídeo tem no máximo 10 segundos; clips mais longos são recusados. Na detecção (YOLO), o envio ao servidor usa uma imagem extraída do primeiro instante do vídeo — o serviço externo continua a receber só imagem.',
+                ),
+            )}</div>
             ${gridPickHtml}
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">Prompt estruturado (único)</label>
-            <textarea class="prop-input" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="window.updateVisionStructuredPrompt(this.value)">${escapeHtmlLogic(
+            ${visionPromptLabelRow}
+            <textarea class="prop-input" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="${visionPromptBlurHandler}">${escapeHtmlLogic(
                 promptDisplay,
             )}</textarea>
-            <div style="font-size:9px; color:#64748b; margin-top:6px;">Descreva critérios, formato desejado e o que a IA deve verificar na mídia. Máximo ~${MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString(
-                'pt-BR',
-            )} caracteres. A API devolve JSON com <code>answers</code> (ex.: id <code>q1</code>) e, se ativar a classificação 0–10 acima, também <code>rating0To10</code> na raiz.</div>
+            <div style="font-size:9px; color:#64748b; margin-top:6px;">${visionPromptHintBlock}</div>
         </div>`;
     } else if (f.type === 'voice_note') {
         const vLang = escapeHtmlLogic(String(f.voiceTranscribeLanguage || 'pt').slice(0, 12));
+        const voiceHelp = fbStr(
+            'fb_prop_voice_help_html',
+            null,
+            'A transcrição usa <b>OpenAI Whisper</b> no servidor (mesma <b>API key</b> da integração «OpenAI» em Integrações). O técnico precisa de <b>internet</b> ao tocar em «Parar e transcrever».',
+        );
+        const voiceLangHint = fbStr(
+            'fb_prop_voice_lang_hint',
+            null,
+            'Ex.: <code>pt</code>, <code>en</code>, <code>es</code>. Opcional, mas ajuda com sotaque e ruído.',
+        );
         extraProps = `
         <div class="prop-group" style="background:#f5f3ff;border:1px solid #c4b5fd;padding:12px;border-radius:8px;margin-top:16px;">
-            <div style="font-size:11px;font-weight:800;color:#5b21b6;margin-bottom:8px;"><ion-icon name="mic-outline"></ion-icon> Nota de voz</div>
+            <div style="font-size:11px;font-weight:800;color:#5b21b6;margin-bottom:8px;"><ion-icon name="mic-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_voice_title', null, 'Nota de voz'))}</div>
             <div style="font-size:10px;color:#6b21a8;line-height:1.4;margin-bottom:10px;">
-              A transcrição usa <b>OpenAI Whisper</b> no servidor (mesma <b>API key</b> da integração «OpenAI» em Integrações). O técnico precisa de <b>internet</b> ao tocar em «Parar e transcrever».
+              ${voiceHelp}
             </div>
-            <label class="prop-label" style="font-size:10px;color:#5b21b6;">Idioma (Whisper)</label>
+            <label class="prop-label" style="font-size:10px;color:#5b21b6;">${escapeHtmlLogic(fbStr('fb_prop_voice_lang_lbl', null, 'Idioma (Whisper)'))}</label>
             <input class="prop-input" type="text" maxlength="12" placeholder="pt" value="${vLang}" onchange="window.handleFieldUpdate('voiceTranscribeLanguage', this.value)" />
-            <div style="font-size:9px;color:#64748b;margin-top:6px;">Ex.: <code>pt</code>, <code>en</code>, <code>es</code>. Opcional mas ajuda com sotaque e ruído.</div>
+            <div style="font-size:9px;color:#64748b;margin-top:6px;">${voiceLangHint}</div>
         </div>`;
     } else if (f.type === 'file_upload') {
+        const fileHelp = fbStr(
+            'fb_prop_file_upload_help',
+            null,
+            'Máximo <b>50 MB</b> por arquivo. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e arquivos correntes (PDF, Office, imagens, ZIP etc.) são aceitos.',
+        );
         extraProps = `
         <div class="prop-group" style="background:#fffbeb; border:1px solid #fcd34d; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px"><ion-icon name="document-attach-outline"></ion-icon> Anexar Arquivo (app)</div>
-            <div style="font-size:10px; color:#92400e; line-height:1.35;">Máximo <b>50 MB</b> por arquivo. O app bloqueia executáveis, scripts e outros tipos habitualmente perigosos; documentos e arquivos correntes (PDF, Office, imagens, ZIP, etc.) são aceitos.</div>
+            <div style="font-size:11px; font-weight:800; color:#b45309; margin-bottom:4px"><ion-icon name="document-attach-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_file_upload_title', null, 'Anexar arquivo (app)'))}</div>
+            <div style="font-size:10px; color:#92400e; line-height:1.35;">${fileHelp}</div>
         </div>`;
     } else if (f.type === 'image_annotation') {
         const pen = escapeHtmlAttr(String(f.annotationPenColor || '#dc2626'));
         const sw = String(f.annotationStrokeWidth != null ? f.annotationStrokeWidth : 4);
         extraProps = `
         <div class="prop-group" style="background:#fff7ed; border:1px solid #fdba74; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#9a3412; margin-bottom:6px"><ion-icon name="brush-outline"></ion-icon> Foto com anotações</div>
-            <div style="font-size:10px; color:#7c2d12; line-height:1.35; margin-bottom:10px;">No app, o técnico escolhe câmera ou galeria e pode desenhar por cima da imagem. O valor guardado é JSON (URI local + traços normalizados).</div>
-            <label class="prop-label" style="color:#c2410c; font-size:10px;">Cor do traço</label>
+            <div style="font-size:11px; font-weight:800; color:#9a3412; margin-bottom:6px"><ion-icon name="brush-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_image_annot_title', null, 'Foto com anotações'))}</div>
+            <div style="font-size:10px; color:#7c2d12; line-height:1.35; margin-bottom:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_help', null, 'No app, o técnico escolhe câmera ou galeria e pode desenhar por cima da imagem. O valor guardado é JSON (URI local + traços normalizados).'))}</div>
+            <label class="prop-label" style="color:#c2410c; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_pen_lbl', null, 'Cor do traço'))}</label>
             <input class="prop-input" type="color" value="${pen}" onchange="window.handleFieldUpdate('annotationPenColor', this.value)" style="max-width:120px;height:36px;padding:2px;" />
-            <label class="prop-label" style="color:#c2410c; font-size:10px; margin-top:10px;">Espessura (1–24)</label>
+            <label class="prop-label" style="color:#c2410c; font-size:10px; margin-top:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_width_lbl', null, 'Espessura (1–24)'))}</label>
             <input class="prop-input" type="number" min="1" max="24" value="${escapeHtmlLogic(sw)}" onchange="window.handleFieldUpdate('annotationStrokeWidth', parseInt(this.value,10)||4)" />
         </div>`;
     } else if (f.type === 'lookup_select') {
@@ -2587,14 +3313,14 @@ function renderProperties() {
         const inlineEsc = escapeHtmlLogic(String(f.lookupInlineJson || ''));
         extraProps = `
         <div class="prop-group" style="background:#eff6ff; border:1px solid #93c5fd; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#1e40af; margin-bottom:6px"><ion-icon name="cloud-download-outline"></ion-icon> Lista dinâmica</div>
-            <label class="prop-label" style="color:#1d4ed8; font-size:10px;">Origem</label>
+            <div style="font-size:11px; font-weight:800; color:#1e40af; margin-bottom:6px"><ion-icon name="cloud-download-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_lookup_title', null, 'Lista dinâmica'))}</div>
+            <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_source_lbl', null, 'Origem'))}</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('lookupSource', this.value); if(typeof renderProperties==='function')renderProperties();" style="font-size:12px; margin-bottom:10px;">
-                <option value="preset" ${src === 'preset' ? 'selected' : ''}>Preset no servidor (GET com sessão)</option>
-                <option value="inline_json" ${src === 'inline_json' ? 'selected' : ''}>JSON no modelo (sem rede)</option>
+                <option value="preset" ${src === 'preset' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_preset', null, 'Preset no servidor (GET com sessão)'))}</option>
+                <option value="inline_json" ${src === 'inline_json' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_inline', null, 'JSON no modelo (sem rede)'))}</option>
             </select>
             <div style="display:${src === 'preset' ? 'block' : 'none'}">
-                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">Preset</label>
+                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_preset_lbl', null, 'Preset'))}</label>
                 <select class="prop-input" onchange="window.handleFieldUpdate('lookupPreset', this.value)" style="font-size:12px;">
                     <option value="equipamentos_demo" ${preset === 'equipamentos_demo' ? 'selected' : ''}>equipamentos_demo</option>
                     <option value="tecnicos_demo" ${preset === 'tecnicos_demo' ? 'selected' : ''}>tecnicos_demo</option>
@@ -2602,7 +3328,7 @@ function renderProperties() {
                 </select>
             </div>
             <div style="display:${src === 'inline_json' ? 'block' : 'none'}; margin-top:8px;">
-                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">JSON (array de { value, label })</label>
+                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_json_lbl', null, 'JSON (array de pares value / label)'))}</label>
                 <textarea class="prop-input" style="height:100px;font-family:monospace;font-size:11px;" onblur="window.handleFieldUpdate('lookupInlineJson', this.value)">${inlineEsc}</textarea>
             </div>
         </div>`;
@@ -2611,19 +3337,24 @@ function renderProperties() {
         const colsEsc = escapeHtmlLogic(colsJson);
         const minR = escapeHtmlLogic(String(f.matrixMinRows != null && f.matrixMinRows !== '' ? f.matrixMinRows : '0'));
         const maxR = escapeHtmlLogic(String(f.matrixMaxRows != null && f.matrixMaxRows !== '' ? f.matrixMaxRows : '20'));
+        const matrixIntro = fbStr(
+            'fb_prop_matrix_intro_html',
+            null,
+            'Colunas (até 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. O app guarda um array JSON de linhas.',
+        );
         extraProps = `
         <div class="prop-group" style="background:#ecfdf5; border:1px solid #6ee7b7; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:6px"><ion-icon name="grid-outline"></ion-icon> Matriz repetível</div>
-            <div style="font-size:10px; color:#065f46; line-height:1.35; margin-bottom:10px;">Colunas (até 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. O app guarda um array JSON de linhas.</div>
-            <label class="prop-label" style="color:#0f766e; font-size:10px;">Colunas (JSON)</label>
+            <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:6px"><ion-icon name="grid-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_matrix_title', null, 'Matriz repetível'))}</div>
+            <div style="font-size:10px; color:#065f46; line-height:1.35; margin-bottom:10px;">${matrixIntro}</div>
+            <label class="prop-label" style="color:#0f766e; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_matrix_cols_lbl', null, 'Colunas (JSON)'))}</label>
             <textarea class="prop-input" style="height:140px;font-family:monospace;font-size:11px;" onblur="window.applyRepeatableMatrixColumnsJson(this.value)">${colsEsc}</textarea>
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
                 <div style="flex:1; min-width:100px;">
-                    <label class="prop-label" style="font-size:10px; color:#047857;">Mín. linhas</label>
+                    <label class="prop-label" style="font-size:10px; color:#047857;">${escapeHtmlLogic(fbStr('fb_prop_matrix_min_rows', null, 'Mín. linhas'))}</label>
                     <input class="prop-input" type="number" min="0" value="${minR}" onchange="window.handleFieldUpdate('matrixMinRows', this.value)" />
                 </div>
                 <div style="flex:1; min-width:100px;">
-                    <label class="prop-label" style="font-size:10px; color:#047857;">Máx. linhas</label>
+                    <label class="prop-label" style="font-size:10px; color:#047857;">${escapeHtmlLogic(fbStr('fb_prop_matrix_max_rows', null, 'Máx. linhas'))}</label>
                     <input class="prop-input" type="number" min="1" value="${maxR}" onchange="window.handleFieldUpdate('matrixMaxRows', this.value)" />
                 </div>
             </div>
@@ -2639,43 +3370,33 @@ function renderProperties() {
         const likEsc = escapeHtmlLogic(likLines);
         extraProps = `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:#6b21a8; margin-bottom:6px"><ion-icon name="analytics-outline"></ion-icon> Escala NPS / Likert</div>
-            <label class="prop-label" style="color:#7c3aed; font-size:10px;">Modo</label>
+            <div style="font-size:11px; font-weight:800; color:#6b21a8; margin-bottom:6px"><ion-icon name="analytics-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_opinion_title', null, 'Escala NPS / Likert'))}</div>
+            <label class="prop-label" style="color:#7c3aed; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_lbl', null, 'Modo'))}</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('opinionScaleMode', this.value)" style="font-size:12px; margin-bottom:10px;">
-                <option value="nps" ${mode === 'nps' ? 'selected' : ''}>NPS (0 a 10)</option>
-                <option value="likert" ${mode === 'likert' ? 'selected' : ''}>Likert (5 níveis)</option>
+                <option value="nps" ${mode === 'nps' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_nps', null, 'NPS (0 a 10)'))}</option>
+                <option value="likert" ${mode === 'likert' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_likert', null, 'Likert (5 níveis)'))}</option>
             </select>
-            <label class="prop-label" style="color:#7c3aed; font-size:10px;">Rótulos Likert (um por linha, até 5)</label>
+            <label class="prop-label" style="color:#7c3aed; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_opinion_likert_lbl', null, 'Rótulos Likert (um por linha, até 5)'))}</label>
             <textarea class="prop-input" style="height:100px;font-size:12px;" onblur="window.handleFieldUpdate('likertLabels', this.value)">${likEsc}</textarea>
         </div>`;
     } else if (f.type === 'dropdown' || f.type === 'multiselect') {
         extraProps = `
         <div class="prop-group" style="background:#eef2ff; border:1px solid #6366f1; padding:12px; border-radius:8px; margin-top:16px;">
-            <label class="prop-label" style="color:#4f46e5;"><ion-icon name="list"></ion-icon> Opções da Lista (Separe por vírgula)</label>
+            <label class="prop-label" style="color:#4f46e5;"><ion-icon name="list"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_list_options_lbl', null, 'Opções da lista (separe por vírgula)'))}</label>
             <textarea class="prop-input" style="height:60px; font-size:12px;" onkeyup="window.handleFieldUpdate('options', this.value)">${f.options || ''}</textarea>
         </div>`;
     } else if (f.type === 'calculated') {
+        const calcPh = escapeHtmlAttr(fbStr('fb_prop_calc_ph', null, 'Ex.: field_123 + field_456'));
         extraProps = `
         <div class="prop-group" style="background:#f5f3ff; border:1px solid #8b5cf6; padding:12px; border-radius:8px; margin-top:16px;">
-            <label class="prop-label" style="color:#7c3aed;"><ion-icon name="calculator"></ion-icon> Expressão Matemática do Sistema</label>
-            <input class="prop-input" type="text" placeholder="Ex: field_123 + field_456" value="${f.calcFormula || ''}" onkeyup="window.handleFieldUpdate('calcFormula', this.value)" />
-            <div style="font-size:10px; color:#7c3aed; margin-top:4px; line-height:1.2;">Variáveis: Use o ID sublinhado de outros blocos (Ex: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.</div>
+            <label class="prop-label" style="color:#7c3aed;"><ion-icon name="calculator"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_calc_title', null, 'Expressão matemática do sistema'))}</label>
+            <input class="prop-input" type="text" placeholder="${calcPh}" value="${escapeHtmlAttr(f.calcFormula || '')}" onkeyup="window.handleFieldUpdate('calcFormula', this.value)" />
+            <div style="font-size:10px; color:#7c3aed; margin-top:4px; line-height:1.2;">${escapeHtmlLogic(fbStr('fb_prop_calc_help', null, 'Variáveis: use o ID sublinhado de outros blocos (ex.: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.'))}</div>
         </div>`;
     } else if (f.type === 'signature_summary') {
         const ids = new Set(Array.isArray(f.summarySourceFieldIds) ? f.summarySourceFieldIds : []);
-        const pickRows = fields
-            .filter(
-                (o) =>
-                    o &&
-                    o.id !== f.id &&
-                    o.type !== 'section_break' &&
-                    o.type !== 'signature_summary' &&
-                    o.type !== 'hidden' &&
-                    o.type !== 'vision_checklist' &&
-                    o.type !== 'vision_ai_analysis' &&
-                    o.type !== 'leitura' &&
-                    o.type !== 'voice_note',
-            )
+        const eligible = getFieldsEligibleForSignatureSummary(f.id);
+        const pickRows = eligible
             .map((o) => {
                 const ck = ids.has(o.id) ? 'checked' : '';
                 const lab = escapeHtmlLogic(o.label || o.id);
@@ -2687,67 +3408,130 @@ function renderProperties() {
                 </label>`;
             })
             .join('');
+        const sumTitle = escapeHtmlLogic(
+            fbStr('fb_prop_signature_summary_fields_title', null, 'Campos no resumo (ordem = ordem no formulário)'),
+        );
+        const sumHelp = fbStr(
+            'fb_prop_signature_summary_fields_help',
+            null,
+            'No app, estes valores aparecem num único bloco <b>acima</b> da zona de assinatura. Na raiz, o app também procura valores em seções repetíveis (primeira ocorrência com texto). Dentro de uma linha repetível, usa-se o contexto dessa linha.',
+        );
+        const sumNone = escapeHtmlLogic(
+            fbStr('fb_prop_signature_summary_none_eligible', null, 'Nenhum campo disponível para incluir.'),
+        );
+        const lblAll = escapeHtmlLogic(fbStr('fb_prop_signature_summary_select_all', null, 'Selecionar todos'));
+        const lblClear = escapeHtmlLogic(fbStr('fb_prop_signature_summary_clear_all', null, 'Limpar seleção'));
         extraProps += `
         <div class="prop-group" style="background:#ecfeff; border:1px solid #67e8f9; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:12px; font-weight:800; color:#0e7490; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                <ion-icon name="reader-outline"></ion-icon> Campos no resumo (ordem = ordem no formulário)
+                <ion-icon name="reader-outline"></ion-icon> ${sumTitle}
             </div>
             <div style="font-size:10px; color:#155e75; line-height:1.4; margin-bottom:10px;">
-                No app, estes valores aparecem num único bloco <b>acima</b> da zona de assinatura. Na raiz, o app também procura valores em secções repetíveis (primeira ocorrência com texto). Dentro de uma linha repetível, usa-se o contexto dessa linha.
+                ${sumHelp}
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="window.signatureSummarySelectAllSources()" style="font-size:11px;padding:6px 10px;">${lblAll}</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="window.signatureSummaryClearAllSources()" style="font-size:11px;padding:6px 10px;">${lblClear}</button>
             </div>
             <div style="max-height:220px; overflow-y:auto;">${
-                pickRows || '<span style="font-size:11px;color:#94a3b8">Nenhum campo disponível.</span>'
+                pickRows || `<span style="font-size:11px;color:#94a3b8">${sumNone}</span>`
             }</div>
         </div>`;
     }
 
+    const phInst1 = escapeHtmlAttr(fbStr('fb_ph_instance_example', { n: '1' }, 'ex.: 1'));
+    const phInst2 = escapeHtmlAttr(fbStr('fb_ph_instance_example', { n: '2' }, 'ex.: 2'));
+    const phInst5 = escapeHtmlAttr(fbStr('fb_ph_instance_example', { n: '5' }, 'ex.: 5'));
+    const onlineValHint =
+        f.type === 'facial_recognition'
+            ? fbStr('fb_prop_online_validation_face', null, '')
+            : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis'
+              ? fbStr('fb_prop_online_validation_vision', null, '')
+              : f.type === 'voice_note'
+                ? fbStr('fb_prop_online_validation_voice', null, '')
+                : f.type === 'lookup_select'
+                  ? fbStr('fb_prop_online_validation_lookup', null, '')
+                  : fbStr('fb_prop_online_validation_generic', null, '');
+
     elPropsBody.innerHTML = `
         <div class="prop-group">
-            <label class="prop-label">${f.type === 'section_break' ? 'Nome da Seção / Etapa (Aparece no App Mobile)' : 'Rótulo da Pergunta no Painel (Técnico vê no App)' }</label>
+            <label class="prop-label">${escapeHtmlLogic(
+                f.type === 'section_break'
+                    ? fbStr('fb_prop_label_section_title', null, 'Nome da etapa ou seção (como aparece no app móvel)')
+                    : fbStr('fb_prop_label_question_panel', null, 'Rótulo da pergunta no painel (técnico vê no app)')
+            )}</label>
             <input id="prop-label-input" class="prop-input" type="text" value="${f.label}" onkeyup="window.handleFieldUpdate('label', this.value)" />
         </div>
         <div class="prop-group">
-            <label class="prop-label">ID Interno (Slug do Campo)</label>
-            <input class="prop-input" type="text" value="${f.id}" disabled style="background:#f1f5f9; cursor:not-allowed;" title="Copie isso para usar em Fórmulas"/>
+            <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_internal_id', null, 'ID interno do campo (slug)'))}</label>
+            <input class="prop-input" type="text" value="${f.id}" disabled style="background:#f1f5f9; cursor:not-allowed;" title="${escapeHtmlAttr(
+                fbStr('fb_prop_internal_id_copy_title', null, 'Copie isso para usar em fórmulas')
+            )}"/>
         </div>
         ${f.type === 'section_break' ? (() => {
             const rawSfm = f.sectionFillMode === 'wizard' ? 'wizard' : f.sectionFillMode === 'list' ? 'list' : 'inherit';
             const pick = rawSfm === 'wizard' ? 'wizard' : 'list';
             return `
         <div class="prop-group" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:12px; border-radius:8px; margin-top:4px;">
-            <label class="prop-label">Como o técnico vê esta etapa (app)</label>
+            <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_section_app_view_title', null, 'Como o técnico vê esta etapa (app)'))}</label>
             <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
                 <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
                     <input type="radio" name="propSectionFillMode" value="list" ${pick === 'list' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'list')" />
                     <span>
-                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="list-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Lista com scroll</span>
-                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Todos os campos desta seção visíveis com scroll.</span>
+                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="list-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> ${escapeHtmlLogic(
+                            fbStr('fb_prop_section_fill_list_title', null, 'Lista com scroll')
+                        )}</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">${escapeHtmlLogic(
+                            fbStr('fb_prop_section_fill_list_desc', null, 'Todos os campos desta seção visíveis com scroll.')
+                        )}</span>
                     </span>
                 </label>
                 <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
                     <input type="radio" name="propSectionFillMode" value="wizard" ${pick === 'wizard' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'wizard')" />
                     <span>
-                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="git-commit-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> Um campo de cada vez</span>
-                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">Assistente: Próximo / Voltar só dentro desta seção.</span>
+                        <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="git-commit-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> ${escapeHtmlLogic(
+                            fbStr('fb_prop_section_fill_wizard_title', null, 'Um campo de cada vez')
+                        )}</span>
+                        <span style="display:block; font-size:11px; color:var(--text3, #64748b); line-height:1.35; margin-top:4px;">${escapeHtmlLogic(
+                            fbStr('fb_prop_section_fill_wizard_desc', null, 'Assistente: Próximo / Voltar só dentro desta seção.')
+                        )}</span>
                     </span>
                 </label>
             </div>
-            ${rawSfm === 'inherit' ? '<div style="font-size:10px; color:#b45309; margin-top:8px; line-height:1.35;">Legado: "seguir global" — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.</div>' : ''}
+            ${
+                rawSfm === 'inherit'
+                    ? `<div style="font-size:10px; color:#b45309; margin-top:8px; line-height:1.35;">${fbStr(
+                          'fb_prop_section_legacy_inherit',
+                          null,
+                          'Legado: «seguir global» — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.'
+                      )}</div>`
+                    : ''
+            }
         </div>
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-section-repeat" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
-                <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Repetir esta seção (lista)</label>
+                <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">${escapeHtmlLogic(
+                    fbStr('fb_prop_section_repeat_chk', null, 'Repetir esta seção (lista)')
+                )}</label>
             </div>
-            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O técnico pode preencher <b>várias instâncias</b> seguidas dos mesmos campos (ex.: vários equipamentos). Cada linha grava um objeto no array <b>__section_repeat_&lt;id&gt;</b> na execução. Use mín./máx. para limitar quantas instâncias.</div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">${fbStr(
+                'fb_prop_section_repeat_help',
+                null,
+                'O técnico pode preencher <b>várias instâncias</b> seguidas dos mesmos campos (ex.: vários equipamentos). Cada linha grava um objeto no array <b>__section_repeat_&lt;id&gt;</b> na execução. Use mín./máx. para limitar quantas instâncias.'
+            )}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <div style="flex:1; min-width:110px;">
-                    <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. instâncias (vazio = 0)</label>
-                    <input class="prop-input" type="number" min="0" placeholder="ex.: 1" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
+                        fbStr('fb_prop_min_instances_sec', null, 'Mín. instâncias (vazio = 0)')
+                    )}</label>
+                    <input class="prop-input" type="number" min="0" placeholder="${phInst1}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
                 </div>
                 <div style="flex:1; min-width:110px;">
-                    <label class="prop-label" style="font-size:10px; color:#581c87;">Máx. instâncias (vazio = ilimitado)</label>
-                    <input class="prop-input" type="number" min="1" placeholder="ex.: 5" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
+                        fbStr('fb_prop_max_instances_sec', null, 'Máx. instâncias (vazio = ilimitado)')
+                    )}</label>
+                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
                 </div>
             </div>
         </div>`;
@@ -2756,9 +3540,13 @@ function renderProperties() {
             f.type === 'leitura'
                 ? `
         <div class="prop-group">
-            <label class="prop-label">Texto da Leitura (rich text)</label>
+            <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_reading_title', null, 'Texto da leitura (rich text)'))}</label>
             <div style="font-size:10px;color:#64748b;margin-bottom:8px;line-height:1.35;">
-              Exibido no app como <strong>só leitura</strong> (scroll com o formulário). <strong>Hiperligações não são permitidas</strong> — são removidas ao editar.
+              ${fbStr(
+                  'fb_prop_reading_intro',
+                  null,
+                  'Exibido no app como <strong>só leitura</strong> (scroll com o formulário). <strong>Hiperligações não são permitidas</strong> — são removidas ao editar.'
+              )}
             </div>
             <div id="field-reading-editor-host" style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
               <div id="field-reading-editor"></div>
@@ -2768,10 +3556,14 @@ function renderProperties() {
                 : `
         <div class="prop-group">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
-                <label class="prop-label" style="margin:0; flex:1; min-width:160px;">Instruções ao técnico (rich text, opcional)</label>
+                <label class="prop-label" style="margin:0; flex:1; min-width:160px;">${escapeHtmlLogic(
+                    fbStr('fb_prop_instructions_title', null, 'Instruções ao técnico (rich text, opcional)')
+                )}</label>
                 ${f.type !== 'section_break' ? `
-                <label title="Mostrar instruções no celular do técnico" style="display:inline-flex; align-items:center; cursor:pointer; user-select:none;">
-                    <input type="checkbox" id="prop-show-field-instructions" aria-label="Mostrar instruções no app móvel" ${f.showFieldInstructions === true ? 'checked' : ''} onchange="window.handleFieldUpdate('showFieldInstructions', this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;" />
+                <label title="${escapeHtmlAttr(fbStr('fb_prop_instructions_show_title', null, 'Mostrar instruções no celular do técnico'))}" style="display:inline-flex; align-items:center; cursor:pointer; user-select:none;">
+                    <input type="checkbox" id="prop-show-field-instructions" aria-label="${escapeHtmlAttr(
+                        fbStr('fb_prop_instructions_show_aria', null, 'Mostrar instruções no app móvel')
+                    )}" ${f.showFieldInstructions === true ? 'checked' : ''} onchange="window.handleFieldUpdate('showFieldInstructions', this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;" />
                 </label>
                 ` : ''}
             </div>
@@ -2784,17 +3576,27 @@ function renderProperties() {
         
         ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
         <div class="prop-group">
-            <label class="prop-label">Auto-Preenchimento / Valor Padrão (Opcional)</label>
-            <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="Use tags como {{user.name}}, {{date}}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
+            <label class="prop-label">${escapeHtmlLogic(
+                fbStr('fb_prop_default_value_lbl', null, 'Auto-preenchimento / valor padrão (opcional)')
+            )}</label>
+            <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="${escapeHtmlAttr(
+                fbStr('fb_prop_default_value_ph', null, 'Use tags como {{user.name}}, {{date}}')
+            )}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
         </div>
         ` : ''}
 
         ${
             f.type === 'leitura'
-                ? `<div class="prop-group" style="font-size:12px;color:#64748b;line-height:1.4;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).</div>`
+                ? `<div class="prop-group" style="font-size:12px;color:#64748b;line-height:1.4;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">${fbStr(
+                      'fb_prop_leitura_block_note',
+                      null,
+                      'Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).'
+                  )}</div>`
                 : `<div class="prop-group" style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="prop-req" ${reqChecked} onchange="window.handleFieldUpdate('required', this.checked)" />
-            <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">Resposta Obrigatória?</label>
+            <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">${escapeHtmlLogic(
+                fbStr('fb_prop_required_q', null, 'Resposta obrigatória?')
+            )}</label>
         </div>`
         }
 
@@ -2803,17 +3605,27 @@ function renderProperties() {
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
-                <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">Várias respostas (lista)</label>
+                <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">${escapeHtmlLogic(
+                    fbStr('fb_prop_repeat_field_title', null, 'Várias respostas (lista)')
+                )}</label>
             </div>
-            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com formulários antigos (valor único continua a ser string ou valor único).</div>
+            <div style="font-size:10px; color:#6b21a8; margin-bottom:10px; line-height:1.35;">${fbStr(
+                'fb_prop_repeat_field_help',
+                null,
+                'O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com formulários antigos (valor único continua a ser string ou valor único).'
+            )}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <div style="flex:1; min-width:110px;">
-                    <label class="prop-label" style="font-size:10px; color:#581c87;">Mín. itens (vazio = padrão)</label>
-                    <input class="prop-input" type="number" min="0" placeholder="ex.: 2" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
+                        fbStr('fb_prop_min_items_field', null, 'Mín. itens (vazio = padrão)')
+                    )}</label>
+                    <input class="prop-input" type="number" min="0" placeholder="${phInst2}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
                 </div>
                 <div style="flex:1; min-width:110px;">
-                    <label class="prop-label" style="font-size:10px; color:#581c87;">Máx. itens (vazio = ilimitado)</label>
-                    <input class="prop-input" type="number" min="1" placeholder="ex.: 5" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                    <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
+                        fbStr('fb_prop_max_items_field', null, 'Máx. itens (vazio = ilimitado)')
+                    )}</label>
+                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
                 </div>
             </div>
         </div>
@@ -2823,8 +3635,16 @@ function renderProperties() {
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
-                <label for="prop-allow-media-desc" style="font-size:13px; font-weight:700; color:#047857; cursor:pointer;">Comentário opcional por foto / arquivo</label>
-                <div style="font-size:10px; color:#065f46; margin-top:4px; line-height:1.35;">Diferente do comentário geral do campo: aqui o técnico pode comentar cada foto, captura ou anexo (câmera, galeria ou arquivo). Tudo opcional.</div>
+                <label for="prop-allow-media-desc" style="font-size:13px; font-weight:700; color:#047857; cursor:pointer;">${escapeHtmlLogic(
+                    fbStr('fb_prop_media_comment_title', null, 'Comentário opcional por foto / arquivo')
+                )}</label>
+                <div style="font-size:10px; color:#065f46; margin-top:4px; line-height:1.35;">${escapeHtmlLogic(
+                    fbStr(
+                        'fb_prop_media_comment_help',
+                        null,
+                        'Diferente do comentário geral do campo: aqui o técnico pode comentar cada foto, captura ou anexo (câmera, galeria ou arquivo). Tudo opcional.'
+                    )
+                )}</div>
             </div>
         </div>
         ` : ''}
@@ -2833,8 +3653,16 @@ function renderProperties() {
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:4px; background:#f0f9ff; border:1px solid #bae6fd; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} onchange="window.handleFieldUpdate('allowTechnicianComment', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
-                <label for="prop-allow-comment" style="font-size:13px; font-weight:700; color:#0369a1; cursor:pointer;">Comentário do técnico (opcional no app)</label>
-                <div style="font-size:10px; color:#0c4a6e; margin-top:4px; line-height:1.35;">Mostra uma caixa de texto livre abaixo da resposta no app. Complementa as instruções ao técnico (não as substitui).</div>
+                <label for="prop-allow-comment" style="font-size:13px; font-weight:700; color:#0369a1; cursor:pointer;">${escapeHtmlLogic(
+                    fbStr('fb_prop_tech_comment_title', null, 'Comentário do técnico (opcional no app)')
+                )}</label>
+                <div style="font-size:10px; color:#0c4a6e; margin-top:4px; line-height:1.35;">${escapeHtmlLogic(
+                    fbStr(
+                        'fb_prop_tech_comment_help',
+                        null,
+                        'Mostra uma caixa de texto livre abaixo da resposta no app. Complementa as instruções ao técnico (não as substitui).'
+                    )
+                )}</div>
             </div>
         </div>
         ` : ''}
@@ -2843,18 +3671,10 @@ function renderProperties() {
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
-                <label for="prop-online" style="font-size:12px; font-weight:800; color:#ca8a04; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> Exigir Validação Apenas Online?</label>
-                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">${
-                    f.type === 'facial_recognition'
-                        ? 'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.'
-                        : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis'
-                          ? 'Na visão IA: <b>desmarcado</b> permite capturar pela câmera sem rede e tentar análise quando houver rede. <b>Marcado</b> exige internet no envio ao servidor.'
-                          : f.type === 'voice_note'
-                            ? 'Nota de voz: a transcrição (Whisper) é <b>sempre no servidor</b>. <b>Desmarcado</b> = pode gravar offline mas precisa de rede ao «Parar e transcrever». <b>Marcado</b> = exige internet no envio.'
-                            : f.type === 'lookup_select'
-                              ? 'Com preset no servidor: <b>desmarcado</b> permite abrir o campo offline se as opções já tiverem sido obtidas antes. <b>Marcado</b> exige internet ao abrir o campo para carregar o preset.'
-                              : 'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.'
-                }</div>
+                <label for="prop-online" style="font-size:12px; font-weight:800; color:#ca8a04; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(
+                    fbStr('fb_prop_online_validation_title', null, 'Exigir validação apenas online?')
+                )}</label>
+                <div style="font-size:10px; color:#a16207; margin-top:2px; line-height:1.2;">${onlineValHint}</div>
             </div>
         </div>
         ` : ''}
@@ -2875,6 +3695,8 @@ function renderProperties() {
     }, 0);
 }
 
+window.renderProperties = renderProperties;
+
 // Expose pra UI HTML
 window.handleFieldUpdate = function(key, val) {
     if (selectedFieldId && key === 'required') {
@@ -2887,10 +3709,14 @@ window.handleFieldUpdate = function(key, val) {
 window.updateVisionStructuredPrompt = function (text) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
-    if (!f || (f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis')) return;
+    if (!f || f.type !== 'vision_ai_analysis') return;
     const raw = String(text || '').trim();
     const s = raw.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-    const fallback = 'A evidência visual confirma o item verificado?';
+    const fallback = fbStr(
+        'fb_prop_vision_default_structured_prompt',
+        null,
+        'A evidência visual confirma o item verificado?',
+    );
     const finalText = s || fallback;
     f.visionStructuredPrompt = finalText;
     f.visionQuestions = [{ id: 'q1', text: finalText }];
@@ -2898,8 +3724,223 @@ window.updateVisionStructuredPrompt = function (text) {
     if (window.fieldPropertiesModalOpen) renderProperties();
 };
 
+window.updateVisionDetectionQuestions = function (text) {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'vision_checklist') return;
+    const raw = String(text || '');
+    const lines = raw
+        .split(/\n/)
+        .map((ln) => String(ln || '').replace(/\r/g, '').trim())
+        .filter((ln) => ln.length > 0);
+    const fallback = fbStr(
+        'fb_prop_vision_default_structured_prompt',
+        null,
+        'A evidência visual confirma o item verificado?',
+    );
+
+    if (lines.length <= 1) {
+        const finalText = (lines[0] || raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+        f.visionStructuredPrompt = finalText;
+        f.visionQuestions = [{ id: 'q1', text: finalText }];
+    } else {
+        const taken = lines
+            .slice(0, MAX_VISION_SIMNAO_QUESTIONS)
+            .map((ln) => ln.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS).trim())
+            .filter((ln) => ln.length > 0);
+        if (taken.length <= 1) {
+            const finalText = (taken[0] || raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+            f.visionStructuredPrompt = finalText;
+            f.visionQuestions = [{ id: 'q1', text: finalText }];
+        } else {
+            f.visionStructuredPrompt = '';
+            f.visionQuestions = taken.map((t, i) => ({ id: `q${i + 1}`, text: t }));
+        }
+    }
+    renderCanvas();
+    if (window.fieldPropertiesModalOpen) renderProperties();
+};
+
+function closeVisionAiPromptExamplesModal() {
+    const el = document.getElementById('vision-ai-prompt-examples-modal');
+    if (!el) return;
+    const fn = el._visionExEsc;
+    if (typeof fn === 'function') document.removeEventListener('keydown', fn);
+    el.remove();
+}
+
+/** Modal com modelos de prompt (só «Visão de IA — análise»). */
+window.openVisionAiStructuredPromptExamplesModal = function () {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'vision_ai_analysis') return;
+    closeVisionAiPromptExamplesModal();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'vision-ai-prompt-examples-modal';
+    overlay.style.cssText =
+        'display:flex;position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:100001;justify-content:center;align-items:center;padding:max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));box-sizing:border-box;backdrop-filter:blur(4px)';
+
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'vision-ai-prompt-ex-h');
+    dialog.style.cssText =
+        'width:min(760px,100%);max-height:min(90vh,920px);background:var(--color-surface, #fff);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:hidden;border:1px solid #e2e8f0';
+
+    const head = document.createElement('div');
+    head.style.cssText =
+        'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #e2e8f0;background:linear-gradient(135deg, #fef2f2 0%, #fff 100%)';
+
+    const headText = document.createElement('div');
+    const h2 = document.createElement('div');
+    h2.id = 'vision-ai-prompt-ex-h';
+    h2.style.cssText = 'font-size:16px;font-weight:800;color:#7f1d1d;letter-spacing:-0.02em;line-height:1.25';
+    h2.textContent = fbStr('fb_vision_prompt_ex_modal_title', null, 'Exemplos de prompt estruturado');
+    const intro = document.createElement('div');
+    intro.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;line-height:1.45';
+    intro.innerHTML = fbStr(
+        'fb_vision_prompt_ex_modal_intro',
+        null,
+        'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Ative «Classificação 0–10» nas propriedades se quiser que a API preencha <code>rating0To10</code> coerente com a rubrica.',
+    );
+    headText.appendChild(h2);
+    headText.appendChild(intro);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn btn-ghost btn-sm';
+    closeBtn.style.cssText = 'flex-shrink:0;font-weight:700;color:#64748b';
+    closeBtn.textContent = fbStr('fb_vision_prompt_ex_close', null, 'Fechar');
+    closeBtn.onclick = closeVisionAiPromptExamplesModal;
+
+    head.appendChild(headText);
+    head.appendChild(closeBtn);
+
+    const cat =
+        typeof window.getVisionAiExampleCatalog === 'function'
+            ? window.getVisionAiExampleCatalog()
+            : null;
+    if (!cat || !Array.isArray(cat.items) || !cat.items.length) {
+        fbAlert(
+            'fb_vision_prompt_ex_catalog_missing',
+            null,
+            'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder.',
+        );
+        return;
+    }
+
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText =
+        'padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc';
+    const areaLab = document.createElement('label');
+    areaLab.setAttribute('for', 'vision-ai-ex-area-select');
+    areaLab.style.cssText = 'font-size:11px;font-weight:800;color:#334155;white-space:nowrap';
+    areaLab.textContent = fbStr('fb_vision_prompt_ex_area_lbl', null, 'Área / setor');
+    const sel = document.createElement('select');
+    sel.id = 'vision-ai-ex-area-select';
+    sel.className = 'prop-input';
+    sel.style.cssText = 'max-width:min(320px,100%);font-size:12px;flex:1;min-width:160px';
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = cat.areaLabel('all');
+    sel.appendChild(optAll);
+    for (let ai = 0; ai < cat.areaOrder.length; ai++) {
+        const aid = cat.areaOrder[ai];
+        const o = document.createElement('option');
+        o.value = aid;
+        o.textContent = cat.areaLabel(aid);
+        sel.appendChild(o);
+    }
+    toolbar.appendChild(areaLab);
+    toolbar.appendChild(sel);
+
+    const scroll = document.createElement('div');
+    scroll.style.cssText = 'flex:1;overflow-y:auto;padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px';
+
+    const emptyMsg = document.createElement('div');
+    emptyMsg.id = 'vision-ai-ex-empty';
+    emptyMsg.style.cssText =
+        'display:none;padding:14px;border-radius:10px;border:1px dashed #cbd5e1;background:#fff;font-size:12px;color:#64748b;text-align:center';
+    emptyMsg.textContent = fbStr('fb_vision_prompt_ex_empty_filter', null, 'Nenhum modelo nesta área. Escolha «Todas as áreas» ou outro setor.');
+    scroll.appendChild(emptyMsg);
+
+    function applyVisionExFilter() {
+        const v = String(sel.value || 'all');
+        const cards = scroll.querySelectorAll('[data-vision-ex-card="1"]');
+        let n = 0;
+        for (let ci = 0; ci < cards.length; ci++) {
+            const card = cards[ci];
+            const a = card.getAttribute('data-area-id') || '';
+            const show = v === 'all' || a === v;
+            card.style.display = show ? '' : 'none';
+            if (show) n++;
+        }
+        emptyMsg.style.display = n ? 'none' : 'block';
+    }
+    sel.onchange = applyVisionExFilter;
+
+    const applyLbl = fbStr('fb_vision_prompt_ex_apply', null, 'Aplicar ao campo');
+    for (let i = 0; i < cat.items.length; i++) {
+        const ex = cat.items[i];
+        const card = document.createElement('div');
+        card.setAttribute('data-vision-ex-card', '1');
+        card.setAttribute('data-area-id', String(ex.areaId || ''));
+        card.style.cssText =
+            'border:1px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;display:flex;flex-direction:column;gap:8px';
+
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText =
+            'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap';
+        const t = document.createElement('div');
+        t.style.cssText = 'font-size:13px;font-weight:800;color:#0f172a;line-height:1.3';
+        t.textContent = ex.title;
+
+        const applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'btn btn-primary btn-sm';
+        applyBtn.style.cssText = 'flex-shrink:0;font-weight:700';
+        applyBtn.textContent = applyLbl;
+        const bodySnap = ex.body;
+        applyBtn.onclick = function () {
+            window.updateVisionStructuredPrompt(bodySnap);
+            closeVisionAiPromptExamplesModal();
+        };
+
+        titleRow.appendChild(t);
+        titleRow.appendChild(applyBtn);
+
+        const pre = document.createElement('pre');
+        pre.style.cssText =
+            'margin:0;font-size:10px;line-height:1.42;color:#334155;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,sans-serif';
+        pre.textContent = ex.body;
+
+        card.appendChild(titleRow);
+        card.appendChild(pre);
+        scroll.appendChild(card);
+    }
+
+    dialog.appendChild(head);
+    dialog.appendChild(toolbar);
+    dialog.appendChild(scroll);
+    applyVisionExFilter();
+    overlay.appendChild(dialog);
+
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeVisionAiPromptExamplesModal();
+    });
+
+    const onEsc = function (ev) {
+        if (ev.key === 'Escape') closeVisionAiPromptExamplesModal();
+    };
+    overlay._visionExEsc = onEsc;
+    document.addEventListener('keydown', onEsc);
+
+    document.body.appendChild(overlay);
+};
+
 /** @deprecated — mantido por compatibilidade com HTML antigo em cache */
-window.updateVisionQuestionsFromLines = window.updateVisionStructuredPrompt;
+window.updateVisionQuestionsFromLines = window.updateVisionDetectionQuestions;
 
 /** Inclui/remove um campo no resumo para assinatura (mantém ordem do canvas). */
 window.applyRepeatableMatrixColumnsJson = function (text) {
@@ -2910,11 +3951,11 @@ window.applyRepeatableMatrixColumnsJson = function (text) {
     try {
         parsed = JSON.parse(String(text || '').trim());
     } catch (e) {
-        alert('JSON inválido nas colunas.');
+        fbAlert('fb_alert_matrix_json', null, 'JSON inválido nas colunas.');
         return;
     }
     if (!Array.isArray(parsed)) {
-        alert('As colunas devem ser um array JSON.');
+        fbAlert('fb_alert_matrix_array', null, 'As colunas devem ser um array JSON.');
         return;
     }
     const next = [];
@@ -2932,10 +3973,48 @@ window.applyRepeatableMatrixColumnsJson = function (text) {
         if (label) next.push({ id, label, cellType });
     }
     if (!next.length) {
-        alert('Nenhuma coluna válida. Ex.: [{"id":"c1","label":"Item","cellType":"text"}]');
+        fbAlert(
+            'fb_alert_matrix_none',
+            null,
+            'Nenhuma coluna válida. Ex.: [{"id":"c1","label":"Item","cellType":"text"}]'
+        );
         return;
     }
     f.matrixColumns = next;
+    renderCanvas();
+    renderProperties();
+};
+
+/** Campos que podem entrar no bloco «resumo para assinatura» (mesma regra que a lista de checkboxes). */
+function getFieldsEligibleForSignatureSummary(excludeFieldId) {
+    return fields.filter(
+        (o) =>
+            o &&
+            o.id !== excludeFieldId &&
+            o.type !== 'section_break' &&
+            o.type !== 'signature_summary' &&
+            o.type !== 'hidden' &&
+            o.type !== 'vision_checklist' &&
+            o.type !== 'vision_ai_analysis' &&
+            o.type !== 'leitura' &&
+            o.type !== 'voice_note',
+    );
+}
+
+window.signatureSummarySelectAllSources = function () {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'signature_summary') return;
+    f.summarySourceFieldIds = getFieldsEligibleForSignatureSummary(f.id).map((o) => o.id);
+    renderCanvas();
+    renderProperties();
+};
+
+window.signatureSummaryClearAllSources = function () {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'signature_summary') return;
+    f.summarySourceFieldIds = [];
     renderCanvas();
     renderProperties();
 };
@@ -2987,6 +4066,39 @@ function normalizeAppHubSectionOrder(v) {
     return v === 'sequential' ? 'sequential' : 'free';
 }
 
+function __fbStripHintDash(h) {
+    return String(h ?? '')
+        .trim()
+        .replace(/^—\s*/, '')
+        .replace(/^-\s*/, '');
+}
+
+/** Resumo curto no botão «Layout» (faixa do builder) — uma linha: «Layout - … - …». */
+window.updateFbAppLayoutButtonSummary = function () {
+    const el = document.getElementById('fb-app-layout-summary');
+    if (!el) return;
+    const fb = typeof window.fbT === 'function' ? window.fbT : null;
+    const eyebrow = fb ? fb('fb_app_start_eyebrow') : 'Layout';
+    const sep = ' - ';
+    if (!globalFormSettings) {
+        el.textContent = eyebrow + sep + '—';
+        return;
+    }
+    const start = normalizeAppSectionStart(globalFormSettings.appSectionStart);
+    const ord = normalizeAppHubSectionOrder(globalFormSettings.appHubSectionOrder);
+    if (start === 'hub') {
+        const hubMain = fb ? fb('fb_app_start_hub') : 'Menu de etapas';
+        const ordLbl =
+            ord === 'sequential' ? (fb ? fb('fb_app_hub_seq') : 'Ordem fixa') : fb ? fb('fb_app_hub_free') : 'Livre';
+        el.textContent = eyebrow + sep + hubMain + sep + ordLbl;
+    } else {
+        const a = fb ? fb('fb_app_start_direct') : '1ª etapa';
+        const hint = fb ? fb('fb_app_start_direct_hint') : '— clássico';
+        const b = __fbStripHintDash(hint);
+        el.textContent = b ? eyebrow + sep + a + sep + b : eyebrow + sep + a;
+    }
+};
+
 window.syncAppSectionNavRadios = function () {
     if (!globalFormSettings) return;
     const start = normalizeAppSectionStart(globalFormSettings.appSectionStart);
@@ -3003,6 +4115,9 @@ window.syncAppSectionNavRadios = function () {
         r.checked = r.value === ord;
         r.disabled = start !== 'hub';
     });
+    if (typeof window.updateFbAppLayoutButtonSummary === 'function') {
+        window.updateFbAppLayoutButtonSummary();
+    }
 };
 
 window.readAppSectionNavFromRadios = function () {
@@ -3159,10 +4274,60 @@ window.openExpectedFormDurationModal = function () {
     m.style.display = 'flex';
 };
 
+window.openAppLayoutModal = function () {
+    const m = document.getElementById('fb-app-layout-modal');
+    if (!m) {
+        console.warn('[checklists-builder] Modal de layout (app) ausente no HTML.');
+        return;
+    }
+    try {
+        const det = m.querySelector('details.formbuilder-app-nav-help');
+        if (det) det.removeAttribute('open');
+    } catch (eLayHelp) {
+        /* ignore */
+    }
+    if (typeof window.syncAppSectionNavRadios === 'function') window.syncAppSectionNavRadios();
+    m.style.display = 'flex';
+    try {
+        const r = m.querySelector('input[name="appSectionStart"]:checked');
+        if (r) r.focus();
+    } catch (eOpenLay) {
+        /* ignore */
+    }
+};
+
+window.closeAppLayoutModal = function () {
+    const m = document.getElementById('fb-app-layout-modal');
+    if (m) m.style.display = 'none';
+    if (typeof window.readAppSectionNavFromRadios === 'function') window.readAppSectionNavFromRadios();
+    if (typeof window.updateFbAppLayoutButtonSummary === 'function') window.updateFbAppLayoutButtonSummary();
+    try {
+        const b = document.getElementById('fb-app-layout-open-btn');
+        if (b) b.focus();
+    } catch (eCloseLay) {
+        /* ignore */
+    }
+};
+
+(function __fbBindAppLayoutModalEscape() {
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        const m = document.getElementById('fb-app-layout-modal');
+        if (!m || m.style.display !== 'flex') return;
+        ev.preventDefault();
+        if (typeof window.closeAppLayoutModal === 'function') window.closeAppLayoutModal();
+    });
+})();
+
 // Global: JSON EXPORTER & IMPORTER
 window.exportJSON = function() {
     if (!fields.some((f) => f.type !== 'section_break')) {
-        return alert('Adicione pelo menos um campo de pergunta ao canvas (a primeira seção já existe).');
+        fbAlert(
+            'fb_alert_export_needs_field',
+            null,
+            'Adicione pelo menos um campo de pergunta ao canvas (a primeira secção já existe).'
+        );
+        return;
     }
     const output = {
         settings: globalFormSettings,
@@ -3216,12 +4381,23 @@ window.importJSON = function() {
                     selectedFieldId = null;
                     renderCanvas();
                     renderProperties();
-                    alert("✅ Formulário importado com sucesso! Clique em 'Salvar Schema' para persistir isso localmente no banco.");
+                    if (typeof window.syncBuilderPersistBaseline === 'function') {
+                        window.syncBuilderPersistBaseline();
+                    }
+                    fbAlert(
+                        'fb_alert_import_ok',
+                        null,
+                        'Formulário importado com sucesso. Clique em «Salvar formulário» para persistir no catálogo local e na API.'
+                    );
                 } else {
-                    alert("O arquivo não é compatível com o BrSpark Builder.");
+                    fbAlert('fb_alert_import_bad', null, 'O arquivo não é compatível com o BrSpark Builder.');
                 }
             } catch(err) {
-                alert("Arquivo Corrompido: " + err.message);
+                fbAlert(
+                    'fb_alert_import_corrupt',
+                    { detail: err && err.message ? err.message : String(err) },
+                    'Arquivo corrompido: ' + (err && err.message ? err.message : err)
+                );
             }
         }
     };
@@ -3277,15 +4453,34 @@ function buildChecklistTemplateMetadata() {
 }
 
 window.saveChecklist = async function() {
-    const btn = document.querySelector('.topbar-actions .btn-primary');
+    const btn = document.getElementById('fb-save-schema-btn');
+    if (!btn) {
+        console.error('[checklists-builder] Botão #fb-save-schema-btn não encontrado.');
+        return;
+    }
+    const setSync = function (mode) {
+        try {
+            if (typeof window.setFbSyncStatus === 'function') window.setFbSyncStatus(mode);
+        } catch (e) {
+            /* ignore */
+        }
+    };
+    ensureBuilderCanvasEl();
     const oldText = btn.innerHTML;
-    btn.innerHTML = '⏳ Salvando...';
+    const fbSaving = window.fbT ? window.fbT('fb_save_saving') : 'Salvando…';
+    btn.innerHTML =
+        '<ion-icon name="hourglass-outline" style="vertical-align:-2px"></ion-icon> <span>' +
+        fbSaving +
+        '</span>';
     btn.disabled = true;
+    setSync('saving');
 
     flushQuillToBoundField();
     window.readAppSectionNavFromRadios && window.readAppSectionNavFromRadios();
     fields = ensureSchemaInstructionFlags(fields);
     ensureCanvasSchemaHasSection();
+    /** Alinha `fields` ao DOM antes do snapshot (Sortable move o DOM no fim do arrasto). */
+    rebuildFieldsOrderFromCanvas();
 
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
@@ -3299,14 +4494,24 @@ window.saveChecklist = async function() {
 
     try {
         if(!currentFormId || currentFormId === 'temp_new') {
-            if (!currentFormTitle || currentFormTitle === 'Novo formulário' || currentFormTitle === 'Novo Checklist') {
-                currentFormTitle = 'FSM ' + new Date().toLocaleString('pt-BR');
+            if (isGenericDefaultFormTitle(currentFormTitle)) {
+                currentFormTitle = 'FSM ' + new Date().toLocaleString();
             }
             currentFormId = 'chk_' + Date.now().toString(36);
         }
 
         if (!normalizeTemplateTitleBuilder(currentFormTitle)) {
-            alert('O título do formulário não pode estar vazio.');
+            fbAlert('fb_val_empty_title', null, 'O título do formulário não pode estar vazio.');
+            setSync('idle');
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            return;
+        }
+
+        const lightVal = validateChecklistLightBeforeSave();
+        if (lightVal && lightVal.length) {
+            alert(lightVal.join('\n'));
+            setSync('idle');
             btn.innerHTML = oldText;
             btn.disabled = false;
             return;
@@ -3318,9 +4523,12 @@ window.saveChecklist = async function() {
             currentFormId
         );
         if (dupLocal) {
-            alert(
+            fbAlert(
+                'fb_alert_dup_title_folder',
+                null,
                 'Já existe um formulário com este nome nesta pasta (catálogo local). Escolha outro título ou pasta.'
             );
+            setSync('idle');
             btn.innerHTML = oldText;
             btn.disabled = false;
             return;
@@ -3329,6 +4537,7 @@ window.saveChecklist = async function() {
         const transitSaveErr = transitDisplacementSchemaErrorMessage(fields);
         if (transitSaveErr) {
             alert(transitSaveErr);
+            setSync('idle');
             btn.innerHTML = oldText;
             btn.disabled = false;
             return;
@@ -3350,8 +4559,14 @@ window.saveChecklist = async function() {
             updatedAt: new Date().toISOString()
         };
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
-        
-        btn.innerHTML = '✅ Salvo localmente';
+
+        if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
+        setSync('local');
+        const fbLocalOk = window.fbT ? window.fbT('fb_save_local_ok') : 'Guardado localmente';
+        btn.innerHTML =
+            '<ion-icon name="checkmark-circle-outline" style="vertical-align:-2px"></ion-icon> <span>' +
+            fbLocalOk +
+            '</span>';
         // NÃO chamar loadSavedFormsList aqui: ele faz GET e substitui o localStorage pela nuvem
         // ANTES do POST terminar → apagava instruções/helpHtml recém gravados.
         if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(db);
@@ -3367,18 +4582,18 @@ window.saveChecklist = async function() {
                 schemaData: schemaSnapshot,
                 folderId: currentFormFolderId ?? null
             };
-            const token = sessionStorage.getItem('brspark_admin_token') || '';
             const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: 'Bearer ' + token } : {}),
-                },
-                body: JSON.stringify(payload)
+                headers: adminJsonHeaders(),
+                body: JSON.stringify(payload),
             });
             const raw = await res.text();
             if (res.ok) {
-                btn.innerHTML = '✅ Na nuvem e no app';
+                const fbCloudOk = window.fbT ? window.fbT('fb_save_cloud_ok') : 'Na nuvem e na app';
+                btn.innerHTML =
+                    '<ion-icon name="cloud-done-outline" style="vertical-align:-2px"></ion-icon> <span>' +
+                    fbCloudOk +
+                    '</span>';
                 try {
                     const saved = JSON.parse(raw);
                     if (saved && saved.id) {
@@ -3402,6 +4617,7 @@ window.saveChecklist = async function() {
                     console.warn('[saveChecklist] merge resposta API', mergeErr);
                 }
                 if (window.loadSavedFormsList) await window.loadSavedFormsList();
+                setSync('cloud');
             } else {
                 let msg = raw;
                 try {
@@ -3409,39 +4625,69 @@ window.saveChecklist = async function() {
                     msg = j.error || raw;
                 } catch (_) {}
                 console.warn('[saveChecklist] API recusou:', res.status, msg);
+                setSync('error');
                 if (res.status === 409) {
-                    alert(msg || 'Já existe um formulário ativo com este nome nesta pasta.');
-                } else {
                     alert(
+                        String(
+                            msg ||
+                                fbStr(
+                                    'fb_alert_dup_title_api',
+                                    null,
+                                    'Já existe um formulário activo com este nome nesta pasta.'
+                                )
+                        )
+                    );
+                } else {
+                    fbAlert(
+                        'fb_alert_api_save_fail',
+                        {
+                            status: String(res.status),
+                            detail: String(msg || 'erro desconhecido'),
+                        },
                         'Guardado só neste navegador. A API não gravou (' +
-                        res.status +
-                        '): ' +
-                        (msg || 'erro desconhecido') +
-                        '\n\nConfirme que o backend está no ar e a URL da API está certa.'
+                            res.status +
+                            '): ' +
+                            (msg || 'erro desconhecido') +
+                            '\n\nConfirme que o backend está no ar e que o URL da API está correcto.'
                     );
                 }
             }
         } catch (apiError) {
             console.warn('Salvamento na API falhou (rede). Rascunho está no navegador.', apiError);
-            alert(
-                'Não foi possível contatar a API. O formulário ficou salvo só neste navegador.\n\n' +
-                (apiError && apiError.message ? apiError.message : '')
+            setSync('error');
+            fbAlert(
+                'fb_alert_api_network',
+                { detail: apiError && apiError.message ? apiError.message : '' },
+                'Não foi possível contactar a API. O formulário ficou guardado só neste navegador.\n\n' +
+                    (apiError && apiError.message ? apiError.message : '')
             );
         }
-        
-        setTimeout(() => { btn.innerHTML = oldText; btn.disabled = false; }, 2200);
-        
+
+        setTimeout(function () {
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            setSync('idle');
+        }, 2200);
     } catch (err) {
-        console.error("Falha fatal ao salvar form:", err);
-        alert("Ops! Erro ao construir os arquivos: " + err.message);
+        console.error('Falha fatal ao salvar form:', err);
+        setSync('error');
+        fbAlert(
+            'fb_alert_save_fatal',
+            { detail: err && err.message ? err.message : String(err) },
+            'Erro ao salvar: ' + (err && err.message ? err.message : err)
+        );
         btn.innerHTML = oldText;
         btn.disabled = false;
+        setSync('idle');
     }
 };
 
 // Global: jsPDF Fallback Generator
 window.previewPDF = function() {
-    if(fields.length === 0) return alert("Adicione perguntas antes de gerar o PDF.");
+    if (fields.length === 0) {
+        fbAlert('fb_alert_pdf_needs_fields', null, 'Adicione perguntas antes de gerar o PDF.');
+        return;
+    }
     
     // window.jspdf vem da CDN chamada no header do HTML
     const { jsPDF } = window.jspdf;
@@ -3690,7 +4936,7 @@ window.openNewFolderModal = function () {
     const m = document.getElementById('new-folder-modal');
     const inp = document.getElementById('new-folder-name-input');
     if (!m || !inp) {
-        alert('Recarregue a página (interface «Nova pasta» não carregou).');
+        fbAlert('fb_alert_folder_ui', null, 'Recarregue a página (interface «Nova pasta» não carregou).');
         return;
     }
     inp.value = '';
@@ -3728,7 +4974,7 @@ window.submitNewTemplateFolder = async function () {
     const inp = document.getElementById('new-folder-name-input');
     const name = inp && inp.value ? String(inp.value).trim() : '';
     if (!name) {
-        alert('Indique um nome para a pasta.');
+        fbAlert('fb_alert_folder_name', null, 'Indique um nome para a pasta.');
         if (inp) inp.focus();
         return;
     }
@@ -3744,14 +4990,16 @@ window.submitNewTemplateFolder = async function () {
             try {
                 msg = JSON.parse(raw).error || raw;
             } catch (_) {}
-            alert('Não foi possível criar a pasta: ' + msg);
+            fbAlert('fb_alert_folder_create_fail', { detail: String(msg) }, 'Não foi possível criar a pasta: ' + msg);
             return;
         }
         window.cancelNewFolderModal();
         await refreshTemplateFolders();
         window.renderFormsGridFromLocal(window._formsDbCache || {});
     } catch (e) {
-        alert(
+        fbAlert(
+            'fb_alert_folder_create_net',
+            null,
             'Erro de rede ao criar pasta. Abra o Form Builder pela URL do servidor Node (ex.: http://localhost:3001/checklists.html), não pelo Live Server.'
         );
         console.warn(e);
@@ -3779,13 +5027,13 @@ window.promptRenameTemplateFolder = async function (folderId) {
             try {
                 msg = JSON.parse(raw).error || raw;
             } catch (_) {}
-            alert('Não foi possível renomear: ' + msg);
+            fbAlert('fb_alert_folder_rename_fail', { detail: String(msg) }, 'Não foi possível renomear: ' + msg);
             return;
         }
         await refreshTemplateFolders();
         window.renderFormsGridFromLocal(window._formsDbCache || {});
     } catch (e) {
-        alert('Erro de rede ao renomear.');
+        fbAlert('fb_alert_folder_rename_net', null, 'Erro de rede ao renomear.');
         console.warn(e);
     }
 };
@@ -3801,7 +5049,11 @@ window.promptDeleteTemplateFolder = async function (folderId) {
         });
         if (!res.ok) {
             const raw = await res.text();
-            alert('Não foi possível eliminar: ' + raw);
+            fbAlert(
+                'fb_alert_folder_delete_fail',
+                { detail: String(raw) },
+                'Não foi possível eliminar: ' + raw
+            );
             return;
         }
         if (builderBrowseFolderId === folderId) {
@@ -3810,7 +5062,7 @@ window.promptDeleteTemplateFolder = async function (folderId) {
         await refreshTemplateFolders();
         await window.loadSavedFormsList();
     } catch (e) {
-        alert('Erro de rede ao eliminar pasta.');
+        fbAlert('fb_alert_folder_delete_net', null, 'Erro de rede ao eliminar pasta.');
         console.warn(e);
     }
 };
@@ -3875,7 +5127,11 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
                 msg = JSON.parse(raw).error || raw;
             } catch (_) {}
             const prefix = res.status === 409 ? '' : 'Não foi possível mover: ';
-            alert(prefix + msg);
+            fbAlert(
+                'fb_alert_folder_move_fail',
+                { detail: prefix + String(msg) },
+                prefix + msg
+            );
             selectEl.value = prevSelectVal;
             return;
         }
@@ -3887,7 +5143,7 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
         window._formsDbCache = db;
         window.renderFormsGridFromLocal(db);
     } catch (e) {
-        alert('Erro de rede ao mover formulário.');
+        fbAlert('fb_alert_folder_move_net', null, 'Erro de rede ao mover formulário.');
         console.warn(e);
     }
 };
@@ -3954,11 +5210,24 @@ window.duplicateChecklist = async function(id) {
             try {
                 msg = JSON.parse(raw).error || raw;
             } catch (_) {}
-            alert(
-                res.status === 409
-                    ? msg
-                    : 'Não foi possível clonar na API: ' + (msg || res.status)
-            );
+            if (res.status === 409) {
+                alert(
+                    String(
+                        msg ||
+                            fbStr(
+                                'fb_alert_dup_title_api',
+                                null,
+                                'Já existe um formulário activo com este nome nesta pasta.'
+                            )
+                    )
+                );
+            } else {
+                fbAlert(
+                    'fb_alert_clone_fail_api',
+                    { detail: String(msg || res.status) },
+                    'Não foi possível clonar na API: ' + (msg || res.status)
+                );
+            }
             window.renderFormsGridFromLocal(db2);
             return;
         }
@@ -3967,12 +5236,12 @@ window.duplicateChecklist = async function(id) {
         const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
         delete db2[newForm.id];
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
-        alert('Erro de rede ao clonar. A cópia local foi anulada.');
+        fbAlert('fb_alert_clone_net', null, 'Erro de rede ao clonar. A cópia local foi anulada.');
         window.renderFormsGridFromLocal(db2);
         return;
     }
     
-    alert(`Formulário '${form.title}' clonado com sucesso!`);
+    fbAlert('fb_alert_clone_ok', { title: String(form.title) }, "Formulário '" + form.title + "' clonado com sucesso.");
     window.renderFormsGridFromLocal(JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}'));
 };
 
@@ -4082,13 +5351,13 @@ window.renderFormsGridFromLocal = function (db) {
         const fid = escapeHtmlAttr(folder.id);
         const fname = escapeHtml(folder.name);
         grid.innerHTML += `
-            <div class="folder-browser-item" data-title="${escapeHtmlAttr(folder.name)}" style="display:flex; align-items:stretch; gap:0; border-radius:12px; overflow:hidden; border:1px solid #c4b5fd; background:linear-gradient(135deg,#faf5ff 0%,#fff 100%); transition:border-color 0.2s;"
+            <div class="folder-browser-item" data-title="${escapeHtmlAttr(folder.name)}" style="min-width:0;max-width:100%;display:flex; align-items:stretch; gap:0; border-radius:12px; overflow:hidden; border:1px solid #c4b5fd; background:linear-gradient(135deg,#faf5ff 0%,#fff 100%); transition:border-color 0.2s;"
                  onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#c4b5fd'">
                <div onclick="window.enterBrowseFolder('${fid}')"
-                    style="flex:1; padding:16px; cursor:pointer; display:flex; align-items:center; gap:16px; border:none; background:transparent;">
+                    style="flex:1; min-width:0; padding:16px; cursor:pointer; display:flex; align-items:center; gap:12px; border:none; background:transparent;">
                   <div style="width:48px; height:48px; border-radius:12px; background:#ede9fe; display:flex; justify-content:center; align-items:center; font-size:26px; flex-shrink:0">📁</div>
-                  <div style="flex:1;">
-                     <h4 style="margin:0; font-size:15px; color:#4c1d95;">${fname}</h4>
+                  <div style="flex:1; min-width:0;">
+                     <h4 style="margin:0; font-size:15px; color:#4c1d95; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">${fname}</h4>
                      <p style="margin:4px 0 0 0; font-size:12px; color:#7c3aed; font-weight:600;">Pasta</p>
                   </div>
                </div>
@@ -4126,16 +5395,16 @@ window.renderFormsGridFromLocal = function (db) {
         const moveSelectId = 'move-folder-' + form.id.replace(/[^a-zA-Z0-9_-]/g, '_');
         const moveOpts = buildMoveFolderOptionsHtml(form.folderId || null);
         grid.innerHTML += `
-            <div class="form-card-item" data-title="${escapeHtmlAttr(form.title)}" style="display:flex; flex-direction:column; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; transition:border-color 0.2s;"
+            <div class="form-card-item" data-title="${escapeHtmlAttr(form.title)}" style="min-width:0;max-width:100%;display:flex; flex-direction:column; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; transition:border-color 0.2s;"
                  onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#e2e8f0'">
-               <div style="display:flex; align-items:stretch; flex:1;">
+               <div style="display:flex; align-items:stretch; flex:1; min-width:0;">
                  <div onclick="window.selectFormFromModal('${fid}')"
-                      style="flex:1; padding:16px; cursor:pointer; display:flex; align-items:center; gap:16px; border:none; background:transparent;">
+                      style="flex:1; min-width:0; padding:12px 12px 12px 14px; cursor:pointer; display:flex; align-items:center; gap:12px; border:none; background:transparent;">
                     <div style="width:48px; height:48px; border-radius:12px; background:#f1f5f9; display:flex; justify-content:center; align-items:center; font-size:24px; color:#64748b; flex-shrink:0">
                        ${iconHtml}
                     </div>
                     <div style="flex:1; min-width:0;">
-                       <h4 style="margin:0; font-size:15px; color:#1e293b;">${ftitle}</h4>
+                       <h4 style="margin:0; font-size:15px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">${ftitle}</h4>
                        <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;">${count} campos</p>
                     </div>
                  </div>
@@ -4167,8 +5436,15 @@ window.renderFormsGridFromLocal = function (db) {
     });
 
     if (subfolders.length === 0 && sortedForms.length === 0) {
+        const emptyMsg = fbStr(
+            'fb_alert_forms_empty',
+            null,
+            'Nenhuma pasta nem formulário neste nível. Use «Nova pasta» ou «Novo formulário aqui».'
+        );
         grid.innerHTML =
-            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">Nenhuma pasta nem formulário neste nível. Use "Nova pasta" ou "Novo formulário aqui".</p>';
+            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">' +
+            escapeHtml(emptyMsg) +
+            '</p>';
     }
 
     if (window.filterFormsList) window.filterFormsList();
@@ -4220,6 +5496,7 @@ window.loadChecklist = function(id) {
         selectedFieldId = null;
         renderCanvas();
         renderProperties();
+        if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
     }
 };
 
@@ -4230,13 +5507,15 @@ window.createNewChecklist = function (fromBrowseFolder) {
     const modal = document.getElementById('new-checklist-modal');
     if (modal) {
         modal.style.display = 'flex';
-        document.getElementById('new-form-name-input').value = 'Novo formulário';
+        document.getElementById('new-form-name-input').value = fbStr('mdl_new_form_title', null, 'Novo formulário');
         setTimeout(() => document.getElementById('new-form-name-input').focus(), 100);
     }
 };
 
 window.confirmCreateNewChecklist = function () {
-    const title = document.getElementById('new-form-name-input').value.trim() || 'Novo formulário';
+    const title =
+        document.getElementById('new-form-name-input').value.trim() ||
+        fbStr('mdl_new_form_title', null, 'Novo formulário');
     document.getElementById('new-checklist-modal').style.display = 'none';
 
     if (window.__newFormFolderId !== undefined) {
@@ -4249,7 +5528,7 @@ window.confirmCreateNewChecklist = function () {
     flushQuillToBoundField();
     currentFormId = null;
     currentFormTitle = title;
-    fields = [createDefaultSectionField()];
+    fields = [createDefaultSectionField([])];
     selectedFieldId = null;
     globalFormSettings = {
         requireGlobalGeofence: false,
@@ -4274,7 +5553,8 @@ window.confirmCreateNewChecklist = function () {
 
     renderCanvas();
     renderProperties();
-    
+    if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
+
     const select = document.getElementById('saved-forms-select');
     if (select) {
         let tempOpt = select.querySelector('option[value="temp_new"]');
@@ -4287,7 +5567,13 @@ window.confirmCreateNewChecklist = function () {
         select.value = 'temp_new';
     }
     
-    alert(`Painel preparado para: "${title}". Já existe uma primeira seção no canvas — arraste perguntas para dentro dela (ou adicione mais seções).`);
+    fbAlert(
+        'fb_alert_new_panel',
+        { title: String(title) },
+        'Painel preparado para «' +
+            title +
+            '». Já existe uma primeira secção no canvas — arraste perguntas para dentro dela (ou adicione mais secções).'
+    );
 };
 
 // --- MOBILE SIMULATOR RENDER LOGIC --- //
@@ -4323,6 +5609,7 @@ function mobilePreviewFieldIconHtml(f) {
     }
 }
 
+/** Preview mobile do Form Builder: simulação DOM (ver aviso #mobile-preview-engine-notice em checklists.html). O motor real do app é RN em app/checklist/[id].tsx — não embutido aqui. */
 function renderMobilePreview() {
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
@@ -4495,8 +5782,8 @@ function renderMobilePreview() {
                 f.visionCaptureMode === 'photo_only'
                     ? 'Só foto'
                     : f.visionCaptureMode === 'video_only'
-                      ? 'Só vídeo'
-                      : 'Foto ou vídeo';
+                      ? 'Só vídeo (até 10 s)'
+                      : 'Foto ou vídeo (vídeo até 10 s)';
             if (f.type === 'vision_ai_analysis') {
                 inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · Gemini · ${f.visionRating0To10Enabled ? 'com nota 0–10' : 'resposta + confiança'}.</span></div>`;
             } else {
@@ -4566,6 +5853,9 @@ window.bindAppSectionNavRadios = function () {
             if (this.checked && globalFormSettings) {
                 globalFormSettings.appSectionStart = normalizeAppSectionStart(this.value);
                 window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
+                if (typeof window.scheduleBuilderDirtyRecompute === 'function') {
+                    window.scheduleBuilderDirtyRecompute();
+                }
             }
         });
     });
@@ -4573,6 +5863,10 @@ window.bindAppSectionNavRadios = function () {
         r.addEventListener('change', function () {
             if (this.checked && globalFormSettings) {
                 globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(this.value);
+                window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
+                if (typeof window.scheduleBuilderDirtyRecompute === 'function') {
+                    window.scheduleBuilderDirtyRecompute();
+                }
             }
         });
     });
@@ -4596,71 +5890,71 @@ window.bindAppSectionNavRadios = function () {
 /** Monitor virtual: tempo total do formulário (app grava __form_started_at / metadata). */
 const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
 
-/** Paridade com `src/lib/businessRuleCondition.ts` — operadores por tipo de monitor. */
+/** Paridade com `src/lib/businessRuleCondition.ts` — operadores por tipo de monitor. Segunda coluna = chave i18n (`fb_logic_op_*`). */
 const NORMAL_LOGIC_OPS = [
-    ['==', 'Igual a (==)'],
-    ['!=', 'Diferente de (!=)'],
-    ['contains', 'Contém texto'],
-    ['not_contains', 'Não contém texto'],
-    ['starts_with', 'Começa com'],
-    ['ends_with', 'Termina com'],
-    ['not_starts_with', 'Não começa com'],
-    ['not_ends_with', 'Não termina com'],
-    ['is_empty', 'Está vazio'],
-    ['not_empty', 'Está preenchido (qualquer valor)'],
-    ['is_true', 'Verdadeiro (caixa / sim / 1)'],
-    ['is_false', 'Falso (não / 0 / desmarcado)'],
-    ['>', 'Maior que (número)'],
-    ['<', 'Menor que (número)'],
-    ['>=', 'Maior ou igual (número)'],
-    ['<=', 'Menor ou igual (número)'],
-    ['between', 'Entre dois números (inclusive) — valor: min|max'],
-    ['not_between', 'Fora do intervalo — valor: min|max'],
-    ['one_of', 'É um de (lista exata, separada por vírgula)'],
-    ['none_of', 'Não é nenhum de (lista exata)'],
-    ['includes_any', 'Contém qualquer trecho da lista (vírgula)'],
-    ['includes_all', 'Contém todos os trechos da lista'],
-    ['excludes_all', 'Não contém nenhum trecho da lista'],
-    ['matches_regex', 'Corresponde ao padrão (regex JavaScript)'],
-    ['length_eq', 'Tamanho do texto = (número de caracteres)'],
-    ['length_neq', 'Tamanho do texto ≠'],
-    ['length_gt', 'Tamanho do texto >'],
-    ['length_gte', 'Tamanho do texto ≥'],
-    ['length_lt', 'Tamanho do texto <'],
-    ['length_lte', 'Tamanho do texto ≤'],
-    ['count_eq', 'N.º de itens selecionados ='],
-    ['count_neq', 'N.º de itens selecionados ≠'],
-    ['count_gt', 'N.º de itens selecionados >'],
-    ['count_gte', 'N.º de itens selecionados ≥'],
-    ['count_lt', 'N.º de itens selecionados <'],
-    ['count_lte', 'N.º de itens selecionados ≤'],
-    ['date_before', 'Data/hora é antes de (valor ISO ou reconhecível)'],
-    ['date_after', 'Data/hora é depois de'],
-    ['date_on_or_before', 'Data/hora ≤ referência'],
-    ['date_on_or_after', 'Data/hora ≥ referência'],
+    ['==', 'fb_logic_op_eq'],
+    ['!=', 'fb_logic_op_ne'],
+    ['contains', 'fb_logic_op_contains'],
+    ['not_contains', 'fb_logic_op_not_contains'],
+    ['starts_with', 'fb_logic_op_starts_with'],
+    ['ends_with', 'fb_logic_op_ends_with'],
+    ['not_starts_with', 'fb_logic_op_not_starts_with'],
+    ['not_ends_with', 'fb_logic_op_not_ends_with'],
+    ['is_empty', 'fb_logic_op_is_empty'],
+    ['not_empty', 'fb_logic_op_not_empty'],
+    ['is_true', 'fb_logic_op_is_true'],
+    ['is_false', 'fb_logic_op_is_false'],
+    ['>', 'fb_logic_op_gt'],
+    ['<', 'fb_logic_op_lt'],
+    ['>=', 'fb_logic_op_gte'],
+    ['<=', 'fb_logic_op_lte'],
+    ['between', 'fb_logic_op_between'],
+    ['not_between', 'fb_logic_op_not_between'],
+    ['one_of', 'fb_logic_op_one_of'],
+    ['none_of', 'fb_logic_op_none_of'],
+    ['includes_any', 'fb_logic_op_includes_any'],
+    ['includes_all', 'fb_logic_op_includes_all'],
+    ['excludes_all', 'fb_logic_op_excludes_all'],
+    ['matches_regex', 'fb_logic_op_matches_regex'],
+    ['length_eq', 'fb_logic_op_length_eq'],
+    ['length_neq', 'fb_logic_op_length_neq'],
+    ['length_gt', 'fb_logic_op_length_gt'],
+    ['length_gte', 'fb_logic_op_length_gte'],
+    ['length_lt', 'fb_logic_op_length_lt'],
+    ['length_lte', 'fb_logic_op_length_lte'],
+    ['count_eq', 'fb_logic_op_count_eq'],
+    ['count_neq', 'fb_logic_op_count_neq'],
+    ['count_gt', 'fb_logic_op_count_gt'],
+    ['count_gte', 'fb_logic_op_count_gte'],
+    ['count_lt', 'fb_logic_op_count_lt'],
+    ['count_lte', 'fb_logic_op_count_lte'],
+    ['date_before', 'fb_logic_op_date_before'],
+    ['date_after', 'fb_logic_op_date_after'],
+    ['date_on_or_before', 'fb_logic_op_date_on_or_before'],
+    ['date_on_or_after', 'fb_logic_op_date_on_or_after'],
 ];
 
 const FORM_CLOCK_LOGIC_OPS = [
-    ['form_elapsed_sec_gte', 'Tempo total no formulário ≥ (segundos)'],
-    ['form_elapsed_sec_lte', 'Tempo total no formulário ≤ (segundos)'],
-    ['form_elapsed_sec_gt', 'Tempo total no formulário > (segundos)'],
-    ['form_elapsed_sec_lt', 'Tempo total no formulário < (segundos)'],
-    ['form_elapsed_sec_eq', 'Tempo total no formulário = (segundos inteiros)'],
-    ['form_elapsed_sec_between', 'Tempo total entre (seg) — min|max'],
+    ['form_elapsed_sec_gte', 'fb_logic_op_form_elapsed_gte'],
+    ['form_elapsed_sec_lte', 'fb_logic_op_form_elapsed_lte'],
+    ['form_elapsed_sec_gt', 'fb_logic_op_form_elapsed_gt'],
+    ['form_elapsed_sec_lt', 'fb_logic_op_form_elapsed_lt'],
+    ['form_elapsed_sec_eq', 'fb_logic_op_form_elapsed_eq'],
+    ['form_elapsed_sec_between', 'fb_logic_op_form_elapsed_between'],
 ];
 
 const SECTION_LOGIC_OPS = [
-    ['section_has_started', 'Técnico já entrou nesta etapa'],
-    ['section_not_started', 'Ainda não entrou nesta etapa'],
-    ['section_has_ended', 'Etapa já foi concluída (avançou ou enviou)'],
-    ['section_not_ended', 'Etapa ainda não foi concluída'],
-    ['section_in_progress', 'Em curso (entrou e não concluiu)'],
-    ['section_elapsed_sec_gte', 'Tempo gasto na etapa ≥ (segundos)'],
-    ['section_elapsed_sec_lte', 'Tempo gasto na etapa ≤ (segundos)'],
-    ['section_elapsed_sec_gt', 'Tempo gasto na etapa > (segundos)'],
-    ['section_elapsed_sec_lt', 'Tempo gasto na etapa < (segundos)'],
-    ['section_elapsed_sec_eq', 'Tempo gasto na etapa = (segundos inteiros)'],
-    ['section_elapsed_sec_between', 'Tempo na etapa entre (seg) — min|max'],
+    ['section_has_started', 'fb_logic_op_section_started'],
+    ['section_not_started', 'fb_logic_op_section_not_started'],
+    ['section_has_ended', 'fb_logic_op_section_ended'],
+    ['section_not_ended', 'fb_logic_op_section_not_ended'],
+    ['section_in_progress', 'fb_logic_op_section_in_progress'],
+    ['section_elapsed_sec_gte', 'fb_logic_op_section_elapsed_gte'],
+    ['section_elapsed_sec_lte', 'fb_logic_op_section_elapsed_lte'],
+    ['section_elapsed_sec_gt', 'fb_logic_op_section_elapsed_gt'],
+    ['section_elapsed_sec_lt', 'fb_logic_op_section_elapsed_lt'],
+    ['section_elapsed_sec_eq', 'fb_logic_op_section_elapsed_eq'],
+    ['section_elapsed_sec_between', 'fb_logic_op_section_elapsed_between'],
 ];
 
 const NORMAL_LOGIC_OP_VALUES = NORMAL_LOGIC_OPS.map((r) => r[0]);
@@ -4676,13 +5970,29 @@ function escapeHtmlLogic(s) {
         .replace(/"/g, '&quot;');
 }
 
+/** Texto do query builder de regras (modal de lógica). */
+function logicStr(key, ptFallback) {
+    return fbStr(key, null, ptFallback);
+}
+
+/** Rótulo guardado no JSON → texto no idioma atual (ex.: «Etapa 1» → «Step 1» em en-US). Vazio permanece vazio. */
+function translateStoredFieldLabelForDisplay(raw) {
+    const t = String(raw || '').trim();
+    if (!t) return '';
+    return translateStepLabelForCanvasDisplay(t);
+}
+
 /** Rótulo no select de alvo / monitor — destaca separadores de etapa (section_break). */
 function logicFieldSelectLabel(fld) {
     if (!fld) return '';
+    const secPrefix = logicStr('fb_logic_field_section_prefix', '[Seção/Etapa]');
+    const unnamed = logicStr('fb_logic_field_unnamed', '(sem nome)');
     if (fld.type === 'section_break') {
-        return `[Seção/Etapa] ${fld.label || '(sem nome)'} — ${fld.id}`;
+        const stepShown = translateStoredFieldLabelForDisplay(fld.label) || unnamed;
+        return `${secPrefix} ${stepShown} — ${fld.id}`;
     }
-    return `${fld.label || fld.id} (${fld.id})`;
+    const shown = translateStoredFieldLabelForDisplay(fld.label) || String(fld.id || '');
+    return `${shown} (${fld.id})`;
 }
 
 function logicConditionNeedsNumericInput(operator) {
@@ -4751,7 +6061,37 @@ function defaultValueForRuleOperator(op) {
 }
 
 function logicValuePlaceholder(op) {
-    const map = {
+    const keys = {
+        between: 'fb_logic_ph_between',
+        not_between: 'fb_logic_ph_not_between',
+        one_of: 'fb_logic_ph_one_of',
+        none_of: 'fb_logic_ph_none_of',
+        includes_any: 'fb_logic_ph_includes_any',
+        includes_all: 'fb_logic_ph_includes_all',
+        excludes_all: 'fb_logic_ph_excludes_all',
+        matches_regex: 'fb_logic_ph_matches_regex',
+        '>': 'fb_logic_ph_num_ref',
+        '<': 'fb_logic_ph_num_ref',
+        '>=': 'fb_logic_ph_num_ref',
+        '<=': 'fb_logic_ph_num_ref',
+        length_eq: 'fb_logic_ph_len',
+        length_neq: 'fb_logic_ph_len',
+        length_gt: 'fb_logic_ph_len',
+        length_gte: 'fb_logic_ph_len',
+        length_lt: 'fb_logic_ph_len',
+        length_lte: 'fb_logic_ph_len',
+        count_eq: 'fb_logic_ph_count_list',
+        count_neq: 'fb_logic_ph_count',
+        count_gt: 'fb_logic_ph_count',
+        count_gte: 'fb_logic_ph_count',
+        count_lt: 'fb_logic_ph_count',
+        count_lte: 'fb_logic_ph_count',
+        date_before: 'fb_logic_ph_date_ref',
+        date_after: 'fb_logic_ph_date_ref_short',
+        date_on_or_before: 'fb_logic_ph_date_ref_short',
+        date_on_or_after: 'fb_logic_ph_date_ref_short',
+    };
+    const pt = {
         between: 'Mínimo|Máximo (ex.: 10|500)',
         not_between: 'Mínimo|Máximo — fora do intervalo',
         one_of: 'Valor1, Valor2 (igualdade, ignora maiúsculas)',
@@ -4781,7 +6121,9 @@ function logicValuePlaceholder(op) {
         date_on_or_before: 'Data/hora de referência',
         date_on_or_after: 'Data/hora de referência',
     };
-    return map[op] || 'Valor esperado';
+    const k = keys[op];
+    if (!k) return logicStr('fb_logic_ph_default', 'Valor esperado');
+    return logicStr(k, pt[op] || 'Valor esperado');
 }
 
 /** Ajusta operador/valor quando o monitor deixa de ser campo “normal”. */
@@ -4817,29 +6159,35 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
         fld.visionRating0To10Enabled &&
         !isFormClock &&
         !isSection
-            ? `<div style="font-size:10px;color:#92400e;line-height:1.45;margin-bottom:10px;padding:9px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px"><strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, <code>Entre dois números</code> e <code>Fora do intervalo</code> comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.</div>`
+            ? `<div style="font-size:10px;color:#92400e;line-height:1.45;margin-bottom:10px;padding:9px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">${logicStr(
+                  'fb_logic_vision_hint_html',
+                  '<strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, «Entre dois números» e «Fora do intervalo» comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.',
+              )}</div>`
             : '';
 
     const opSelect = `
             ${visionRatingHint}
             <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
                 ${opList
-                    .map(
-                        ([val, label]) =>
-                            `<option value="${escapeHtmlLogic(val)}" ${op === val ? 'selected' : ''}>${escapeHtmlLogic(
-                                label,
-                            )}</option>`,
-                    )
+                    .map(([val, i18nKey]) => {
+                        const label = logicStr(i18nKey, String(val));
+                        return `<option value="${escapeHtmlLogic(val)}" ${op === val ? 'selected' : ''}>${escapeHtmlLogic(
+                            label,
+                        )}</option>`;
+                    })
                     .join('')}
             </select>`;
 
     let valInput = '';
     if (logicConditionNeedsNumericInput(op)) {
         const useBetween = op.endsWith('_between');
+        const phSec = escapeHtmlAttr(
+            useBetween
+                ? logicStr('fb_logic_ph_sec_between', 'min|max em segundos (ex.: 30|600)')
+                : logicStr('fb_logic_ph_sec_single', 'Segundos (ex.: 120)'),
+        );
         valInput = `
-            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${
-                useBetween ? 'min|max em segundos (ex.: 30|600)' : 'Segundos (ex.: 120)'
-            }" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${phSec}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
     } else if (!isFormClock && !isSection && logicConditionSingleNumberInput(op)) {
         valInput = `
             <input type="number" step="any" class="prop-input" placeholder="${escapeHtmlLogic(
@@ -4868,7 +6216,7 @@ function buildLogicActionTargetOptions(actType, selectedTargetId) {
             const sa = a.type === 'section_break' ? 0 : 1;
             const sb = b.type === 'section_break' ? 0 : 1;
             if (sa !== sb) return sa - sb;
-            return logicFieldSelectLabel(a).localeCompare(logicFieldSelectLabel(b), 'pt');
+            return logicFieldSelectLabel(a).localeCompare(logicFieldSelectLabel(b), undefined, { sensitivity: 'base' });
         });
     }
     const body = list
@@ -4877,7 +6225,30 @@ function buildLogicActionTargetOptions(actType, selectedTargetId) {
                 `<option value="${escapeHtmlLogic(fld.id)}" ${selectedTargetId === fld.id ? 'selected' : ''}>${escapeHtmlLogic(logicFieldSelectLabel(fld))}</option>`
         )
         .join('');
-    return '<option value="">[Selec. Alvo]</option>' + body;
+    return (
+        `<option value="">${escapeHtmlLogic(logicStr('fb_logic_target_pick', '[Selecionar alvo]'))}</option>` + body
+    );
+}
+
+/** Opções do select «tipo de ação» (ENTÃO), com rótulos traduzidos. */
+function buildLogicActionTypeOptionsHtml(selectedType) {
+    const rows = [
+        ['SHOW', 'fb_logic_act_show', 'Exibir o campo'],
+        ['HIDE', 'fb_logic_act_hide', 'Ocultar o campo'],
+        ['REQUIRE', 'fb_logic_act_require', 'Tornar obrigatório'],
+        ['OPTIONAL', 'fb_logic_act_optional', 'Tornar opcional'],
+        ['SET_VALUE', 'fb_logic_act_set_value', 'Definir valor'],
+        ['API_VALIDATION', 'fb_logic_act_api_val', 'Validar na API externa'],
+        ['API_FETCH', 'fb_logic_act_api_fetch', 'Buscar na API e preencher campo'],
+    ];
+    return rows
+        .map(
+            ([val, key, pt]) =>
+                `<option value="${val}" ${selectedType === val ? 'selected' : ''}>${escapeHtmlLogic(
+                    logicStr(key, pt),
+                )}</option>`,
+        )
+        .join('');
 }
 
 // --- NEW CONTEXTUAL LOGIC BUILDER ---
@@ -4919,7 +6290,9 @@ window.openLogicModal = function(evt, fieldId) {
     
     const field = fields.find(f => f.id === fieldId);
     if(!field) return;
-    
+
+    if (typeof window.applyChecklistsModalsI18n === 'function') window.applyChecklistsModalsI18n();
+
     const sub = document.getElementById('logic-modal-subtitle');
     sub.textContent = '';
     sub.style.display = 'flex';
@@ -4933,13 +6306,17 @@ window.openLogicModal = function(evt, fieldId) {
     row1.style.flexWrap = 'wrap';
     row1.style.alignItems = 'center';
     row1.style.gap = '8px';
-    row1.appendChild(document.createTextNode('Regras neste bloco:'));
+    const fb = typeof window.fbT === 'function' ? window.fbT : (k) => k;
+    row1.appendChild(document.createTextNode(fb('mdl_logic_rules_in_block')));
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.id = 'logic-modal-field-label';
     inp.className = 'prop-input';
-    inp.value = field.label || '';
-    inp.setAttribute('aria-label', 'Nome do campo ou etapa');
+    inp.value =
+        field.label != null && String(field.label).trim() !== ''
+            ? translateStoredFieldLabelForDisplay(field.label)
+            : String(field.label || '');
+    inp.setAttribute('aria-label', fb('mdl_logic_field_label_aria'));
     inp.style.cssText =
         'flex:1; min-width:200px; max-width:min(380px,65vw); font-weight:700; font-size:13px; padding:8px 10px; margin:0;';
     inp.addEventListener('input', () => window.handleLogicModalLabelInput(inp.value));
@@ -4961,8 +6338,7 @@ window.openLogicModal = function(evt, fieldId) {
     tail.style.fontSize = '12px';
     tail.style.lineHeight = '1.45';
     tail.style.opacity = '0.92';
-    tail.innerHTML =
-        'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>. Ações «Buscar na API e preencher campo» disparam ao <strong>sair do campo monitorizado</strong> (teclado), em geral com o mesmo timing que «Validar na API externa» — GET sem corpo ou POST com JSON do formulário.';
+    tail.innerHTML = fb('mdl_logic_sub_help_html');
     sub.appendChild(tail);
     
     // Initialize rules array if it doesn't exist
@@ -5006,7 +6382,9 @@ function renderLogicRules() {
 
         const monitorFieldId = rule.condFieldId || currentLogicFieldId;
         const condSourceOptions =
-            `<option value="${FORM_CLOCK_COND_ID}" ${monitorFieldId === FORM_CLOCK_COND_ID ? 'selected' : ''}>[Formulário] Cronómetro geral (tempo total)</option>` +
+            `<option value="${FORM_CLOCK_COND_ID}" ${monitorFieldId === FORM_CLOCK_COND_ID ? 'selected' : ''}>${escapeHtmlLogic(
+                logicStr('fb_logic_form_clock_option', '[Formulário] Cronómetro geral (tempo total)'),
+            )}</option>` +
             fields
                 .map(
                     (ff) =>
@@ -5015,7 +6393,9 @@ function renderLogicRules() {
                 .join('');
         const condFieldSelect = `
             <div style="margin-bottom:12px;">
-                <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">Campo monitorado (dispara o SE)</label>
+                <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">${escapeHtmlLogic(
+                    logicStr('fb_logic_monitor_label', 'Campo monitorado (dispara o SE)'),
+                )}</label>
                 <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'condFieldId', this.value)" style="margin-bottom:0;">
                     ${condSourceOptions}
                 </select>
@@ -5031,81 +6411,106 @@ function renderLogicRules() {
             const fieldOptsFetch = buildLogicActionTargetOptions('SET_VALUE', act.targetId);
 
             if (act.type === 'API_FETCH') {
+                const phUrl = escapeHtmlAttr(logicStr('fb_logic_api_ph_url', 'https://… (GET: inclua query na URL)'));
+                const phPath = escapeHtmlAttr(logicStr('fb_logic_api_ph_path', 'Ex.: current.temp_c (vazio = corpo inteiro como texto)'));
+                const phErr = escapeHtmlAttr(logicStr('fb_logic_api_ph_errmsg', 'Ex.: Serviço indisponível.'));
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#ecfdf5; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #86efac;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
                         <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
-                            <option value="SHOW">Exibir o Campo</option>
-                            <option value="HIDE">Ocultar o Campo</option>
-                            <option value="REQUIRE">Tornar Obrigatório</option>
-                            <option value="OPTIONAL">Tornar Opcional</option>
-                            <option value="SET_VALUE">Definir Valor</option>
-                            <option value="API_VALIDATION">Validar na API Externa</option>
-                            <option value="API_FETCH" selected>Buscar na API e preencher campo</option>
+                            ${buildLogicActionTypeOptionsHtml('API_FETCH')}
                         </select>
                         <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
                     </div>
-                    <label style="font-size:10px; color:#166534; font-weight:bold;">Campo destino (recebe o texto extraído)</label>
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_target', 'Campo destino (recebe o texto extraído)'),
+                    )}</label>
                     <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'targetId', this.value)">${fieldOptsFetch}</select>
-                    <label style="font-size:10px; color:#166534; font-weight:bold;">Método HTTP</label>
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_method', 'Método HTTP'),
+                    )}</label>
                     <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiMethod', this.value)">
-                        <option value="POST" ${(act.apiMethod || 'POST') === 'POST' ? 'selected' : ''}>POST (JSON com formulário, tarefa e respostas)</option>
-                        <option value="GET" ${String(act.apiMethod || '').toUpperCase() === 'GET' ? 'selected' : ''}>GET (URL completa; sem corpo)</option>
+                        <option value="POST" ${(act.apiMethod || 'POST') === 'POST' ? 'selected' : ''}>${escapeHtmlLogic(
+                            logicStr('fb_logic_api_method_post', 'POST (JSON com formulário, tarefa e respostas)'),
+                        )}</option>
+                        <option value="GET" ${String(act.apiMethod || '').toUpperCase() === 'GET' ? 'selected' : ''}>${escapeHtmlLogic(
+                            logicStr('fb_logic_api_method_get', 'GET (URL completa; sem corpo)'),
+                        )}</option>
                     </select>
-                    <label style="font-size:10px; color:#166534; font-weight:bold;">URL do endpoint</label>
-                    <input type="text" class="prop-input" placeholder="https://… (GET: inclua query na URL)" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
-                    <label style="font-size:10px; color:#166534; font-weight:bold;">Caminho no JSON da resposta (opcional)</label>
-                    <input type="text" class="prop-input" placeholder="Ex.: current.temp_c (vazio = corpo inteiro como texto)" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiResponsePath', this.value)" />
-                    <label style="font-size:10px; color:#166534; font-weight:bold;">Mensagem se falhar a chamada</label>
-                    <input type="text" class="prop-input" placeholder="Ex.: Serviço indisponível." value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_url', 'URL do endpoint'),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phUrl}" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_path', 'Caminho no JSON da resposta (opcional)'),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phPath}" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiResponsePath', this.value)" />
+                    <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_errmsg', 'Mensagem se falhar a chamada'),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phErr}" value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
                         <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiAllowOffline', this.checked)" />
-                        <label for="api_fetch_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#166534; cursor:pointer;">Se offline, não buscar nem alterar o campo</label>
+                        <label for="api_fetch_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#166534; cursor:pointer;">${escapeHtmlLogic(
+                            logicStr('fb_logic_api_fetch_offline', 'Se offline, não buscar nem alterar o campo'),
+                        )}</label>
                     </div>
                 </div>`;
             } else if (act.type === 'API_VALIDATION') {
+                const phUrlVal = escapeHtmlAttr(logicStr('fb_logic_api_ph_url_val', 'Ex.: https://api.fornecedor.com/valida'));
+                const phExp = escapeHtmlAttr(logicStr('fb_logic_api_ph_expected', 'Ex.: "status":"VALID"'));
+                const phBlock = escapeHtmlAttr(logicStr('fb_logic_api_ph_block_msg', 'Ex.: CPF inválido no Serasa.'));
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#f0f9ff; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #bae6fd;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
                         <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
-                            <option value="SHOW">Exibir o Campo</option>
-                            <option value="HIDE">Ocultar o Campo</option>
-                            <option value="REQUIRE">Tornar Obrigatório</option>
-                            <option value="OPTIONAL">Tornar Opcional</option>
-                            <option value="SET_VALUE">Definir Valor</option>
-                            <option value="API_VALIDATION" selected>Validar na API Externa</option>
-                            <option value="API_FETCH">Buscar na API e preencher campo</option>
+                            ${buildLogicActionTypeOptionsHtml('API_VALIDATION')}
                         </select>
                         <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
                     </div>
-                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">URL do Endpoint (O app fará POST injetando o Payload XML/JSON)</label>
-                    <input type="text" class="prop-input" placeholder="Ex: https://api.fornecedor.com/valida" value="${act.apiUrl || ''}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
-                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">Condição de Retorno de Sucesso (String/Regex Esperada no Body)</label>
-                    <input type="text" class="prop-input" placeholder="Ex: \"status\":\"VALID\"" value="${act.apiExpectedReturn || ''}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiExpectedReturn', this.value)" />
-                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">Mensagem Personalizada em caso de Bloqueio/Erro</label>
-                    <input type="text" class="prop-input" placeholder="Ex: CPF Inválido no SERASA." value="${act.apiErrorMsg || ''}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
+                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr(
+                            'fb_logic_api_lbl_url_val',
+                            'URL do endpoint (o app fará POST injetando o payload XML/JSON)',
+                        ),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phUrlVal}" value="${escapeHtmlAttr(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
+                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr(
+                            'fb_logic_api_lbl_expected',
+                            'Condição de retorno de sucesso (string/regex esperada no corpo)',
+                        ),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phExp}" value="${escapeHtmlAttr(act.apiExpectedReturn || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiExpectedReturn', this.value)" />
+                    <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
+                        logicStr('fb_logic_api_lbl_block_msg', 'Mensagem personalizada em caso de bloqueio/erro'),
+                    )}</label>
+                    <input type="text" class="prop-input" placeholder="${phBlock}" value="${escapeHtmlAttr(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
                         <input type="checkbox" id="api_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiAllowOffline', this.checked)" />
-                        <label for="api_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#0369a1; cursor:pointer;">Permitir que o técnico pule a regra se estiver OFFLINE</label>
+                        <label for="api_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#0369a1; cursor:pointer;">${escapeHtmlLogic(
+                            logicStr('fb_logic_api_allow_offline', 'Permitir que o técnico pule a regra se estiver offline'),
+                        )}</label>
                     </div>
                 </div>`;
             } else {
+                const phNewVal = escapeHtmlAttr(logicStr('fb_logic_new_value_ph', 'Novo valor'));
                 actionsHTML += `
                     <div style="display:flex; gap:8px; align-items:center; background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:8px; border:1px solid #e2e8f0;">
-                        <div style="color:var(--accent); font-weight:800; font-size:12px; margin-right:8px;">ENTÃO</div>
+                        <div style="color:var(--accent); font-weight:800; font-size:12px; margin-right:8px;">${escapeHtmlLogic(
+                            logicStr('fb_logic_then', 'ENTÃO'),
+                        )}</div>
                         <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
-                            <option value="SHOW" ${act.type==='SHOW'?'selected':''}>Exibir o Campo</option>
-                            <option value="HIDE" ${act.type==='HIDE'?'selected':''}>Ocultar o Campo</option>
-                            <option value="REQUIRE" ${act.type==='REQUIRE'?'selected':''}>Tornar Obrigatório</option>
-                            <option value="OPTIONAL" ${act.type==='OPTIONAL'?'selected':''}>Tornar Opcional</option>
-                            <option value="SET_VALUE" ${act.type==='SET_VALUE'?'selected':''}>Definir Valor</option>
-                            <option value="API_VALIDATION" ${act.type==='API_VALIDATION'?'selected':''}>Validar na API Externa</option>
-                            <option value="API_FETCH" ${act.type==='API_FETCH'?'selected':''}>Buscar na API e preencher campo</option>
+                            ${buildLogicActionTypeOptionsHtml(act.type || 'SHOW')}
                         </select>
                         <select class="prop-input" style="flex:1">
                             ${fieldOptions}
                         </select>
-                        ${act.type === 'SET_VALUE' ? `<input type="text" class="prop-input" style="flex:1" placeholder="Novo valor" value="${act.value || ''}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'value', this.value)" />` : ''}
+                        ${
+                            act.type === 'SET_VALUE'
+                                ? `<input type="text" class="prop-input" style="flex:1" placeholder="${phNewVal}" value="${escapeHtmlAttr(act.value || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'value', this.value)" />`
+                                : ''
+                        }
                         <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
                     </div>
                 `;
@@ -5117,17 +6522,23 @@ function renderLogicRules() {
                 <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0;">
                     ${condFieldSelect}
                     <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;">
-                    <div style="background:#f1f5f9; padding:6px 12px; border-radius:6px; color:#334155; font-weight:800; font-size:12px; align-self:flex-start;">SE</div>
+                    <div style="background:#f1f5f9; padding:6px 12px; border-radius:6px; color:#334155; font-weight:800; font-size:12px; align-self:flex-start;">${escapeHtmlLogic(
+                        logicStr('fb_logic_if', 'SE'),
+                    )}</div>
                     <div style="flex:1; min-width:120px;">${opSelect}</div>
                     <div style="flex:1; min-width:120px;">${valInput}</div>
                     </div>
                 </div>
-                <div style="cursor:pointer; color:var(--red); padding:4px 8px; font-weight:700; font-size:12px; border:1px solid var(--red); border-radius:4px; margin-left:12px;" onclick="window.removeLogicRule(${ruleIndex})">Excluir Regra</div>
+                <div style="cursor:pointer; color:var(--red); padding:4px 8px; font-weight:700; font-size:12px; border:1px solid var(--red); border-radius:4px; margin-left:12px;" onclick="window.removeLogicRule(${ruleIndex})">${escapeHtmlLogic(
+                    logicStr('fb_logic_del_rule', 'Excluir regra'),
+                )}</div>
             </div>
             
             <div style="border-top:1px dashed #cbd5e1; padding-top:12px;">
                 ${actionsHTML}
-                <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="window.addLogicAction(${ruleIndex})">+ Adicionar Ação (ENTÃO)</button>
+                <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="window.addLogicAction(${ruleIndex})">${escapeHtmlLogic(
+                    logicStr('fb_logic_add_action', '+ Adicionar ação (ENTÃO)'),
+                )}</button>
             </div>
         `;
         
@@ -5143,6 +6554,8 @@ function renderLogicRules() {
         });
     });
 }
+
+window.renderLogicRules = renderLogicRules;
 
 window.addLogicRule = function() {
     const field = fields.find(f => f.id === currentLogicFieldId);
@@ -5306,7 +6719,7 @@ window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
 
 window.brsparkCopilotSyncFocusFromCanvasSelection = function () {
     if (!selectedFieldId) {
-        alert('Selecione um campo no canvas (clique num cartão).');
+        fbAlert('fb_alert_select_field', null, 'Selecione um campo no canvas (clique num cartão).');
         return;
     }
     window.brsparkCopilotPinFieldFromCanvas(selectedFieldId, { skipSelect: true, skipOpenPanel: true });
@@ -5346,6 +6759,7 @@ function syncBuilderTaskIconDom() {
         trigger.innerHTML =
             '<ion-icon name="images-outline" style="font-size:22px;color:#94a3b8;"></ion-icon>';
     }
+    if (typeof window.scheduleBuilderDirtyRecompute === 'function') window.scheduleBuilderDirtyRecompute();
 }
 
 function mergeGlobalFormSettingsFromCopilot(incoming) {
@@ -5903,7 +7317,11 @@ window.brsparkCopilotSendClarifySelections = function () {
         lines.push('[Pergunta ' + qid + '] ' + labels.join(', '));
     });
     if (!lines.length) {
-        alert('Marque pelo menos uma opção em alguma pergunta, ou escreva na caixa de texto.');
+        fbAlert(
+            'fb_alert_clarify_options',
+            null,
+            'Marque pelo menos uma opção em alguma pergunta, ou escreva na caixa de texto.'
+        );
         return;
     }
     const inp = document.getElementById('ai-copilot-input');
@@ -6457,7 +7875,7 @@ function brsparkCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, 
 window.brsparkCopilotReprocessSchemaPreview = async function () {
     var base = window.__brsparkCopilotPreviewPayload || window.__brsparkCopilotLast;
     if (!base || !Array.isArray(base.schemaData)) {
-        alert('Sem proposta carregada para reprocessar.');
+        fbAlert('fb_alert_copilot_reprocess', null, 'Sem proposta carregada para reprocessar.');
         return;
     }
     var rowMap = brsparkCopilotReadPreviewRowMapFromDom();
@@ -6596,8 +8014,7 @@ function brsparkCopilotEnsureTaskBrandingFromResponse(data) {
     if (brsparkCopilotCountOperationalInSchema(schema) < 1) return;
     var ctx = collectCopilotFormContext();
     var genericTitle = function (t) {
-        var s = String(t || '').trim().toLowerCase();
-        return !s || s === 'novo formulário' || s === 'novo checklist';
+        return isGenericDefaultFormTitle(t);
     };
     var tr = data.templateTitleResolved != null ? String(data.templateTitleResolved).trim() : '';
     if (!tr || genericTitle(tr)) {
@@ -6770,7 +8187,7 @@ function brsparkCopilotApplyChatResponse(data) {
 async function brsparkCopilotPostChatRound(userText, opts) {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Faça login no painel admin (token ausente).');
+        fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
     }
     const trimmed = String(userText || '').trim();
@@ -6936,7 +8353,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
 window.brsparkCopilotSend = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Faça login no painel admin (token ausente).');
+        fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
     }
     const inp = document.getElementById('ai-copilot-input');
@@ -6946,8 +8363,10 @@ window.brsparkCopilotSend = async function () {
             text =
                 'Com base na planilha em contexto e no formulário atual no canvas, sugira próximos passos e melhorias úteis.';
         } else {
-            alert(
-                'Escreva uma mensagem ou carregue arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Copiloto para obter sugestões automáticas.',
+            fbAlert(
+                'fb_alert_copilot_write_or_attach',
+                null,
+                'Escreva uma mensagem ou envie arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Copiloto para obter sugestões automáticas.'
             );
             return;
         }
@@ -6967,7 +8386,7 @@ window.brsparkCopilotSend = async function () {
 window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Faça login no painel admin (token ausente).');
+        fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         if (inputEl) inputEl.value = '';
         return;
     }
@@ -6983,10 +8402,12 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
         else files.push(f);
     }
     if (bad.length) {
-        alert(
+        fbAlert(
+            'fb_alert_copilot_bad_ext',
+            { list: bad.join(', ') },
             'Extensão não suportada em: ' +
                 bad.join(', ') +
-                '. Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp ou .json.',
+                '. Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp ou .json.'
         );
         if (!files.length) {
             inputEl.value = '';
@@ -6994,7 +8415,15 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
         }
     }
     if (files.length > BRSPARK_COPILOT_REF_MAX_FILES) {
-        alert('No máximo ' + BRSPARK_COPILOT_REF_MAX_FILES + ' arquivos por vez. Serão analisados só os primeiros ' + BRSPARK_COPILOT_REF_MAX_FILES + '.');
+        fbAlert(
+            'fb_alert_copilot_max_files',
+            { max: String(BRSPARK_COPILOT_REF_MAX_FILES) },
+            'No máximo ' +
+                BRSPARK_COPILOT_REF_MAX_FILES +
+                ' arquivos por vez. Serão analisados só os primeiros ' +
+                BRSPARK_COPILOT_REF_MAX_FILES +
+                '.'
+        );
         files = files.slice(0, BRSPARK_COPILOT_REF_MAX_FILES);
     }
 
@@ -7106,16 +8535,24 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             await brsparkCopilotPostChatRound(msgRound);
         } else {
             if (statusEl) statusEl.textContent = errors.length ? 'Erro: ' + errors.join(' | ') : 'Nenhum arquivo analisado.';
-            alert(
-                errors.length
-                    ? 'Nenhum arquivo foi analisado com sucesso.\n\n' + errors.join('\n')
-                    : 'Nenhum arquivo foi analisado.',
-            );
+            if (errors.length) {
+                fbAlert(
+                    'fb_alert_copilot_analyze_none_ok',
+                    { detail: errors.join('\n') },
+                    'Nenhum arquivo foi analisado com sucesso.\n\n' + errors.join('\n')
+                );
+            } else {
+                fbAlert('fb_alert_copilot_analyze_none', null, 'Nenhum arquivo foi analisado.');
+            }
         }
     } catch (e) {
         console.error(e);
         if (statusEl) statusEl.textContent = 'Erro: ' + (e.message || e);
-        alert(e.message || String(e));
+        fbAlert(
+            'fb_alert_err_detail',
+            { detail: e && e.message ? e.message : String(e) },
+            e && e.message ? e.message : String(e)
+        );
     } finally {
         window.__brsparkCopilotExcelBusy = false;
         endCopilotThinking();
@@ -7201,13 +8638,13 @@ window.brsparkCopilotUndo = function () {
 window.brsparkCopilotSuggestLogic = async function () {
     const token = brsparkAdminBearerToken();
     if (!token) {
-        alert('Faça login no painel admin (token ausente).');
+        fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
     }
     const g = document.getElementById('ai-copilot-logic-goal');
     const goal = g ? String(g.value || '').trim() : '';
     if (!goal) {
-        alert('Descreva o que a lógica deve fazer.');
+        fbAlert('fb_alert_logic_goal', null, 'Descreva o que a lógica deve fazer.');
         return;
     }
     beginCopilotThinking('A IA está elaborando sugestões de regras…');
@@ -7276,7 +8713,11 @@ window.brsparkCopilotSuggestLogic = async function () {
         }
     } catch (e) {
         console.error(e);
-        alert(e.message || String(e));
+        fbAlert(
+            'fb_alert_err_detail',
+            { detail: e && e.message ? e.message : String(e) },
+            e && e.message ? e.message : String(e)
+        );
     } finally {
         endCopilotThinking();
     }

@@ -80,7 +80,7 @@ const FIELD_SPECS = [
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'allowFacial',
-    descPt: 'Biometria facial (CompreFace: self_verify ou identify no builder).',
+    descPt: 'Biometria facial (FaceMatch: self_verify ou identify no builder).',
   },
   {
     type: 'vision_checklist',
@@ -104,7 +104,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final.',
+      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final. Opcional no builder: transitKeepScreenAwake (boolean) — manter tela acesa durante o deslocamento até transit_end (mais bateria, melhor continuidade de GPS).',
   },
   {
     type: 'transit_end',

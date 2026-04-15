@@ -52,17 +52,17 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Multi-location</span>
+        <span id="mpc-bc-here">Multi-location</span>
       </nav>
     </div>
 
     <div class="page-body">
 
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Países, regiões e idiomas</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Países, regiões e idiomas</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Locales ativos na plataforma, idiomas suportados e estatísticas agregadas por tenant. Use a busca para filtrar cartões; a tabela abaixo resume a cobertura de idiomas.
         </p>
       </header>
@@ -71,22 +71,22 @@
         <div class="stat-card" style="--accent-color:var(--accent)">
           <div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="earth-outline" style="vertical-align:-2px"></ion-icon></div>
           <div class="stat-value" id="stat-countries">—</div>
-          <div class="stat-label">Países ativos</div>
+          <div class="stat-label" id="loc-stat-countries-lbl">Países ativos</div>
         </div>
         <div class="stat-card" style="--accent-color:var(--blue)">
           <div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon></div>
           <div class="stat-value" id="stat-langs">—</div>
-          <div class="stat-label">Idiomas suportados</div>
+          <div class="stat-label" id="loc-stat-langs-lbl">Idiomas suportados</div>
         </div>
         <div class="stat-card" style="--accent-color:var(--green)">
           <div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
           <div class="stat-value" id="stat-users">—</div>
-          <div class="stat-label">Usuários nesses países</div>
+          <div class="stat-label" id="loc-stat-users-lbl">Usuários nesses países</div>
         </div>
         <div class="stat-card" style="--accent-color:var(--amber)">
           <div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div>
           <div class="stat-value" id="stat-assets">—</div>
-          <div class="stat-label">Bens cadastrados</div>
+          <div class="stat-label" id="loc-stat-assets-lbl">Bens cadastrados</div>
         </div>
       </div>
 
@@ -101,12 +101,12 @@
           <div class="data-toolbar-actions">
             <button type="button" class="btn btn-primary" onclick="openModal('new-country-modal')">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-              Adicionar país
+              <span id="loc-btn-add-country-text">Adicionar país</span>
             </button>
           </div>
         </div>
         <div class="data-table-head">
-          <h2 class="data-table-title">Regiões habilitadas</h2>
+          <h2 class="data-table-title" id="loc-table-regions-title">Regiões habilitadas</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="data-shell-body" style="padding-top:0">
@@ -118,12 +118,12 @@
 
       <section class="data-shell fade-in" style="margin-top:20px">
         <div class="data-table-head">
-          <h2 class="data-table-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px;font-size:18px"></ion-icon> Cobertura de idiomas na plataforma</h2>
+          <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px;font-size:18px"></ion-icon><span id="loc-table-title">Cobertura de idiomas na plataforma</span></h2>
         </div>
         <div class="table-wrap">
           <table class="table-data">
             <thead><tr>
-              <th>Idioma</th><th>Código</th><th>Países</th><th>Usuários</th><th>Tradução app</th><th>Tradução admin</th><th>Status</th>
+              <th id="loc-th-lang">Idioma</th><th id="loc-th-code">Código</th><th id="loc-th-status">Status</th><th id="loc-th-users">Usuários</th><th id="loc-th-cov-app">Tradução app</th><th id="loc-th-cov-panel">Tradução admin</th><th id="loc-th-quality">Qualidade</th>
             </tr></thead>
             <tbody id="lang-table-body"></tbody>
           </table>
@@ -209,7 +209,9 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import { applyLocationsPageI18n, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
   await initPage();
+  applyLocationsPageI18n();
 
   // Platform languages — derived from DB locales
   const PLATFORM_LANGS_BASE = [
@@ -253,8 +255,8 @@
 
     document.getElementById('stat-countries').textContent = activeLocales.length || locales.length || '—';
     document.getElementById('stat-langs').textContent     = PLATFORM_LANGS_BASE.length;
-    document.getElementById('stat-users').textContent     = totalUsers.toLocaleString('pt-BR');
-    document.getElementById('stat-assets').textContent    = totalAssets.toLocaleString('pt-BR');
+    document.getElementById('stat-users').textContent     = totalUsers.toLocaleString(mpIntlLocale());
+    document.getElementById('stat-assets').textContent    = totalAssets.toLocaleString(mpIntlLocale());
 
     // Build country cards from DB locales
     const countryData = locales.map(l => {
@@ -276,7 +278,7 @@
       };
     });
 
-    document.getElementById('count-badge').textContent = `${countryData.length} regiões`;
+    document.getElementById('count-badge').textContent = mpT('loc_count_regions', { n: countryData.length });
 
     const q = document.getElementById('search-input').value.toLowerCase();
     const filtered = q
@@ -288,8 +290,8 @@
       ? filtered.map(renderCountryCard).join('')
       : `<div class="empty-state-pro" style="padding:36px 20px 32px;grid-column:1/-1">
           <ion-icon name="earth-outline"></ion-icon>
-          <div class="empty-state-pro-title">Nenhuma região encontrada</div>
-          <p class="empty-state-pro-sub">Ajuste o termo de busca ou limpe o filtro para ver todos os países.</p>
+          <div class="empty-state-pro-title">${mpT('loc_empty_regions_title')}</div>
+          <p class="empty-state-pro-sub">${mpT('loc_empty_regions_sub')}</p>
         </div>`;
 
     // Language coverage: derive from active locales
@@ -300,11 +302,11 @@
       return `<tr>
         <td><strong>${l.flag} ${l.name}</strong></td>
         <td class="mono" style="font-size:11px">${l.code}</td>
-        <td>${inUse ? '<span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Habilitado</span>' : '<span class="badge badge-gray">— Inativo</span>'}</td>
-        <td>${usage.users.toLocaleString('pt-BR')}</td>
+        <td>${inUse ? `<span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${mpT('loc_badge_enabled')}</span>` : `<span class="badge badge-gray">${mpT('loc_badge_inactive')}</span>`}</td>
+        <td>${usage.users.toLocaleString(mpIntlLocale())}</td>
         <td><span class="badge badge-green">100%</span></td>
         <td><span class="badge badge-green">100%</span></td>
-        <td><span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Completo</span></td>
+        <td><span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${mpT('loc_badge_complete')}</span></td>
       </tr>`;
     }).join('');
   }
@@ -326,7 +328,7 @@
           <div class="country-name">${c.name}</div>
           <div class="country-code">${c.code} · ${c.timezone}</div>
         </div>
-        <label class="toggle-switch" title="${c.enabled ? 'Habilitado' : 'Desabilitado'}" style="margin-left:auto">
+        <label class="toggle-switch" title="${c.enabled ? mpT('loc_toggle_on') : mpT('loc_toggle_off')}" style="margin-left:auto">
           <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleRegion('${c.code}', this.checked)" />
           <div class="toggle-track"></div>
         </label>
@@ -338,16 +340,16 @@
       </div>
       <div class="country-stats">
         <div class="country-stat">
-          <span class="country-stat-val">${c.users.toLocaleString('pt-BR')}</span>
-          <span class="country-stat-label">Usuários</span>
+          <span class="country-stat-val">${c.users.toLocaleString(mpIntlLocale())}</span>
+          <span class="country-stat-label">${mpT('loc_stat_users_lbl')}</span>
         </div>
         <div class="country-stat">
-          <span class="country-stat-val">${c.assets.toLocaleString('pt-BR')}</span>
-          <span class="country-stat-label">Bens</span>
+          <span class="country-stat-val">${c.assets.toLocaleString(mpIntlLocale())}</span>
+          <span class="country-stat-label">${mpT('loc_stat_assets_lbl')}</span>
         </div>
         <div class="country-stat">
           <span class="country-stat-val">${c.enabled ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon>' : '——'}</span>
-          <span class="country-stat-label">Status</span>
+          <span class="country-stat-label">${mpT('loc_stat_status_lbl')}</span>
         </div>
       </div>
     </div>`;
@@ -371,9 +373,9 @@
   document.getElementById('save-country-btn').addEventListener('click', () => {
     const name = document.getElementById('new-country-name').value.trim();
     const code = document.getElementById('new-country-code').value.trim().toUpperCase();
-    if (!name || !code) return alert('Nome e código do país são obrigatórios.');
+    if (!name || !code) return alert(mpT('loc_alert_country_required'));
     // Futuramente: salvar no banco via API
-    alert(`País "${name}" (${code}) será adicionado. Implemente a rota /api/regions para persistência.`);
+    alert(mpT('loc_alert_country_stub', { name, code }));
     closeModal('new-country-modal');
   });
 

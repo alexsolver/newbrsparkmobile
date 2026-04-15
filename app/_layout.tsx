@@ -172,22 +172,28 @@ function MainLayout() {
 
   return (
     <RouteGuard>
-      <PushNotificationResponseBridge />
-      <AppInitializer />
-      {!inAuth && !isAgendaLandscape && <Header />}
-      <Stack screenOptions={{ 
-        headerShown: false,
-        gestureEnabled: true, 
-        animation: 'slide_from_right' 
-      }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="provider-os-search" />
-        <Stack.Screen name="work-time" />
-        <Stack.Screen name="provider-services/[tenantId]" />
-        <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-      </Stack>
+      <View style={{ flex: 1 }}>
+        <PushNotificationResponseBridge />
+        <AppInitializer />
+        {!inAuth && !isAgendaLandscape && <Header />}
+        <View style={{ flex: 1 }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              gestureEnabled: true,
+              animation: 'slide_from_right',
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="profile" />
+            <Stack.Screen name="provider-os-search" />
+            <Stack.Screen name="work-time" />
+            <Stack.Screen name="provider-services/[tenantId]" />
+            <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+          </Stack>
+        </View>
+      </View>
     </RouteGuard>
   );
 }

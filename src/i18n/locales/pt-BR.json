@@ -74,7 +74,8 @@
     "orders": "Pedidos",
     "scanner": "Leitor",
     "providerOsSearch": "Busca OS",
-    "workTime": "Ponto"
+    "workTime": "Ponto",
+    "workTimeBrPj": "Registro"
   },
   "radialMenu": {
     "productivity": "Desempenho",
@@ -219,7 +220,11 @@
     "alertConsentRequired": "Você deve aceitar os Termos e a Política de Privacidade para continuar. (Exigência LGPD/GDPR)",
     "errorLogin": "Erro ao entrar",
     "errorRegister": "Erro ao criar conta",
-    "errorConnection": "Verifique sua conexão e tente novamente."
+    "errorConnection": "Verifique sua conexão e tente novamente.",
+    "oauthOrContinue": "ou continue com",
+    "oauthGoogle": "Continuar com Google",
+    "oauthFacebook": "Continuar com Facebook",
+    "oauthApple": "Continuar com Apple"
   },
   "consentFlow": {
     "a11yLogo": "BrSpark",
@@ -1439,7 +1444,11 @@
     "galleryUnavailableBody": "Erro ao abrir a galeria.",
     "mediaCaptureError": "Erro geral na captura de mídia.",
     "hardwareSimulatorTitle": "Aviso de hardware",
-    "hardwareSimulatorBody": "No simulador a tela de captura pode falhar. No celular funciona normalmente."
+    "hardwareSimulatorBody": "No simulador a tela de captura pode falhar. No celular funciona normalmente.",
+    "visionVideoTooLongTitle": "Vídeo longo demais",
+    "visionVideoTooLongBody": "Neste campo o vídeo pode ter no máximo {{seconds}} segundos. Grave outro clip.",
+    "visionYoloVideoFrameTitle": "Vídeo",
+    "visionYoloVideoFrameBody": "O serviço de detecção (YOLO) só aceita imagem. Não foi possível gerar uma imagem a partir do vídeo. Grave uma foto ou tente novamente."
   },
   "pause": {
     "pickCategory": "Motivo da pausa",
@@ -1535,7 +1544,7 @@
     "dashboardEntryTitle": "Registro de ponto",
     "dashboardEntryHintReady": "Toque para abrir e bater o ponto.",
     "dashboardEntryHintBlocked": "Abra para ver o estado (ex.: biometria pendente).",
-    "dashboardEntryHintMatriculaPending": "Ponto disponível — complete a matrícula facial no perfil para validação plena.",
+    "dashboardEntryHintMatriculaPending": "Ponto disponível — conclua a matrícula facial no perfil para validação plena.",
     "unavailable": "O registro de horas não está disponível para esta sessão.",
     "offlineNoMeCacheHint": "Sem configurações em cache neste aparelho. Com internet, abra esta tela ou use o menu inferior até os dados sincronizarem; depois o modo offline mostra o aviso da empresa e o histórico salvo.",
     "moduleOffTitle": "Registro indisponível",
@@ -1545,13 +1554,13 @@
     "hintRoleClient": "Contas com perfil de cliente (papel \u201cUsuário\u201d / USER) não utilizam o registro de ponto. Os demais perfis precisam da flag, do módulo da empresa e desta opção ativados.",
     "clientAccountNoAccess": "O registro de ponto não está disponível para contas com perfil de cliente.",
     "faceBlockedTitle": "Biometria necessária",
-    "faceBlockedBody": "Sua empresa exige verificação facial e a matrícula ainda não está concluída ou sincronizada. Conclua o cadastro facial no perfil ou contate a administração.",
+    "faceBlockedBody": "Sua empresa exige verificação facial e a matrícula ainda não está concluída. Conclua o cadastro facial no perfil ou contate a administração.",
     "noticeTitle": "Aviso da empresa",
     "refreshA11y": "Atualizar",
     "historyTitle": "Últimas batidas",
     "historyEmpty": "Ainda não há batidas nos últimos dias.",
     "punchSaved": "Batida registrada.",
-    "punchSavedFaceInvalid": "A batida foi registrada com sucesso. A matrícula facial do cadastro ainda não está completa: faltam fotos base no perfil e/ou a sincronização dessas fotos no servidor de biometria ainda não terminou. Atualize o perfil ou tente mais tarde.",
+    "punchSavedFaceInvalid": "A batida foi registrada com sucesso. A matrícula facial ainda não está válida para validação plena (faltam fotos base no perfil ou a biometria da empresa não aceitou a galeria). Atualize o perfil ou contate a administração.",
     "historyMatriculaNaoValidada": "Matrícula facial não validada nesta batida.",
     "detailName": "Nome completo",
     "detailMatricula": "Matrícula",
@@ -1571,6 +1580,7 @@
     "punchStatusSuccess": "Registro conforme",
     "punchStatusCaution": "Registro com ressalva",
     "dayJourneyTitle": "Jornada acumulada do dia",
+    "dayJourneyTitleBrPj": "Horas registradas hoje",
     "dayJourneyWorked": "Até este registro, você já tinha trabalhado {{time}} hoje.",
     "gpsRequired": "Ative a localização e permita o acesso ao GPS para bater o ponto.",
     "faceVerifyFailed": "Não foi possível validar a biometria.",

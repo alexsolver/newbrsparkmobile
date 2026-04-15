@@ -19,15 +19,15 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Documentação da API</span>
+        <span id="mpc-bc-here">Documentação da API</span>
       </nav>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Documentação da API</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Documentação da API</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Especificação OpenAPI interativa (Swagger). Autentique com JWT de admin ou de app conforme o fluxo de cada rota.
         </p>
       </header>
@@ -36,26 +36,17 @@
         <div class="data-toolbar-actions">
           <a class="btn btn-ghost btn-sm" href="openapi.json" download="brspark-openapi.json">
             <ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon>
-            Baixar OpenAPI (JSON)
+            <span id="apidoc-btn-dl-text">Baixar OpenAPI (JSON)</span>
           </a>
           <a class="btn btn-ghost btn-sm" href="openapi.json" target="_blank" rel="noopener">
-            Abrir JSON
+            <span id="apidoc-btn-open-text">Abrir JSON</span>
           </a>
         </div>
       </div>
       <section class="data-shell fade-in" style="margin-bottom:16px">
         <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
-          <p class="api-docs-intro">
-            Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code>
-            e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por
-            <code>admin-panel/scripts/build-openapi.js</code> — após alterar rotas, execute
-            <code>npm run openapi</code> na pasta <code>admin-panel/backend</code>.
-          </p>
-          <p class="api-docs-intro">
-            <strong>Admin:</strong> obtenha JWT com <code>POST /api/auth/login</code> e use <em>Authorize → bearerAdmin</em>.<br />
-            <strong>App:</strong> <code>POST /api/login</code> ou <code>POST /api/register</code> → <em>bearerApp</em>.
-            Rotas públicas não exigem cabeçalho <code>Authorization</code>.
-          </p>
+          <p class="api-docs-intro" id="apidoc-intro-1"></p>
+          <p class="api-docs-intro" id="apidoc-intro-2"></p>
         </div>
       </section>
       <div id="swagger-ui"></div>
@@ -65,8 +56,10 @@
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
+  import { applyApiDocsPageI18n, mpT } from './js/menu-pages-i18n.js';
 
   await initPage();
+  applyApiDocsPageI18n();
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -74,7 +67,7 @@
       s.src = src;
       s.crossOrigin = 'anonymous';
       s.onload = resolve;
-      s.onerror = () => reject(new Error('Falha ao carregar: ' + src));
+      s.onerror = () => reject(new Error(mpT('apidoc_err_load', { src })));
       document.body.appendChild(s);
     });
   }
@@ -83,7 +76,7 @@
 
   if (typeof SwaggerUIBundle === 'undefined') {
     document.getElementById('swagger-ui').innerHTML =
-      '<p style="color:var(--red);padding:16px">Não foi possível carregar o Swagger UI (rede ou CDN).</p>';
+      `<p style="color:var(--red);padding:16px">${mpT('apidoc_err_swagger')}</p>`;
   } else {
     const specUrl = new URL('openapi.json', window.location.href).href;
     window.ui = SwaggerUIBundle({

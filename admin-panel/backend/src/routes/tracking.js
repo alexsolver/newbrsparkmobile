@@ -11,10 +11,17 @@ const prisma  = require('../db');
 const { Prisma } = require('@prisma/client');
 const crypto  = require('crypto');
 const { sendClientProviderEnRoutePush } = require('../lib/clientProviderEnRoutePush');
+const { sendTrackingClientChatPushToTechnician } = require('../lib/trackingClientChatPush');
 const authUser = require('../middleware/authUser');
 const { COPY } = require('../lib/trackingChatModerationPolicy');
 const { pointsDeltaForSeverity, THRESHOLD_ALERT } = require('../lib/trackingChatModerationEngine');
 const { runModerationPipeline, persistModerationEvent, getModState } = require('../lib/trackingChatPipeline');
+const {
+  translateChatText,
+  normalizeChatLocale,
+  parseTranslationsJson,
+  chatTranslationEnabled,
+} = require('../lib/chatTranslation');
 
 /** Sem GPS com coordenadas dentro deste intervalo → "sem sinal" no link público. Padrão 10 min (mau sinal / intervalos de GPS). Override: TRACKING_GPS_STALE_SEC. */
 const DISPLACEMENT_GPS_STALE_SEC = Math.min(
@@ -58,9 +65,19 @@ function sameOwnerEmail(execEmail, jwtEmail) {
 }
 
 function normalizeChatMessages(raw) {
-  if (!Array.isArray(raw)) return [];
+  let arr = raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return [];
+    try {
+      arr = JSON.parse(s);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
   const out = [];
-  for (const m of raw) {
+  for (const m of arr) {
     if (!m || typeof m !== 'object') continue;
     const id = typeof m.id === 'string' && m.id.trim() ? m.id.trim() : null;
     const text = typeof m.text === 'string' ? m.text.trim() : '';
@@ -78,6 +95,11 @@ function normalizeChatMessages(raw) {
       senderLabel: role === 'system' ? null : senderLabel,
     };
     if (kind) row.kind = kind;
+    const trIn = m.translations;
+    if (trIn != null && typeof trIn === 'object' && !Array.isArray(trIn)) {
+      const parsed = parseTranslationsJson(trIn);
+      if (Object.keys(parsed).length) row.translations = parsed;
+    }
     out.push(row);
   }
   return out.slice(-MAX_TRACKING_CHAT_MESSAGES);
@@ -121,9 +143,12 @@ function readForceSend(req) {
   return !!(b.ackModerationWarning || b.forceSend || b.moderationOverrideAck);
 }
 
+/** ID fixo: execuções antigas sem banner gravado recebem um virtual em cada GET; id aleatório quebrava keys do FlatList no app a cada poll. */
+const TRACKING_CONDUCT_BANNER_ID = 'brspark_tracking_conduct_banner_v1';
+
 function conductBannerMessage() {
   return {
-    id: crypto.randomBytes(8).toString('hex'),
+    id: TRACKING_CONDUCT_BANNER_ID,
     role: 'system',
     kind: 'conduct_banner',
     text: COPY.conductBanner,
@@ -152,6 +177,28 @@ const selectExecForToken = {
 
 async function findExecutionByTrackingToken(token) {
   if (!token || typeof token !== 'string') return null;
+  /** Índice JSON no Postgres costuma bastar; SQL direto cobre edge cases em que o filtro Prisma falha ou há muitas OS ativas. */
+  try {
+    const rows = await prisma.$queryRaw(
+      Prisma.sql`
+        SELECT id FROM "ChecklistExecution"
+        WHERE status <> 'CANCELLED'
+          AND metadata IS NOT NULL
+          AND metadata->>'trackingToken' = ${token}
+        LIMIT 1
+      `
+    );
+    if (Array.isArray(rows) && rows[0] && rows[0].id) {
+      const byId = await prisma.checklistExecution.findUnique({
+        where: { id: String(rows[0].id) },
+        select: selectExecForToken,
+      });
+      if (byId) return byId;
+    }
+  } catch (e) {
+    console.warn('[TRACKING] findExecutionByTrackingToken SQL:', e?.message || e);
+  }
+
   let exec = await prisma.checklistExecution.findFirst({
     where: {
       status: { not: 'CANCELLED' },
@@ -164,12 +211,12 @@ async function findExecutionByTrackingToken(token) {
       where: { status: { not: 'CANCELLED' } },
       select: selectExecForToken,
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: 4000,
     });
     exec =
       execs.find((e) => {
-        const m = e.metadata;
-        return m && typeof m === 'object' && m.trackingToken === token;
+        const m = cloneExecMetadata(e.metadata);
+        return m.trackingToken === token;
       }) || null;
   }
   return exec;
@@ -205,13 +252,107 @@ async function mergeChatMetadata(executionId, fn) {
 }
 
 /**
+ * Técnico: `preferredChatLocale` ou idioma padrão do tenant. Cliente (link): `?chatLocale=` ou cabeçalho `X-Chat-Locale`.
+ * @param {import('express').Request} req
+ * @param {'tech'|'client'} viewerRole
+ */
+async function resolveTrackingLocaleFromRequest(req, viewerRole) {
+  if (viewerRole === 'tech') {
+    const u = req.user;
+    if (!u?.id) return 'pt-BR';
+    const meRow = await prisma.user.findUnique({
+      where: { id: u.id },
+      select: { preferredChatLocale: true, tenantId: true },
+    });
+    if (meRow?.preferredChatLocale && String(meRow.preferredChatLocale).trim()) {
+      return normalizeChatLocale(meRow.preferredChatLocale);
+    }
+    if (!meRow?.tenantId) return 'pt-BR';
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: meRow.tenantId },
+      select: { defaultLang: true },
+    });
+    return normalizeChatLocale(tenant?.defaultLang || 'pt-BR');
+  }
+  const raw = String(req.query?.chatLocale || req.headers['x-chat-locale'] || '').trim();
+  if (!raw) return 'pt-BR';
+  return normalizeChatLocale(raw);
+}
+
+/**
+ * Texto a mostrar (`displayText`) por mensagem; persiste cache `translations` no metadata (como no chat interno).
+ * @param {string|null} execId
+ * @param {Array<object>} messages
+ * @param {'tech'|'client'} viewerRole
+ * @param {string} resolvedLocale
+ */
+async function applyTrackingDisplayTranslations(execId, messages, viewerRole, resolvedLocale) {
+  const locale = normalizeChatLocale(resolvedLocale);
+  const out = [];
+  if (!chatTranslationEnabled()) {
+    for (const m of messages) {
+      const { translations: _x, ...rest } = m;
+      out.push({ ...rest, displayText: m.text });
+    }
+    return out;
+  }
+
+  /** @type {Map<string, Record<string, string>>} */
+  const persistById = new Map();
+  for (const m of messages) {
+    const { translations: _tr, ...rest } = m;
+    let displayText = m.text;
+    if (m.role === viewerRole) {
+      displayText = m.text;
+    } else {
+      const trans = parseTranslationsJson(m.translations);
+      if (trans[locale]) {
+        displayText = trans[locale];
+      } else {
+        const rawText = m.text != null ? String(m.text) : '';
+        if (rawText.trim()) {
+          const t = await translateChatText(rawText, locale);
+          if (t) {
+            displayText = t;
+            persistById.set(m.id, { ...trans, [locale]: t });
+          }
+        }
+      }
+    }
+    out.push({ ...rest, displayText });
+  }
+
+  if (persistById.size > 0 && execId) {
+    try {
+      await mergeChatMetadata(execId, (meta) => {
+        let list = normalizeChatMessages(meta[TRACKING_CHAT_KEY]);
+        for (const [msgId, mergedTrans] of persistById) {
+          const idx = list.findIndex((x) => x.id === msgId);
+          if (idx >= 0) {
+            const prev = parseTranslationsJson(list[idx].translations);
+            const merged = { ...prev, ...mergedTrans };
+            list[idx] = { ...list[idx], translations: merged };
+          }
+        }
+        meta[TRACKING_CHAT_KEY] = list;
+      });
+    } catch (e) {
+      console.warn('[TRACKING] falha ao persistir traduções no chat:', e?.message || e);
+    }
+  }
+
+  return out;
+}
+
+/**
  * @param {import('express').Response} res
  * @param {{ req: import('express').Request, exec: any, textIn: string, actorRole: 'client'|'tech', techSenderLabel?: string|null }} opts
  */
 async function processModeratedChatPost(res, opts) {
   const { req, exec, textIn, actorRole, techSenderLabel } = opts;
+  const viewerLocale = await resolveTrackingLocaleFromRequest(req, actorRole);
   const forceSend = readForceSend(req);
-  const meta0 = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
+  const meta0 = cloneExecMetadata(exec.metadata);
   const tenantFeatures = exec.template?.tenant?.features;
   const tenantId = exec.template?.tenantId || null;
 
@@ -289,7 +430,16 @@ async function processModeratedChatPost(res, opts) {
       while (list.length > MAX_TRACKING_CHAT_MESSAGES) list.shift();
       meta[TRACKING_CHAT_KEY] = list;
     });
-    return res.json({ ok: true, messages });
+    const enriched = await applyTrackingDisplayTranslations(exec.id, messages, actorRole, viewerLocale);
+    if (actorRole === 'client') {
+      void sendTrackingClientChatPushToTechnician(prisma, {
+        executionId: exec.id,
+        ownerEmail: exec.ownerEmail,
+        templateTenantId: tenantId,
+        messagePreview: textIn,
+      }).catch((e) => console.warn('[TRACKING] push chat cliente:', e?.message || e));
+    }
+    return res.json({ ok: true, messages: enriched });
   }
 
   if (finalAction === 'request_rewrite' || finalAction === 'block' || finalAction === 'escalate_review') {
@@ -309,6 +459,7 @@ async function processModeratedChatPost(res, opts) {
       while (list.length > MAX_TRACKING_CHAT_MESSAGES) list.shift();
       meta[TRACKING_CHAT_KEY] = list;
     });
+    const enriched422 = await applyTrackingDisplayTranslations(exec.id, messages, actorRole, viewerLocale);
     return res.status(422).json({
       ok: false,
       code: 'CHAT_MODERATION',
@@ -317,7 +468,7 @@ async function processModeratedChatPost(res, opts) {
       category: pipe.sig.category,
       userMessage: userMessage || COPY.requestRewrite,
       canOverride: !!canOverride && finalAction === 'request_rewrite',
-      messages,
+      messages: enriched422,
     });
   }
 
@@ -328,14 +479,17 @@ async function processModeratedChatPost(res, opts) {
 // ─── POST /api/tracking/start/:taskId ────────────────────────────────────────
 // Called by mobile app when technician presses "Iniciar Deslocamento".
 // Creates a unique public token linked to this execution.
-router.post('/start/:taskId', async (req, res) => {
+router.post('/start/:taskId', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      return res.status(403).json({ error: 'Sem permissão para iniciar o rastreamento desta OS.' });
+    }
 
     // Idempotent: reuse existing token if already started
-    const existingToken = exec.metadata?.trackingToken;
+    const existingToken = cloneExecMetadata(exec.metadata).trackingToken;
     if (existingToken) {
       const url = `${req.protocol}://${req.get('host')}/track.html?t=${existingToken}`;
       sendClientProviderEnRoutePush({ executionId: taskId, trackingUrl: url }).catch((e) =>
@@ -375,11 +529,14 @@ router.post('/start/:taskId', async (req, res) => {
 // ─── POST /api/tracking/end/:taskId ──────────────────────────────────────────
 // Called by mobile app when technician finishes transit.
 // Expira o link público após TRACKING_GRACE_AFTER_END_MS (padrão 30 min).
-router.post('/end/:taskId', async (req, res) => {
+router.post('/end/:taskId', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      return res.status(403).json({ error: 'Sem permissão para encerrar o rastreamento desta OS.' });
+    }
 
     const meta = cloneExecMetadata(exec.metadata);
     const expiry = new Date(Date.now() + TRACKING_GRACE_AFTER_END_MS);
@@ -404,11 +561,14 @@ router.post('/end/:taskId', async (req, res) => {
 });
 
 // ─── POST /api/tracking/pause/:taskId ──────────────────────────────────────────
-router.post('/pause/:taskId', async (req, res) => {
+router.post('/pause/:taskId', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      return res.status(403).json({ error: 'Sem permissão para pausar o rastreamento desta OS.' });
+    }
     const meta = cloneExecMetadata(exec.metadata);
     meta.trackingPaused = true;
     meta.trackingPausedAt = new Date().toISOString();
@@ -424,11 +584,14 @@ router.post('/pause/:taskId', async (req, res) => {
 });
 
 // ─── POST /api/tracking/resume/:taskId ──────────────────────────────────────────
-router.post('/resume/:taskId', async (req, res) => {
+router.post('/resume/:taskId', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
     const exec = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
     if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      return res.status(403).json({ error: 'Sem permissão para retomar o rastreamento desta OS.' });
+    }
     const meta = cloneExecMetadata(exec.metadata);
     meta.trackingPaused = false;
     delete meta.trackingPausedAt;
@@ -445,34 +608,129 @@ router.post('/resume/:taskId', async (req, res) => {
 
 // ─── Chat (cliente via token público / técnico via JWT) — mensagens em metadata ──
 
+// #region agent log
+/** Debug session a0ffcb — não registar tokens nem texto de mensagens. */
+function agentDebugLog(location, message, data, hypothesisId) {
+  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
+    body: JSON.stringify({
+      sessionId: 'a0ffcb',
+      location,
+      message,
+      data: data || {},
+      timestamp: Date.now(),
+      hypothesisId: hypothesisId || 'H0',
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
+function setTrackingChatCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Accept, Cache-Control, Pragma, X-Chat-Locale'
+  );
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+router.options('/task/:taskId/chat', (_req, res) => {
+  setTrackingChatCorsHeaders(res);
+  res.sendStatus(204);
+});
+
+router.options('/:token/chat', (_req, res) => {
+  setTrackingChatCorsHeaders(res);
+  res.sendStatus(204);
+});
+
 router.get('/task/:taskId/chat', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
+    agentDebugLog(
+      'tracking.js:GET_task_chat:enter',
+      'tech GET chat',
+      { taskIdLen: String(taskId || '').length, hasBearer: !!(req.headers.authorization || '').startsWith('Bearer ') },
+      'H3'
+    );
     const exec = await prisma.checklistExecution.findUnique({
       where: { id: taskId },
       select: { id: true, ownerEmail: true, metadata: true },
     });
-    if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!exec) {
+      agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 404, reason: 'no_exec' }, 'H1');
+      return res.status(404).json({ error: 'OS não encontrada' });
+    }
     if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 403, reason: 'owner_mismatch' }, 'H3');
       return res.status(403).json({ error: 'Sem permissão para esta OS.' });
     }
-    const meta = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
+    const meta = cloneExecMetadata(exec.metadata);
     if (!trackingChatAllowed(meta)) {
+      agentDebugLog(
+        'tracking.js:GET_task_chat',
+        'exit',
+        {
+          status: 400,
+          reason: 'chat_not_allowed',
+          hasTrackingToken: !!meta.trackingToken,
+          chatExpired: isTrackingChatExpired(meta),
+        },
+        'H2'
+      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
-    const messages = chatMessagesForApiResponse(meta);
+    const baseMsgs = chatMessagesForApiResponse(meta);
+    const locTech = await resolveTrackingLocaleFromRequest(req, 'tech');
+    const messages = await applyTrackingDisplayTranslations(exec.id, baseMsgs, 'tech', locTech);
+    agentDebugLog(
+      'tracking.js:GET_task_chat',
+      'exit',
+      { status: 200, messageCount: Array.isArray(messages) ? messages.length : -1 },
+      'H1'
+    );
     res.json({ messages });
   } catch (err) {
+    agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat GET (task) error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/task/:taskId/chat', authUser, async (req, res) => {
+router.post(
+  '/task/:taskId/chat',
+  (req, res, next) => {
+    agentDebugLog(
+      'tracking.js:POST_task_chat:preauth',
+      'POST antes de authUser',
+      {
+        taskIdLen: String(req.params?.taskId || '').length,
+        hasBearer: !!(req.headers.authorization || '').startsWith('Bearer '),
+      },
+      'H9'
+    );
+    next();
+  },
+  authUser,
+  async (req, res) => {
   try {
     const { taskId } = req.params;
     const textIn = readChatTextFromBody(req);
-    if (!textIn) return res.status(400).json({ error: 'Mensagem vazia.' });
+    agentDebugLog(
+      'tracking.js:POST_task_chat:enter',
+      'tech POST chat',
+      {
+        taskIdLen: String(taskId || '').length,
+        bodyLen: textIn ? String(textIn).length : 0,
+        hasBearer: !!(req.headers.authorization || '').startsWith('Bearer '),
+      },
+      'H3'
+    );
+    if (!textIn) {
+      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 400, reason: 'empty_body' }, 'H5');
+      return res.status(400).json({ error: 'Mensagem vazia.' });
+    }
 
     const exec = await prisma.checklistExecution.findUnique({
       where: { id: taskId },
@@ -483,12 +741,27 @@ router.post('/task/:taskId/chat', authUser, async (req, res) => {
         template: { select: { tenantId: true, tenant: { select: { features: true } } } },
       },
     });
-    if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+    if (!exec) {
+      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 404, reason: 'no_exec' }, 'H1');
+      return res.status(404).json({ error: 'OS não encontrada' });
+    }
     if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 403, reason: 'owner_mismatch' }, 'H3');
       return res.status(403).json({ error: 'Sem permissão para esta OS.' });
     }
-    const meta = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
+    const meta = cloneExecMetadata(exec.metadata);
     if (!trackingChatAllowed(meta)) {
+      agentDebugLog(
+        'tracking.js:POST_task_chat',
+        'exit',
+        {
+          status: 400,
+          reason: 'chat_not_allowed',
+          hasTrackingToken: !!meta.trackingToken,
+          chatExpired: isTrackingChatExpired(meta),
+        },
+        'H2'
+      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
 
@@ -501,29 +774,89 @@ router.post('/task/:taskId/chat', authUser, async (req, res) => {
       if (u?.name && String(u.name).trim()) techSenderLabel = String(u.name).trim().slice(0, 80);
     } catch (_) {}
 
-    await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'tech', techSenderLabel });
+    const prevSend = res.send;
+    const prevJson = res.json;
+    let postTaskOutcome = /** @type {{ status?: number, code?: string, hasMessagesArray?: boolean } | null} */ (null);
+    res.json = function patchedJson(body) {
+      try {
+        const st = res.statusCode || 200;
+        postTaskOutcome = {
+          status: st,
+          code: body && typeof body === 'object' ? body.code : undefined,
+          hasMessagesArray: Array.isArray(body && body.messages),
+        };
+      } catch (_) {}
+      return prevJson.call(this, body);
+    };
+    res.send = function patchedSend(body) {
+      postTaskOutcome = { status: res.statusCode || 500 };
+      return prevSend.call(this, body);
+    };
+    try {
+      await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'tech', techSenderLabel });
+    } finally {
+      res.json = prevJson;
+      res.send = prevSend;
+    }
+    agentDebugLog(
+      'tracking.js:POST_task_chat',
+      'exit_after_moderation',
+      postTaskOutcome || { status: res.statusCode },
+      'H5'
+    );
   } catch (err) {
+    agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat POST (task) error:', err);
     res.status(500).json({ error: err.message });
   }
-});
+  }
+);
 
 router.get('/:token/chat', async (req, res) => {
   try {
     const { token } = req.params;
+    agentDebugLog(
+      'tracking.js:GET_token_chat:enter',
+      'client GET chat',
+      { tokenLen: String(token || '').length },
+      'H4'
+    );
     const exec = await findExecutionByTrackingToken(token);
-    if (!exec) return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
-    const meta = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
+    if (!exec) {
+      agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 404, reason: 'token_lookup_miss' }, 'H2');
+      return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
+    }
+    const meta = cloneExecMetadata(exec.metadata);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     if (isTrackingChatExpired(meta)) {
+      agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 410, reason: 'expired' }, 'H2');
       return res.status(410).json({ expired: true, error: 'Este link de rastreamento expirou.' });
     }
     if (!trackingChatAllowed(meta)) {
+      agentDebugLog(
+        'tracking.js:GET_token_chat',
+        'exit',
+        {
+          status: 400,
+          reason: 'chat_not_allowed',
+          hasTrackingToken: !!meta.trackingToken,
+        },
+        'H2'
+      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
-    const messages = chatMessagesForApiResponse(meta);
+    const baseTok = chatMessagesForApiResponse(meta);
+    const locClient = await resolveTrackingLocaleFromRequest(req, 'client');
+    const messages = await applyTrackingDisplayTranslations(exec.id, baseTok, 'client', locClient);
+    agentDebugLog(
+      'tracking.js:GET_token_chat',
+      'exit',
+      { status: 200, messageCount: Array.isArray(messages) ? messages.length : -1 },
+      'H1'
+    );
     res.json({ messages });
   } catch (err) {
+    agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat GET (token) error:', err);
     res.status(500).json({ error: err.message });
   }
@@ -533,21 +866,66 @@ router.post('/:token/chat', async (req, res) => {
   try {
     const { token } = req.params;
     const textIn = readChatTextFromBody(req);
-    if (!textIn) return res.status(400).json({ error: 'Mensagem vazia.' });
+    agentDebugLog(
+      'tracking.js:POST_token_chat:enter',
+      'client POST chat',
+      { tokenLen: String(token || '').length, bodyLen: textIn ? String(textIn).length : 0 },
+      'H4'
+    );
+    if (!textIn) {
+      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 400, reason: 'empty_body' }, 'H5');
+      return res.status(400).json({ error: 'Mensagem vazia.' });
+    }
 
     const exec = await findExecutionByTokenForChat(token);
-    if (!exec) return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
-    const meta = exec.metadata && typeof exec.metadata === 'object' ? exec.metadata : {};
+    if (!exec) {
+      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 404, reason: 'token_lookup_miss' }, 'H2');
+      return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
+    }
+    const meta = cloneExecMetadata(exec.metadata);
     res.setHeader('Cache-Control', 'no-store');
     if (isTrackingChatExpired(meta)) {
+      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 410, reason: 'expired' }, 'H2');
       return res.status(410).json({ expired: true, error: 'Este link de rastreamento expirou.' });
     }
-    if (!meta.trackingToken || meta.trackingToken !== token) {
+    const urlTok = String(token || '').trim();
+    const metaTok = String(meta.trackingToken || '').trim();
+    if (!metaTok || metaTok !== urlTok) {
+      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 404, reason: 'token_meta_mismatch' }, 'H2');
       return res.status(404).json({ error: 'Link inválido.' });
     }
 
-    await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'client', techSenderLabel: null });
+    const prevSend = res.send;
+    const prevJson = res.json;
+    let postTokenOutcome = /** @type {{ status?: number, code?: string, hasMessagesArray?: boolean } | null} */ (null);
+    res.json = function patchedJsonTok(body) {
+      try {
+        postTokenOutcome = {
+          status: res.statusCode || 200,
+          code: body && typeof body === 'object' ? body.code : undefined,
+          hasMessagesArray: Array.isArray(body && body.messages),
+        };
+      } catch (_) {}
+      return prevJson.call(this, body);
+    };
+    res.send = function patchedSendTok(body) {
+      postTokenOutcome = { status: res.statusCode || 500 };
+      return prevSend.call(this, body);
+    };
+    try {
+      await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'client', techSenderLabel: null });
+    } finally {
+      res.json = prevJson;
+      res.send = prevSend;
+    }
+    agentDebugLog(
+      'tracking.js:POST_token_chat',
+      'exit_after_moderation',
+      postTokenOutcome || { status: res.statusCode },
+      'H5'
+    );
   } catch (err) {
+    agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat POST (token) error:', err);
     res.status(500).json({ error: err.message });
   }

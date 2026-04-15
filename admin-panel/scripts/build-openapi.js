@@ -207,27 +207,27 @@ const ROUTES = [
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
 
-  // ── Operations (Kanban — sem adminAuth no router; uma rota usa adminAuth)
-  ['get', '/api/operations/tasks', op('Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os)', ['Operações & OS'], false)],
-  ['get', '/api/operations/tasks/{id}/revisions/export', op('Exportar revisões', ['Operações & OS'], false, {
+  // ── Operations (Kanban — JWT painel/admin; reject também aceita JWT do app)
+  ['get', '/api/operations/tasks', op('Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os; tenant via JWT)', ['Operações & OS'], bearerAdmin)],
+  ['get', '/api/operations/tasks/{id}/revisions/export', op('Exportar revisões', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['get', '/api/operations/tasks/{id}/revisions/{revision}', op('Uma revisão', ['Operações & OS'], false, {
+  ['get', '/api/operations/tasks/{id}/revisions/{revision}', op('Uma revisão', ['Operações & OS'], bearerAdmin, {
     parameters: [
       { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'revision', in: 'path', required: true, schema: { type: 'string' } },
     ],
   })],
-  ['get', '/api/operations/tasks/{id}/revisions', op('Lista de revisões', ['Operações & OS'], false, {
+  ['get', '/api/operations/tasks/{id}/revisions', op('Lista de revisões', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['delete', '/api/operations/tasks/{id}', op('Excluir execução', ['Operações & OS'], false, {
+  ['delete', '/api/operations/tasks/{id}', op('Excluir execução', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/operations/tasks/{id}/reject', op('Rejeitar OS', ['Operações & OS'], false, {
+  ['post', '/api/operations/tasks/{id}/reject', op('Rejeitar OS (JWT painel/admin ou JWT app — owner + tenant do formulário)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/operations/tasks/{id}/reopen-for-revision', op('Reabrir para revisão (admin JWT)', ['Operações & OS'], bearerAdmin, {
+  ['post', '/api/operations/tasks/{id}/reopen-for-revision', op('Reabrir para revisão (JWT painel)', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
@@ -279,17 +279,17 @@ const ROUTES = [
   })],
   ['get', '/api/metrics', op('Listar métricas agregadas', ['Admin — Métricas'], bearerAdmin)],
 
-  // ── Tracking (público / app conforme implementação atual)
-  ['post', '/api/tracking/start/{taskId}', op('Iniciar tracking / gerar token público', ['Tracking'], false, {
+  // ── Tracking (estado: link público; start/end/pause/resume: JWT do app + dono da OS)
+  ['post', '/api/tracking/start/{taskId}', op('Iniciar tracking / gerar token (técnico dono da OS, JWT)', ['Tracking'], bearerApp, {
     parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/tracking/end/{taskId}', op('Encerrar deslocamento', ['Tracking'], false, {
+  ['post', '/api/tracking/end/{taskId}', op('Encerrar deslocamento (técnico, JWT)', ['Tracking'], bearerApp, {
     parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/tracking/pause/{taskId}', op('Pausar tracking', ['Tracking'], false, {
+  ['post', '/api/tracking/pause/{taskId}', op('Pausar tracking (técnico, JWT)', ['Tracking'], bearerApp, {
     parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
-  ['post', '/api/tracking/resume/{taskId}', op('Retomar tracking', ['Tracking'], false, {
+  ['post', '/api/tracking/resume/{taskId}', op('Retomar tracking (técnico, JWT)', ['Tracking'], bearerApp, {
     parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['get', '/api/tracking/{token}', op('Estado em tempo real (link público)', ['Tracking'], false, {
@@ -318,6 +318,7 @@ const ROUTES = [
 
   // ── Admin CRUD (todos com adminAuth no mount em index.js)
   ['get', '/api/dashboard', op('Resumo do dashboard', ['Admin — Dashboard'], bearerAdmin)],
+  ['get', '/api/stock-critical', op('Itens de estoque em ou abaixo do mínimo', ['Admin — Estoque crítico'], bearerAdmin)],
   ['get', '/api/tenants', op('Listar tenants', ['Admin — Tenants'], bearerAdmin)],
   ['get', '/api/tenants/{id}', op('Detalhe tenant', ['Admin — Tenants'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],

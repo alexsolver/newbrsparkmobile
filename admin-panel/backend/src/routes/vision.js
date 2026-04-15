@@ -1,6 +1,6 @@
 'use strict';
 /**
- * API de «visão» operacional: biometria / verificação facial alinhada ao plano do tenant (CompreFace, etc.).
+ * API de «visão» operacional: biometria / verificação facial alinhada ao plano do tenant (FaceMatch, etc.).
  * NÃO inclui o gate de foto do cadastro de prestador — isso está em routes/aiTechnicianProfilePhoto.js.
  */
 const router = require('express').Router();

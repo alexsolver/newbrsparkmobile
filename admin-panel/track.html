@@ -8,8 +8,8 @@
   <title data-i18n-title>BrSpark</title>
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
   <!-- Ionicons -->
   <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
@@ -55,7 +55,7 @@
       border: none; border-radius: 24px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 700; color: #dc2626; cursor: pointer;
+      font-weight: 700; color: var(--color-destructive); cursor: pointer;
     }
     #btn-back { width: 48px; font-size: 20px; color: var(--text); }
     #btn-help { padding: 0 20px; font-size: 14px; }
@@ -328,10 +328,18 @@
     }
     .chat-head {
       display: flex; align-items: center; justify-content: space-between;
+      gap: 10px;
       padding: 14px 16px 10px;
       border-bottom: 1px solid var(--border);
     }
-    .chat-head-title { font-size: 17px; font-weight: 800; color: var(--text); }
+    .chat-head-title { flex: 1; min-width: 0; font-size: 17px; font-weight: 800; color: var(--text); }
+    .chat-head-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .chat-lang-btn {
+      width: 40px; height: 40px; border: none; border-radius: 20px;
+      background: var(--bg); font-size: 20px; line-height: 1; color: var(--text2);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
     .chat-close {
       width: 40px; height: 40px; border: none; border-radius: 20px;
       background: var(--bg); font-size: 22px; line-height: 1; color: var(--text2);
@@ -375,6 +383,22 @@
       cursor: pointer;
     }
     #chat-send:disabled { opacity: 0.55; cursor: not-allowed; }
+    #chat-locale-overlay {
+      position: fixed; inset: 0; z-index: 100002;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; background: rgba(15,23,42,0.45);
+    }
+    #chat-locale-overlay.hidden { display: none !important; }
+    .chat-locale-card {
+      width: 100%; max-width: 360px; background: #fff; border-radius: 16px;
+      padding: 18px 18px 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    }
+    .chat-locale-row {
+      display: flex; align-items: center; padding: 12px 4px;
+      border-bottom: 1px solid var(--border); cursor: pointer; font-weight: 600;
+      font-size: 15px; color: var(--text);
+    }
+    .chat-locale-row:last-of-type { border-bottom: none; }
   </style>
 </head>
 <body>
@@ -412,13 +436,40 @@
   <div id="chat-panel" role="dialog" aria-labelledby="chat-title">
     <div class="chat-head">
       <span id="chat-title" class="chat-head-title"></span>
-      <button type="button" class="chat-close" id="chat-close-btn" onclick="closeTrackingChat()" aria-label="">×</button>
+      <div class="chat-head-actions">
+        <button type="button" class="chat-lang-btn" id="chat-lang-btn" onclick="openTrackingChatLocaleModal()" aria-label="">
+          <ion-icon name="language-outline" style="font-size:22px;color:var(--brand);"></ion-icon>
+        </button>
+        <button type="button" class="chat-close" id="chat-close-btn" onclick="closeTrackingChat()" aria-label="">×</button>
+      </div>
     </div>
     <div id="chat-messages"></div>
     <form id="chat-form" action="javascript:void(0)" onsubmit="event.preventDefault(); return false;">
       <textarea id="chat-input" name="body" maxlength="900" rows="1" placeholder="" autocomplete="off"></textarea>
       <button type="button" id="chat-send"></button>
     </form>
+  </div>
+</div>
+
+<div
+  id="chat-locale-overlay"
+  class="hidden"
+  aria-hidden="true"
+  onclick="if(event.target===this)closeTrackingChatLocaleModal()"
+>
+  <div class="chat-locale-card" role="dialog" aria-labelledby="chat-locale-title" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;margin-bottom:10px;">
+      <span id="chat-locale-title" style="flex:1;font-size:17px;font-weight:800;color:var(--text);"></span>
+      <button type="button" class="chat-close" onclick="closeTrackingChatLocaleModal()" aria-label="">×</button>
+    </div>
+    <p id="chat-locale-hint" style="font-size:13px;color:var(--text3);margin:0 0 12px;line-height:1.45;"></p>
+    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale(null)">
+      <ion-icon name="globe-outline" style="font-size:20px;margin-right:10px;color:var(--brand);"></ion-icon>
+      <span id="chat-locale-opt-auto"></span>
+    </div>
+    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('pt-BR')"><span id="chat-locale-opt-pt"></span></div>
+    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('en-US')"><span id="chat-locale-opt-en"></span></div>
+    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('es-ES')"><span id="chat-locale-opt-es"></span></div>
   </div>
 </div>
 
@@ -497,6 +548,8 @@
 
   // ── Idioma (prioridade: ?lang= / ?locale= → localStorage → navegador → pt-BR) ──
   const TRACK_LOCALE_STORAGE = 'brspark_track_locale_v1';
+  /** Idioma para traduzir mensagens do outro lado no chat (separado do idioma da UI da página). */
+  const TRACK_CHAT_LOCALE_STORAGE = 'brspark_track_chat_locale_v1';
   const STR = {
     'pt-BR': {
       pageTitle: 'Acompanhe seu técnico · BrSpark',
@@ -562,6 +615,17 @@
       status_way: '{name} está em deslocamento',
       err_send: 'Não foi possível enviar.',
       err_network: 'Sem conexão. Tente novamente.',
+      chatLoadFail: 'Não foi possível carregar o chat.',
+      chatLoadFailHint:
+        'Se o técnico acabou de iniciar o deslocamento, aguarde alguns segundos e abra o chat de novo.',
+      chatLocaleTitle: 'Idioma das mensagens',
+      chatLocaleHint:
+        'Define em que idioma você prefere ler as mensagens recebidas (tradução automática). “Automático” segue o idioma da página (PT/EN/ES).',
+      chatLocaleAuto: 'Automático (idioma da página)',
+      chatLocalePt: 'Português',
+      chatLocaleEn: 'English',
+      chatLocaleEs: 'Español',
+      chatLocaleSaved: 'Preferência guardada.',
     },
     en: {
       pageTitle: 'Track your technician · BrSpark',
@@ -627,6 +691,16 @@
       status_way: '{name} is on the way',
       err_send: 'Could not send.',
       err_network: 'No connection. Try again.',
+      chatLoadFail: 'Could not load the chat.',
+      chatLoadFailHint: 'If the technician just started the trip, wait a few seconds and open the chat again.',
+      chatLocaleTitle: 'Message language',
+      chatLocaleHint:
+        'Choose the language you prefer for incoming messages (automatic translation). “Automatic” follows the page language (PT/EN/ES).',
+      chatLocaleAuto: 'Automatic (page language)',
+      chatLocalePt: 'Portuguese',
+      chatLocaleEn: 'English',
+      chatLocaleEs: 'Spanish',
+      chatLocaleSaved: 'Preference saved.',
     },
     es: {
       pageTitle: 'Siga a su técnico · BrSpark',
@@ -692,6 +766,16 @@
       status_way: '{name} va en camino',
       err_send: 'No se pudo enviar.',
       err_network: 'Sin conexión. Inténtelo de nuevo.',
+      chatLoadFail: 'No se pudo cargar el chat.',
+      chatLoadFailHint: 'Si el técnico acaba de iniciar el desplazamiento, espere unos segundos y vuelva a abrir el chat.',
+      chatLocaleTitle: 'Idioma de los mensajes',
+      chatLocaleHint:
+        'Elija el idioma en el que prefiere leer los mensajes recibidos (traducción automática). “Automático” sigue el idioma de la página (PT/EN/ES).',
+      chatLocaleAuto: 'Automático (idioma de la página)',
+      chatLocalePt: 'Portugués',
+      chatLocaleEn: 'Inglés',
+      chatLocaleEs: 'Español',
+      chatLocaleSaved: 'Preferencia guardada.',
     },
     fr: {
       pageTitle: 'Suivez votre technicien · BrSpark',
@@ -757,6 +841,17 @@
       status_way: '{name} est en route',
       err_send: 'Envoi impossible.',
       err_network: 'Pas de connexion. Réessayez.',
+      chatLoadFail: 'Impossible de charger le chat.',
+      chatLoadFailHint:
+        'Si le technicien vient de démarrer le déplacement, attendez quelques secondes et rouvrez le chat.',
+      chatLocaleTitle: 'Langue des messages',
+      chatLocaleHint:
+        'Choisissez la langue dans laquelle vous préférez lire les messages reçus (traduction automatique). « Automatique » suit la langue de la page (PT/EN/ES).',
+      chatLocaleAuto: 'Automatique (langue de la page)',
+      chatLocalePt: 'Portugais',
+      chatLocaleEn: 'Anglais',
+      chatLocaleEs: 'Espagnol',
+      chatLocaleSaved: 'Préférence enregistrée.',
     },
   };
 
@@ -799,6 +894,68 @@
 
   let trackLocale = detectTrackLocale();
 
+  function normalizeTrackingChatLocaleApi(raw) {
+    var s = String(raw || '')
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, '-');
+    if (s.indexOf('en') === 0) return 'en-US';
+    if (s.indexOf('es') === 0) return 'es-ES';
+    return 'pt-BR';
+  }
+
+  /** Query `chatLocale=` para GET/POST do chat (servidor alinha ao chat interno). */
+  function trackingChatLocaleQueryString() {
+    try {
+      var st = localStorage.getItem(TRACK_CHAT_LOCALE_STORAGE);
+      var loc;
+      if (st === null || st === '' || st === '__auto__') {
+        if (trackLocale === 'en') loc = 'en-US';
+        else if (trackLocale === 'es') loc = 'es-ES';
+        else if (trackLocale === 'fr') loc = 'en-US';
+        else loc = 'pt-BR';
+      } else {
+        loc = normalizeTrackingChatLocaleApi(st);
+      }
+      return 'chatLocale=' + encodeURIComponent(loc);
+    } catch (e) {
+      return 'chatLocale=' + encodeURIComponent('pt-BR');
+    }
+  }
+
+  function openTrackingChatLocaleModal() {
+    var ov = document.getElementById('chat-locale-overlay');
+    if (!ov) return;
+    ov.classList.remove('hidden');
+    ov.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeTrackingChatLocaleModal() {
+    var ov = document.getElementById('chat-locale-overlay');
+    if (ov) {
+      ov.classList.add('hidden');
+      ov.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function applyTrackingChatPageLocale(code) {
+    try {
+      if (code === null || code === undefined || code === '') {
+        localStorage.setItem(TRACK_CHAT_LOCALE_STORAGE, '__auto__');
+      } else {
+        localStorage.setItem(TRACK_CHAT_LOCALE_STORAGE, String(code));
+      }
+    } catch (e) {}
+    closeTrackingChatLocaleModal();
+    try {
+      alert(T('chatLocaleSaved'));
+    } catch (e2) {}
+    var chatOv = document.getElementById('chat-overlay');
+    if (chatOv && !chatOv.classList.contains('hidden')) {
+      void fetchTrackingChatMessages();
+    }
+  }
+
   function T(key, params) {
     const pack = STR[trackLocale] || STR['pt-BR'];
     const fb = STR['pt-BR'];
@@ -833,6 +990,15 @@
     const chatInp = document.getElementById('chat-input');
     if (chatInp) chatInp.placeholder = T('chatPlaceholder');
     setTxt('chat-send', T('chatSend'));
+    setTxt('chat-locale-title', T('chatLocaleTitle'));
+    var chHint = document.getElementById('chat-locale-hint');
+    if (chHint) chHint.textContent = T('chatLocaleHint');
+    setTxt('chat-locale-opt-auto', T('chatLocaleAuto'));
+    setTxt('chat-locale-opt-pt', T('chatLocalePt'));
+    setTxt('chat-locale-opt-en', T('chatLocaleEn'));
+    setTxt('chat-locale-opt-es', T('chatLocaleEs'));
+    var langBtn = document.getElementById('chat-lang-btn');
+    if (langBtn) langBtn.setAttribute('aria-label', T('chatLocaleTitle'));
     setTxt('status-title', T('statusWaiting'));
     setTxt('pause-ribbon-msg', T('pauseMsg'));
     setTxt('info-label-text', T('infoInProgress'));
@@ -956,7 +1122,13 @@
       meta.textContent = who + (when ? ' · ' + when : '');
       const bubble = document.createElement('div');
       bubble.className = 'chat-bubble';
-      bubble.textContent = typeof m.text === 'string' ? m.text : '';
+      var body =
+        typeof m.displayText === 'string' && m.displayText.trim()
+          ? m.displayText.trim()
+          : typeof m.text === 'string'
+            ? m.text
+            : '';
+      bubble.textContent = body;
       row.appendChild(meta);
       row.appendChild(bubble);
       el.appendChild(row);
@@ -964,23 +1136,51 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  function showChatLoadBanner(message, hint) {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    el.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.setAttribute('role', 'alert');
+    wrap.style.cssText =
+      'margin-bottom:12px;padding:12px 14px;border-radius:12px;font-size:13px;font-weight:600;line-height:1.45;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;white-space:pre-wrap';
+    wrap.textContent = hint ? String(message || '').trim() + '\n\n' + String(hint || '').trim() : String(message || '').trim();
+    el.appendChild(wrap);
+  }
+
   async function fetchTrackingChatMessages() {
     if (!token || pollHalted) return;
     try {
-      const res = await fetch(
-        `${BASE}/api/tracking/${encodeURIComponent(token)}/chat?cb=${Date.now()}`,
-        { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }
-      );
-      if (res.status === 410) {
-        closeTrackingChat();
-        showExpiredGrace();
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const res = await fetch(
+          `${BASE}/api/tracking/${encodeURIComponent(token)}/chat?${trackingChatLocaleQueryString()}&cb=${Date.now()}`,
+          { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }
+        );
+        if (res.status === 410) {
+          closeTrackingChat();
+          showExpiredGrace();
+          return;
+        }
+        if (res.ok) {
+          const data = await res.json();
+          renderTrackingChatMessages(data.messages);
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        const err = typeof body.error === 'string' ? body.error : '';
+        if (res.status === 400 && /iniciad|indisponível|disponib|started|unavailable/i.test(err) && attempt < 7) {
+          await new Promise(function (r) {
+            setTimeout(r, 450);
+          });
+          continue;
+        }
+        showChatLoadBanner(err || T('chatLoadFail'), T('chatLoadFailHint'));
         return;
       }
-      if (!res.ok) return;
-      const data = await res.json();
-      renderTrackingChatMessages(data.messages);
+      showChatLoadBanner(T('chatLoadFail'), T('chatLoadFailHint'));
     } catch (e) {
       console.warn('[tracking] chat fetch', e);
+      showChatLoadBanner(T('err_network'), '');
     }
   }
 
@@ -1020,15 +1220,18 @@
     if (btn) btn.disabled = true;
     if (input) input.disabled = true;
     try {
-      const res = await fetch(`${BASE}/api/tracking/${encodeURIComponent(token)}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ text }),
-        cache: 'no-store',
-      });
+      const res = await fetch(
+        `${BASE}/api/tracking/${encodeURIComponent(token)}/chat?${trackingChatLocaleQueryString()}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ text }),
+          cache: 'no-store',
+        }
+      );
       if (res.status === 410) {
         closeTrackingChat();
         showExpiredGrace();
@@ -1043,15 +1246,18 @@
             : T('err_send');
         if (data.canOverride) {
           if (window.confirm(msg + '\n\n' + T('chatSendAnywayQ'))) {
-            const res2 = await fetch(`${BASE}/api/tracking/${encodeURIComponent(token)}/chat`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-              },
-              body: JSON.stringify({ text: text, ackModerationWarning: true }),
-              cache: 'no-store',
-            });
+            const res2 = await fetch(
+              `${BASE}/api/tracking/${encodeURIComponent(token)}/chat?${trackingChatLocaleQueryString()}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+                body: JSON.stringify({ text: text, ackModerationWarning: true }),
+                cache: 'no-store',
+              }
+            );
             const data2 = await res2.json().catch(() => ({}));
             if (res2.status === 410) {
               closeTrackingChat();
@@ -1063,7 +1269,11 @@
               return false;
             }
             if (input) input.value = '';
-            renderTrackingChatMessages(data2.messages);
+            if (Array.isArray(data2.messages)) {
+              renderTrackingChatMessages(data2.messages);
+            } else {
+              void fetchTrackingChatMessages();
+            }
           }
         } else {
           alert(msg);
@@ -1075,7 +1285,11 @@
         return false;
       }
       if (input) input.value = '';
-      renderTrackingChatMessages(data.messages);
+      if (Array.isArray(data.messages)) {
+        renderTrackingChatMessages(data.messages);
+      } else {
+        void fetchTrackingChatMessages();
+      }
     } catch (e) {
       alert(T('err_network'));
     } finally {

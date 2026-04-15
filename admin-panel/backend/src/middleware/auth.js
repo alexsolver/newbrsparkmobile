@@ -72,4 +72,37 @@ function adminOrReportsApiKey(req, res, next) {
   }
 }
 
-module.exports = { adminAuth, adminAuthThenPanel, adminOrReportsApiKey };
+/**
+ * Recusa de OS a partir do app (Live Activity / push) ou do painel.
+ * Aceita JWT de utilizador do app (`sessionId` no payload) ou JWT do painel / admin legado (via `adminAuth` + permissões).
+ */
+function rejectOsAuth(req, res, next) {
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token de autenticação ausente.' });
+  }
+  const token = header.slice(7);
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token inválido ou expirado.' });
+  }
+  if (payload.panel === true && payload.userId) {
+    req.admin = attachAdminFromPayload(payload);
+    return enforcePanelPermissions(req, res, () => next());
+  }
+  if (payload.sessionId != null && payload.id) {
+    req.appUser = {
+      id: payload.id,
+      tenantId: payload.tenantId,
+      email: payload.email,
+      role: payload.role,
+    };
+    return next();
+  }
+  req.admin = attachAdminFromPayload(payload);
+  return next();
+}
+
+module.exports = { adminAuth, adminAuthThenPanel, adminOrReportsApiKey, rejectOsAuth };

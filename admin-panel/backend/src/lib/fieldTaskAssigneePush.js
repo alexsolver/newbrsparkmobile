@@ -87,12 +87,14 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
   /** iOS: segunda linha; na tela bloqueada as ações aparecem ao expandir. */
   const subtitle =
     String(opts.pushSubtitle || '').trim() ||
-    'Deslize para baixo — Aceitar, Recusar ou Ver detalhes.';
+    'Deslize para baixo — Aceitar, Recusar ou OK.';
 
   const pushRes = await sendExpoPushToMany(pushTokens, {
     title: String(opts.pushTitle || 'Nova atividade').slice(0, 120),
     body: String(opts.pushBody || 'Nova atividade na sua lista.').slice(0, 180),
     subtitle: subtitle.slice(0, 120),
+    /** iOS 15+ (Expo): explícito; «time-sensitive» exige capability no App ID. */
+    interruptionLevel: 'active',
     categoryId: 'BRSPARK_TECH_ACTIVITY',
     channelId: 'brspark-tecnico',
     data: { taskId: executionId, type: 'os_dispatched' },

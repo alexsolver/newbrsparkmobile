@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css" />
   <!-- Universal React Native Vector Icons Map -->
   <link rel="stylesheet" href="css/vector-icons.css" />
-  
+  <link rel="stylesheet" href="css/brspark-tokens.css" />
   <link rel="stylesheet" href="css/main.css" />
   <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
   <script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
@@ -21,7 +21,7 @@
   <style>
     .toolbox-item {
       padding: 12px 16px;
-      background: #fdfdfd;
+      background: var(--color-surface-low);
       border: 1px solid var(--border);
       border-radius: 8px;
       cursor: grab;
@@ -33,10 +33,91 @@
       -webkit-user-select: none;
     }
     .toolbox-item:hover { border-color: var(--accent); color: var(--accent); }
+    /* Toolbox: abas por categoria */
+    .fb-toolbox {
+      gap: 8px !important;
+    }
+    .fb-toolbox-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      flex-shrink: 0;
+      padding: 0 0 2px;
+      margin: 0 0 2px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .fb-toolbox--filtering .fb-toolbox-tabs {
+      display: none;
+    }
+    .fb-toolbox-tab {
+      flex: 1 1 calc(50% - 2px);
+      min-width: 0;
+      margin: 0;
+      padding: 6px 4px;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1.2;
+      text-align: center;
+      color: var(--text3, #64748b);
+      background: var(--color-surface-low, #f8fafc);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .fb-toolbox-tab:hover {
+      color: var(--text2, #334155);
+      border-color: #cbd5e1;
+    }
+    .fb-toolbox-tab[aria-selected="true"] {
+      color: var(--primary, #4f46e5);
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.45);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12);
+    }
+    .fb-toolbox-tab:focus-visible {
+      outline: 2px solid var(--primary, #4f46e5);
+      outline-offset: 2px;
+    }
+    .fb-toolbox-panes {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .fb-toolbox--filtering .fb-toolbox-panes {
+      overflow-y: auto;
+    }
+    .fb-toolbox-pane {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .fb-toolbox-pane[hidden] {
+      display: none !important;
+    }
+    .fb-toolbox--filtering .fb-toolbox-pane:not([hidden]) {
+      flex: 0 0 auto;
+      max-height: none;
+      overflow: visible;
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+      border-bottom: 1px dashed var(--border, #e2e8f0);
+    }
+    .fb-toolbox--filtering .fb-toolbox-pane:not([hidden]):last-of-type {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
     .canvas-item {
       padding: 16px 206px 16px 42px;
-      background: white;
-      border: 1px solid #cbd5e1;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       margin-bottom: 12px;
       cursor: default;
@@ -66,7 +147,7 @@
       z-index: 12;
       flex-shrink: 0;
       pointer-events: none;
-      background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, #fff 10px);
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, var(--color-surface) 10px);
       padding-left: 12px;
     }
     .canvas-item-toolbar > button {
@@ -80,12 +161,12 @@
       border: none;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.7);
-      color: #64748b;
+      color: var(--color-text-light);
       cursor: pointer;
       flex-shrink: 0;
     }
     .canvas-item-toolbar > button:hover {
-      background: #fff;
+      background: var(--color-surface);
       color: var(--accent);
     }
     .canvas-item-toolbar > button.danger:hover {
@@ -95,7 +176,7 @@
       color: var(--red);
     }
     .canvas-item-toolbar > button.is-req-active:hover {
-      color: #dc2626;
+      color: var(--color-destructive);
     }
     #canvas .canvas-item-toolbar ion-icon,
     #canvas .canvas-section-head__toolbar ion-icon {
@@ -124,15 +205,15 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #94a3b8;
+      color: var(--color-text-light);
       cursor: grab;
       border-radius: 8px;
       z-index: 3;
       flex-shrink: 0;
     }
     .canvas-drag-handle:hover {
-      background: #f1f5f9;
-      color: #64748b;
+      background: var(--color-divider);
+      color: var(--color-text-light);
     }
     .canvas-drag-handle:active {
       cursor: grabbing;
@@ -144,14 +225,50 @@
     }
     /* Clique no ícone deve ir para o <button> (onclick / handlers); senão parece que "nada acontece". */
     .topbar-actions button ion-icon,
-    .topbar-title button ion-icon {
+    .topbar-title button ion-icon,
+    .data-toolbar button ion-icon {
       pointer-events: none;
     }
     .canvas-drag-handle {
       touch-action: none;
     }
-    .sortable-ghost.hover-ghost {
-      opacity: 0.45;
+    /* Sortable: “slot” onde o cartão vai aterrar — bem visível (antes ficava quase invisível). */
+    #canvas .sortable-ghost.hover-ghost {
+      opacity: 1 !important;
+      min-height: 56px !important;
+      background: linear-gradient(180deg, rgba(238, 242, 255, 0.98) 0%, rgba(224, 231, 255, 0.92) 100%) !important;
+      border: 3px dashed #6366f1 !important;
+      border-radius: 10px !important;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+        0 0 0 3px rgba(99, 102, 241, 0.22),
+        0 12px 28px rgba(79, 70, 229, 0.18) !important;
+      box-sizing: border-box !important;
+    }
+    #canvas .sortable-ghost.hover-ghost .canvas-item-main,
+    #canvas .sortable-ghost.hover-ghost .canvas-item-toolbar,
+    #canvas .sortable-ghost.hover-ghost .canvas-drag-handle {
+      opacity: 0.35;
+    }
+    /* Cartão escolhido / clone em arrasto (incl. forceFallback). */
+    #canvas .canvas-sortable-chosen,
+    #canvas .sortable-chosen.canvas-sortable-chosen {
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35), 0 10px 26px rgba(15, 23, 42, 0.12) !important;
+      border-color: #818cf8 !important;
+    }
+    #canvas .canvas-sortable-drag,
+    #canvas .sortable-drag.canvas-sortable-drag {
+      opacity: 0.98 !important;
+      background: var(--color-surface) !important;
+      border: 2px solid #6366f1 !important;
+      border-radius: 10px !important;
+      box-shadow: 0 16px 40px rgba(79, 70, 229, 0.28) !important;
+      z-index: 100 !important;
+      cursor: grabbing !important;
+    }
+    #canvas .sortable-fallback {
+      opacity: 0.98 !important;
+      z-index: 120 !important;
     }
     /*
      * Sortable escreve width/minWidth inline no cartão; isso ganha sobre `width:100%` sem !important.
@@ -185,9 +302,9 @@
       margin: 10px 0;
       min-height: 48px;
       border-radius: 8px;
-      background: #f1f5f9;
+      background: var(--color-divider);
     }
-    .canvas-empty { text-align: center; color: var(--text3); font-size: 14px; padding: 40px; border: 2px dashed #cbd5e1; border-radius: 12px; }
+    .canvas-empty { text-align: center; color: var(--text3); font-size: 14px; padding: 40px; border: 2px dashed var(--color-border); border-radius: 12px; }
 
     /* Seções no canvas: agrupar campos entre separadores de etapa */
     .canvas-section-group {
@@ -197,13 +314,13 @@
       margin-bottom: 20px;
       border-radius: 12px;
       border: 1px solid #c4b5fd;
-      background: linear-gradient(180deg, #faf5ff 0%, #f8fafc 48px);
+      background: linear-gradient(180deg, #faf5ff 0%, var(--color-bg) 48px);
       overflow: hidden;
       box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
     }
     .canvas-section-group--preamble {
-      border-color: #94a3b8;
-      background: linear-gradient(180deg, #f1f5f9 0%, #f8fafc 48px);
+      border-color: var(--color-text-light);
+      background: linear-gradient(180deg, var(--color-divider) 0%, var(--color-bg) 48px);
     }
     .canvas-section-head {
       display: flex;
@@ -233,7 +350,7 @@
       transition: transform 0.15s ease;
     }
     .canvas-section-group--preamble .canvas-section-head__chev {
-      color: #64748b;
+      color: var(--color-text-light);
     }
     .canvas-section-group.is-collapsed .canvas-section-head__chev {
       transform: rotate(-90deg);
@@ -256,7 +373,7 @@
     }
     .canvas-section-group--preamble .canvas-section-head__badge {
       color: #475569;
-      background: #e2e8f0;
+      background: var(--color-border);
     }
     .canvas-section-group--selected {
       border-color: #7c3aed;
@@ -315,11 +432,11 @@
       border: none;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.7);
-      color: #64748b;
+      color: var(--color-text-light);
       cursor: pointer;
     }
     .canvas-section-head__toolbar button:hover {
-      background: #fff;
+      background: var(--color-surface);
       color: var(--accent);
     }
     .canvas-section-head__toolbar button.danger:hover {
@@ -352,19 +469,20 @@
       padding: 2px 4px;
       margin-right: 2px;
       cursor: grab;
-      color: #94a3b8;
+      color: var(--color-text-light);
       border-radius: 6px;
       user-select: none;
     }
     .canvas-section-head__section-drag:hover {
       background: rgba(255, 255, 255, 0.7);
-      color: #64748b;
+      color: var(--color-text-light);
     }
     .canvas-section-head__section-drag:active {
       cursor: grabbing;
     }
     /* Coluna: evita que clones da toolbox fiquem em linha (flex default = row) */
     .canvas-section-body {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: stretch;
@@ -372,8 +490,30 @@
       max-width: 100%;
       min-width: 0;
       padding: 12px 12px 4px;
-      background: #f8fafc;
+      background: var(--color-bg);
       box-sizing: border-box;
+    }
+    /* Indicador ao arrastar da palette (HTML5) sobre o canvas */
+    .canvas-section-body.fb-palette-drop-target {
+      background: rgba(238, 242, 255, 0.88) !important;
+      box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.4);
+      border-radius: 0 0 10px 10px;
+      transition: background 0.12s ease, box-shadow 0.12s ease;
+    }
+    .canvas-section-body .fb-palette-drop-line {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 5px;
+      margin: 0;
+      border-radius: 4px;
+      transform: translateY(-50%);
+      pointer-events: none;
+      z-index: 45;
+      background: linear-gradient(90deg, #4f46e5, #818cf8 50%, #4f46e5);
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.95),
+        0 3px 14px rgba(79, 70, 229, 0.45);
     }
     .canvas-section-body--empty-hint {
       min-height: 100px;
@@ -386,7 +526,7 @@
       color: var(--text3);
       font-size: 13px;
       font-weight: 600;
-      border: 2px dashed #cbd5e1;
+      border: 2px dashed var(--color-border);
       border-radius: 8px;
       margin-bottom: 8px;
     }
@@ -428,8 +568,8 @@
       height: min(96dvh, 920px);
       max-height: min(96dvh, 920px);
       z-index: 200000;
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
+      background: var(--color-divider);
+      border: 1px solid var(--color-border);
       border-radius: 16px;
       box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
       display: none;
@@ -453,8 +593,8 @@
     .ai-copilot-head {
       flex-shrink: 0;
       padding: 12px 16px;
-      border-bottom: 1px solid #e2e8f0;
-      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+      border-bottom: 1px solid var(--color-border);
+      background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-bg) 100%);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -506,8 +646,8 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
-      border-right: 1px solid #e2e8f0;
-      background: linear-gradient(180deg, #eef2ff 0%, #f1f5f9 50%, #f8fafc 100%);
+      border-right: 1px solid var(--color-border);
+      background: linear-gradient(180deg, #eef2ff 0%, var(--color-divider) 50%, var(--color-bg) 100%);
     }
     #ai-copilot-panel.ai-copilot-menu-collapsed .ai-copilot-col-chat {
       flex: 1 1 100%;
@@ -533,7 +673,7 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
-      background: #f8fafc;
+      background: var(--color-bg);
     }
     .ai-copilot-menu-eyebrow {
       flex-shrink: 0;
@@ -542,9 +682,9 @@
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #64748b;
-      border-bottom: 1px solid #e2e8f0;
-      background: #fff;
+      color: var(--color-text-light);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -557,7 +697,7 @@
       flex-shrink: 0;
       padding: 4px 8px !important;
       min-height: 0;
-      color: #64748b !important;
+      color: var(--color-text-light) !important;
     }
     .ai-copilot-menu-scroll {
       flex: 1;
@@ -597,7 +737,7 @@
         flex: 1 1 55%;
         min-height: 0;
         border-right: none;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--color-border);
       }
       .ai-copilot-col-menu {
         flex: 1 1 45%;
@@ -632,9 +772,9 @@
       text-align: center;
       font-size: 13px;
       line-height: 1.55;
-      color: #64748b;
+      color: var(--color-text-light);
       background: rgba(255, 255, 255, 0.85);
-      border: 1px dashed #cbd5e1;
+      border: 1px dashed var(--color-border);
       border-radius: 16px;
     }
     .ai-copilot-empty strong {
@@ -671,7 +811,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: #94a3b8;
+      color: var(--color-text-light);
       padding: 0 6px;
     }
     .ai-copilot-msg-row.user .ai-copilot-msg-meta {
@@ -683,7 +823,7 @@
       flex-direction: column;
       padding: 0 14px 12px;
       background: linear-gradient(180deg, rgba(238, 242, 255, 0.95) 0%, rgba(250, 245, 255, 0.98) 100%);
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid var(--color-border);
       font-size: 12px;
       font-weight: 700;
       color: #4338ca;
@@ -718,17 +858,17 @@
       margin: 0;
       padding: 10px 14px 12px;
       background: rgba(255, 255, 255, 0.95);
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid var(--color-border);
     }
     .ai-copilot-menu-scroll .ai-copilot-details--advanced {
       margin: 8px 12px 12px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--color-border);
       border-radius: 14px;
       overflow: hidden;
       background: #fafafa;
     }
     .ai-copilot-menu-scroll .ai-copilot-details--advanced > summary {
-      background: #f8fafc;
+      background: var(--color-bg);
     }
     .ai-copilot-clarify-hint {
       margin: 10px 12px 8px;
@@ -744,9 +884,9 @@
     .ai-copilot-clarify-block {
       margin: 0 12px 10px;
       padding: 12px 14px;
-      background: #fff;
+      background: var(--color-surface);
       border-radius: 14px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--color-border);
       box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
     }
     .ai-copilot-clarify-q {
@@ -782,8 +922,8 @@
     .ai-copilot-confirm-block {
       flex-shrink: 0;
       padding: 12px 14px 20px;
-      background: #fff;
-      border-top: 1px solid #e2e8f0;
+      background: var(--color-surface);
+      border-top: 1px solid var(--color-border);
     }
     #ai-copilot-thinking .ai-copilot-thinking-spinner {
       width: 18px;
@@ -811,21 +951,21 @@
     }
     .ai-copilot-bubble.user {
       background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-      color: #fff;
+      color: var(--color-surface);
       border-radius: 18px 18px 6px 18px;
       box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
     }
     .ai-copilot-bubble.assistant {
-      background: #fff;
-      border: 1px solid #e2e8f0;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       color: #334155;
       border-radius: 18px 18px 18px 6px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
     }
     .ai-copilot-details {
       flex-shrink: 0;
-      border-bottom: 1px solid #e2e8f0;
-      background: #fff;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
     }
     .ai-copilot-details > summary {
       list-style: none;
@@ -844,11 +984,11 @@
       display: none;
     }
     .ai-copilot-details > summary:hover {
-      background: #f8fafc;
+      background: var(--color-bg);
     }
     .ai-copilot-details > summary .ai-copilot-details-chevron {
       font-size: 10px;
-      color: #94a3b8;
+      color: var(--color-text-light);
       transition: transform 0.2s ease;
     }
     .ai-copilot-details[open] > summary .ai-copilot-details-chevron {
@@ -856,13 +996,13 @@
     }
     .ai-copilot-details-body {
       padding: 0 14px 14px;
-      border-top: 1px solid #f1f5f9;
+      border-top: 1px solid var(--color-divider);
     }
     .ai-copilot-composer-bar {
       flex-shrink: 0;
       padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
-      border-top: 1px solid #e2e8f0;
-      background: #fff;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-surface);
       box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
     }
     /* Revisão de campos proposta pela IA (antes de aplicar no canvas) */
@@ -884,19 +1024,19 @@
     #copilot-schema-preview-modal .copilot-preview-dialog {
       width: min(1180px, 100%);
       max-height: min(88vh, 100dvh - 32px);
-      background: #fff;
+      background: var(--color-surface);
       border-radius: 16px;
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--color-border);
     }
     #copilot-schema-preview-modal .copilot-preview-head {
       flex-shrink: 0;
       padding: 16px 20px;
-      border-bottom: 1px solid #e2e8f0;
-      background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+      border-bottom: 1px solid var(--color-border);
+      background: linear-gradient(135deg, var(--color-bg) 0%, #eef2ff 100%);
     }
     #copilot-schema-preview-modal .copilot-preview-head h3 {
       margin: 0 0 6px 0;
@@ -910,7 +1050,7 @@
     #copilot-schema-preview-modal .copilot-preview-head p {
       margin: 0;
       font-size: 12px;
-      color: #64748b;
+      color: var(--color-text-light);
       line-height: 1.45;
     }
     #copilot-schema-preview-modal .copilot-preview-scroll {
@@ -926,13 +1066,13 @@
     }
     #copilot-schema-preview-modal table.copilot-preview-table th,
     #copilot-schema-preview-modal table.copilot-preview-table td {
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid var(--color-border);
       padding: 8px 10px;
       text-align: left;
       vertical-align: middle;
     }
     #copilot-schema-preview-modal table.copilot-preview-table th {
-      background: #f8fafc;
+      background: var(--color-bg);
       font-weight: 800;
       color: #475569;
       position: sticky;
@@ -947,7 +1087,7 @@
       max-width: 200px;
       font-size: 11px;
       padding: 6px 8px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
     }
@@ -955,10 +1095,10 @@
       max-width: 160px;
       font-size: 11px;
       padding: 5px 8px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
-      background: #fff;
+      background: var(--color-surface);
     }
     #copilot-schema-preview-modal .copilot-prev-ai-note {
       width: 100%;
@@ -967,7 +1107,7 @@
       min-height: 48px;
       font-size: 11px;
       padding: 6px 8px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
       resize: vertical;
@@ -976,7 +1116,7 @@
     #copilot-schema-preview-modal .copilot-preview-general-notes {
       flex-shrink: 0;
       padding: 12px 16px 4px;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid var(--color-border);
       background: #fafbff;
     }
     #copilot-schema-preview-modal .copilot-preview-general-notes textarea {
@@ -984,7 +1124,7 @@
       box-sizing: border-box;
       font-size: 12px;
       padding: 8px 10px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid var(--color-border);
       border-radius: 10px;
       font-family: inherit;
       resize: vertical;
@@ -993,8 +1133,8 @@
     #copilot-schema-preview-modal .copilot-preview-foot {
       flex-shrink: 0;
       padding: 14px 16px;
-      border-top: 1px solid #e2e8f0;
-      background: #fff;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-surface);
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
@@ -1008,8 +1148,8 @@
       display: flex;
       align-items: flex-end;
       gap: 10px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
       border-radius: 20px;
       padding: 8px 8px 8px 14px;
       margin-bottom: 0;
@@ -1039,7 +1179,7 @@
       border: none;
       border-radius: 50%;
       background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      color: #fff;
+      color: var(--color-surface);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -1070,8 +1210,8 @@
     }
     .ai-copilot-foot {
       padding: 12px 14px 16px;
-      border-top: 1px solid #e2e8f0;
-      background: #fff;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-surface);
     }
     .ai-copilot-actions {
       display: flex;
@@ -1091,7 +1231,7 @@
     }
     .ai-copilot-ctx-mini {
       font-size: 11px;
-      color: #64748b;
+      color: var(--color-text-light);
       margin-bottom: 8px;
     }
     .ai-copilot-ctx-mini label { display: block; margin-bottom: 4px; font-weight: 700; color: #475569; }
@@ -1100,12 +1240,15 @@
     .formbuilder-app-nav-strip {
       background: var(--card);
       border-bottom: 1px solid var(--border);
-      padding: 6px 16px 8px;
+      padding: 4px 12px 6px;
       flex-shrink: 0;
     }
     .formbuilder-app-nav-help {
-      margin: 0 0 6px 0;
+      margin: 0 0 4px 0;
       border: none;
+    }
+    #fb-app-layout-dialog .formbuilder-app-nav-help {
+      margin: 0 0 18px 0;
     }
     .formbuilder-app-nav-help > summary {
       list-style: none;
@@ -1136,26 +1279,68 @@
       font-size: 11px;
       color: var(--text2);
       line-height: 1.45;
-      background: var(--background, #f8fafc);
+      background: var(--background, var(--color-bg));
       border-radius: 8px;
       border: 1px solid var(--border);
+    }
+    .formbuilder-app-nav-main-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 10px;
+      min-height: 36px;
+    }
+    .formbuilder-app-nav-scroll {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      padding: 2px 0 4px;
+    }
+    .formbuilder-app-nav-scroll::-webkit-scrollbar {
+      height: 5px;
+    }
+    .formbuilder-app-nav-scroll::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+    .formbuilder-app-nav-scroll .formbuilder-app-nav-row {
+      display: inline-flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px 12px;
+      width: max-content;
+      min-width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--background, #f8fafc);
+      box-sizing: border-box;
+    }
+    .fb-app-nav-chip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px !important;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fafafa;
+      font-weight: 600;
+      font-size: 12px;
+      flex-shrink: 0;
+      color: var(--text1);
+    }
+    .fb-app-nav-chip-btn:hover {
+      border-color: var(--primary, #2563eb);
+      background: #eff6ff;
     }
     .formbuilder-app-nav-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px 14px;
-    }
-    .fb-app-nav-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--text1);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      flex-shrink: 0;
     }
     .fb-app-start-group,
     #app-hub-order-wrap {
@@ -1171,6 +1356,41 @@
       min-height: 28px;
       transition: opacity 0.15s ease;
     }
+    #fb-app-layout-dialog #app-hub-order-wrap {
+      margin-left: 0;
+      padding-left: 0;
+      padding-top: 14px;
+      margin-top: 12px;
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
+    .fb-app-layout-open-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px !important;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fafafa;
+      font-weight: 700;
+      max-width: min(340px, 58vw);
+      text-align: left;
+    }
+    .fb-app-layout-open-btn:hover {
+      border-color: var(--primary, #2563eb);
+      background: #eff6ff;
+    }
+    .fb-app-layout-open-btn__line {
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text1);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: min(280px, 50vw);
+    }
     #app-hub-order-wrap.app-hub-order-muted {
       opacity: 0.42;
     }
@@ -1185,9 +1405,9 @@
     label.fb-app-inline-radio {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       margin: 0;
-      padding: 4px 10px;
+      padding: 3px 8px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: #fafafa;
@@ -1199,8 +1419,8 @@
       transition: border-color 0.12s ease, background 0.12s ease;
     }
     label.fb-app-inline-radio:hover {
-      border-color: #cbd5e1;
-      background: #f1f5f9;
+      border-color: var(--color-border);
+      background: var(--color-divider);
     }
     label.fb-app-inline-radio:has(input:checked) {
       border-color: var(--primary, #2563eb);
@@ -1239,131 +1459,188 @@
       min-height: 0;
       overflow: hidden;
     }
+    .fb-page-chrome {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 0 12px 12px;
+    }
+    .fb-toolbar.data-toolbar {
+      flex-shrink: 0;
+      margin-bottom: 0;
+    }
+    /* Barra de acções logo abaixo do título «Forms Builder» — evita linha dupla com o hero */
+    .fb-page-hero:has(+ .fb-toolbar-below-hero) {
+      border-bottom: none;
+      padding-bottom: 6px;
+    }
+    .fb-toolbar.data-toolbar.fb-toolbar-below-hero {
+      padding-top: 10px;
+      padding-bottom: 12px;
+    }
+    .fb-page-hero {
+      flex-shrink: 0;
+      max-width: none;
+      margin: 0;
+      padding: 8px 8px 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .fb-page-hero .page-hero-sub {
+      font-size: 12px;
+      line-height: 1.4;
+      margin-top: 4px;
+    }
+    /* Título + descrição: menos altura, descrição não monopoliza a largura */
+    .fb-template-strip {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px 14px;
+      flex-shrink: 0;
+      align-items: end;
+    }
+    @media (min-width: 880px) {
+      .fb-template-strip {
+        grid-template-columns: minmax(220px, 1fr) minmax(0, 1fr);
+      }
+    }
     .fb-builder-shell.data-shell {
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      margin: 0 12px 12px;
+      margin: 0;
       padding: 0;
+    }
+    .fb-builder-inner {
+      display: flex;
+      gap: 20px;
+      flex: 1;
+      min-height: 0;
+      padding: 20px;
+      overflow: hidden;
     }
   </style>
 </head>
 <body>
 <div class="admin-layout">
   <div class="main-content fb-main-scroll">
-    <div class="topbar topbar--data" style="flex-direction:column;align-items:stretch;height:auto;min-height:60px;gap:10px;padding-top:12px;padding-bottom:12px">
-      <nav class="topbar-breadcrumb" aria-label="Trilha" style="flex:none">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+    <div class="topbar topbar--data" style="flex-shrink:0">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a id="fb-bc-panel" href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Forms Builder</span>
+        <span id="fb-bc-builder">Forms Builder</span>
       </nav>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;width:100%">
-      <div class="topbar-title" style="display:flex; align-items:center; gap:12px;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Abrir Formulário</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> Criar Novo</button>
-      </div>
-      <div class="topbar-actions">
-        <!-- Import / Export -->
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.importJSON()" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
-        <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Copiloto: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
-          <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> Copiloto
-        </button>
-        <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
-
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> Preview no App</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.configureGlobalSettings()"><ion-icon name="settings-outline" style="vertical-align:-2px"></ion-icon> Cerca Global</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.openExpectedFormDurationModal()" title="Minutos previstos só do preenchimento (sem deslocamento), usados no despacho"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Tempo do formulário</button>
-        <button type="button" class="btn btn-primary btn-sm" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Schema</button>
-      </div>
-      </div>
     </div>
-    
-    <div style="background:var(--card); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; gap:20px; flex-shrink: 0; align-items:flex-end;">
-       <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
-          <label class="prop-label" for="tpl-title">Título do formulário</label>
+
+    <div class="fb-page-chrome">
+      <header class="page-hero fade-in fb-page-hero">
+        <h1 id="fb-page-title" class="page-hero-title" style="display:flex;align-items:center;gap:10px">
+          <ion-icon name="list-circle-outline" style="color:var(--accent)"></ion-icon>
+          <span id="fb-hero-heading-text">Forms Builder</span>
+        </h1>
+        <p class="page-hero-sub">Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Título e descrição públicos ficam na faixa seguinte.</p>
+      </header>
+
+      <div class="data-toolbar fb-toolbar fb-toolbar-below-hero">
+        <div class="data-toolbar-main" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-open-lbl">Abrir Formulário</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="new-form" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-new-lbl">Criar Novo</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="import-json" onclick="window.importJSON()" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="export-json" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
+          <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Copiloto: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
+            <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-copilot-lbl">Copiloto</span>
+          </button>
+        </div>
+        <div class="data-toolbar-actions">
+          <span id="fb-unsaved-badge" class="badge badge-amber" style="display:none;font-size:11px;font-weight:700;margin-right:4px;"></span>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-preview-lbl">Preview no App</span></button>
+          <button type="button" class="btn btn-primary btn-sm" id="fb-save-schema-btn" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-save-lbl">Salvar Schema</span></button>
+        </div>
+      </div>
+
+    <div class="fb-template-strip">
+       <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+          <label id="fb-label-tpl-title" class="prop-label" for="tpl-title">Título do formulário</label>
           <div style="display:flex; align-items:center; gap:10px; min-width:0;">
             <input type="hidden" id="tpl-icon" value="">
             <input type="hidden" id="tpl-icon-library" value="Ionicons">
             <button type="button" id="tpl-form-icon-trigger" title="Ícone do formulário — clique para escolher" aria-label="Escolher ícone do formulário"
               onclick="window.openTemplateFormIconPicker(event)"
-              style="width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;justify-content:center;align-items:center;cursor:pointer;background:#f8fafc;border:1px dashed #cbd5e1;padding:0;transition:border-color 0.2s,background 0.2s;">
-              <ion-icon name="images-outline" style="font-size:22px;color:#94a3b8;"></ion-icon>
+              style="width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;justify-content:center;align-items:center;cursor:pointer;background:var(--color-bg);border:1px dashed var(--color-border);padding:0;transition:border-color 0.2s,background 0.2s;">
+              <ion-icon name="images-outline" style="font-size:22px;color:var(--color-text-light);"></ion-icon>
             </button>
-            <input id="tpl-title" type="text" class="prop-input" placeholder="Ex: Vistoria Cautelar" style="font-weight:700; font-size:16px; flex:1; min-width:0;" value="NOVO FORMULÁRIO">
+            <input id="tpl-title" type="text" class="prop-input" placeholder="Ex: Vistoria Cautelar" style="font-weight:700; font-size:15px; flex:1; min-width:0;" value="">
           </div>
        </div>
-       <div style="flex:2; min-width:0;">
-          <label class="prop-label" for="tpl-desc">Descrição Pública</label>
-          <input id="tpl-desc" type="text" class="prop-input" placeholder="O que seus parceiros farão com este doc?">
+       <div style="min-width:0;">
+          <label id="fb-label-tpl-desc" class="prop-label" for="tpl-desc">Descrição Pública</label>
+          <input id="tpl-desc" type="text" class="prop-input" placeholder="O que seus parceiros farão com este doc?" style="font-size:13px;">
        </div>
     </div>
 
     <div class="formbuilder-app-nav-strip">
-      <details class="formbuilder-app-nav-help">
-        <summary>
-          <span class="fb-help-chevron">▸</span>
-          <ion-icon name="phone-portrait-outline" style="font-size:16px; color:var(--accent); vertical-align:-3px;"></ion-icon>
-          Ajuda: navegação por seções no app (lista vs um a um)
-        </summary>
-        <div class="fb-help-body">
-          <p style="margin:0 0 8px 0;"><strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>seção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as seções num scroll único quando todas são lista; se alguma for "um a um", usa telas por etapa. Formulários antigos só com "seguir global" continuam a usar o modo guardado no JSON até definir modo por seção.</p>
-          <p style="margin:0; font-size:10px; color:var(--text3);">Com uma única seção, o menu de etapas é ignorado no app. Com hub ativo e várias seções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.</p>
+      <div class="formbuilder-app-nav-main-row">
+        <div class="formbuilder-app-nav-scroll" id="fb-app-nav-scroll">
+        <div class="formbuilder-app-nav-row" id="app-section-start-radios">
+          <button
+            type="button"
+            id="fb-app-layout-open-btn"
+            class="btn btn-ghost btn-sm fb-app-layout-open-btn"
+            aria-haspopup="dialog"
+            aria-controls="fb-app-layout-dialog"
+            onclick="window.openAppLayoutModal && window.openAppLayoutModal()"
+          >
+            <ion-icon name="map-outline" style="font-size:16px; color:var(--accent); flex-shrink:0;"></ion-icon>
+            <span class="fb-app-layout-open-btn__line" id="fb-app-layout-summary">Layout - 1ª etapa - clássico</span>
+          </button>
+          <button
+            type="button"
+            id="fb-btn-geofence-nav"
+            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
+            onclick="window.configureGlobalSettings && window.configureGlobalSettings()"
+          >
+            <ion-icon name="settings-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+            <span id="fb-btn-geofence-lbl">Cerca global</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
+            data-fb-action="form-duration"
+            onclick="window.openExpectedFormDurationModal && window.openExpectedFormDurationModal()"
+          >
+            <ion-icon name="time-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+            <span id="fb-btn-duration-lbl">Tempo do formulário</span>
+          </button>
         </div>
-      </details>
-      <div class="formbuilder-app-nav-row" id="app-section-start-radios">
-        <span class="fb-app-nav-eyebrow">
-          <ion-icon name="map-outline" style="font-size:15px; color:var(--accent);"></ion-icon>
-          Início no app
-        </span>
-        <div class="fb-app-start-group" title="Como o técnico entra no formulário">
-          <label class="fb-app-inline-radio">
-            <input type="radio" name="appSectionStart" value="direct" checked>
-            <ion-icon name="play-forward-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
-            1.ª etapa
-            <small>— clássico</small>
-          </label>
-          <label class="fb-app-inline-radio">
-            <input type="radio" name="appSectionStart" value="hub">
-            <ion-icon name="grid-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
-            Menu de etapas
-            <small>— escolhe a seção</small>
-          </label>
-        </div>
-        <div id="app-hub-order-wrap" class="app-hub-order-muted" title="Ativo quando "Menu de etapas" está selecionado">
-          <span class="fb-app-hub-sep">No menu</span>
-          <label class="fb-app-inline-radio">
-            <input type="radio" name="appHubSectionOrder" value="free" checked>
-            Livre
-          </label>
-          <label class="fb-app-inline-radio">
-            <input type="radio" name="appHubSectionOrder" value="sequential">
-            Ordem fixa
-          </label>
         </div>
       </div>
     </div>
 
-    <!-- flex:0 0 auto evita herdar .page-body { flex:1 } do main.css, que criava faixa branca vazia -->
-    <div class="page-body" style="padding:10px 20px 12px;flex:0 0 auto;background:var(--surface)">
-      <header class="page-hero fade-in" style="margin-bottom:0;max-width:none">
-        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px">
-          <ion-icon name="list-circle-outline" style="color:var(--accent)"></ion-icon>
-          Forms Builder
-        </h1>
-        <p class="page-hero-sub">Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Título e descrição públicos ficam na faixa abaixo.</p>
-      </header>
-    </div>
-
-    <section class="data-shell fade-in fb-builder-shell" aria-label="Área do builder">
-    <div class="page-body" style="display:flex; gap:20px; flex:1; min-height:0; padding: 20px; overflow: hidden;">
+    <section class="data-shell fade-in fb-builder-shell" aria-labelledby="fb-page-title">
+    <div class="fb-builder-inner">
       <!-- Toolbox Column -->
       <div class="panel" style="width: 250px; flex-shrink: 0; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
-        <div class="panel-header"><span class="panel-title">Campos Dinâmicos</span></div>
-        <div class="panel-body" id="toolbox" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:4px; margin-bottom:8px;">BÁSICOS E CONTATOS</div>
+        <div class="panel-header"><span id="fb-toolbox-panel-title" class="panel-title">Campos Dinâmicos</span></div>
+        <div class="panel-body" style="flex:1; min-height:0; display:flex; flex-direction:column; gap:8px; overflow:hidden;">
+          <input id="fb-toolbox-filter" type="search" class="prop-input" autocomplete="off" style="flex-shrink:0;font-size:12px;padding:8px 10px;" placeholder="Filtrar tipos de campo…">
+          <div id="toolbox" class="fb-toolbox" style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+            <div id="fb-toolbox-tablist" class="fb-toolbox-tabs" role="tablist" aria-label="Categorias de campos">
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-basic" data-fb-toolbox-tab="basic" aria-controls="fb-pane-basic" aria-selected="true">Básicos</button>
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-premium" data-fb-toolbox-tab="premium" aria-controls="fb-pane-premium" aria-selected="false" tabindex="-1">Dinâmicos</button>
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-wfm" data-fb-toolbox-tab="wfm" aria-controls="fb-pane-wfm" aria-selected="false" tabindex="-1">Rastreamento</button>
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-audit" data-fb-toolbox-tab="audit" aria-controls="fb-pane-audit" aria-selected="false" tabindex="-1">Evidências</button>
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-launches" data-fb-toolbox-tab="launches" aria-controls="fb-pane-launches" aria-selected="false" tabindex="-1">Lançamentos</button>
+              <button type="button" class="fb-toolbox-tab" role="tab" id="fb-toolbox-tab-ai" data-fb-toolbox-tab="ai" aria-controls="fb-pane-ai" aria-selected="false" tabindex="-1">IA</button>
+            </div>
+            <div class="fb-toolbox-panes">
+              <div id="fb-pane-basic" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-basic" data-fb-toolbox-pane="basic">
            <div class="toolbox-item" data-type="text"><ion-icon name="text-outline" style="margin-right:6px; font-size:16px"></ion-icon>Resposta em Texto</div>
            <div class="toolbox-item" data-type="number"><ion-icon name="keypad-outline" style="margin-right:6px; font-size:16px"></ion-icon>Input Numérico</div>
            <div class="toolbox-item" data-type="email"><ion-icon name="mail-outline" style="margin-right:6px; font-size:16px"></ion-icon>E-mail</div>
@@ -1371,50 +1648,55 @@
            <div class="toolbox-item" data-type="date"><ion-icon name="calendar-outline" style="margin-right:6px; font-size:16px"></ion-icon>Data / Hora</div>
            <div class="toolbox-item" data-type="checkbox"><ion-icon name="checkbox-outline" style="margin-right:6px; font-size:16px"></ion-icon>Caixa de Seleção</div>
            <div class="toolbox-item" data-type="yes_no"><ion-icon name="toggle-outline" style="margin-right:6px; font-size:16px"></ion-icon>Sim / Não (Toggle)</div>
-           
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">PREMIUM & INTELIGÊNCIA</div>
+           <div class="toolbox-item" data-type="leitura" style="border-left: 3px solid #4338ca;"><ion-icon name="book-outline" style="margin-right:6px; font-size:16px; color:#4338ca;"></ion-icon>Leitura</div>
+              </div>
+              <div id="fb-pane-premium" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-premium" data-fb-toolbox-pane="premium" hidden>
            <div class="toolbox-item" data-type="dropdown" style="border-left: 3px solid #6366f1;"><ion-icon name="list-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Lista (Dropdown)</div>
            <div class="toolbox-item" data-type="multiselect" style="border-left: 3px solid #6366f1;"><ion-icon name="list-circle-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Múltipla Escolha</div>
            <div class="toolbox-item" data-type="rating" style="border-left: 3px solid #6366f1;"><ion-icon name="star-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Avaliação (Estrelas)</div>
            <div class="toolbox-item" data-type="lookup_select" style="border-left: 3px solid #2563eb;"><ion-icon name="cloud-download-outline" style="margin-right:6px; font-size:16px; color:#2563eb;"></ion-icon>Lista dinâmica (servidor / JSON)</div>
            <div class="toolbox-item" data-type="repeatable_matrix" style="border-left: 3px solid #0f766e;"><ion-icon name="grid-outline" style="margin-right:6px; font-size:16px; color:#0f766e;"></ion-icon>Matriz repetível (tabela)</div>
            <div class="toolbox-item" data-type="opinion_scale" style="border-left: 3px solid #7c3aed;"><ion-icon name="analytics-outline" style="margin-right:6px; font-size:16px; color:#7c3aed;"></ion-icon>Escala NPS / Likert</div>
-           <div class="toolbox-item" data-type="image_annotation" style="border-left: 3px solid #c2410c;"><ion-icon name="brush-outline" style="margin-right:6px; font-size:16px; color:#c2410c;"></ion-icon>Foto com anotações</div>
+           <div class="toolbox-item" data-type="voice_note" style="border-left: 3px solid #7c3aed; background:#faf5ff"><ion-icon name="mic-outline" style="margin-right:6px; font-size:16px; color:#7c3aed;"></ion-icon>Nota de voz</div>
+           <div class="toolbox-item" data-type="barcode_scan" style="border-left: 3px solid #f59e0b;"><ion-icon name="barcode-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Escanear Etiqueta / Bem</div>
            <div class="toolbox-item" data-type="calculated" style="border-left: 3px solid #8b5cf6;"><ion-icon name="calculator-outline" style="margin-right:6px; font-size:16px; color:#8b5cf6;"></ion-icon>Campo Calculado (Math)</div>
-           <div class="toolbox-item" data-type="hidden" style="border-left: 3px solid #94a3b8;"><ion-icon name="eye-off-outline" style="margin-right:6px; font-size:16px; color:#94a3b8;"></ion-icon>Campo Oculto</div>
-           
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">OPERAÇÃO & JORNADA (WFM)</div>
+           <div class="toolbox-item" data-type="hidden" style="border-left: 3px solid var(--color-text-light);"><ion-icon name="eye-off-outline" style="margin-right:6px; font-size:16px; color:var(--color-text-light);"></ion-icon>Campo Oculto</div>
+              </div>
+              <div id="fb-pane-wfm" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-wfm" data-fb-toolbox-pane="wfm" hidden>
            <div class="toolbox-item" data-type="transit_start" style="border-left: 3px solid #3b82f6;"><ion-icon name="rocket-outline" style="margin-right:6px; font-size:16px; color:#3b82f6;"></ion-icon>Iniciar Deslocamento</div>
            <div class="toolbox-item" data-type="transit_end" style="border-left: 3px solid #3b82f6;"><ion-icon name="flag-outline" style="margin-right:6px; font-size:16px; color:#3b82f6;"></ion-icon>Finalizar Deslocamento</div>
            <div class="toolbox-item" data-type="geofence_check" style="border-left: 3px solid #10b981;"><ion-icon name="location-outline" style="margin-right:6px; font-size:16px; color:#10b981;"></ion-icon>Validar Cerca (Geofence)</div>
            <div class="toolbox-item" data-type="location_pick" style="border-left: 3px solid #0ea5e9;"><ion-icon name="map-outline" style="margin-right:6px; font-size:16px; color:#0ea5e9;"></ion-icon>Localização (GPS + mapa)</div>
-
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px;">AUDITORIA E PROVAS</div>
+              </div>
+              <div id="fb-pane-audit" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-audit" data-fb-toolbox-pane="audit" hidden>
            <div class="toolbox-item" data-type="file_upload" style="border-left: 3px solid #f59e0b;"><ion-icon name="document-attach-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Anexar Arquivo</div>
            <div class="toolbox-item" data-type="photo"><ion-icon name="camera-outline" style="margin-right:6px; font-size:16px;"></ion-icon>Foto (Galeria Livre)</div>
            <div class="toolbox-item" data-type="photo_stamped" style="border-left: 3px solid #f59e0b;"><ion-icon name="scan-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Foto Carimbada (Ao Vivo)</div>
-           <div class="toolbox-item" data-type="barcode_scan" style="border-left: 3px solid #f59e0b;"><ion-icon name="barcode-outline" style="margin-right:6px; font-size:16px; color:#f59e0b;"></ion-icon>Escanear Etiqueta / Bem</div>
+           <div class="toolbox-item" data-type="image_annotation" style="border-left: 3px solid #c2410c;"><ion-icon name="brush-outline" style="margin-right:6px; font-size:16px; color:#c2410c;"></ion-icon>Foto com anotações</div>
+           <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
+           <div class="toolbox-item" data-type="signature_summary" style="border-left: 3px solid #0e7490;"><ion-icon name="reader-outline" style="margin-right:6px; font-size:16px; color:#0e7490;"></ion-icon>Resumo para assinatura · Signature summary</div>
+              </div>
+              <div id="fb-pane-launches" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-launches" data-fb-toolbox-pane="launches" hidden>
            <div class="toolbox-item" data-type="materials_consumption" style="border-left: 3px solid #0369a1;"><ion-icon name="cube-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Materiais / consumo (estoque técnico)</div>
            <div class="toolbox-item" data-type="materials_receipt" style="border-left: 3px solid #15803d;"><ion-icon name="arrow-down-circle-outline" style="margin-right:6px; font-size:16px; color:#15803d;"></ion-icon>Materiais / entrada (estoque técnico)</div>
            <div class="toolbox-item" data-type="technician_finance" style="border-left: 3px solid #0f766e;"><ion-icon name="cash-outline" style="margin-right:6px; font-size:16px; color:#0f766e;"></ion-icon>Custos do técnico (financeiro técnico)</div>
-           <div class="toolbox-item" data-type="signature"><ion-icon name="create-outline" style="margin-right:6px; font-size:16px"></ion-icon>Assinatura</div>
-           <div class="toolbox-item" data-type="signature_summary" style="border-left: 3px solid #0e7490;"><ion-icon name="reader-outline" style="margin-right:6px; font-size:16px; color:#0e7490;"></ion-icon>Resumo para assinatura</div>
-           <div class="toolbox-item" data-type="leitura" style="border-left: 3px solid #4338ca;"><ion-icon name="book-outline" style="margin-right:6px; font-size:16px; color:#4338ca;"></ion-icon>Leitura</div>
-           <div class="toolbox-item" data-type="voice_note" style="border-left: 3px solid #7c3aed; background:#faf5ff"><ion-icon name="mic-outline" style="margin-right:6px; font-size:16px; color:#7c3aed;"></ion-icon>Nota de voz</div>
-
-           <div style="font-size:10px; font-weight:800; color:var(--text3); margin-top:12px; margin-bottom:8px; letter-spacing:0.02em;">Inteligência Artificial</div>
+              </div>
+              <div id="fb-pane-ai" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-ai" data-fb-toolbox-pane="ai" hidden>
            <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
            <div class="toolbox-item" data-type="vision_checklist" style="border-left: 3px solid #0369a1; background:#f0f9ff"><ion-icon name="videocam-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Visão de IA Detecção</div>
            <div class="toolbox-item" data-type="vision_ai_analysis" style="border-left: 3px solid #dc2626; background:#fef2f2"><ion-icon name="sparkles-outline" style="margin-right:6px; font-size:16px; color:#b91c1c;"></ion-icon><span style="color:#991b1b;font-weight:800">Visão de IA Análise</span></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
       <!-- Canvas Column -->
       <div class="panel" style="flex: 1; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
         <div class="panel-header">
-           <span class="panel-title">Canvas do formulário</span>
+           <span id="fb-canvas-panel-title" class="panel-title">Canvas do formulário</span>
         </div>
-        <div class="panel-body" style="flex:1; background:#f8fafc; padding:20px; border-radius:8px; overflow-y:auto;">
+        <div class="panel-body" style="flex:1; background:var(--color-bg); padding:20px; border-radius:8px; overflow-y:auto;">
            <div id="canvas" style="min-height: 200px;">
               <div class="canvas-empty" style="font-size:12px;">Carregando o canvas… Cada formulário começa com uma seção; arraste perguntas para dentro dela.</div>
            </div>
@@ -1422,22 +1704,23 @@
       </div>
     </div>
     </section>
+    </div>
   </div>
 </div>
 
 <!-- Propriedades do campo (modal — abre pela engrenagem no cartão ou ao criar/clonar campo) -->
 <div id="field-properties-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.82); z-index:99990; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:16px;" onclick="if(event.target===this)window.closeFieldPropertiesModal()">
-  <div role="dialog" aria-modal="true" aria-labelledby="field-properties-modal-title" style="width:min(560px,100%); max-height:min(90vh,920px); background:#fff; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
-    <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-shrink:0; background:linear-gradient(180deg,#f8fafc 0%,#fff 100%);">
+  <div role="dialog" aria-modal="true" aria-labelledby="field-properties-modal-title" style="width:min(560px,100%); max-height:min(90vh,920px); background:var(--color-surface); border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+    <div style="padding:14px 18px; border-bottom:1px solid var(--color-border); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-shrink:0; background:linear-gradient(180deg,var(--color-bg) 0%,var(--color-surface) 100%);">
       <div style="min-width:0;">
         <div id="field-properties-modal-title" style="font-size:16px; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">Propriedades do campo</div>
-        <div id="field-properties-modal-subtitle" style="font-size:12px; color:#64748b; margin-top:4px; line-height:1.4; word-break:break-word;"></div>
+        <div id="field-properties-modal-subtitle" style="font-size:12px; color:var(--color-text-light); margin-top:4px; line-height:1.4; word-break:break-word;"></div>
       </div>
-      <button type="button" class="btn btn-ghost" style="flex-shrink:0; padding:8px 12px; font-size:20px; line-height:1; border-radius:10px;" title="Fechar" aria-label="Fechar" onclick="window.closeFieldPropertiesModal()">&times;</button>
+      <button type="button" id="mdl-field-props-close-btn" class="btn btn-ghost" style="flex-shrink:0; padding:8px 12px; font-size:20px; line-height:1; border-radius:10px;" title="Fechar" aria-label="Fechar" onclick="window.closeFieldPropertiesModal()">&times;</button>
     </div>
     <div id="field-properties-modal-body" class="panel-body" style="flex:1; overflow-y:auto; overflow-x:hidden; padding:16px 18px 16px; min-height:120px;"></div>
-    <div style="flex-shrink:0; padding:12px 18px 16px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:flex-end; gap:10px;">
-      <button type="button" class="btn btn-primary" style="min-width:100px; font-weight:700;" onclick="window.closeFieldPropertiesModal()">OK</button>
+    <div style="flex-shrink:0; padding:12px 18px 16px; border-top:1px solid var(--color-border); background:var(--color-bg); display:flex; justify-content:flex-end; gap:10px;">
+      <button type="button" id="mdl-field-props-ok" class="btn btn-primary" style="min-width:100px; font-weight:700;" onclick="window.closeFieldPropertiesModal()">OK</button>
     </div>
   </div>
 </div>
@@ -1450,26 +1733,29 @@
      
      <!-- Simulator Header -->
      <div style="background: var(--primary); color: white; padding: 40px 20px 20px; text-align:center; font-weight:700; font-size:16px;">
-        <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">Aplicativo BrSpark</div>
+        <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">App BrSpark</div>
         <div style="position:absolute; top: 38px; left: 20px; font-size:24px; cursor:pointer;" onclick="window.toggleMobilePreview()">&times;</div>
      </div>
-     <div id="mobile-preview-fill-toolbar" style="display:none; flex-shrink:0; background:#1e293b; color:#e2e8f0; padding:10px 12px; font-size:10px; border-bottom:1px solid #334155;">
-        <div style="font-weight:800; margin-bottom:8px; color:#94a3b8;">Simular navegação (só preview)</div>
+     <div id="mobile-preview-fill-toolbar" style="display:none; flex-shrink:0; background:#1e293b; color:var(--color-border); padding:10px 12px; font-size:10px; border-bottom:1px solid #334155;">
+        <div id="mdl-mobile-sim-nav" style="font-weight:800; margin-bottom:8px; color:var(--color-text-light);">Simular navegação (só preview)</div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:#fff; border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('full')">Lista</button>
-          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:#fff; border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('wizard')">Um-a-um</button>
-          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:#fff; border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('hybrid')">Híbrido</button>
-          <span id="mobile-preview-fill-hint" style="margin-left:auto; font-size:10px; color:#94a3b8; max-width:140px; text-align:right;"></span>
+          <button type="button" id="mdl-mobile-btn-list" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('full')">Lista</button>
+          <button type="button" id="mdl-mobile-btn-wizard" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('wizard')">Um-a-um</button>
+          <button type="button" id="mdl-mobile-btn-hybrid" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('hybrid')">Híbrido</button>
+          <span id="mobile-preview-fill-hint" style="margin-left:auto; font-size:10px; color:var(--color-text-light); max-width:140px; text-align:right;"></span>
         </div>
+     </div>
+     <div id="mobile-preview-engine-notice" style="flex-shrink:0;background:#fffbeb;border-bottom:1px solid #fde68a;padding:10px 14px;font-size:11px;line-height:1.45;color:#854d0e;">
+       <span id="mdl-mobile-preview-notice" style="display:block;"></span>
      </div>
      
      <!-- Simulator Content Area -->
-     <div id="mobile-preview-content" style="flex:1; background:#f1f5f9; padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
+     <div id="mobile-preview-content" style="flex:1; background:var(--color-divider); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:16px;">
         <!-- Filled by JS -->
      </div>
      
      <!-- Simulator Footer (Bottom Nav Bar Mock) -->
-     <div style="height: 60px; background: white; border-top: 1px solid #e2e8f0; display:flex; justify-content:space-around; align-items:center; color:#94a3b8; padding-bottom:10px;">
+     <div style="height: 60px; background: white; border-top: 1px solid var(--color-border); display:flex; justify-content:space-around; align-items:center; color:var(--color-text-light); padding-bottom:10px;">
         <div style="font-size:24px;"><ion-icon name="home"></ion-icon></div>
         <div style="font-size:24px; color:var(--primary)"><ion-icon name="list"></ion-icon></div>
         <div style="font-size:24px;"><ion-icon name="person"></ion-icon></div>
@@ -1479,13 +1765,13 @@
 <!-- Modal criar novo formulário -->
 <div id="new-checklist-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
   <div style="width: 400px; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Novo Formulário</h3>
-    <label style="display:block; font-size:13px; font-weight:600; color:#64748b; margin-bottom:8px; margin-top:20px;">Dê um nome / título para o documento:</label>
-    <input type="text" id="new-form-name-input" placeholder="Ex: Roteiro de Ar Condicionado" style="width:90%; padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; margin-bottom:20px;" />
+    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> <span id="mdl-new-form-title">Novo Formulário</span></h3>
+    <label id="mdl-new-form-label" style="display:block; font-size:13px; font-weight:600; color:var(--color-text-light); margin-bottom:8px; margin-top:20px;">Dê um nome / título para o documento:</label>
+    <input type="text" id="new-form-name-input" placeholder="Ex: Roteiro de Ar Condicionado" style="width:90%; padding:12px; border:1px solid var(--color-border); border-radius:8px; font-size:15px; margin-bottom:20px;" />
     
     <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
-      <button type="button" class="btn btn-ghost" onclick="document.getElementById('new-checklist-modal').style.display='none'">Cancelar</button>
-      <button type="button" class="btn btn-primary" onclick="window.confirmCreateNewChecklist()">Criar Painel Limpo</button>
+      <button type="button" id="mdl-new-form-cancel" class="btn btn-ghost" onclick="document.getElementById('new-checklist-modal').style.display='none'">Cancelar</button>
+      <button type="button" id="mdl-new-form-create" class="btn btn-primary" onclick="window.confirmCreateNewChecklist()">Criar Painel Limpo</button>
     </div>
   </div>
 </div>
@@ -1497,30 +1783,33 @@
 </script>
 
 <!-- Forms List Modal (árvore de pastas + grelha, estilo Finder no admin) -->
-<div id="forms-list-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
-    <div style="background:#f8fafc; width:min(1100px, 95vw); height:85vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-        <div style="padding:24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+<div id="forms-list-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); box-sizing:border-box;">
+    <div style="background:var(--color-bg); width:min(1100px, 95vw); height:min(85vh, calc(100vh - 24px)); max-height:90vh; min-height:0; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); box-sizing:border-box;">
+        <div style="padding:24px; background:white; border-bottom:1px solid var(--color-border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
             <div>
-               <h3 style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
-               <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Pastas e modelos — abra uma pasta ou escolha um formulário para editar.</p>
+               <h3 id="mdl-forms-title" style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
+               <p id="mdl-forms-sub" style="margin:4px 0 0 0; font-size:13px; color:var(--color-text-light);">Pastas e modelos — abra uma pasta ou escolha um formulário para editar.</p>
             </div>
-            <span style="font-size:24px; cursor:pointer; color:#94a3b8;" onclick="document.getElementById('forms-list-modal').style.display='none'">&times;</span>
+            <span style="font-size:24px; cursor:pointer; color:var(--color-text-light);" onclick="document.getElementById('forms-list-modal').style.display='none'">&times;</span>
         </div>
-        <div style="padding:16px 24px; background:white; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:8px;">
-            <ion-icon name="search-outline" style="font-size:20px; color:#94a3b8;"></ion-icon>
+        <div style="padding:16px 24px; background:white; border-bottom:1px solid var(--color-border); display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <ion-icon name="search-outline" style="font-size:20px; color:var(--color-text-light);"></ion-icon>
             <input type="text" id="form-search" placeholder="Filtrar por nome na pasta atual..." class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none;" >
         </div>
-        <div style="flex:1; display:flex; flex-direction:row; min-height:0; background:#f8fafc;">
-            <aside id="forms-folder-tree" style="width:260px; flex-shrink:0; background:white; border-right:1px solid #e2e8f0; padding:12px; overflow-y:auto; font-size:13px;">
+        <div style="flex:1 1 0%; display:flex; flex-direction:row; min-height:0; background:var(--color-bg);">
+            <aside id="forms-folder-tree" style="width:260px; flex-shrink:0; min-height:0; align-self:stretch; background:white; border-right:1px solid var(--color-border); padding:12px; overflow-y:auto; overflow-x:hidden; font-size:13px;">
             </aside>
-            <div style="flex:1; display:flex; flex-direction:column; min-width:0; padding:0 24px 24px 24px;">
-                <div id="forms-browser-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:16px 0 12px 0; border-bottom:1px solid #e2e8f0;">
+            <div style="flex:1 1 0%; display:flex; flex-direction:column; min-width:0; min-height:0; padding:0 24px 16px 24px; overflow:hidden;">
+                <div id="forms-browser-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:16px 0 12px 0; border-bottom:1px solid var(--color-border); flex-shrink:0;">
                     <nav id="forms-folder-breadcrumb" style="font-size:13px; color:#475569; flex:1; min-width:160px;"></nav>
                     <button type="button" class="btn btn-outline" id="btn-new-template-folder" style="font-size:12px; white-space:nowrap;">+ Nova pasta</button>
-                    <button type="button" class="btn btn-primary" onclick="window.createNewChecklistInBrowseFolder()" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
+                    <button type="button" class="btn btn-primary" data-fb-forms-new-here onclick="window.createNewChecklistInBrowseFolder()" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
                 </div>
-                <div id="forms-grid" style="flex:1; overflow-y:auto; padding-top:16px; display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:16px; align-content:start;">
-                    <!-- Pastas e formulários injetados por JS -->
+                <!-- Scroll no wrapper: grid+flex+overflow no mesmo nó falha em vários browsers (grelha cresce e corta em baixo). -->
+                <div id="forms-grid-scroll" style="flex:1 1 0%; min-height:0; max-height:100%; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-top:16px; padding-bottom:16px; scrollbar-gutter:stable;">
+                    <div id="forms-grid" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; align-content:start;">
+                        <!-- Pastas e formulários injetados por JS -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -1530,13 +1819,13 @@
 <!-- Nova pasta (substitui window.prompt — alguns browsers bloqueiam prompt no modal) -->
 <div id="new-folder-modal" style="display:none; position:fixed; inset:0; z-index:1000000; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.cancelNewFolderModal()">
     <div style="background:white; width:min(420px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
-        <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Nova pasta</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b;">A pasta será criada no nível atual (breadcrumb).</p>
-        <label class="prop-label" for="new-folder-name-input">Nome</label>
+        <h3 id="mdl-folder-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Nova pasta</h3>
+        <p id="mdl-folder-sub" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light);">A pasta será criada no nível atual (breadcrumb).</p>
+        <label id="mdl-folder-name-lbl" class="prop-label" for="new-folder-name-input">Nome</label>
         <input type="text" id="new-folder-name-input" class="prop-input" placeholder="Ex.: Manutenção 2026" autocomplete="off" style="margin-bottom:16px;" />
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" class="btn btn-ghost" onclick="window.cancelNewFolderModal()">Cancelar</button>
-            <button type="button" class="btn btn-primary" onclick="window.submitNewTemplateFolder()">Criar pasta</button>
+            <button type="button" id="mdl-folder-cancel" class="btn btn-ghost" onclick="window.cancelNewFolderModal()">Cancelar</button>
+            <button type="button" id="mdl-folder-create" class="btn btn-primary" onclick="window.submitNewTemplateFolder()">Criar pasta</button>
         </div>
     </div>
 </div>
@@ -1544,18 +1833,18 @@
 <!-- Cerca global: modal em vez de confirm/prompt (ícones na topbar + browsers que suprimem diálogos) -->
 <div id="global-geofence-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeGlobalGeofenceModal()">
     <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
-        <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Cerca eletrónica global</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Se ativar, o app deve exigir que o técnico esteja dentro do raio (metros) do GPS da manutenção para abrir este formulário. A validação completa no celular depende da implementação no app.</p>
+        <h3 id="mdl-geofence-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Cerca eletrónica global</h3>
+        <p id="mdl-geofence-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Se ativar, a app pode exigir que o técnico esteja dentro do raio (metros) do GPS da manutenção para abrir este formulário.</p>
         <label style="display:flex; align-items:center; gap:10px; margin-bottom:16px; font-size:14px; font-weight:600; color:#1e293b; cursor:pointer;">
             <input type="checkbox" id="global-geofence-enabled" style="width:18px; height:18px;" />
-            Exigir cerca para abrir o formulário
+            <span id="mdl-geofence-chk-label">Exigir cerca para abrir o formulário</span>
         </label>
-        <label class="prop-label" for="global-geofence-radius">Raio (metros)</label>
+        <label id="mdl-geofence-radius-lbl" class="prop-label" for="global-geofence-radius">Raio (metros)</label>
         <input type="number" id="global-geofence-radius" class="prop-input" min="10" max="50000" step="1" style="margin-bottom:16px;" />
-        <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8;">Pode continuar a usar o bloco "Validar Cerca" em passos isolados. Use <strong>Salvar Schema</strong> para gravar estas configurações.</p>
+        <p id="mdl-geofence-hint" style="margin:0 0 16px 0; font-size:12px; color:var(--color-text-light);">Pode continuar a usar o bloco "Validar Cerca" em passos isolados. Use <strong>Salvar Schema</strong> para gravar estas configurações.</p>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" class="btn btn-ghost" onclick="window.closeGlobalGeofenceModal()">Fechar</button>
-            <button type="button" class="btn btn-primary" onclick="window.applyGlobalGeofenceModal()">Aplicar</button>
+            <button type="button" id="mdl-geofence-close" class="btn btn-ghost" onclick="window.closeGlobalGeofenceModal()">Fechar</button>
+            <button type="button" id="mdl-geofence-apply" class="btn btn-primary" onclick="window.applyGlobalGeofenceModal()">Aplicar</button>
         </div>
     </div>
 </div>
@@ -1563,34 +1852,98 @@
 <!-- Tempo previsto de execução do formulário (despacho) — separado da cerca global -->
 <div id="expected-form-duration-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeExpectedFormDurationModal()">
     <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
-        <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Tempo previsto de execução do formulário</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Só o preenchimento do formulário (sem deslocamento). Opcional: se vazio, no despacho usa-se 60 min. Múltiplos de 5 min; mínimo 5.</p>
-        <label class="prop-label" for="expected-form-duration-minutes">Minutos (opcional)</label>
+        <h3 id="mdl-duration-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Tempo previsto de execução do formulário</h3>
+        <p id="mdl-duration-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Só o preenchimento do formulário (sem deslocamento). Opcional: se vazio, no despacho usa-se 60 min. Múltiplos de 5 min; mínimo 5.</p>
+        <label id="mdl-duration-lbl" class="prop-label" for="expected-form-duration-minutes">Minutos (opcional)</label>
         <input type="number" id="expected-form-duration-minutes" class="prop-input" min="5" step="5" placeholder="Ex.: 90 — deixe vazio para padrão no despacho" style="margin-bottom:16px;" />
-        <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8;">Use <strong>Salvar Schema</strong> para gravar esta configuração no modelo.</p>
+        <p id="mdl-duration-hint" style="margin:0 0 16px 0; font-size:12px; color:var(--color-text-light);">Use <strong>Salvar Schema</strong> para gravar esta configuração no modelo.</p>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" class="btn btn-ghost" onclick="window.closeExpectedFormDurationModal()">Fechar</button>
-            <button type="button" class="btn btn-primary" onclick="window.applyExpectedFormDurationModal()">Aplicar</button>
+            <button type="button" id="mdl-duration-close" class="btn btn-ghost" onclick="window.closeExpectedFormDurationModal()">Fechar</button>
+            <button type="button" id="mdl-duration-apply" class="btn btn-primary" onclick="window.applyExpectedFormDurationModal()">Aplicar</button>
         </div>
     </div>
+</div>
+
+<!-- Layout do formulário no app (entrada + menu de etapas) — opções antes inline na faixa -->
+<div
+  id="fb-app-layout-modal"
+  style="display:none; position:fixed; inset:0; z-index:1000002; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);"
+  onclick="if(event.target===this && window.closeAppLayoutModal) window.closeAppLayoutModal()"
+>
+  <div
+    id="fb-app-layout-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="mdl-app-layout-title"
+    style="background:white; width:min(520px,94vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); max-height:min(88vh,720px); overflow:auto;"
+    onclick="event.stopPropagation()"
+  >
+    <h3 id="mdl-app-layout-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Layout na app</h3>
+    <p id="mdl-app-layout-intro" style="margin:0 0 18px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">
+      Defina como o prestador abre o formulário no celular e, quando usar menu de etapas, se a ordem das seções é livre ou fixa.
+    </p>
+    <details class="formbuilder-app-nav-help">
+      <summary id="fb-nav-help-summary">
+        <span class="fb-help-chevron">▸</span>
+        <ion-icon name="phone-portrait-outline" style="font-size:16px; color:var(--accent); vertical-align:-3px;"></ion-icon>
+        <span id="fb-nav-help-summary-text">Ajuda: navegação por seções no app (lista vs um a um)</span>
+      </summary>
+      <div class="fb-help-body">
+        <p id="fb-nav-help-p1" style="margin:0 0 8px 0;">
+          <strong style="color:var(--text1);">Navegação no app</strong> — Em cada <b>seção</b>, no painel de propriedades à direita, escolha <b>lista com scroll</b> ou <b>um campo de cada vez</b>. O app junta as seções num scroll único quando todas são lista; se alguma for "um a um", usa telas por etapa. Formulários antigos só com "seguir global" continuam a usar o modo salvo no JSON até definir modo por seção.
+        </p>
+        <p id="fb-nav-help-p2" style="margin:0; font-size:10px; color:var(--text3);">
+          Com uma única seção, o menu de etapas é ignorado no app. Com hub ativo e várias seções só em lista, o app mostra uma etapa de cada vez em vez de um scroll único.
+        </p>
+      </div>
+    </details>
+    <div class="fb-app-start-group" title="">
+      <label class="fb-app-inline-radio">
+        <input type="radio" name="appSectionStart" value="direct" checked />
+        <ion-icon name="play-forward-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+        <span id="fb-app-start-direct">1ª etapa</span>
+        <small id="fb-app-start-direct-hint">— clássico</small>
+      </label>
+      <label class="fb-app-inline-radio">
+        <input type="radio" name="appSectionStart" value="hub" />
+        <ion-icon name="grid-outline" style="font-size:14px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+        <span id="fb-app-start-hub">Menu de etapas</span>
+        <small id="fb-app-start-hub-hint">— escolhe a seção</small>
+      </label>
+    </div>
+    <div id="app-hub-order-wrap" class="app-hub-order-muted" title="">
+      <span id="fb-app-hub-sep" class="fb-app-hub-sep">No menu</span>
+      <label class="fb-app-inline-radio">
+        <input type="radio" name="appHubSectionOrder" value="free" checked />
+        <span id="fb-app-hub-free">Livre</span>
+      </label>
+      <label class="fb-app-inline-radio">
+        <input type="radio" name="appHubSectionOrder" value="sequential" />
+        <span id="fb-app-hub-seq">Ordem fixa</span>
+      </label>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:22px;">
+      <button type="button" id="mdl-app-layout-close" class="btn btn-primary" onclick="window.closeAppLayoutModal && window.closeAppLayoutModal()">Pronto</button>
+    </div>
+  </div>
 </div>
 
 <!-- Editar nome e ícone da etapa (seção) — z-index abaixo do icon-picker para a grelha ficar por cima -->
 <div id="section-step-edit-modal" style="display:none; position:fixed; inset:0; z-index:99997; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeSectionStepEditModal()">
     <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
-        <h3 style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Editar etapa</h3>
-        <p style="margin:0 0 16px 0; font-size:13px; color:#64748b; line-height:1.45;">Nome e ícone usados no canvas e no app móvel (quando o campo de seção tiver ícone definido).</p>
-        <label class="prop-label" for="section-step-edit-title">Nome da etapa</label>
+        <h3 id="mdl-section-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Editar etapa</h3>
+        <p id="mdl-section-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Nome e ícone usados no canvas e no app móvel (quando o campo de seção tiver ícone definido).</p>
+        <label id="mdl-section-name-lbl" class="prop-label" for="section-step-edit-title">Nome da etapa</label>
         <input type="text" id="section-step-edit-title" class="prop-input" placeholder="Ex.: Inspeção inicial" autocomplete="off" style="margin-bottom:16px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.applySectionStepEditModal();}" />
         <label class="prop-label">Ícone (app móvel)</label>
-        <div id="section-step-edit-icon-preview" style="display:flex; align-items:center; justify-content:center; min-height:72px; margin-bottom:12px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px;"></div>
+        <div id="section-step-edit-icon-preview" style="display:flex; align-items:center; justify-content:center; min-height:72px; margin-bottom:12px; background:var(--color-bg); border:1px dashed var(--color-border); border-radius:12px;"></div>
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;">
-            <button type="button" class="btn btn-outline btn-sm" onclick="window.sectionStepEditPickIcon()"><ion-icon name="color-palette-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher ícone</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="window.sectionStepEditClearIcon()">Ícone predefinido</button>
+            <button type="button" id="mdl-section-pick-icon" class="btn btn-outline btn-sm" onclick="window.sectionStepEditPickIcon()"><ion-icon name="color-palette-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher ícone</button>
+            <button type="button" id="mdl-section-clear-icon" class="btn btn-ghost btn-sm" onclick="window.sectionStepEditClearIcon()">Ícone predefinido</button>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" class="btn btn-ghost" onclick="window.closeSectionStepEditModal()">Cancelar</button>
-            <button type="button" class="btn btn-primary" onclick="window.applySectionStepEditModal()">Aplicar</button>
+            <button type="button" id="mdl-section-cancel" class="btn btn-ghost" onclick="window.closeSectionStepEditModal()">Cancelar</button>
+            <button type="button" id="mdl-section-apply" class="btn btn-primary" onclick="window.applySectionStepEditModal()">Aplicar</button>
         </div>
     </div>
 </div>
@@ -1599,31 +1952,31 @@
 <div id="icon-picker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center;">
     <div style="background:white; width:600px; height:80vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden;">
         <div style="padding:16px; background:var(--primary); color:white; display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; font-size:16px;">Selecione um Ícone</h3>
+            <h3 id="mdl-icon-picker-title" style="margin:0; font-size:16px;">Selecione um Ícone</h3>
             <span style="font-size:24px; cursor:pointer;" onclick="document.getElementById('icon-picker-modal').style.display='none'">&times;</span>
         </div>
-        <div style="padding:16px; border-bottom:1px solid #e2e8f0; display:flex; gap:12px; align-items:flex-end;">
+        <div style="padding:16px; border-bottom:1px solid var(--color-border); display:flex; gap:12px; align-items:flex-end;">
             <div style="flex:1;">
-               <label class="prop-label">Pesquisar Ícone</label>
+               <label id="mdl-icon-search-lbl" class="prop-label">Pesquisar Ícone</label>
                <input type="text" id="icon-search" placeholder="Pesquisa (inglês ou PT: estrela→star, carro→car…)" class="prop-input" onkeyup="window.filterIcons(this.value)" >
             </div>
             <div style="width:180px;">
-               <label class="prop-label">Biblioteca</label>
+               <label id="mdl-icon-lib-lbl" class="prop-label">Biblioteca</label>
                <select id="icon-lib-select" class="prop-input" onchange="window.switchIconLibrary()">
                    <!-- Loaded by JS -->
                </select>
             </div>
             <div style="width:60px; text-align:center;">
-               <label class="prop-label">Cor</label>
+               <label id="mdl-icon-color-lbl" class="prop-label">Cor</label>
                <input type="color" id="icon-color" value="#1d4ed8" style="width:100%; height:34px; border:none; padding:0; background:transparent; cursor:pointer;" onchange="window.updateIconGridColors()">
             </div>
         </div>
         <div id="icon-grid" style="flex:1; padding:16px; overflow-y:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap:12px; align-content:start;">
             <!-- Icons injected by JS -->
         </div>
-        <div style="padding:16px; border-top:1px solid #e2e8f0; text-align:right;">
-             <button class="btn btn-outline" style="color:#ef4444; border-color:#fca5a5; margin-right:12px;" onclick="window.confirmIconSelection('')">Remover Ícone (Deixar Vazio)</button>
-             <button class="btn btn-ghost" onclick="document.getElementById('icon-picker-modal').style.display='none'">Cancelar</button>
+        <div style="padding:16px; border-top:1px solid var(--color-border); text-align:right;">
+             <button id="mdl-icon-remove" class="btn btn-outline" style="color:#ef4444; border-color:#fca5a5; margin-right:12px;" onclick="window.confirmIconSelection('')">Remover Ícone (Deixar Vazio)</button>
+             <button id="mdl-icon-cancel" class="btn btn-ghost" onclick="document.getElementById('icon-picker-modal').style.display='none'">Cancelar</button>
         </div>
     </div>
 </div>
@@ -1633,35 +1986,35 @@
 <div id="logic-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:99998; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
     <div style="background:var(--bg); width:750px; max-height:85vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
         
-        <!-- Modal Header -->
-        <div style="padding:20px; background:linear-gradient(to right, #4f46e5, #c084fc); color:white; display:flex; justify-content:space-between; align-items:center; flex-shrink: 0;">
-            <div>
-               <h3 style="margin:0; font-size:20px; display:flex; align-items:center; gap:8px;"><ion-icon name="beaker-outline" style="vertical-align:-2px"></ion-icon> Regras e Lógica do Campo</h3>
-               <div id="logic-modal-subtitle" style="font-size:12px; opacity:0.9; margin-top:4px;">Configurando gatilhos para o campo: ...</div>
+        <!-- Modal Header (alinhado ao .modal-header do design system — sem gradiente roxo) -->
+        <div class="logic-modal__head" style="padding:20px 24px 16px; background:var(--surface); color:var(--text); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:flex-start; flex-shrink:0; gap:16px;">
+            <div style="min-width:0; flex:1;">
+               <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:10px; color:var(--text); line-height:1.3;"><ion-icon name="git-network-outline" style="vertical-align:-2px;font-size:22px;color:var(--accent);flex-shrink:0"></ion-icon><span id="mdl-logic-title">Regras e lógica do campo</span></h3>
+               <div id="logic-modal-subtitle" style="font-size:12px; color:var(--text2); margin-top:8px; line-height:1.45;">Configurando gatilhos para o campo…</div>
             </div>
-            <span style="font-size:32px; cursor:pointer;" onclick="window.hideLogicModal()">&times;</span>
+            <button type="button" id="mdl-logic-close" class="btn btn-ghost btn-sm" onclick="window.hideLogicModal()" style="padding:6px;min-width:auto;flex-shrink:0;color:var(--text3);" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:24px;vertical-align:middle"></ion-icon></button>
         </div>
         
         <!-- Rules Body -->
-        <div style="flex:1; background:#f8fafc; padding:24px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
+        <div style="flex:1; background:var(--color-bg); padding:24px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
-               <h4 style="margin:0; color:#334155;">Condição (SE) e ações (ENTÃO)</h4>
-               <button class="btn btn-primary btn-sm" onclick="window.addLogicRule()">+ Adicionar Regra (SE)</button>
+               <h4 id="mdl-logic-h4" style="margin:0; color:var(--text); font-weight:800;">Condição (SE) e ações (ENTÃO)</h4>
+               <button id="mdl-logic-add" class="btn btn-primary btn-sm" onclick="window.addLogicRule()">+ Adicionar Regra (SE)</button>
            </div>
            
            <div id="logic-rules-container" style="display:flex; flex-direction:column; gap:16px;">
                <!-- Rules injected via JS -->
            </div>
 
-           <div id="logic-empty-state" style="text-align:center; padding:40px; color:#94a3b8; display:none;">
+           <div id="logic-empty-state" style="text-align:center; padding:40px; color:var(--color-text-light); display:none;">
                <ion-icon name="git-network-outline" style="font-size:48px; opacity:0.5;"></ion-icon>
-               <p style="margin-top:12px; font-weight:600;">Este campo não possui regras ativas.</p>
+               <p id="mdl-logic-empty" style="margin-top:12px; font-weight:600;">Este campo não possui regras ativas.</p>
            </div>
         </div>
         
-        <div style="padding:20px; background:white; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:12px;">
-             <button class="btn btn-ghost" onclick="window.hideLogicModal()">Cancelar</button>
-             <button class="btn btn-primary" onclick="window.saveFieldLogic()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Regras do Campo</button>
+        <div style="padding:20px; background:var(--surface); border-top:1px solid var(--color-border); display:flex; justify-content:flex-end; gap:12px;">
+             <button id="mdl-logic-cancel" class="btn btn-ghost" onclick="window.hideLogicModal()">Cancelar</button>
+             <button id="mdl-logic-save" class="btn btn-primary" onclick="window.saveFieldLogic()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Regras do Campo</button>
         </div>
     </div>
 </div>
@@ -1670,7 +2023,7 @@
 <div id="ai-copilot-panel" class="ai-copilot-menu-collapsed" aria-hidden="true">
   <div class="ai-copilot-head">
     <h4 title="Arraste pelo cabeçalho para mover o painel. Duplo clique aqui repõe a posição.">
-      <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> Copiloto
+      <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> <span id="mdl-copilot-head-text">Copiloto</span>
     </h4>
     <div class="ai-copilot-head-actions">
       <button
@@ -1685,7 +2038,7 @@
         <ion-icon name="options-outline" style="font-size:20px;vertical-align:-3px"></ion-icon>
         <span class="ai-copilot-menu-toggle-label">Opções</span>
       </button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar copiloto"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
+      <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar copiloto"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
   </div>
   <div class="ai-copilot-body">
@@ -1730,7 +2083,7 @@
         <div id="copilot-canvas-focus-panel">
           <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:700;color:#475569;margin:0 0 8px;cursor:pointer;line-height:1.35;">
             <input type="checkbox" id="copilot-follow-canvas" checked style="margin-top:2px;accent-color:#6366f1;" />
-            Ao clicar no canvas, usar esse campo na conversa
+            <span id="mdl-copilot-follow-txt">Ao clicar no canvas, usar esse campo na conversa</span>
           </label>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
             <button type="button" class="btn btn-outline btn-sm" id="copilot-pin-selection-btn" onclick="window.brsparkCopilotSyncFocusFromCanvasSelection()">Fixar seleção atual</button>
@@ -1741,21 +2094,21 @@
         <p id="ai-copilot-clarify-hint" class="ai-copilot-clarify-hint" style="display:none;">Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.</p>
         <div id="ai-copilot-clarify"></div>
         <details id="copilot-context-details" class="ai-copilot-details ai-copilot-details--advanced">
-          <summary>Avançado: contexto, integrações e Excel <span class="ai-copilot-details-chevron" aria-hidden="true">▼</span></summary>
+          <summary><span id="mdl-copilot-adv-summary-txt">Avançado: contexto, integrações e Excel</span> <span class="ai-copilot-details-chevron" aria-hidden="true">▼</span></summary>
           <div class="ai-copilot-details-body">
             <div class="ai-copilot-ctx-mini">
               <label for="copilot-ctx-objective">Contexto e objetivo (opcional)</label>
               <textarea id="copilot-ctx-objective" class="prop-input" rows="3" placeholder="Ex.: vistoria em campo com foto de evidência, leitura do patrimônio por etiqueta, chegada só perto do cliente… O Copiloto infere carimbo, barras, GPS, cerca e deslocamento a partir disto e da conversa." style="font-size:12px; margin-bottom:8px;"></textarea>
-              <p style="font-size:11px;color:#64748b;margin:0 0 8px;line-height:1.45;">Não é preciso marcar recursos à mão: a IA sugere e combina com você conforme o caso de uso.</p>
-              <div class="copilot-doc-url-strip" style="padding:10px 0 0; margin-top:10px; border-top:1px solid #e2e8f0;">
+              <p style="font-size:11px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Não é preciso marcar recursos à mão: a IA sugere e combina com você conforme o caso de uso.</p>
+              <div class="copilot-doc-url-strip" style="padding:10px 0 0; margin-top:10px; border-top:1px solid var(--color-border);">
                 <label for="copilot-ctx-doc-url" class="prop-label" style="font-size:11px;">URL da documentação da API (opcional)</label>
-                <p style="font-size:10px;color:#64748b;margin:0 0 6px;line-height:1.45;">HTTPS público. O servidor descarrega o conteúdo <strong>uma vez por mensagem</strong> e envia à IA (ex.: CEP ViaCEP → regra «Buscar na API»). Rede interna e <code>localhost</code> na URL são bloqueados.</p>
+                <p style="font-size:10px;color:var(--color-text-light);margin:0 0 6px;line-height:1.45;">HTTPS público. O servidor descarrega o conteúdo <strong>uma vez por mensagem</strong> e envia à IA (ex.: CEP ViaCEP → regra «Buscar na API»). Rede interna e <code>localhost</code> na URL são bloqueados.</p>
                 <input type="url" id="copilot-ctx-doc-url" class="prop-input" inputmode="url" autocomplete="off" placeholder="https://viacep.com.br/" style="font-size:12px; margin-bottom:0;" />
               </div>
             </div>
-            <div class="copilot-excel-strip" style="padding:12px 0 4px; margin-top:10px; border-top:1px solid #e2e8f0;">
+            <div class="copilot-excel-strip" style="padding:12px 0 4px; margin-top:10px; border-top:1px solid var(--color-border);">
               <label class="prop-label" style="font-size:11px;margin-bottom:4px;">Arquivos de referência (opcional)</label>
-              <p style="font-size:10px;color:#64748b;margin:0 0 8px;line-height:1.45;"><strong>Excel</strong> (.xlsx, .xlsm), <strong>Word</strong> (.docx), <strong>PDF</strong>, <strong>imagem</strong> (.png, .jpg, .webp), <strong>JSON</strong> (.json — schema BrSpark, Google Forms, Typeform ou outro). Pode <strong>selecionar vários</strong> de uma vez (Ctrl/Cmd+clique ou Shift); cada arquivo é analisado e o resumo acumulado entra no chat. Imagens usam OCR.</p>
+              <p style="font-size:10px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;"><strong>Excel</strong> (.xlsx, .xlsm), <strong>Word</strong> (.docx), <strong>PDF</strong>, <strong>imagem</strong> (.png, .jpg, .webp), <strong>JSON</strong> (.json — schema BrSpark, Google Forms, Typeform ou outro). Pode <strong>selecionar vários</strong> de uma vez (Ctrl/Cmd+clique ou Shift); cada arquivo é analisado e o resumo acumulado entra no chat. Imagens usam OCR.</p>
               <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" style="display:none;" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
               <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;">
                 <button type="button" class="btn btn-outline btn-sm" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()"><ion-icon name="documents-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher arquivos…</button>
@@ -1765,11 +2118,11 @@
               <textarea id="copilot-excel-hint" class="prop-input" rows="2" placeholder='Ex.: cada aba vira uma etapa; em PDF use só a primeira parte; em fotos peça campos por secção' style="font-size:12px;margin-bottom:6px;resize:vertical;"></textarea>
               <div id="copilot-excel-status" style="font-size:11px;color:#475569;min-height:18px;line-height:1.35;"></div>
             </div>
-            <p id="copilot-rag-footnote" style="font-size:10px;color:#64748b;margin:12px 0 0;line-height:1.45;"></p>
+            <p id="copilot-rag-footnote" style="font-size:10px;color:var(--color-text-light);margin:12px 0 0;line-height:1.45;"></p>
           </div>
         </details>
         <div class="ai-copilot-confirm-block">
-          <p style="font-size:11px;color:#64748b;margin:0 0 10px;line-height:1.45;">O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
+          <p style="font-size:11px;color:var(--color-text-light);margin:0 0 10px;line-height:1.45;">O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
           <div class="ai-copilot-actions">
             <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Reverte o formulário ao estado antes da última alteração aplicada pelo Copiloto">Desfazer última alteração</button>
           </div>
@@ -1789,19 +2142,19 @@
 <div id="copilot-schema-preview-modal" role="dialog" aria-modal="true" aria-labelledby="copilot-schema-preview-title" aria-hidden="true" onclick="if(event.target===this)window.brsparkCopilotCloseSchemaPreview(false)">
   <div class="copilot-preview-dialog" onclick="event.stopPropagation()">
     <div class="copilot-preview-head">
-      <h3 id="copilot-schema-preview-title"><ion-icon name="list-circle-outline" style="color:#6366f1"></ion-icon> Revisar campos sugeridos</h3>
-      <p>Marque <strong>Incluir</strong> para cada linha. Ajuste o <strong>tipo</strong>, a <strong>descrição</strong>, <strong>instruções por campo</strong> (para a IA) e <strong>obrigatório</strong>. Use <strong>Comentários gerais</strong> e <strong>Reprocessar com instruções</strong> para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (<code>section_break</code>) não podem ser excluídas — o tipo de etapa não é alterável aqui.</p>
+      <h3 id="copilot-schema-preview-title"><ion-icon name="list-circle-outline" style="color:#6366f1"></ion-icon> <span id="copilot-schema-preview-heading">Revisar campos sugeridos</span></h3>
+      <p id="copilot-preview-intro">Marque <strong>Incluir</strong> para cada linha. Ajuste o <strong>tipo</strong>, a <strong>descrição</strong>, <strong>instruções por campo</strong> (para a IA) e <strong>obrigatório</strong>. Use <strong>Comentários gerais</strong> e <strong>Reprocessar com instruções</strong> para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (<code>section_break</code>) não podem ser excluídas — o tipo de etapa não é alterável aqui.</p>
     </div>
     <div class="copilot-preview-scroll">
       <table class="copilot-preview-table">
         <thead>
           <tr>
-            <th style="width:36px;">Incl.</th>
-            <th style="min-width:120px;">Campo / etapa</th>
-            <th style="width:168px;">Tipo</th>
-            <th style="min-width:140px;">Descrição</th>
-            <th style="min-width:180px;">Instruções p/ IA (opcional)</th>
-            <th style="width:44px;">Obr.</th>
+            <th id="copilot-prev-th-inc" style="width:36px;">Incl.</th>
+            <th id="copilot-prev-th-field" style="min-width:120px;">Campo / etapa</th>
+            <th id="copilot-prev-th-type" style="width:168px;">Tipo</th>
+            <th id="copilot-prev-th-desc" style="min-width:140px;">Descrição</th>
+            <th id="copilot-prev-th-ai" style="min-width:180px;">Instruções p/ IA (opcional)</th>
+            <th id="copilot-prev-th-req" style="width:44px;">Obr.</th>
           </tr>
         </thead>
         <tbody id="copilot-schema-preview-tbody"></tbody>
@@ -1809,14 +2162,14 @@
     </div>
     <div class="copilot-preview-general-notes">
       <label class="prop-label" for="copilot-schema-preview-general-note" style="font-size:11px;margin-bottom:4px;">Comentários gerais para a IA (opcional)</label>
-      <p style="font-size:10px;color:#64748b;margin:0 0 8px;line-height:1.45;">Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com <strong>Reprocessar com instruções</strong> para a IA reapresentar o formulário; ou preencha só para referência antes de <strong>Aplicar no canvas</strong> (neste caso o texto não é enviado à IA — use Reprocessar para enviar).</p>
+      <p id="copilot-preview-notes-hint" style="font-size:10px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com <strong>Reprocessar com instruções</strong> para a IA reapresentar o formulário; ou preencha só para referência antes de <strong>Aplicar no canvas</strong> (neste caso o texto não é enviado à IA — use Reprocessar para enviar).</p>
       <textarea id="copilot-schema-preview-general-note" placeholder="Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…"></textarea>
     </div>
     <div class="copilot-preview-foot">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="window.brsparkCopilotPreviewMarkAllOptional()">Tornar todos opcionais</button>
-      <button type="button" class="btn btn-ghost" onclick="window.brsparkCopilotCloseSchemaPreview(false)">Cancelar</button>
-      <button type="button" class="btn btn-outline" onclick="void window.brsparkCopilotReprocessSchemaPreview()"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
-      <button type="button" class="btn btn-primary" onclick="window.brsparkCopilotCloseSchemaPreview(true)"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
+      <button type="button" id="copilot-preview-mark-optional" class="btn btn-ghost btn-sm" onclick="window.brsparkCopilotPreviewMarkAllOptional()">Tornar todos opcionais</button>
+      <button type="button" id="copilot-preview-cancel" class="btn btn-ghost" onclick="window.brsparkCopilotCloseSchemaPreview(false)">Cancelar</button>
+      <button type="button" id="copilot-preview-reprocess" class="btn btn-outline" onclick="void window.brsparkCopilotReprocessSchemaPreview()"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
+      <button type="button" id="copilot-preview-apply" class="btn btn-primary" onclick="window.brsparkCopilotCloseSchemaPreview(true)"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
     </div>
   </div>
 </div>
@@ -1827,8 +2180,8 @@
         <div style="width:56px; height:56px; border-radius:28px; background:#fee2e2; color:#ef4444; display:flex; justify-content:center; align-items:center; font-size:32px; margin:0 auto 16px;">
             <ion-icon name="warning-outline"></ion-icon>
         </div>
-        <h3 style="margin:0 0 8px; font-size:18px; color:#0f172a; font-weight:800;">Excluir Formulário?</h3>
-        <p style="margin:0 0 24px; font-size:14px; color:#64748b; line-height:1.5;">Tem certeza que deseja excluir este formulário permanentemente? Esta ação não pode ser desfeita.</p>
+        <h3 id="mdl-delete-form-title" style="margin:0 0 8px; font-size:18px; color:#0f172a; font-weight:800;">Excluir Formulário?</h3>
+        <p id="mdl-delete-form-body" style="margin:0 0 24px; font-size:14px; color:var(--color-text-light); line-height:1.5;">Tem certeza que deseja excluir este formulário permanentemente? Esta ação não pode ser desfeita.</p>
         <div style="display:flex; justify-content:center; gap:12px;">
             <button id="custom-confirm-cancel" class="btn btn-outline" style="flex:1;">Cancelar</button>
             <button id="custom-confirm-yes" class="btn" style="flex:1; background:#ef4444; color:white; border:none;">Sim, Excluir</button>
@@ -1839,6 +2192,17 @@
 <script type="module">
   // Descobre a API real (evita POST para :5500 Live Server) antes do builder
   import { ensureAdminApiDetected, resolveApiBase } from './js/config.js';
+  import {
+    applyChecklistsBuilderChromeI18n,
+    applyChecklistsModalsI18n,
+    bindChecklistsBuilderLocaleHotReload,
+    fbFormatInt,
+    fbT,
+    initToolboxTypeFilter,
+    setFbSyncStatus,
+  } from './js/checklists-i18n.js';
+  import { getVisionAiExampleCatalog } from './js/visionAiAnalysisPromptExamplesData.js';
+  import { getAdminUiLocale } from './js/user-pages-i18n.js';
   await ensureAdminApiDetected();
   window.__BRSPARK_API_BASE__ = resolveApiBase();
   await new Promise((resolve, reject) => {
@@ -1846,10 +2210,19 @@
     s.src = 'js/checklists-builder.js?v=' + Date.now();
     s.onload = resolve;
     s.onerror = () => reject(new Error('Falha ao carregar o script do Form Builder (checklists-builder.js).'));
-    document.head.appendChild(s);
+    document.body.appendChild(s);
   });
+  window.fbT = fbT;
+  window.fbFormatInt = fbFormatInt;
+  window.getVisionAiExampleCatalog = () => getVisionAiExampleCatalog(getAdminUiLocale());
+  window.applyChecklistsModalsI18n = applyChecklistsModalsI18n;
+  window.setFbSyncStatus = setFbSyncStatus;
+  applyChecklistsBuilderChromeI18n();
+  bindChecklistsBuilderLocaleHotReload();
+  initToolboxTypeFilter();
   if (window.bindAppSectionNavRadios) window.bindAppSectionNavRadios();
   if (window.syncAppSectionNavRadios) window.syncAppSectionNavRadios();
+  if (typeof window.initBuilderDirtyTracking === 'function') window.initBuilderDirtyTracking();
 </script>
 </body>
 </html>

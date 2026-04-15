@@ -16,14 +16,19 @@ function normalizeFacePhotos(raw) {
 }
 
 /**
+ * Matrícula facial «ok» para o ponto: exige fotos base no perfil.
+ * `comprefaceRecognitionSync`: `synced` ou `pending` contam como OK; só `error` falha.
+ *
  * @param {import('@prisma/client').User} user
  */
 function faceEnrollmentOk(user) {
   const photos = normalizeFacePhotos(user.faceEnrollmentPhotos);
   if (photos.length === 0) return false;
   const s = user.comprefaceRecognitionSync;
-  if (!s || typeof s !== 'object') return false;
-  return String(s.status || '') === 'synced';
+  if (!s || typeof s !== 'object') return true;
+  const st = String(s.status || '').toLowerCase();
+  if (st === 'error') return false;
+  return st === 'synced' || st === 'pending';
 }
 
 /**
@@ -97,8 +102,10 @@ async function getWorkTimeEffectiveForUser(userId) {
       role: true,
       workTimeTrackingEnabled: true,
       workTimeEnrolledAt: true,
+      workTimeBrazilRegime: true,
       faceEnrollmentPhotos: true,
       comprefaceRecognitionSync: true,
+      tenant: { select: { locale: { select: { countryCode: true } } } },
     },
   });
   if (!user) {
@@ -116,11 +123,20 @@ async function getWorkTimeEffectiveForUser(userId) {
 
   const canPunch = effective;
 
+  const tenantIsBr =
+    String(user.tenant?.locale?.countryCode || '')
+      .trim()
+      .toUpperCase() === 'BR';
+  /** `null` fora do Brasil; no BR, default CLT quando ainda não gravado. */
+  const workTimeBrazilRegime =
+    tenantIsBr && userOn ? user.workTimeBrazilRegime || 'CLT' : null;
+
   return {
     ok: true,
     tenantId: user.tenantId,
     userId: user.id,
     role: user.role,
+    workTimeBrazilRegime,
     featureFlagEnabled: flagOn,
     settings: {
       moduleEnabled: settings.moduleEnabled,

@@ -9,34 +9,42 @@
 <div class="admin-layout">
   <div class="main-content">
     <div class="topbar topbar--data">
-      <nav class="topbar-breadcrumb" aria-label="Trilha">Painel <span class="topbar-breadcrumb-sep">/</span> Usuários</nav>
+      <nav class="topbar-breadcrumb" aria-label="Trilha"><span id="ul-bc-panel">Painel</span> <span class="topbar-breadcrumb-sep">/</span> <span id="ul-bc-users">Usuários</span></nav>
     </div>
     <div class="page-body">
 
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Gestão de usuários</h1>
-        <p class="page-hero-sub">
-          Centralize contas, papéis e acessos. Acompanhe prestadores, registro de ponto e sincronização CompreFace num só lugar.
+        <h1 class="page-hero-title" id="ul-hero-title">Gestão de usuários</h1>
+        <p class="page-hero-sub" id="ul-hero-sub">
+          Centralize contas, papéis e acessos. Acompanhe prestadores, registro de ponto e sincronização FaceMatch num só lugar.
         </p>
       </header>
 
       <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total na página</div></div>
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label">Ativos (página)</div></div>
-        <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-admins">—</div><div class="stat-label">Gestão / admin (página)</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-inactive">—</div><div class="stat-label">Inativos (página)</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label" id="ul-stat-total-lbl">Total na página</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-active">—</div><div class="stat-label" id="ul-stat-active-lbl">Ativos (página)</div></div>
+        <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-icon" style="background:var(--red-dim);color:var(--red)"><ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-admins">—</div><div class="stat-label" id="ul-stat-admins-lbl">Gestão / admin (página)</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon></div><div class="stat-value" id="stat-inactive">—</div><div class="stat-label" id="ul-stat-inactive-lbl">Inativos (página)</div></div>
       </div>
 
       <section class="data-shell" aria-labelledby="users-table-title">
         <div class="data-toolbar">
           <div class="data-toolbar-main">
-            <div class="search-wrap search-wrap--toolbar">
-              <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
-              <input type="search" placeholder="Buscar por nome ou e-mail…" id="search-input" autocomplete="off" />
-            </div>
+            <div class="data-toolbar-search-filters">
+              <div class="data-toolbar-search-row">
+                <div class="search-wrap search-wrap--toolbar">
+                  <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+                  <input type="search" placeholder="Buscar por nome ou e-mail…" id="search-input" autocomplete="off" />
+                </div>
+                <button type="button" class="btn btn-outline users-filters-toggle" id="users-filters-toggle" aria-expanded="true" aria-controls="users-filters-panel">
+                  <ion-icon name="funnel-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+                  <span data-ul-filters-toggle-txt>Ocultar filtros</span>
+                </button>
+              </div>
+              <div id="users-filters-panel" class="data-toolbar-filters-panel">
             <div class="data-toolbar-filters">
               <label class="filter-field">
-                <span class="filter-field-label"><ion-icon name="shield-checkmark-outline"></ion-icon> Papel</span>
+                <span class="filter-field-label"><ion-icon name="shield-checkmark-outline"></ion-icon> <span id="ul-filter-role-txt">Papel</span></span>
                 <select class="form-control filter-field-control" id="filter-role">
                   <option value="">Todos os papéis</option>
                   <option value="USER">Usuário</option>
@@ -48,22 +56,110 @@
               </label>
               <label class="filter-field filter-field--check">
                 <input type="checkbox" id="filter-worktime" />
-                <span class="filter-field-label">Só ponto ativo</span>
+                <span class="filter-field-label" id="ul-filter-worktime-lbl">Só ponto ativo</span>
               </label>
+              <label class="filter-field">
+                <span class="filter-field-label" id="ul-filter-active-lbl">Conta ativa</span>
+                <select class="form-control filter-field-control" id="filter-active">
+                  <option value="">Todas</option>
+                  <option value="1">Somente ativos</option>
+                  <option value="0">Somente inativos</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon> <span id="ul-filter-tenant-txt">Tenant</span></span>
+                <select class="form-control filter-field-control" id="filter-tenant">
+                  <option value="">Todos</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="scan-outline"></ion-icon> <span id="ul-filter-cf-txt">FaceMatch</span></span>
+                <select class="form-control filter-field-control" id="filter-compreface">
+                  <option value="">Todos</option>
+                  <option value="synced">Sincronizado</option>
+                  <option value="pending">Pendente</option>
+                  <option value="error">Erro</option>
+                  <option value="none">Sem registo</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="construct-outline"></ion-icon> <span id="ul-filter-tech-txt">Prestador</span></span>
+                <select class="form-control filter-field-control" id="filter-technician">
+                  <option value="">Todos</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label"><ion-icon name="mail-outline"></ion-icon> <span id="ul-filter-emailver-txt">Verificação de e-mail</span></span>
+                <select class="form-control filter-field-control" id="filter-email-verification">
+                  <option value="">Todos</option>
+                  <option value="verified">Verificado</option>
+                  <option value="unverified">Não verificado</option>
+                  <option value="pending">Convite pendente</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label" id="ul-filter-login-from-lbl">Último acesso (de)</span>
+                <input type="date" class="form-control filter-field-control" id="filter-lastlogin-from" />
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label" id="ul-filter-login-to-lbl">Último acesso (até)</span>
+                <input type="date" class="form-control filter-field-control" id="filter-lastlogin-to" />
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label" id="ul-filter-sort-lbl">Ordenar por</span>
+                <select class="form-control filter-field-control" id="filter-sort">
+                  <option value="createdAt">Criação</option>
+                  <option value="lastLogin">Último acesso</option>
+                  <option value="name">Nome</option>
+                  <option value="email">E-mail</option>
+                  <option value="updatedAt">Atualização</option>
+                  <option value="id">ID</option>
+                  <option value="employeeMatricula">Matrícula</option>
+                  <option value="role">Papel</option>
+                  <option value="isActive">Conta ativa</option>
+                  <option value="workTimeTrackingEnabled">Ponto (flag)</option>
+                  <option value="emailVerifiedAt">E-mail verificado</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field-label" id="ul-filter-sortdir-lbl">Ordem</span>
+                <select class="form-control filter-field-control" id="filter-sort-dir">
+                  <option value="desc">Desc.</option>
+                  <option value="asc">Asc.</option>
+                </select>
+              </label>
+            </div>
+              </div>
             </div>
           </div>
           <div class="data-toolbar-actions">
+            <label class="ue-users-locale" for="users-panel-locale" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3)">
+              <span id="ul-locale-lbl">Idioma</span>
+              <select id="users-panel-locale" class="form-control" style="min-width:130px;padding:6px 10px;font-size:12px">
+                <option value="pt-BR">pt-BR</option>
+                <option value="en-US">en-US</option>
+                <option value="es-ES">es-ES</option>
+              </select>
+            </label>
             <button type="button" class="btn btn-outline" id="export-users-btn" title="Exportar a página atual em CSV">
               <ion-icon name="download-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-              Exportar
+              <span id="ul-export-btn-txt">Exportar</span>
+            </button>
+            <button type="button" class="btn btn-outline" id="ul-open-reset-email-btn" title="">
+              <ion-icon name="mail-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              <span id="ul-open-reset-email-txt">Reset por e-mail</span>
             </button>
             <a class="btn btn-outline" href="technician-applications.html" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
               <ion-icon name="person-add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-              Cadastro prestador
+              <span id="ul-tech-signup-txt">Cadastro prestador</span>
             </a>
             <button type="button" class="btn btn-primary" onclick="openModal('new-user-modal')">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-              Novo usuário
+              <span id="ul-new-user-btn-txt">Novo usuário</span>
             </button>
           </div>
         </div>
@@ -72,27 +168,56 @@
 
         <div class="data-table-head">
           <h2 id="users-table-title" class="data-table-title">Lista de usuários</h2>
-          <span class="badge badge-accent" id="count-badge">—</span>
+          <span class="badge badge-accent" id="count-badge" aria-live="polite" aria-atomic="true">—</span>
         </div>
 
-        <div class="table-wrap">
-          <table class="table-data">
+        <div class="ul-columns-bar" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 14px;font-size:12px;color:var(--text2)">
+          <span id="ul-cols-label" style="font-weight:700">Colunas extra</span>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-id" /> <span id="ul-col-lbl-id">ID</span></label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-created" /> <span id="ul-col-lbl-created">Criado em</span></label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-country" /> <span id="ul-col-lbl-country">País</span></label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-emailver" /> <span id="ul-col-lbl-emailver">E-mail verificado</span></label>
+        </div>
+
+        <div id="ul-bulk-bar" class="ul-bulk-bar" hidden>
+          <span id="ul-bulk-count" class="ul-bulk-count" aria-live="polite"></span>
+          <div class="ul-bulk-actions">
+            <button type="button" class="btn btn-outline" id="ul-bulk-export-csv">
+              <ion-icon name="download-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              <span id="ul-bulk-export-csv-txt">Exportar selecionados (CSV)</span>
+            </button>
+            <button type="button" class="btn btn-outline ul-bulk-deactivate-btn" id="ul-bulk-deactivate">
+              <ion-icon name="ban-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              <span id="ul-bulk-deactivate-txt">Desativar selecionados</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrap" id="users-table-wrap" tabindex="-1" role="region" aria-labelledby="users-table-title">
+          <table class="table-data" id="users-table">
             <thead>
-              <tr>
-                <th>Usuário</th>
-                <th class="col-hide-md">Matrícula</th>
-                <th>Tenant</th>
-                <th>Papel</th>
-                <th class="col-hide-md">Ponto</th>
-                <th>Último acesso</th>
-                <th>Conta / OS</th>
-                <th class="col-hide-wide">CompreFace</th>
-                <th class="text-right">Ações</th>
+              <tr id="users-table-head-row">
+                <th scope="col" class="ul-col-sel">
+                  <input type="checkbox" id="ul-select-all" class="ul-select-all" aria-label="" title="" />
+                </th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="name" title=""><span id="lbl-th-user">Usuário</span></button></th>
+                <th scope="col" class="ul-col-opt ul-col-id"><span id="lbl-th-id">ID</span></th>
+                <th scope="col" class="ul-col-opt ul-col-created"><span id="lbl-th-created">Criado em</span></th>
+                <th scope="col" class="ul-col-opt ul-col-country"><span id="lbl-th-country">País</span></th>
+                <th scope="col" class="ul-col-opt ul-col-emailver"><button type="button" class="ul-th-sort" data-ul-sort="emailVerifiedAt" title=""><span id="lbl-th-emailver">E-mail verificado</span></button></th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="employeeMatricula" title=""><span id="lbl-th-mat">Matrícula</span></button></th>
+                <th scope="col"><span id="lbl-th-tenant">Tenant</span></th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="role" title=""><span id="lbl-th-role">Papel</span></button></th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="workTimeTrackingEnabled" title=""><span id="lbl-th-ponto">Ponto</span></button></th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="lastLogin" title=""><span id="lbl-th-last">Último acesso</span></button></th>
+                <th scope="col"><button type="button" class="ul-th-sort" data-ul-sort="isActive" title=""><span id="lbl-th-account">Conta / OS</span></button></th>
+                <th scope="col" class="col-hide-wide"><span id="lbl-th-cf">FaceMatch</span></th>
+                <th scope="col" class="text-right"><span id="lbl-th-actions">Ações</span></th>
               </tr>
             </thead>
             <tbody id="users-tbody">
               <tr>
-                <td colspan="9" style="padding:0;border:none">
+                <td colspan="14" style="padding:0;border:none">
                   <div class="table-skeleton" aria-hidden="true">
                     <div class="table-skeleton-row"></div>
                     <div class="table-skeleton-row"></div>
@@ -114,18 +239,18 @@
 <!-- New User Modal -->
 <div class="modal-overlay" id="new-user-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title">Novo Usuário</span><button class="modal-close" onclick="closeModal('new-user-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="new-user-modal-title">Novo Usuário</span><button class="modal-close" onclick="closeModal('new-user-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Nome *</label><input class="form-control" id="new-name" placeholder="João Silva" /></div>
-        <div class="form-group"><label class="form-label">E-mail *</label><input class="form-control" id="new-email" type="email" placeholder="joao@exemplo.com" /></div>
+        <div class="form-group"><label class="form-label" id="ul-new-lbl-name">Nome *</label><input class="form-control" id="new-name" placeholder="João Silva" /></div>
+        <div class="form-group"><label class="form-label" id="ul-new-lbl-email">E-mail *</label><input class="form-control" id="new-email" type="email" placeholder="joao@exemplo.com" /></div>
       </div>
-      <div class="form-group"><label class="form-label">Matrícula funcional</label><input class="form-control" id="new-employee-matricula" maxlength="80" placeholder="Opcional — única na organização" autocomplete="off" /></div>
+      <div class="form-group"><label class="form-label" id="ul-new-lbl-matricula">Matrícula funcional</label><input class="form-control" id="new-employee-matricula" maxlength="80" placeholder="Opcional — única na organização" autocomplete="off" /></div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Conta (Tenant)</label>
+        <div class="form-group"><label class="form-label" id="ul-new-lbl-tenant">Conta (Tenant)</label>
           <select class="form-control" id="new-tenant"><option value="">Selecione...</option></select>
         </div>
-        <div class="form-group"><label class="form-label">Papel</label>
+        <div class="form-group"><label class="form-label" id="ul-new-lbl-role">Papel</label>
           <select class="form-control" id="new-role">
             <option value="USER">Usuário</option>
             <option value="PROVIDER">Prestador</option>
@@ -135,10 +260,10 @@
           </select>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+      <div class="form-group"><label class="form-label" id="ul-new-lbl-pwd">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="mínimo 6 caracteres" /></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('new-user-modal')">Cancelar</button>
+      <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('new-user-modal')">Cancelar</button>
       <button class="btn btn-primary" id="save-user-btn">Criar Usuário</button>
     </div>
   </div>
@@ -147,14 +272,45 @@
 <!-- Reset Password Modal -->
 <div class="modal-overlay" id="reset-pwd-modal">
   <div class="modal" style="max-width:400px">
-    <div class="modal-header"><span class="modal-title">Resetar Senha</span><button class="modal-close" onclick="closeModal('reset-pwd-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="reset-pwd-modal-title">Resetar Senha</span><button class="modal-close" onclick="closeModal('reset-pwd-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="reset-user-id" />
-      <div class="form-group"><label class="form-label">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+      <div class="form-group"><label class="form-label" id="ul-reset-pwd-lbl">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="mínimo 6 caracteres" /></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('reset-pwd-modal')">Cancelar</button>
+      <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('reset-pwd-modal')">Cancelar</button>
       <button class="btn btn-danger" id="confirm-reset-btn">Resetar Senha</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset password by email -->
+<div class="modal-overlay" id="reset-email-modal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title" id="reset-email-modal-title">Resetar senha por e-mail</span>
+      <button class="modal-close" type="button" onclick="closeModal('reset-email-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <p id="reset-email-modal-hint" style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:14px"></p>
+      <div class="form-group">
+        <label class="form-label" for="reset-email-input" id="reset-email-lbl-email">E-mail do utilizador</label>
+        <input type="email" class="form-control" id="reset-email-input" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reset-email-tenant" id="reset-email-lbl-tenant">Organização (tenant)</label>
+        <select class="form-control" id="reset-email-tenant">
+          <option value="" id="reset-email-tenant-opt-auto">Automático se o e-mail for único</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reset-email-password" id="ul-reset-email-pwd-lbl">Nova senha *</label>
+        <input type="password" class="form-control" id="reset-email-password" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" data-ul-cancel onclick="closeModal('reset-email-modal')">Cancelar</button>
+      <button type="button" class="btn btn-danger" id="confirm-reset-email-btn">Redefinir senha</button>
     </div>
   </div>
 </div>
@@ -168,8 +324,68 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG }   from './js/config.js';
+  import { CONFIG, persistAdminSessionBundleFromSessionStorage } from './js/config.js';
+  import { getAdminUiLocale, setAdminUiLocale, t, applyUsersListPageI18n, syncUsersListFiltersToggle } from './js/user-pages-i18n.js';
   await initPage();
+  const USER_FILTERS_EXPANDED_LS = 'brspark_users_filters_expanded';
+  try {
+    const ufPanel0 = document.getElementById('users-filters-panel');
+    if (ufPanel0 && localStorage.getItem(USER_FILTERS_EXPANDED_LS) === '0') ufPanel0.classList.add('is-collapsed');
+  } catch {
+    /* ignore */
+  }
+  applyUsersListPageI18n();
+
+  (function initUsersFiltersCollapse() {
+    const panel = document.getElementById('users-filters-panel');
+    const btn = document.getElementById('users-filters-toggle');
+    if (!panel || !btn) return;
+    btn.addEventListener('click', () => {
+      panel.classList.toggle('is-collapsed');
+      syncUsersListFiltersToggle();
+      try {
+        localStorage.setItem(USER_FILTERS_EXPANDED_LS, panel.classList.contains('is-collapsed') ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+    });
+  })();
+  loadColPrefs();
+  refreshTableColClasses();
+
+  const NAV_CTX_KEY = 'brspark_user_edit_nav';
+  const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
+
+  const locSel = document.getElementById('users-panel-locale');
+  if (locSel) {
+    locSel.value = getAdminUiLocale();
+    locSel.addEventListener('change', () => {
+      setAdminUiLocale(locSel.value);
+      window.location.reload();
+    });
+  }
+
+  try {
+    const dup = sessionStorage.getItem(DUP_DRAFT_KEY);
+    if (dup) {
+      const d = JSON.parse(dup);
+      sessionStorage.removeItem(DUP_DRAFT_KEY);
+      if (d && d.tenantId) {
+        openModal('new-user-modal');
+        if (d.name) document.getElementById('new-name').value = d.name;
+        if (d.role) document.getElementById('new-role').value = d.role;
+        const nt = document.getElementById('new-tenant');
+        if (nt) nt.value = d.tenantId;
+        const ne = document.getElementById('new-email');
+        if (ne) {
+          ne.value = '';
+          ne.focus();
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 
   const roleMap = {
     USER: 'badge-gray',
@@ -179,39 +395,233 @@
     SAAS_ADMIN: 'badge-purple',
     ADMIN: 'badge-red',
   };
-  const roleLbl = {
-    USER: '<ion-icon name="person-outline" style="vertical-align:-2px"></ion-icon> Usuário',
-    PROVIDER: '<ion-icon name="briefcase-outline" style="vertical-align:-2px"></ion-icon> Prestador',
-    MANAGER: '<ion-icon name="construct-outline"></ion-icon> Gestor',
-    TENANT_ADMIN: '<ion-icon name="business-outline" style="vertical-align:-2px"></ion-icon> Admin tenant',
-    SAAS_ADMIN: '<ion-icon name="cloud-outline" style="vertical-align:-2px"></ion-icon> Admin SaaS',
-    ADMIN: '<ion-icon name="flash-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Admin',
-  };
-  const rolePlain = {
-    USER: 'Usuário',
-    PROVIDER: 'Prestador',
-    MANAGER: 'Gestor',
-    TENANT_ADMIN: 'Admin tenant',
-    SAAS_ADMIN: 'Admin SaaS',
-    ADMIN: 'Admin',
-  };
+  function rolePlainText(role) {
+    const k = `ul_role_${String(role || '').toUpperCase()}`;
+    const x = t(k);
+    return x !== k ? x : String(role || '');
+  }
+  function roleBadgeHtml(role) {
+    const r = String(role || '').toUpperCase();
+    const icons = {
+      USER: 'person-outline',
+      PROVIDER: 'briefcase-outline',
+      MANAGER: 'construct-outline',
+      TENANT_ADMIN: 'business-outline',
+      SAAS_ADMIN: 'cloud-outline',
+      ADMIN: 'flash-outline',
+    };
+    const ic = icons[r] || 'person-outline';
+    const lbl = t(`ul_roleBadge_${r}`) !== `ul_roleBadge_${r}` ? t(`ul_roleBadge_${r}`) : rolePlainText(r);
+    const extra = r === 'ADMIN' ? ' style="font-size:16px;vertical-align:middle;margin-right:8px"' : ' style="vertical-align:-2px"';
+    return `<ion-icon name="${ic}"${extra}></ion-icon> ${escAttr(lbl)}`;
+  }
 
   let currentPage = 1;
   let pageSize = 25;
   let lastRows = [];
   let lastTotal = 0;
 
-  const rtf = typeof Intl !== 'undefined' && Intl.RelativeTimeFormat
-    ? new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' })
-    : null;
+  const PANEL_LOGIN_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN', 'MANAGER']);
+
+  function canImpersonatePanelTarget(u) {
+    if (!u || !PANEL_LOGIN_ROLES.has(u.role)) return false;
+    const myRole = (sessionStorage.getItem('brspark_admin_role') || '').trim();
+    if (myRole === 'SAAS_ADMIN') return true;
+    if (myRole === 'TENANT_ADMIN') {
+      try {
+        const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || 'null');
+        return t && t.id === u.tenantId;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  window.ulStartImpersonate = async (rawId) => {
+    const id = String(rawId || '').trim();
+    if (!id) return;
+    const u = lastRows.find((r) => r.id === id);
+    if (!u || !canImpersonatePanelTarget(u)) return;
+    if (!confirm(t('ul_impersonateConfirm'))) return;
+    const res = await CONFIG.post('/auth/impersonate-panel', { userId: id }).catch(() => null);
+    if (!res?.token) {
+      alert(`${t('ul_impersonateErr')} ${(res && res.error) || ''}`);
+      return;
+    }
+    const backup = {
+      token: sessionStorage.getItem('brspark_admin_token'),
+      email: sessionStorage.getItem('brspark_admin_email'),
+      name: sessionStorage.getItem('brspark_admin_name'),
+      role: sessionStorage.getItem('brspark_admin_role'),
+      panelMode: sessionStorage.getItem('brspark_panel_mode'),
+      panelTenant: sessionStorage.getItem('brspark_panel_tenant'),
+      targetLabel: u.name || u.email || id,
+    };
+    try {
+      sessionStorage.setItem('brspark_impersonation_backup', JSON.stringify(backup));
+    } catch {
+      alert(t('ul_impersonateStorageErr'));
+      return;
+    }
+    sessionStorage.setItem('brspark_admin_token', res.token);
+    sessionStorage.setItem('brspark_admin_email', res.user.email || '');
+    sessionStorage.setItem('brspark_admin_name', res.user.name || '');
+    sessionStorage.setItem('brspark_admin_role', res.user.role || '');
+    sessionStorage.setItem('brspark_panel_mode', 'tenant');
+    sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(res.tenant));
+    persistAdminSessionBundleFromSessionStorage();
+    window.location.href = 'dashboard.html';
+  };
+
+  function openResetEmailModal() {
+    document.getElementById('reset-email-input').value = '';
+    document.getElementById('reset-email-password').value = '';
+    const rt = document.getElementById('reset-email-tenant');
+    if (rt) rt.value = '';
+    openModal('reset-email-modal');
+  }
+
+  const LS_COLS_KEY = 'brspark_users_list_cols';
+  function loadColPrefs() {
+    try {
+      const r = JSON.parse(localStorage.getItem(LS_COLS_KEY) || '{}');
+      const a = document.getElementById('col-show-id');
+      const b = document.getElementById('col-show-created');
+      const c = document.getElementById('col-show-country');
+      const ev = document.getElementById('col-show-emailver');
+      if (a) a.checked = !!r.id;
+      if (b) b.checked = !!r.created;
+      if (c) c.checked = !!r.country;
+      if (ev) ev.checked = !!r.emailVer;
+    } catch {
+      /* ignore */
+    }
+  }
+  function saveColPrefs() {
+    try {
+      localStorage.setItem(
+        LS_COLS_KEY,
+        JSON.stringify({
+          id: !!document.getElementById('col-show-id')?.checked,
+          created: !!document.getElementById('col-show-created')?.checked,
+          country: !!document.getElementById('col-show-country')?.checked,
+          emailVer: !!document.getElementById('col-show-emailver')?.checked,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+  function refreshTableColClasses() {
+    const tbl = document.getElementById('users-table');
+    if (!tbl) return;
+    tbl.classList.toggle('cols-show-id', !!document.getElementById('col-show-id')?.checked);
+    tbl.classList.toggle('cols-show-created', !!document.getElementById('col-show-created')?.checked);
+    tbl.classList.toggle('cols-show-country', !!document.getElementById('col-show-country')?.checked);
+    tbl.classList.toggle('cols-show-emailver', !!document.getElementById('col-show-emailver')?.checked);
+  }
+  function usersListColspan() {
+    return 14;
+  }
+  function extractCountry(u) {
+    const j = u.addressJson;
+    if (!j || typeof j !== 'object') return '';
+    const c = j.countryCode != null ? j.countryCode : j.country;
+    return c != null ? String(c).trim().toUpperCase().slice(0, 2) : '';
+  }
+  function paintTableSortUi() {
+    const fs = document.getElementById('filter-sort');
+    const fd = document.getElementById('filter-sort-dir');
+    const cur = fs?.value;
+    const dir = fd?.value;
+    const hint = t('ul_sortClickHint');
+    document.querySelectorAll('.ul-th-sort[data-ul-sort]').forEach((btn) => {
+      btn.title = hint;
+      const th = btn.closest('th');
+      const k = btn.getAttribute('data-ul-sort');
+      if (!th || !k) return;
+      if (k === cur) th.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
+      else th.setAttribute('aria-sort', 'none');
+    });
+  }
+
+  window.storeUserEditNav = (idx) => {
+    try {
+      const q = document.getElementById('search-input').value.trim();
+      const role = document.getElementById('filter-role').value;
+      const workTime = document.getElementById('filter-worktime')?.checked || false;
+      const tenantId = document.getElementById('filter-tenant')?.value || '';
+      const comprefaceStatus = document.getElementById('filter-compreface')?.value || '';
+      const technicianStatus = document.getElementById('filter-technician')?.value || '';
+      const emailVerification = document.getElementById('filter-email-verification')?.value || '';
+      const lastLoginFrom = document.getElementById('filter-lastlogin-from')?.value || '';
+      const lastLoginTo = document.getElementById('filter-lastlogin-to')?.value || '';
+      const sort = document.getElementById('filter-sort')?.value || 'createdAt';
+      const sortDir = document.getElementById('filter-sort-dir')?.value || 'desc';
+      const active = document.getElementById('filter-active')?.value || '';
+      sessionStorage.setItem(
+        NAV_CTX_KEY,
+        JSON.stringify({
+          ids: lastRows.map((x) => x.id),
+          idx,
+          page: currentPage,
+          pageSize,
+          q,
+          role,
+          workTime,
+          active,
+          tenantId,
+          comprefaceStatus,
+          technicianStatus,
+          emailVerification,
+          lastLoginFrom,
+          lastLoginTo,
+          sort,
+          sortDir,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  function relTimeFmt() {
+    const loc = getAdminUiLocale();
+    return typeof Intl !== 'undefined' && Intl.RelativeTimeFormat
+      ? new Intl.RelativeTimeFormat(loc, { numeric: 'auto' })
+      : null;
+  }
+
+  function emailVerListCell(u, fmt, locBr) {
+    if (u.emailVerifiedAt) {
+      const tip = new Date(u.emailVerifiedAt).toLocaleString(locBr);
+      return `<div class="ul-emailver-cell" title="${escAttr(tip)}"><span class="badge badge-green" style="font-size:10px;font-weight:700">${escAttr(t('ul_emailVerOk'))}</span><div style="font-size:10px;color:var(--text3);margin-top:4px;white-space:nowrap">${escAttr(fmt(u.emailVerifiedAt))}</div></div>`;
+    }
+    const exp = u.emailVerificationExpiresAt;
+    if (exp && new Date(exp).getTime() > Date.now()) {
+      const expTip = `${t('ul_emailVerPendingTip')} ${new Date(exp).toLocaleString(locBr)}`;
+      return `<span class="badge badge-amber" style="font-size:10px;font-weight:700;white-space:normal;max-width:132px;line-height:1.25;display:inline-block" title="${escAttr(expTip)}">${escAttr(t('ul_emailVerPending'))}</span>`;
+    }
+    return `<span class="badge badge-gray" style="font-size:10px">${escAttr(t('ul_emailVerNo'))}</span>`;
+  }
+
+  function csvEmailVerStatus(u) {
+    if (u.emailVerifiedAt) return new Date(u.emailVerifiedAt).toISOString();
+    const exp = u.emailVerificationExpiresAt;
+    if (exp && new Date(exp).getTime() > Date.now()) return t('ul_emailVerCsvPending');
+    return t('ul_emailVerCsvNo');
+  }
 
   function relativeLastSeen(iso) {
     if (!iso) return '—';
-    const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return '—';
-    const diffSec = Math.round((t - Date.now()) / 1000);
+    const t0 = new Date(iso).getTime();
+    if (Number.isNaN(t0)) return '—';
+    const rtf = relTimeFmt();
+    const diffSec = Math.round((t0 - Date.now()) / 1000);
     const abs = Math.abs(diffSec);
-    if (!rtf) return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const loc = getAdminUiLocale();
+    if (!rtf) return new Date(iso).toLocaleString(loc, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     if (abs < 60) return rtf.format(Math.round(diffSec / 1), 'second');
     if (abs < 3600) return rtf.format(Math.round(diffSec / 60), 'minute');
     if (abs < 86400) return rtf.format(Math.round(diffSec / 3600), 'hour');
@@ -256,42 +666,137 @@
   }
 
   function csvEscape(v) {
-    const t = String(v ?? '').replace(/"/g, '""');
-    return /[",\n\r]/.test(t) ? `"${t}"` : t;
+    const s = String(v ?? '').replace(/"/g, '""');
+    return /[",\n\r]/.test(s) ? `"${s}"` : s;
+  }
+
+  function csvLinesForUserRows(rows) {
+    const showId = document.getElementById('col-show-id')?.checked;
+    const showCreated = document.getElementById('col-show-created')?.checked;
+    const showCountry = document.getElementById('col-show-country')?.checked;
+    const showEmailVer = document.getElementById('col-show-emailver')?.checked;
+    const headers = [t('ul_csvName'), t('ul_csvEmail')];
+    if (showId) headers.push(t('ul_csvId'));
+    if (showCreated) headers.push(t('ul_csvCreated'));
+    if (showCountry) headers.push(t('ul_csvCountry'));
+    if (showEmailVer) headers.push(t('ul_csvEmailVer'));
+    headers.push(
+      t('ul_csvMatricula'),
+      t('ul_csvTenant'),
+      t('ul_csvTenantEmail'),
+      t('ul_csvRole'),
+      t('ul_csvPonto'),
+      t('ul_csvLast'),
+      t('ul_csvActive'),
+      t('ul_csvFace'),
+    );
+    const lines = [headers.join(',')];
+    for (const u of rows) {
+      const tenantRow = u.tenant;
+      const tn =
+        tenantRow && tenantRow.name && String(tenantRow.name).trim()
+          ? String(tenantRow.name).trim()
+          : u.tenantId
+            ? String(u.tenantId)
+            : '';
+      const te = tenantRow && tenantRow.email ? String(tenantRow.email).trim() : '';
+      const sync = u.comprefaceRecognitionSync;
+      const cf = sync && sync.status ? String(sync.status) : '';
+      const row = [csvEscape(u.name), csvEscape(u.email)];
+      if (showId) row.push(csvEscape(u.id));
+      if (showCreated) row.push(csvEscape(u.createdAt ? new Date(u.createdAt).toISOString() : ''));
+      if (showCountry) row.push(csvEscape(extractCountry(u) || ''));
+      if (showEmailVer) row.push(csvEscape(csvEmailVerStatus(u)));
+      row.push(
+        csvEscape(u.employeeMatricula),
+        csvEscape(tn),
+        csvEscape(te),
+        csvEscape(rolePlainText(u.role)),
+        csvEscape(u.workTimeTrackingEnabled ? t('ul_yes') : t('ul_no')),
+        csvEscape(u.lastLogin ? new Date(u.lastLogin).toISOString() : ''),
+        csvEscape(u.isActive ? t('ul_yes') : t('ul_no')),
+        csvEscape(cf),
+      );
+      lines.push(row.join(','));
+    }
+    return lines;
+  }
+
+  function downloadCsvLines(lines, filenameBase) {
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filenameBase;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   function exportUsersCsv() {
     if (!lastRows.length) {
-      alert('Não há linhas para exportar nesta página.');
+      alert(t('ul_csvNoRows'));
       return;
     }
-    const headers = ['Nome', 'E-mail', 'Matrícula', 'Tenant', 'E-mail tenant', 'Papel', 'Ponto', 'Último acesso', 'Conta ativa', 'CompreFace'];
-    const lines = [headers.join(',')];
-    for (const u of lastRows) {
-      const t = u.tenant;
-      const tn = t && (t.name && String(t.name).trim()) ? String(t.name).trim() : (u.tenantId ? String(u.tenantId) : '');
-      const te = t && t.email ? String(t.email).trim() : '';
-      const sync = u.comprefaceRecognitionSync;
-      const cf = sync && sync.status ? String(sync.status) : '';
-      lines.push([
-        csvEscape(u.name),
-        csvEscape(u.email),
-        csvEscape(u.employeeMatricula),
-        csvEscape(tn),
-        csvEscape(te),
-        csvEscape(rolePlain[u.role] || u.role),
-        csvEscape(u.workTimeTrackingEnabled ? 'Sim' : 'Não'),
-        csvEscape(u.lastLogin ? new Date(u.lastLogin).toISOString() : ''),
-        csvEscape(u.isActive ? 'Sim' : 'Não'),
-        csvEscape(cf),
-      ].join(','));
+    downloadCsvLines(csvLinesForUserRows(lastRows), `${t('ul_csvFilename')}-${currentPage}.csv`);
+  }
+
+  function getSelectedUserIds() {
+    return [...document.querySelectorAll('#users-tbody .ul-row-sel:checked')].map((el) => el.value);
+  }
+
+  function syncBulkSelectionUi() {
+    const bar = document.getElementById('ul-bulk-bar');
+    const countEl = document.getElementById('ul-bulk-count');
+    const all = document.getElementById('ul-select-all');
+    const rowBoxes = [...document.querySelectorAll('#users-tbody .ul-row-sel')];
+    const n = rowBoxes.filter((b) => b.checked).length;
+    if (countEl) {
+      countEl.textContent = t('ul_bulkSelected').replace(/\{n\}/g, String(n));
     }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `usuarios-pagina-${currentPage}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    if (bar) bar.hidden = n === 0;
+    if (all && rowBoxes.length) {
+      all.checked = n === rowBoxes.length;
+      all.indeterminate = n > 0 && n < rowBoxes.length;
+    } else if (all) {
+      all.checked = false;
+      all.indeterminate = false;
+    }
+  }
+
+  function exportSelectedUsersCsv() {
+    const ids = new Set(getSelectedUserIds());
+    const rows = lastRows.filter((u) => ids.has(u.id));
+    if (!rows.length) {
+      alert(t('ul_bulkNoSelection'));
+      return;
+    }
+    downloadCsvLines(csvLinesForUserRows(rows), `${t('ul_csvFilename')}-selecao.csv`);
+  }
+
+  async function bulkDeactivateSelected() {
+    const ids = getSelectedUserIds();
+    if (!ids.length) {
+      alert(t('ul_bulkNoSelection'));
+      return;
+    }
+    const onlyActive = ids.filter((id) => {
+      const u = lastRows.find((r) => r.id === id);
+      return u && u.isActive;
+    });
+    if (!onlyActive.length) {
+      alert(t('ul_bulkNoneActive'));
+      return;
+    }
+    if (!confirm(t('ul_bulkDeactivateConfirm'))) return;
+    const res = await CONFIG.patch('/users/bulk-active', { ids: onlyActive, isActive: false });
+    if (res && res.error) {
+      alert(`${t('ul_bulkDeactivateErr')} ${res.error}`);
+      return;
+    }
+    const updated = res && typeof res.updated === 'number' ? res.updated : 0;
+    alert(t('ul_bulkDeactivateOk').replace(/\{n\}/g, String(updated)));
+    const allCb = document.getElementById('ul-select-all');
+    if (allCb) allCb.checked = false;
+    loadUsers(currentPage);
   }
 
   function updateFilterChips() {
@@ -299,17 +804,71 @@
     const q = document.getElementById('search-input').value.trim();
     const role = document.getElementById('filter-role').value;
     const workT = document.getElementById('filter-worktime')?.checked;
+    const activeF = document.getElementById('filter-active')?.value || '';
+    const tenantId = document.getElementById('filter-tenant')?.value || '';
+    const cf = document.getElementById('filter-compreface')?.value || '';
+    const tech = document.getElementById('filter-technician')?.value || '';
+    const emailVer = document.getElementById('filter-email-verification')?.value || '';
+    const llFrom = document.getElementById('filter-lastlogin-from')?.value || '';
+    const llTo = document.getElementById('filter-lastlogin-to')?.value || '';
+    const sort = document.getElementById('filter-sort')?.value || 'createdAt';
+    const sortDir = document.getElementById('filter-sort-dir')?.value || 'desc';
     const chips = [];
-    if (q) chips.push({ html: `<span class="filter-chip">Busca: <strong>${escAttr(q)}</strong></span>` });
-    if (role) chips.push({ html: `<span class="filter-chip">Papel: <strong>${escAttr(rolePlain[role] || role)}</strong></span>` });
-    if (workT) chips.push({ html: `<span class="filter-chip">Só ponto ativo</span>` });
+    if (q) chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipSearch'))}: <strong>${escAttr(q)}</strong></span>` });
+    if (role) chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipRole'))}: <strong>${escAttr(rolePlainText(role))}</strong></span>` });
+    if (workT) chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipWorktime'))}</span>` });
+    if (activeF === '1') chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipActiveOn'))}</span>` });
+    if (activeF === '0') chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipActiveOff'))}</span>` });
+    if (tenantId) {
+      const lab = document.getElementById('filter-tenant')?.selectedOptions[0]?.textContent || tenantId;
+      chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipTenant'))}: <strong>${escAttr(lab)}</strong></span>` });
+    }
+    if (cf) {
+      const m = { synced: 'ul_cfOptSynced', pending: 'ul_cfOptPending', error: 'ul_cfOptError', none: 'ul_cfOptNone' };
+      chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipCf'))}: <strong>${escAttr(t(m[cf] || cf))}</strong></span>` });
+    }
+    if (tech) chips.push({ html: `<span class="filter-chip">${escAttr(t('ul_chipTech'))}: <strong>${escAttr(tech)}</strong></span>` });
+    if (emailVer) {
+      const em = {
+        verified: 'ul_filterEmailVerVerified',
+        unverified: 'ul_filterEmailVerUnverified',
+        pending: 'ul_filterEmailVerPending',
+      };
+      chips.push({
+        html: `<span class="filter-chip">${escAttr(t('ul_chipEmailVer'))}: <strong>${escAttr(t(em[emailVer] || emailVer))}</strong></span>`,
+      });
+    }
+    if (llFrom || llTo) {
+      chips.push({
+        html: `<span class="filter-chip">${escAttr(t('ul_chipLastLogin'))}: <strong>${escAttr(llFrom || '—')} → ${escAttr(llTo || '—')}</strong></span>`,
+      });
+    }
+    if (sort !== 'createdAt' || sortDir !== 'desc') {
+      const sm = {
+        createdAt: 'ul_sortCreated',
+        lastLogin: 'ul_sortLastLogin',
+        name: 'ul_sortName',
+        email: 'ul_sortEmail',
+        updatedAt: 'ul_sortUpdated',
+        id: 'ul_sortId',
+        employeeMatricula: 'ul_sortMatricula',
+        role: 'ul_sortRoleOpt',
+        isActive: 'ul_sortActiveOpt',
+        workTimeTrackingEnabled: 'ul_sortPontoOpt',
+        emailVerifiedAt: 'ul_sortEmailVer',
+      };
+      const dn = sortDir === 'asc' ? t('ul_sortAsc') : t('ul_sortDesc');
+      chips.push({
+        html: `<span class="filter-chip">${escAttr(t('ul_sortBy'))}: <strong>${escAttr(t(sm[sort] || sort))} · ${escAttr(dn)}</strong></span>`,
+      });
+    }
     if (!chips.length) {
       el.innerHTML = '';
       el.hidden = true;
       return;
     }
     chips.push({
-      html: `<button type="button" class="filter-chip" id="clear-filters-chip" style="border-style:dashed;background:var(--surface2);color:var(--text2);border-color:var(--border2)">Limpar filtros</button>`,
+      html: `<button type="button" class="filter-chip" id="clear-filters-chip" style="border-style:dashed;background:var(--surface2);color:var(--text2);border-color:var(--border2)">${escAttr(t('ul_clearFilters'))}</button>`,
     });
     el.innerHTML = chips.map((c) => c.html).join('');
     el.hidden = false;
@@ -317,12 +876,29 @@
       document.getElementById('search-input').value = '';
       document.getElementById('filter-role').value = '';
       if (document.getElementById('filter-worktime')) document.getElementById('filter-worktime').checked = false;
+      const ft = document.getElementById('filter-tenant');
+      if (ft) ft.value = '';
+      const fc = document.getElementById('filter-compreface');
+      if (fc) fc.value = '';
+      const ftech = document.getElementById('filter-technician');
+      if (ftech) ftech.value = '';
+      const fev = document.getElementById('filter-email-verification');
+      if (fev) fev.value = '';
+      const lf = document.getElementById('filter-lastlogin-from');
+      const lt = document.getElementById('filter-lastlogin-to');
+      if (lf) lf.value = '';
+      if (lt) lt.value = '';
+      const fs = document.getElementById('filter-sort');
+      const fd = document.getElementById('filter-sort-dir');
+      if (fs) fs.value = 'createdAt';
+      if (fd) fd.value = 'desc';
       loadUsers(1);
     });
   }
 
   function renderSkeletonTbody() {
-    return `<tr><td colspan="9" style="padding:0;border:none">
+    const cs = usersListColspan();
+    return `<tr><td colspan="${cs}" style="padding:0;border:none">
       <div class="table-skeleton" aria-hidden="true">
         <div class="table-skeleton-row"></div><div class="table-skeleton-row"></div>
         <div class="table-skeleton-row"></div><div class="table-skeleton-row"></div><div class="table-skeleton-row"></div>
@@ -333,8 +909,8 @@
     const pag = document.getElementById('pagination');
     const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
     const to = Math.min(page * pageSize, total);
-    const meta = `<div class="pagination-meta">Mostrando <strong>${from}</strong>–<strong>${to}</strong> de <strong>${total}</strong></div>`;
-    const size = `<div class="pagination-page-size"><span>Linhas</span><select id="page-size-select" aria-label="Itens por página">
+    const meta = `<div class="pagination-meta">${escAttr(t('ul_pagShowing'))} <strong>${from}</strong>–<strong>${to}</strong> ${escAttr(t('ul_pagOf'))} <strong>${total}</strong></div>`;
+    const size = `<div class="pagination-page-size"><span>${escAttr(t('ul_pagRows'))}</span><select id="page-size-select" aria-label="${escAttr(t('ul_pagPerPage'))}">
       <option value="10">10</option>
       <option value="25">25</option>
       <option value="50">50</option>
@@ -392,34 +968,215 @@
     }
   }
 
-  // Populate tenant dropdown
-  CONFIG.get('/tenants?limit=500').then(res => {
-    const sel = document.getElementById('new-tenant');
-    (res?.data || []).forEach(t => {
-      sel.innerHTML += `<option value="${t.id}">${t.name} (${t.email})</option>`;
+  function readUserEditNavCtx() {
+    try {
+      const raw = sessionStorage.getItem(NAV_CTX_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function stripUserListResumeQuery() {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get('resume') !== '1') return;
+      u.searchParams.delete('resume');
+      const q = u.searchParams.toString();
+      window.history.replaceState({}, '', u.pathname + (q ? `?${q}` : '') + u.hash);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Volta da ficha com `users.html?resume=1`: repõe filtros e tamanho de página de `storeUserEditNav`. */
+  function applyListFiltersFromUserEditNavCtx(ctx) {
+    if (!ctx || typeof ctx !== 'object') return;
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (v === undefined || v === null || v === '') {
+        if (el.type === 'checkbox') el.checked = false;
+        else if (id === 'filter-sort') el.value = 'createdAt';
+        else if (id === 'filter-sort-dir') el.value = 'desc';
+        else el.value = '';
+        return;
+      }
+      if (el.type === 'checkbox') el.checked = !!v;
+      else el.value = String(v);
+    };
+    setVal('search-input', ctx.q);
+    setVal('filter-role', ctx.role);
+    const wt = document.getElementById('filter-worktime');
+    if (wt) wt.checked = !!ctx.workTime;
+    setVal('filter-active', ctx.active);
+    setVal('filter-tenant', ctx.tenantId);
+    setVal('filter-compreface', ctx.comprefaceStatus);
+    setVal('filter-technician', ctx.technicianStatus);
+    setVal('filter-email-verification', ctx.emailVerification);
+    setVal('filter-lastlogin-from', ctx.lastLoginFrom);
+    setVal('filter-lastlogin-to', ctx.lastLoginTo);
+    if (ctx.sort) setVal('filter-sort', ctx.sort);
+    if (ctx.sortDir) setVal('filter-sort-dir', ctx.sortDir);
+    const ps = Number(ctx.pageSize);
+    if ([10, 25, 50].includes(ps)) pageSize = ps;
+
+    const anyFilter =
+      String(ctx.q || '').trim() ||
+      String(ctx.role || '').trim() ||
+      ctx.workTime ||
+      String(ctx.active || '').trim() ||
+      String(ctx.tenantId || '').trim() ||
+      String(ctx.comprefaceStatus || '').trim() ||
+      String(ctx.technicianStatus || '').trim() ||
+      String(ctx.emailVerification || '').trim() ||
+      String(ctx.lastLoginFrom || '').trim() ||
+      String(ctx.lastLoginTo || '').trim();
+    if (anyFilter) {
+      const uf = document.getElementById('users-filters-panel');
+      if (uf) uf.classList.remove('is-collapsed');
+      try {
+        localStorage.setItem(USER_FILTERS_EXPANDED_LS, '1');
+      } catch {
+        /* ignore */
+      }
+      syncUsersListFiltersToggle();
+    }
+  }
+
+  function applyUsersUrlFromSearchParams() {
+    try {
+      const sp = new URL(window.location.href).searchParams;
+      const q = sp.get('q');
+      if (q != null && q !== '') document.getElementById('search-input').value = q;
+      const role = sp.get('role');
+      if (role != null && role !== '') document.getElementById('filter-role').value = role;
+      const tenantId = sp.get('tenantId');
+      const ft = document.getElementById('filter-tenant');
+      if (tenantId != null && tenantId !== '' && ft) ft.value = tenantId;
+      const active = sp.get('active');
+      const fa = document.getElementById('filter-active');
+      if (fa && (active === '1' || active === 'true')) fa.value = '1';
+      else if (fa && (active === '0' || active === 'false')) fa.value = '0';
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function initialLoadPageFromResumeIfNeeded() {
+    let resume = false;
+    try {
+      resume = new URL(window.location.href).searchParams.get('resume') === '1';
+    } catch {
+      /* ignore */
+    }
+    if (resume) stripUserListResumeQuery();
+    if (!resume) {
+      applyUsersUrlFromSearchParams();
+      try {
+        const sp = new URL(window.location.href).searchParams;
+        if (sp.get('q') || sp.get('role') || sp.get('tenantId') || sp.get('active') || sp.get('page')) {
+          const uf = document.getElementById('users-filters-panel');
+          if (uf) uf.classList.remove('is-collapsed');
+          try {
+            localStorage.setItem(USER_FILTERS_EXPANDED_LS, '1');
+          } catch {
+            /* ignore */
+          }
+          syncUsersListFiltersToggle();
+        }
+        const p = parseInt(sp.get('page') || '1', 10);
+        return Number.isFinite(p) && p > 0 ? p : 1;
+      } catch {
+        return 1;
+      }
+    }
+    const ctx = readUserEditNavCtx();
+    if (!ctx) return 1;
+    applyListFiltersFromUserEditNavCtx(ctx);
+    return Math.min(99999, Math.max(1, parseInt(String(ctx.page || 1), 10) || 1));
+  }
+
+  // Populate tenant dropdowns (novo utilizador + filtro da lista); primeira listagem após repor filtros ao voltar da ficha.
+  CONFIG.get('/tenants?limit=500')
+    .then((res) => {
+      const sel = document.getElementById('new-tenant');
+      const ft = document.getElementById('filter-tenant');
+      const rten = document.getElementById('reset-email-tenant');
+      (res?.data || []).forEach((t) => {
+        const opt = `<option value="${escAttr(t.id)}">${escAttr(t.name)} (${escAttr(t.email)})</option>`;
+        if (sel) sel.innerHTML += opt;
+        if (ft) ft.innerHTML += opt;
+        if (rten) rten.innerHTML += opt;
+      });
+      if (ft && ft.options[0]) ft.options[0].textContent = t('ul_filterTenantAll');
+      loadUsers(initialLoadPageFromResumeIfNeeded());
+    })
+    .catch(() => {
+      loadUsers(initialLoadPageFromResumeIfNeeded());
     });
-  });
+
+  function syncUsersListUrl() {
+    try {
+      const params = new URLSearchParams();
+      const q = document.getElementById('search-input').value.trim();
+      if (q) params.set('q', q);
+      const role = document.getElementById('filter-role').value;
+      if (role) params.set('role', role);
+      const tenantId = document.getElementById('filter-tenant')?.value || '';
+      if (tenantId) params.set('tenantId', tenantId);
+      const active = document.getElementById('filter-active')?.value || '';
+      if (active === '1') params.set('active', '1');
+      if (active === '0') params.set('active', '0');
+      if (currentPage > 1) params.set('page', String(currentPage));
+      const u = new URL(window.location.href);
+      window.history.replaceState({}, '', u.pathname + (params.toString() ? `?${params}` : '') + u.hash);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function loadUsers(page = 1) {
     currentPage = page;
     document.getElementById('users-tbody').innerHTML = renderSkeletonTbody();
+    syncBulkSelectionUi();
     updateFilterChips();
 
     const q = document.getElementById('search-input').value.trim();
     const role = document.getElementById('filter-role').value;
     const workT = document.getElementById('filter-worktime')?.checked ? '1' : '';
+    const activeF = document.getElementById('filter-active')?.value || '';
+    const tenantId = document.getElementById('filter-tenant')?.value || '';
+    const comprefaceStatus = document.getElementById('filter-compreface')?.value || '';
+    const technicianStatus = document.getElementById('filter-technician')?.value || '';
+    const emailVerification = document.getElementById('filter-email-verification')?.value || '';
+    const lastLoginFrom = document.getElementById('filter-lastlogin-from')?.value || '';
+    const lastLoginTo = document.getElementById('filter-lastlogin-to')?.value || '';
+    const sort = document.getElementById('filter-sort')?.value || 'createdAt';
+    const sortDir = document.getElementById('filter-sort-dir')?.value || 'desc';
     const params = new URLSearchParams({
       page,
       limit: String(pageSize),
+      sort,
+      sortDir,
       ...(q && { q }),
       ...(role && { role }),
       ...(workT && { workTime: workT }),
+      ...(activeF === '1' && { active: '1' }),
+      ...(activeF === '0' && { active: '0' }),
+      ...(tenantId && { tenantId }),
+      ...(comprefaceStatus && { comprefaceStatus }),
+      ...(technicianStatus && { technicianStatus }),
+      ...(emailVerification && { emailVerification }),
+      ...(lastLoginFrom && { lastLoginFrom }),
+      ...(lastLoginTo && { lastLoginTo }),
     });
     const res = await CONFIG.get(`/users?${params}`);
     if (!res) return;
 
     if (res.error) {
-      document.getElementById('count-badge').textContent = 'Erro';
+      document.getElementById('count-badge').textContent = t('ul_errBadge');
       ['stat-total', 'stat-active', 'stat-admins', 'stat-inactive'].forEach((id) => {
         document.getElementById(id).textContent = '—';
       });
@@ -431,11 +1188,12 @@
         .replace(/>/g, '&gt;')
         .slice(0, 1200);
       document.getElementById('users-tbody').innerHTML =
-        `<tr><td colspan="9" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
-          <strong>Não foi possível carregar os usuários.</strong> Reinicie o servidor da API após <code>npx prisma generate</code> se acabou de migrar o schema.<br/>
+        `<tr><td colspan="${usersListColspan()}" style="text-align:left;padding:24px 28px;color:var(--red);font-size:13px;line-height:1.5">
+          <strong>${escAttr(t('ul_loadErrTitle'))}</strong> ${escAttr(t('ul_loadErrHint'))} <code>npx prisma generate</code> ${escAttr(t('ul_loadErrPrisma'))}<br/>
           <span style="display:block;margin-top:10px;font-size:11px;color:var(--text3);white-space:pre-wrap;font-weight:400">${detail}</span>
         </td></tr>`;
       document.getElementById('pagination').innerHTML = '';
+      syncBulkSelectionUi();
       return;
     }
 
@@ -443,7 +1201,8 @@
     lastRows = data;
     lastTotal = total;
 
-    document.getElementById('count-badge').textContent = `${total} usuário${total === 1 ? '' : 's'}`;
+    document.getElementById('count-badge').textContent =
+      total === 1 ? t('ul_countOne') : `${total} ${t('ul_countMany')}`;
     document.getElementById('stat-total').textContent = data.length;
     document.getElementById('stat-active').textContent = data.filter(u => u.isActive).length;
     document.getElementById('stat-admins').textContent = data.filter(u =>
@@ -454,21 +1213,22 @@
     ).length;
     document.getElementById('stat-inactive').textContent = data.filter(u => !u.isActive).length;
 
-    const fmt = d => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const locBr = getAdminUiLocale();
+    const fmt = (d) =>
+      d ? new Date(d).toLocaleDateString(locBr, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
     const prestadorOsHint = (tp) => {
       if (!tp || !tp.status) return '';
       const st = String(tp.status).toUpperCase();
       const lines = {
-        ACTIVE: { c: 'var(--green)', t: 'Prestador: pode receber OS', sub: '' },
+        ACTIVE: { c: 'var(--green)', t: t('ul_providerActive'), sub: '' },
         PENDING: {
           c: 'var(--amber)',
-          t: 'Prestador: pendente (ainda não recebe OS)',
-          sub:
-            'Isto é o perfil técnico. O formulário de cadastro é outra lista: <a href="technician-applications.html" style="color:inherit;text-decoration:underline;font-weight:600">Cadastro de prestadores</a> (procure «Perfil sem candidatura» se não houver convite).',
+          t: t('ul_providerPending'),
+          sub: t('ul_providerPendingSub'),
         },
-        INACTIVE: { c: 'var(--text3)', t: 'Prestador: inativo (não recebe OS)', sub: '' },
-        SUSPENDED: { c: 'var(--red)', t: 'Prestador: suspenso', sub: '' },
+        INACTIVE: { c: 'var(--text3)', t: t('ul_providerInactive'), sub: '' },
+        SUSPENDED: { c: 'var(--red)', t: t('ul_providerSuspended'), sub: '' },
       };
       const x = lines[st];
       if (!x) return '';
@@ -501,8 +1261,8 @@
 
     const pontoCell = (u) =>
       u.workTimeTrackingEnabled
-        ? '<span class="badge badge-green" style="font-size:10px;font-weight:700">Sim</span>'
-        : '<span class="badge badge-gray" style="font-size:10px">Não</span>';
+        ? `<span class="badge badge-green" style="font-size:10px;font-weight:700">${escAttr(t('ul_yes'))}</span>`
+        : `<span class="badge badge-gray" style="font-size:10px">${escAttr(t('ul_no'))}</span>`;
 
     const matriculaCell = (u) => {
       const m = u.employeeMatricula != null ? String(u.employeeMatricula).trim() : '';
@@ -512,11 +1272,11 @@
 
     const comprefaceListCell = (sync) => {
       if (!sync || typeof sync !== 'object') {
-        return '<span style="font-size:11px;color:var(--text3)" title="Sem registro de sincronização CompreFace">—</span>';
+        return `<span style="font-size:11px;color:var(--text3)" title="${escAttr(t('ul_cfNoSync'))}">—</span>`;
       }
       const st = String(sync.status || '').toLowerCase();
       const shortDate = sync.at
-        ? new Date(sync.at).toLocaleString('pt-BR', {
+        ? new Date(sync.at).toLocaleString(locBr, {
             day: '2-digit',
             month: '2-digit',
             hour: '2-digit',
@@ -525,38 +1285,45 @@
         : '';
       const tip =
         st === 'synced'
-          ? `Sincronizado · ${Number(sync.faces) || 0} imagem(ns) · ${shortDate}${sync.subject ? ` · ${sync.subject}` : ''}`
+          ? `${t('ul_cfSynced')} · ${Number(sync.faces) || 0} · ${shortDate}${sync.subject ? ` · ${sync.subject}` : ''}`
           : st === 'pending'
-            ? `Pendente · ${shortDate} · ${sync.message || ''}`
+            ? `${t('ul_cfPending')} · ${shortDate} · ${sync.message || ''}`
             : st === 'error'
-              ? `Erro · ${shortDate} · ${sync.message || ''}`
+              ? `${t('ul_cfError')} · ${shortDate} · ${sync.message || ''}`
               : JSON.stringify(sync);
+      const dateSub = `<div style="font-size:10px;color:var(--text3);margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.2" title="${escAttr(tip)}">${escAttr(t('ul_cfSyncedAt'))}: ${escAttr(shortDate || '—')}</div>`;
       if (st === 'synced') {
-        return `<span class="badge badge-green" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="checkmark-done-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Sincronizado</span>`;
+        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-green" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="checkmark-done-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfSynced'))}</span>${dateSub}</div>`;
       }
       if (st === 'pending') {
-        return `<span class="badge badge-amber" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="time-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Pendente</span>`;
+        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-amber" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="time-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfPending'))}</span>${dateSub}</div>`;
       }
       if (st === 'error') {
-        return `<span class="badge badge-red" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left" title="${escAttr(tip)}"><ion-icon name="alert-circle-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> Erro</span>`;
+        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-red" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="alert-circle-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfError'))}</span>${dateSub}</div>`;
       }
-      return `<span class="badge badge-gray" style="font-size:10px" title="${escAttr(tip)}">${escAttr(st || '?')}</span>`;
+      return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-gray" style="font-size:10px;display:inline-block" title="${escAttr(tip)}">${escAttr(st || '?')}</span>${dateSub}</div>`;
     };
 
     const uid = (id) => escAttr(id);
 
     if (!data.length) {
       document.getElementById('users-tbody').innerHTML = `
-        <tr><td colspan="9" style="padding:0;border:none">
+        <tr><td colspan="${usersListColspan()}" style="padding:0;border:none">
           <div class="empty-state-pro">
             <ion-icon name="people-outline"></ion-icon>
-            <div class="empty-state-pro-title">Nenhum usuário encontrado</div>
-            <p class="empty-state-pro-sub">Ajuste a busca ou os filtros, ou cadastre um novo usuário.</p>
+            <div class="empty-state-pro-title">${escAttr(t('ul_emptyTitle'))}</div>
+            <p class="empty-state-pro-sub">${escAttr(t('ul_emptySub'))}</p>
           </div>
         </td></tr>`;
     } else {
-      document.getElementById('users-tbody').innerHTML = data.map(u => `
+      document.getElementById('users-tbody').innerHTML = data.map((u, idx) => {
+        const co = extractCountry(u);
+        const rowSelLabel = t('ul_rowSelectAria').replace(/\{name\}/g, String(u.name || u.email || u.id));
+        return `
       <tr>
+        <td class="ul-col-sel">
+          <input type="checkbox" class="ul-row-sel" value="${escAttr(u.id)}" aria-label="${escAttr(rowSelLabel)}" />
+        </td>
         <td>
           <div class="person-cell">
             ${avatarCell(u)}
@@ -566,25 +1333,44 @@
             </div>
           </div>
         </td>
+        <td class="ul-col-opt ul-col-id col-hide-md" style="font-size:10px;vertical-align:middle"><code style="word-break:break-all">${escAttr(u.id)}</code></td>
+        <td class="ul-col-opt ul-col-created col-hide-md" style="font-size:11px;color:var(--text3);vertical-align:middle;white-space:nowrap">${escAttr(fmt(u.createdAt))}</td>
+        <td class="ul-col-opt ul-col-country col-hide-md" style="font-size:11px;vertical-align:middle">${escAttr(co || '—')}</td>
+        <td class="ul-col-opt ul-col-emailver col-hide-md" style="vertical-align:middle">${emailVerListCell(u, fmt, locBr)}</td>
         <td class="col-hide-md" style="vertical-align:middle;white-space:nowrap">${matriculaCell(u)}</td>
         <td style="vertical-align:top">${tenantListCell(u)}</td>
-        <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleLbl[u.role] || u.role}</span></td>
+        <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleBadgeHtml(u.role)}</span></td>
         <td class="col-hide-md" style="vertical-align:middle">${pontoCell(u)}</td>
         <td style="color:var(--text3);font-size:11px" title="${escAttr(fmt(u.lastLogin))}">${escAttr(relativeLastSeen(u.lastLogin))}</td>
-        <td style="vertical-align:top"><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta ativa' : '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Conta inativa'}</span>${prestadorOsHint(u.technicianProfile)}</td>
+        <td style="vertical-align:top"><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountActive'))}` : `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountInactive'))}`}</span>${prestadorOsHint(u.technicianProfile)}</td>
         <td class="col-hide-wide" style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
         <td class="text-right">
           <div class="row-actions">
-            <a class="icon-action" href="user-edit.html?id=${encodeURIComponent(u.id)}" title="Editar usuário"><ion-icon name="create-outline"></ion-icon></a>
-            <button type="button" class="icon-action" onclick="openReset('${uid(u.id)}')" title="Resetar senha"><ion-icon name="key-outline"></ion-icon></button>
-            <button type="button" class="icon-action icon-action--danger" onclick="toggleUser('${uid(u.id)}')" title="${u.isActive ? 'Desativar conta' : 'Ativar conta'}"><ion-icon name="${u.isActive ? 'ban-outline' : 'checkmark-circle-outline'}"></ion-icon></button>
+            <a class="icon-action" href="user-edit.html?id=${encodeURIComponent(u.id)}" title="${escAttr(t('ul_editUser'))}" onclick="storeUserEditNav(${idx})"><ion-icon name="create-outline"></ion-icon></a>
+            <div class="ue-dropdown-wrap">
+              <button type="button" class="icon-action" data-ul-actions-toggle aria-haspopup="true" aria-expanded="false" aria-label="${escAttr(t('moreActions'))}"><ion-icon name="ellipsis-horizontal"></ion-icon></button>
+              <div class="ue-dropdown" data-ul-actions-menu hidden role="menu">
+                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}&readonly=1" onclick="storeUserEditNav(${idx})">${escAttr(t('ul_viewUser'))}</a>
+                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}" target="_blank" rel="noopener" onclick="storeUserEditNav(${idx})">${escAttr(t('openNewTab'))}</a>
+                ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick="ulStartImpersonate(${JSON.stringify(u.id)})">${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
+                <button type="button" class="ue-dropdown__item" role="menuitem" onclick="openReset('${uid(u.id)}')">${escAttr(t('ul_resetPwdBtn'))}</button>
+                <hr class="ue-dropdown__sep" />
+                <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="toggleUser('${uid(u.id)}')">${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
+              </div>
+            </div>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
     }
 
     const pages = Math.ceil(total / pageSize) || 1;
     renderPagination(page, pages, total);
+    syncBulkSelectionUi();
+    paintTableSortUi();
+    refreshTableColClasses();
+    document.getElementById('users-table-wrap')?.focus({ preventScroll: true });
+    syncUsersListUrl();
   }
 
   window.loadUsers = loadUsers;
@@ -601,14 +1387,78 @@
   };
 
   document.getElementById('export-users-btn').addEventListener('click', exportUsersCsv);
+  document.getElementById('ul-bulk-export-csv')?.addEventListener('click', exportSelectedUsersCsv);
+  document.getElementById('ul-bulk-deactivate')?.addEventListener('click', bulkDeactivateSelected);
+  document.getElementById('ul-select-all')?.addEventListener('change', (e) => {
+    const on = e.target.checked;
+    document.querySelectorAll('#users-tbody .ul-row-sel').forEach((cb) => {
+      cb.checked = on;
+    });
+    syncBulkSelectionUi();
+  });
+  document.getElementById('users-tbody')?.addEventListener('change', (ev) => {
+    if (ev.target && ev.target.classList && ev.target.classList.contains('ul-row-sel')) syncBulkSelectionUi();
+  });
+
+  function closeAllUlRowActionMenus() {
+    const tbl = document.getElementById('users-table');
+    if (!tbl) return;
+    tbl.querySelectorAll('[data-ul-actions-menu]').forEach((menu) => {
+      menu.hidden = true;
+      const btn = menu.closest('.ue-dropdown-wrap')?.querySelector('[data-ul-actions-toggle]');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+  document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('[data-ul-actions-toggle]');
+    if (toggle && document.getElementById('users-table')?.contains(toggle)) {
+      const wrap = toggle.closest('.ue-dropdown-wrap');
+      const menu = wrap?.querySelector('[data-ul-actions-menu]');
+      if (!menu) return;
+      const wasOpen = !menu.hidden;
+      closeAllUlRowActionMenus();
+      if (!wasOpen) {
+        menu.hidden = false;
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+      return;
+    }
+    if (document.getElementById('users-table')?.contains(e.target.closest('[data-ul-actions-menu]'))) {
+      closeAllUlRowActionMenus();
+      return;
+    }
+    closeAllUlRowActionMenus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAllUlRowActionMenus();
+  });
 
   document.getElementById('confirm-reset-btn').addEventListener('click', async () => {
     const id  = document.getElementById('reset-user-id').value;
     const pwd = document.getElementById('reset-password').value;
-    if (!pwd || pwd.length < 6) return alert('A senha deve ter ao menos 6 caracteres.');
+    if (!pwd || pwd.length < 6) return alert(t('ul_pwdMin'));
     const res = await CONFIG.patch(`/users/${id}/reset-password`, { newPassword: pwd });
-    if (res?.ok !== false) { alert('Senha resetada com sucesso.'); closeModal('reset-pwd-modal'); }
-    else alert('Erro ao resetar senha: ' + (res?.error || ''));
+    if (res?.ok !== false) { alert(t('ul_pwdOk')); closeModal('reset-pwd-modal'); }
+    else alert(`${t('ul_pwdErr')} ${res?.error || ''}`);
+  });
+
+  document.getElementById('ul-open-reset-email-btn')?.addEventListener('click', openResetEmailModal);
+
+  document.getElementById('confirm-reset-email-btn')?.addEventListener('click', async () => {
+    const email = document.getElementById('reset-email-input')?.value.trim() || '';
+    const tenantId = document.getElementById('reset-email-tenant')?.value || '';
+    const pwd = document.getElementById('reset-email-password')?.value || '';
+    if (!email) return alert(t('ul_resetEmailNeedEmail'));
+    if (!pwd || pwd.length < 6) return alert(t('ul_pwdMin'));
+    const body = { email, newPassword: pwd };
+    if (tenantId) body.tenantId = tenantId;
+    const res = await CONFIG.patch('/users/reset-password-by-email', body);
+    if (res?.ok !== false) {
+      alert(t('ul_pwdOk'));
+      closeModal('reset-email-modal');
+    } else {
+      alert(`${t('ul_pwdErr')} ${res?.error || ''}`);
+    }
   });
 
   document.getElementById('save-user-btn').addEventListener('click', async () => {
@@ -620,8 +1470,7 @@
       password: document.getElementById('new-password').value,
       employeeMatricula: (document.getElementById('new-employee-matricula')?.value || '').trim() || undefined,
     };
-    if (!body.name || !body.email || !body.password || !body.tenantId)
-      return alert('Preencha todos os campos obrigatórios.');
+    if (!body.name || !body.email || !body.password || !body.tenantId) return alert(t('ul_createFill'));
     const res = await CONFIG.post('/users', body);
     if (res?.id) {
       closeModal('new-user-modal');
@@ -630,15 +1479,43 @@
         if (el) el.value = '';
       });
       loadUsers();
-    } else alert('Erro: ' + (res?.error || 'Falha ao criar usuário.'));
+    } else alert(`${res?.error || t('ul_createErr')}`);
   });
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadUsers(1), 300); });
   document.getElementById('filter-role').addEventListener('change', () => loadUsers(1));
   document.getElementById('filter-worktime')?.addEventListener('change', () => loadUsers(1));
+  ['filter-tenant', 'filter-compreface', 'filter-technician', 'filter-email-verification', 'filter-active', 'filter-sort', 'filter-sort-dir'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('change', () => loadUsers(1));
+  });
+  ['filter-lastlogin-from', 'filter-lastlogin-to'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('change', () => loadUsers(1));
+  });
 
-  loadUsers();
+  document.getElementById('users-table-head-row')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.ul-th-sort[data-ul-sort]');
+    if (!btn) return;
+    e.preventDefault();
+    const sortKey = btn.getAttribute('data-ul-sort');
+    const fs = document.getElementById('filter-sort');
+    const fd = document.getElementById('filter-sort-dir');
+    if (!fs || !fd || !sortKey) return;
+    if (fs.value === sortKey) fd.value = fd.value === 'asc' ? 'desc' : 'asc';
+    else {
+      fs.value = sortKey;
+      fd.value = 'desc';
+    }
+    loadUsers(1);
+  });
+
+  ['col-show-id', 'col-show-created', 'col-show-country', 'col-show-emailver'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      saveColPrefs();
+      refreshTableColClasses();
+    });
+  });
+
 </script>
 </body>
 </html>

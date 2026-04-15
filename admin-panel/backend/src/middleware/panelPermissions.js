@@ -10,6 +10,7 @@ const FULL_PANEL_ACCESS_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN']);
 const MANAGER_ALLOWED_PREFIXES = [
   '/api/auth',
   '/api/dashboard',
+  '/api/stock-critical',
   '/api/tenants',
   '/api/users',
   '/api/work-time',

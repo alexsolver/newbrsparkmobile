@@ -17,6 +17,8 @@ import { API_BASE } from '../services/auth';
 export type FieldHelpInstructionsProps = {
   plainDescription?: string;
   helpHtml?: string;
+  /** Quando preenchida, substitui as imagens de referência do modelo no modal por esta captura. */
+  capturedPreviewUri?: string | null;
 };
 
 function decodeAttrEntities(s: string): string {
@@ -127,7 +129,11 @@ export function isFieldInstructionsVisible(field: {
 
 const SHEET_HEADER_PX = 56;
 
-export function FieldHelpInstructions({ plainDescription, helpHtml }: FieldHelpInstructionsProps) {
+export function FieldHelpInstructions({
+  plainDescription,
+  helpHtml,
+  capturedPreviewUri,
+}: FieldHelpInstructionsProps) {
   const desc = (plainDescription || '').trim();
   const html = (helpHtml || '').trim();
   if (!desc && !html) return null;
@@ -195,18 +201,33 @@ export function FieldHelpInstructions({ plainDescription, helpHtml }: FieldHelpI
                       {textFromHtml}
                     </Text>
                   ) : null}
-                  {images.map((uri, i) => {
-                    const resolved = resolveHelpMediaUri(uri);
-                    return (
+                  {capturedPreviewUri && String(capturedPreviewUri).trim() ? (
+                    <View style={styles.captureBlock}>
+                      <Text style={styles.captureLabel}>A sua fotografia</Text>
+                      <Text style={styles.captureHint}>
+                        Substitui a imagem de referência do modelo neste painel.
+                      </Text>
                       <Image
-                        key={`${i}-${resolved.slice(0, 80)}`}
-                        source={{ uri: resolved }}
+                        source={{ uri: String(capturedPreviewUri).trim() }}
                         style={styles.helpImage}
                         resizeMode="contain"
-                        accessibilityLabel={`Imagem ${i + 1} das instruções`}
+                        accessibilityLabel="Fotografia capturada para este campo"
                       />
-                    );
-                  })}
+                    </View>
+                  ) : (
+                    images.map((uri, i) => {
+                      const resolved = resolveHelpMediaUri(uri);
+                      return (
+                        <Image
+                          key={`${i}-${resolved.slice(0, 80)}`}
+                          source={{ uri: resolved }}
+                          style={styles.helpImage}
+                          resizeMode="contain"
+                          accessibilityLabel={`Imagem ${i + 1} das instruções`}
+                        />
+                      );
+                    })
+                  )}
                 </ScrollView>
               </View>
             </View>
@@ -294,5 +315,19 @@ const styles = StyleSheet.create({
     maxHeight: 720,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
+  },
+  captureBlock: {
+    gap: 8,
+  },
+  captureLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  captureHint: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 17,
+    marginBottom: 4,
   },
 });

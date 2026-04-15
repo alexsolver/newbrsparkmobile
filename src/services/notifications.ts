@@ -70,7 +70,7 @@ export async function registerInteractivePushCategories(): Promise<void> {
         },
         {
           identifier: TECH_PUSH_ACTION_OPEN,
-          buttonTitle: 'Ver detalhes',
+          buttonTitle: 'OK',
           options: { opensAppToForeground: true },
         },
       ],

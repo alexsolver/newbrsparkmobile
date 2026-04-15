@@ -37,6 +37,10 @@
       "description": ""
     },
     {
+      "name": "Admin — Estoque crítico",
+      "description": ""
+    },
+    {
       "name": "Admin — Flags",
       "description": ""
     },
@@ -5592,11 +5596,15 @@
     },
     "/api/operations/tasks": {
       "get": {
-        "summary": "Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os)",
+        "summary": "Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os; tenant via JWT)",
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -5660,7 +5668,11 @@
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -5734,7 +5746,11 @@
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -5816,7 +5832,11 @@
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -5890,7 +5910,11 @@
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -5960,11 +5984,22 @@
     },
     "/api/operations/tasks/{id}/reject": {
       "post": {
-        "summary": "Rejeitar OS",
+        "summary": "Rejeitar OS (JWT painel/admin ou JWT app — owner + tenant do formulário)",
         "tags": [
           "Operações & OS"
         ],
-        "security": [],
+        "security": [
+          [
+            {
+              "bearerAdmin": []
+            }
+          ],
+          [
+            {
+              "bearerApp": []
+            }
+          ]
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -6034,7 +6069,7 @@
     },
     "/api/operations/tasks/{id}/reopen-for-revision": {
       "post": {
-        "summary": "Reabrir para revisão (admin JWT)",
+        "summary": "Reabrir para revisão (JWT painel)",
         "tags": [
           "Operações & OS"
         ],
@@ -7510,11 +7545,15 @@
     },
     "/api/tracking/start/{taskId}": {
       "post": {
-        "summary": "Iniciar tracking / gerar token público",
+        "summary": "Iniciar tracking / gerar token (técnico dono da OS, JWT)",
         "tags": [
           "Tracking"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -7584,11 +7623,15 @@
     },
     "/api/tracking/end/{taskId}": {
       "post": {
-        "summary": "Encerrar deslocamento",
+        "summary": "Encerrar deslocamento (técnico, JWT)",
         "tags": [
           "Tracking"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -7658,11 +7701,15 @@
     },
     "/api/tracking/pause/{taskId}": {
       "post": {
-        "summary": "Pausar tracking",
+        "summary": "Pausar tracking (técnico, JWT)",
         "tags": [
           "Tracking"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -7732,11 +7779,15 @@
     },
     "/api/tracking/resume/{taskId}": {
       "post": {
-        "summary": "Retomar tracking",
+        "summary": "Retomar tracking (técnico, JWT)",
         "tags": [
           "Tracking"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sucesso"
@@ -8348,6 +8399,74 @@
         "summary": "Resumo do dashboard",
         "tags": [
           "Admin — Dashboard"
+        ],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Proibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock-critical": {
+      "get": {
+        "summary": "Itens de estoque em ou abaixo do mínimo",
+        "tags": [
+          "Admin — Estoque crítico"
         ],
         "security": [
           {

@@ -6,7 +6,7 @@ const { REGISTRATION_PRIMARY_FACE_ID, isRegistrationPrimaryFacePhoto } = require
 
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
-/** Mínimo de fotos faciais exigidas na candidatura (reconhecimento facial / CompreFace). */
+/** Mínimo de fotos faciais exigidas na candidatura (reconhecimento facial / FaceMatch). */
 const MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT = 4;
 
 function normalizeFacePhotos(raw) {
@@ -180,7 +180,7 @@ async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, 
       userData.comprefaceRecognitionSync = {
         status: 'pending',
         at: new Date().toISOString(),
-        message: 'Candidatura aprovada — a sincronizar galeria CompreFace.',
+        message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
       };
     }
 
@@ -293,7 +293,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
           comprefaceRecognitionSync: {
             status: 'pending',
             at: new Date().toISOString(),
-            message: 'Candidatura aprovada — a sincronizar galeria CompreFace.',
+            message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
           },
         },
       });

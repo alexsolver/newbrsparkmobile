@@ -12,6 +12,7 @@ import {
   Linking,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,11 +27,13 @@ import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingServi
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { KeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src/services/osrmClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 
@@ -52,13 +55,15 @@ function mapServerChatMessages(raw: unknown): TrackingChatRow[] {
     if (!row || typeof row !== 'object') continue;
     const o = row as Record<string, unknown>;
     const id = typeof o.id === 'string' ? o.id : '';
-    const text = typeof o.text === 'string' ? o.text : '';
+    const rawText = typeof o.text === 'string' ? o.text : '';
+    const display =
+      typeof o.displayText === 'string' && o.displayText.trim() ? String(o.displayText).trim() : rawText;
     const at = typeof o.at === 'string' ? o.at : '';
     const role = o.role === 'tech' ? 'tech' : o.role === 'system' ? 'system' : 'client';
     const senderLabel = typeof o.senderLabel === 'string' ? o.senderLabel : null;
     const kind = typeof o.kind === 'string' ? o.kind : null;
-    if (!id || !text) continue;
-    next.push({ id, text, at: at || new Date().toISOString(), role, senderLabel, kind });
+    if (!id || !rawText.trim()) continue;
+    next.push({ id, text: display, at: at || new Date().toISOString(), role, senderLabel, kind });
   }
   return next;
 }
@@ -98,6 +103,8 @@ interface Props {
   taskId?: string | null;
   /** OS tipo rota: tolerância (m) = `locationRadius` no despacho — corredor e métricas de patrulha. */
   corridorToleranceM?: number;
+  /** `transit_start.transitKeepScreenAwake` no schema — evita suspensão do aparelho durante o deslocamento ativo. */
+  keepScreenAwake?: boolean;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -540,6 +547,7 @@ export default function LiveRouteMapCard({
   endTransitLoading = false,
   taskId,
   corridorToleranceM,
+  keepScreenAwake = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
@@ -556,7 +564,8 @@ export default function LiveRouteMapCard({
     setWindowDims(Dimensions.get('window'));
   }, [visible]);
 
-  const { user } = useAuth();
+  const { t: tr } = useTranslation();
+  const { user, patchUser } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
@@ -580,7 +589,12 @@ export default function LiveRouteMapCard({
   const [trackingChatDraft, setTrackingChatDraft] = useState('');
   const [trackingChatSending, setTrackingChatSending] = useState(false);
   const [trackingChatError, setTrackingChatError] = useState<string | null>(null);
+  const [trackingChatLocaleOpen, setTrackingChatLocaleOpen] = useState(false);
   const trackingChatListRef = useRef<FlatList<TrackingChatRow>>(null);
+
+  useEffect(() => {
+    if (!trackingChatOpen) setTrackingChatLocaleOpen(false);
+  }, [trackingChatOpen]);
 
   /** No iOS o `Modal` pode não refletir dimensões a tempo — `expo-screen-orientation` + `Dimensions`. */
   useEffect(() => {
@@ -743,15 +757,28 @@ export default function LiveRouteMapCard({
 
   const fetchTrackingChat = useCallback(async () => {
     if (!taskId) return;
+    const looksLikeChatNotReady = (msg: string) =>
+      /não iniciado|deslocamento não iniciado|indisponível.*iniciado/i.test(msg);
     try {
-      const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`);
-      const j = (await r.json().catch(() => ({}))) as { messages?: unknown; error?: string };
-      if (!r.ok) {
-        setTrackingChatError(typeof j.error === 'string' ? j.error : 'Não foi possível carregar o chat.');
+      let lastMsg = 'Não foi possível carregar o chat.';
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`);
+        const j = (await r.json().catch(() => ({}))) as { messages?: unknown; error?: string };
+        if (r.ok) {
+          setTrackingChatError(null);
+          setTrackingChatMessages(mapServerChatMessages(j.messages));
+          return;
+        }
+        const msg = typeof j.error === 'string' && j.error.trim() ? j.error.trim() : lastMsg;
+        lastMsg = msg;
+        if (r.status === 400 && looksLikeChatNotReady(msg) && attempt < 7) {
+          await new Promise((res) => setTimeout(res, 450));
+          continue;
+        }
+        setTrackingChatError(msg);
         return;
       }
-      setTrackingChatError(null);
-      setTrackingChatMessages(mapServerChatMessages(j.messages));
+      setTrackingChatError(lastMsg);
     } catch {
       setTrackingChatError('Sem ligação. Tente de novo.');
     }
@@ -1350,6 +1377,28 @@ export default function LiveRouteMapCard({
 
   const sendTrackingChat = async (opts?: { moderationOverrideAck?: boolean }) => {
     const t = trackingChatDraft.trim();
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
+      body: JSON.stringify({
+        sessionId: 'a0ffcb',
+        location: 'LiveRouteMapCard.tsx:sendTrackingChat:gate',
+        message: 'envio chat técnico',
+        data: {
+          hasDraft: !!t,
+          draftLen: t.length,
+          hasTaskId: !!taskId,
+          taskIdLen: taskId ? String(taskId).length : 0,
+          sending: trackingChatSending,
+          override: !!opts?.moderationOverrideAck,
+        },
+        timestamp: Date.now(),
+        hypothesisId: 'H6',
+        runId: 'run2',
+      }),
+    }).catch(() => {});
+    // #endregion
     if (!t || !taskId || trackingChatSending) return;
     setTrackingChatSending(true);
     try {
@@ -1366,6 +1415,25 @@ export default function LiveRouteMapCard({
         userMessage?: string;
         canOverride?: boolean;
       };
+      // #region agent log
+      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
+        body: JSON.stringify({
+          sessionId: 'a0ffcb',
+          location: 'LiveRouteMapCard.tsx:sendTrackingChat:response',
+          message: 'resposta POST chat técnico',
+          data: {
+            status: r.status,
+            code: typeof j.code === 'string' ? j.code : null,
+            hasMessages: Array.isArray(j.messages),
+          },
+          timestamp: Date.now(),
+          hypothesisId: 'H7',
+          runId: 'run2',
+        }),
+      }).catch(() => {});
+      // #endregion
       if (r.status === 422 && j.code === 'CHAT_MODERATION') {
         if (Array.isArray(j.messages)) setTrackingChatMessages(mapServerChatMessages(j.messages));
         const um =
@@ -1394,7 +1462,11 @@ export default function LiveRouteMapCard({
         return;
       }
       setTrackingChatDraft('');
-      setTrackingChatMessages(mapServerChatMessages(j.messages));
+      if (Array.isArray(j.messages)) {
+        setTrackingChatMessages(mapServerChatMessages(j.messages));
+      } else {
+        void fetchTrackingChat();
+      }
     } catch {
       Alert.alert('Chat', 'Sem ligação. Tente de novo.');
     } finally {
@@ -1414,6 +1486,17 @@ export default function LiveRouteMapCard({
       });
     } catch {
       return '';
+    }
+  };
+
+  const applyTrackingChatLocale = async (loc: string | null) => {
+    setTrackingChatLocaleOpen(false);
+    try {
+      await patchUser({ preferredChatLocale: loc });
+      Alert.alert('', tr('chat.localeSaved'));
+      if (trackingChatOpen && taskId) void fetchTrackingChat();
+    } catch (e: unknown) {
+      Alert.alert('Erro', (e as Error)?.message || 'Falha ao guardar idioma');
     }
   };
 
@@ -1446,6 +1529,13 @@ export default function LiveRouteMapCard({
             <Text style={{ flex: 1, marginLeft: 12, fontSize: 17, fontWeight: '800', color: '#0f172a' }}>
               Chat com o cliente
             </Text>
+            <TouchableOpacity
+              onPress={() => setTrackingChatLocaleOpen(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={tr('chat.localeTitle')}
+            >
+              <Ionicons name="language-outline" size={24} color="#ea580c" />
+            </TouchableOpacity>
           </View>
           {trackingChatError ? (
             <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -1573,22 +1663,142 @@ export default function LiveRouteMapCard({
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+          {trackingChatLocaleOpen ? (
+            <View
+              pointerEvents="box-none"
+              style={[
+                StyleSheet.absoluteFillObject,
+                {
+                  zIndex: 2000,
+                  justifyContent: 'center',
+                  padding: 24,
+                  ...(Platform.OS === 'android' ? { elevation: 80 } : {}),
+                },
+              ]}
+            >
+              <Pressable
+                style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,23,42,0.45)' }]}
+                onPress={() => setTrackingChatLocaleOpen(false)}
+              />
+              <View
+                style={{
+                  alignSelf: 'center',
+                  width: '100%',
+                  maxWidth: 360,
+                  backgroundColor: '#fff',
+                  borderRadius: 16,
+                  padding: 18,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={{ flex: 1, fontSize: 17, fontWeight: '800', color: '#0f172a' }}>
+                    {tr('chat.localeTitle')}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setTrackingChatLocaleOpen(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={26} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 14 }}>{tr('chat.localeHint')}</Text>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: '#e2e8f0',
+                  }}
+                  onPress={() => void applyTrackingChatLocale(null)}
+                >
+                  <Ionicons name="globe-outline" size={20} color="#ea580c" />
+                  <Text style={{ flex: 1, marginLeft: 10, fontWeight: '600', color: '#0f172a' }}>
+                    {tr('chat.localeAuto')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 14,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: '#e2e8f0',
+                  }}
+                  onPress={() => void applyTrackingChatLocale('pt-BR')}
+                >
+                  <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localePt')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 14,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: '#e2e8f0',
+                  }}
+                  onPress={() => void applyTrackingChatLocale('en-US')}
+                >
+                  <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localeEn')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ paddingVertical: 14 }}
+                  onPress={() => void applyTrackingChatLocale('es-ES')}
+                >
+                  <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localeEs')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </View>
       </Modal>
     ) : null;
+
+  const openTrackingChatFromMap = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
+      body: JSON.stringify({
+        sessionId: 'a0ffcb',
+        location: 'LiveRouteMapCard.tsx:openTrackingChatFromMap',
+        message: 'toque abrir chat',
+        data: { expanded, hasTaskId: !!taskId, taskIdLen: taskId ? String(taskId).length : 0, visible },
+        timestamp: Date.now(),
+        hypothesisId: 'H11',
+        runId: 'run3',
+      }),
+    }).catch(() => {});
+    // #endregion
+    setTrackingChatOpen(true);
+  };
 
   // Minimized view (shows inline in scrollview)
   if (!expanded) {
     return (
       <>
-        <TouchableOpacity style={styles.minimizedCard} onPress={() => setExpanded(true)}>
-          <Ionicons name="map" size={24} color="#f97316" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
-            <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
-          </View>
-          <Ionicons name="expand" size={20} color="#f97316" />
-        </TouchableOpacity>
+        {visible && keepScreenAwake ? <KeepAwake /> : null}
+        <View style={styles.minimizedCard} collapsable={false}>
+          <TouchableOpacity
+            style={styles.minimizedCardTapExpand}
+            onPress={() => setExpanded(true)}
+            activeOpacity={0.75}
+            accessibilityLabel="Abrir mapa de navegação"
+          >
+            <Ionicons name="map" size={24} color="#f97316" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
+              <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
+            </View>
+            <Ionicons name="expand" size={20} color="#f97316" />
+          </TouchableOpacity>
+          {taskId ? (
+            <TouchableOpacity
+              style={styles.minimizedChatBtn}
+              onPress={openTrackingChatFromMap}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Abrir chat com o cliente"
+            >
+              <Ionicons name="chatbubbles-outline" size={22} color="#ea580c" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
         {trackingChatModalEl}
       </>
     );
@@ -1624,6 +1834,7 @@ export default function LiveRouteMapCard({
   // Full Screen Modal View
   return (
     <>
+    {visible && keepScreenAwake ? <KeepAwake /> : null}
     <Modal
       visible={expanded}
       animationType="slide"
@@ -1955,7 +2166,10 @@ export default function LiveRouteMapCard({
           )}
         </MapView>
 
-        <View style={[styles.floatingRightGroup, isLandscape && styles.floatingRightGroupLandscape]}>
+        <View
+          style={[styles.floatingRightGroup, isLandscape && styles.floatingRightGroupLandscape]}
+          collapsable={false}
+        >
           {(route?.length > 0 || targetLoc?.lat) && (
             <TouchableOpacity style={styles.navBtn} onPress={openNavOptions}>
                <Ionicons name="navigate" size={24} color="#fff" />
@@ -1964,7 +2178,7 @@ export default function LiveRouteMapCard({
           {taskId ? (
             <TouchableOpacity
               style={styles.recenterBtn}
-              onPress={() => setTrackingChatOpen(true)}
+              onPress={openTrackingChatFromMap}
               accessibilityLabel="Abrir chat com o cliente"
             >
               <Ionicons name="chatbubbles-outline" size={22} color="#475569" />
@@ -2080,16 +2294,43 @@ export default function LiveRouteMapCard({
             </Text>
           </View>
         )}
+        {/* Chat aninhado: evita segundo Modal irmão ficar atrás do mapa no Android. */}
+        {trackingChatModalEl}
       </View>
     </Modal>
-    {trackingChatModalEl}
     </>
   );
 }
 
 const styles = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: '#f1f5f9' },
-  minimizedCard: { marginHorizontal: 16, marginTop: 10, padding: 16, backgroundColor: '#fff', borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
+  minimizedCard: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingLeft: 14,
+    paddingRight: 10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  minimizedCardTapExpand: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  minimizedChatBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
   minimizedTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   
   floatingHeader: { position: 'absolute', left: 16, right: 16, zIndex: 10, backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, borderLeftWidth: 4 },
@@ -2139,7 +2380,16 @@ const styles = StyleSheet.create({
   miniBar: { height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden', width: '100%', marginTop: 4 },
   miniBarFill: { height: 4, borderRadius: 2 },
   
-  floatingRightGroup: { position: 'absolute', right: 16, bottom: 180, zIndex: 10, alignItems: 'center', gap: 12 },
+  /** zIndex + elevation (Android): sem isto o MapView nativo costuma consumir toques por cima dos botões. */
+  floatingRightGroup: {
+    position: 'absolute',
+    right: 16,
+    bottom: 180,
+    zIndex: 100,
+    alignItems: 'center',
+    gap: 12,
+    ...(Platform.OS === 'android' ? { elevation: 32 } : {}),
+  },
   floatingRightGroupLandscape: { bottom: 76 },
   navBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', shadowColor: '#3b82f6', shadowOpacity: 0.4, shadowRadius: 6, elevation: 6 },
   recenterBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 5, elevation: 4 },

@@ -10,51 +10,56 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Planos (pacotes)</span>
+        <span id="mpc-bc-here">Planos (pacotes)</span>
       </nav>
-      <div class="topbar-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-        <a class="btn btn-ghost btn-sm" href="subscriptions.html">Assinaturas</a>
-        <a class="btn btn-outline btn-sm" href="billing.html">Billing e MRR</a>
-        <button class="btn btn-primary" type="button" onclick="openNewPlanModal()">
-          <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-          Novo plano
-        </button>
-      </div>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Catálogo de planos</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Catálogo de planos</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Defina preços, limites e cotas mensais (IA, OS de campo, rotina, formulários). Os tenants herdam estes valores pela
           <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>.
           <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.
         </p>
       </header>
 
+      <div class="data-toolbar" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <a class="btn btn-ghost btn-sm" id="pln-link-subs" href="subscriptions.html">Assinaturas</a>
+          <a class="btn btn-outline btn-sm" id="pln-link-billing" href="billing.html">Billing e MRR</a>
+        </div>
+        <div class="data-toolbar-actions">
+          <button class="btn btn-primary" type="button" id="pln-btn-new" onclick="openNewPlanModal()">
+            <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+            Novo plano
+          </button>
+        </div>
+      </div>
+
       <section class="data-shell fade-in">
         <div class="data-table-head">
           <h2 class="data-table-title" style="display:flex;align-items:center;gap:8px;margin:0">
             <ion-icon name="layers-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
-            Todos os pacotes
+            <span id="pln-table-title">Todos os pacotes</span>
           </h2>
         </div>
         <div class="table-wrap">
           <table class="table-data">
             <thead>
               <tr>
-                <th>Nome</th>
-                <th>R$/mês</th>
-                <th>R$/ano</th>
-                <th>Subs</th>
-                <th>Bens</th>
-                <th>Usuários</th>
-                <th>Téc.</th>
-                <th>GB</th>
-                <th>FT/mês</th>
-                <th>Ativo</th>
-                <th class="text-right">Ações</th>
+                <th id="pln-th-name">Nome</th>
+                <th id="pln-th-pm">R$/mês</th>
+                <th id="pln-th-py">R$/ano</th>
+                <th id="pln-th-subs">Subs</th>
+                <th id="pln-th-assets">Bens</th>
+                <th id="pln-th-users">Usuários</th>
+                <th id="pln-th-tech">Téc.</th>
+                <th id="pln-th-gb">GB</th>
+                <th id="pln-th-ft">FT/mês</th>
+                <th id="pln-th-active">Ativo</th>
+                <th class="text-right" id="pln-th-actions">Ações</th>
               </tr>
             </thead>
             <tbody id="plans-tbody"><tr><td colspan="11" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr></tbody>
@@ -68,7 +73,7 @@
 <div class="modal-overlay" id="plan-modal">
   <div class="modal" style="max-width:760px">
     <div class="modal-header">
-      <span class="modal-title" id="plan-modal-title">Novo plano</span>
+      <span class="modal-title" id="pln-modal-title">Novo plano</span>
       <button class="modal-close" type="button" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
@@ -76,43 +81,43 @@
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
           <input type="checkbox" id="plan-is-active" checked style="transform:scale(1.15)" />
-          <span>Plano ativo (visível para novas assinaturas)</span>
+          <span id="pln-chk-active-span">Plano ativo (visível para novas assinaturas)</span>
         </label>
       </div>
-      <div class="form-group"><label class="form-label">Nome do plano *</label><input class="form-control" id="plan-name" placeholder="Ex.: Pro" /></div>
+      <div class="form-group"><label class="form-label" id="pln-lbl-name">Nome do plano *</label><input class="form-control" id="plan-name" placeholder="Ex.: Pro" /></div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Preço mensal (R$) *</label><input class="form-control" id="plan-price-monthly" type="number" step="0.01" placeholder="99.00" /></div>
-        <div class="form-group"><label class="form-label">Preço anual (R$) *</label><input class="form-control" id="plan-price-yearly" type="number" step="0.01" placeholder="990.00" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-pm">Preço mensal (R$) *</label><input class="form-control" id="plan-price-monthly" type="number" step="0.01" placeholder="99.00" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-py">Preço anual (R$) *</label><input class="form-control" id="plan-price-yearly" type="number" step="0.01" placeholder="990.00" /></div>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Limite de bens (−1 = ilimitado)</label><input class="form-control" id="plan-max-assets" type="number" placeholder="100" /></div>
-        <div class="form-group"><label class="form-label">Usuários do painel (−1 = ilimitado)</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-max-assets">Limite de bens (−1 = ilimitado)</label><input class="form-control" id="plan-max-assets" type="number" placeholder="100" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-max-users">Usuários do painel (−1 = ilimitado)</label><input class="form-control" id="plan-max-users" type="number" placeholder="5" /></div>
       </div>
-      <div class="form-group"><label class="form-label">Armazenamento (GB)</label><input class="form-control" id="plan-storage" type="number" placeholder="10" /></div>
+      <div class="form-group"><label class="form-label" id="pln-lbl-storage">Armazenamento (GB)</label><input class="form-control" id="plan-storage" type="number" placeholder="10" /></div>
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-        <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Cotas por tenant neste plano</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35;">Técnicos = papéis <code>USER</code> e <code>PROVIDER</code> ativos. <strong>−1</strong> = ilimitado.</div>
-        <div class="form-group"><label class="form-label">Máx. técnicos</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
+        <div id="pln-quotas-title" style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Cotas por tenant neste plano</div>
+        <div id="pln-quotas-hint" style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35;">Técnicos = papéis <code>USER</code> e <code>PROVIDER</code> ativos. <strong>−1</strong> = ilimitado.</div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-max-tech">Máx. técnicos</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">IA — facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
-          <div class="form-group"><label class="form-label">IA — visão detecção / mês</label><input class="form-control" id="plan-quota-ai-vision-det" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label" id="pln-lbl-ai-face">IA — facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label" id="pln-lbl-ai-det">IA — visão detecção / mês</label><input class="form-control" id="plan-quota-ai-vision-det" type="number" placeholder="-1" /></div>
         </div>
-        <div class="form-group"><label class="form-label">IA — visão análise (Gemini) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-ai-anal">IA — visão análise (Gemini) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">OS campo (FT) / mês</label><input class="form-control" id="plan-quota-ft" type="number" placeholder="-1" /></div>
-          <div class="form-group"><label class="form-label">Rotina (RT) / mês</label><input class="form-control" id="plan-quota-rt" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label" id="pln-lbl-ft">OS campo (FT) / mês</label><input class="form-control" id="plan-quota-ft" type="number" placeholder="-1" /></div>
+          <div class="form-group"><label class="form-label" id="pln-lbl-rt">Rotina (RT) / mês</label><input class="form-control" id="plan-quota-rt" type="number" placeholder="-1" /></div>
         </div>
-        <div class="form-group"><label class="form-label">Máx. formulários (tenantId no modelo)</label><input class="form-control" id="plan-max-templates" type="number" placeholder="-1" /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-max-tpl">Máx. formulários (tenantId no modelo)</label><input class="form-control" id="plan-max-templates" type="number" placeholder="-1" /></div>
       </div>
 
-      <div class="form-group"><label class="form-label">Features (JSON)</label>
+      <div class="form-group"><label class="form-label" id="pln-lbl-features">Features (JSON)</label>
         <textarea class="form-control" id="plan-features" rows="4" placeholder='{"stock":true,"facialVisionProvider":"COMPREFACE"}'></textarea>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" type="button" onclick="closeModal('plan-modal')">Cancelar</button>
-      <button class="btn btn-primary" type="button" id="save-plan-btn">Salvar plano</button>
+      <button class="btn btn-ghost" type="button" id="pln-modal-cancel" onclick="closeModal('plan-modal')">Cancelar</button>
+      <button class="btn btn-primary" type="button" id="save-plan-btn"><span id="pln-modal-save">Salvar plano</span></button>
     </div>
   </div>
 </div>
@@ -127,7 +132,10 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
+  import { applyPlansPageI18n, mpT } from './js/menu-pages-i18n.js';
+
   await initPage();
+  applyPlansPageI18n();
 
   let allPlans = [];
 
@@ -147,8 +155,8 @@
       tb.innerHTML = `<tr><td colspan="11" style="padding:0;border:none">
         <div class="empty-state-pro" style="padding:36px 20px 32px">
           <ion-icon name="layers-outline"></ion-icon>
-          <div class="empty-state-pro-title">Nenhum plano cadastrado</div>
-          <p class="empty-state-pro-sub">Crie o primeiro pacote com «Novo plano».</p>
+          <div class="empty-state-pro-title">${mpT('pln_empty_title')}</div>
+          <p class="empty-state-pro-sub">${mpT('pln_empty_sub')}</p>
         </div></td></tr>`;
       return;
     }
@@ -164,10 +172,10 @@
         <td>${fmt(p.maxTechnicians)}</td>
         <td>${esc(p.storageGb)}</td>
         <td>${fmt(p.quotaFieldTasksMonthly)}</td>
-        <td>${p.isActive === false ? '<span class="badge badge-gray">Não</span>' : '<span class="badge badge-green">Sim</span>'}</td>
+        <td>${p.isActive === false ? `<span class="badge badge-gray">${mpT('pln_badge_no')}</span>` : `<span class="badge badge-green">${mpT('pln_badge_yes')}</span>`}</td>
         <td style="text-align:right;white-space:nowrap">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">Editar</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">Duplicar</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">${mpT('pln_btn_edit')}</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">${mpT('pln_btn_dup')}</button>
         </td>
       </tr>`,
       )
@@ -178,7 +186,7 @@
     const p = allPlans.find((x) => x.id === id);
     if (!p) return;
     document.getElementById('plan-id').value = p.id;
-    document.getElementById('plan-modal-title').textContent = 'Editar: ' + p.name;
+    document.getElementById('pln-modal-title').textContent = mpT('pln_modal_edit') + p.name;
     document.getElementById('plan-is-active').checked = p.isActive !== false;
     document.getElementById('plan-name').value = p.name;
     document.getElementById('plan-price-monthly').value = p.priceMonthly;
@@ -199,7 +207,7 @@
 
   window.openNewPlanModal = () => {
     document.getElementById('plan-id').value = '';
-    document.getElementById('plan-modal-title').textContent = 'Novo plano';
+    document.getElementById('pln-modal-title').textContent = mpT('pln_modal_new');
     document.getElementById('plan-is-active').checked = true;
     [
       'plan-name',
@@ -226,12 +234,12 @@
   window.duplicatePlan = async (id) => {
     const p = allPlans.find((x) => x.id === id);
     if (!p) return;
-    if (!confirm(`Criar um plano novo copiando limites de «${p.name}»?`)) return;
-    const base = String(p.name || 'Plano').trim();
-    let name = `${base} (cópia)`;
+    if (!confirm(mpT('pln_confirm_dup', { name: p.name }))) return;
+    const base = String(p.name || mpT('pln_dup_base')).trim();
+    let name = `${base}${mpT('pln_dup_suffix')}`;
     let n = 2;
     while (allPlans.some((x) => String(x.name).trim() === name)) {
-      name = `${base} (cópia ${n})`;
+      name = `${base}${mpT('pln_dup_suffix_n', { n })}`;
       n += 1;
     }
     const body = {
@@ -254,8 +262,8 @@
     const res = await CONFIG.post('/plans', body);
     if (res?.id || res?.name) {
       await loadPlans();
-      alert('Plano duplicado. Fica inativo por padrão — edite e ative quando quiser.');
-    } else alert('Erro: ' + (res?.error || 'Falha ao duplicar.'));
+      alert(mpT('pln_alert_dup_ok'));
+    } else alert(mpT('pln_alert_save_err', { detail: res?.error || mpT('pln_alert_dup_err') }));
   };
 
   document.getElementById('save-plan-btn').addEventListener('click', async () => {
@@ -264,7 +272,7 @@
     try {
       features = JSON.parse(document.getElementById('plan-features').value || '{}');
     } catch {
-      alert('JSON de features inválido.');
+      alert(mpT('pln_alert_json'));
       return;
     }
     const parseSigned = (hid, def) => {
@@ -291,14 +299,14 @@
       features,
     };
     if (!body.name) {
-      alert('Nome é obrigatório.');
+      alert(mpT('pln_alert_name'));
       return;
     }
     const res = id ? await CONFIG.patch(`/plans/${id}`, body) : await CONFIG.post('/plans', body);
     if (res?.id || res?.name) {
       closeModal('plan-modal');
       await loadPlans();
-    } else alert('Erro: ' + (res?.error || 'Falha ao salvar.'));
+    } else alert(mpT('pln_alert_save_err', { detail: res?.error || mpT('pln_save_fail') }));
   });
 
   await loadPlans();

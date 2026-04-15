@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert,
@@ -21,6 +21,7 @@ import {
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
+import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
 
 const REGION_KEY = '@brspark_region';
 
@@ -199,7 +200,7 @@ export default function LoginScreen() {
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
-  const { login, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
+  const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
@@ -259,6 +260,7 @@ export default function LoginScreen() {
   const [otpLoading, setOtpLoading] = useState(false);
 
   const [tenantPick, setTenantPick] = useState<LoginTenantOption[] | null>(null);
+  const oauthPendingRef = useRef<NativeOAuthPending | null>(null);
 
   const goToTechRegistrationAfterAuth = () => {
     if (!techRegToken) return;
@@ -345,10 +347,33 @@ export default function LoginScreen() {
     }
   };
 
+  const runNativeOAuthLogin = async (pending: NativeOAuthPending) => {
+    oauthPendingRef.current = pending;
+    setLoading(true);
+    try {
+      await loginWithOAuth(pending);
+      oauthPendingRef.current = null;
+      goToTechRegistrationAfterAuth();
+    } catch (e: unknown) {
+      if (e instanceof MultipleAccountsError && e.tenants?.length) {
+        setTenantPick(e.tenants);
+        return;
+      }
+      oauthPendingRef.current = null;
+      Alert.alert(
+        t('auth.errorLogin'),
+        e instanceof Error ? e.message : t('auth.errorConnection'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!email || !password) {
       return Alert.alert('', t('auth.alertFillFields'));
     }
+    oauthPendingRef.current = null;
     if (mode === 'REGISTER') {
       if (!name) return Alert.alert('', t('auth.alertFillName'));
       if (password.length < 6) return Alert.alert('', t('auth.alertWeakPass'));
@@ -386,6 +411,24 @@ export default function LoginScreen() {
 
   const completeLoginWithChosenTenant = async (tenantId: string) => {
     setTenantPick(null);
+    const oauth = oauthPendingRef.current;
+    if (oauth) {
+      setLoading(true);
+      try {
+        await loginWithOAuth({ ...oauth, tenantId });
+        oauthPendingRef.current = null;
+        goToTechRegistrationAfterAuth();
+      } catch (e: unknown) {
+        oauthPendingRef.current = null;
+        Alert.alert(
+          t('auth.errorLogin'),
+          e instanceof Error ? e.message : t('auth.errorConnection'),
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     if (!email || !password) return;
     setLoading(true);
     try {
@@ -473,7 +516,10 @@ export default function LoginScreen() {
             </ScrollView>
             <TouchableOpacity
               style={{ alignItems: 'center', paddingTop: 12 }}
-              onPress={() => setTenantPick(null)}
+              onPress={() => {
+                setTenantPick(null);
+                oauthPendingRef.current = null;
+              }}
               disabled={loading}
             >
               <Text style={{ fontSize: 14, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
@@ -684,6 +730,21 @@ export default function LoginScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            {mode === 'LOGIN' ? (
+              <LoginOAuthNativeSection
+                C={C}
+                disabled={loading}
+                labelDivider={t('auth.oauthOrContinue')}
+                labelGoogle={t('auth.oauthGoogle')}
+                labelFacebook={t('auth.oauthFacebook')}
+                labelApple={t('auth.oauthApple')}
+                onOAuth={(pending) => runNativeOAuthLogin(pending)}
+                onNativeError={(msg) =>
+                  Alert.alert(t('auth.errorLogin'), msg || t('auth.errorConnection'))
+                }
+              />
+            ) : null}
 
             <TouchableOpacity onPress={async () => { await logout(); router.replace('/(tabs)' as any); }} style={styles.guestLink}>
               <Text style={styles.guestLinkText}>{t('auth.exploreGuest')}</Text>

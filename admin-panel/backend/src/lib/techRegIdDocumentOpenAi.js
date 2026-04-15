@@ -171,7 +171,7 @@ Regras:
 
 /**
  * Passo 3: compara fotografia do rosto no documento com a foto de perfil (etapa 1).
- * Usa o mesmo motor multimodal OpenAI que valida a foto de perfil — não usa CompreFace.
+ * Usa o mesmo motor multimodal OpenAI que valida a foto de perfil — não usa FaceMatch.
  *
  * @param {Buffer} profileBuffer — foto de perfil (referência)
  * @param {Buffer} documentBuffer — imagem do documento

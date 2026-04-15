@@ -39,15 +39,15 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Qualidade e avaliações</span>
+        <span id="mpc-bc-here">Qualidade e avaliações</span>
       </nav>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Avaliações e Minha Produtividade</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Avaliações e Minha Produtividade</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Controle de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o registro mais recentemente atualizado prevalece).
         </p>
       </header>
@@ -56,7 +56,7 @@
       <div class="data-toolbar">
         <div class="data-toolbar-main eval-actions">
           <label class="filter-field" style="min-width:200px">
-            <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon> Tenant</span>
+            <span class="filter-field-label" id="ev-filter-tenant-lbl"><ion-icon name="business-outline"></ion-icon> Tenant</span>
             <select class="form-control filter-field-control" id="filter-tenant">
               <option value="">Todos os tenants</option>
             </select>
@@ -68,27 +68,27 @@
       </div>
 
       <div class="eval-tab-bar">
-        <button type="button" class="eval-tab eval-tab-active" data-tab="resumo">Resumo</button>
-        <button type="button" class="eval-tab" data-tab="disputas">Disputas</button>
-        <button type="button" class="eval-tab" data-tab="instancias">Instâncias</button>
-        <button type="button" class="eval-tab" data-tab="templates">Templates</button>
-        <button type="button" class="eval-tab" data-tab="ranking">Ranking técnicos</button>
+        <button type="button" class="eval-tab eval-tab-active" id="ev-tab-resumo" data-tab="resumo">Resumo</button>
+        <button type="button" class="eval-tab" id="ev-tab-disputas" data-tab="disputas">Disputas</button>
+        <button type="button" class="eval-tab" id="ev-tab-instancias" data-tab="instancias">Instâncias</button>
+        <button type="button" class="eval-tab" id="ev-tab-templates" data-tab="templates">Templates</button>
+        <button type="button" class="eval-tab" id="ev-tab-ranking" data-tab="ranking">Ranking técnicos</button>
       </div>
 
       <div class="eval-tab-panel is-visible" data-panel="resumo">
         <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
-          <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label">Instâncias (90d)</div></div>
-          <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label">Pendentes</div></div>
-          <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label">Média 0–100</div></div>
-          <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="warning-outline"></ion-icon></div><div class="stat-value" id="st-crit">—</div><div class="stat-label">Críticas</div></div>
-          <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="pulse-outline"></ion-icon></div><div class="stat-value" id="st-rate">—</div><div class="stat-label">Taxa resposta %</div></div>
+          <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label" id="ev-st-lbl-total">Instâncias (90d)</div></div>
+          <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label" id="ev-st-lbl-pend">Pendentes</div></div>
+          <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label" id="ev-st-lbl-avg">Média 0–100</div></div>
+          <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="warning-outline"></ion-icon></div><div class="stat-value" id="st-crit">—</div><div class="stat-label" id="ev-st-lbl-crit">Críticas</div></div>
+          <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="pulse-outline"></ion-icon></div><div class="stat-value" id="st-rate">—</div><div class="stat-label" id="ev-st-lbl-rate">Taxa resposta %</div></div>
         </div>
       </div>
 
       <div class="eval-tab-panel" data-panel="disputas">
         <div class="panel" style="margin-bottom:12px">
           <div class="eval-actions">
-            <label style="font-size:12px;font-weight:600;color:var(--text3)">Estado</label>
+            <label id="ev-dispute-state-lbl" style="font-size:12px;font-weight:600;color:var(--text3)">Estado</label>
             <select class="form-control" id="dispute-status-filter" style="width:200px;padding:7px 10px;font-size:12px">
               <option value="PENDING">Pendentes</option>
               <option value="ALL">Todas</option>
@@ -99,11 +99,11 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><span class="panel-title">Revisões / disputas</span></div>
-          <p class="hint-sm" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.</p>
+          <div class="panel-header"><span class="panel-title" id="ev-disputes-panel-title">Revisões / disputas</span></div>
+          <p class="hint-sm" id="ev-disputes-hint" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.</p>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th>Técnico</th><th>OS / nota</th><th>Justificativa</th><th class="text-right">Ações</th></tr></thead>
-            <tbody id="tbody-disputes"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+            <table class="table-data"><thead><tr><th id="ev-th-dispute-tech">Técnico</th><th id="ev-th-dispute-os">OS / nota</th><th id="ev-th-dispute-just">Justificativa</th><th id="ev-th-dispute-actions" class="text-right">Ações</th></tr></thead>
+            <tbody id="tbody-disputes"><tr><td colspan="4" id="ev-loading-disputes" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>
       </div>
@@ -111,7 +111,7 @@
       <div class="eval-tab-panel" data-panel="instancias">
         <div class="panel" style="margin-bottom:12px">
           <div class="eval-actions">
-            <label style="font-size:12px;font-weight:600;color:var(--text3)">Estado instância</label>
+            <label id="ev-inst-state-lbl" style="font-size:12px;font-weight:600;color:var(--text3)">Estado instância</label>
             <select class="form-control" id="instance-status-filter" style="width:200px;padding:7px 10px;font-size:12px">
               <option value="">Todos</option>
               <option value="PENDING">PENDING</option>
@@ -122,19 +122,19 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><span class="panel-title">Instâncias recentes</span></div>
-          <p class="hint-sm" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
+          <div class="panel-header"><span class="panel-title" id="ev-inst-panel-title">Instâncias recentes</span></div>
+          <p class="hint-sm" id="ev-inst-hint" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th>Estado</th><th>Template</th><th>Técnico</th><th>OS</th><th>URL do formulário web</th><th class="text-right">Ações</th></tr></thead>
-            <tbody id="tbody-inst"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+            <table class="table-data"><thead><tr><th id="ev-th-inst-status">Estado</th><th id="ev-th-inst-template">Template</th><th id="ev-th-inst-tech">Técnico</th><th id="ev-th-inst-os">OS</th><th id="ev-th-inst-url">URL do formulário web</th><th id="ev-th-inst-actions" class="text-right">Ações</th></tr></thead>
+            <tbody id="tbody-inst"><tr><td colspan="6" id="ev-loading-inst" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
           <div id="eval-survey-preview" class="eval-survey-preview" hidden>
             <div class="eval-survey-preview-header">
-              <span class="panel-title" style="margin:0;font-size:15px">Pré-visualização do formulário (iframe)</span>
+              <span class="panel-title" id="ev-preview-title" style="margin:0;font-size:15px">Pré-visualização do formulário (iframe)</span>
               <button type="button" class="btn btn-sm" id="eval-survey-preview-close">Fechar</button>
             </div>
             <iframe id="eval-survey-iframe" title="Formulário de avaliação ao cliente" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" style="width:100%;min-height:520px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></iframe>
-            <p class="hint-sm" style="margin-top:10px;margin-bottom:0">Se o quadro ficar vazio, o servidor pode bloquear iframes (<code>X-Frame-Options</code>). Nesse caso use <strong>Abrir</strong> ou copie o URL.</p>
+            <p class="hint-sm" id="ev-preview-hint" style="margin-top:10px;margin-bottom:0">Se o quadro ficar vazio, o servidor pode bloquear iframes (<code>X-Frame-Options</code>). Nesse caso use <strong>Abrir</strong> ou copie o URL.</p>
           </div>
         </div>
       </div>
@@ -144,20 +144,20 @@
           <button type="button" class="btn btn-primary" id="btn-new-template">+ Novo template</button>
         </div>
         <div class="panel">
-          <div class="panel-header"><span class="panel-title">Templates de avaliação</span></div>
+          <div class="panel-header"><span class="panel-title" id="ev-tpl-panel-title">Templates de avaliação</span></div>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th>Nome</th><th>Tipo</th><th>Tenant</th><th>Perguntas</th><th>Instâncias</th><th class="text-right">Ações</th></tr></thead>
-            <tbody id="tbody-tpl"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
+            <table class="table-data"><thead><tr><th id="ev-th-tpl-name">Nome</th><th id="ev-th-tpl-type">Tipo</th><th id="ev-th-tpl-tenant">Tenant</th><th id="ev-th-tpl-q">Perguntas</th><th id="ev-th-tpl-inst">Instâncias</th><th id="ev-th-tpl-actions" class="text-right">Ações</th></tr></thead>
+            <tbody id="tbody-tpl"><tr><td colspan="6" id="ev-loading-tpl" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>
       </div>
 
       <div class="eval-tab-panel" data-panel="ranking">
         <div class="panel">
-          <div class="panel-header"><span class="panel-title">Média por técnico (período dos KPIs)</span></div>
+          <div class="panel-header"><span class="panel-title" id="ev-ranking-panel-title">Média por técnico (período dos KPIs)</span></div>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th>Nome</th><th>E-mail</th><th>Média</th><th>Nº avaliações</th></tr></thead>
-            <tbody id="tbody-ranking"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Abra o separador Resumo para carregar dados.</td></tr></tbody></table>
+            <table class="table-data"><thead><tr><th id="ev-th-rank-name">Nome</th><th id="ev-th-rank-email">E-mail</th><th id="ev-th-rank-avg">Média</th><th id="ev-th-rank-count">Nº avaliações</th></tr></thead>
+            <tbody id="tbody-ranking"><tr><td colspan="4" id="ev-loading-ranking" style="text-align:center;padding:24px;color:var(--text3)">Abra o separador Resumo para carregar dados.</td></tr></tbody></table>
           </div>
         </div>
       </div>
@@ -171,36 +171,36 @@
     <h2 id="tpl-modal-title">Template</h2>
     <input type="hidden" id="tpl-edit-id" value="" />
     <div class="form-row">
-      <label for="tpl-tenant">Tenant</label>
+      <label for="tpl-tenant" id="ev-lbl-tpl-tenant">Tenant</label>
       <select class="form-control" id="tpl-tenant" style="padding:8px 10px;font-size:13px"></select>
     </div>
     <div class="form-row">
-      <label for="tpl-name">Nome do template</label>
+      <label for="tpl-name" id="ev-lbl-tpl-name">Nome do template</label>
       <input type="text" class="form-control" id="tpl-name" style="padding:8px 10px" placeholder="Ex.: Satisfação pós-visita" />
     </div>
     <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
       <div>
-        <label for="tpl-type">Tipo</label>
+        <label for="tpl-type" id="ev-lbl-tpl-type">Tipo</label>
         <select class="form-control" id="tpl-type" style="padding:8px 10px;min-width:140px">
           <option value="CLIENT">CLIENT (cliente)</option>
           <option value="AUDIT">AUDIT</option>
           <option value="INTERNAL">INTERNAL</option>
         </select>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
-        <input type="checkbox" id="tpl-active" checked /> Ativo
+      <label id="ev-tpl-active-lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" id="tpl-active" checked /> <span id="ev-tpl-active-text">Ativo</span>
       </label>
     </div>
     <div class="form-row">
-      <label>Regras de disparo</label>
-      <label style="display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text2)">
-        <input type="checkbox" id="tpl-rule-os-synced" checked /> Criar avaliação quando a OS for sincronizada (SYNCED)
+      <label id="ev-tpl-trigger-title">Regras de disparo</label>
+      <label id="ev-tpl-rule-os-label" style="display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text2)">
+        <input type="checkbox" id="tpl-rule-os-synced" checked /> <span id="ev-tpl-rule-os-text">Criar avaliação quando a OS for sincronizada (SYNCED)</span>
       </label>
-      <p class="hint-sm">Gravado em <code>triggerRules.events</code> (ex.: <code>OS_SYNCED</code>). Apenas templates <strong>CLIENT</strong> ativos com este evento e com perguntas são elegíveis; usa-se o mais recentemente atualizado.</p>
+      <p class="hint-sm" id="ev-tpl-trigger-hint">Gravado em <code>triggerRules.events</code> (ex.: <code>OS_SYNCED</code>). Apenas templates <strong>CLIENT</strong> ativos com este evento e com perguntas são elegíveis; usa-se o mais recentemente atualizado.</p>
     </div>
     <p class="hint-sm" id="tpl-instances-hint"></p>
     <div class="form-row">
-      <label>Perguntas</label>
+      <label id="ev-tpl-questions-lbl">Perguntas</label>
       <div id="tpl-questions"></div>
       <button type="button" class="btn btn-sm" id="tpl-add-question" style="margin-top:8px">+ Pergunta</button>
     </div>
@@ -230,11 +230,11 @@
     <input type="hidden" id="dispute-modal-id" />
     <input type="hidden" id="dispute-modal-action" />
     <div class="form-row" id="dispute-adjust-wrap" style="display:none">
-      <label for="dispute-modal-score">Nova nota global (0–100)</label>
+      <label for="dispute-modal-score" id="ev-lbl-dispute-score">Nova nota global (0–100)</label>
       <input type="number" class="form-control" id="dispute-modal-score" min="0" max="100" step="0.1" style="padding:8px 10px;max-width:160px" />
     </div>
     <div class="form-row">
-      <label for="dispute-modal-note">Nota de resolução (opcional)</label>
+      <label for="dispute-modal-note" id="ev-lbl-dispute-note">Nota de resolução (opcional)</label>
       <textarea class="form-control" id="dispute-modal-note" rows="3" style="padding:8px 10px" placeholder="Comentário interno"></textarea>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">

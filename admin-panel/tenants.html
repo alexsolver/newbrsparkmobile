@@ -10,15 +10,15 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="ten-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Tenants</span>
+        <span id="ten-bc-here">Tenants</span>
       </nav>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Gestão de tenants</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="ten-hero-title">Gestão de tenants</h1>
+        <p class="page-hero-sub" id="ten-hero-sub">
           Contas da plataforma, planos e status. Filtre por nome, plano ou situação; os cartões refletem o resultado atual da lista (até 200 registros).
         </p>
       </header>
@@ -34,14 +34,14 @@
             </div>
             <div class="data-toolbar-filters">
               <label class="filter-field">
-                <span class="filter-field-label"><ion-icon name="layers-outline"></ion-icon> Plano</span>
+                <span class="filter-field-label" id="ten-lbl-plan"><ion-icon name="layers-outline"></ion-icon> Plano</span>
                 <select class="form-control filter-field-control" id="filter-plan">
                   <option value="">Todos os planos</option>
                   <option>Basic</option><option>Pro</option><option>Enterprise</option>
                 </select>
               </label>
               <label class="filter-field">
-                <span class="filter-field-label"><ion-icon name="flag-outline"></ion-icon> Status</span>
+                <span class="filter-field-label" id="ten-lbl-status"><ion-icon name="flag-outline"></ion-icon> Status</span>
                 <select class="form-control filter-field-control" id="filter-status">
                   <option value="">Todos os status</option>
                   <option value="ACTIVE">Ativo</option>
@@ -61,22 +61,22 @@
         </div>
 
         <div class="data-table-head">
-          <h2 class="data-table-title">Lista de tenants</h2>
+          <h2 class="data-table-title" id="ten-table-title">Lista de tenants</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="table-wrap">
           <table class="table-data">
             <thead>
               <tr>
-                <th>Slug</th>
-                <th>Região</th>
-                <th>Nome</th>
-                <th>Plano</th>
-                <th>Usuários</th>
-                <th>Bens</th>
-                <th>Status</th>
-                <th>Criado em</th>
-                <th class="text-right">Ações</th>
+                <th id="ten-th-slug">Slug</th>
+                <th id="ten-th-region">Região</th>
+                <th id="ten-th-name">Nome</th>
+                <th id="ten-th-plan">Plano</th>
+                <th id="ten-th-users">Usuários</th>
+                <th id="ten-th-assets">Bens</th>
+                <th id="ten-th-status">Status</th>
+                <th id="ten-th-created">Criado em</th>
+                <th class="text-right" id="ten-th-actions">Ações</th>
               </tr>
             </thead>
             <tbody id="tenants-tbody">
@@ -93,27 +93,27 @@
 <div class="modal-overlay" id="new-tenant-modal">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Novo Tenant</span>
+      <span class="modal-title" id="ten-modal-title">Novo Tenant</span>
       <button type="button" class="modal-close" onclick="closeModal('new-tenant-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">Nome da Empresa *</label><input class="form-control" id="new-name" placeholder="Ex: Benedito Imóveis" /></div>
-      <div class="form-group"><label class="form-label">E-mail do Admin *</label><input class="form-control" id="new-email" type="email" placeholder="admin@empresa.com" /></div>
-      <div class="form-group"><label class="form-label">Região/País *</label>
+      <div class="form-group"><label class="form-label" id="ten-lbl-company">Nome da Empresa *</label><input class="form-control" id="new-name" placeholder="Ex: Benedito Imóveis" /></div>
+      <div class="form-group"><label class="form-label" id="ten-lbl-admin-email">E-mail do Admin *</label><input class="form-control" id="new-email" type="email" placeholder="admin@empresa.com" /></div>
+      <div class="form-group"><label class="form-label" id="ten-lbl-region">Região/País *</label>
         <select class="form-control" id="new-locale-id"><option value="">Selecione a localização...</option></select>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Plano</label>
+        <div class="form-group"><label class="form-label" id="ten-lbl-plan-modal">Plano</label>
           <select class="form-control" id="new-plan-id"><option value="">Sem plano</option></select>
         </div>
-        <div class="form-group"><label class="form-label">Idioma Padrão</label>
+        <div class="form-group"><label class="form-label" id="ten-lbl-lang">Idioma Padrão</label>
           <select class="form-control" id="new-lang"><option value="pt-BR">pt-BR</option><option value="en-US">en-US</option><option value="es-ES">es-ES</option></select>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('new-tenant-modal')">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="save-tenant-btn">Criar Tenant</button>
+      <button type="button" class="btn btn-ghost" id="ten-modal-cancel" onclick="closeModal('new-tenant-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-tenant-btn"><span id="ten-modal-save">Criar Tenant</span></button>
     </div>
   </div>
 </div>
@@ -128,10 +128,12 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import { applyTenantsPageI18n, tenantsStatusLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
+
   await initPage();
+  applyTenantsPageI18n();
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
-  const statusLbl = { TRIAL:'Trial', ACTIVE:'Ativo', SUSPENDED:'Suspenso', CANCELLED:'Cancelado' };
   const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
   const flags     = { BR:'🇧🇷', US:'🇺🇸', ES:'🇪🇸', AR:'🇦🇷', CL:'🇨🇱', MX:'🇲🇽', PT:'🇵🇹' };
 
@@ -151,8 +153,40 @@
   const planSel   = document.getElementById('new-plan-id');
   const localeSel = document.getElementById('new-locale-id');
 
-  (planData || []).forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}/mês</option>`; });
+  (planData || []).forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
   (localeData || []).forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
+
+  function applyTenantsUrlFilters() {
+    try {
+      const sp = new URL(window.location.href).searchParams;
+      const q = sp.get('q');
+      if (q != null) document.getElementById('search-input').value = q;
+      const plan = sp.get('plan');
+      if (plan != null) document.getElementById('filter-plan').value = plan;
+      const status = sp.get('status');
+      if (status != null) document.getElementById('filter-status').value = status;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function syncTenantsUrl() {
+    try {
+      const params = new URLSearchParams();
+      const q = document.getElementById('search-input').value.trim();
+      if (q) params.set('q', q);
+      const plan = document.getElementById('filter-plan').value;
+      if (plan) params.set('plan', plan);
+      const status = document.getElementById('filter-status').value;
+      if (status) params.set('status', status);
+      const u = new URL(window.location.href);
+      window.history.replaceState({}, '', u.pathname + (params.toString() ? `?${params}` : '') + u.hash);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  applyTenantsUrlFilters();
 
   async function loadTenants() {
     const q      = document.getElementById('search-input').value.trim();
@@ -164,7 +198,10 @@
     if (status) params.set('status', status);
 
     const data = await CONFIG.get(`/tenants?${params}`);
-    if (!data) return;
+    if (!data) {
+      syncTenantsUrl();
+      return;
+    }
     const tenants = data.data || [];
 
     const total  = data.total || tenants.length;
@@ -173,15 +210,16 @@
     const susp   = tenants.filter(t => t.status === 'SUSPENDED').length;
 
     document.getElementById('tenant-stats').innerHTML = [
-      { label:'Total (lista)', value: total,  icon:'business-outline', color:'var(--accent)' },
-      { label:'Ativos (lista)', value: active, icon:'checkmark-circle-outline', color:'var(--green)'  },
-      { label:'Trial (lista)', value: trial,  icon:'time-outline',  color:'var(--amber)'  },
-      { label:'Suspensos (lista)', value: susp, icon:'ban-outline', color:'var(--red)'    },
+      { label: mpT('ten_stat_total'), value: total,  icon:'business-outline', color:'var(--accent)' },
+      { label: mpT('ten_stat_active'), value: active, icon:'checkmark-circle-outline', color:'var(--green)'  },
+      { label: mpT('ten_stat_trial'), value: trial,  icon:'time-outline',  color:'var(--amber)'  },
+      { label: mpT('ten_stat_susp'), value: susp, icon:'ban-outline', color:'var(--red)'    },
     ].map(s => `<div class="stat-card fade-in" style="--accent-color:${s.color}">
       <div class="stat-icon" style="background:${s.color}18;color:${s.color}"><ion-icon name="${s.icon}" style="font-size:18px;vertical-align:-2px"></ion-icon></div>
       <div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`).join('');
 
-    document.getElementById('count-badge').textContent = `${total} tenant${total === 1 ? '' : 's'}`;
+    document.getElementById('count-badge').textContent =
+      total === 1 ? mpT('ten_count_one') : mpT('ten_count_many', { n: total });
 
     const tbody = document.getElementById('tenants-tbody');
     if (!tenants.length) {
@@ -189,20 +227,22 @@
         <tr><td colspan="9" style="padding:0;border:none">
           <div class="empty-state-pro" style="padding:36px 20px 32px">
             <ion-icon name="business-outline"></ion-icon>
-            <div class="empty-state-pro-title">Nenhum tenant encontrado</div>
-            <p class="empty-state-pro-sub">Ajuste a busca ou os filtros, ou crie um novo tenant.</p>
+            <div class="empty-state-pro-title">${mpT('ten_empty_title')}</div>
+            <p class="empty-state-pro-sub">${mpT('ten_empty_sub')}</p>
           </div>
         </td></tr>`;
+      syncTenantsUrl();
       return;
     }
+
     tbody.innerHTML = tenants.map(t => {
       const planName = t.subscription?.plan?.name || '—';
       const users   = t._count?.users ?? 0;
       const assets  = t._count?.assets ?? 0;
       const localeHtml = t.locale
         ? `${flags[t.locale.countryCode] || '🌐'} ${escHtml(t.locale.name)}`
-        : '<span style="color:var(--text3)">Não definido</span>';
-      const created = new Date(t.createdAt).toLocaleDateString('pt-BR');
+        : `<span style="color:var(--text3)">${mpT('ten_undefined_region')}</span>`;
+      const created = new Date(t.createdAt).toLocaleDateString(mpIntlLocale());
       const isActive = t.status === 'ACTIVE' || t.status === 'TRIAL';
       const idAttr = escHtml(t.id);
       return `<tr>
@@ -211,16 +251,17 @@
         <td class="bold">${escHtml(t.name)}</td>
         <td><span class="badge ${planMap[planName] || 'badge-gray'}">${escHtml(planName)}</span></td>
         <td>${users}</td>
-        <td>${assets.toLocaleString('pt-BR')}</td>
-        <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${escHtml(statusLbl[t.status] || t.status)}</span></td>
+        <td>${assets.toLocaleString(mpIntlLocale())}</td>
+        <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${escHtml(tenantsStatusLabel(t.status) || t.status)}</span></td>
         <td style="color:var(--text3);font-size:11px">${created}</td>
         <td class="text-right">
           ${isActive
-            ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">Suspender</button>`
-            : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">Ativar</button>`}
+            ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">${mpT('ten_row_suspend')}</button>`
+            : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">${mpT('ten_row_activate')}</button>`}
         </td>
       </tr>`;
     }).join('');
+    syncTenantsUrl();
   }
 
   window.toggleStatus = async (id, status) => {
@@ -236,7 +277,7 @@
       defaultLang: document.getElementById('new-lang').value,
       planId:      document.getElementById('new-plan-id').value || undefined,
     };
-    if (!body.name || !body.email || !body.localeId) return alert('Campos obrigatórios: Nome, E-mail e Região.');
+    if (!body.name || !body.email || !body.localeId) return alert(mpT('ten_alert_required'));
     const res = await CONFIG.post('/tenants', body);
     if (res) { closeModal('new-tenant-modal'); loadTenants(); }
   };

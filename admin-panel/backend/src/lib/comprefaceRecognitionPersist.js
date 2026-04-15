@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Persiste estado CompreFace Recognition no User (painel + cadastro de prestador).
+ * Persiste no utilizador o estado de sincronização da galeria facial (FaceMatch).
  * @param {{ ok: boolean, faces?: number, subject?: string, error?: string, orphanSubjectsCleaned?: number }} r
  */
 async function persistComprefaceRecognitionSync(prisma, userId, r) {

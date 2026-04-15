@@ -6,7 +6,7 @@ const { validateTechRegProfilePhotoOpenAi } = require('./validateTechRegProfileP
 const MAX_BYTES = 5 * 1024 * 1024;
 
 /**
- * Corpo comum: POST JSON { imageBase64 } — cadastro prestador passo 1 (IA, não CompreFace).
+ * Corpo comum: POST JSON { imageBase64 } — cadastro prestador passo 1 (IA, não FaceMatch).
  */
 async function handleTechnicianProfilePhotoAiValidate(req, res) {
   try {

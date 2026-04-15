@@ -83,6 +83,8 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const { userRole, user } = useAuth();
   const { mode } = useAppContext();
   const [showWorkTimeTab, setShowWorkTimeTab] = useState(false);
+  /** Tenant BR + utilizador em PJ: rótulo do separador «Registro» em pt-BR. */
+  const [workTimeTabBrazilPj, setWorkTimeTabBrazilPj] = useState(false);
   const [workTimeJourneyPhase, setWorkTimeJourneyPhase] = useState<WorkTimeJourneyPhase>('idle_out');
   const lastWorkTimeTabFetchRef = useRef(0);
   const navStyles = useMemo(() => createNavStyles(), []);
@@ -90,13 +92,18 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const refreshWorkTimeTab = useCallback(async () => {
     if (!user?.id || String(user.role || '').toUpperCase() === 'USER') {
       setShowWorkTimeTab(false);
+      setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
       return;
     }
     const session = { id: user.id, tenantId: user.tenantId };
     try {
       try {
-        await pushWorkTimePunchOutbox();
+        try {
+          await pushWorkTimePunchOutbox();
+        } catch (pushErr) {
+          console.warn('[TabBar] pushWorkTimePunchOutbox:', pushErr);
+        }
       let d: Awaited<ReturnType<typeof fetchWorkTimeMe>> | null = null;
       let meSource: 'network_ok' | 'network_err' | 'network_throw' | 'cache' | 'none' = 'none';
       try {
@@ -128,14 +135,21 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
         }
       }
       setShowWorkTimeTab(show);
+      setWorkTimeTabBrazilPj(!!(show && d && d.ok && d.workTimeBrazilRegime === 'PJ'));
       if (!show || mode !== 'PROVIDER') {
         setWorkTimeJourneyPhase('idle_out');
         return;
       }
-      const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
-      const pending = await getWorkTimeOutboxForDisplay();
-      const merged = mergePendingWithServerPunches(pending, rows);
-      setWorkTimeJourneyPhase(computeJourneyUiState(merged).phase);
+      /** Batidas/outbox não devem esconder o separador se `/me` já autorizou o ponto. */
+      try {
+        const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+        const pending = await getWorkTimeOutboxForDisplay();
+        const merged = mergePendingWithServerPunches(pending, rows);
+        setWorkTimeJourneyPhase(computeJourneyUiState(merged).phase);
+      } catch (journeyErr) {
+        console.warn('[TabBar] refreshWorkTimeTab (batidas/aura):', journeyErr);
+        setWorkTimeJourneyPhase('idle_out');
+      }
     } catch (outerErr) {
       let cached: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
       try {
@@ -145,6 +159,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
       }
       if (cached?.ok && cached.showWorkTimeInApp && mode === 'PROVIDER') {
         setShowWorkTimeTab(true);
+        setWorkTimeTabBrazilPj(cached.workTimeBrazilRegime === 'PJ');
         try {
           await pushWorkTimePunchOutbox();
           const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
@@ -162,11 +177,13 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
         return;
       }
       setShowWorkTimeTab(false);
+      setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
     }
     } catch (fatal) {
       console.warn('[TabBar] refreshWorkTimeTab (fatal):', fatal);
       setShowWorkTimeTab(false);
+      setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
     }
   }, [user?.id, user?.role, user?.tenantId, mode]);
@@ -315,40 +332,41 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             ? workTimeJourneyAuraStyle(workTimeJourneyPhase as 'in_work' | 'on_break')
             : null;
 
+          const workTimeTabLabel = workTimeTabBrazilPj ? t('tabs.workTimeBrPj') : t('tabs.workTime');
           return (
             <TouchableOpacity
               onPress={() => router.push('/work-time' as any)}
               style={navStyles.tabBtn}
               activeOpacity={0.65}
               accessibilityRole="button"
-              accessibilityLabel={t('tabs.workTime')}
+              accessibilityLabel={workTimeTabLabel}
             >
-              {highlightJourney && aura ? (
-                <View
-                  style={[
-                    navStyles.workTimeAuraWrap,
-                    {
-                      backgroundColor: aura.ring,
-                      borderColor: `${aura.glow}66`,
-                      borderWidth: aura.borderW,
-                      shadowColor: aura.glow,
-                      shadowOffset: { width: 0, height: 0 },
-                      shadowOpacity: aura.shadowOpacity,
-                      shadowRadius: aura.shadowRadius,
-                      elevation: aura.elevation,
-                    },
-                  ]}
-                >
+              <View style={{ alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
+                {highlightJourney && aura ? (
+                  <View
+                    style={[
+                      navStyles.workTimeAuraWrap,
+                      {
+                        backgroundColor: aura.ring,
+                        borderColor: `${aura.glow}66`,
+                        borderWidth: aura.borderW,
+                        shadowColor: aura.glow,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: aura.shadowOpacity,
+                        shadowRadius: aura.shadowRadius,
+                        elevation: aura.elevation,
+                      },
+                    ]}
+                  >
+                    <Ionicons name={iconName} size={TAB_BAR_ICON_SIZE} color={iconColor} />
+                  </View>
+                ) : (
                   <Ionicons name={iconName} size={TAB_BAR_ICON_SIZE} color={iconColor} />
-                </View>
-              ) : (
-                <>
-                  <Ionicons name={iconName} size={TAB_BAR_ICON_SIZE} color={iconColor} />
-                  <Text style={[navStyles.tabLabel, { color: labelColor }]} numberOfLines={1}>
-                    {t('tabs.workTime')}
-                  </Text>
-                </>
-              )}
+                )}
+                <Text style={[navStyles.tabLabel, { color: labelColor }]} numberOfLines={1}>
+                  {workTimeTabLabel}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })()}

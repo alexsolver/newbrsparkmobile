@@ -3,19 +3,47 @@ const router = require('express').Router();
 const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
-const { syncUserToCompreface } = require('../lib/comprefaceSync');
-const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
+const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
 const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
 const { assertTechnicianSeatForNewUser, assertTechnicianSeatForUserPatch } = require('../lib/planQuotaService');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
+const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 
 const USER_ROLES = new Set(['USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
+
+function escapeHtmlEmail(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;');
+}
+
+function newEmailVerificationToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/** URL do painel para `verify-email.html?token=` — defina ADMIN_PANEL_PUBLIC_BASE_URL (ou PUBLIC_PANEL_URL). */
+function buildPublicVerifyEmailLink(token) {
+  const base = String(
+    process.env.PUBLIC_PANEL_URL ||
+      process.env.ADMIN_PANEL_PUBLIC_URL ||
+      process.env.ADMIN_PANEL_PUBLIC_BASE_URL ||
+      '',
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  if (!base) return null;
+  return `${base}/verify-email.html?token=${encodeURIComponent(token)}`;
+}
 
 /** Matrícula funcional (ponto / RH). Vazio → null. Máx. 80 caracteres. */
 function normalizeEmployeeMatricula(raw) {
@@ -61,6 +89,26 @@ function detectFaceExtFromBuffer(buf) {
   return null;
 }
 
+function mimeToDocAttachmentExt(mt) {
+  const m = String(mt || '').toLowerCase();
+  if (m.includes('pdf')) return 'pdf';
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+  if (m.includes('png')) return 'png';
+  if (m.includes('webp')) return 'webp';
+  return null;
+}
+
+/** PDF / JPEG / PNG / WebP para anexos de documentos (admin). */
+function detectDocAttachmentExtFromBuffer(buf) {
+  if (!buf || buf.length < 8) return null;
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return 'pdf';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  const head = buf.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF' && head.slice(8, 12).toString('ascii') === 'WEBP') return 'webp';
+  return null;
+}
+
 const userListSelect = {
   id: true,
   tenantId: true,
@@ -78,16 +126,52 @@ const userListSelect = {
   tenant: { select: { id: true, name: true, email: true } },
   technicianProfile: { select: { id: true, status: true } },
   workTimeTrackingEnabled: true,
+  addressJson: true,
+  emailVerifiedAt: true,
+  emailVerificationExpiresAt: true,
 };
+
+const TECHNICIAN_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED']);
+const USER_LIST_SORT_FIELDS = new Set([
+  'id',
+  'createdAt',
+  'lastLogin',
+  'name',
+  'email',
+  'updatedAt',
+  'employeeMatricula',
+  'role',
+  'isActive',
+  'workTimeTrackingEnabled',
+  'emailVerifiedAt',
+]);
 
 // GET /api/users
 router.get('/', async (req, res) => {
   try {
-    const { tenantId, role, q, page = 1, limit = 50, workTime } = req.query;
+    const {
+      tenantId,
+      role,
+      q,
+      page = 1,
+      limit = 50,
+      workTime,
+      active,
+      technicianStatus,
+      comprefaceStatus,
+      emailVerification,
+      lastLoginFrom,
+      lastLoginTo,
+      sort,
+      sortDir,
+    } = req.query;
+
     const where = {
-      ...(tenantId && { tenantId }),
+      ...(tenantId && { tenantId: String(tenantId) }),
       ...(role && { role }),
       ...(workTime === '1' && { workTimeTrackingEnabled: true }),
+      ...(active === '1' || active === 'true' ? { isActive: true } : {}),
+      ...(active === '0' || active === 'false' ? { isActive: false } : {}),
       ...(q && {
         OR: [
           { name: { contains: q, mode: 'insensitive' } },
@@ -96,17 +180,68 @@ router.get('/', async (req, res) => {
         ],
       }),
     };
+
+    const ts = technicianStatus && String(technicianStatus).trim().toUpperCase();
+    if (ts && TECHNICIAN_STATUSES.has(ts)) {
+      where.technicianProfile = { is: { status: ts } };
+    }
+
+    const cfs = comprefaceStatus && String(comprefaceStatus).trim().toLowerCase();
+    const andExtra = [];
+    if (cfs === 'synced' || cfs === 'pending' || cfs === 'error') {
+      andExtra.push({
+        comprefaceRecognitionSync: {
+          path: ['status'],
+          equals: cfs,
+        },
+      });
+    } else if (cfs === 'none') {
+      andExtra.push({ comprefaceRecognitionSync: null });
+    }
+
+    const evf = emailVerification && String(emailVerification).trim().toLowerCase();
+    if (evf === 'verified') {
+      andExtra.push({ emailVerifiedAt: { not: null } });
+    } else if (evf === 'unverified') {
+      andExtra.push({ emailVerifiedAt: null });
+    } else if (evf === 'pending') {
+      andExtra.push({
+        emailVerifiedAt: null,
+        emailVerificationToken: { not: null },
+        emailVerificationExpiresAt: { gt: new Date() },
+      });
+    }
+
+    const llFrom = lastLoginFrom ? new Date(String(lastLoginFrom)) : null;
+    const llTo = lastLoginTo ? new Date(String(lastLoginTo)) : null;
+    const loginRange = {};
+    if (llFrom && !Number.isNaN(llFrom.getTime())) loginRange.gte = llFrom;
+    if (llTo && !Number.isNaN(llTo.getTime())) {
+      const end = new Date(llTo);
+      end.setHours(23, 59, 59, 999);
+      loginRange.lte = end;
+    }
+    if (Object.keys(loginRange).length) where.lastLogin = loginRange;
+
+    if (andExtra.length) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...andExtra];
+    }
+
+    const sortKey = USER_LIST_SORT_FIELDS.has(String(sort || '')) ? String(sort) : 'createdAt';
+    const dir = String(sortDir || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+    const orderBy = { [sortKey]: dir };
+
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
         skip: (page - 1) * limit,
         take: +limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         select: userListSelect,
       }),
       prisma.user.count({ where }),
     ]);
-    res.json({ data: users, total, page: +page });
+    res.json({ data: users, total, page: +page, sort: sortKey, sortDir: dir });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -156,6 +291,96 @@ router.post('/', async (req, res) => {
       }
       return res.status(400).json({ error: 'Registo duplicado (e-mail ou outro campo único).' });
     }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const MAX_BULK_USER_IDS = 200;
+
+// PATCH /api/users/bulk-active — { ids: string[], isActive: boolean }
+router.patch('/bulk-active', async (req, res) => {
+  try {
+    const { ids, isActive } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Envie ids: array de identificadores.' });
+    }
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'isActive deve ser true ou false.' });
+    }
+    const clean = [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, MAX_BULK_USER_IDS);
+    if (!clean.length) {
+      return res.status(400).json({ error: 'Nenhum id válido.' });
+    }
+    const result = await prisma.user.updateMany({
+      where: { id: { in: clean } },
+      data: { isActive },
+    });
+    const _a = auditActor(req);
+    await prisma.auditLog
+      .create({
+        data: {
+          ..._a,
+          action: isActive ? 'USER_BULK_ACTIVATE' : 'USER_BULK_DEACTIVATE',
+          resource: `${result.count} usuários`,
+          category: 'ADMIN',
+          metadata: { count: result.count, requested: clean.length, isActive },
+        },
+      })
+      .catch(() => {});
+    res.json({ updated: result.count, requested: clean.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/users/reset-password-by-email — { email, tenantId?, newPassword }
+router.patch('/reset-password-by-email', async (req, res) => {
+  try {
+    const { email, tenantId, newPassword } = req.body || {};
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: 'E-mail e nova senha são obrigatórios.' });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
+    }
+    const em = String(email).toLowerCase().trim();
+    const tid = tenantId && String(tenantId).trim() ? String(tenantId).trim() : null;
+    let user;
+    if (tid) {
+      user = await prisma.user.findFirst({ where: { email: em, tenantId: tid } });
+    } else {
+      const matches = await prisma.user.findMany({
+        where: { email: em },
+        take: 12,
+        select: { id: true },
+      });
+      if (matches.length === 0) {
+        return res.status(404).json({ error: 'Nenhum utilizador encontrado com este e-mail.' });
+      }
+      if (matches.length > 1) {
+        return res.status(400).json({
+          error:
+            'Vários utilizadores com este e-mail. Selecione a organização (tenant) ou utilize o reset a partir da linha na lista.',
+        });
+      }
+      user = await prisma.user.findUnique({ where: { id: matches[0].id } });
+    }
+    if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    const hash = await bcrypt.hash(newPassword, 10);
+    const updated = await prisma.user.update({ where: { id: user.id }, data: { password: hash } });
+    const _a = auditActor(req);
+    await prisma.auditLog.create({
+      data: {
+        ..._a,
+        tenantId: updated.tenantId,
+        action: 'USER_RESET_PASSWORD',
+        resource: updated.email,
+        category: 'ADMIN',
+        metadata: { byEmail: true },
+      },
+    });
+    res.json({ ok: true, userId: updated.id });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -308,14 +533,7 @@ router.post('/:id/face-enrollment', async (req, res) => {
 
     await prisma.user.update({
       where: { id },
-      data: {
-        faceEnrollmentPhotos: next,
-        comprefaceRecognitionSync: {
-          status: 'pending',
-          at: new Date().toISOString(),
-          message: 'Novas fotos de matrícula — a sincronizar com a galeria CompreFace.',
-        },
-      },
+      data: { faceEnrollmentPhotos: next },
     });
 
     await prisma.auditLog
@@ -331,29 +549,240 @@ router.post('/:id/face-enrollment', async (req, res) => {
       })
       .catch(() => {});
 
-    const row = await prisma.user.findUnique({
-      where: { id },
-      select: { comprefaceRecognitionSync: true },
-    });
+    const { comprefaceSync, comprefaceRecognitionSync } = await syncComprefaceGalleryAfterUserChange(
+      prisma,
+      id,
+      req,
+      'face_enrollment_add',
+    );
 
-    res.status(201).json({ photo: entry, photos: next, comprefaceRecognitionSync: row?.comprefaceRecognitionSync });
+    res.status(201).json({ photo: entry, photos: next, comprefaceSync, comprefaceRecognitionSync });
   } catch (err) {
     console.error('POST /users/:id/face-enrollment', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/users/:id/sync-compreface — envia avatar + matrícula ao CompreFace (galeria Recognition)
+// POST /api/users/:id/document-attachment — PDF ou imagem (JPEG/PNG/WebP) para URL em documentos do utilizador
+router.post('/:id/document-attachment', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fileBase64, mimeType, fileName } = req.body || {};
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+    }
+    const b64 = String(fileBase64).replace(/\s/g, '');
+    let buf;
+    try {
+      buf = Buffer.from(b64, 'base64');
+    } catch {
+      return res.status(400).json({ error: 'Base64 inválido.' });
+    }
+    if (buf.length > MAX_DOC_ATTACHMENT_BYTES) {
+      return res.status(400).json({ error: 'Ficheiro demasiado grande (máx. 15 MB).' });
+    }
+    if (buf.length < 16) return res.status(400).json({ error: 'Ficheiro inválido.' });
+
+    let ext = mimeToDocAttachmentExt(mimeType);
+    if (!ext) ext = detectDocAttachmentExtFromBuffer(buf);
+    if (!ext) {
+      const n = String(fileName || '').toLowerCase();
+      if (n.endsWith('.pdf')) ext = 'pdf';
+      else if (n.endsWith('.jpg') || n.endsWith('.jpeg')) ext = 'jpg';
+      else if (n.endsWith('.png')) ext = 'png';
+      else if (n.endsWith('.webp')) ext = 'webp';
+    }
+    if (!ext) return res.status(400).json({ error: 'Use PDF, JPEG, PNG ou WebP.' });
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const attId = `doc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const fname = `${attId}.${ext}`;
+    const absDir = path.join(__dirname, '../../public/uploads/user-documents', id);
+    await fs.mkdir(absDir, { recursive: true });
+    await fs.writeFile(path.join(absDir, fname), buf);
+
+    const publicPath = `/uploads/user-documents/${id}/${fname}`;
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'USER_DOCUMENT_ATTACHMENT_UPLOAD',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: id, path: publicPath, bytes: buf.length },
+        },
+      })
+      .catch(() => {});
+
+    res.status(201).json({ url: publicPath, bytes: buf.length });
+  } catch (err) {
+    console.error('POST /users/:id/document-attachment', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/avatar-attachment — JPEG/PNG/WebP até 5 MB; URL pública para o campo avatarUrl
+router.post('/:id/avatar-attachment', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fileBase64, mimeType, fileName } = req.body || {};
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+    }
+    const b64 = String(fileBase64).replace(/\s/g, '');
+    let buf;
+    try {
+      buf = Buffer.from(b64, 'base64');
+    } catch {
+      return res.status(400).json({ error: 'Base64 inválido.' });
+    }
+    if (buf.length > MAX_AVATAR_ATTACHMENT_BYTES) {
+      return res.status(400).json({ error: 'O arquivo é grande demais (máx. 5 MB).' });
+    }
+    if (buf.length < 16) return res.status(400).json({ error: 'Arquivo inválido.' });
+
+    let ext = mimeToFaceExt(mimeType);
+    if (!ext) ext = detectFaceExtFromBuffer(buf);
+    if (!ext) {
+      const n = String(fileName || '').toLowerCase();
+      if (n.endsWith('.jpg') || n.endsWith('.jpeg')) ext = 'jpg';
+      else if (n.endsWith('.png')) ext = 'png';
+      else if (n.endsWith('.webp')) ext = 'webp';
+    }
+    if (ext === 'heic') {
+      return res.status(400).json({ error: 'HEIC não é aceito. Converta para JPEG ou PNG.' });
+    }
+    if (!ext) return res.status(400).json({ error: 'Use JPEG, PNG ou WebP.' });
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const attId = `av_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const fname = `${attId}.${ext}`;
+    const absDir = path.join(__dirname, '../../public/uploads/user-avatars', id);
+    await fs.mkdir(absDir, { recursive: true });
+    await fs.writeFile(path.join(absDir, fname), buf);
+
+    const publicPath = `/uploads/user-avatars/${id}/${fname}`;
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'USER_AVATAR_ATTACHMENT_UPLOAD',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: id, path: publicPath, bytes: buf.length },
+        },
+      })
+      .catch(() => {});
+
+    res.status(201).json({ url: publicPath, bytes: buf.length });
+  } catch (err) {
+    console.error('POST /users/:id/avatar-attachment', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/send-email-verification — gera token (48 h), envia e-mail (MailerSend se configurado; senão Nylas)
+router.post('/:id/send-email-verification', express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (existing.emailVerifiedAt) {
+      return res.status(400).json({ error: 'Este e-mail já está verificado.' });
+    }
+
+    let token = newEmailVerificationToken();
+    const exp = new Date(Date.now() + 48 * 3600 * 1000);
+    let saved = false;
+    for (let attempt = 0; attempt < 5 && !saved; attempt++) {
+      try {
+        await prisma.user.update({
+          where: { id },
+          data: {
+            emailVerificationToken: token,
+            emailVerificationExpiresAt: exp,
+          },
+        });
+        saved = true;
+      } catch (e) {
+        if (e && e.code === 'P2002') token = newEmailVerificationToken();
+        else throw e;
+      }
+    }
+    if (!saved) return res.status(500).json({ error: 'Não foi possível gerar o token de verificação.' });
+
+    const link = buildPublicVerifyEmailLink(token);
+    const subject = 'Confirme o seu e-mail — BrSpark';
+    const text = link
+      ? `Olá,\n\nClique no link abaixo para confirmar o seu e-mail. O link fica válido por 48 horas.\n\n${link}\n\nSe não foi você que pediu isso, ignore esta mensagem.\n`
+      : `Olá,\n\nNo painel BrSpark, use o fluxo de verificação com o token abaixo (válido por 48 horas).\n\n${token}\n\nSe não foi você que pediu isso, ignore esta mensagem.\n`;
+    const html = link
+      ? `<p>Olá,</p><p><strong>Confirme o seu e-mail</strong> clicando no link abaixo. O link fica válido por <strong>48 horas</strong>.</p><p><a href="${escapeHtmlEmail(link)}">Confirmar o e-mail</a></p><p>Se não foi você que pediu isso, ignore esta mensagem.</p>`
+      : `<p>Olá,</p><p>No painel BrSpark, <strong>confirme o seu e-mail</strong> com o token abaixo (válido por <strong>48 horas</strong>).</p><p style="font-family:monospace;word-break:break-all">${escapeHtmlEmail(token)}</p><p>Se não foi você que pediu isso, ignore esta mensagem.</p>`;
+
+    const { send, provider } = await sendTransactionalEmailWithFallback({
+      to: existing.email,
+      subject,
+      html,
+      text,
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: existing.tenantId,
+          action: 'USER_EMAIL_VERIFICATION_SENT',
+          resource: existing.email,
+          category: 'ADMIN',
+          metadata: {
+            userId: id,
+            emailSent: !!send.ok,
+            skipped: !!send.skipped,
+            emailProvider: provider,
+          },
+        },
+      })
+      .catch(() => {});
+
+    res.status(201).json({
+      ok: true,
+      email: send.ok
+        ? { sent: true, provider }
+        : {
+            sent: false,
+            skipped: !!send.skipped,
+            provider,
+            error: send.error || send.reason || 'Falha no envio.',
+          },
+      verificationUrl: link || null,
+      expiresInHours: 48,
+    });
+  } catch (err) {
+    console.error('POST /users/:id/send-email-verification', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/sync-compreface — envia avatar + matrícula ao FaceMatch (galeria Recognition)
 router.post('/:id/sync-compreface', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await syncUserToCompreface(prisma, id);
-    await persistComprefaceRecognitionSync(prisma, id, result);
-    const row = await prisma.user.findUnique({
-      where: { id },
-      select: { email: true, tenantId: true, comprefaceRecognitionSync: true },
-    });
-    const syncPayload = row?.comprefaceRecognitionSync;
+    const { comprefaceRecognitionSync: syncPayload, syncResult } = await syncComprefaceGalleryAfterUserChange(
+      prisma,
+      id,
+      req,
+      'manual_api',
+    );
+    const result = syncResult || { ok: false, error: 'Falha na sincronização.' };
 
     if (!result.ok) {
       return res.status(400).json({
@@ -361,27 +790,6 @@ router.post('/:id/sync-compreface', async (req, res) => {
         error: result.error || 'Falha na sincronização.',
         comprefaceRecognitionSync: syncPayload,
       });
-    }
-    if (row) {
-      await prisma.auditLog
-        .create({
-          data: {
-            ...auditActor(req),
-            tenantId: row.tenantId,
-            action: 'USER_COMPREFACE_SYNC',
-            resource: row.email,
-            category: 'ADMIN',
-            metadata: {
-              userId: id,
-              subject: result.subject,
-              faces: result.faces,
-              ...(result.orphanSubjectsCleaned
-                ? { orphanSubjectsCleaned: result.orphanSubjectsCleaned }
-                : {}),
-            },
-          },
-        })
-        .catch(() => {});
     }
     res.json({
       ok: true,
@@ -432,46 +840,48 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
       data: { faceEnrollmentPhotos: next },
     });
 
-    let comprefaceSync = null;
-    try {
-      const r = await syncUserToCompreface(prisma, id);
-      comprefaceSync = r.ok
-        ? { ok: true, subject: r.subject, faces: r.faces }
-        : { ok: false, error: r.error || 'Falha na sincronização.' };
-      await persistComprefaceRecognitionSync(prisma, id, r);
-      if (r.ok) {
-        await prisma.auditLog
-          .create({
-            data: {
-              ...auditActor(req),
-              tenantId: user.tenantId,
-              action: 'USER_COMPREFACE_SYNC',
-              resource: user.email,
-              category: 'ADMIN',
-              metadata: {
-                userId: id,
-                subject: r.subject,
-                faces: r.faces,
-                trigger: 'face_enrollment_delete',
-                ...(r.orphanSubjectsCleaned ? { orphanSubjectsCleaned: r.orphanSubjectsCleaned } : {}),
-              },
-            },
-          })
-          .catch(() => {});
-      }
-    } catch (e) {
-      comprefaceSync = { ok: false, error: e.message || String(e) };
-      await persistComprefaceRecognitionSync(prisma, id, { ok: false, error: comprefaceSync.error });
-    }
+    const { comprefaceSync, comprefaceRecognitionSync } = await syncComprefaceGalleryAfterUserChange(
+      prisma,
+      id,
+      req,
+      'face_enrollment_delete',
+    );
 
-    const rowCf = await prisma.user.findUnique({
-      where: { id },
-      select: { comprefaceRecognitionSync: true },
-    });
-
-    res.json({ photos: next, comprefaceSync, comprefaceRecognitionSync: rowCf?.comprefaceRecognitionSync });
+    res.json({ photos: next, comprefaceSync, comprefaceRecognitionSync });
   } catch (err) {
     console.error('DELETE /users/:id/face-enrollment/:photoId', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/users/:id/admin-activity — últimos eventos de auditoria ligados a este usuário (painel)
+router.get('/:id/admin-activity', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, tenantId: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const limit = Math.min(100, Math.max(1, +req.query.limit || 40));
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { metadata: { path: ['userId'], equals: user.id } },
+          {
+            AND: [{ tenantId: user.tenantId }, { resource: user.email }],
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        admin: { select: { id: true, email: true, name: true } },
+        tenant: { select: { id: true, name: true } },
+      },
+    });
+    res.json({ data: logs });
+  } catch (err) {
+    console.error('GET /users/:id/admin-activity', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -482,11 +892,19 @@ router.get('/:id', async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.params.id },
       include: {
-        tenant: { select: { id: true, name: true, email: true } },
+        tenant: { select: { id: true, name: true, email: true, locale: { select: { countryCode: true } } } },
         technicianProfile: true,
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const admin = req.admin;
+    const panelRole =
+      admin && admin.panelUser ? String(admin.role || '').trim().toUpperCase() : null;
+    if (panelRole === 'MANAGER' && String(user.role || '').toUpperCase() === 'SAAS_ADMIN') {
+      return res.status(403).json({ error: 'Sem permissão para ver administrador da plataforma.' });
+    }
+
     const { password, ...safe } = user;
     res.json(safe);
   } catch (err) {
@@ -514,9 +932,20 @@ router.patch('/:id', express.json(), async (req, res) => {
     const { id } = req.params;
     const existing = await prisma.user.findUnique({
       where: { id },
-      include: { technicianProfile: true },
+      include: {
+        technicianProfile: true,
+        tenant: { select: { locale: { select: { countryCode: true } } } },
+      },
     });
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const admin = req.admin;
+    const panelRole =
+      admin && admin.panelUser ? String(admin.role || '').trim().toUpperCase() : null;
+
+    if (panelRole === 'MANAGER' && String(existing.role || '').toUpperCase() === 'SAAS_ADMIN') {
+      return res.status(403).json({ error: 'Sem permissão para editar administrador da plataforma.' });
+    }
 
     const {
       name,
@@ -532,8 +961,34 @@ router.patch('/:id', express.json(), async (req, res) => {
       technician,
       workTimeTrackingEnabled,
       workTimeEnrolledAt,
+      workTimeBrazilRegime: bodyWorkTimeBrazilRegime,
       employeeMatricula: bodyEmployeeMatricula,
+      preferredChatLocale: bodyPreferredChatLocale,
+      adminInternalNotes: bodyAdminInternalNotes,
+      emailVerifiedAt: bodyEmailVerifiedAt,
     } = req.body;
+
+    const tenantIsBr =
+      String(existing.tenant?.locale?.countryCode || '')
+        .trim()
+        .toUpperCase() === 'BR';
+
+    if (
+      bodyWorkTimeBrazilRegime !== undefined &&
+      bodyWorkTimeBrazilRegime !== null &&
+      String(bodyWorkTimeBrazilRegime).trim() !== ''
+    ) {
+      const r = String(bodyWorkTimeBrazilRegime).trim().toUpperCase();
+      if (r !== 'CLT' && r !== 'PJ') {
+        return res.status(400).json({ error: 'workTimeBrazilRegime deve ser CLT ou PJ.' });
+      }
+      if (!tenantIsBr) {
+        return res.status(400).json({
+          error:
+            'O vínculo CLT/PJ no registro de horas só está disponível para organizações com perfil de país Brasil (BR) no tenant.',
+        });
+      }
+    }
 
     if (faceEnrollmentPhotos !== undefined && !Array.isArray(faceEnrollmentPhotos)) {
       return res.status(400).json({ error: 'faceEnrollmentPhotos deve ser um array.' });
@@ -563,6 +1018,26 @@ router.patch('/:id', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'Papel inválido.' });
     }
 
+    if (role != null) {
+      const nextR = String(role).toUpperCase();
+      if (panelRole === 'MANAGER') {
+        if (nextR === 'TENANT_ADMIN' || nextR === 'SAAS_ADMIN') {
+          return res.status(403).json({ error: 'Sem permissão para atribuir este papel.' });
+        }
+      } else if (panelRole === 'TENANT_ADMIN') {
+        if (nextR === 'SAAS_ADMIN') {
+          return res.status(403).json({ error: 'Apenas administrador da plataforma pode atribuir papel SaaS.' });
+        }
+      }
+      if (String(existing.role || '').toUpperCase() === 'SAAS_ADMIN' && nextR !== 'SAAS_ADMIN') {
+        if (panelRole !== 'SAAS_ADMIN') {
+          return res.status(403).json({
+            error: 'Apenas administrador da plataforma pode alterar o papel desta conta.',
+          });
+        }
+      }
+    }
+
     if (email != null && String(email).toLowerCase().trim() !== existing.email.toLowerCase()) {
       const dup = await prisma.user.findFirst({
         where: {
@@ -584,24 +1059,36 @@ router.patch('/:id', express.json(), async (req, res) => {
       }
     }
 
+    if (bodyEmailVerifiedAt !== undefined && panelRole === 'MANAGER') {
+      return res.status(403).json({ error: 'Sem permissão para alterar a verificação do e-mail.' });
+    }
+
     const seatPatch = await assertTechnicianSeatForUserPatch(prisma, existing, { role, isActive });
     if (!seatPatch.ok) {
       return res.status(403).json({ error: seatPatch.error, code: seatPatch.code || 'PLAN_MAX_TECHNICIANS' });
     }
 
+    let needsComprefaceSync = false;
+
     await prisma.$transaction(async (tx) => {
       const userPatch = {};
       if (name != null) userPatch.name = String(name).trim();
-      if (email != null) userPatch.email = String(email).trim().toLowerCase();
+      if (email != null) {
+        const nextE = String(email).trim().toLowerCase();
+        userPatch.email = nextE;
+        if (nextE !== existing.email.toLowerCase()) {
+          userPatch.emailVerifiedAt = null;
+          userPatch.emailVerificationToken = null;
+          userPatch.emailVerificationExpiresAt = null;
+        }
+      }
       if (phone !== undefined) userPatch.phone = phone ? String(phone).trim() : null;
       if (role != null) userPatch.role = String(role).toUpperCase();
       if (avatarUrl !== undefined) {
-        userPatch.avatarUrl = avatarUrl ? String(avatarUrl).trim() : null;
-        userPatch.comprefaceRecognitionSync = {
-          status: 'pending',
-          at: new Date().toISOString(),
-          message: 'Avatar alterado — sincronize a galeria CompreFace.',
-        };
+        const nextA = avatarUrl ? String(avatarUrl).trim() : null;
+        const prevA = existing.avatarUrl ? String(existing.avatarUrl || '').trim() : null;
+        userPatch.avatarUrl = nextA;
+        if (nextA !== prevA) needsComprefaceSync = true;
       }
       if (typeof isActive === 'boolean') userPatch.isActive = isActive;
       if (typeof workTimeTrackingEnabled === 'boolean') {
@@ -621,12 +1108,69 @@ router.patch('/:id', express.json(), async (req, res) => {
           if (!Number.isNaN(d.getTime())) userPatch.workTimeEnrolledAt = d;
         }
       }
+
+      const nextWtEnabled =
+        typeof workTimeTrackingEnabled === 'boolean'
+          ? workTimeTrackingEnabled
+          : !!existing.workTimeTrackingEnabled;
+
+      if (!tenantIsBr) {
+        if (existing.workTimeBrazilRegime != null) {
+          userPatch.workTimeBrazilRegime = null;
+        }
+      } else if (!nextWtEnabled) {
+        userPatch.workTimeBrazilRegime = null;
+      } else if (bodyWorkTimeBrazilRegime !== undefined) {
+        if (bodyWorkTimeBrazilRegime === null || String(bodyWorkTimeBrazilRegime).trim() === '') {
+          userPatch.workTimeBrazilRegime = 'CLT';
+        } else {
+          userPatch.workTimeBrazilRegime = String(bodyWorkTimeBrazilRegime).trim().toUpperCase();
+        }
+      } else if (
+        typeof workTimeTrackingEnabled === 'boolean' &&
+        workTimeTrackingEnabled &&
+        !existing.workTimeTrackingEnabled
+      ) {
+        userPatch.workTimeBrazilRegime = 'CLT';
+      }
+
       if (addressJson !== undefined) userPatch.addressJson = addressJson;
       if (personalDocuments !== undefined) userPatch.personalDocuments = personalDocuments;
       if (bodyEmployeeMatricula !== undefined) {
         userPatch.employeeMatricula = normalizeEmployeeMatricula(bodyEmployeeMatricula);
       }
+      if (bodyPreferredChatLocale !== undefined) {
+        if (bodyPreferredChatLocale === null || bodyPreferredChatLocale === '') {
+          userPatch.preferredChatLocale = null;
+        } else {
+          const pl = String(bodyPreferredChatLocale).trim().slice(0, 35);
+          userPatch.preferredChatLocale = pl || null;
+        }
+      }
+      if (bodyAdminInternalNotes !== undefined && panelRole !== 'MANAGER') {
+        if (bodyAdminInternalNotes === null || bodyAdminInternalNotes === '') {
+          userPatch.adminInternalNotes = null;
+        } else {
+          const n = String(bodyAdminInternalNotes).slice(0, 20000);
+          userPatch.adminInternalNotes = n.trim() === '' ? null : n;
+        }
+      }
+      if (bodyEmailVerifiedAt !== undefined) {
+        if (bodyEmailVerifiedAt === null || bodyEmailVerifiedAt === false || bodyEmailVerifiedAt === '') {
+          userPatch.emailVerifiedAt = null;
+          userPatch.emailVerificationToken = null;
+          userPatch.emailVerificationExpiresAt = null;
+        } else {
+          const d = bodyEmailVerifiedAt === true ? new Date() : new Date(String(bodyEmailVerifiedAt));
+          if (!Number.isNaN(d.getTime())) {
+            userPatch.emailVerifiedAt = d;
+            userPatch.emailVerificationToken = null;
+            userPatch.emailVerificationExpiresAt = null;
+          }
+        }
+      }
       if (faceEnrollmentPhotos !== undefined) {
+        needsComprefaceSync = true;
         let nextFaces = sortFaceEnrollmentPrimaryFirst(faceEnrollmentPhotos);
         if (prevRegistrationPrimary) {
           nextFaces = nextFaces.map((p) =>
@@ -688,6 +1232,10 @@ router.patch('/:id', express.json(), async (req, res) => {
       }
 
     });
+
+    if (needsComprefaceSync) {
+      await syncComprefaceGalleryAfterUserChange(prisma, id, req, 'user_patch');
+    }
 
     await prisma.auditLog
       .create({

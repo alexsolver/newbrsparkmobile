@@ -1042,12 +1042,29 @@ router.post('/dispatch', async (req, res) => {
         console.log(`[DISPATCH] 📍 locationZoneType=${execution.locationZoneType} | polygon.length=${Array.isArray(execution.locationPolygon) ? execution.locationPolygon.length : 'null'} | lat=${execution.locationLat}`);
         
         // ─── Push (categorias/botões no app; canais Android em fieldTaskAssigneePush) ───
+        // Título/corpo legíveis no Lock Screen: antes o `body` era só o nome do modelo (ex.: «face»),
+        // o que parecia «push simples»; incluímos FT-… + modelo + título customizado do painel.
         try {
             const emailRaw = String(resolvedOwnerEmail || '').trim();
-            const pushTitle = String(osTitle).slice(0, 120);
-            const pushBody = formTemplateTitle
-                ? String(formTemplateTitle).slice(0, 180)
-                : 'Nova atividade na sua lista.';
+            const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
+            const tplTitle = formTemplateTitle ? String(formTemplateTitle).trim() : '';
+            const customOs = String(osTitle || '').trim();
+            const genericLabel = (s) => {
+                const t = String(s || '').trim().toLowerCase();
+                return !t || t === 'nova os designada' || t === 'nova atividade';
+            };
+
+            const pushTitle = 'Nova OS atribuída';
+            const parts = [];
+            if (osNum) parts.push(osNum);
+            if (tplTitle) parts.push(tplTitle);
+            if (!genericLabel(customOs)) parts.push(customOs);
+            let pushBody =
+                parts.length > 0
+                    ? parts.join(' · ')
+                    : 'Abra o app para ver detalhes e aceitar.';
+            if (pushBody.length > 180) pushBody = `${pushBody.slice(0, 177)}…`;
+
             await sendFieldTaskActivityPushToAssignee(prisma, {
                 ownerEmail: emailRaw,
                 templateTenantId: loadedTemplate?.tenantId ?? null,

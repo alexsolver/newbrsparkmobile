@@ -3,6 +3,8 @@
  */
 import { initPage } from './sidebar.js';
 import { CONFIG } from './config.js';
+import { getAdminUiLocale } from './user-pages-i18n.js';
+import { evT, applyEvaluationsStaticI18n } from './evaluations-i18n.js';
 
 const Q_TYPES = ['RATING', 'NPS', 'BOOLEAN', 'TEXT', 'MULTIPLE_CHOICE'];
 
@@ -20,24 +22,29 @@ let lastChatTranscriptPayload = null;
 function formatChatTranscriptText(data) {
   if (!data || typeof data !== 'object') return '';
   const lines = [];
-  lines.push(`Instância de avaliação: ${data.evaluationInstanceId || '—'}`);
-  lines.push(`OS: ${data.osNumber || '—'} | Execução: ${data.executionId || '—'}`);
-  lines.push(`Técnico: ${data.techEmail || '—'} | Cliente (metadata): ${data.clientEmail || '—'}`);
-  lines.push(`Sala de chat: ${data.roomId || '—'}`);
-  lines.push(`Janela temporal: ${data.windowFrom || '—'} → ${data.windowTo || '—'}`);
+  lines.push(evT('ev_chat_line_instance', { id: data.evaluationInstanceId || '—' }));
+  lines.push(evT('ev_chat_line_os', { os: data.osNumber || '—', ex: data.executionId || '—' }));
+  lines.push(evT('ev_chat_line_people', { tech: data.techEmail || '—', client: data.clientEmail || '—' }));
+  lines.push(evT('ev_chat_line_room', { room: data.roomId || '—' }));
+  lines.push(evT('ev_chat_line_window', { from: data.windowFrom || '—', to: data.windowTo || '—' }));
   lines.push('');
   if (Array.isArray(data.warnings) && data.warnings.length) {
-    lines.push('AVISOS:', ...data.warnings.map((w) => `  • ${w}`), '');
+    lines.push(evT('ev_chat_warnings'), ...data.warnings.map((w) => `  • ${w}`), '');
   }
   const msgs = data.messages || [];
   if (!msgs.length) {
-    lines.push('(Sem mensagens de texto/foto nesta janela.)');
+    lines.push(evT('ev_chat_no_msgs'));
   } else {
-    lines.push(`Mensagens (${msgs.length}):`, '');
+    lines.push(evT('ev_chat_msgs_header', { n: msgs.length }), '');
     msgs.forEach((m) => {
-      const head = `[${m.createdAt}] ${m.senderName} <${m.senderId}> (${m.type})`;
+      const head = evT('ev_chat_msg_head', {
+        at: m.createdAt,
+        name: m.senderName,
+        id: m.senderId,
+        type: m.type,
+      });
       const body = m.content ? String(m.content) : '';
-      const media = m.mediaUrl ? `\n  [arquivo] ${m.mediaUrl}` : '';
+      const media = m.mediaUrl ? `\n  ${evT('ev_chat_media', { url: m.mediaUrl })}` : '';
       lines.push(head + (body ? `\n  ${body.replace(/\n/g, '\n  ')}` : '') + media, '');
     });
   }
@@ -50,7 +57,11 @@ function renderChatTranscriptModal(data) {
   const warn = document.getElementById('chat-transcript-warn');
   const body = document.getElementById('chat-transcript-body');
   if (meta) {
-    meta.innerHTML = `<strong>OS</strong> ${esc(data.osNumber || '—')} · <strong>Sala</strong> ${esc(data.roomId || '—')} · <strong>${esc((data.messages || []).length)}</strong> mensagem(ns)`;
+    meta.innerHTML = evT('ev_chat_meta_html', {
+      os: esc(data.osNumber || '—'),
+      room: esc(data.roomId || '—'),
+      n: esc((data.messages || []).length),
+    });
   }
   if (warn) {
     const w = data.warnings || [];
@@ -83,7 +94,7 @@ async function openChatTranscriptFromDispute(disputeId) {
     '/admin/evaluations/disputes/' + encodeURIComponent(disputeId) + '/chat-transcript'
   );
   if (!data || data.error) {
-    alert(data?.error || 'Não foi possível carregar a transcrição.');
+    alert(data?.error || evT('ev_alert_transcript'));
     return;
   }
   renderChatTranscriptModal(data);
@@ -95,7 +106,7 @@ async function openChatTranscriptFromInstance(instanceId) {
     '/admin/evaluations/instances/' + encodeURIComponent(instanceId) + '/chat-transcript'
   );
   if (!data || data.error) {
-    alert(data?.error || 'Não foi possível carregar a transcrição.');
+    alert(data?.error || evT('ev_alert_transcript'));
     return;
   }
   renderChatTranscriptModal(data);
@@ -116,11 +127,21 @@ function showTab(name) {
   });
 }
 
+function withSurveyLang(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('lang', getAdminUiLocale());
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 function showSurveyPreview(url) {
   const wrap = document.getElementById('eval-survey-preview');
   const iframe = document.getElementById('eval-survey-iframe');
   if (!wrap || !iframe || !url) return;
-  iframe.src = url;
+  iframe.src = withSurveyLang(url);
   wrap.hidden = false;
   requestAnimationFrame(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 }
@@ -148,12 +169,12 @@ function addQuestionRow(q) {
   row.innerHTML = `
     <input type="hidden" class="q-id" value="${esc(q?.id || '')}" />
     <div class="q-row-grid">
-      <input type="text" class="form-control q-text" placeholder="Texto da pergunta" value="${esc(q?.text || '')}" />
+      <input type="text" class="form-control q-text" placeholder="${esc(evT('ev_q_placeholder'))}" value="${esc(q?.text || '')}" />
       <select class="form-control q-type">${Q_TYPES.map((t) => `<option value="${t}" ${(q?.type || 'RATING') === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      <input type="number" class="form-control q-weight" min="0.1" step="0.1" value="${esc(q?.weight ?? 1)}" title="Peso" />
-      <label class="q-req" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text3);white-space:nowrap"><input type="checkbox" class="q-required" ${q?.required !== false ? 'checked' : ''}/> obrig.</label>
+      <input type="number" class="form-control q-weight" min="0.1" step="0.1" value="${esc(q?.weight ?? 1)}" title="${esc(evT('ev_q_weight_title'))}" />
+      <label class="q-req" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text3);white-space:nowrap"><input type="checkbox" class="q-required" ${q?.required !== false ? 'checked' : ''}/> ${esc(evT('ev_q_required'))}</label>
       <button type="button" class="btn btn-sm q-del" style="color:var(--red)">✕</button>
-      <input type="text" class="form-control q-cat" placeholder="categoryKey (ex.: qualidade, prazo) — usado na média por categoria" value="${esc(q?.categoryKey || '')}" />
+      <input type="text" class="form-control q-cat" placeholder="${esc(evT('ev_q_cat_placeholder'))}" value="${esc(q?.categoryKey || '')}" />
     </div>
   `;
   row.querySelector('.q-del').onclick = () => row.remove();
@@ -166,7 +187,7 @@ function collectQuestions() {
   let i = 0;
   rows.forEach((row) => {
     const id = row.querySelector('.q-id')?.value?.trim() || '';
-    const text = row.querySelector('.q-text')?.value?.trim() || 'Pergunta';
+    const text = row.querySelector('.q-text')?.value?.trim() || evT('ev_collect_default_q');
     const type = row.querySelector('.q-type')?.value || 'RATING';
     const weight = Number(row.querySelector('.q-weight')?.value) || 1;
     const required = row.querySelector('.q-required')?.checked !== false;
@@ -204,7 +225,7 @@ async function loadTenantsIntoFilter() {
   const res = await CONFIG.get('/tenants?limit=500');
   const list = res?.data || res || [];
   tenantSel.querySelectorAll('option:not(:first-child)').forEach((o) => o.remove());
-  if (tplTenant) tplTenant.innerHTML = '<option value="">— Escolha o tenant —</option>';
+  if (tplTenant) tplTenant.innerHTML = `<option value="">${esc(evT('ev_tenant_pick'))}</option>`;
   for (const t of list) {
     const o = document.createElement('option');
     o.value = t.id;
@@ -239,7 +260,7 @@ async function loadAnalytics() {
   if (tb && Array.isArray(a.technicianRanking)) {
     const rows = a.technicianRanking;
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Sem dados no período.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">${esc(evT('ev_no_data_period'))}</td></tr>`;
     } else {
       tb.innerHTML = rows
         .map(
@@ -261,7 +282,7 @@ async function loadDisputes() {
   const items = d?.items || [];
   if (!tb) return;
   if (!items.length) {
-    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro.</td></tr>';
+    tb.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">${esc(evT('ev_no_records'))}</td></tr>`;
     return;
   }
   tb.innerHTML = items
@@ -269,16 +290,16 @@ async function loadDisputes() {
       const tech = esc(x.technician?.email || '');
       const os = esc(x.instance?.execution?.osNumber || '—');
       const score = x.instance?.score?.totalScore;
-      const sc = score != null ? ` <small style="color:var(--text3)">(nota ${esc(score)})</small>` : '';
+      const sc = score != null ? ` <small style="color:var(--text3)">${esc(evT('ev_note_prefix', { score }))}</small>` : '';
       const full = esc(x.justification || '');
       return `<tr data-dispute-id="${esc(x.id)}" data-instance-id="${esc(x.instanceId)}">
         <td>${tech}</td><td>${os}${sc}</td>
-        <td style="max-width:400px"><details><summary style="cursor:pointer;color:var(--accent)">Ver justificativa</summary><div style="margin-top:8px;white-space:pre-wrap;font-size:12px;color:var(--text2)">${full}</div></details></td>
+        <td style="max-width:400px"><details><summary style="cursor:pointer;color:var(--accent)">${esc(evT('ev_justify_view'))}</summary><div style="margin-top:8px;white-space:pre-wrap;font-size:12px;color:var(--text2)">${full}</div></details></td>
         <td style="text-align:right;white-space:nowrap">
-          <button type="button" class="btn btn-sm btn-chat-trans" style="margin-right:6px">Ver conversa</button>
-          <button type="button" class="btn btn-sm btn-primary btn-disp" data-a="MAINTAIN_EVAL">Manter</button>
-          <button type="button" class="btn btn-sm btn-disp" data-a="ADJUSTED">Ajustar nota</button>
-          <button type="button" class="btn btn-sm btn-disp" style="color:var(--red)" data-a="INVALIDATED">Invalidar</button>
+          <button type="button" class="btn btn-sm btn-chat-trans" style="margin-right:6px">${esc(evT('ev_btn_chat'))}</button>
+          <button type="button" class="btn btn-sm btn-primary btn-disp" data-a="MAINTAIN_EVAL">${esc(evT('ev_btn_maintain'))}</button>
+          <button type="button" class="btn btn-sm btn-disp" data-a="ADJUSTED">${esc(evT('ev_btn_adjust'))}</button>
+          <button type="button" class="btn btn-sm btn-disp" style="color:var(--red)" data-a="INVALIDATED">${esc(evT('ev_btn_invalidate'))}</button>
         </td></tr>`;
     })
     .join('');
@@ -310,10 +331,10 @@ function openDisputeModal(disputeId, action) {
   if (title) {
     title.textContent =
       action === 'MAINTAIN_EVAL'
-        ? 'Manter avaliação'
+        ? evT('ev_dispute_title_maintain')
         : action === 'ADJUSTED'
-          ? 'Ajustar nota global'
-          : 'Invalidar avaliação';
+          ? evT('ev_dispute_title_adjust')
+          : evT('ev_dispute_title_invalidate');
   }
   document.getElementById('dispute-modal-note').value = '';
   document.getElementById('dispute-modal-score').value = '';
@@ -325,18 +346,18 @@ async function submitDisputeModal() {
   const action = document.getElementById('dispute-modal-action').value;
   const note = document.getElementById('dispute-modal-note').value.trim();
   const scoreRaw = document.getElementById('dispute-modal-score').value.trim();
-  const body = { status: action, resolutionNote: note || 'Painel qualidade' };
+  const body = { status: action, resolutionNote: note || evT('ev_resolution_default_note') };
   if (action === 'ADJUSTED') {
     const n = Number(scoreRaw);
     if (!Number.isFinite(n)) {
-      alert('Indique uma nota numérica para ajuste.');
+      alert(evT('ev_alert_adjust_score'));
       return;
     }
     body.adjustedTotalScore = n;
   }
   const res = await CONFIG.patch('/admin/evaluations/disputes/' + encodeURIComponent(id) + '/resolve', body);
   if (res?.error) {
-    alert(res.error || 'Erro');
+    alert(res.error || evT('ev_alert_err'));
     return;
   }
   closeModal('dispute-modal-overlay');
@@ -358,28 +379,29 @@ async function loadInstances() {
   const origin = window.location.origin;
   if (!tb) return;
   if (!items.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem instâncias.</td></tr>';
+    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">${esc(evT('ev_no_instances'))}</td></tr>`;
     return;
   }
   tb.innerHTML = items
     .map((x) => {
-      const href =
+      const hrefRaw =
         x.clientSurveyFullUrl ||
         (x.publicToken ? `${origin}/evaluation-survey.html?token=${encodeURIComponent(x.publicToken)}` : '');
+      const href = hrefRaw ? withSurveyLang(hrefRaw) : '';
       const enc = href ? encodeURIComponent(href) : '';
       const urlCell = href
         ? `<input type="text" readonly class="form-control inst-url-input" value="${esc(href)}" aria-label="URL do formulário web" />
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <a class="btn btn-sm btn-primary" href="${esc(href)}" target="_blank" rel="noopener">Abrir</a>
-            <button type="button" class="btn btn-sm btn-survey-copy" data-enc="${enc}">Copiar URL</button>
-            <button type="button" class="btn btn-sm btn-survey-preview" data-enc="${enc}">Pré-visualizar</button>
+            <a class="btn btn-sm btn-primary" href="${esc(href)}" target="_blank" rel="noopener">${esc(evT('ev_btn_open'))}</a>
+            <button type="button" class="btn btn-sm btn-survey-copy" data-enc="${enc}">${esc(evT('ev_btn_copy_url'))}</button>
+            <button type="button" class="btn btn-sm btn-survey-preview" data-enc="${enc}">${esc(evT('ev_btn_preview'))}</button>
           </div>`
         : '<span style="color:var(--text3)">—</span>';
       const regen =
         x.status === 'PENDING'
-          ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">Novo token</button>`
+          ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">${esc(evT('ev_btn_regen'))}</button>`
           : '—';
-      return `<tr data-instance-id="${esc(x.id)}"><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen} <button type="button" class="btn btn-sm btn-inst-chat" style="margin-left:6px">Ver conversa</button></td></tr>`;
+      return `<tr data-instance-id="${esc(x.id)}"><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen} <button type="button" class="btn btn-sm btn-inst-chat" style="margin-left:6px">${esc(evT('ev_btn_chat'))}</button></td></tr>`;
     })
     .join('');
   tb.querySelectorAll('button[data-regen]').forEach((btn) => {
@@ -397,7 +419,7 @@ async function loadTemplatesTable() {
   const list = Array.isArray(rows) ? rows : [];
   if (!tb) return;
   if (!list.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem templates.</td></tr>';
+    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">${esc(evT('ev_no_templates'))}</td></tr>`;
     return;
   }
   tb.innerHTML = list
@@ -410,7 +432,7 @@ async function loadTemplatesTable() {
       <td>${esc(t._count?.questions)}</td>
       <td>${esc(t._count?.instances)}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button type="button" class="btn btn-sm btn-primary btn-edit-tpl" data-id="${esc(t.id)}">Editar</button>
+        <button type="button" class="btn btn-sm btn-primary btn-edit-tpl" data-id="${esc(t.id)}">${esc(evT('ev_btn_edit'))}</button>
       </td>
     </tr>`
     )
@@ -430,7 +452,7 @@ async function openTemplateModal(id) {
       alert(t.error);
       return;
     }
-    title.textContent = 'Editar template';
+    title.textContent = evT('ev_tpl_title_edit');
     document.getElementById('tpl-edit-id').value = t.id;
     document.getElementById('tpl-name').value = t.name || '';
     document.getElementById('tpl-type').value = t.type || 'CLIENT';
@@ -442,11 +464,9 @@ async function openTemplateModal(id) {
     applyTriggerToForm(t.triggerRules);
     (t.questions || []).forEach((q) => addQuestionRow(q));
     document.getElementById('tpl-instances-hint').textContent =
-      t._count?.instances > 0
-        ? `Este template tem ${t._count.instances} instância(s). Não pode remover perguntas já respondidas.`
-        : '';
+      t._count?.instances > 0 ? evT('ev_tpl_instances_hint', { n: t._count.instances }) : '';
   } else {
-    title.textContent = 'Novo template';
+    title.textContent = evT('ev_tpl_title_new');
     document.getElementById('tpl-edit-id').value = '';
     document.getElementById('tpl-name').value = '';
     document.getElementById('tpl-type').value = 'CLIENT';
@@ -458,9 +478,9 @@ async function openTemplateModal(id) {
       if (ft) tenantSel.value = ft;
     }
     document.getElementById('tpl-instances-hint').textContent = '';
-    addQuestionRow({ text: 'Qualidade do serviço', type: 'RATING', categoryKey: 'qualidade', weight: 1 });
-    addQuestionRow({ text: 'Cumprimento de prazos', type: 'RATING', categoryKey: 'prazo', weight: 1 });
-    addQuestionRow({ text: 'Atendimento', type: 'RATING', categoryKey: 'atendimento', weight: 1 });
+    addQuestionRow({ text: evT('ev_default_q1'), type: 'RATING', categoryKey: 'qualidade', weight: 1 });
+    addQuestionRow({ text: evT('ev_default_q2'), type: 'RATING', categoryKey: 'prazo', weight: 1 });
+    addQuestionRow({ text: evT('ev_default_q3'), type: 'RATING', categoryKey: 'atendimento', weight: 1 });
   }
   openModal('tpl-modal-overlay');
 }
@@ -473,15 +493,15 @@ async function saveTemplateModal() {
   const tenantId = document.getElementById('tpl-tenant')?.value;
   const questions = collectQuestions();
   if (!name) {
-    alert('Indique o nome do template.');
+    alert(evT('ev_alert_name_tpl'));
     return;
   }
   if (!editId && !tenantId) {
-    alert('Escolha o tenant.');
+    alert(evT('ev_alert_tenant'));
     return;
   }
   if (!questions.length) {
-    alert('Adicione pelo menos uma pergunta.');
+    alert(evT('ev_alert_questions'));
     return;
   }
   const triggerRules = triggerRulesFromForm();
@@ -520,6 +540,7 @@ async function refreshAll() {
 }
 
 export async function bootEvaluationsPage() {
+  applyEvaluationsStaticI18n();
   await initPage();
   await loadTenantsIntoFilter();
 
@@ -566,12 +587,12 @@ export async function bootEvaluationsPage() {
       navigator.clipboard.writeText(u).then(
         () => {
           const t = copyBtn.textContent;
-          copyBtn.textContent = 'Copiado!';
+          copyBtn.textContent = evT('ev_copied');
           setTimeout(() => {
             copyBtn.textContent = t;
           }, 1600);
         },
-        () => alert('Não foi possível copiar automaticamente. Selecione o texto na caixa acima e use Ctrl+C / ⌘C.')
+        () => alert(evT('ev_alert_copy_fail'))
       );
       return;
     }

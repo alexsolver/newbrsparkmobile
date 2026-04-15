@@ -3,6 +3,8 @@ const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
+const { adminAuthThenPanel } = require('../middleware/auth');
+const { auditActor } = require('../lib/auditActor');
 
 const PANEL_TENANT_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN', 'MANAGER']);
 
@@ -119,6 +121,94 @@ async function postTenantLogin(req, res) {
 }
 
 router.post('/tenant-login', postTenantLogin);
+
+// POST /api/auth/impersonate-panel — { userId } — SAAS_ADMIN, admin global ou TENANT_ADMIN (mesmo tenant)
+router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'userId é obrigatório.' });
+    }
+    const actor = req.admin;
+    if (!actor) return res.status(401).json({ error: 'Sessão inválida.' });
+
+    if (actor.panelUser && actor.role === 'MANAGER') {
+      return res.status(403).json({ error: 'O perfil Gestor não pode iniciar sessão como outro utilizador.' });
+    }
+    if (actor.panelUser && actor.role !== 'SAAS_ADMIN' && actor.role !== 'TENANT_ADMIN') {
+      return res.status(403).json({ error: 'Sem permissão para impersonar.' });
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: String(userId).trim() },
+      include: { tenant: true },
+    });
+    if (!target || !target.tenant) {
+      return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    }
+    if (!target.isActive) {
+      return res.status(403).json({ error: 'Não é possível impersonar uma conta desativada.' });
+    }
+    if (!PANEL_TENANT_ROLES.has(target.role)) {
+      return res.status(403).json({ error: 'Este utilizador não tem acesso ao painel (papel incompatível).' });
+    }
+
+    if (actor.panelUser && actor.role === 'TENANT_ADMIN') {
+      if (!actor.tenantId || target.tenantId !== actor.tenantId) {
+        return res.status(403).json({ error: 'Só é possível impersonar utilizadores do seu tenant.' });
+      }
+    }
+
+    const token = jwt.sign(
+      {
+        panel: true,
+        userId: target.id,
+        tenantId: target.tenantId,
+        email: target.email,
+        name: target.name,
+        role: target.role,
+        tenantSlug: target.tenant.slug,
+        tenantName: target.tenant.name,
+        impersonation: true,
+        impersonatorUserId: actor.panelUser ? actor.userId : null,
+        impersonatorEmail: actor.email || null,
+        impersonatorLegacyAdminId: actor.panelUser ? null : actor.id || null,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_IMPERSONATION_EXPIRES_IN || '30m' }
+    );
+
+    const _a = auditActor(req);
+    await prisma.auditLog
+      .create({
+        data: {
+          ..._a,
+          tenantId: target.tenantId,
+          action: 'PANEL_IMPERSONATE',
+          resource: target.email,
+          category: 'ADMIN',
+          metadata: {
+            targetUserId: target.id,
+            targetRole: target.role,
+            impersonatorUserId: actor.panelUser ? actor.userId : null,
+            impersonatorEmail: actor.email || null,
+            impersonatorLegacyAdminId: actor.panelUser ? null : actor.id || null,
+          },
+        },
+      })
+      .catch(() => {});
+
+    res.json({
+      token,
+      mode: 'tenant',
+      user: { id: target.id, email: target.email, name: target.name, role: target.role },
+      tenant: { id: target.tenant.id, slug: target.tenant.slug, name: target.tenant.name },
+    });
+  } catch (err) {
+    console.error('[auth/impersonate-panel]', err);
+    res.status(500).json({ error: 'Erro interno.' });
+  }
+});
 
 // GET /api/auth/me
 router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {

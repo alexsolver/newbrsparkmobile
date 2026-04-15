@@ -21,6 +21,11 @@ import {
   collectSectionTimingRowsForPreview,
   buildPauseProductivityPdfFragment,
   buildVisionChecklistReportHtml,
+  buildImageAnnotationReportHtml,
+  buildRepeatableMatrixReportHtml,
+  buildVoiceNoteReportHtml,
+  escapeHtmlAttr,
+  parseCapturedAtFromPhotoUriPdf,
 } from './pdfStandardBlocks.js';
 import { buildPreviewPdfEntries } from './pdfPreviewFormEntries.js';
 import { formatServiceLocationInnerHtml } from './serviceLocationFormat.js';
@@ -535,6 +540,11 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
     return formatFileUploadPdfHtml(val, f, responses, row);
   }
 
+  if (fType === 'voice_note') {
+    const vn = buildVoiceNoteReportHtml(val, esc);
+    if (vn) return vn;
+  }
+
   if (typeof val === 'string' && val.startsWith('SIG_V1|')) {
     return formatSignaturePdfHtml(val, th);
   }
@@ -547,6 +557,16 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
   if (fType === 'vision_checklist' || fType === 'vision_ai_analysis') {
     const vh = buildVisionChecklistReportHtml(val, fType, esc);
     if (vh) return vh;
+  }
+
+  if (fType === 'image_annotation') {
+    const ih = buildImageAnnotationReportHtml(val, esc);
+    if (ih) return ih;
+  }
+
+  if (fType === 'repeatable_matrix') {
+    const rh = buildRepeatableMatrixReportHtml(val, f, esc);
+    if (rh) return rh;
   }
 
   if (asObj && typeof asObj === 'object' && !Array.isArray(asObj) && !isTransitPayload(asObj)) {
@@ -1463,21 +1483,7 @@ function buildPdfProdBlockForPreview(th, t, responses) {
       </div>`;
 }
 
-/** Data/hora da captura embutida na query (`capturedAt`), igual ao app. */
-function parseCapturedAtFromPhotoUri(uri) {
-  try {
-    const s = String(uri);
-    const q = s.indexOf('?');
-    if (q === -1) return null;
-    const cap = new URLSearchParams(s.slice(q)).get('capturedAt');
-    if (!cap) return null;
-    const d = new Date(decodeURIComponent(cap));
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleString('pt-BR');
-  } catch {
-    return null;
-  }
-}
+const parseCapturedAtFromPhotoUri = parseCapturedAtFromPhotoUriPdf;
 
 function formatFieldTimeIso(iso) {
   if (!iso) return '';
@@ -1730,7 +1736,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
           singleVal.startsWith('https://') ||
           singleVal.startsWith('data:image')
         ) {
-          const imgSrc = esc(singleVal);
+          const imgSrc = escapeHtmlAttr(singleVal);
           imgInnerHtml = `<img src="${imgSrc}" alt="" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
         } else if (singleVal.startsWith('file://')) {
           imgInnerHtml = `<div style="padding:20px;text-align:center;color:#78350f;font-size:10px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local. Sincronize para incluir a imagem no PDF.</div>`;
@@ -1758,7 +1764,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
         singleVal.startsWith('https://') ||
         singleVal.startsWith('data:image')
       ) {
-        const imgSrc = esc(singleVal);
+        const imgSrc = escapeHtmlAttr(singleVal);
         const showFooter = !!(stampTypes || singleVal.includes('live'));
         const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
         block = `

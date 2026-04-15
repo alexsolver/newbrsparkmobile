@@ -5,7 +5,11 @@ const {
   buildDefaultAnalyzeProposalOptions,
   applyDefaultTypeIconsToSchemaItems,
 } = require('./formAiFieldCatalog');
-const { MAX_VISION_STRUCTURED_PROMPT_CHARS } = require('../constants/visionSimNaoQuestions');
+const {
+  MAX_VISION_STRUCTURED_PROMPT_CHARS,
+  MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
+} = require('../constants/visionSimNaoQuestions');
 
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
@@ -184,21 +188,59 @@ function normalizeSchemaItem(raw, usedIds) {
       : [];
   }
   if (type === 'vision_checklist' || type === 'vision_ai_analysis') {
-    let structured =
-      raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
-    if (!structured) {
-      const rawVq = raw.visionQuestions ?? raw.vision_questions;
-      if (Array.isArray(rawVq) && rawVq.length) {
-        structured = rawVq
-          .map((x) => String(x?.text || x?.question || '').trim())
-          .filter(Boolean)
-          .join('\n\n');
+    const rawVq = raw.visionQuestions ?? raw.vision_questions;
+    const parseVisionQuestionItems = () => {
+      if (!Array.isArray(rawVq) || !rawVq.length) return [];
+      return rawVq
+        .map((x, i) => {
+          const text = String(x?.text || x?.question || '').trim();
+          if (!text) return null;
+          const id = String(x?.id || `q${i + 1}`)
+            .replace(/[^\w-]/g, '_')
+            .slice(0, 64);
+          return { id, text };
+        })
+        .filter(Boolean)
+        .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
+    };
+
+    if (type === 'vision_checklist') {
+      const items = parseVisionQuestionItems();
+      if (items.length >= 2) {
+        base.visionStructuredPrompt = '';
+        base.visionQuestions = items.map((q, i) => ({
+          id: q.id || `q${i + 1}`,
+          text: q.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
+        }));
+      } else {
+        let structured =
+          raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
+        if (!structured && items.length === 1) {
+          structured = items[0].text;
+        }
+        if (!structured) {
+          structured = 'A evidência visual confirma o item verificado?';
+        }
+        structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+        base.visionStructuredPrompt = structured;
+        base.visionQuestions = [{ id: 'q1', text: structured }];
       }
+    } else {
+      let structured =
+        raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
+      if (!structured) {
+        const items = parseVisionQuestionItems();
+        if (items.length) {
+          structured = items
+            .map((x) => x.text)
+            .join('\n\n');
+        }
+      }
+      if (!structured) structured = 'A evidência visual confirma o item verificado?';
+      structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      base.visionStructuredPrompt = structured;
+      base.visionQuestions = [{ id: 'q1', text: structured }];
     }
-    if (!structured) structured = 'A evidência visual confirma o item verificado?';
-    structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-    base.visionStructuredPrompt = structured;
-    base.visionQuestions = [{ id: 'q1', text: structured }];
     const vcm = raw.visionCaptureMode ?? raw.vision_capture_mode;
     if (typeof vcm === 'string') {
       const m = vcm.trim();

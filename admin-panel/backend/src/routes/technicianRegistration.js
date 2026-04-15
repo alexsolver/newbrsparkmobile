@@ -13,9 +13,8 @@ const {
   MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
 } = require('../lib/technicianRegistrationMaterialize');
 const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
-const { sendEmailViaNylas } = require('../lib/nylasSendEmail');
-const { syncUserToCompreface } = require('../lib/comprefaceSync');
-const { persistComprefaceRecognitionSync } = require('../lib/comprefaceRecognitionPersist');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 const {
   draftPatchTouchesLockedIdentity,
@@ -73,7 +72,7 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Passo 1 com gate IA (foto de perfil separada das fotos CompreFace). */
+/** Passo 1 com gate IA (foto de perfil separada das fotos FaceMatch). */
 function isAiTechRegProfileGateFromRaw(raw) {
   const cap = raw && typeof raw === 'object' ? raw.techRegPrimaryProfileCapture : null;
   if (!cap || typeof cap !== 'object') return false;
@@ -1071,10 +1070,19 @@ publicRouter.delete(
  * Utilizadores com TechnicianProfile PENDING mas sem candidatura de cadastro em curso
  * (o que explica «Prestador pendente» em Utilizadores sem linha em Cadastro de prestadores).
  */
-async function listOrphanPendingTechnicianProfiles(tenantFilter) {
+async function listOrphanPendingTechnicianProfiles(tenantFilter, qSearch) {
+  const q = qSearch != null ? String(qSearch).trim().slice(0, 200) : '';
   const userWhere = {
     technicianProfile: { status: 'PENDING' },
     ...(tenantFilter ? { tenantId: tenantFilter } : {}),
+    ...(q
+      ? {
+          OR: [
+            { email: { contains: q, mode: 'insensitive' } },
+            { name: { contains: q, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
   };
   const users = await prisma.user.findMany({
     where: userWhere,
@@ -1127,25 +1135,35 @@ async function listOrphanPendingTechnicianProfiles(tenantFilter) {
 
 adminRouter.get('/', async (req, res) => {
   try {
-    const { status, tenantId: qTenant, includeOrphans } = req.query;
+    const { status, tenantId: qTenant, includeOrphans, q: qRaw } = req.query;
     const a = req.admin;
     let tenantFilter = qTenant || null;
     if (a?.panelUser && a.tenantId) tenantFilter = a.tenantId;
 
     const statusStr = status ? String(status) : '';
+    const qSearch = qRaw != null ? String(qRaw).trim().slice(0, 200) : '';
     /** Com filtro por estado de candidatura, não misturar filas diferentes. */
     const wantOrphans =
       includeOrphans !== '0' &&
       (!statusStr || statusStr === 'PERFIL_SEM_CANDIDATURA' || statusStr === '__ORPHAN__');
 
     if (statusStr === 'PERFIL_SEM_CANDIDATURA' || statusStr === '__ORPHAN__') {
-      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter);
+      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter, qSearch);
       return res.json({ data: orphans });
     }
 
-    const where = {};
-    if (tenantFilter) where.tenantId = tenantFilter;
-    if (statusStr) where.status = statusStr;
+    const whereParts = [];
+    if (tenantFilter) whereParts.push({ tenantId: tenantFilter });
+    if (statusStr) whereParts.push({ status: statusStr });
+    if (qSearch) {
+      whereParts.push({
+        OR: [
+          { invitedEmail: { contains: qSearch, mode: 'insensitive' } },
+          { tenant: { name: { contains: qSearch, mode: 'insensitive' } } },
+        ],
+      });
+    }
+    const where = whereParts.length === 0 ? {} : whereParts.length === 1 ? whereParts[0] : { AND: whereParts };
 
     const rows = await prisma.technicianRegistrationApplication.findMany({
       where,
@@ -1176,7 +1194,7 @@ adminRouter.get('/', async (req, res) => {
 
     let data = mapped;
     if (wantOrphans && !statusStr) {
-      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter);
+      const orphans = await listOrphanPendingTechnicianProfiles(tenantFilter, qSearch);
       data = [...orphans, ...mapped];
     }
 
@@ -1283,24 +1301,24 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
 <p><a href="${escapeHtml(deepLinkHint)}">Abrir convite no app</a></p>
 <p style="font-size:12px;color:#555">Se o botão não funcionar, copie o link acima para o navegador ou abra o app manualmente após iniciar sessão.</p>`;
 
-    let emailInfo = { sent: false, skipped: true, detail: null };
+    let emailInfo = { sent: false, skipped: true, detail: null, provider: 'none' };
     try {
-      const send = await sendEmailViaNylas({
+      const { send, provider } = await sendTransactionalEmailWithFallback({
         to: { email: em },
         subject: `Convite BrSpark — cadastro de prestador (${tenant.name})`,
         text: textBody,
         html: htmlBody,
       });
       if (send.skipped) {
-        emailInfo = { sent: false, skipped: true, detail: send.reason || null };
+        emailInfo = { sent: false, skipped: true, detail: send.reason || null, provider };
       } else if (send.ok) {
-        emailInfo = { sent: true, skipped: false, detail: null };
+        emailInfo = { sent: true, skipped: false, detail: null, provider };
       } else {
-        emailInfo = { sent: false, skipped: false, detail: send.error || 'Falha no envio.' };
-        console.error('[tech-reg invite] Nylas:', send.error);
+        emailInfo = { sent: false, skipped: false, detail: send.error || 'Falha no envio.', provider };
+        console.error('[tech-reg invite] envio:', send.error, 'provider:', provider);
       }
     } catch (e) {
-      emailInfo = { sent: false, skipped: false, detail: e.message || String(e) };
+      emailInfo = { sent: false, skipped: false, detail: e.message || String(e), provider: 'none' };
       console.error('[tech-reg invite] e-mail:', e);
     }
 
@@ -1383,10 +1401,9 @@ adminRouter.post('/:id/approve', async (req, res) => {
 
     const user = await materializeApprovedApplication(prisma, app.id);
     try {
-      const r = await syncUserToCompreface(prisma, user.id);
-      await persistComprefaceRecognitionSync(prisma, user.id, r);
+      await syncComprefaceGalleryAfterUserChange(prisma, user.id, req, 'tech_reg_approve');
     } catch (e) {
-      console.warn('[tech-reg] CompreFace após aprovação', e);
+      console.warn('[tech-reg] FaceMatch após aprovação', e);
     }
 
     await prisma.auditLog

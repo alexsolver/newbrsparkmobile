@@ -16,6 +16,7 @@ const { consumeQuota } = require('../lib/planQuotaService');
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
+  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
 
 const router = express.Router();
@@ -24,6 +25,29 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 95 * 1024 * 1024 },
 });
+
+/**
+ * React Native / multipart: `mimetype` pode vir vazio ou `application/octet-stream`.
+ * Inferir a partir do nome do ficheiro para não devolver HTTP 400 em vídeos válidos.
+ */
+function resolveVisionUploadMime(file) {
+  const raw = String(file.mimetype || '').trim().toLowerCase();
+  const name = String(file.originalname || '').trim().toLowerCase();
+  const inferFromName = () => {
+    if (/\.(mp4|m4v)(\?|$)/i.test(name)) return 'video/mp4';
+    if (/\.(webm)(\?|$)/i.test(name)) return 'video/webm';
+    if (/\.(mov|qt)(\?|$)/i.test(name)) return 'video/quicktime';
+    if (/\.(3gp|3gpp)(\?|$)/i.test(name)) return 'video/3gpp';
+    if (/\.(mkv)(\?|$)/i.test(name)) return 'video/x-matroska';
+    if (/\.(jpe?g)(\?|$)/i.test(name)) return 'image/jpeg';
+    if (/\.(png)(\?|$)/i.test(name)) return 'image/png';
+    if (/\.(webp)(\?|$)/i.test(name)) return 'image/webp';
+    if (/\.(heic|heif)(\?|$)/i.test(name)) return 'image/heic';
+    return '';
+  };
+  if (raw && raw !== 'application/octet-stream') return raw;
+  return inferFromName() || raw;
+}
 
 /**
  * POST /api/checklists/vision/analyze
@@ -53,7 +77,9 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
             })
             .filter((x) => x && x.rawText);
           const textMax =
-            mapped.length <= 1 ? MAX_VISION_STRUCTURED_PROMPT_CHARS : 500;
+            mapped.length <= 1
+              ? MAX_VISION_STRUCTURED_PROMPT_CHARS
+              : MAX_VISION_MULTI_SIMNAO_TEXT_CHARS;
           questions = mapped
             .map((x) => {
               const text = x.rawText.slice(0, textMax);
@@ -75,7 +101,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       });
     }
 
-    const mt = String(file.mimetype || '').toLowerCase();
+    const mt = resolveVisionUploadMime(file);
     const isImage = mt.startsWith('image/');
     const isVideo = mt.startsWith('video/');
     if (!isImage && !isVideo) {
@@ -108,7 +134,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       try {
         const normalized = await analyzeWithGoogleAiStudio({
           buffer: file.buffer,
-          mimetype: file.mimetype || mt,
+          mimetype: mt || 'application/octet-stream',
           questions,
           integration: studioInt,
           visionRating0To10,
@@ -171,7 +197,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
         name: 'media',
         value: file.buffer,
         filename: file.originalname || (isVideo ? 'upload.mp4' : 'upload.jpg'),
-        contentType: file.mimetype || 'application/octet-stream',
+        contentType: mt || 'application/octet-stream',
       },
       { name: 'questions', value: JSON.stringify(questions) },
       { name: 'schemaVersion', value: '1' },

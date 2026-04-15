@@ -10,37 +10,37 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Metatags</span>
+        <span id="mpc-bc-here">Metatags</span>
       </nav>
     </div>
     <div class="page-body">
 
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Metatags e categorias</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Metatags e categorias</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Tipos de bem, estoque, serviço, despesas, receitas, mídia e tags globais usados no app e no painel. Filtre por tipo e mantenha chaves estáveis para não quebrar dados existentes.
         </p>
       </header>
 
       <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));margin-bottom:24px">
-        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="pricetags-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total</div></div>
-        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="home-outline"></ion-icon></div><div class="stat-value" id="stat-asset-types">—</div><div class="stat-label">Tipos de Bem</div></div>
-        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cube-outline"></ion-icon></div><div class="stat-value" id="stat-stock">—</div><div class="stat-label">Cat. Estoque</div></div>
-        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="construct-outline"></ion-icon></div><div class="stat-value" id="stat-service">—</div><div class="stat-label">Cat. Serviço</div></div>
-        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="trending-down-outline"></ion-icon></div><div class="stat-value" id="stat-expense">—</div><div class="stat-label">Despesa (bens)</div></div>
-        <div class="stat-card" style="--accent-color:#C2410C"><div class="stat-icon" style="background:#FFF7ED;color:#C2410C"><ion-icon name="briefcase-outline"></ion-icon></div><div class="stat-value" id="stat-tech-expense">—</div><div class="stat-label">Desp. técnico</div></div>
-        <div class="stat-card" style="--accent-color:#10B981"><div class="stat-icon" style="background:#ECFDF5;color:#10B981"><ion-icon name="trending-up-outline"></ion-icon></div><div class="stat-value" id="stat-revenue">—</div><div class="stat-label">Cat. Receita</div></div>
-        <div class="stat-card" style="--accent-color:#8B5CF6"><div class="stat-icon" style="background:#F5F3FF;color:#8B5CF6"><ion-icon name="images-outline"></ion-icon></div><div class="stat-value" id="stat-media">—</div><div class="stat-label">Cat. Mídia</div></div>
-        <div class="stat-card" style="--accent-color:var(--text3)"><div class="stat-icon" style="background:var(--surface2);color:var(--text3)"><ion-icon name="globe-outline"></ion-icon></div><div class="stat-value" id="stat-global">—</div><div class="stat-label">Tags Globais</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="pricetags-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon></div><div class="stat-value" id="stat-total">—</div><div class="stat-label" id="mt-stat-total">Total</div></div>
+        <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-icon" style="background:var(--blue-dim);color:var(--blue)"><ion-icon name="home-outline"></ion-icon></div><div class="stat-value" id="stat-asset-types">—</div><div class="stat-label" id="mt-stat-asset">Tipos de Bem</div></div>
+        <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="cube-outline"></ion-icon></div><div class="stat-value" id="stat-stock">—</div><div class="stat-label" id="mt-stat-stock">Cat. Estoque</div></div>
+        <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="construct-outline"></ion-icon></div><div class="stat-value" id="stat-service">—</div><div class="stat-label" id="mt-stat-service">Cat. Serviço</div></div>
+        <div class="stat-card" style="--accent-color:#EF4444"><div class="stat-icon" style="background:#FEF2F2;color:#EF4444"><ion-icon name="trending-down-outline"></ion-icon></div><div class="stat-value" id="stat-expense">—</div><div class="stat-label" id="mt-stat-expense">Despesa (bens)</div></div>
+        <div class="stat-card" style="--accent-color:#C2410C"><div class="stat-icon" style="background:#FFF7ED;color:#C2410C"><ion-icon name="briefcase-outline"></ion-icon></div><div class="stat-value" id="stat-tech-expense">—</div><div class="stat-label" id="mt-stat-tech-exp">Desp. técnico</div></div>
+        <div class="stat-card" style="--accent-color:#10B981"><div class="stat-icon" style="background:#ECFDF5;color:#10B981"><ion-icon name="trending-up-outline"></ion-icon></div><div class="stat-value" id="stat-revenue">—</div><div class="stat-label" id="mt-stat-revenue">Cat. Receita</div></div>
+        <div class="stat-card" style="--accent-color:#8B5CF6"><div class="stat-icon" style="background:#F5F3FF;color:#8B5CF6"><ion-icon name="images-outline"></ion-icon></div><div class="stat-value" id="stat-media">—</div><div class="stat-label" id="mt-stat-media">Cat. Mídia</div></div>
+        <div class="stat-card" style="--accent-color:var(--text3)"><div class="stat-icon" style="background:var(--surface2);color:var(--text3)"><ion-icon name="globe-outline"></ion-icon></div><div class="stat-value" id="stat-global">—</div><div class="stat-label" id="mt-stat-global">Tags Globais</div></div>
       </div>
 
       <section class="data-shell fade-in">
         <div class="data-toolbar">
           <div class="data-toolbar-main">
             <label class="filter-field">
-              <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon> Tipo</span>
+              <span class="filter-field-label"><ion-icon name="funnel-outline"></ion-icon><span id="mt-lbl-type">Tipo</span></span>
               <select class="form-control filter-field-control" id="filter-type" style="min-width:220px;max-width:100%">
                 <option value="">Todos os tipos</option>
                 <option value="ASSET_TYPE">Tipos de bem</option>
@@ -63,12 +63,12 @@
           </div>
         </div>
         <div class="data-table-head">
-          <h2 class="data-table-title">Metatags cadastradas</h2>
+          <h2 class="data-table-title" id="mt-table-title">Metatags cadastradas</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
         </div>
         <div class="table-wrap">
           <table class="table-data">
-            <thead><tr><th>Ícone</th><th>Tipo</th><th>Chave</th><th>PT-BR</th><th>Cor</th><th>Status</th><th class="text-right">Ações</th></tr></thead>
+            <thead><tr><th id="mt-th-icon">Ícone</th><th id="mt-th-type">Tipo</th><th id="mt-th-key">Chave</th><th id="mt-th-pt">PT-BR</th><th id="mt-th-color">Cor</th><th id="mt-th-status">Status</th><th class="text-right" id="mt-th-actions">Ações</th></tr></thead>
             <tbody id="tags-tbody"><tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text3);font-size:13px;font-weight:500">Carregando…</td></tr></tbody>
           </table>
         </div>
@@ -146,7 +146,9 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import { applyMetatagsPageI18n, mpT } from './js/menu-pages-i18n.js';
   await initPage();
+  applyMetatagsPageI18n();
 
   const typeLabel = {
     ASSET_TYPE:       '<ion-icon name="home-outline"></ion-icon> Tipo de Bem',
@@ -733,7 +735,7 @@
   };
 
   window.deleteTag = async (id) => {
-    if (!confirm('Excluir esta metatag?')) return;
+    if (!confirm(mpT('mt_confirm_delete'))) return;
     await CONFIG.del(`/metatags/${id}`);
     loadTags();
   };
@@ -750,10 +752,10 @@
       color:     document.getElementById('tag-color').value,
       sortOrder: parseInt(document.getElementById('tag-sort').value) || 0,
     };
-    if (!body.key || !body.ptBr) return alert('Chave e Nome PT-BR são obrigatórios.');
+    if (!body.key || !body.ptBr) return alert(mpT('mt_alert_key_pt'));
     const res = id ? await CONFIG.put(`/metatags/${id}`, body) : await CONFIG.post('/metatags', body);
     if (res?.id) { closeModal('tag-modal'); loadTags(); }
-    else alert('Erro: ' + (res?.error || 'Chave duplicada ou falha ao salvar.'));
+    else alert(mpT('mt_alert_save_err', { detail: res?.error || 'Chave duplicada ou falha ao salvar.' }));
   });
 
   document.getElementById('filter-type').addEventListener('change', loadTags);

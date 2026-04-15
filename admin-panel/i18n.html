@@ -10,15 +10,15 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Traduções e regionais</span>
+        <span id="mpc-bc-here">Traduções e regionais</span>
       </nav>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Traduções e configurações regionais</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Traduções e configurações regionais</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Dicionário do app, metatags, flags, perfis de locale e overrides por tenant. Salve após editar; a tradução com IA preenche só campos vazios.
         </p>
       </header>
@@ -30,7 +30,7 @@
             <input type="search" id="search-input" class="form-control" placeholder="Buscar por chave ou conteúdo…" autocomplete="off" />
           </div>
           <label class="filter-field" style="min-width:160px">
-            <span class="filter-field-label"><ion-icon name="layers-outline"></ion-icon> Fonte</span>
+            <span class="filter-field-label"><ion-icon name="layers-outline"></ion-icon><span id="trl-lbl-source">Fonte</span></span>
             <select id="source-filter" class="form-control filter-field-control">
               <option value="app">Dicionário do app</option>
               <option value="db-metatags">Metatags (categorias)</option>
@@ -40,7 +40,7 @@
             </select>
           </label>
           <label class="filter-field" id="tenant-selector-wrap" style="min-width:180px;display:none">
-            <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon> Tenant</span>
+            <span class="filter-field-label"><ion-icon name="business-outline"></ion-icon><span id="trl-lbl-tenant">Tenant</span></span>
             <select class="form-control filter-field-control" id="tenant-selector">
               <option value="">Selecione o tenant…</option>
             </select>
@@ -60,16 +60,16 @@
 
       <section class="data-shell fade-in" id="table-panel">
         <div class="data-table-head">
-          <h2 class="data-table-title">Entradas</h2>
+          <h2 class="data-table-title" id="trl-table-title">Entradas</h2>
         </div>
         <div class="table-wrap" style="max-height: calc(100vh - 320px); overflow-y: auto;">
           <table class="table-data" style="table-layout: fixed; width: 100%;">
             <thead id="i18n-thead" style="position: sticky; top: 0; z-index: 10;">
               <tr>
-                <th style="width: 25%;">Chave / ID</th>
-                <th>Português (pt-BR)</th>
-                <th>Inglês (en-US)</th>
-                <th>Espanhol (es-ES)</th>
+                <th style="width: 25%;" id="trl-th-key">Chave / ID</th>
+                <th id="trl-th-pt">Português (pt-BR)</th>
+                <th id="trl-th-en">Inglês (en-US)</th>
+                <th id="trl-th-es">Espanhol (es-ES)</th>
               </tr>
             </thead>
             <tbody id="i18n-tbody">
@@ -89,21 +89,23 @@
   <!-- AI Progress Modal -->
   <div id="ai-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
     <div style="background:var(--surface);border-radius:16px;padding:32px;width:420px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <div style="font-size:20px;font-weight:900;margin-bottom:4px"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Tradução com IA</div>
-      <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Preenchendo campos vazios via MyMemory API...</div>
+      <div style="font-size:20px;font-weight:900;margin-bottom:4px"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> <span id="trl-ai-modal-title">Tradução com IA</span></div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px" id="trl-ai-sub">Preenchendo campos vazios via MyMemory API...</div>
       <div style="background:var(--border);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px">
         <div id="ai-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
       </div>
       <div id="ai-progress-txt" style="font-size:12px;color:var(--text3);text-align:center">0 / 0</div>
       <div id="ai-log" style="font-size:11px;margin-top:12px;max-height:120px;overflow-y:auto;color:var(--text2)"></div>
-      <button type="button" id="ai-cancel-btn" class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%">Cancelar</button>
+      <button type="button" id="ai-cancel-btn" class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%"><span id="trl-ai-cancel">Cancelar</span></button>
     </div>
   </div>
 
   <script type="module">
     import { initPage } from './js/sidebar.js';
     import { CONFIG }   from './js/config.js';
+    import { applyTrlPageI18n, mpT } from './js/menu-pages-i18n.js';
     await initPage();
+    applyTrlPageI18n();
 
     let allEntries = [];
     let modifiedEntries = new Set();
@@ -135,7 +137,7 @@
         localesGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">Buscando configurações regionais...</div>';
         try {
           const locales = await CONFIG.get('/i18n/entries?source=locales') || [];
-          badge.textContent = `${locales.length} perfis`;
+          badge.textContent = mpT('trl_locales_count', { n: locales.length });
           localesGrid.innerHTML = locales.map(l => `
             <div class="panel" style="padding:20px">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
@@ -175,7 +177,7 @@
              btn.disabled = true; btn.textContent = 'Salvando...';
              await CONFIG.post('/i18n/locales', data);
              btn.disabled = false; btn.textContent = 'Salvar';
-             alert('Perfil atualizado!');
+             alert(mpT('trl_alert_profile_ok'));
           };
         } catch (err) {
           localesGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--danger)">Erro: ${err.message}</div>`;
@@ -225,7 +227,7 @@
         (e.key && e.key.toLowerCase().includes(query)) || 
         (e.ptBr && e.ptBr.toString().toLowerCase().includes(query))
       );
-      badge.textContent = `${filtered.length} entradas`;
+      badge.textContent = mpT('trl_counter', { n: filtered.length });
 
       tbody.innerHTML = filtered.map(e => `
         <tr data-key="${e.key}" ${e.isOverride ? 'style="background:var(--accent)08"' : ''}>
@@ -249,7 +251,7 @@
     }
 
     async function saveAll() {
-      if (modifiedEntries.size === 0) return alert('Sem alterações.');
+      if (modifiedEntries.size === 0) return alert(mpT('trl_alert_no_changes'));
       const source = sourceFilter.value;
       const btn = document.getElementById('save-all-btn');
       const originalText = btn.innerHTML;
@@ -284,8 +286,8 @@
           await CONFIG.post('/i18n/update', { source, entries: changes });
         }
         
-        alert('Alterações salvas!'); modifiedEntries.clear(); loadEntries();
-      } catch (err) { alert(`Erro: ${err.message}`); }
+        alert(mpT('trl_alert_saved')); modifiedEntries.clear(); loadEntries();
+      } catch (err) { alert(mpT('trl_alert_err', { msg: err.message })); }
       finally { btn.disabled = false; btn.innerHTML = originalText; }
     }
 
@@ -325,7 +327,7 @@
 
       // Use the first non-empty value as source, then translate to the others
       const source = ptVal || enVal || esVal;
-      if (!source) return alert('Nenhum valor para traduzir nesta linha.');
+      if (!source) return alert(mpT('trl_alert_no_val'));
 
       const srcLang = ptVal ? 'pt-BR' : enVal ? 'en' : 'es';
 
@@ -350,7 +352,7 @@
         if (hasMissing && hasSource) toTranslate.push({ key, ptEl, enEl, esEl });
       });
 
-      if (toTranslate.length === 0) return alert('Nenhum campo vazio encontrado nos resultados visíveis.');
+      if (toTranslate.length === 0) return alert(mpT('trl_alert_no_empty'));
 
       // Show modal
       aiCancelled = false;

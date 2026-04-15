@@ -81,6 +81,7 @@
           "enableBackgroundRemoteNotifications": true
         }
       ],
+      "expo-live-activity",
       "expo-router",
       [
         "expo-image-picker",

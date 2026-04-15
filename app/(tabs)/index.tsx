@@ -2281,7 +2281,7 @@ export default function DashboardScreen() {
     return loadDataChainRef.current;
   };
 
-  /** Abrir cartão da OS após toque «Ver detalhes» na notificação push. */
+  /** Abrir cartão da OS após toque «OK» na notificação push. */
   useEffect(() => {
     if (userRole !== 'TECHNICIAN') return;
     const tid = peekPendingOpenExecutionFromPush();

@@ -12,6 +12,10 @@ import {
 import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent';
 import { apiFetch } from '../services/auth';
 import { enqueueExecutionStatusPatch } from '../services/syncService';
+import {
+  startTechTaskLiveActivity,
+  stopTechTaskLiveActivityForTask,
+} from '../services/techTaskLiveActivity';
 
 const REJECT_REASON_FROM_PUSH =
   'Recusada pelo alerta no dispositivo sem motivo adicional fornecido.';
@@ -52,12 +56,32 @@ async function handleNotificationResponse(
     return;
   }
 
-  if (type !== 'os_dispatched') return;
+  /** Cliente escreveu no chat do link de rastreio — abrir a OS no app. */
+  if (type === 'tracking_client_chat') {
+    if (!isDefault) return;
+    const taskId = String(data.taskId || data.executionId || '').trim();
+    if (!taskId) return;
+    setPendingOpenExecutionFromPush(taskId);
+    router.replace('/(tabs)' as never);
+    return;
+  }
+
+  /** Despacho novo ou OS reaberta para revisão — mesmas ações (Aceitar / Recusar / OK). */
+  if (type !== 'os_dispatched' && type !== 'os_reopened_revision') return;
 
   const taskId = String(data.taskId || '').trim();
   if (!taskId) return;
 
+  const content = response.notification.request.content;
+  const liveTitle = String(content.title || 'BrSpark').slice(0, 56);
+  const liveSub = [content.subtitle, content.body]
+    .filter((x) => typeof x === 'string' && String(x).trim())
+    .map((x) => String(x).trim())
+    .join(' — ')
+    .slice(0, 120);
+
   if (action === TECH_PUSH_ACTION_ACCEPT) {
+    await stopTechTaskLiveActivityForTask(taskId);
     try {
       await enqueueExecutionStatusPatch(taskId, {
         status: 'ACCEPTED',
@@ -70,6 +94,7 @@ async function handleNotificationResponse(
   }
 
   if (action === TECH_PUSH_ACTION_REJECT) {
+    await stopTechTaskLiveActivityForTask(taskId);
     try {
       const res = await apiFetch(`/api/operations/tasks/${encodeURIComponent(taskId)}/reject`, {
         method: 'POST',
@@ -99,6 +124,11 @@ async function handleNotificationResponse(
   }
 
   if (action === TECH_PUSH_ACTION_OPEN || isDefault) {
+    await startTechTaskLiveActivity({
+      taskId,
+      title: liveTitle,
+      subtitle: liveSub || undefined,
+    });
     setPendingOpenExecutionFromPush(taskId);
     router.replace('/(tabs)' as never);
   }
@@ -117,6 +147,30 @@ export function PushNotificationResponseBridge() {
     });
     return () => sub.remove();
   }, [router]);
+
+  /** Com o app em primeiro plano, mostra Live Activity ao chegar OS/revisão (cartão no Lock Screen ao bloquear de novo). */
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const raw = notification.request.content.data;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+      const d = raw as Record<string, unknown>;
+      const t = String(d.type || '');
+      if (t !== 'os_dispatched' && t !== 'os_reopened_revision') return;
+      const taskId = String(d.taskId || '').trim();
+      if (!taskId) return;
+      const c = notification.request.content;
+      void startTechTaskLiveActivity({
+        taskId,
+        title: String(c.title || 'BrSpark').slice(0, 56),
+        subtitle: [c.subtitle, c.body]
+          .filter((x) => typeof x === 'string' && String(x).trim())
+          .map((x) => String(x).trim())
+          .join(' — ')
+          .slice(0, 120),
+      });
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (handledColdStartRef.current) return;

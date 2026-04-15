@@ -85,9 +85,9 @@
 
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Coleta de dados</span>
+        <span id="mpc-bc-here">Coleta de dados</span>
       </nav>
     </div>
 
@@ -96,9 +96,9 @@
       <header class="page-hero fade-in">
         <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px">
           <ion-icon name="pulse-outline" style="color:var(--accent)"></ion-icon>
-          Coleta de dados e privacidade
+          <span id="mpc-hero-title">Coleta de dados e privacidade</span>
         </h1>
-        <p class="page-hero-sub">
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Política global de localização, overrides por tenant, retenção e integridade. Alterações sensíveis exigem alinhamento com privacidade e operações.
         </p>
       </header>
@@ -106,12 +106,12 @@
       <section class="data-shell fade-in" aria-label="Políticas de coleta e retenção">
       <div class="data-toolbar">
         <div class="data-toolbar-main" style="align-items:center">
-          <span class="badge badge-blue" id="policy-source-badge">Política global</span>
+          <span class="badge badge-blue" id="dc-policy-source-badge">Política global</span>
         </div>
         <div class="data-toolbar-actions">
           <button type="button" class="btn btn-primary" onclick="saveGlobalPolicy()">
             <ion-icon name="save-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>
-            Salvar
+            <span id="dc-btn-save-txt">Salvar</span>
           </button>
         </div>
       </div>
@@ -119,13 +119,13 @@
       <!-- TABS -->
       <div class="dc-tabs">
         <button type="button" class="dc-tab active" onclick="switchTab('global', this)">
-          <ion-icon name="globe-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Política global
+          <ion-icon name="globe-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-global-txt">Política global</span>
         </button>
         <button type="button" class="dc-tab" onclick="switchTab('tenants', this)">
-          <ion-icon name="business-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Overrides por Tenant
+          <ion-icon name="business-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-tenants-txt">Overrides por Tenant</span>
         </button>
         <button type="button" class="dc-tab" onclick="switchTab('retention', this)">
-          <ion-icon name="layers-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Retenção de Dados
+          <ion-icon name="layers-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-retention-txt">Retenção de Dados</span>
         </button>
         <button type="button" class="dc-tab" onclick="switchTab('integrity', this)">
           <ion-icon name="shield-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Integridade
@@ -484,7 +484,9 @@
 <script type="module">
 import { initPage } from './js/sidebar.js';
 import { CONFIG }   from './js/config.js';
+import { applyDataCollectionPageChrome } from './js/menu-pages-i18n.js';
 await initPage();
+applyDataCollectionPageChrome();
 
 let globalPolicy = null;
 let currentTenantId = null;
@@ -539,7 +541,7 @@ function populateForm(p) {
   chk('requireCheckinPhoto',           p.requireCheckinPhoto);
   chk('allowOfflineCheckin',           p.allowOfflineCheckin);
   updateRetentionDisplay(p);
-  const badge = document.getElementById('policy-source-badge');
+  const badge = document.getElementById('dc-policy-source-badge');
   if (badge) badge.textContent = p._source === 'global' ? 'Política global' : `Override ${p._source}`;
 }
 

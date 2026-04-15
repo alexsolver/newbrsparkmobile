@@ -74,7 +74,8 @@
     "orders": "Orders",
     "scanner": "Scanner",
     "providerOsSearch": "WO search",
-    "workTime": "Time clock"
+    "workTime": "Time clock",
+    "workTimeBrPj": "Log"
   },
   "radialMenu": {
     "productivity": "My productivity",
@@ -219,7 +220,11 @@
     "alertConsentRequired": "You must accept the Terms and Privacy Policy to continue. (GDPR/LGPD required)",
     "errorLogin": "Sign in error",
     "errorRegister": "Account creation error",
-    "errorConnection": "Check your connection and try again."
+    "errorConnection": "Check your connection and try again.",
+    "oauthOrContinue": "or continue with",
+    "oauthGoogle": "Continue with Google",
+    "oauthFacebook": "Continue with Facebook",
+    "oauthApple": "Continue with Apple"
   },
   "consentFlow": {
     "a11yLogo": "BrSpark",
@@ -1439,7 +1444,11 @@
     "galleryUnavailableBody": "Could not open the gallery.",
     "mediaCaptureError": "Something went wrong while capturing media.",
     "hardwareSimulatorTitle": "Hardware notice",
-    "hardwareSimulatorBody": "Capture may fail in the simulator. On a phone it works normally."
+    "hardwareSimulatorBody": "Capture may fail in the simulator. On a phone it works normally.",
+    "visionVideoTooLongTitle": "Video too long",
+    "visionVideoTooLongBody": "This field allows videos up to {{seconds}} seconds. Record a shorter clip.",
+    "visionYoloVideoFrameTitle": "Video",
+    "visionYoloVideoFrameBody": "The detection service (YOLO) only accepts images. Could not extract a frame from the video. Take a photo or try again."
   },
   "pause": {
     "pickCategory": "Pause reason",
@@ -1545,13 +1554,13 @@
     "hintRoleClient": "End-customer accounts (role «User») cannot use the time clock. Other roles still need the feature flag, tenant module and per-user option enabled.",
     "clientAccountNoAccess": "The time clock is not available for end-customer accounts.",
     "faceBlockedTitle": "Biometrics required",
-    "faceBlockedBody": "Your organization requires face verification and enrollment is not complete or synced yet. Finish face enrollment in your profile or contact an admin.",
+    "faceBlockedBody": "Your organization requires face verification and enrollment is not complete yet. Finish face enrollment in your profile or contact an admin.",
     "noticeTitle": "Company notice",
     "refreshA11y": "Refresh",
     "historyTitle": "Recent punches",
     "historyEmpty": "No punches in the last few days.",
     "punchSaved": "Punch saved.",
-    "punchSavedFaceInvalid": "Your punch was saved. Face enrollment on your profile is still incomplete: add base photos in your profile and/or wait until server-side biometric sync finishes. Update your profile or try again later.",
+    "punchSavedFaceInvalid": "Your punch was saved. Face enrollment is not yet valid for full validation (add base photos in your profile or ask an admin if the company’s biometric gallery was rejected). Update your profile or contact an admin.",
     "historyMatriculaNaoValidada": "Face enrollment not validated for this punch.",
     "detailName": "Full name",
     "detailMatricula": "Employee ID",
@@ -1571,6 +1580,7 @@
     "punchStatusSuccess": "Registered — OK",
     "punchStatusCaution": "Registered with caveat",
     "dayJourneyTitle": "Accumulated time today",
+    "dayJourneyTitleBrPj": "Hours logged today",
     "dayJourneyWorked": "Up to this punch, you had already worked {{time}} today.",
     "gpsRequired": "Enable location and allow GPS access to punch.",
     "faceVerifyFailed": "Could not validate biometrics.",

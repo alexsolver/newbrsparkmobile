@@ -1,2 +1,2 @@
--- Estado persistido da sincronização CompreFace (Recognition) por utilizador
+-- Estado persistido da sincronização FaceMatch (Recognition) por utilizador
 ALTER TABLE "User" ADD COLUMN "comprefaceRecognitionSync" JSONB;

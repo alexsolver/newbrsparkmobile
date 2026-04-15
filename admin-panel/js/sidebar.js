@@ -8,6 +8,23 @@ import {
   persistAdminSessionBundleFromSessionStorage,
   clearAdminSessionFully,
 } from './config.js';
+import { getAdminUiLocale, setAdminUiLocale, t } from './user-pages-i18n.js';
+
+function impersonationBannerHtml() {
+  try {
+    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('brspark_impersonation_backup') : null;
+    if (!raw) return '';
+    const b = JSON.parse(raw);
+    if (!b || !b.token) return '';
+    const lab = String(b.targetLabel || '—').replace(/</g, '&lt;');
+    return `<div class="sidebar-impersonation" role="status">
+      <div class="sidebar-impersonation__txt">${String(t('imp_banner_prefix')).replace(/</g, '&lt;')}<strong>${lab}</strong>${String(t('imp_banner_suffix')).replace(/</g, '&lt;')}</div>
+      <button type="button" class="btn btn-sm btn-outline sidebar-impersonation__btn" id="sidebar-end-impersonation-btn">${String(t('imp_end_btn')).replace(/</g, '&lt;')}</button>
+    </div>`;
+  } catch {
+    return '';
+  }
+}
 
 const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
 
@@ -59,42 +76,47 @@ export function setSidebarCollapsed(collapsed) {
   const btn = document.getElementById('sidebar-toggle');
   if (btn) {
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    btn.setAttribute('aria-label', collapsed ? 'Expandir menu' : 'Recolher menu');
-    btn.title = collapsed ? 'Expandir menu' : 'Recolher menu';
+    btn.setAttribute('aria-label', collapsed ? t('nav_sidebar_expand') : t('nav_sidebar_collapse'));
+    btn.title = collapsed ? t('nav_sidebar_expand') : t('nav_sidebar_collapse');
   }
 }
 
 export const NAV_ITEMS = [
-  { page: 'dashboard.html',     icon: 'grid-outline',       label: 'Dashboard',           section: null },
-  { page: 'tenants.html',       icon: 'business-outline',   label: 'Tenants',              section: 'Gestão' },
-  { page: 'users.html',         icon: 'people-outline',     label: 'Usuários',              section: null },
-  { page: 'technician-applications.html', icon: 'person-add-outline', label: 'Cadastro prestador', section: null },
-  { page: 'checklists.html',    icon: 'list-circle-outline',label: 'Forms Builder',   section: 'Operações' },
-  { page: 'operations.html',    icon: 'git-branch-outline', label: 'Central de Operações', section: null },
-  { page: 'routine-tasks.html', icon: 'repeat-outline',     label: 'RT — Tarefas de rotina', section: null },
-  { page: 'reports.html',       icon: 'document-text-outline', label: 'Relatórios PDF', section: null },
-  { page: 'evaluations.html',   icon: 'star-half-outline',     label: 'Avaliações',           section: null },
-  { page: 'cockpit.html',       icon: 'pulse-outline',      label: 'Sync Cockpit',         section: null },
-  { page: 'locations.html',     icon: 'location-outline',   label: 'Multi-Location',        section: 'Multi-Location' },
-  { page: 'i18n.html',          icon: 'globe-outline',      label: 'Traduções e regionais', section: null },
-  { page: 'metatags.html',      icon: 'pricetags-outline',  label: 'Metatags',              section: 'Plataforma' },
-  { page: 'subscriptions.html', icon: 'card-outline',       label: 'Assinaturas',          section: null },
-  { page: 'plans.html',         icon: 'layers-outline',     label: 'Planos (pacotes)',     section: null },
-  { page: 'integrations.html',  icon: 'flash-outline',       label: 'Integrações',           section: null },
-  { page: 'notifications.html', icon: 'notifications-outline', label: 'Notificações',          section: null },
-  { page: 'compliance.html',      icon: 'shield-checkmark-outline', label: 'LGPD & Compliance',   section: null },
+  { page: 'dashboard.html', icon: 'grid-outline', labelKey: 'nav_dashboard', sectionKey: null },
+  { page: 'tenants.html', icon: 'business-outline', labelKey: 'nav_tenants', sectionKey: 'nav_sec_mgmt' },
+  { page: 'users.html', icon: 'people-outline', labelKey: 'nav_users', sectionKey: null },
+  {
+    page: 'technician-applications.html',
+    icon: 'person-add-outline',
+    labelKey: 'nav_tech_signup',
+    sectionKey: null,
+  },
+  { page: 'checklists.html', icon: 'list-circle-outline', labelKey: 'nav_forms_builder', sectionKey: 'nav_sec_ops' },
+  { page: 'operations.html', icon: 'git-branch-outline', labelKey: 'nav_operations', sectionKey: null },
+  { page: 'routine-tasks.html', icon: 'repeat-outline', labelKey: 'nav_routine_tasks', sectionKey: null },
+  { page: 'reports.html', icon: 'document-text-outline', labelKey: 'nav_reports_pdf', sectionKey: null },
+  { page: 'evaluations.html', icon: 'star-half-outline', labelKey: 'nav_evaluations', sectionKey: null },
+  { page: 'cockpit.html', icon: 'pulse-outline', labelKey: 'nav_cockpit', sectionKey: null },
+  { page: 'locations.html', icon: 'location-outline', labelKey: 'nav_locations', sectionKey: 'nav_sec_multi' },
+  { page: 'i18n.html', icon: 'globe-outline', labelKey: 'nav_i18n', sectionKey: null },
+  { page: 'metatags.html', icon: 'pricetags-outline', labelKey: 'nav_metatags', sectionKey: 'nav_sec_plat' },
+  { page: 'subscriptions.html', icon: 'card-outline', labelKey: 'nav_subscriptions', sectionKey: null },
+  { page: 'plans.html', icon: 'layers-outline', labelKey: 'nav_plans', sectionKey: null },
+  { page: 'integrations.html', icon: 'flash-outline', labelKey: 'nav_integrations', sectionKey: null },
+  { page: 'notifications.html', icon: 'notifications-outline', labelKey: 'nav_notifications', sectionKey: null },
+  { page: 'compliance.html', icon: 'shield-checkmark-outline', labelKey: 'nav_compliance', sectionKey: null },
   {
     page: 'tracking-chat-moderation.html',
     icon: 'chatbox-ellipses-outline',
-    label: 'Segurança do chat (visita)',
-    section: null,
+    labelKey: 'nav_chat_mod',
+    sectionKey: null,
   },
-  { page: 'data-collection.html', icon: 'pulse-outline',            label: 'Coleta de Dados',      section: null },
-  { page: 'work-time.html',       icon: 'finger-print-outline',     label: 'Registro de horas',    section: null },
-  { page: 'telemetry.html',       icon: 'navigate-circle-outline',  label: 'Telemetria',            section: null },
-  { page: 'api-docs.html',      icon: 'document-text-outline',   label: 'API Docs',              section: null },
-  { page: 'audit.html',         icon: 'time-outline',       label: 'Auditoria',             section: 'Sistema' },
-  { page: 'system.html',        icon: 'settings-outline',   label: 'Configurações',         section: null },
+  { page: 'data-collection.html', icon: 'pulse-outline', labelKey: 'nav_data_collection', sectionKey: null },
+  { page: 'work-time.html', icon: 'finger-print-outline', labelKey: 'nav_work_time', sectionKey: null },
+  { page: 'telemetry.html', icon: 'navigate-circle-outline', labelKey: 'nav_telemetry', sectionKey: null },
+  { page: 'api-docs.html', icon: 'document-text-outline', labelKey: 'nav_api_docs', sectionKey: null },
+  { page: 'audit.html', icon: 'time-outline', labelKey: 'nav_audit', sectionKey: 'nav_sec_sys' },
+  { page: 'system.html', icon: 'settings-outline', labelKey: 'nav_system', sectionKey: null },
 ];
 
 /** Papéis com menu completo no painel. */
@@ -145,16 +167,89 @@ export function defaultLandingPageForRole(role) {
   return String(role || '').trim() === 'MANAGER' ? 'tenants.html' : 'dashboard.html';
 }
 
-function logout() {
+/** Termina sessão do painel (usado na sidebar e na barra superior). */
+export function adminPanelLogout() {
   clearAdminSessionFully();
   window.location.href = 'index.html';
+}
+
+/**
+ * Barra superior do conteúdo: idioma + avatar/resumo da conta (todas as páginas com `.main-content > .topbar`).
+ */
+function injectGlobalTopbarActions() {
+  const main = document.querySelector('.admin-layout > .main-content') || document.querySelector('.main-content');
+  if (!main) return;
+  const topbar = main.querySelector(':scope > .topbar');
+  if (!topbar || topbar.querySelector('[data-brspark-app-topbar]')) return;
+
+  const email = sessionStorage.getItem('brspark_admin_email') || '';
+  const displayName = (sessionStorage.getItem('brspark_admin_name') || '').trim();
+  const initialsSource = (displayName || email || '—').trim();
+  const initials = initialsSource.slice(0, 2).toUpperCase() || '—';
+  const shortName = (displayName || (email.includes('@') ? email.split('@')[0] : email) || '—').trim();
+
+  const actions = document.createElement('div');
+  actions.className = 'topbar-actions brspark-app-topbar';
+  actions.setAttribute('data-brspark-app-topbar', '1');
+  actions.innerHTML = `
+    <label class="topbar-locale-wrap" for="brspark-topbar-locale">
+      <span class="topbar-locale-icon" title="${String(t('localeLabel')).replace(/"/g, '&quot;')}" aria-hidden="true"><ion-icon name="language-outline"></ion-icon></span>
+      <select id="brspark-topbar-locale" class="form-control topbar-locale-select">
+        <option value="pt-BR">PT</option>
+        <option value="en-US">EN</option>
+        <option value="es-ES">ES</option>
+      </select>
+    </label>
+    <details class="topbar-user-details" id="brspark-topbar-user-wrap">
+      <summary class="topbar-user-trigger">
+        <div class="topbar-user-avatar" id="brspark-topbar-avatar"></div>
+        <div class="topbar-user-meta">
+          <span class="topbar-user-name" id="brspark-topbar-name"></span>
+          <span class="topbar-user-email" id="brspark-topbar-email"></span>
+        </div>
+      </summary>
+      <div class="topbar-user-dropdown">
+        <button type="button" class="btn btn-ghost btn-sm" id="brspark-topbar-logout-btn"></button>
+      </div>
+    </details>
+  `;
+  topbar.appendChild(actions);
+  topbar.classList.add('topbar--with-chrome');
+
+  const av = document.getElementById('brspark-topbar-avatar');
+  const nm = document.getElementById('brspark-topbar-name');
+  const em = document.getElementById('brspark-topbar-email');
+  const locSel = document.getElementById('brspark-topbar-locale');
+  const loBtn = document.getElementById('brspark-topbar-logout-btn');
+  if (av) av.textContent = initials;
+  if (nm) nm.textContent = shortName;
+  if (em) em.textContent = email;
+  if (locSel) {
+    try {
+      locSel.setAttribute('aria-label', t('localeLabel'));
+      locSel.value = getAdminUiLocale();
+      locSel.addEventListener('change', () => {
+        setAdminUiLocale(locSel.value);
+        window.location.reload();
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (loBtn) {
+    loBtn.textContent = t('topbarLogout');
+    loBtn.addEventListener('click', () => adminPanelLogout());
+  }
+
+  document.querySelectorAll('.ue-users-locale').forEach((el) => {
+    el.setAttribute('hidden', '');
+    el.setAttribute('aria-hidden', 'true');
+  });
 }
 
 export function renderSidebar(alertCount = 3) {
   const page = window.location.pathname.split('/').pop().replace('.html','') || 'dashboard';
   const currentPage = page.endsWith('.html') ? page : page + '.html';
-  const email = sessionStorage.getItem('brspark_admin_email') || 'admin@brspark.com';
-  const displayName = sessionStorage.getItem('brspark_admin_name') || '';
   const panelMode = sessionStorage.getItem('brspark_panel_mode') || 'global';
   let tenantLine = '';
   try {
@@ -166,17 +261,15 @@ export function renderSidebar(alertCount = 3) {
   } catch {
     /* ignore */
   }
-  const initials = (displayName || email).slice(0, 2).toUpperCase();
-  const footerTitle = displayName || (panelMode === 'tenant' ? 'Usuário' : 'Administrador');
-
   const role = getStoredPanelRole();
   const items = navItemsForRole(role);
   let lastSection = null;
   const navHtml = items.map(item => {
     let sectionHtml = '';
-    if (item.section && item.section !== lastSection) {
-      sectionHtml = `<div class="nav-section-label">${item.section}</div>`;
-      lastSection = item.section;
+    const secKey = item.sectionKey || null;
+    if (secKey && secKey !== lastSection) {
+      sectionHtml = `<div class="nav-section-label">${t(secKey)}</div>`;
+      lastSection = secKey;
     }
     const pageKey = currentPage.replace('.html','');
     const itemKey = item.page.replace('.html','');
@@ -186,11 +279,12 @@ export function renderSidebar(alertCount = 3) {
       (pageKey === 'technician-applications' && item.page === 'technician-applications.html')
         ? 'active'
         : '';
+    const lab = t(item.labelKey);
     const badge = item.page === 'audit.html' ? `<span class="nav-badge">${alertCount}</span>` : '';
     return `${sectionHtml}
-      <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${item.label.replace(/"/g, '&quot;')}">
+      <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${lab.replace(/"/g, '&quot;')}">
         <ion-icon name="${item.icon}" class="nav-icon" style="font-size:18px"></ion-icon>
-        <span>${item.label}</span>
+        <span>${lab}</span>
         ${badge}
       </a>`;
   }).join('');
@@ -200,29 +294,20 @@ export function renderSidebar(alertCount = 3) {
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-header-row">
-          <a href="${defaultLandingPageForRole(role)}" class="sidebar-brand" title="BrSpark — Início">
+          <a href="${defaultLandingPageForRole(role)}" class="sidebar-brand" title="${String(t('nav_home_title')).replace(/"/g, '&quot;')}">
             <img src="img/logo.png" alt="BrSpark">
           </a>
           <button type="button" class="sidebar-toggle" id="sidebar-toggle"
-            aria-label="${collapsed ? 'Expandir menu' : 'Recolher menu'}"
+            aria-label="${collapsed ? String(t('nav_sidebar_expand')).replace(/"/g, '&quot;') : String(t('nav_sidebar_collapse')).replace(/"/g, '&quot;')}"
             aria-expanded="${collapsed ? 'false' : 'true'}"
-            title="${collapsed ? 'Expandir menu' : 'Recolher menu'}">
+            title="${collapsed ? String(t('nav_sidebar_expand')).replace(/"/g, '&quot;') : String(t('nav_sidebar_collapse')).replace(/"/g, '&quot;')}">
             <ion-icon name="chevron-back-outline"></ion-icon>
           </button>
         </div>
         ${tenantLine}
+        ${impersonationBannerHtml()}
       </div>
       <nav class="sidebar-nav">${navHtml}</nav>
-      <div class="sidebar-footer">
-        <div class="admin-profile" id="logout-btn" title="Sair">
-          <div class="admin-avatar">${initials}</div>
-          <div class="admin-info">
-            <div class="admin-name">${footerTitle.replace(/</g, '&lt;')}</div>
-            <div class="admin-email">${email.replace(/</g, '&lt;')}</div>
-          </div>
-          <ion-icon name="log-out-outline" style="font-size:18px;color:var(--text3)"></ion-icon>
-        </div>
-      </div>
     </aside>`;
 }
 
@@ -257,26 +342,79 @@ export async function initPage() {
     document.head.appendChild(s2);
   }
 
-  document.body.insertAdjacentHTML('afterbegin', renderSidebar());
+  /** Remove sidebars duplicados (sessões antigas / HMR) — um só `position:fixed` cobre o ecrã. */
+  const existingAsides = document.querySelectorAll('body > aside.sidebar');
+  if (existingAsides.length > 1) {
+    for (let i = 1; i < existingAsides.length; i += 1) {
+      existingAsides[i].remove();
+    }
+  }
+  if (!document.querySelector('body > aside.sidebar')) {
+    document.body.insertAdjacentHTML('afterbegin', renderSidebar());
+  }
   if (isSidebarCollapsed() && window.matchMedia('(min-width: 769px)').matches) {
     document.body.classList.add('sidebar-collapsed');
   }
-  document.getElementById('logout-btn').addEventListener('click', logout);
+  const impBtn = document.getElementById('sidebar-end-impersonation-btn');
+  if (impBtn && !impBtn.dataset.ueBound) {
+    impBtn.dataset.ueBound = '1';
+    impBtn.addEventListener('click', () => {
+      let raw;
+      try {
+        raw = sessionStorage.getItem('brspark_impersonation_backup');
+      } catch {
+        raw = null;
+      }
+      if (!raw) return;
+      let b;
+      try {
+        b = JSON.parse(raw);
+      } catch {
+        sessionStorage.removeItem('brspark_impersonation_backup');
+        return;
+      }
+      if (!b || !b.token) {
+        sessionStorage.removeItem('brspark_impersonation_backup');
+        return;
+      }
+      sessionStorage.setItem('brspark_admin_token', b.token);
+      sessionStorage.setItem('brspark_admin_email', b.email || '');
+      sessionStorage.setItem('brspark_admin_name', b.name || '');
+      sessionStorage.setItem('brspark_admin_role', b.role || '');
+      if (b.panelMode) sessionStorage.setItem('brspark_panel_mode', b.panelMode);
+      else sessionStorage.removeItem('brspark_panel_mode');
+      if (b.panelTenant) sessionStorage.setItem('brspark_panel_tenant', b.panelTenant);
+      else sessionStorage.removeItem('brspark_panel_tenant');
+      sessionStorage.removeItem('brspark_impersonation_backup');
+      persistAdminSessionBundleFromSessionStorage();
+      window.location.href = defaultLandingPageForRole(b.role || '');
+    });
+  }
 
   const toggle = document.getElementById('sidebar-toggle');
-  if (toggle) {
+  if (toggle && !toggle.dataset.ueBound) {
+    toggle.dataset.ueBound = '1';
     toggle.addEventListener('click', () => {
       setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
     });
   }
 
-  window.matchMedia('(min-width: 769px)').addEventListener('change', (e) => {
-    if (!e.matches) {
-      document.body.classList.remove('sidebar-collapsed');
-    } else if (isSidebarCollapsed()) {
-      document.body.classList.add('sidebar-collapsed');
-    }
-  });
+  if (!window.__brsparkSidebarMqlBound) {
+    window.__brsparkSidebarMqlBound = true;
+    window.matchMedia('(min-width: 769px)').addEventListener('change', (e) => {
+      if (!e.matches) {
+        document.body.classList.remove('sidebar-collapsed');
+      } else if (isSidebarCollapsed()) {
+        document.body.classList.add('sidebar-collapsed');
+      }
+    });
+  }
 
   persistAdminSessionBundleFromSessionStorage();
+
+  try {
+    injectGlobalTopbarActions();
+  } catch (e) {
+    console.warn('[admin] injectGlobalTopbarActions:', e);
+  }
 }

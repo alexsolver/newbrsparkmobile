@@ -33,26 +33,29 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Integrações</span>
+        <span id="mpc-bc-here">Integrações</span>
       </nav>
-      <div class="topbar-actions">
-        <span id="active-count" class="badge badge-green" style="font-size:12px">— ativas</span>
-      </div>
     </div>
     <div class="page-body">
 
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Integrações</h1>
-        <p class="page-hero-sub">
-          Chaves de API e serviços externos (IA, e-mail, mapas, CompreFace, etc.). Campos sensíveis não são mostrados em claro após gravar — use «Testar» ou «Salvar» para validar.
+        <h1 class="page-hero-title" id="mpc-hero-title">Integrações</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
+          Chaves de API e serviços externos (IA, e-mail, mapas, FaceMatch, etc.). Campos sensíveis não são mostrados em claro após gravar — use «Testar» ou «Salvar» para validar.
         </p>
       </header>
 
+      <div class="data-toolbar" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="align-items:center;flex:1">
+          <span id="active-count" class="badge badge-green" style="font-size:12px">— ativas</span>
+        </div>
+      </div>
+
       <section class="data-shell fade-in" aria-label="Catálogo de integrações">
       <!-- ── IA & LLM ──────────────────────────────────────────── -->
-      <div class="section-title"><ion-icon name="bulb-outline" style="vertical-align:-2px"></ion-icon> Inteligência Artificial / LLM</div>
+      <div class="section-title"><ion-icon name="bulb-outline" style="vertical-align:-2px"></ion-icon> <span id="integ-sec-ai">Inteligência Artificial / LLM</span></div>
       <div class="int-catalog" id="ai-catalog">
 
         <!-- OpenAI -->
@@ -116,7 +119,7 @@
       </div>
 
       <!-- ── E-mail & Notificações ───────────────────────────── -->
-      <div class="section-title"><ion-icon name="mail-outline"></ion-icon> E-mail &amp; Notificações</div>
+      <div class="section-title"><ion-icon name="mail-outline"></ion-icon> <span id="integ-sec-email">E-mail &amp; Notificações</span></div>
       <div class="int-catalog" id="email-catalog">
 
         <!-- Gmail -->
@@ -179,6 +182,32 @@
           </div>
         </div>
 
+        <!-- MailerSend (API REST em api.mailersend.com — não é SMTP) -->
+        <div class="int-card" id="card-mailersend">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#6E3AFF;color:#fff;font-weight:900;font-size:15px">MS</div>
+            <div><div class="int-name">MailerSend</div><div class="int-cat">E-mail · API transacional (mailersend.com)</div></div>
+            <span class="int-status inactive" id="status-mailersend" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">
+            Integração com o serviço <strong>MailerSend</strong> via <strong>API REST</strong> (<code>api.mailersend.com</code>).
+            Gere um <strong>API token</strong> no painel em
+            <a href="https://www.mailersend.com/" target="_blank" rel="noopener noreferrer">mailersend.com</a>
+            e consulte a documentação em
+            <a href="https://developers.mailersend.com/" target="_blank" rel="noopener noreferrer">developers.mailersend.com</a>.
+            O teste usa <code>GET /v1/domains</code> com <code>Authorization: Bearer</code>.
+          </div>
+          <div class="int-fields" id="fields-mailersend">
+            <input class="form-control" id="url-mailersend" placeholder="URL base da API (padrão: https://api.mailersend.com/v1)" value="https://api.mailersend.com/v1" />
+            <input class="form-control" id="key-mailersend" type="password" placeholder="API token (Bearer) — MailerSend" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveMailerSend()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-mailersend" style="display:none" onclick="testInt('mailersend')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-mailersend" style="display:none" onclick="deleteIntByName('MailerSend')">Remover</button>
+          </div>
+        </div>
+
         <!-- Nylas -->
         <div class="int-card" id="card-nylas">
           <div class="int-card-header">
@@ -203,7 +232,7 @@
       </div>
 
       <!-- ── Catálogos & APIs ──────────────────────────────────── -->
-      <div class="section-title"><ion-icon name="library-outline"></ion-icon> Catálogos &amp; APIs Externas</div>
+      <div class="section-title"><ion-icon name="library-outline"></ion-icon> <span id="integ-sec-catalog">Catálogos &amp; APIs Externas</span></div>
       <div class="int-catalog" id="catalog-catalog">
         
         <!-- Bluesoft Cosmos -->
@@ -247,7 +276,7 @@
       </div>
 
       <!-- ── Storage & Cloud ──────────────────────────────────── -->
-      <div class="section-title"><ion-icon name="cloud-outline"></ion-icon> Storage &amp; Cloud</div>
+      <div class="section-title"><ion-icon name="cloud-outline"></ion-icon> <span id="integ-sec-storage">Storage &amp; Cloud</span></div>
       <div class="int-catalog" id="storage-catalog">
 
         <!-- Dropbox -->
@@ -316,7 +345,7 @@
       </div>
 
       <!-- ── Mapas & Roteamento ──────────────────────────────────── -->
-      <div class="section-title"><ion-icon name="map-outline"></ion-icon> Mapas &amp; Roteamento</div>
+      <div class="section-title"><ion-icon name="map-outline"></ion-icon> <span id="integ-sec-maps">Mapas &amp; Roteamento</span></div>
       <div class="int-catalog" id="maps-catalog">
 
         <!-- OSRM -->
@@ -340,7 +369,7 @@
       </div>
 
       <!-- ── Biometria & Visão ──────────────────────────────────── -->
-      <div class="section-title"><ion-icon name="scan-outline"></ion-icon> Biometria &amp; Reconhecimento Facial</div>
+      <div class="section-title"><ion-icon name="scan-outline"></ion-icon> <span id="integ-sec-bio">Biometria &amp; Reconhecimento Facial</span></div>
       <div class="int-catalog" id="vision-catalog">
 
         <!-- AWS Rekognition -->
@@ -363,18 +392,18 @@
           </div>
         </div>
 
-        <!-- CompreFace -->
+        <!-- FaceMatch (integração persistida: Exadel CompreFace) -->
         <div class="int-card" id="card-compreface">
           <div class="int-card-header">
             <div class="int-logo" style="background:#2563EB;color:#fff"><ion-icon name="cube-outline" style="vertical-align:-2px"></ion-icon></div>
-            <div><div class="int-name">Exadel CompreFace</div><div class="int-cat">Visão & Biometria</div></div>
+            <div><div class="int-name">Exadel FaceMatch</div><div class="int-cat">Visão & Biometria</div></div>
             <span class="int-status inactive" id="status-compreface" style="margin-left:auto">○ Desconectado</span>
           </div>
           <div class="int-desc">Motor Open-Source de reconhecimento facial gratuito para validação em backend.</div>
           <div class="int-fields" id="fields-compreface">
             <input class="form-control" id="url-compreface" placeholder="Raiz da API (ex: http://192.168.x.x:8000) — sem /api/v1" />
             <input class="form-control" id="prefix-compreface" placeholder="Opcional — prefixo reverso, só o segmento (ex: compreface) se a URL pública for …/compreface/…" />
-            <input class="form-control" id="key-compreface" type="password" placeholder="Recognition API Key (aplicação Recognition no CompreFace)" />
+            <input class="form-control" id="key-compreface" type="password" placeholder="Recognition API Key (aplicação Recognition no FaceMatch)" />
             <input class="form-control" id="key-compreface-detection" type="password" placeholder="Detection API Key (opcional — app Face Detection)" />
             <input class="form-control" id="key-compreface-verification" type="password" placeholder="Verification API Key (opcional — app Face Verification)" />
           </div>
@@ -423,7 +452,17 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import {
+    applyIntegrationsPageI18n,
+    integT,
+    integDisconnectedLabel,
+    integConnectedStatusHtml,
+    integTypeLabel,
+    integActiveCountText,
+  } from './js/integrations-i18n.js';
+
   await initPage();
+  applyIntegrationsPageI18n();
 
   // Mapa: name → id do card e slug
   const CARD_MAP = {
@@ -433,6 +472,7 @@
     'Gmail':               { slug:'gmail' },
     'Office 365':          { slug:'office365' },
     'SMTP Genérico':       { slug:'smtp' },
+    'MailerSend':          { slug:'mailersend' },
     'Nylas':               { slug:'nylas' },
     'Dropbox':             { slug:'dropbox' },
     'Cloudflare R2':       { slug:'cloudflare-r2' },
@@ -457,7 +497,9 @@
   }
 
   // type → typeLabel legível para exibição
-  const typeLabel = { AI_LLM:'IA / LLM', EMAIL:'E-mail', STORAGE:'Storage', WEBHOOK:'Webhook', ERP:'ERP', PUSH:'Push', MAPS:'Mapas', VISION:'Visão IA' };
+  const typeLabel = Object.fromEntries(
+    ['AI_LLM', 'EMAIL', 'STORAGE', 'WEBHOOK', 'ERP', 'PUSH', 'MAPS', 'VISION'].map((k) => [k, integTypeLabel(k)]),
+  );
 
   let activeInts = {};   // name → integration object
 
@@ -489,7 +531,7 @@
     if (connected) {
       card.classList.add('connected');
       status.className = 'int-status active';
-      status.innerHTML = intObj?.status === 'ERROR' ? '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> Erro' : '● Conectado';
+      status.innerHTML = integConnectedStatusHtml(intObj?.status === 'ERROR');
       status.style.color = intObj?.status === 'ERROR' ? 'var(--red)' : '';
       if (delBtn)  delBtn.style.display = '';
       if (testBtn) testBtn.style.display = '';
@@ -497,7 +539,7 @@
     } else {
       card.classList.remove('connected');
       status.className = 'int-status inactive';
-      status.innerHTML = '○ Desconectado';
+      status.innerHTML = integDisconnectedLabel(slug === 'osrm');
       status.style.color = '';
       if (delBtn)  delBtn.style.display = 'none';
       if (testBtn) testBtn.style.display = 'none';
@@ -511,16 +553,16 @@
     let intObj = activeInts[name];
     if (slug === 'vision-checklist') intObj = activeVisionChecklistInt();
     if (slug === 'googleai') intObj = activeGoogleAiStudioInt();
-    if (!intObj?.id) return showToast('Salve a integração antes de testar.', false);
+    if (!intObj?.id) return showToast(integT('integ_toast_save_first'), false);
 
     const btn = document.getElementById(`test-${slug}`);
-    if (btn) { btn.disabled = true; btn.textContent = '⌛ Testando…'; }
+    if (btn) { btn.disabled = true; btn.textContent = `⌛ ${integT('integ_test_testing')}`; }
 
     try {
       const res = await CONFIG.post(`/integrations/${intObj.id}/test`, {});
       const ok = !!(res && res.ok === true);
       showToast(
-        res?.message || res?.error || (ok ? 'Conectado com sucesso!' : 'Falha na conexão'),
+        res?.message || res?.error || (ok ? integT('integ_toast_ok') : integT('integ_toast_fail')),
         ok,
       );
 
@@ -531,12 +573,12 @@
         setConnected(slug, true, updated);
       }
     } catch (e) {
-      showToast('Erro ao testar: ' + e.message, false);
+      showToast(integT('integ_toast_test_err', { msg: e.message }), false);
     } finally {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML =
-          '<ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar';
+          `<ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> ${integT('integ_btn_test')}`;
       }
     }
   };
@@ -570,6 +612,20 @@
       const m = d && d.match(/client_id:(\S+)/);
       clientNylas.value = nyMeta.nylasClientId || (m ? m[1] : '') || '';
     }
+
+    const urlMs = document.getElementById('url-mailersend');
+    const keyMs = document.getElementById('key-mailersend');
+    const msRow = activeInts['MailerSend'];
+    if (urlMs) {
+      const bu = msRow?.baseUrl != null ? String(msRow.baseUrl).trim() : '';
+      const defApi = 'https://api.mailersend.com/v1';
+      if (bu && /^https?:\/\//i.test(bu) && /mailersend\.com/i.test(bu)) {
+        urlMs.value = bu.replace(/\/+$/, '');
+      } else {
+        urlMs.value = defApi;
+      }
+    }
+    if (keyMs) keyMs.value = '';
 
     const urlCf = document.getElementById('url-compreface');
     const prefixCf = document.getElementById('prefix-compreface');
@@ -623,14 +679,14 @@
       if (connected) count++;
       setConnected(slug, connected, intForCard);
     });
-    document.getElementById('active-count').textContent = `${count} ativas`;
+    document.getElementById('active-count').textContent = integActiveCountText(count);
   }
 
   window.saveGoogleAiStudio = async () => {
     const key = document.getElementById('key-googleai')?.value.trim() || '';
     let base = document.getElementById('url-googleai')?.value.trim() || '';
     const model = document.getElementById('model-googleai')?.value.trim() || '';
-    if (!key) return alert('Informe a API key do Google AI Studio.');
+    if (!key) return alert(integT('integ_alert_googleai_key'));
     if (!base) base = 'https://generativelanguage.googleapis.com/v1beta';
     const meta = {};
     if (model) meta.defaultModel = model.slice(0, 120);
@@ -650,15 +706,15 @@
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) {
       loadIntegrations();
-      showToast('Integração Google AI Studio salva!');
-    } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+      showToast(integT('integ_toast_google_saved'));
+    } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
   window.deleteGoogleAiStudioInt = async () => {
     const intObj = activeGoogleAiStudioInt();
     if (!intObj) return;
     const label = intObj.name || 'Google AI Studio';
-    if (!confirm(`Remover integração "${label}"?`)) return;
+    if (!confirm(integT('integ_confirm_remove', { name: label }))) return;
     await CONFIG.del(`/integrations/${intObj.id}`);
     loadIntegrations();
   };
@@ -672,7 +728,7 @@
     if (activeInts[name]) await CONFIG.del(`/integrations/${activeInts[name].id}`);
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) { loadIntegrations(); }
-    else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+    else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
   // Nylas — API Key + URI + Grant ID (envio) + Client ID opcional (OAuth hospedado)
@@ -681,7 +737,7 @@
     const url = document.getElementById('url-nylas').value.trim() || 'https://api.us.nylas.com';
     const grant = document.getElementById('grant-nylas')?.value.trim() || '';
     const client = document.getElementById('client-nylas').value.trim();
-    if (!key) return alert('API Key da Nylas é obrigatória.');
+    if (!key) return alert(integT('integ_alert_nylas_key'));
     const meta = {};
     if (grant) meta.nylasGrantId = grant;
     if (client) meta.nylasClientId = client;
@@ -699,13 +755,36 @@
     loadIntegrations();
   };
 
+  // MailerSend — API REST (Bearer); baseUrl = raiz da API (ex.: https://api.mailersend.com/v1)
+  window.saveMailerSend = async () => {
+    const url = document.getElementById('url-mailersend')?.value.trim() || 'https://api.mailersend.com/v1';
+    const key = document.getElementById('key-mailersend')?.value.trim() || '';
+    if (!key) return alert(integT('integ_alert_mailersend_token'));
+    const body = {
+      type: 'EMAIL',
+      name: 'MailerSend',
+      status: 'ACTIVE',
+      baseUrl: url,
+      apiKey: key,
+      description: 'Integração MailerSend (REST API — mailersend.com).',
+    };
+    if (activeInts['MailerSend']) await CONFIG.del(`/integrations/${activeInts['MailerSend'].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_mailersend_saved'));
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
+
   // SMTP — salva com campos específicos no description
   window.saveSmtp = async () => {
     const host = document.getElementById('host-smtp').value.trim();
     const port = document.getElementById('port-smtp').value.trim();
     const user = document.getElementById('user-smtp').value.trim();
     const key  = document.getElementById('key-smtp').value.trim();
-    if (!host) return alert('Host SMTP é obrigatório.');
+    if (!host) return alert(integT('integ_alert_smtp_host'));
     const body = {
       type: 'EMAIL', name: 'SMTP Genérico', status: 'ACTIVE',
       baseUrl: `${host}:${port}`,
@@ -723,7 +802,7 @@
     const appSecret = document.getElementById('secret-dropbox').value.trim();
     const refreshToken = document.getElementById('refresh-dropbox').value.trim();
     const folder = document.getElementById('folder-dropbox').value.trim() || '/';
-    if (!appKey || !appSecret || !refreshToken) return alert('App Key, App Secret e Refresh Token são obrigatórios.');
+    if (!appKey || !appSecret || !refreshToken) return alert(integT('integ_alert_dropbox_tokens'));
     
     const body = {
       type: 'STORAGE', name: 'Dropbox', status: 'ACTIVE',
@@ -742,7 +821,7 @@
     const keyid   = document.getElementById('keyid-r2').value.trim();
     const secret  = document.getElementById('secret-r2').value.trim();
     const bucket  = document.getElementById('bucket-r2').value.trim();
-    if (!keyid || !secret || !bucket) return alert('Access Key, Secret e Bucket são obrigatórios.');
+    if (!keyid || !secret || !bucket) return alert(integT('integ_alert_r2_fields'));
     const body = {
       type: 'STORAGE', name: 'Cloudflare R2', status: 'ACTIVE',
       baseUrl: `https://${account}.r2.cloudflarestorage.com/${bucket}`,
@@ -760,7 +839,7 @@
     const secret = document.getElementById('secret-s3').value.trim();
     const bucket = document.getElementById('bucket-s3').value.trim();
     const region = document.getElementById('region-s3').value.trim();
-    if (!keyid || !secret || !bucket) return alert('Access Key, Secret e Bucket são obrigatórios.');
+    if (!keyid || !secret || !bucket) return alert(integT('integ_alert_s3_fields'));
     const body = {
       type: 'STORAGE', name: 'Amazon S3', status: 'ACTIVE',
       baseUrl: `https://${bucket}.s3.${region}.amazonaws.com`,
@@ -775,7 +854,7 @@
   window.deleteIntByName = async (name) => {
     const intObj = activeInts[name];
     if (!intObj) return;
-    if (!confirm(`Remover integração "${name}"?`)) return;
+    if (!confirm(integT('integ_confirm_remove', { name }))) return;
     await CONFIG.del(`/integrations/${intObj.id}`);
     loadIntegrations();
   };
@@ -783,7 +862,7 @@
   window.deleteVisionChecklistInt = async () => {
     const intObj = activeVisionChecklistInt();
     if (!intObj) return;
-    if (!confirm(`Remover integração "${VISION_CHECKLIST_INT_NAME}"?`)) return;
+    if (!confirm(integT('integ_confirm_remove', { name: VISION_CHECKLIST_INT_NAME }))) return;
     await CONFIG.del(`/integrations/${intObj.id}`);
     loadIntegrations();
   };
@@ -794,7 +873,7 @@
       const region = document.getElementById('region-aws-rekog').value.trim();
       const keyId = document.getElementById('key-aws-rekog').value.trim();
       const secret = document.getElementById('secret-aws-rekog').value.trim();
-      if (!region || !keyId || !secret) return alert('Region, Key e Secret são obrigatórios.');
+      if (!region || !keyId || !secret) return alert(integT('integ_alert_aws_rekog'));
       body.baseUrl = region;
       body.apiKey = `${keyId}|${secret}`;
       body.metadata = { category: 'COMPUTER_VISION', engine: 'aws_rekognition' };
@@ -810,18 +889,18 @@
       const description = seg ? `path_prefix:${seg}` : null;
 
       if (existingCf) {
-        if (!url) return alert('URL é obrigatória.');
+        if (!url) return alert(integT('integ_alert_webhook_url'));
         const patchBody = { baseUrl: url, metadata, description };
         if (keyRec) patchBody.apiKey = keyRec;
         if (keyDet) patchBody.comprefaceDetectionKey = keyDet;
         if (keyVer) patchBody.comprefaceVerificationKey = keyVer;
         const res = await CONFIG.patch(`/integrations/${existingCf.id}`, patchBody);
-        if (res?.id || res?.name) { loadIntegrations(); showToast('Integração CompreFace atualizada!'); }
-        else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+        if (res?.id || res?.name) { loadIntegrations(); showToast(integT('integ_toast_compreface_updated')); }
+        else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
         return;
       }
 
-      if (!url || !keyRec) return alert('Na primeira configuração, URL e Recognition API Key são obrigatórias.');
+      if (!url || !keyRec) return alert(integT('integ_alert_compreface_first'));
       body.baseUrl = url;
       body.apiKey = keyRec;
       body.metadata = metadata;
@@ -831,8 +910,8 @@
     }
     if (activeInts[name]) await CONFIG.del(`/integrations/${activeInts[name].id}`);
     const res = await CONFIG.post('/integrations', body);
-    if (res?.id || res?.name) { loadIntegrations(); showToast('Integração de Biometria salva!'); }
-    else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+    if (res?.id || res?.name) { loadIntegrations(); showToast(integT('integ_toast_bio_saved')); }
+    else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
   /** Visão IA - YOLO — tipo VISION; URL = POST multipart completo no serviço externo. */
@@ -840,11 +919,11 @@
     const url = document.getElementById('url-vision-checklist').value.trim();
     const key = document.getElementById('key-vision-checklist').value.trim();
     const timeoutRaw = document.getElementById('timeout-vision-checklist').value.trim();
-    if (!url) return alert('Informe o URL completo do POST no serviço externo.');
+    if (!url) return alert(integT('integ_alert_webhook_post_url'));
     const metadata = {};
     if (timeoutRaw) {
       const n = parseInt(timeoutRaw, 10);
-      if (!Number.isFinite(n) || n < 10000) return alert('Timeout inválido: use um valor ≥ 10000 ms (10 s).');
+      if (!Number.isFinite(n) || n < 10000) return alert(integT('integ_alert_timeout'));
       metadata.timeoutMs = Math.min(300000, n);
     }
     const existing = activeVisionChecklistInt();
@@ -858,8 +937,8 @@
       const res = await CONFIG.patch(`/integrations/${existing.id}`, patch);
       if (res?.id || res?.name) {
         loadIntegrations();
-        showToast('Integração "Visão IA - YOLO" atualizada!');
-      } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+        showToast(integT('integ_toast_vision_yolo_updated'));
+      } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
       return;
     }
     const body = {
@@ -873,8 +952,8 @@
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) {
       loadIntegrations();
-      showToast('Integração "Visão IA - YOLO" salva!');
-    } else alert('Erro ao salvar: ' + (res?.error || 'verifique os campos.'));
+      showToast(integT('integ_toast_vision_yolo_saved'));
+    } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
   loadIntegrations();

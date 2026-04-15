@@ -10,24 +10,28 @@
   <div class="main-content">
     <div class="topbar topbar--data">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="mpc-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Notificações</span>
+        <span id="mpc-bc-here">Notificações</span>
       </nav>
-      <div class="topbar-actions">
-        <button type="button" class="btn btn-primary" onclick="window.newTemplate()">
-          <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
-          Novo template
-        </button>
-      </div>
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title">Notificações</h1>
-        <p class="page-hero-sub">
+        <h1 class="page-hero-title" id="mpc-hero-title">Notificações</h1>
+        <p class="page-hero-sub" id="mpc-hero-sub">
           Modelos por canal (e-mail, push, WhatsApp, SMS) e histórico de envios. Ative ou desative templates sem alterar o conteúdo.
         </p>
       </header>
+
+      <div class="data-toolbar" style="margin-bottom:24px">
+        <div class="data-toolbar-main" style="min-width:0"></div>
+        <div class="data-toolbar-actions">
+          <button type="button" class="btn btn-primary" id="notif-btn-new" onclick="window.newTemplate()">
+            <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+            Novo template
+          </button>
+        </div>
+      </div>
 
       <div class="grid-2" style="align-items:start">
 
@@ -35,7 +39,7 @@
           <div class="panel-header">
             <span class="panel-title" style="display:flex;align-items:center;gap:8px">
               <ion-icon name="mail-outline" style="font-size:18px"></ion-icon>
-              Templates de notificação
+              <span id="notif-panel-tmpl">Templates de notificação</span>
             </span>
             <span class="badge badge-accent" id="tmpl-count">—</span>
           </div>
@@ -48,7 +52,7 @@
           <div class="panel-header">
             <span class="panel-title" style="display:flex;align-items:center;gap:8px">
               <ion-icon name="send-outline" style="font-size:18px"></ion-icon>
-              Histórico de envios
+              <span id="notif-panel-log">Histórico de envios</span>
             </span>
           </div>
           <div class="data-shell-body" id="log-list" style="padding-top:8px;padding-bottom:8px">
@@ -64,27 +68,27 @@
 <!-- Template Modal -->
 <div class="modal-overlay" id="template-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="modal-title">Novo Template</span><button type="button" class="modal-close" onclick="closeModal('template-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="notif-modal-title">Novo Template</span><button type="button" class="modal-close" onclick="closeModal('template-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="tmpl-id" />
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Chave (key)</label><input class="form-control" id="tmpl-key" placeholder="Ex: password_reset" /></div>
-        <div class="form-group"><label class="form-label">Label</label><input class="form-control" id="tmpl-label" placeholder="Resetar senha" /></div>
+        <div class="form-group"><label class="form-label" id="notif-lbl-key">Chave (key)</label><input class="form-control" id="tmpl-key" placeholder="Ex: password_reset" /></div>
+        <div class="form-group"><label class="form-label" id="notif-lbl-label">Label</label><input class="form-control" id="tmpl-label" placeholder="Resetar senha" /></div>
       </div>
-      <div class="form-group"><label class="form-label">Canal</label>
+      <div class="form-group"><label class="form-label" id="notif-lbl-channel">Canal</label>
         <select class="form-control" id="tmpl-channel">
           <option value="EMAIL">E-mail</option><option value="PUSH">Push</option>
           <option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Assunto (e-mail)</label><input class="form-control" id="tmpl-subject" placeholder="{{name}}, sua senha foi resetada" /></div>
-      <div class="form-group"><label class="form-label">Corpo (use {{variavel}} para vars)</label>
+      <div class="form-group"><label class="form-label" id="notif-lbl-subject">Assunto (e-mail)</label><input class="form-control" id="tmpl-subject" placeholder="{{name}}, sua senha foi resetada" /></div>
+      <div class="form-group"><label class="form-label" id="notif-lbl-body">Corpo (use {{variavel}} para vars)</label>
         <textarea class="form-control" id="tmpl-body" rows="6" placeholder="Olá {{name}},&#10;&#10;Sua senha foi resetada..."></textarea>
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('template-modal')">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="save-tmpl-btn">Salvar template</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('template-modal')"><span id="notif-modal-cancel">Cancelar</span></button>
+      <button type="button" class="btn btn-primary" id="save-tmpl-btn"><span id="notif-modal-save">Salvar template</span></button>
     </div>
   </div>
 </div>
@@ -92,7 +96,9 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import { applyNotificationsPageI18n, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
   await initPage();
+  applyNotificationsPageI18n();
 
   const chanIcon  = { EMAIL:'<ion-icon name="mail-outline"></ion-icon>', PUSH:'<ion-icon name="smartphone-outline"></ion-icon>', WHATSAPP:'<ion-icon name="logo-whatsapp"></ion-icon>', SMS:'<ion-icon name="chatbox-ellipses-outline"></ion-icon>' };
   const statusMap = { SENT:'badge-green', DELIVERED:'badge-blue', FAILED:'badge-red', BOUNCED:'badge-amber' };
@@ -109,18 +115,19 @@
     const raw = await CONFIG.get('/notifications/templates');
     if (!raw) return;
     const templates = Array.isArray(raw) ? raw : [];
-    document.getElementById('tmpl-count').textContent = `${templates.length} template${templates.length === 1 ? '' : 's'}`;
+    document.getElementById('tmpl-count').textContent =
+      templates.length === 1 ? mpT('notif_tmpl_count_one') : mpT('notif_tmpl_count_many', { n: templates.length });
     document.getElementById('template-list').innerHTML = templates.length
       ? templates.map(t => `
       <div class="flag-item">
         <span class="flag-icon">${chanIcon[t.channel] || chanIcon.EMAIL}</span>
         <div class="flag-info">
           <div class="flag-name">${escHtml(t.label)} <span class="badge badge-gray">${escHtml(t.channel)}</span></div>
-          <div class="flag-desc">Chave: <code>${escHtml(t.key)}</code></div>
-          ${t.subject ? `<div class="flag-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">Assunto: ${escHtml(t.subject)}</div>` : ''}
+          <div class="flag-desc">${escHtml(mpT('notif_key_prefix'))} <code>${escHtml(t.key)}</code></div>
+          ${t.subject ? `<div class="flag-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${escHtml(mpT('notif_subject_prefix'))} ${escHtml(t.subject)}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="editTemplate(${JSON.stringify(t).replace(/"/g, '&quot;')})">Editar</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="editTemplate(${JSON.stringify(t).replace(/"/g, '&quot;')})">${escHtml(mpT('notif_btn_edit'))}</button>
           <label class="toggle">
             <input type="checkbox" ${t.isActive ? 'checked' : ''} onclick="toggleTemplate('${t.id}', this.checked)" />
             <span class="toggle-track"></span>
@@ -129,13 +136,13 @@
       </div>`).join('')
       : `<div class="empty-state-pro" style="padding:24px 16px 20px">
           <ion-icon name="mail-open-outline"></ion-icon>
-          <div class="empty-state-pro-title">Nenhum template</div>
-          <p class="empty-state-pro-sub">Crie um template com «Novo template».</p>
+          <div class="empty-state-pro-title">${escHtml(mpT('notif_empty_tmpl_title'))}</div>
+          <p class="empty-state-pro-sub">${escHtml(mpT('notif_empty_tmpl_sub'))}</p>
         </div>`;
   }
 
   window.newTemplate = () => {
-    document.getElementById('modal-title').textContent = 'Novo template';
+    document.getElementById('notif-modal-title').textContent = mpT('notif_modal_new');
     document.getElementById('tmpl-id').value = '';
     document.getElementById('tmpl-key').value = '';
     document.getElementById('tmpl-label').value = '';
@@ -146,7 +153,7 @@
   };
 
   window.editTemplate = (t) => {
-    document.getElementById('modal-title').textContent = 'Editar template';
+    document.getElementById('notif-modal-title').textContent = mpT('notif_modal_edit');
     document.getElementById('tmpl-id').value = t.id;
     document.getElementById('tmpl-key').value = t.key;
     document.getElementById('tmpl-label').value = t.label;
@@ -171,15 +178,15 @@
         <div class="activity-content">
           <div class="activity-text"><strong>${escHtml(l.template?.label || l.templateId)}</strong> → ${escHtml(l.recipient)}</div>
           <div class="activity-time">
-            ${new Date(l.sentAt).toLocaleString('pt-BR')}
+            ${new Date(l.sentAt).toLocaleString(mpIntlLocale())}
             <span class="badge ${statusMap[l.status] || 'badge-gray'}">${escHtml(l.status)}</span>
           </div>
         </div>
       </div>`).join('')
       : `<div class="empty-state-pro" style="padding:28px 16px 24px">
           <ion-icon name="paper-plane-outline"></ion-icon>
-          <div class="empty-state-pro-title">Nenhum envio registrado</div>
-          <p class="empty-state-pro-sub">Os envios aparecem aqui após o sistema processar as filas.</p>
+          <div class="empty-state-pro-title">${escHtml(mpT('notif_empty_log_title'))}</div>
+          <p class="empty-state-pro-sub">${escHtml(mpT('notif_empty_log_sub'))}</p>
         </div>`;
   }
 
@@ -195,7 +202,7 @@
       subject: document.getElementById('tmpl-subject').value,
       body:    document.getElementById('tmpl-body').value,
     };
-    if (!body.key || !body.label || !body.body) return alert('Preencha os campos obrigatórios.');
+    if (!body.key || !body.label || !body.body) return alert(mpT('notif_alert_required'));
 
     if (id) {
        await CONFIG.put(`/notifications/templates/${id}`, body);

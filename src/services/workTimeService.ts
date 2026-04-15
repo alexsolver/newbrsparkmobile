@@ -18,6 +18,8 @@ export type WorkTimeMeOk = {
   tenantId: string;
   userId: string;
   role: string;
+  /** Brasil (tenant): `CLT` | `PJ` para cópia no app; `null` fora do BR ou sem registro de horas ativo neste utilizador. */
+  workTimeBrazilRegime?: 'CLT' | 'PJ' | null;
   featureFlagEnabled: boolean;
   settings: WorkTimeSettingsPayload;
   userWorkTimeEnabled: boolean;

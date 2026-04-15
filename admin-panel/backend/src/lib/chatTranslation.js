@@ -5,6 +5,13 @@ const { openAiMessageContentToString } = require('./openAiChatParse');
 
 const CANON = ['pt-BR', 'en-US', 'es-ES'];
 
+/** Nomes explícitos no prompt — o modelo segue melhor do que só o código BCP-47. */
+const TARGET_LANGUAGE_LABEL = {
+  'pt-BR': 'Brazilian Portuguese (pt-BR)',
+  'en-US': 'American English (en-US)',
+  'es-ES': 'Spanish (Spain) (es-ES)',
+};
+
 function chatTranslationEnabled() {
   return String(process.env.CHAT_TRANSLATION_ENABLED || '1').trim() !== '0';
 }
@@ -35,6 +42,7 @@ async function translateChatText(text, targetLocale) {
   const trimmed = String(text || '').trim();
   if (!trimmed) return null;
   const target = normalizeChatLocale(targetLocale);
+  const targetLabel = TARGET_LANGUAGE_LABEL[target] || target;
 
   let creds;
   try {
@@ -63,7 +71,7 @@ async function translateChatText(text, targetLocale) {
           {
             role: 'system',
             content:
-              `You translate short mobile chat messages into ${target} (BCP-47). ` +
+              `You translate short mobile chat messages into ${targetLabel}. ` +
               'Preserve meaning, tone, URLs, @mentions, and line breaks. ' +
               'If the text is already in that language, return it unchanged. ' +
               'Output ONLY the translated message text, with no quotes or preamble.',

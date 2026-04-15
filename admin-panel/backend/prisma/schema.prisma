@@ -128,6 +128,12 @@ enum WorkTimePunchSyncStatus {
   ERROR
 }
 
+/// Brasil: rótulos do app móvel (CLT = fluxo «ponto»; PJ = «Registro» / «Horas registradas hoje»). Só aplicável quando o tenant tem `LocaleProfile.countryCode = BR`.
+enum WorkTimeBrazilRegime {
+  CLT
+  PJ
+}
+
 model WorkTimePunch {
   id        String   @id @default(cuid())
   tenantId  String
@@ -147,7 +153,7 @@ model WorkTimePunch {
   faceVerificationId String?
   faceScore          Float?
   faceEngine         String?
-  /// true quando, no momento da batida, a matrícula facial não cumpria fotos base + CompreFace sincronizado.
+  /// true quando, no momento da batida, a matrícula facial não cumpria fotos base + FaceMatch sincronizado.
   faceEnrollmentInvalid Boolean @default(false)
 
   /// Batida registada fora do percurso ideal (falha de GPS, endereço, face, etc.) com justificativa.
@@ -337,6 +343,11 @@ model User {
   tenantId   String
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
   email      String
+  /// Preenchido quando o utilizador confirma o e-mail (link enviado pelo painel).
+  emailVerifiedAt              DateTime? @map("email_verified_at")
+  /// Token opaco para verificação; expira em `emailVerificationExpiresAt`.
+  emailVerificationToken       String?   @unique @map("email_verification_token")
+  emailVerificationExpiresAt   DateTime? @map("email_verification_expires_at")
   name       String
   password   String   // bcrypt hash
   /// Matrícula funcional (RH / ponto). Uma por usuário; única por tenant quando preenchida.
@@ -349,7 +360,7 @@ model User {
   personalDocuments Json?
   /// Fotos base para reconhecimento facial (admin): [{ id, url, mimeType?, createdAt }]
   faceEnrollmentPhotos Json?
-  /// Último estado da galeria Recognition CompreFace: { status, at, faces?, subject?, message?, previous? }
+  /// Último estado da galeria Recognition FaceMatch: { status, at, faces?, subject?, message?, previous? }
   comprefaceRecognitionSync Json?
   role       UserRole @default(USER)
   /// BCP-47 (ex.: pt-BR, en-US, es-ES) para tradução automática no chat; null = usar idioma do dispositivo / tenant.
@@ -378,6 +389,10 @@ model User {
 
   workTimeTrackingEnabled Boolean   @default(false)
   workTimeEnrolledAt      DateTime?
+  /// Brasil (`tenant.locale.countryCode = BR`): regime de cópia no app. Fora do BR deve permanecer null.
+  workTimeBrazilRegime    WorkTimeBrazilRegime? @map("work_time_brazil_regime")
+  /// Notas visíveis só no painel admin (suporte / operações)
+  adminInternalNotes String? @map("admin_internal_notes") @db.Text
 
   @@unique([email, tenantId])
   @@unique([tenantId, employeeMatricula])
@@ -596,7 +611,7 @@ model Integration {
   type                      IntType
   description               String?
   icon                      String?
-  apiKey                    String?  // encrypted in production — CompreFace: Recognition
+  apiKey                    String?  // encrypted in production — FaceMatch: Recognition
   comprefaceDetectionKey    String?
   comprefaceVerificationKey String?
   baseUrl                   String?

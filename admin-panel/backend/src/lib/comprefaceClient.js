@@ -68,7 +68,7 @@ function stripDataUrlBase64(b64) {
 }
 
 /**
- * @param {object} integration — registro Prisma Exadel CompreFace
+ * @param {object} integration — registro Prisma Exadel FaceMatch
  * @param {Buffer} imageBuffer
  * @param {{ predictionCount?: number }} opts
  */
@@ -81,7 +81,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
   }
   const roots = buildComprefaceApiRoots(integration.baseUrl, integration.description);
   if (!roots.length) {
-    const err = new Error('URL CompreFace não configurada.');
+    const err = new Error('URL FaceMatch não configurada.');
     err.code = 'MISSING_URL';
     throw err;
   }
@@ -107,7 +107,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
         try {
           return { root: base, data: JSON.parse(text) };
         } catch (e) {
-          lastErr = new Error(`Resposta CompreFace inválida: ${e.message}`);
+          lastErr = new Error(`Resposta FaceMatch inválida: ${e.message}`);
         }
       } else {
         let parsedBody = null;
@@ -116,7 +116,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
         } catch {
           parsedBody = null;
         }
-        lastErr = new Error(`CompreFace recognize HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
+        lastErr = new Error(`FaceMatch recognize HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
         lastErr.status = r.status;
         if (parsedBody && typeof parsedBody === 'object') {
           if (parsedBody.code != null) lastErr.comprefaceCode = parsedBody.code;
@@ -127,7 +127,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error('Falha ao contatar o CompreFace.');
+  throw lastErr || new Error('Falha ao contatar o FaceMatch.');
 }
 
 /**
@@ -135,7 +135,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
  * @returns {{ subject: string, similarity: number } | null}
  */
 /** HTTP 400 código 28 — «No face is found in the given image» (imagem sem rosto detetável). */
-function isCompreFaceNoFaceInImageError(err) {
+function isFaceMatchNoFaceInImageError(err) {
   if (!err) return false;
   const st = Number(err.status);
   if (st !== 400) return false;
@@ -193,7 +193,7 @@ async function ensureSubject(root, apiKey, subject) {
   });
   if (ok) return { created: true, data };
   if (status === 400 || status === 409 || status === 422) return { created: false, data, status };
-  const err = new Error(`CompreFace create subject HTTP ${status}`);
+  const err = new Error(`FaceMatch create subject HTTP ${status}`);
   err.status = status;
   err.data = data;
   throw err;
@@ -204,14 +204,14 @@ async function deleteFacesForSubject(root, apiKey, subject) {
   const url = `${base}/api/v1/recognition/faces?subject=${encodeURIComponent(subject)}`;
   const { ok, status, data } = await comprefaceFetchJson('DELETE', url, apiKey, { timeoutMs: 20000 });
   if (ok || status === 404) return { ok: true, data };
-  const err = new Error(`CompreFace delete faces HTTP ${status}`);
+  const err = new Error(`FaceMatch delete faces HTTP ${status}`);
   err.status = status;
   err.data = data;
   throw err;
 }
 
 /**
- * Lista nomes de subjects na app Recognition (CompreFace 0.6+).
+ * Lista nomes de subjects na app Recognition (FaceMatch 0.6+).
  * @returns {Promise<string[]>}
  */
 async function listRecognitionSubjects(root, apiKey) {
@@ -234,14 +234,14 @@ async function listRecognitionSubjects(root, apiKey) {
         })
         .filter(Boolean);
     }
-    lastErr = new Error(`CompreFace list subjects HTTP ${status}`);
+    lastErr = new Error(`FaceMatch list subjects HTTP ${status}`);
   }
-  throw lastErr || new Error('CompreFace list subjects failed');
+  throw lastErr || new Error('FaceMatch list subjects failed');
 }
 
 /**
  * Remove faces de subjects BrSpark `tenantId:userId` quando o userId coincide com o usuário
- * mas o tenantId é diferente do atual (ex.: mudança de tenant / dados antigos no CompreFace).
+ * mas o tenantId é diferente do atual (ex.: mudança de tenant / dados antigos no FaceMatch).
  * Não remove o subject atual nem subjects sem formato BrSpark.
  * @returns {Promise<{ cleaned: number }>}
  */
@@ -269,7 +269,7 @@ async function deleteStaleBrsparkSubjectFacesForUser(root, apiKey, currentTenant
     try {
       await deleteFacesForSubject(root, apiKey, name);
       cleaned += 1;
-      console.info('[comprefaceClient] removed CompreFace faces from stale subject:', name);
+      console.info('[comprefaceClient] removed FaceMatch faces from stale subject:', name);
     } catch (e) {
       console.warn('[comprefaceClient] failed to delete stale subject faces:', name, e.message || e);
     }
@@ -315,7 +315,7 @@ function extractVerificationBestSimilarity(parsedJson) {
 }
 
 /**
- * Compara duas imagens no serviço **Verification** do CompreFace (não usa Recognition).
+ * Compara duas imagens no serviço **Verification** do FaceMatch (não usa Recognition).
  * `source_image` = foto nova a validar; `target_image` = referência (foto de perfil).
  * Chama também na ordem inversa e usa o **mínimo** das duas similaridades (reduz falsos positivos).
  * Com `options.idDocumentPairing`, tenta as duas direções de forma independente e usa o **máximo** das que
@@ -339,7 +339,7 @@ async function verifyFacePairWithIntegration(
   }
   const roots = buildComprefaceApiRoots(integration.baseUrl, integration.description);
   if (!roots.length) {
-    const err = new Error('URL CompreFace não configurada.');
+    const err = new Error('URL FaceMatch não configurada.');
     err.code = 'MISSING_URL';
     throw err;
   }
@@ -360,7 +360,7 @@ async function verifyFacePairWithIntegration(
     });
     const text = await r.text().catch(() => '');
     if (!r.ok) {
-      const err = new Error(`CompreFace verification HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
+      const err = new Error(`FaceMatch verification HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}`);
       err.status = r.status;
       throw err;
     }
@@ -368,11 +368,11 @@ async function verifyFacePairWithIntegration(
     try {
       data = JSON.parse(text);
     } catch (e) {
-      throw new Error(`CompreFace verification JSON inválido: ${e.message}`);
+      throw new Error(`FaceMatch verification JSON inválido: ${e.message}`);
     }
     const sim = extractVerificationBestSimilarity(data);
     if (!Number.isFinite(sim)) {
-      throw new Error('CompreFace verification devolveu resposta sem similaridade.');
+      throw new Error('FaceMatch verification devolveu resposta sem similaridade.');
     }
     return sim;
   }
@@ -452,7 +452,7 @@ async function addFaceToSubject(root, apiKey, subject, imageBuffer, filename = '
   });
   const text = await r.text().catch(() => '');
   if (!r.ok) {
-    const err = new Error(`CompreFace add face HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
+    const err = new Error(`FaceMatch add face HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
     err.status = r.status;
     throw err;
   }
@@ -471,7 +471,7 @@ module.exports = {
   parseComprefaceSubjectName,
   stripDataUrlBase64,
   recognizeWithIntegration,
-  isCompreFaceNoFaceInImageError,
+  isFaceMatchNoFaceInImageError,
   pickTopRecognitionMatch,
   ensureSubject,
   deleteFacesForSubject,

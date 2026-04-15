@@ -6,6 +6,7 @@ const {
   testIntegration,
   normalizeComprefaceBaseUrl,
   normalizeGoogleGenerativeLanguageBaseUrl,
+  normalizeMailerSendApiBaseUrl,
 } = require('../lib/integrationTester');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
@@ -78,6 +79,8 @@ router.post('/', async (req, res) => {
       resolvedBase = normalizeNylasApiUri(baseUrl);
     } else if ((name === 'Google AI Studio' || name === 'Google AI (Gemini)') && baseUrl) {
       resolvedBase = normalizeGoogleGenerativeLanguageBaseUrl(baseUrl);
+    } else if (name === 'MailerSend') {
+      resolvedBase = normalizeMailerSendApiBaseUrl(baseUrl);
     }
     const integration = await prisma.integration.create({
       data: {
@@ -124,6 +127,8 @@ router.patch('/:id', async (req, res) => {
       data.baseUrl
     ) {
       data = { ...data, baseUrl: normalizeGoogleGenerativeLanguageBaseUrl(data.baseUrl) };
+    } else if (existing.name === 'MailerSend' && Object.prototype.hasOwnProperty.call(data, 'baseUrl')) {
+      data = { ...data, baseUrl: normalizeMailerSendApiBaseUrl(data.baseUrl) };
     }
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({

@@ -14,8 +14,7 @@
       flex: 1;
       min-height: 0;
       height: calc(100vh - 96px);
-      /* Sem margem negativa à esquerda — empurra conteúdo por baixo do menu fixo */
-      margin: -8px -12px 0 0;
+      margin: 0;
     }
     .report-page-body {
       flex: 1;
@@ -23,7 +22,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      padding: 12px 16px 16px;
+      padding: 20px 24px 24px;
     }
     .report-shell.data-shell {
       flex: 1;
@@ -40,33 +39,16 @@
       flex: 1;
       min-height: 0;
     }
-    .report-builder-topbar {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px 14px;
-      flex-wrap: wrap;
-      padding: 6px 14px 8px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
+    .report-shell > .report-builder-page > .data-toolbar {
+      flex-shrink: 0;
     }
-    .report-builder-topbar .topbar-title-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex: 1;
-      min-width: 200px;
+    .report-shell .report-toolbar .data-toolbar-main {
+      row-gap: 10px;
     }
-    .report-topbar-heading {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 12px;
-    }
-    .report-builder-topbar h1 {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
+    .report-shell .report-toolbar .report-compact-help {
+      flex: 1 1 220px;
+      min-width: 0;
+      max-width: 640px;
     }
     .report-compact-help {
       margin: 0;
@@ -551,38 +533,39 @@
   <div class="main-content">
     <div class="topbar topbar--data" style="flex-shrink:0">
       <nav class="topbar-breadcrumb" aria-label="Trilha">
-        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <a href="dashboard.html" id="rep-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
-        <span>Relatórios PDF</span>
+        <span id="rep-bc-page">Relatórios PDF</span>
       </nav>
     </div>
     <div class="page-body report-page-body">
-      <header class="page-hero fade-in" style="max-width:920px;margin-bottom:14px">
-        <h1 class="page-hero-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <header class="page-hero fade-in" style="max-width:none;margin-bottom:16px">
+        <h1 id="report-page-title" class="page-hero-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <ion-icon name="color-wand-outline" style="font-size:1em;color:var(--accent)"></ion-icon>
-          Construtor de relatório PDF
+          <span id="rep-hero-title">Construtor de relatório PDF</span>
+          <span id="rep-hero-badge" class="report-badge-live" title="Pré-visualização em tempo real">WYSIWYG</span>
         </h1>
-        <p class="page-hero-sub">
-          Presets alinhados à Central de Operações; pré-visualização A4 em tempo quase real. O editor compacto fica abaixo.
+        <p class="page-hero-sub" id="rep-hero-sub">
+          Presets alinhados à Central de Operações; pré-visualização A4 em tempo quase real. Ajuste blocos na coluna à esquerda e acompanhe o PDF à direita.
         </p>
       </header>
-      <section class="data-shell fade-in report-shell" aria-label="Editor do relatório PDF">
+      <section class="data-shell fade-in report-shell" aria-labelledby="report-page-title">
     <div class="report-builder-page">
-      <div class="report-builder-topbar">
-        <div class="topbar-title-wrap">
-          <div class="report-topbar-heading">
-            <h1><ion-icon name="color-wand-outline" style="vertical-align:-3px;color:var(--accent)"></ion-icon> Editor <span class="report-badge-live">WYSIWYG</span></h1>
-            <details class="report-compact-help">
-              <summary><span class="report-help-chevron">▸</span> Notas + API</summary>
-              <div class="report-help-body">
-                O painel à direita simula a planilha A4. As alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração.
-                <div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong> — <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>
-              </div>
-            </details>
-          </div>
+      <div class="data-toolbar report-toolbar">
+        <div class="data-toolbar-main" style="align-items:flex-end">
+          <label class="filter-field" style="min-width:200px;max-width:min(100%,340px)">
+            <span class="filter-field-label" id="rep-lbl-preset"><ion-icon name="layers-outline"></ion-icon> Preset</span>
+            <select id="preset-select" class="form-control" style="min-width:200px;font-size:12px;padding:8px 12px"></select>
+          </label>
+          <details class="report-compact-help">
+            <summary><span class="report-help-chevron">▸</span><span id="rep-compact-help-sum-text">Notas + API</span></summary>
+            <div class="report-help-body" id="rep-help-body">
+              O painel à direita simula a planilha A4. As alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração.
+              <div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong> — <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>
+            </div>
+          </details>
         </div>
-        <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex-shrink:0;align-self:center">
-          <select id="preset-select" class="form-control" style="min-width:200px;font-size:12px;padding:6px 10px"></select>
+        <div class="data-toolbar-actions">
           <button type="button" class="btn btn-ghost btn-sm" id="btn-new-preset">+ Novo</button>
           <button type="button" class="btn btn-primary btn-sm" id="ed-save">Salvar</button>
           <button type="button" class="btn btn-ghost btn-sm" id="ed-delete" style="display:none;color:var(--red)">Excluir</button>
@@ -594,17 +577,17 @@
           <input type="hidden" id="ed-id" />
 
           <div class="report-inspector-section">
-            <h3>Preset</h3>
+            <h3 id="rep-h3-preset">Preset</h3>
             <div class="form-group" style="margin-bottom:8px">
-              <label class="form-label">Nome *</label>
+              <label class="form-label" id="rep-lbl-name">Nome *</label>
               <input class="form-control" id="ed-name" placeholder="Ex.: Cliente final" style="font-size:12px" />
             </div>
             <div class="form-group" style="margin-bottom:0">
-              <label class="form-label">Slug</label>
+              <label class="form-label" id="rep-lbl-slug">Slug</label>
               <input class="form-control" id="ed-slug" placeholder="opcional" style="font-size:12px" />
             </div>
             <div id="ed-link-wrap" style="display:none;margin-top:10px">
-              <label class="form-label">Link direto</label>
+              <label class="form-label" id="rep-lbl-deeplink">Link direto</label>
               <div style="display:flex;gap:6px">
                 <input class="form-control" id="ed-deeplink" readonly style="font-size:10px;padding:6px 8px" />
                 <button type="button" class="btn btn-ghost btn-sm" id="ed-copy-link">Copiar</button>
@@ -617,11 +600,11 @@
               <div class="report-preview-focus-head">
                 <h3 class="report-preview-focus-title">
                   <ion-icon name="eye-outline" aria-hidden="true"></ion-icon>
-                  Dados na pré-visualização
+                  <span id="rep-preview-title">Dados na pré-visualização</span>
                 </h3>
                 <details class="report-preview-focus-help">
-                  <summary>Ajuda</summary>
-                  <div class="report-help-body">
+                  <summary id="rep-preview-help-summary">Ajuda</summary>
+                  <div class="report-help-body" id="rep-preview-help-body">
                     Por padrão o canvas usa um <strong>exemplo</strong>. Informe o <strong>ID interno</strong> da execução ou o número <strong>FT-…</strong> da OS e clique em Carregar para ver respostas reais (só na pré-visualização).
                   </div>
                 </details>
@@ -646,38 +629,38 @@
           </div>
 
           <div class="report-inspector-section">
-            <h3>Aparência (banner)</h3>
+            <h3 id="rep-h3-banner">Aparência (banner)</h3>
             <div class="form-group" style="margin-bottom:8px">
-              <label class="form-label">URL do logo</label>
+              <label class="form-label" id="rep-lbl-logo">URL do logo</label>
               <input class="form-control" id="ed-logo" placeholder="https://… ou /uploads/…" style="font-size:12px" />
             </div>
             <div class="form-group" style="margin-bottom:8px">
-              <label class="form-label">Título (H2)</label>
+              <label class="form-label" id="rep-lbl-title">Título (H2)</label>
               <input class="form-control" id="ed-report-title" placeholder="Vazio = RELATÓRIO DA ATIVIDADE" style="font-size:12px" />
             </div>
             <div class="form-group" style="margin-bottom:0">
-              <label class="form-label">Subtítulo</label>
+              <label class="form-label" id="rep-lbl-sub">Subtítulo</label>
               <input class="form-control" id="ed-report-subtitle" placeholder="Vazio = número OS" style="font-size:12px" />
             </div>
           </div>
 
           <div class="report-inspector-section">
-            <h3>Módulos na planilha</h3>
-            <details class="report-section-help">
-              <summary><span class="report-help-chevron">▸</span> Ordem e agrupamento</summary>
-              <div class="report-help-body">Use o interruptor para mostrar ou ocultar; as setas definem a ordem no PDF. Se "Produtividade" vier logo a seguir a "Bloco técnico", a faixa fica dentro do mesmo cartão.</div>
+            <h3 id="rep-h3-modules">Módulos na planilha</h3>
+            <details class="report-section-help" id="rep-mod-help-details">
+              <summary><span class="report-help-chevron">▸</span><span id="rep-mod-help-sum-text">Ordem e agrupamento</span></summary>
+              <div class="report-help-body" id="rep-mod-help-body">Use o interruptor para mostrar ou ocultar; as setas definem a ordem no PDF. Se "Produtividade" vier logo a seguir a "Bloco técnico", a faixa fica dentro do mesmo cartão.</div>
             </details>
             <div id="ed-modules"></div>
           </div>
 
           <div class="report-inspector-section">
-            <h3>Tipo e cores</h3>
+            <h3 id="rep-h3-theme">Tipo e cores</h3>
             <div class="form-group" style="margin-bottom:8px">
-              <label class="form-label">Fonte (família CSS)</label>
+              <label class="form-label" id="rep-lbl-font">Fonte (família CSS)</label>
               <input class="form-control" id="th-font" style="font-size:11px" placeholder="Inter, system-ui, sans-serif" />
             </div>
             <div class="form-group" style="margin-bottom:10px">
-              <label class="form-label">Escala do texto <span id="th-scale-label" style="font-weight:600;color:var(--text2)">100%</span></label>
+              <label class="form-label"><span id="rep-lbl-scale">Escala do texto</span> <span id="th-scale-label" style="font-weight:600;color:var(--text2)">100%</span></label>
               <input type="range" id="th-scale" min="75" max="135" value="100" style="width:100%" />
             </div>
             <div class="report-theme-grid">
@@ -697,13 +680,13 @@
           </div>
 
           <div class="report-inspector-section" style="flex:1;padding-bottom:16px">
-            <h3>Campos do formulário</h3>
+            <h3 id="rep-h3-fields">Campos do formulário</h3>
             <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;font-size:12px">
-              <input type="checkbox" id="ed-hide-empty" /> Ocultar vazios no PDF
+              <input type="checkbox" id="ed-hide-empty" /> <span id="rep-hide-empty-text">Ocultar vazios no PDF</span>
             </label>
-            <details class="report-section-help">
-              <summary><span class="report-help-chevron">▸</span> Rótulos e lista</summary>
-              <div class="report-help-body">Mostrar ou ocultar campos e renomear rótulos no PDF. Com uma OS carregada, a lista segue o formulário dessa execução.</div>
+            <details class="report-section-help" id="rep-fields-help-details">
+              <summary><span class="report-help-chevron">▸</span><span id="rep-fields-help-sum-text">Rótulos e lista</span></summary>
+              <div class="report-help-body" id="rep-fields-help-body">Mostrar ou ocultar campos e renomear rótulos no PDF. Com uma OS carregada, a lista segue o formulário dessa execução.</div>
             </details>
             <div id="field-rows"></div>
           </div>
@@ -711,9 +694,9 @@
 
         <main class="report-builder-stage">
           <div class="report-canvas-toolbar">
-            <span style="font-size:11px;font-weight:800;color:var(--text2)">A4</span>
+            <span id="rep-canvas-a4" style="font-size:11px;font-weight:800;color:var(--text2)">A4</span>
             <label style="display:inline-flex;align-items:center;gap:6px"><input type="range" id="canvas-zoom" min="40" max="100" value="72" style="width:100px;vertical-align:middle" /> <span id="canvas-zoom-label" style="font-size:11px;min-width:2.5em">72%</span></label>
-            <span class="report-badge-live report-badge-live--info" style="font-size:9px;padding:2px 6px">Live</span>
+            <span id="rep-canvas-live" class="report-badge-live report-badge-live--info" style="font-size:9px;padding:2px 6px">Live</span>
           </div>
           <div class="report-canvas-scroll">
             <div class="report-canvas-sheet" id="canvas-sheet">
@@ -740,20 +723,10 @@ import {
   MOCK_PREVIEW_TASK,
   MOCK_PREVIEW_SCHEMA,
 } from './js/report/reportPdfPreview.js';
+import { applyReportsStaticI18n, reportsT, reportModuleLabel } from './js/reports-i18n.js';
 
 await initPage();
-
-const MODULE_LABELS = {
-  topbar: 'Barra + logo + data',
-  headerBanner: 'Faixa azul (título / técnico)',
-  technicalBlock: 'Bloco técnico (3 colunas)',
-  productivity: 'Produtividade (bloco PDF)',
-  timeline: 'Linha do tempo',
-  transit: 'Deslocamento',
-  formResponses: 'Respostas numeradas',
-  photoGallery: 'Galeria de fotos',
-  footer: 'Rodapé',
-};
+applyReportsStaticI18n();
 
 let cacheList = [];
 let previewTask = structuredClone(MOCK_PREVIEW_TASK);
@@ -872,7 +845,7 @@ function renderModuleRows(opts = {}) {
       const id = `ed-mod-${k}`;
       const isOn = !!checked[k];
       return `<div class="report-module-row" data-key="${k}">
-        <span class="report-module-label">${MODULE_LABELS[k] || k}</span>
+        <span class="report-module-label">${reportModuleLabel(k)}</span>
         <div class="report-module-meta">
           <div class="report-order-actions">
             <button type="button" class="btn btn-ghost btn-sm order-up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
@@ -880,7 +853,7 @@ function renderModuleRows(opts = {}) {
         i === moduleOrderState.length - 1 ? 'disabled' : ''
       }>↓</button>
           </div>
-          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="${id}" data-mod="${k}" ${isOn ? 'checked' : ''} /><span></span></label>
+          <label class="report-switch" title="${reportsT('rep_mod_visible').replace(/"/g, '&quot;')}"><input type="checkbox" id="${id}" data-mod="${k}" ${isOn ? 'checked' : ''} /><span></span></label>
         </div>
       </div>`;
     })
@@ -941,12 +914,11 @@ function readFieldsFromDom() {
 }
 
 /** @param {Record<string,{visible?:boolean,label?:string}>} [seed] — valores do preset ao abrir */
-const TECH_FIN_PDF_WARNING =
-  'Ao incluir "Custos do técnico" no PDF, informações que podem corresponder a custos operacionais internos passam a poder ser vistas pelo cliente ou por quem receber o relatório. Confirme que deseja expor estes dados.';
-
 function renderFieldRows(seed) {
   const host = document.getElementById('field-rows');
   const seedFields = seed && typeof seed === 'object' ? seed : {};
+  const phFld = reportsT('rep_ph_fld_label').replace(/"/g, '&quot;');
+  const visTitle = reportsT('rep_mod_visible').replace(/"/g, '&quot;');
   host.innerHTML = previewSchema
     .map((f) => {
       const fc = seedFields[f.id];
@@ -956,19 +928,16 @@ function renderFieldRows(seed) {
         fc && Object.prototype.hasOwnProperty.call(fc, 'visible') ? !!fc.visible : defaultVis;
       const lab = fc && fc.label ? String(fc.label) : '';
       const warnBox = isTechFin
-        ? `<div class="report-techfin-pdf-warn" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:10px;line-height:1.45;color:#92400e;font-weight:600">
-          <ion-icon name="warning-outline" style="vertical-align:-3px"></ion-icon>
-          Por padrão este campo não entra no PDF. Se ativar a visibilidade, dados de custos internos do técnico podem ficar disponíveis ao cliente.
-        </div>`
+        ? `<div class="report-techfin-pdf-warn" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:10px;line-height:1.45;color:#92400e;font-weight:600">${reportsT('rep_techfin_warn_html')}</div>`
         : '';
       return `<div class="report-field-row" data-fid="${f.id}" data-ftype="${f.type || ''}">
         <div>
           <div style="font-weight:700;color:var(--text);margin-bottom:4px">${f.label.replace(/</g, '')} <span style="font-weight:600;color:var(--text3);font-size:10px">${f.type}</span></div>
-          <input type="text" id="fld-lab-${f.id}" placeholder="Rótulo no PDF (opcional)" value="${lab.replace(/"/g, '&quot;')}" />
+          <input type="text" id="fld-lab-${f.id}" placeholder="${phFld}" value="${lab.replace(/"/g, '&quot;')}" />
           ${warnBox}
         </div>
         <div class="eye">
-          <label class="report-switch" title="Visível no PDF"><input type="checkbox" id="fld-vis-${f.id}" data-techfin-warn="${isTechFin ? '1' : ''}" ${vis ? 'checked' : ''} /><span></span></label>
+          <label class="report-switch" title="${visTitle}"><input type="checkbox" id="fld-vis-${f.id}" data-techfin-warn="${isTechFin ? '1' : ''}" ${vis ? 'checked' : ''} /><span></span></label>
         </div>
       </div>`;
     })
@@ -979,7 +948,7 @@ function renderFieldRows(seed) {
   });
   host.querySelectorAll('input[type="checkbox"][data-techfin-warn="1"]').forEach((el) => {
     el.addEventListener('change', () => {
-      if (el.checked) window.alert(TECH_FIN_PDF_WARNING);
+      if (el.checked) window.alert(reportsT('rep_techfin_alert'));
     });
   });
 }
@@ -1039,7 +1008,11 @@ async function loadPresets() {
 function fillPresetSelect() {
   const sel = document.getElementById('preset-select');
   const cur = sel.value;
-  sel.innerHTML = '<option value="">— Novo preset —</option>';
+  sel.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = reportsT('rep_opt_new_preset');
+  sel.appendChild(opt0);
   for (const p of cacheList) {
     const o = document.createElement('option');
     o.value = p.id;
@@ -1108,7 +1081,7 @@ document.getElementById('ed-save').addEventListener('click', async () => {
   const id = document.getElementById('ed-id').value.trim();
   const name = document.getElementById('ed-name').value.trim();
   if (!name) {
-    alert('Indique o nome do preset.');
+    alert(reportsT('rep_alert_name'));
     return;
   }
   const body = {
@@ -1139,13 +1112,13 @@ document.getElementById('ed-save').addEventListener('click', async () => {
     const saved = await r.json();
     openEditor(saved.id);
   } catch (e) {
-    alert('Erro: ' + (e.message || e));
+    alert(reportsT('rep_err_save') + (e.message || e));
   }
 });
 
 document.getElementById('ed-delete').addEventListener('click', async () => {
   const id = document.getElementById('ed-id').value.trim();
-  if (!id || !confirm('Excluir este preset?')) return;
+  if (!id || !confirm(reportsT('rep_alert_delete'))) return;
   try {
     const r = await fetch(`${CONFIG.API_BASE}/reports/presets/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -1155,7 +1128,7 @@ document.getElementById('ed-delete').addEventListener('click', async () => {
     await refresh();
     openEditor(null);
   } catch (e) {
-    alert('Erro: ' + (e.message || e));
+    alert(reportsT('rep_err_save') + (e.message || e));
   }
 });
 
@@ -1173,11 +1146,11 @@ document.getElementById('preview-load-exec').addEventListener('click', async () 
   const id = document.getElementById('preview-exec-id').value.trim();
   const msg = document.getElementById('preview-load-msg');
   if (!id) {
-    msg.textContent = 'Indique o ID da execução.';
+    msg.textContent = reportsT('rep_exec_need');
     return;
   }
   const prevFieldCfg = readFieldsFromDom();
-  msg.textContent = 'Carregando…';
+  msg.textContent = reportsT('rep_exec_loading');
   try {
     const r = await fetch(`${CONFIG.API_BASE}/operations/tasks?id=${encodeURIComponent(id)}`, {
       headers: CONFIG.headers(),
@@ -1187,7 +1160,7 @@ document.getElementById('preview-load-exec').addEventListener('click', async () 
     const found = Array.isArray(arr)
       ? arr.find((x) => x && (x.id === id || (x.osNumber && String(x.osNumber) === id)))
       : null;
-    if (!found) throw new Error('Execução não encontrada.');
+    if (!found) throw new Error(reportsT('rep_exec_not_found'));
     previewTask = found;
     previewSchema = buildPreviewSchemaFromLoadedTask(found);
     const seed = {};
@@ -1195,7 +1168,7 @@ document.getElementById('preview-load-exec').addEventListener('click', async () 
       if (prevFieldCfg[f.id]) seed[f.id] = prevFieldCfg[f.id];
     }
     renderFieldRows(seed);
-    msg.textContent = 'Dados reais carregados no canvas.';
+    msg.textContent = reportsT('rep_exec_loaded');
     schedulePreview();
   } catch (e) {
     msg.textContent = String(e.message || e);
@@ -1207,7 +1180,7 @@ document.getElementById('preview-reset-mock').addEventListener('click', () => {
   previewTask = structuredClone(MOCK_PREVIEW_TASK);
   previewSchema = [...MOCK_PREVIEW_SCHEMA];
   document.getElementById('preview-exec-id').value = '';
-  document.getElementById('preview-load-msg').textContent = 'Exemplo padrão.';
+  document.getElementById('preview-load-msg').textContent = reportsT('rep_mock_reset');
   const seed = {};
   for (const f of previewSchema) {
     if (prevFieldCfg[f.id]) seed[f.id] = prevFieldCfg[f.id];
