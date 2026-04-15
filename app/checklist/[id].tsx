@@ -1501,7 +1501,7 @@ function getFirstBlockingVisionPendingRequiringOnline(
     const checkScope = (scope: SectionRepeatScope | null): string | null => {
       const raw = getScopedFieldValue(res, scope, f.id);
       const o = parseVisionChecklistStored(raw);
-      if (!isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return null;
+      if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return null;
       return String(f.label || f.id);
     };
 

@@ -27,7 +27,7 @@ import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingServi
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { KeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
@@ -563,6 +563,16 @@ export default function LiveRouteMapCard({
     if (!visible) return;
     setWindowDims(Dimensions.get('window'));
   }, [visible]);
+
+  /** `expo-keep-awake` não exporta componente `<KeepAwake />` — usar activate/deactivate por tag. */
+  useEffect(() => {
+    if (!visible || !keepScreenAwake) return;
+    const tag = 'brspark-live-route-map';
+    void activateKeepAwakeAsync(tag);
+    return () => {
+      void deactivateKeepAwake(tag);
+    };
+  }, [visible, keepScreenAwake]);
 
   const { t: tr } = useTranslation();
   const { user, patchUser } = useAuth();
@@ -1773,7 +1783,6 @@ export default function LiveRouteMapCard({
   if (!expanded) {
     return (
       <>
-        {visible && keepScreenAwake ? <KeepAwake /> : null}
         <View style={styles.minimizedCard} collapsable={false}>
           <TouchableOpacity
             style={styles.minimizedCardTapExpand}
@@ -1834,7 +1843,6 @@ export default function LiveRouteMapCard({
   // Full Screen Modal View
   return (
     <>
-    {visible && keepScreenAwake ? <KeepAwake /> : null}
     <Modal
       visible={expanded}
       animationType="slide"

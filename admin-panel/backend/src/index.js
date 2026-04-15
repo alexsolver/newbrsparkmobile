@@ -279,12 +279,13 @@ app.get('/api/providers', async (req, res) => {
     const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
     const pgFallback = directoryPostgresFallbackEnabled();
 
-    const emptyPayload = () => ({
+    const emptyPayload = (errorCode) => ({
       data: [],
       total: 0,
       page: pageNum,
       limit: take,
       totalPages: 0,
+      ...(errorCode ? { error: errorCode } : {}),
     });
 
     if (cmsBase) {
@@ -304,7 +305,8 @@ app.get('/api/providers', async (req, res) => {
         if (!pgFallback) {
           res.set('Cache-Control', 'no-store');
           res.set('X-BrSpark-Directory-Source', 'laravel-error');
-          return res.json(emptyPayload());
+          // 503: clientes móveis tratam como falha e podem usar cache SQLite (ver ProviderService.search).
+          return res.status(503).json(emptyPayload('CMS_DIRECTORY_UNAVAILABLE'));
         }
         console.warn('[api/providers] Fallback PostgreSQL (DIRECTORY_POSTGRES_FALLBACK=1).');
         res.set('X-BrSpark-Directory-Fallback', '1');
@@ -313,7 +315,7 @@ app.get('/api/providers', async (req, res) => {
     } else if (!pgFallback) {
       res.set('Cache-Control', 'no-store');
       res.set('X-BrSpark-Directory-Source', 'cms-not-configured');
-      return res.json(emptyPayload());
+      return res.status(503).json(emptyPayload('CMS_DIRECTORY_NOT_CONFIGURED'));
     }
 
     const skip = (pageNum - 1) * take;

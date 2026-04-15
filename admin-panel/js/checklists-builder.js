@@ -38,7 +38,6 @@ const MAX_VISION_SIMNAO_QUESTIONS = 10;
 const MAX_VISION_STRUCTURED_PROMPT_CHARS = 12000;
 /** Alinhado a `checklistsVision.js` / `visionSimNaoQuestions.js` quando há mais de uma pergunta. */
 const MAX_VISION_MULTI_SIMNAO_TEXT_CHARS = 500;
-const MAX_VISION_SIMNAO_QUESTIONS = 10;
 
 /** URL da imagem no preview do builder: origem da página se a porta for a da API (corrige localhost vs 127.0.0.1). */
 function helpImageDisplayUrl(pathOrUrl) {
@@ -72,6 +71,27 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Catálogo local `brspark_checklists_db` — JSON inválido não deve quebrar o painel. */
+function parseLocalChecklistsDb() {
+  try {
+    const raw = localStorage.getItem('brspark_checklists_db');
+    if (raw == null || !String(raw).trim()) return {};
+    const o = JSON.parse(raw);
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch (e) {
+    console.warn(
+      '[checklists-builder] Cache brspark_checklists_db inválido ou corrompido; a repor catálogo vazio.',
+      e,
+    );
+    try {
+      localStorage.removeItem('brspark_checklists_db');
+    } catch (_) {
+      /* ignore */
+    }
+    return {};
+  }
 }
 
 function fbStr(key, vars, fallbackPt) {
@@ -2278,6 +2298,14 @@ function initCanvasSectionSortables() {
         console.error(
             '[checklists-builder] SortableJS não está disponível (verifique o script no checklists.html).'
         );
+        if (!window.__fbSortableMissingAlerted) {
+            window.__fbSortableMissingAlerted = true;
+            fbAlert(
+                'fb_alert_sortable_missing',
+                null,
+                'A biblioteca SortableJS não carregou (rede ou CDN). O arrastar e soltar no canvas fica desativado — recarregue a página ou verifique o script em checklists.html.',
+            );
+        }
         return;
     }
     if (!ensureBuilderCanvasEl()) return;
@@ -4421,12 +4449,7 @@ function templateTitleDuplicateInLocalDb(title, folderId, excludeId) {
     if (!key) return null;
     const fid =
         folderId === null || folderId === undefined || folderId === '' ? null : String(folderId);
-    let db;
-    try {
-        db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
-    } catch (e) {
-        return null;
-    }
+    const db = parseLocalChecklistsDb();
     for (const eid of Object.keys(db)) {
         if (excludeId && eid === excludeId) continue;
         const entry = db[eid];
@@ -4547,7 +4570,7 @@ window.saveChecklist = async function() {
         const schemaSnapshot = JSON.parse(JSON.stringify(fields));
         
         // 1. BACKUP OFFLINE-FIRST SEMPRE FUNCIONA (GARANTIDO)
-        const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const db = parseLocalChecklistsDb();
         db[currentFormId] = {
             id: currentFormId,
             title: currentFormTitle,
@@ -4597,7 +4620,7 @@ window.saveChecklist = async function() {
                 try {
                     const saved = JSON.parse(raw);
                     if (saved && saved.id) {
-                        const dbLocal = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+                        const dbLocal = parseLocalChecklistsDb();
                         const apiSch = Array.isArray(saved.schemaData) ? saved.schemaData : [];
                         const mergedSch = mergeSchemaKeepRichHelp(schemaSnapshot, apiSch);
                         dbLocal[saved.id] = {
@@ -4688,10 +4711,19 @@ window.previewPDF = function() {
         fbAlert('fb_alert_pdf_needs_fields', null, 'Adicione perguntas antes de gerar o PDF.');
         return;
     }
-    
-    // window.jspdf vem da CDN chamada no header do HTML
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+
+    const jspdfRoot = typeof window !== 'undefined' ? window.jspdf : undefined;
+    const JsPdfCtor = jspdfRoot && typeof jspdfRoot.jsPDF === 'function' ? jspdfRoot.jsPDF : null;
+    if (!JsPdfCtor) {
+        fbAlert(
+            'fb_alert_jspdf_missing',
+            null,
+            'A biblioteca jsPDF não carregou (rede ou CDN). Não é possível gerar o PDF de pré-visualização — recarregue a página ou confira o script em checklists.html.',
+        );
+        return;
+    }
+
+    const doc = new JsPdfCtor();
     
     // Cabeçalho
     doc.setFontSize(22);
@@ -5107,7 +5139,7 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
     const folderId = v === '' ? null : v;
     let prevSelectVal = '';
     try {
-        const dbPrev = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const dbPrev = parseLocalChecklistsDb();
         const pf = dbPrev[formId] ? dbPrev[formId].folderId : null;
         prevSelectVal = pf === null || pf === undefined || pf === '' ? '' : String(pf);
     } catch (_) {}
@@ -5135,7 +5167,7 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
             selectEl.value = prevSelectVal;
             return;
         }
-        const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const db = parseLocalChecklistsDb();
         if (db[formId]) {
             db[formId].folderId = folderId;
             localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
@@ -5169,7 +5201,7 @@ window.filterFormsList = function () {
 };
 
 window.duplicateChecklist = async function(id) {
-    const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+    const db = parseLocalChecklistsDb();
     const form = db[id];
     if(!form) return;
     
@@ -5203,7 +5235,7 @@ window.duplicateChecklist = async function(id) {
         });
         const raw = await res.text();
         if (!res.ok) {
-            const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+            const db2 = parseLocalChecklistsDb();
             delete db2[newForm.id];
             localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
             let msg = raw;
@@ -5233,7 +5265,7 @@ window.duplicateChecklist = async function(id) {
         }
     } catch(e) {
         console.warn('Erro ao clonar formulário na API', e);
-        const db2 = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const db2 = parseLocalChecklistsDb();
         delete db2[newForm.id];
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
         fbAlert('fb_alert_clone_net', null, 'Erro de rede ao clonar. A cópia local foi anulada.');
@@ -5242,7 +5274,7 @@ window.duplicateChecklist = async function(id) {
     }
     
     fbAlert('fb_alert_clone_ok', { title: String(form.title) }, "Formulário '" + form.title + "' clonado com sucesso.");
-    window.renderFormsGridFromLocal(JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}'));
+    window.renderFormsGridFromLocal(parseLocalChecklistsDb());
 };
 
 window.deleteChecklist = function(id) {
@@ -5272,7 +5304,7 @@ window.deleteChecklist = function(id) {
         }
         
         // Always remove locally regardless of API response
-        const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+        const db = parseLocalChecklistsDb();
         delete db[id];
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
 
@@ -5289,12 +5321,7 @@ window.selectFormFromModal = function(id) {
 };
 
 window.loadSavedFormsList = async function () {
-    let prev = {};
-    try {
-        prev = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
-    } catch (e) {
-        prev = {};
-    }
+    const prev = parseLocalChecklistsDb();
     await refreshTemplateFolders();
     try {
         const res = await fetch(`${brsparkApiBase()}/checklists/templates`);
@@ -5324,7 +5351,7 @@ window.loadSavedFormsList = async function () {
         console.warn('Sem conexão com API Node.js. Carregando formulários locais do Cache...', e);
     }
 
-    const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+    const db = parseLocalChecklistsDb();
     window.renderFormsGridFromLocal(db);
 };
 
@@ -5456,7 +5483,7 @@ window.loadChecklist = function(id) {
         return;
     }
     flushQuillToBoundField();
-    const db = JSON.parse(localStorage.getItem('brspark_checklists_db') || '{}');
+    const db = parseLocalChecklistsDb();
     const form = db[id];
     if(form) {
         currentFormId = form.id;

@@ -598,6 +598,10 @@ const M = {
     fb_alert_api_network: 'Não foi possível contatar a API. O formulário ficou salvo apenas neste navegador.\n\n{detail}',
     fb_alert_save_fatal: 'Erro ao salvar: {detail}',
     fb_alert_pdf_needs_fields: 'Adicione perguntas antes de gerar o PDF.',
+    fb_alert_jspdf_missing:
+      'A biblioteca jsPDF não carregou (rede ou CDN). Não é possível gerar o PDF de pré-visualização — recarregue a página ou confira o script em checklists.html.',
+    fb_alert_sortable_missing:
+      'A biblioteca SortableJS não carregou (rede ou CDN). O arrastar e soltar no canvas fica desativado — recarregue a página ou verifique o script em checklists.html.',
     fb_alert_folder_ui: 'Recarregue a página (interface «Nova pasta» não carregou).',
     fb_alert_folder_name: 'Indique um nome para a pasta.',
     fb_alert_folder_create_fail: 'Não foi possível criar a pasta: {detail}',
@@ -1219,6 +1223,10 @@ const M = {
     fb_alert_api_network: 'Could not reach the API. The form was saved in this browser only.\n\n{detail}',
     fb_alert_save_fatal: 'Save error: {detail}',
     fb_alert_pdf_needs_fields: 'Add questions before generating the PDF.',
+    fb_alert_jspdf_missing:
+      'The jsPDF library did not load (network or CDN). PDF preview cannot be generated — reload the page or check the script in checklists.html.',
+    fb_alert_sortable_missing:
+      'SortableJS did not load (network or CDN). Canvas drag-and-drop is disabled — reload the page or check the script in checklists.html.',
     fb_alert_folder_ui: 'Reload the page (New folder UI did not load).',
     fb_alert_folder_name: 'Enter a folder name.',
     fb_alert_folder_create_fail: 'Could not create folder: {detail}',
