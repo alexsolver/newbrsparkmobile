@@ -29,6 +29,11 @@ import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, getDeviceRegion } from '../src/i18n';
 import { clearLocalDatabase } from '../src/database';
+import {
+  getChecklistOutboxConflicts,
+  requeueChecklistOutboxConflicts,
+  clearChecklistOutboxConflicts,
+} from '../src/services/syncService';
 import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 
@@ -75,6 +80,8 @@ export default function ProfileScreen() {
   const styles = useMemo(() => createProfileStyles(C), [C]);
   const { t, i18n } = useTranslation();
   const [queueCount, setQueueCount] = useState(0);
+  const [syncConflictCount, setSyncConflictCount] = useState(0);
+  const [syncConflictsBusy, setSyncConflictsBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -356,9 +363,23 @@ export default function ProfileScreen() {
     AuthService.getTwoFactorStatus().then(setTwoFaEnabled);
   }, [user]);
 
+  const refreshSyncIndicators = useCallback(async () => {
+    try {
+      setQueueCount(getSyncQueue().length);
+    } catch {
+      setQueueCount(0);
+    }
+    try {
+      const conflicts = await getChecklistOutboxConflicts();
+      setSyncConflictCount(conflicts.length);
+    } catch {
+      setSyncConflictCount(0);
+    }
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
-      setQueueCount(getSyncQueue().length);
+      void refreshSyncIndicators();
       let cancelled = false;
       (async () => {
         const on = await readPushEnabledPreference();
@@ -367,7 +388,7 @@ export default function ProfileScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [refreshSyncIndicators]),
   );
 
   useFocusEffect(
@@ -406,7 +427,7 @@ export default function ProfileScreen() {
   const handleSync = async () => {
     setSyncing(true);
     const success = await ApiService.sync();
-    setQueueCount(getSyncQueue().length);
+    await refreshSyncIndicators();
     setSyncing(false);
     if (success) {
       // Reload formats from server if needed (future)
@@ -414,6 +435,47 @@ export default function ProfileScreen() {
     Alert.alert(
       success ? t('common.success') : t('common.attention'),
       success ? t('profile.syncSuccess') : t('profile.syncFailed'),
+    );
+  };
+
+  const handleRequeueSyncConflicts = async () => {
+    if (syncConflictsBusy) return;
+    setSyncConflictsBusy(true);
+    try {
+      const res = await requeueChecklistOutboxConflicts();
+      await refreshSyncIndicators();
+      Alert.alert(
+        'Conflitos reenfileirados',
+        `${res.requeued} item(ns) voltaram para a fila de envio. Restantes em conflito: ${res.remaining}.`,
+      );
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha ao reenfileirar conflitos.');
+    } finally {
+      setSyncConflictsBusy(false);
+    }
+  };
+
+  const handleClearSyncConflicts = async () => {
+    if (syncConflictsBusy) return;
+    Alert.alert(
+      'Limpar conflitos',
+      'Isso remove apenas a quarentena de conflitos. Não remove itens já reenfileirados na outbox.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Limpar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSyncConflictsBusy(true);
+              await clearChecklistOutboxConflicts();
+              await refreshSyncIndicators();
+            } finally {
+              setSyncConflictsBusy(false);
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -1064,10 +1126,66 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.listItemText}>{t('profile.forceSync')}</Text>
-              <Text style={styles.listItemSub}>{queueCount} {t('profile.pendingActions')}</Text>
+              <Text style={styles.listItemSub}>
+                {queueCount} {t('profile.pendingActions')}
+                {syncConflictCount > 0 ? ` · ${syncConflictCount} conflito(s)` : ''}
+              </Text>
             </View>
             {syncing ? <Text style={{ fontSize: 12, color: '#A1A1AA' }}>Sincronizando...</Text> : <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />}
           </TouchableOpacity>
+
+          <View style={styles.listSeparator} />
+          <View style={[styles.listItem, { alignItems: 'flex-start', paddingVertical: 12 }]}>
+            <View style={[styles.listIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="warning-outline" size={18} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.listItemText}>Conflitos de sincronização</Text>
+              <Text style={styles.listItemSub}>
+                {syncConflictCount > 0
+                  ? `Existem ${syncConflictCount} item(ns) em quarentena por conflito de revisão.`
+                  : 'Nenhum conflito no momento. Você pode abrir os detalhes para monitorar.'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/profile/sync-conflicts' as any)}
+                style={{ marginTop: 6, alignSelf: 'flex-start' }}
+              >
+                <Text style={{ color: '#B45309', fontSize: 12, fontWeight: '800' }}>Ver detalhes</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                <TouchableOpacity
+                  onPress={handleRequeueSyncConflicts}
+                  disabled={syncConflictsBusy || syncConflictCount === 0}
+                  style={{
+                    backgroundColor: '#B45309',
+                    borderRadius: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    opacity: syncConflictsBusy || syncConflictCount === 0 ? 0.5 : 1,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
+                    {syncConflictsBusy ? 'Processando...' : 'Reenfileirar'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleClearSyncConflicts}
+                  disabled={syncConflictsBusy || syncConflictCount === 0}
+                  style={{
+                    backgroundColor: '#FEE2E2',
+                    borderRadius: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    opacity: syncConflictsBusy || syncConflictCount === 0 ? 0.5 : 1,
+                  }}
+                >
+                  <Text style={{ color: '#B91C1C', fontWeight: '800', fontSize: 12 }}>
+                    Limpar conflitos
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
 
           <View style={styles.listSeparator} />
 

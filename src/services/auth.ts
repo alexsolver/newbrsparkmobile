@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
+import {
+  createEmergencyOfflineBackup,
+  restoreEmergencyOfflineBackupForUser,
+} from './offlineRecoveryBackup';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
@@ -231,6 +235,27 @@ const TOKEN_KEY = 'brspark_jwt';
 const USER_KEY  = 'brspark_user';
 /** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
 const ISOLATION_VERSION_KEY = '@brspark:isolation_v';
+/** Marcador temporário quando a sessão expira/sessão invalidada para reter dados offline até novo login da mesma conta. */
+const PRESERVED_LOCAL_OWNER_KEY = '@brspark_preserved_local_owner_v1';
+
+type PreservedLocalOwner = {
+  id: string;
+  email: string;
+  tenantId: string;
+  at: number;
+  reason?: string;
+};
+
+function normalizeIdentityPart(v: unknown): string {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+function userIdentityFingerprint(u: Partial<User> | null | undefined): string {
+  const id = normalizeIdentityPart((u as any)?.id);
+  const email = normalizeIdentityPart((u as any)?.email);
+  const tenantId = normalizeIdentityPart((u as any)?.tenantId);
+  return `${id}|${email}|${tenantId}`;
+}
 
 /**
  * Remove caches BrSpark em AsyncStorage (OS, rascunhos, filas, dados por e-mail, etc.) e SQLite local.
@@ -285,17 +310,89 @@ export async function getToken(): Promise<string | null> {
 
 // ─── AuthService ─────────────────────────────────────────────────────────────
 export class AuthService {
+  static async tryAutoRestoreOfflineBackup(user: User | null): Promise<void> {
+    if (!user) return;
+    try {
+      const r = await restoreEmergencyOfflineBackupForUser(user);
+      if (r.restored) {
+        console.log(
+          `[AUTH] Backup offline restaurado automaticamente (keys=${r.restoredKeys}, syncQueue=${r.restoredQueueRows}).`,
+        );
+      }
+    } catch (e) {
+      console.warn('[AUTH] Falha ao restaurar backup offline:', e);
+    }
+  }
+
+  static async savePreservedLocalOwner(user: User | null, reason?: string): Promise<void> {
+    if (!user) return;
+    const owner: PreservedLocalOwner = {
+      id: String(user.id || '').trim(),
+      email: String(user.email || '').trim().toLowerCase(),
+      tenantId: String(user.tenantId || '').trim(),
+      at: Date.now(),
+      reason: reason ? String(reason) : undefined,
+    };
+    try {
+      await AsyncStorage.setItem(PRESERVED_LOCAL_OWNER_KEY, JSON.stringify(owner));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  static async clearPreservedLocalOwner(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(PRESERVED_LOCAL_OWNER_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  static async loadPreservedLocalOwner(): Promise<PreservedLocalOwner | null> {
+    try {
+      const raw = await AsyncStorage.getItem(PRESERVED_LOCAL_OWNER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as PreservedLocalOwner;
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!parsed.id || !parsed.email || !parsed.tenantId) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
 
   /** Avatar do usuário anterior + purge total antes de gravar nova sessão (mesmo aparelho, outra conta). */
-  static async wipeLocalDataBeforeNewSession(): Promise<void> {
+  static async wipeLocalDataBeforeNewSession(nextUser?: User | null): Promise<void> {
+    const preserved = await AuthService.loadPreservedLocalOwner();
+    if (nextUser && preserved) {
+      const sameUser =
+        userIdentityFingerprint(nextUser) ===
+        userIdentityFingerprint({
+          id: preserved.id,
+          email: preserved.email,
+          tenantId: preserved.tenantId,
+        } as Partial<User>);
+      if (sameUser) {
+        console.log('[AUTH] Sessão restaurada para a mesma conta: preservando dados offline locais.');
+        await AuthService.clearPreservedLocalOwner();
+        return;
+      }
+    }
+
     const existing = await AuthService.getUser();
     if (existing?.id) {
+      try {
+        await createEmergencyOfflineBackup(existing, 'new_session_purge');
+      } catch {
+        /* ignore */
+      }
       try {
         await deleteAvatarCache(existing.id);
       } catch {
         /* ignore */
       }
     }
+    await AuthService.clearPreservedLocalOwner();
     await purgeAllBrSparkLocalCaches();
   }
 
@@ -334,9 +431,10 @@ export class AuthService {
       throw new TwoFactorRequired(data.challengeToken);
     }
 
-    await AuthService.wipeLocalDataBeforeNewSession();
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
     return data.user as User;
   }
 
@@ -380,9 +478,10 @@ export class AuthService {
       throw new Error(data.error || 'Erro ao fazer login social.');
     }
 
-    await AuthService.wipeLocalDataBeforeNewSession();
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
     return data.user as User;
   }
 
@@ -417,9 +516,10 @@ export class AuthService {
       throw new Error(data.error || 'Erro ao criar conta.');
     }
 
-    await AuthService.wipeLocalDataBeforeNewSession();
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
     return data.user as User;
   }
 
@@ -474,8 +574,24 @@ export class AuthService {
   }
 
   /** Logout — limpa JWT e dados locais */
-  static async logout(): Promise<void> {
+  static async logout(options?: {
+    preserveLocalData?: boolean;
+    reason?: 'session_expired' | 'session_invalidated' | 'manual' | string;
+  }): Promise<void> {
+    const preserveLocalData = options?.preserveLocalData === true;
     const existing = await AuthService.getUser();
+    if (preserveLocalData) {
+      await AuthService.savePreservedLocalOwner(existing, options?.reason);
+      await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+      return;
+    }
+    if (existing) {
+      try {
+        await createEmergencyOfflineBackup(existing, options?.reason || 'logout');
+      } catch {
+        /* ignore */
+      }
+    }
     if (existing?.id) {
       try {
         await deleteAvatarCache(existing.id);
@@ -526,7 +642,7 @@ export class AuthService {
         }
         // Só invalidar sessão com 401 explícito — 5xx/timeout após reconexão não devem forçar novo login.
         if (res.status === 401) {
-          await AuthService.logout();
+          await AuthService.logout({ preserveLocalData: true, reason: 'session_expired' });
           return null;
         }
         console.warn(`[Auth] validateSession tentativa ${attempt + 1}/3 — HTTP ${res.status}`);
@@ -588,9 +704,10 @@ export class AuthService {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Código inválido.');
-    await AuthService.wipeLocalDataBeforeNewSession();
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
     return data.user as User;
   }
 
@@ -655,7 +772,7 @@ export function subscribeSessionInvalidated(cb: () => void): () => void {
 /** Logout + alerta + notificação aos listeners (push remoto ou 401 SESSION_INVALIDATED). Idempotente. */
 export async function applySessionInvalidatedFromServer(): Promise<void> {
   if (!(await getToken())) return;
-  await AuthService.logout();
+  await AuthService.logout({ preserveLocalData: true, reason: 'session_invalidated' });
   sessionInvalidatedListeners.forEach((fn) => {
     try {
       fn();

@@ -12,31 +12,48 @@ import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../services/auth';
 
+const VOICE_NOTE_PHASE_PENDING = 'pending_transcription';
+
 export type VoiceNoteStoredValue = {
   transcript?: string;
-  phase?: 'idle' | 'recording' | 'uploading' | 'done' | 'error';
+  phase?: 'idle' | 'recording' | 'uploading' | 'done' | 'error' | 'pending_transcription';
+  status?: 'pending_transcription' | 'completed';
   error?: string;
+  localUri?: string;
+  mimeType?: string;
+  fileName?: string;
+  language?: string;
+  pendingSince?: string;
+  lastAttemptAt?: string;
 };
 
-function parseVoiceValue(raw: unknown): VoiceNoteStoredValue {
+export function parseVoiceNoteValue(raw: unknown): VoiceNoteStoredValue {
   if (raw == null) return {};
   if (typeof raw === 'string') {
     try {
       const j = JSON.parse(raw);
-      return j && typeof j === 'object' ? j : {};
+      return j && typeof j === 'object' ? (j as VoiceNoteStoredValue) : {};
     } catch {
-      return raw.trim() ? { transcript: raw, phase: 'done' } : {};
+      return raw.trim() ? { transcript: raw, phase: 'done', status: 'completed' } : {};
     }
   }
   if (typeof raw === 'object') return raw as VoiceNoteStoredValue;
   return {};
 }
 
+export function voiceNoteHasPendingTranscription(raw: unknown): boolean {
+  const p = parseVoiceNoteValue(raw);
+  const phase = String(p.phase || p.status || '').toLowerCase();
+  const localUri = String(p.localUri || '').trim();
+  const hasTranscript = String(p.transcript || '').trim().length > 0;
+  return !hasTranscript && phase === VOICE_NOTE_PHASE_PENDING && !!localUri;
+}
+
 type Props = {
   value: unknown;
   onChange: (next: VoiceNoteStoredValue) => void;
   readOnly?: boolean;
-  /** Whisper: pt, en, … */
+  /** Whisper: pt, en, ... */
   transcribeLanguage?: string;
 };
 
@@ -46,12 +63,16 @@ export function ChecklistVoiceNoteField({
   readOnly,
   transcribeLanguage = 'pt',
 }: Props) {
-  const parsed = parseVoiceValue(value);
+  const parsed = parseVoiceNoteValue(value);
   const [phase, setPhase] = useState<VoiceNoteStoredValue['phase']>(parsed.phase || 'idle');
   const [transcript, setTranscript] = useState(String(parsed.transcript || '').trim());
   const [errMsg, setErrMsg] = useState(String(parsed.error || '').trim());
+  const [pendingLocalUri, setPendingLocalUri] = useState(String(parsed.localUri || '').trim());
+  const [pendingMimeType, setPendingMimeType] = useState(String(parsed.mimeType || '').trim());
+  const [pendingFileName, setPendingFileName] = useState(String(parsed.fileName || '').trim());
   const recordingRef = useRef<InstanceType<typeof Audio.Recording> | null>(null);
   const mounted = useRef(true);
+  const transcribingRef = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -66,24 +87,274 @@ export function ChecklistVoiceNoteField({
   }, []);
 
   useEffect(() => {
-    const p = parseVoiceValue(value);
+    const p = parseVoiceNoteValue(value);
     if (p.transcript != null) setTranscript(String(p.transcript).trim());
     if (p.error != null) setErrMsg(String(p.error).trim());
+    setPendingLocalUri(String(p.localUri || '').trim());
+    setPendingMimeType(String(p.mimeType || '').trim());
+    setPendingFileName(String(p.fileName || '').trim());
     if (p.phase && p.phase !== 'recording' && p.phase !== 'uploading') setPhase(p.phase);
   }, [value]);
 
-  const pushState = useCallback(
-    (patch: VoiceNoteStoredValue) => {
+  const emitState = useCallback(
+    (patch: Partial<VoiceNoteStoredValue>) => {
+      const nextPhase = patch.phase ?? phase;
+      const nextTranscript =
+        patch.transcript !== undefined ? String(patch.transcript || '').trim() : transcript;
+      const nextError =
+        patch.error !== undefined ? String(patch.error || '').trim() : errMsg;
+      const nextLocalUri =
+        patch.localUri !== undefined ? String(patch.localUri || '').trim() : pendingLocalUri;
+      const nextMimeType =
+        patch.mimeType !== undefined ? String(patch.mimeType || '').trim() : pendingMimeType;
+      const nextFileName =
+        patch.fileName !== undefined ? String(patch.fileName || '').trim() : pendingFileName;
+      const nextLanguage = String(patch.language || transcribeLanguage || 'pt').slice(0, 8);
+
       const next: VoiceNoteStoredValue = {
-        transcript: patch.transcript !== undefined ? patch.transcript : transcript,
-        phase: patch.phase ?? phase,
-        error: patch.error !== undefined ? patch.error : errMsg || undefined,
+        transcript: nextTranscript,
+        phase: nextPhase,
+        status: nextPhase === VOICE_NOTE_PHASE_PENDING ? 'pending_transcription' : 'completed',
+        error: nextError || undefined,
+        localUri: nextLocalUri || undefined,
+        mimeType: nextMimeType || undefined,
+        fileName: nextFileName || undefined,
+        language: nextLanguage,
+        pendingSince:
+          patch.pendingSince !== undefined
+            ? patch.pendingSince || undefined
+            : nextPhase === VOICE_NOTE_PHASE_PENDING
+              ? parsed.pendingSince || new Date().toISOString()
+              : undefined,
+        lastAttemptAt:
+          patch.lastAttemptAt !== undefined
+            ? patch.lastAttemptAt || undefined
+            : nextPhase === VOICE_NOTE_PHASE_PENDING
+              ? new Date().toISOString()
+              : undefined,
       };
+
+      if (next.phase !== VOICE_NOTE_PHASE_PENDING && !nextTranscript) {
+        next.status = undefined;
+      }
+      if (next.phase === 'done') {
+        next.status = 'completed';
+        delete next.localUri;
+      }
       if (!next.error) delete next.error;
+      if (!next.localUri) delete next.localUri;
+      if (!next.mimeType) delete next.mimeType;
+      if (!next.fileName) delete next.fileName;
+      if (!next.language) delete next.language;
+      if (!next.pendingSince) delete next.pendingSince;
+      if (!next.lastAttemptAt) delete next.lastAttemptAt;
+
       onChange(next);
     },
-    [onChange, transcript, phase, errMsg],
+    [
+      errMsg,
+      onChange,
+      parsed.pendingSince,
+      pendingFileName,
+      pendingLocalUri,
+      pendingMimeType,
+      phase,
+      transcript,
+      transcribeLanguage,
+    ],
   );
+
+  const markPending = useCallback(
+    (
+      uri: string,
+      opts?: {
+        message?: string;
+        mimeType?: string;
+        fileName?: string;
+      },
+    ) => {
+      const msg = String(opts?.message || '').trim();
+      const mime = String(opts?.mimeType || pendingMimeType || 'audio/m4a').trim();
+      const fileName = String(opts?.fileName || pendingFileName || 'nota_voz.m4a').trim();
+      setPendingLocalUri(uri);
+      setPendingMimeType(mime);
+      setPendingFileName(fileName);
+      setErrMsg(msg);
+      setPhase(VOICE_NOTE_PHASE_PENDING);
+      emitState({
+        phase: VOICE_NOTE_PHASE_PENDING,
+        error: msg,
+        localUri: uri,
+        mimeType: mime,
+        fileName,
+        pendingSince: parsed.pendingSince || new Date().toISOString(),
+        lastAttemptAt: new Date().toISOString(),
+      });
+    },
+    [emitState, parsed.pendingSince, pendingFileName, pendingMimeType],
+  );
+
+  const transcribeFromUri = useCallback(
+    async (
+      uri: string,
+      opts?: {
+        mimeType?: string;
+        fileName?: string;
+        quietIfOffline?: boolean;
+      },
+    ): Promise<boolean> => {
+      if (!uri || readOnly || transcribingRef.current) return false;
+      transcribingRef.current = true;
+      const fileName = String(opts?.fileName || pendingFileName || 'nota_voz.m4a').trim() || 'nota_voz.m4a';
+      const mimeType = String(opts?.mimeType || pendingMimeType || 'audio/m4a').trim() || 'audio/m4a';
+      const language = String(transcribeLanguage || 'pt').slice(0, 8);
+      setPhase('uploading');
+      setErrMsg('');
+      emitState({
+        phase: 'uploading',
+        error: '',
+        localUri: uri,
+        mimeType,
+        fileName,
+        language,
+        lastAttemptAt: new Date().toISOString(),
+      });
+
+      try {
+        const net = await Network.getNetworkStateAsync();
+        if (net.isConnected === false) {
+          if (!opts?.quietIfOffline) {
+            markPending(uri, {
+              message:
+                'Sem internet agora. A nota foi guardada e será transcrita automaticamente quando voltar a conexão.',
+              mimeType,
+              fileName,
+            });
+          } else {
+            setPhase(VOICE_NOTE_PHASE_PENDING);
+          }
+          return false;
+        }
+
+        const token = await getToken();
+        if (!token) {
+          markPending(uri, {
+            message: 'Sessão expirada. Faça login novamente; a transcrição será retomada automaticamente.',
+            mimeType,
+            fileName,
+          });
+          return false;
+        }
+
+        const form = new FormData();
+        form.append('language', language);
+        form.append(
+          'audio',
+          {
+            uri,
+            type: mimeType,
+            name: fileName,
+          } as any,
+        );
+
+        const res = await apiFetch('/api/checklists/voice/transcribe', {
+          method: 'POST',
+          body: form,
+          timeoutMs: 120_000,
+        });
+        const text = await res.text();
+        let json: any;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new Error(res.status >= 500 ? 'Resposta inválida do servidor.' : text.slice(0, 240));
+        }
+        if (res.status === 401) {
+          await handleUnauthorizedMaybeSessionInvalidated(res);
+        }
+        if (!res.ok) {
+          throw new Error(String(json?.error || `Erro HTTP ${res.status}`));
+        }
+        const tr = String(json?.transcript || '').trim();
+        if (!tr) {
+          throw new Error('Transcrição vazia.');
+        }
+        if (!mounted.current) return true;
+        setTranscript(tr);
+        setPhase('done');
+        setErrMsg('');
+        setPendingLocalUri('');
+        setPendingMimeType('');
+        setPendingFileName('');
+        onChange({
+          transcript: tr,
+          phase: 'done',
+          status: 'completed',
+          language,
+        });
+        return true;
+      } catch (e: any) {
+        const msg = String(e?.message || 'Falha na transcrição.').trim();
+        if (!mounted.current) return false;
+        markPending(uri, { message: msg, mimeType, fileName });
+        return false;
+      } finally {
+        transcribingRef.current = false;
+      }
+    },
+    [
+      emitState,
+      markPending,
+      onChange,
+      pendingFileName,
+      pendingMimeType,
+      readOnly,
+      transcribeLanguage,
+    ],
+  );
+
+  useEffect(() => {
+    if (readOnly) return;
+    const shouldRetry =
+      (phase === VOICE_NOTE_PHASE_PENDING || String(parsed.status || '').toLowerCase() === VOICE_NOTE_PHASE_PENDING) &&
+      pendingLocalUri;
+    if (!shouldRetry) return;
+
+    let cancelled = false;
+    const tryNow = async () => {
+      if (cancelled || transcribingRef.current) return;
+      const net = await Network.getNetworkStateAsync();
+      if (cancelled || net.isConnected === false) return;
+      await transcribeFromUri(pendingLocalUri, {
+        mimeType: pendingMimeType,
+        fileName: pendingFileName,
+        quietIfOffline: true,
+      });
+    };
+
+    void tryNow();
+
+    const sub = Network.addNetworkStateListener((state) => {
+      if (cancelled || !state.isConnected || transcribingRef.current) return;
+      void transcribeFromUri(pendingLocalUri, {
+        mimeType: pendingMimeType,
+        fileName: pendingFileName,
+        quietIfOffline: true,
+      });
+    });
+    return () => {
+      cancelled = true;
+      sub?.remove?.();
+    };
+  }, [
+    parsed.status,
+    pendingFileName,
+    pendingLocalUri,
+    pendingMimeType,
+    phase,
+    readOnly,
+    transcribeFromUri,
+  ]);
 
   const startRecording = useCallback(async () => {
     if (readOnly) return;
@@ -106,21 +377,19 @@ export function ChecklistVoiceNoteField({
       await rec.startAsync();
       recordingRef.current = rec;
       setPhase('recording');
-      pushState({ phase: 'recording', error: '' });
+      emitState({ phase: 'recording', error: '' });
     } catch (e: any) {
       const msg = e?.message || 'Não foi possível iniciar a gravação.';
       setErrMsg(msg);
       setPhase('error');
-      pushState({ phase: 'error', error: msg });
+      emitState({ phase: 'error', error: msg });
     }
-  }, [readOnly, pushState]);
+  }, [emitState, readOnly]);
 
   const stopAndTranscribe = useCallback(async () => {
     const rec = recordingRef.current;
     if (!rec || readOnly) return;
     recordingRef.current = null;
-    setPhase('uploading');
-    pushState({ phase: 'uploading', error: '' });
     let uri: string | null = null;
     try {
       await rec.stopAndUnloadAsync();
@@ -129,95 +398,45 @@ export function ChecklistVoiceNoteField({
       const msg = e?.message || 'Falha ao finalizar a gravação.';
       setErrMsg(msg);
       setPhase('error');
-      pushState({ phase: 'error', error: msg });
+      emitState({ phase: 'error', error: msg });
       return;
     }
     if (!uri) {
       const msg = 'Gravação sem ficheiro.';
       setErrMsg(msg);
       setPhase('error');
-      pushState({ phase: 'error', error: msg });
+      emitState({ phase: 'error', error: msg });
       return;
     }
 
-    try {
-      const net = await Network.getNetworkStateAsync();
-      if (net.isConnected === false) {
-        throw new Error('Sem ligação à internet. A transcrição é feita no servidor — conecte-se e tente de novo.');
-      }
-    } catch (e: any) {
-      if (e?.message) {
-        setErrMsg(e.message);
-        setPhase('error');
-        pushState({ phase: 'error', error: e.message });
-        return;
-      }
-    }
+    await transcribeFromUri(uri, {
+      mimeType: 'audio/m4a',
+      fileName: `nota_voz_${Date.now()}.m4a`,
+    });
+  }, [emitState, readOnly, transcribeFromUri]);
 
-    const token = await getToken();
-    if (!token) {
-      const msg = 'Faça login novamente para transcrever.';
-      setErrMsg(msg);
-      setPhase('error');
-      pushState({ phase: 'error', error: msg });
-      return;
-    }
-
-    try {
-      const form = new FormData();
-      form.append('language', String(transcribeLanguage || 'pt').slice(0, 8));
-      form.append('audio', {
-        uri,
-        type: 'audio/m4a',
-        name: 'nota_voz.m4a',
-      } as any);
-
-      const res = await apiFetch('/api/checklists/voice/transcribe', {
-        method: 'POST',
-        body: form,
-        timeoutMs: 120_000,
-      });
-      const text = await res.text();
-      let json: any;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error(res.status >= 500 ? 'Resposta inválida do servidor.' : text.slice(0, 240));
-      }
-      if (res.status === 401) {
-        await handleUnauthorizedMaybeSessionInvalidated(res);
-      }
-      if (!res.ok) {
-        throw new Error(String(json?.error || `Erro HTTP ${res.status}`));
-      }
-      const tr = String(json?.transcript || '').trim();
-      if (!tr) {
-        throw new Error('Transcrição vazia.');
-      }
-      if (!mounted.current) return;
-      setTranscript(tr);
-      setPhase('done');
-      setErrMsg('');
-      onChange({ transcript: tr, phase: 'done' });
-    } catch (e: any) {
-      const msg = e?.message || 'Falha na transcrição.';
-      if (!mounted.current) return;
-      setErrMsg(msg);
-      setPhase('error');
-      onChange({ transcript, phase: 'error', error: msg });
-    }
-  }, [readOnly, transcribeLanguage, onChange, transcript]);
+  const retryPendingNow = useCallback(() => {
+    if (!pendingLocalUri || readOnly) return;
+    void transcribeFromUri(pendingLocalUri, {
+      mimeType: pendingMimeType,
+      fileName: pendingFileName,
+    });
+  }, [pendingFileName, pendingLocalUri, pendingMimeType, readOnly, transcribeFromUri]);
 
   const clearNote = useCallback(() => {
     if (readOnly) return;
     setTranscript('');
     setErrMsg('');
     setPhase('idle');
+    setPendingLocalUri('');
+    setPendingMimeType('');
+    setPendingFileName('');
     onChange({ transcript: '', phase: 'idle' });
   }, [readOnly, onChange]);
 
   const isRecording = phase === 'recording';
   const isBusy = phase === 'uploading';
+  const isPending = phase === VOICE_NOTE_PHASE_PENDING && !!pendingLocalUri;
 
   return (
     <View style={styles.wrap}>
@@ -249,7 +468,7 @@ export function ChecklistVoiceNoteField({
               <Text style={styles.btnPrimaryText}>Parar e transcrever</Text>
             </TouchableOpacity>
           )}
-          {(transcript || errMsg) && !isRecording && !isBusy ? (
+          {(transcript || errMsg || isPending) && !isRecording && !isBusy ? (
             <TouchableOpacity style={styles.btnGhost} onPress={clearNote} hitSlop={10}>
               <Text style={styles.ghostText}>Limpar</Text>
             </TouchableOpacity>
@@ -258,11 +477,25 @@ export function ChecklistVoiceNoteField({
       ) : null}
 
       {isRecording ? (
-        <Text style={styles.hint}>A gravar… fale ao microfone e toque em «Parar e transcrever».</Text>
+        <Text style={styles.hint}>A gravar... fale ao microfone e toque em "Parar e transcrever".</Text>
       ) : null}
-      {isBusy ? <Text style={styles.hint}>A enviar e a transcrever no servidor…</Text> : null}
+      {isBusy ? <Text style={styles.hint}>A enviar e a transcrever no servidor...</Text> : null}
 
-      {errMsg ? (
+      {isPending ? (
+        <View style={styles.pendingBox}>
+          <Text style={styles.pendingTitle}>Transcrição pendente</Text>
+          <Text style={styles.pendingText}>
+            Áudio guardado no dispositivo. Quando houver internet/sessão válida, a transcrição será retomada automaticamente.
+          </Text>
+          {!readOnly ? (
+            <TouchableOpacity style={styles.pendingRetryBtn} onPress={retryPendingNow} activeOpacity={0.88}>
+              <Text style={styles.pendingRetryText}>Tentar agora</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {errMsg && !isPending ? (
         <View style={styles.errBox}>
           <Text style={styles.errText}>{errMsg}</Text>
         </View>
@@ -276,15 +509,19 @@ export function ChecklistVoiceNoteField({
           </Text>
         </View>
       ) : !readOnly && phase === 'idle' ? (
-        <Text style={styles.muted}>Grave uma nota — o texto aparece aqui após a transcrição (OpenAI Whisper).</Text>
+        <Text style={styles.muted}>Grave uma nota - o texto aparece aqui após a transcrição (OpenAI Whisper).</Text>
       ) : null}
     </View>
   );
 }
 
 export function voiceNoteValueIsFilled(raw: unknown): boolean {
-  const p = parseVoiceValue(raw);
-  return String(p.transcript || '').trim().length > 0;
+  const p = parseVoiceNoteValue(raw);
+  const tr = String(p.transcript || '').trim();
+  if (tr.length > 0) return true;
+  const st = String(p.phase || p.status || '').toLowerCase();
+  const lu = String(p.localUri || '').trim();
+  return st === VOICE_NOTE_PHASE_PENDING && !!lu;
 }
 
 const styles = StyleSheet.create({
@@ -304,6 +541,24 @@ const styles = StyleSheet.create({
   btnGhost: { paddingVertical: 8, paddingHorizontal: 4 },
   ghostText: { color: '#64748b', fontWeight: '700', fontSize: 14 },
   hint: { fontSize: 13, color: '#475569', lineHeight: 19 },
+  pendingBox: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    gap: 8,
+  },
+  pendingTitle: { fontSize: 13, fontWeight: '800', color: '#92400e' },
+  pendingText: { fontSize: 13, color: '#78350f', lineHeight: 19 },
+  pendingRetryBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#d97706',
+  },
+  pendingRetryText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   errBox: {
     padding: 10,
     borderRadius: 8,

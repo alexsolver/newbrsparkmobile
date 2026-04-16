@@ -58,6 +58,7 @@ let isSyncing = false;
 
 const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
 const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
+const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
 
 function normalizeStoredId(v: unknown): string {
   const s = String(v ?? '').trim();
@@ -99,6 +100,241 @@ export function checklistOutboxIdentityKey(item: any): string {
     return `tpl:${tpl}|st:${started}|end:${completed}|own:${owner}`;
   }
   return `fallback:${JSON.stringify(item ?? {})}`;
+}
+
+export type ChecklistOutboxConflict = {
+  id: string;
+  at: number;
+  identity: string;
+  reason: string;
+  taskId: string | null;
+  submissionRevision: number | null;
+  serverLastSubmittedRevision: number | null;
+  serverExpectedNext: number | null;
+  statusCode: number | null;
+  payload: any;
+};
+
+function parseChecklistOutboxConflicts(raw: string | null): ChecklistOutboxConflict[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => ({
+        id: String((row as any).id || `${Date.now()}_${Math.random()}`),
+        at: Number((row as any).at) || Date.now(),
+        identity: String((row as any).identity || ''),
+        reason: String((row as any).reason || 'unknown_conflict'),
+        taskId: (row as any).taskId == null ? null : String((row as any).taskId),
+        submissionRevision:
+          Number.isFinite(Number((row as any).submissionRevision))
+            ? Number((row as any).submissionRevision)
+            : null,
+        serverLastSubmittedRevision:
+          Number.isFinite(Number((row as any).serverLastSubmittedRevision))
+            ? Number((row as any).serverLastSubmittedRevision)
+            : null,
+        serverExpectedNext:
+          Number.isFinite(Number((row as any).serverExpectedNext))
+            ? Number((row as any).serverExpectedNext)
+            : null,
+        statusCode:
+          Number.isFinite(Number((row as any).statusCode))
+            ? Number((row as any).statusCode)
+            : null,
+        payload: (row as any).payload,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getChecklistOutboxConflicts(): Promise<ChecklistOutboxConflict[]> {
+  try {
+    const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+    const list = parseChecklistOutboxConflicts(raw);
+    return list.sort((a, b) => b.at - a.at);
+  } catch {
+    return [];
+  }
+}
+
+export async function clearChecklistOutboxConflicts(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function requeueChecklistOutboxConflicts(
+  limitOrIds?: number | string[],
+): Promise<{ requeued: number; remaining: number }> {
+  let conflicts = await getChecklistOutboxConflicts();
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return { requeued: 0, remaining: 0 };
+  }
+  if (Array.isArray(limitOrIds)) {
+    const wanted = new Set(limitOrIds.map((id) => String(id)));
+    conflicts = conflicts.filter((c) => wanted.has(String(c.id)));
+  } else if (Number.isFinite(Number(limitOrIds)) && Number(limitOrIds) > 0) {
+    conflicts = conflicts.slice(0, Math.max(0, Number(limitOrIds)));
+  }
+
+  const outboxRaw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
+  let outbox: any[] = [];
+  try {
+    const parsed = outboxRaw ? JSON.parse(outboxRaw) : [];
+    outbox = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    outbox = [];
+  }
+
+  const byIdentity = new Map<string, any>();
+  for (const item of outbox) {
+    byIdentity.set(checklistOutboxIdentityKey(item), item);
+  }
+
+  let requeued = 0;
+  const movedIds = new Set<string>();
+  for (const c of conflicts) {
+    if (!c || !c.payload || typeof c.payload !== 'object') continue;
+    const identity = checklistOutboxIdentityKey(c.payload);
+    byIdentity.set(identity, c.payload);
+    movedIds.add(c.id);
+    requeued += 1;
+    const tid = checklistOutboxTaskId(c.payload);
+    if (tid) {
+      try {
+        await AsyncStorage.setItem(`@brspark_execution_${tid}`, JSON.stringify(c.payload));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  if (requeued > 0) {
+    await AsyncStorage.setItem(CHECKLIST_OUTBOX_KEY, JSON.stringify([...byIdentity.values()]));
+  }
+
+  const allConflicts = await getChecklistOutboxConflicts();
+  const remainingRows = allConflicts.filter((c) => !movedIds.has(c.id));
+  if (remainingRows.length > 0) {
+    await AsyncStorage.setItem(CHECKLIST_OUTBOX_CONFLICTS_KEY, JSON.stringify(remainingRows));
+  } else {
+    await AsyncStorage.removeItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+  }
+  return { requeued, remaining: remainingRows.length };
+}
+
+export async function removeChecklistOutboxConflictsByIds(
+  ids: string[],
+): Promise<{ removed: number; remaining: number }> {
+  const wanted = new Set((ids || []).map((id) => String(id)));
+  if (wanted.size === 0) {
+    const current = await getChecklistOutboxConflicts();
+    return { removed: 0, remaining: current.length };
+  }
+  const current = await getChecklistOutboxConflicts();
+  if (current.length === 0) return { removed: 0, remaining: 0 };
+  const remainingRows = current.filter((c) => !wanted.has(String(c.id)));
+  const removed = current.length - remainingRows.length;
+  if (remainingRows.length > 0) {
+    await AsyncStorage.setItem(CHECKLIST_OUTBOX_CONFLICTS_KEY, JSON.stringify(remainingRows));
+  } else {
+    await AsyncStorage.removeItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+  }
+  return { removed, remaining: remainingRows.length };
+}
+
+function parseChecklistSubmissionRevision(item: any): number | null {
+  const raw = item?.metadata?.submissionRevision ?? item?.submissionRevision;
+  const n = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return n;
+}
+
+async function quarantineChecklistOutboxConflict(
+  payload: any,
+  opts: {
+    reason: string;
+    taskId?: string;
+    submissionRevision?: number | null;
+    serverLastSubmittedRevision?: number | null;
+    serverExpectedNext?: number | null;
+    statusCode?: number;
+  },
+): Promise<void> {
+  const identity = checklistOutboxIdentityKey(payload);
+  const row = {
+    id: `${identity}|${Date.now()}`,
+    at: Date.now(),
+    identity,
+    reason: String(opts.reason || 'unknown_conflict'),
+    taskId: opts.taskId ? String(opts.taskId) : null,
+    submissionRevision:
+      opts.submissionRevision != null && Number.isFinite(opts.submissionRevision)
+        ? Number(opts.submissionRevision)
+        : null,
+    serverLastSubmittedRevision:
+      opts.serverLastSubmittedRevision != null && Number.isFinite(opts.serverLastSubmittedRevision)
+        ? Number(opts.serverLastSubmittedRevision)
+        : null,
+    serverExpectedNext:
+      opts.serverExpectedNext != null && Number.isFinite(opts.serverExpectedNext)
+        ? Number(opts.serverExpectedNext)
+        : null,
+    statusCode:
+      opts.statusCode != null && Number.isFinite(opts.statusCode) ? Number(opts.statusCode) : null,
+    payload,
+  };
+
+  await updateStoredJsonArray<any>(
+    CHECKLIST_OUTBOX_CONFLICTS_KEY,
+    (arr) => {
+      const next = [...arr, row];
+      return next.slice(-200);
+    },
+  );
+}
+
+async function preflightChecklistRevisionConflict(
+  payload: any,
+): Promise<{ action: 'proceed' | 'drop_as_conflict' }> {
+  const taskId = checklistOutboxTaskId(payload);
+  if (!taskId) return { action: 'proceed' };
+  const submissionRevision = parseChecklistSubmissionRevision(payload);
+  if (!submissionRevision) return { action: 'proceed' };
+
+  try {
+    const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+    if (res.status === 404 || res.status === 403) return { action: 'proceed' };
+    if (!res.ok) return { action: 'proceed' };
+    const remote = await res.json();
+    const remoteLast = Number(remote?.lastSubmittedRevision);
+    const lastSubmittedRevision = Number.isFinite(remoteLast) ? remoteLast : 0;
+    const expectedNext = lastSubmittedRevision + 1;
+
+    if (submissionRevision !== expectedNext) {
+      await quarantineChecklistOutboxConflict(payload, {
+        reason: 'preflight_revision_mismatch',
+        taskId,
+        submissionRevision,
+        serverLastSubmittedRevision: lastSubmittedRevision,
+        serverExpectedNext: expectedNext,
+      });
+      console.warn(
+        `[SYNC] Conflito de revisão detectado antes do POST (task=${taskId}, local=${submissionRevision}, expected=${expectedNext}).`,
+      );
+      return { action: 'drop_as_conflict' };
+    }
+  } catch {
+    return { action: 'proceed' };
+  }
+
+  return { action: 'proceed' };
 }
 
 /** Prefixo das cópias locais do corpo da execução (respostas) — OS concluídas só devem persistir após visualização e com TTL curto. */
@@ -997,6 +1233,14 @@ async function pushChecklistOutbox() {
      const syncedIdentityKeys = new Set<string>();
      for (const payload of outbox) {
          try {
+             const preflight = await preflightChecklistRevisionConflict(payload);
+             if (preflight.action === 'drop_as_conflict') {
+                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
+                 const tid = checklistOutboxTaskId(payload);
+                 if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                 continue;
+             }
+
              await uploadLocalMediaInChecklistPayload(payload);
 
              const res = await apiFetch('/api/checklists/executions', {
@@ -1012,6 +1256,35 @@ async function pushChecklistOutbox() {
                  if (tid) {
                      await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
                  }
+             } else if (res.status === 422) {
+                 const tid = checklistOutboxTaskId(payload);
+                 const localRev = parseChecklistSubmissionRevision(payload);
+                 let serverLast: number | null = null;
+                 let expectedNext: number | null = null;
+                 try {
+                     const body = await res.clone().json();
+                     if (body?.error === 'revision_mismatch') {
+                         const n1 = Number(body?.lastSubmittedRevision);
+                         const n2 = Number(body?.expectedNext);
+                         serverLast = Number.isFinite(n1) ? n1 : null;
+                         expectedNext = Number.isFinite(n2) ? n2 : null;
+                     }
+                 } catch {
+                     /* ignore */
+                 }
+                 await quarantineChecklistOutboxConflict(payload, {
+                     reason: 'server_revision_mismatch',
+                     taskId: tid || undefined,
+                     submissionRevision: localRev,
+                     serverLastSubmittedRevision: serverLast,
+                     serverExpectedNext: expectedNext,
+                     statusCode: 422,
+                 });
+                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
+                 if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                 console.warn(
+                   `[SYNC] Payload movido para conflitos (422 revision_mismatch) task=${tid || 'unknown'}.`
+                 );
              } else {
                  console.warn(`[SYNC] Outbox falhou: ${res.status}`);
              }

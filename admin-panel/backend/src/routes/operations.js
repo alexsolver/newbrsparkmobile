@@ -103,6 +103,156 @@ router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
   }
 });
 
+const OPS_CHAT_BODY_MAX = 8000;
+
+async function findExecutionForOpsChat(req, executionId) {
+  const id = String(executionId || '').trim();
+  if (!id) return null;
+  if (req.appUser) {
+    return prisma.checklistExecution.findFirst({
+      where: {
+        id,
+        ownerEmail: { equals: String(req.appUser.email || '').trim(), mode: 'insensitive' },
+        template: { tenantId: String(req.appUser.tenantId || '').trim() },
+      },
+      select: { id: true, ownerEmail: true, osNumber: true, routineTaskNumber: true },
+    });
+  }
+  if (req.admin) {
+    return prisma.checklistExecution.findFirst({
+      where: mergeExecutionWhere({ id }, req),
+      select: { id: true, ownerEmail: true, osNumber: true, routineTaskNumber: true },
+    });
+  }
+  return null;
+}
+
+// ─── GET /api/operations/tasks/:id/ops-chat (painel ou app — thread por execução) ──
+router.get('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ex = await findExecutionForOpsChat(req, id);
+    if (!ex) return res.status(404).json({ error: 'Execução não encontrada ou sem permissão.' });
+
+    const rows = await prisma.checklistExecutionOpsChatMessage.findMany({
+      where: { executionId: ex.id },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        senderEmail: true,
+        senderKind: true,
+        body: true,
+        createdAt: true,
+      },
+    });
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      executionId: ex.id,
+      messages: rows.map((m) => ({
+        id: m.id,
+        senderEmail: m.senderEmail,
+        senderKind: m.senderKind,
+        body: m.body,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    console.error('[operations/tasks/:id/ops-chat GET]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/operations/tasks/:id/ops-chat ───────────────────
+router.post('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ex = await findExecutionForOpsChat(req, id);
+    if (!ex) return res.status(404).json({ error: 'Execução não encontrada ou sem permissão.' });
+
+    const rawBody =
+      req.body && typeof req.body.body === 'string'
+        ? req.body.body
+        : req.body && typeof req.body.text === 'string'
+          ? req.body.text
+          : '';
+    const body = String(rawBody || '').trim();
+    if (!body) return res.status(400).json({ error: 'Mensagem vazia.' });
+    if (body.length > OPS_CHAT_BODY_MAX) {
+      return res.status(400).json({ error: `Mensagem muito longa (máx. ${OPS_CHAT_BODY_MAX} caracteres).` });
+    }
+
+    const senderKind = req.appUser ? 'TECH' : 'GESTOR';
+    const senderEmail = req.appUser
+      ? String(req.appUser.email || '').trim().toLowerCase()
+      : String(req.admin?.email || '').trim().toLowerCase();
+    if (!senderEmail) return res.status(400).json({ error: 'Remetente inválido.' });
+
+    const row = await prisma.checklistExecutionOpsChatMessage.create({
+      data: {
+        executionId: ex.id,
+        senderEmail,
+        senderKind,
+        body,
+      },
+      select: {
+        id: true,
+        senderEmail: true,
+        senderKind: true,
+        body: true,
+        createdAt: true,
+      },
+    });
+
+    if (senderKind === 'GESTOR') {
+      const notifyEmail = String(ex.ownerEmail || '').trim();
+      try {
+        const users = await prisma.user.findMany({
+          where: {
+            isActive: true,
+            email: { equals: notifyEmail, mode: 'insensitive' },
+          },
+          select: { id: true },
+        });
+        if (users.length) {
+          const userIds = users.map((u) => u.id);
+          const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+          if (pushTokens.length) {
+            const osLine =
+              ex.osNumber && String(ex.osNumber).trim()
+                ? String(ex.osNumber).trim()
+                : ex.routineTaskNumber && String(ex.routineTaskNumber).trim()
+                  ? String(ex.routineTaskNumber).trim()
+                  : ex.id.slice(0, 8);
+            const preview = body.length > 140 ? `${body.slice(0, 137)}…` : body;
+            await sendExpoPushToMany(pushTokens, {
+              title: 'Mensagem do gestor',
+              body: `${osLine} · ${preview}`,
+              data: { type: 'execution_ops_chat', taskId: ex.id },
+            });
+          }
+        }
+      } catch (pushErr) {
+        console.error('[operations/ops-chat POST] Push:', pushErr.message || pushErr);
+      }
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json({
+      message: {
+        id: row.id,
+        senderEmail: row.senderEmail,
+        senderKind: row.senderKind,
+        body: row.body,
+        createdAt: row.createdAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('[operations/tasks/:id/ops-chat POST]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.use(adminAuthThenPanel);
 
 /** Respostas de negócio preservadas; tempos de formulário/pausas/etapas limpos para nova sessão. */

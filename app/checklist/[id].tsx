@@ -56,7 +56,12 @@ import {
   ChecklistRepeatableMatrixField,
 } from '../../src/components/ChecklistExtendedFieldWidgets';
 import { ChecklistVisionGridComposeRunner } from '../../src/components/ChecklistVisionGridComposeRunner';
-import { ChecklistVoiceNoteField, voiceNoteValueIsFilled } from '../../src/components/ChecklistVoiceNoteField';
+import {
+  ChecklistVoiceNoteField,
+  parseVoiceNoteValue,
+  voiceNoteHasPendingTranscription,
+  voiceNoteValueIsFilled,
+} from '../../src/components/ChecklistVoiceNoteField';
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
@@ -1475,21 +1480,13 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     return `${n} lançamento(s) financeiros`;
   }
   if (t === 'voice_note') {
-    if (typeof raw === 'string') {
-      const s = raw.trim();
-      if (!s) return '—';
-      try {
-        const j = JSON.parse(s);
-        const tr = j && typeof j === 'object' ? String((j as any).transcript || '').trim() : '';
-        return tr || '—';
-      } catch {
-        return s;
-      }
+    const p = parseVoiceNoteValue(raw);
+    const tr = String(p.transcript || '').trim();
+    if (tr) return tr;
+    if (voiceNoteHasPendingTranscription(raw)) {
+      return 'Nota de voz registada — transcrição pendente (envio automático com rede)';
     }
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      const tr = String((raw as any).transcript || '').trim();
-      return tr || '—';
-    }
+    if (typeof raw === 'string') return raw.trim() || '—';
     return '—';
   }
   if (t === 'transit_start' || t === 'transit_end') {

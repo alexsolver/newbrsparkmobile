@@ -691,6 +691,7 @@ router.post('/executions', authUser, async (req, res) => {
         if (responses && typeof responses === 'object' && !Array.isArray(responses) && req.user.tenantId && req.user.id) {
             const { cloneResponsesShallow, resolvePendingFacialAuditsOnSync } = require('../lib/facialRecognitionEngine');
             const { resolvePendingVisionAnalysisOnSync } = require('../lib/resolvePendingVisionOnSync');
+            const { resolvePendingVoiceNotesOnSync } = require('../lib/resolvePendingVoiceNoteOnSync');
             let templateIdForMediaResolve = finalTemplateId;
             if (taskId && !templateIdForMediaResolve) {
                 const exQuick = await prisma.checklistExecution.findUnique({
@@ -725,6 +726,17 @@ router.post('/executions', authUser, async (req, res) => {
                     }
                 } catch (ve) {
                     console.error('[checklists] resolvePendingVisionAnalysisOnSync', ve);
+                }
+                try {
+                    const nVoice = await resolvePendingVoiceNotesOnSync(prisma, {
+                        responses,
+                        templateId: templateIdForMediaResolve,
+                    });
+                    if (nVoice > 0) {
+                        console.log(`[checklists] Nota de voz pendente transcrita no sync: ${nVoice} campo(s)`);
+                    }
+                } catch (vne) {
+                    console.error('[checklists] resolvePendingVoiceNotesOnSync', vne);
                 }
             }
         }

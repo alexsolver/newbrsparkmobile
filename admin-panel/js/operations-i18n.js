@@ -41,6 +41,11 @@ const M = {
     ops_sort_toggle_title: 'Alterar ordenação',
     ops_sort_new_first: 'Novas primeiro',
     ops_sort_old_first: 'Antigas primeiro',
+    ops_sort_by_title: 'Ordenar por',
+    ops_sort_key_created: 'Data de criação',
+    ops_sort_key_due: 'Data de vencimento (agenda)',
+    ops_sort_key_sync: 'Último sincronismo',
+    ops_sort_key_completed: 'Data de conclusão',
     ops_empty_col: 'Nenhuma atividade aqui',
     ops_trunc_banner:
       'Está a ver no máximo {limit} OS mais recentes (limite da API). Aumente o limite na barra ou refine os filtros na API.',
@@ -199,6 +204,11 @@ const M = {
     ops_sort_toggle_title: 'Change sort order',
     ops_sort_new_first: 'Newest first',
     ops_sort_old_first: 'Oldest first',
+    ops_sort_by_title: 'Sort by',
+    ops_sort_key_created: 'Creation date',
+    ops_sort_key_due: 'Due date (schedule)',
+    ops_sort_key_sync: 'Last sync',
+    ops_sort_key_completed: 'Completion date',
     ops_empty_col: 'Nothing here',
     ops_trunc_banner:
       'You are viewing at most {limit} newest rows (API cap). Raise the limit in the toolbar or narrow filters.',
@@ -785,7 +795,30 @@ export function applyOperationsStaticI18n() {
   }
 
   const sortIds = ['pending', 'progress', 'completed', 'error', 'cancelled'];
+  const sortKeyOpts = [
+    ['created', 'ops_sort_key_created'],
+    ['due', 'ops_sort_key_due'],
+    ['sync', 'ops_sort_key_sync'],
+    ['completed', 'ops_sort_key_completed'],
+  ];
   for (const col of sortIds) {
+    const sel = document.getElementById(`ops-sort-key-${col}`);
+    if (sel) {
+      sel.setAttribute('title', opsT('ops_sort_by_title'));
+      sel.setAttribute('aria-label', opsT('ops_sort_by_title'));
+      for (const opt of sel.querySelectorAll('option[data-ops-sort-key]')) {
+        const k = opt.getAttribute('data-ops-sort-key');
+        const map = sortKeyOpts.find((x) => x[0] === k);
+        if (map) opt.textContent = opsT(map[1]);
+      }
+      try {
+        const st = window.__opsColState && window.__opsColState[col];
+        const key = st && st.sortKey && sortKeyOpts.some((x) => x[0] === st.sortKey) ? st.sortKey : 'created';
+        sel.value = key;
+      } catch {
+        sel.value = 'created';
+      }
+    }
     const btn = document.getElementById(`sort-btn-${col}`);
     if (btn) {
       btn.setAttribute('title', opsT('ops_sort_toggle_title'));

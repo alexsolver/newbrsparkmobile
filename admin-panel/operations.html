@@ -261,13 +261,15 @@
     /* ── Column Controls ─────────────────────────────────────── */
     .kanban-col-controls {
       display: flex;
+      flex-direction: column;
       gap: 6px;
       padding: 8px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
     }
     .kanban-col-controls input {
-      flex: 1;
+      width: 100%;
+      box-sizing: border-box;
       font-size: 10px;
       padding: 5px 8px;
       border: 1px solid var(--border);
@@ -276,7 +278,25 @@
       background: #f8fafc;
     }
     .kanban-col-controls input:focus { border-color: var(--accent); }
+    .kanban-col-sort-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .kanban-col-sort-key {
+      flex: 1;
+      min-width: 0;
+      font-size: 10px;
+      padding: 5px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #f8fafc;
+      color: var(--text2);
+      cursor: pointer;
+    }
+    .kanban-col-sort-key:focus { border-color: var(--accent); outline: none; }
     .kanban-col-controls button {
+      flex-shrink: 0;
       font-size: 10px;
       padding: 5px 6px;
       background: #f1f5f9;
@@ -605,6 +625,10 @@
             <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
               <option value="">Todos os técnicos</option>
             </select>
+            <select class="filter-input" id="filter-voice-sync" onchange="applyFilters()" style="min-width:220px" title="Filtrar por pendência de transcrição de nota de voz">
+              <option value="">Todas (voz)</option>
+              <option value="pending_voice">Com nota de voz pendente</option>
+            </select>
             <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" oninput="applyFilters()" style="min-width:200px;flex:1;max-width:360px" />
             <label class="filter-field" style="margin:0;display:flex;align-items:flex-end;gap:6px;flex-direction:column">
               <span id="ops-limit-label" class="filter-field-label" style="margin:0;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">Limite na API</span>
@@ -637,7 +661,15 @@
           </div>
           <div class="kanban-col-controls">
             <input type="text" id="ops-f-pending" placeholder="Filtrar pendentes..." onkeyup="updateColFilter('pending', this.value)" />
-            <button onclick="toggleColSort('pending')" id="sort-btn-pending" title="Alterar ordenação">⬇ Novas</button>
+            <div class="kanban-col-sort-row">
+              <select id="ops-sort-key-pending" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('pending', this.value)">
+                <option value="created" data-ops-sort-key="created">Data de criação</option>
+                <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
+                <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
+                <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
+              </select>
+              <button type="button" onclick="toggleColSort('pending')" id="sort-btn-pending" title="Alterar ordenação">⬇ Novas</button>
+            </div>
           </div>
           <div class="kanban-col-body" id="col-pending"></div>
         </div>
@@ -649,7 +681,15 @@
           </div>
           <div class="kanban-col-controls">
             <input type="text" id="ops-f-progress" placeholder="Filtrar em campo..." onkeyup="updateColFilter('progress', this.value)" />
-            <button onclick="toggleColSort('progress')" id="sort-btn-progress" title="Alterar ordenação">⬇ Novas</button>
+            <div class="kanban-col-sort-row">
+              <select id="ops-sort-key-progress" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('progress', this.value)">
+                <option value="created" data-ops-sort-key="created">Data de criação</option>
+                <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
+                <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
+                <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
+              </select>
+              <button type="button" onclick="toggleColSort('progress')" id="sort-btn-progress" title="Alterar ordenação">⬇ Novas</button>
+            </div>
           </div>
           <div class="kanban-col-body" id="col-progress"></div>
         </div>
@@ -661,7 +701,15 @@
           </div>
           <div class="kanban-col-controls">
             <input type="text" id="ops-f-completed" placeholder="Filtrar concluídas..." onkeyup="updateColFilter('completed', this.value)" />
-            <button onclick="toggleColSort('completed')" id="sort-btn-completed" title="Alterar ordenação">⬇ Novas</button>
+            <div class="kanban-col-sort-row">
+              <select id="ops-sort-key-completed" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('completed', this.value)">
+                <option value="created" data-ops-sort-key="created">Data de criação</option>
+                <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
+                <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
+                <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
+              </select>
+              <button type="button" onclick="toggleColSort('completed')" id="sort-btn-completed" title="Alterar ordenação">⬇ Novas</button>
+            </div>
           </div>
           <div class="kanban-col-body" id="col-completed"></div>
         </div>
@@ -673,7 +721,15 @@
           </div>
           <div class="kanban-col-controls">
             <input type="text" id="ops-f-error" placeholder="Filtrar erros..." onkeyup="updateColFilter('error', this.value)" />
-            <button onclick="toggleColSort('error')" id="sort-btn-error" title="Alterar ordenação">⬇ Novas</button>
+            <div class="kanban-col-sort-row">
+              <select id="ops-sort-key-error" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('error', this.value)">
+                <option value="created" data-ops-sort-key="created">Data de criação</option>
+                <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
+                <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
+                <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
+              </select>
+              <button type="button" onclick="toggleColSort('error')" id="sort-btn-error" title="Alterar ordenação">⬇ Novas</button>
+            </div>
           </div>
           <div class="kanban-col-body" id="col-error"></div>
         </div>
@@ -685,7 +741,15 @@
           </div>
           <div class="kanban-col-controls">
             <input type="text" id="ops-f-cancelled" placeholder="Filtrar canceladas..." onkeyup="updateColFilter('cancelled', this.value)" />
-            <button onclick="toggleColSort('cancelled')" id="sort-btn-cancelled" title="Alterar ordenação">⬇ Novas</button>
+            <div class="kanban-col-sort-row">
+              <select id="ops-sort-key-cancelled" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('cancelled', this.value)">
+                <option value="created" data-ops-sort-key="created">Data de criação</option>
+                <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
+                <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
+                <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
+              </select>
+              <button type="button" onclick="toggleColSort('cancelled')" id="sort-btn-cancelled" title="Alterar ordenação">⬇ Novas</button>
+            </div>
           </div>
           <div class="kanban-col-body" id="col-cancelled"></div>
         </div>
@@ -1086,6 +1150,16 @@ function initOpsListLimitControl() {
     void window.loadBoard();
   });
 }
+// Estado das colunas do Kanban (precisa existir antes do i18n ler __opsColState)
+const colState = {
+  pending: { text: '', sort: 'desc', sortKey: 'created' },
+  progress: { text: '', sort: 'desc', sortKey: 'created' },
+  completed: { text: '', sort: 'desc', sortKey: 'created' },
+  cancelled: { text: '', sort: 'desc', sortKey: 'created' },
+  error: { text: '', sort: 'desc', sortKey: 'created' },
+};
+window.__opsColState = colState;
+
 initOpsListLimitControl();
 applyOperationsStaticI18n();
 
@@ -1606,6 +1680,7 @@ function populateEmailFilter(tasks) {
 window.applyFilters = function() {
   const emailFilter  = document.getElementById('filter-email').value.toLowerCase();
   const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+  const voiceFilter = String(document.getElementById('filter-voice-sync')?.value || '').toLowerCase();
 
   const filtered = allTasks.filter(t => {
     const matchEmail  = !emailFilter  || (t.ownerEmail || '').toLowerCase() === emailFilter;
@@ -1617,25 +1692,60 @@ window.applyFilters = function() {
       String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
       String(t.routineTaskNumber || '').toLowerCase().includes(searchFilter) ||
       String(t.lastSubmittedRevision ?? '').includes(searchFilter);
-    return matchEmail && matchSearch;
+    const hasPendingVoice = taskHasPendingVoiceTranscription(t);
+    const matchVoice =
+      !voiceFilter ||
+      (voiceFilter === 'pending_voice' && hasPendingVoice);
+    return matchEmail && matchSearch && matchVoice;
   });
 
   renderKanban(filtered);
 };
 
-// ── Column Sorting and Filtering State ────────────────────────
-const colState = {
-   pending:   { text: '', sort: 'desc' },
-   progress:  { text: '', sort: 'desc' },
-   completed: { text: '', sort: 'desc' },
-   cancelled: { text: '', sort: 'desc' },
-   error:     { text: '', sort: 'desc' }
-};
-window.__opsColState = colState;
-
+// ── Column Sorting and Filtering (estado: colState acima) ─────
 window.updateColFilter = function(colId, text) {
    colState[colId].text = text.toLowerCase();
    applyFilters(); // Re-triggers renderKanban with the global filters
+};
+
+/** ISO ou null: fim previsto na agenda (início + duração do formulário; 60 min se duração vazia). */
+function opsTaskDueAtIso(t) {
+  const s = t && t.scheduledStartAt;
+  if (!s) return null;
+  const start = new Date(s).getTime();
+  if (!Number.isFinite(start)) return null;
+  let mins = Math.floor(Number(t.expectedFormDurationMinutes));
+  if (!Number.isFinite(mins) || mins < 0) mins = 60;
+  return new Date(start + mins * 60000).toISOString();
+}
+
+/** Valor bruto usado para ordenar (string ISO ou null). */
+function opsTaskSortRawValue(t, sortKey) {
+  const k = sortKey || 'created';
+  if (k === 'created') return t.createdAt || null;
+  if (k === 'sync') return t.syncedAt || null;
+  if (k === 'completed') return t.completedAt || null;
+  if (k === 'due') return opsTaskDueAtIso(t);
+  return t.createdAt || null;
+}
+
+function opsSortMissingSentinel(sortDir) {
+  return sortDir === 'desc' ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+}
+
+function opsTaskSortMillis(t, sortKey, sortDir) {
+  const raw = opsTaskSortRawValue(t, sortKey);
+  if (raw == null || raw === '') return opsSortMissingSentinel(sortDir);
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : opsSortMissingSentinel(sortDir);
+}
+
+window.updateColSortKey = function(colId, sortKey) {
+  const allowed = new Set(['created', 'due', 'sync', 'completed']);
+  colState[colId].sortKey = allowed.has(String(sortKey)) ? String(sortKey) : 'created';
+  const sel = document.getElementById('ops-sort-key-' + colId);
+  if (sel) sel.value = colState[colId].sortKey;
+  applyFilters();
 };
 
 window.updateColSort = function(colId, sortDir) {
@@ -1667,18 +1777,12 @@ function renderKanban(tasks) {
            (t.refId || '').toLowerCase().includes(st.text)
         );
      }
-     res = res.sort((a,b) => {
-         // Escolhe a data mais relevante dependendo de quão avançada está a OS
-         const getRelevantDate = (t) => {
-             if (colId === 'completed') return t.completedAt || t.syncedAt || t.updatedAt || t.createdAt;
-             if (colId === 'progress')  return t.startedAt || t.updatedAt || t.createdAt;
-             // Pending ou fallback geral: data de criação modificação mais recente disponível ali
-             return t.updatedAt || t.createdAt;
-         };
-         
-         const dA = new Date(getRelevantDate(a) || 0).getTime();
-         const dB = new Date(getRelevantDate(b) || 0).getTime();
-         return st.sort === 'desc' ? dB - dA : dA - dB;
+     const sk = st.sortKey || 'created';
+     const dir = st.sort === 'desc' ? 'desc' : 'asc';
+     res = res.sort((a, b) => {
+         const dA = opsTaskSortMillis(a, sk, dir);
+         const dB = opsTaskSortMillis(b, sk, dir);
+         return dir === 'desc' ? dB - dA : dA - dB;
      });
      return res;
   };
@@ -1741,11 +1845,52 @@ function opsPauseReasonText(task) {
   return '';
 }
 
+function parseOpsVoiceNoteStored(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (!t) return null;
+    try {
+      const j = JSON.parse(t);
+      return j && typeof j === 'object' && !Array.isArray(j) ? j : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function isPendingVoiceNoteStored(raw) {
+  const o = parseOpsVoiceNoteStored(raw);
+  if (!o) return false;
+  const transcript = String(o.transcript || '').trim();
+  if (transcript) return false;
+  const phase = String(o.phase || o.status || '').trim().toLowerCase();
+  const localUri = String(o.localUri || '').trim();
+  return phase === 'pending_transcription' && !!localUri;
+}
+
+function taskHasPendingVoiceTranscription(task) {
+  const r = task && task.responses;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+  for (const [k, v] of Object.entries(r)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(v)) {
+      for (const row of v) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const rv of Object.values(row)) {
+          if (isPendingVoiceNoteStored(rv)) return true;
+        }
+      }
+      continue;
+    }
+    if (isPendingVoiceNoteStored(v)) return true;
+  }
+  return false;
+}
+
 function buildCard(task, colClass) {
   const isRt = !!(task.routineTaskNumber && String(task.routineTaskNumber).trim());
-  const rtBadge = isRt
-    ? '<span class="badge" style="background:#fff7ed;color:#c2410c;font-size:9px;margin-bottom:6px;border:1px solid #fed7aa"><ion-icon name="reader-outline" style="vertical-align:-2px"></ion-icon> RT</span>'
-    : '';
   const refTitle = task.title || task.metadata?.title;
   const kindLabel = isRt ? 'RT' : 'OS';
   const titlePlain = refTitle || `${kindLabel} ${displayOsLabel(task)}`;
@@ -1753,11 +1898,16 @@ function buildCard(task, colClass) {
     ? String(refTitle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     : `${kindLabel} <strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>`;
   const formDisplayName = String(task.metadata?.templateTitle || task.template?.title || '').trim();
+  const osLabelEsc = String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ftRtPillStyle = isRt
+    ? 'background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;border:1px solid #9a3412;box-shadow:0 2px 8px rgba(234,88,12,0.35)'
+    : 'background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;border:1px solid #1e40af;box-shadow:0 2px 8px rgba(37,99,235,0.35)';
+  const ftRtBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:900;letter-spacing:0.02em;${ftRtPillStyle}"><ion-icon name="${isRt ? 'reader-outline' : 'pricetag-outline'}" style="font-size:16px;vertical-align:-2px;opacity:0.95"></ion-icon><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace">#${osLabelEsc}</span></span>`;
   const formNameHtml = formDisplayName
-    ? `<div style="font-size:10px;color:var(--text2);margin-top:5px;line-height:1.35;word-break:break-word"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.3px">Formulário · </span>${String(formDisplayName)
+    ? `<span style="display:inline-flex;align-self:flex-start;max-width:100%;margin-top:2px;padding:6px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.02em;line-height:1.35;word-break:break-word;background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);color:#fff;border:1px solid #5b21b6;box-shadow:0 2px 8px rgba(124,58,237,0.28)"><span style="opacity:0.92;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.35px;margin-right:6px">Formulário</span><span>${String(formDisplayName)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</div>`
+        .replace(/>/g, '&gt;')}</span></span>`
     : '';
   const refId  = task.refId || task.metadata?.refId || '—';
   
@@ -1796,6 +1946,9 @@ function buildCard(task, colClass) {
   } else if (task.status === 'REJECTED') {
      subBadge = '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:9px;margin-bottom:6px"><ion-icon name="close-circle-outline" style="vertical-align:-2px"></ion-icon> Técnico Rejeitou</span>';
   }
+  const voicePendingBadge = taskHasPendingVoiceTranscription(task)
+    ? '<span class="badge" style="background:#fffbeb;color:#92400e;font-size:9px;margin-bottom:6px;border:1px solid #fde68a"><ion-icon name="mic-outline" style="vertical-align:-2px"></ion-icon> Voz pendente</span>'
+    : '';
 
   const fd = (d) => opsFormatCardDateTime(d);
 
@@ -1806,27 +1959,30 @@ function buildCard(task, colClass) {
       ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
       : '';
 
+  const locationBlock = (() => {
+    const loc = formatServiceLocationPlainLine(task);
+    if (!loc) return '';
+    const safe = String(loc)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return `<div style="font-size:11px;color:var(--text);margin-top:2px;line-height:1.45;word-break:break-word;font-weight:600"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.35px;display:block;margin-bottom:3px">Local do atendimento</span>${safe}</div>`;
+  })();
+
   return `
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
-      ${rtBadge}
-      ${subBadge}
-      <div class="task-card-title" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        ${ftRtBadgeHtml}
+        <div class="task-card-email" style="margin-bottom:0">
+          <ion-icon name="person-outline"></ion-icon>
+          ${task.ownerEmail || '—'}
+        </div>
       ${formNameHtml}
-      ${
-        (() => {
-          const loc = formatServiceLocationPlainLine(task);
-          if (!loc) return '';
-          const safe = String(loc)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `<div style="font-size:10px;color:var(--text2);margin-top:4px;line-height:1.35;word-break:break-word"><span style="color:var(--text3);font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:0.3px">Local · </span>${safe}</div>`;
-        })()
-      }
-      <div class="task-card-email">
-        <ion-icon name="person-outline"></ion-icon>
-        ${task.ownerEmail || '—'}
+      ${locationBlock}
       </div>
+      ${subBadge}
+      ${voicePendingBadge}
+      <div class="task-card-title" style="margin-top:2px" title="${titlePlain.replace(/"/g, '&quot;')}">${titleHtml}</div>
       
       <div style="font-size:9px;color:var(--text2);margin-bottom:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px;white-space:nowrap;overflow:hidden;">
         <div style="text-overflow:ellipsis;overflow:hidden;"><strong style="color:var(--text3)">Criada:</strong><br>${fd(task.createdAt)}</div>
@@ -1838,8 +1994,7 @@ function buildCard(task, colClass) {
       </div>
 
       <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
-          <span class="task-card-id">#<strong style="font-weight:900;color:var(--text)">${String(displayOsLabel(task)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong></span>
+        <div style="display:flex; justify-content:flex-end; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
           <span style="display:flex; align-items:center; gap:4px; flex-wrap:wrap">
           ${completedTaskSubmissionBadgeHtml(task)}
           ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}

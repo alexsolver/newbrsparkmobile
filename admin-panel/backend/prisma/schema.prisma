@@ -993,6 +993,9 @@ model ChecklistExecution {
 
   trackingChatModerationEvents TrackingChatModerationEvent[]
 
+  /// Mensagens do fio gestor ↔ técnico por execução (FT/RT); auditoria por `executionId`.
+  opsChatMessages ChecklistExecutionOpsChatMessage[]
+
   @@index([ownerEmail])
   @@index([status])
   @@index([ownerEmail, status])
@@ -1022,6 +1025,21 @@ model TrackingChatModerationEvent {
   @@index([tenantId, createdAt])
   @@index([needsHumanReview, createdAt])
   @@map("tracking_chat_moderation_events")
+}
+
+/// Chat operacional por execução (uma thread por FT/RT — gestor no painel, técnico no app).
+model ChecklistExecutionOpsChatMessage {
+  id          String   @id @default(cuid())
+  executionId String   @map("execution_id")
+  execution   ChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  senderEmail String   @map("sender_email")
+  /// GESTOR (painel) ou TECH (app — dono da execução)
+  senderKind  String   @map("sender_kind")
+  body        String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([executionId, createdAt])
+  @@map("checklist_execution_ops_chat_messages")
 }
 
 /// Snapshot imutável por conclusão (revisita = nova linha; FT/osNumber estáveis na execução).
