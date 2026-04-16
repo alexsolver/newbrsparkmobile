@@ -5,7 +5,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MEDIA_TAG_COLORS } from '../theme/colors';
 import { taskOsLabel } from '../utils/taskOsLabel';
-import { effectiveProviderTaskStatus } from '../utils/technicianFinanceLinkableTasks';
+import { effectiveProviderTaskStatus } from '../utils/providerTaskStatus';
+import { updateStoredJsonArray } from '../lib/asyncStorageAtomic';
 import {
   pullTasks,
   purgeExpiredCompletedExecutionCaches,
@@ -196,7 +197,24 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     }
   }
   if (updatedExecs) {
-    await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(validExecs));
+    await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+      const merged = [...validExecs];
+      const seen = new Set(
+        merged.map((ex) => String(typeof ex === 'string' ? ex : ex?.id || '').trim()).filter(Boolean)
+      );
+      for (const ex of current) {
+        const item = typeof ex === 'string' ? { id: ex, completedAt: new Date().toISOString() } : ex;
+        const id = String(item?.id || '').trim();
+        if (!id || seen.has(id)) continue;
+        const completedTs = new Date(item?.completedAt ?? 0).getTime();
+        const age = Number.isFinite(completedTs) ? now - completedTs : 0;
+        if (!Number.isFinite(completedTs) || age <= THIRTY_DAYS_MS) {
+          merged.push(item);
+          seen.add(id);
+        }
+      }
+      return merged;
+    });
   }
 
   const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';

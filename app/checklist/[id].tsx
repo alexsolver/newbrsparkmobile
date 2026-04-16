@@ -63,7 +63,14 @@ import {
   enqueueExecutionStatusPatch,
   pushSyncQueue,
   COMPLETED_BODY_LOCAL_TTL_MS,
+  checklistOutboxIdentityKey,
+  clearExecutionStatusOutboxForTask,
 } from '../../src/services/syncService';
+import {
+  appendUniqueStringToStoredArray,
+  updateStoredJsonArray,
+  withAsyncStorageKeyLock,
+} from '../../src/lib/asyncStorageAtomic';
 import {
   findCloudTaskById,
   loadAllCloudTasksForExecutionLookup,
@@ -392,17 +399,7 @@ async function ensureTaskMarkedInProgressLocally(executionId: string): Promise<v
   const id = String(executionId || '').trim();
   if (!id) return;
   try {
-    const raw = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-    let arr: string[] = [];
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      arr = [];
-    }
-    if (!Array.isArray(arr)) arr = [];
-    if (arr.includes(id)) return;
-    arr.push(id);
-    await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(arr));
+    await appendUniqueStringToStoredArray('@brspark_inprogress_tasks', id);
   } catch {
     /* ignore */
   }
@@ -953,6 +950,76 @@ function findFieldValueInResponses(
   return undefined;
 }
 
+/** `transit_start` imediatamente antes deste `transit_end` na ordem do schema. */
+function findPreviousTransitStartForEnd(schemaData: any[] | undefined, endFieldId: string): any | null {
+  if (!Array.isArray(schemaData) || !endFieldId) return null;
+  let lastStart: any | null = null;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    if (f.type === 'transit_start') lastStart = f;
+    if (f.id === endFieldId && f.type === 'transit_end') return lastStart;
+  }
+  return null;
+}
+
+type ActiveTransitLegInfo = {
+  startField: any;
+  endField: any;
+  reimbursement: boolean;
+};
+
+/**
+ * Trecho de deslocamento em curso: último início preenchido cujo par de fim ainda está vazio.
+ */
+function getActiveTransitLegInfo(
+  schemaData: any[] | undefined,
+  responses: Record<string, unknown>
+): ActiveTransitLegInfo | null {
+  if (!Array.isArray(schemaData) || !responses || typeof responses !== 'object') return null;
+  let pendingStart: { field: any; reimbursement: boolean } | null = null;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    if (f.type === 'transit_start') {
+      const v = findFieldValueInResponses(responses as any, f.id, schemaData);
+      if (v != null && String(v).trim() !== '') {
+        pendingStart = {
+          field: f,
+          reimbursement: f.transitPurpose === 'reimbursement',
+        };
+      } else {
+        pendingStart = null;
+      }
+    }
+    if (f.type === 'transit_end') {
+      const v = findFieldValueInResponses(responses as any, f.id, schemaData);
+      if (pendingStart && (v == null || String(v).trim() === '')) {
+        return {
+          startField: pendingStart.field,
+          endField: f,
+          reimbursement: pendingStart.reimbursement,
+        };
+      }
+      if (v != null && String(v).trim() !== '') {
+        pendingStart = null;
+      }
+    }
+  }
+  return null;
+}
+
+/** Reembolso / «apenas registo»: `transitPurpose` no início; o fim herda do início anterior no schema. */
+function isReimbursementTransitField(schemaData: any[] | undefined, fieldId: string): boolean {
+  if (!fieldId || !Array.isArray(schemaData)) return false;
+  const fd = schemaData.find((f: any) => f && f.id === fieldId);
+  if (!fd) return false;
+  if (fd.type === 'transit_start') return fd.transitPurpose === 'reimbursement';
+  if (fd.type === 'transit_end') {
+    const st = findPreviousTransitStartForEnd(schemaData, fieldId);
+    return st?.transitPurpose === 'reimbursement';
+  }
+  return false;
+}
+
 /** IDs de campos incluídos no bloco «resumo para assinatura» (schema). */
 function normalizeSignatureSummarySourceIds(raw: unknown): string[] {
   if (Array.isArray(raw)) {
@@ -1423,6 +1490,78 @@ async function mergeAddrIntoMediaUriIfStillCurrent(args: {
 }
 
 /**
+ * Visão IA: gravar `captureAddr` no objeto JSON quando há lat/lng na URI ou no objeto (reverse geocode).
+ * Alinhado a `mergeAddrIntoMediaUriIfStillCurrent` (foto carimbada).
+ */
+async function mergeAddrIntoVisionFieldIfStillCurrent(args: {
+  getResponses: () => Record<string, any>;
+  applyInput: (fieldId: string, value: any, scope?: SectionRepeatScope | null) => void;
+  fieldId: string;
+  scope: SectionRepeatScope | null | undefined;
+  uriAtCommit: string;
+}): Promise<void> {
+  const { getResponses, applyInput, fieldId, scope, uriAtCommit } = args;
+  try {
+    const net = await Network.getNetworkStateAsync();
+    if (net.isConnected === false) return;
+  } catch {
+    return;
+  }
+  const snap = getResponses();
+  const raw = getScopedFieldValue(snap, scope ?? null, fieldId);
+  const o = parseVisionChecklistStored(raw);
+  if (!o || typeof o !== 'object') return;
+  if (typeof o.captureAddr === 'string' && o.captureAddr.trim()) return;
+
+  let latN: number | null = null;
+  let lngN: number | null = null;
+  const parsed = parseLatLngFromUriQueryForAddrFill(uriAtCommit);
+  if (parsed) {
+    latN = parsed.lat;
+    lngN = parsed.lng;
+  } else {
+    const la = o.captureLat != null ? parseFloat(String(o.captureLat)) : NaN;
+    const ln = o.captureLng != null ? parseFloat(String(o.captureLng)) : NaN;
+    if (Number.isFinite(la) && Number.isFinite(ln)) {
+      latN = la;
+      lngN = ln;
+    }
+  }
+  if (latN == null || lngN == null) return;
+
+  let line = '';
+  try {
+    const rev = await Location.reverseGeocodeAsync({ latitude: latN, longitude: lngN });
+    if (rev?.length) {
+      const r = rev[0];
+      line = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`.trim();
+    }
+  } catch {
+    line = '';
+  }
+  if (!line) line = 'Endereço indisponível (rede ou mapas).';
+
+  const snap2 = getResponses();
+  const raw2 = getScopedFieldValue(snap2, scope ?? null, fieldId);
+  const cur = parseVisionChecklistStored(raw2);
+  if (!cur || typeof cur !== 'object') return;
+  if (typeof cur.captureAddr === 'string' && cur.captureAddr.trim()) return;
+  if (!String(cur.localUri || '').trim()) return;
+
+  const commitBase = uriAtCommit.split('?')[0];
+  const curLocal = String(cur.localUri || '').split('?')[0];
+  if (curLocal && commitBase && curLocal !== commitBase && String(cur.localUri) !== uriAtCommit) return;
+
+  const next = {
+    ...cur,
+    captureLat: cur.captureLat != null ? String(cur.captureLat) : String(latN),
+    captureLng: cur.captureLng != null ? String(cur.captureLng) : String(lngN),
+    captureAddr: line,
+  };
+  applyInput(fieldId, next, scope ?? null);
+}
+
+/**
  * Template/admin pode gravar `requireOnlineValidation` como boolean ou string (`"false"` é truthy em JS — não usar `!!campo` cru).
  * Só exige rede/servidor quando o valor é explicitamente afirmativo.
  */
@@ -1631,6 +1770,22 @@ function facialAuditSnapshotFromCaptureUri(imgUri: string): {
     out.captureLng = lng;
   }
   if (addr) out.captureAddr = addr;
+  return out;
+}
+
+/** GPS/morada na query da URI de captura — mesmo formato que facial/foto carimbada (relatório PDF). */
+function visionGeoFieldsFromCaptureUri(uri: string): {
+  captureLat?: string;
+  captureLng?: string;
+  captureAddr?: string;
+} {
+  const s = facialAuditSnapshotFromCaptureUri(uri);
+  const out: { captureLat?: string; captureLng?: string; captureAddr?: string } = {};
+  if (s.captureLat && s.captureLng) {
+    out.captureLat = s.captureLat;
+    out.captureLng = s.captureLng;
+  }
+  if (s.captureAddr) out.captureAddr = s.captureAddr;
   return out;
 }
 
@@ -2394,6 +2549,15 @@ export default function ChecklistEngine() {
     String(Array.isArray(routineTask) ? routineTask[0] : routineTask || '') === '1';
   const isRoutineTaskFlow = routineTaskFlag && !!resolvedTaskId;
 
+  /** `runVisionChecklistAnalyze` usa `[]` em deps — refs para PATCH pós-análise em modo só leitura. */
+  const visionPatchAfterAnalyzeRef = useRef({ isReadOnly: false, taskId: '' as string });
+  useEffect(() => {
+    visionPatchAfterAnalyzeRef.current = {
+      isReadOnly: !!isReadOnly,
+      taskId: resolvedTaskId ? String(resolvedTaskId) : '',
+    };
+  }, [isReadOnly, resolvedTaskId]);
+
   const [ruleTick, setRuleTick] = useState(0);
   const fgSegmentStartRef = useRef<number | null>(null);
   /** Próximo número de revisão a enviar em POST /executions (lastSubmittedRevision + 1). */
@@ -2805,6 +2969,7 @@ export default function ChecklistEngine() {
     if (gpsCaptureLockRef.current) return;
     gpsCaptureLockRef.current = true;
     setGpsBusyFieldId(fieldId);
+    const isReimbursementTransit = isReimbursementTransitField(template?.schemaData, fieldId);
     const isGeofenceCheck = label === 'VALIDACAO_CERCA';
     try {
       setSubmitting(true);
@@ -2940,14 +3105,19 @@ export default function ChecklistEngine() {
       if (traversedPath && traversedPath.length > 0) {
           payload.traversedPath = traversedPath;
       }
+      if (isReimbursementTransit) {
+        payload.transitPurpose = 'reimbursement';
+      }
 
       /** Métricas de rota (OSRM) e morada exacta: em segundo plano após gravar o GPS (ver IIFE no fim). */
 
       if (label === 'CHEGADA') {
         try {
-          const startField = template?.schemaData?.find((f: any) => f.type === 'transit_start');
+          const startFieldForPair = findPreviousTransitStartForEnd(template?.schemaData, fieldId);
           const startRaw =
-            startField != null ? getScopedFieldValue(responses, scope ?? null, startField.id) : undefined;
+            startFieldForPair != null
+              ? getScopedFieldValue(responses, scope ?? null, startFieldForPair.id)
+              : undefined;
           let startObj: any = null;
           if (startRaw != null && String(startRaw).trim() !== '') {
             try {
@@ -2989,7 +3159,7 @@ export default function ChecklistEngine() {
             };
           }
 
-          if (currentTask?.locationZoneType === 'route') {
+          if (!isReimbursementTransit && currentTask?.locationZoneType === 'route') {
             const refPts = buildRouteCoordsFromTask(currentTask);
             const tol = parseInt(String(currentTask?.locationRadius ?? '100'), 10) || 100;
             if (refPts.length >= 2) {
@@ -3017,8 +3187,8 @@ export default function ChecklistEngine() {
       
       handleInput(fieldId, JSON.stringify(payload), scope);
       
-      // Auto-encerrar o public link se for evento de CHEGADA
-      if (label === 'CHEGADA') {
+      // Link público: só no deslocamento operacional (não «apenas registo»)
+      if (label === 'CHEGADA' && !isReimbursementTransit) {
           endTrackingLink();
       }
 
@@ -3037,7 +3207,7 @@ export default function ChecklistEngine() {
         } else {
           Alert.alert(
             'Deslocamento finalizado',
-            `O trecho de deslocamento foi encerrado (não indica chegada ao local de serviço).${tailMoradaAsync}`
+            `O trecho de deslocamento foi encerrado e o registro foi guardado (início → fim no mapa).\n\nIsto não substitui, por si só, outros passos do formulário que sirvam como prova formal de chegada ao local de serviço — por exemplo, quando existir validação em cerca eletrônica ou campo próprio de confirmação.${tailMoradaAsync}`
           );
         }
       } else if (label === 'SAIDA') {
@@ -3084,7 +3254,7 @@ export default function ChecklistEngine() {
             distanceMeters?: number | null;
             source?: string;
           } | undefined;
-          if (label === 'SAIDA') {
+          if (label === 'SAIDA' && !isReimbursementTransit) {
             try {
               const task = currentTaskRef.current;
               const routeCoords = buildRouteCoordsFromTask(task);
@@ -3179,11 +3349,8 @@ export default function ChecklistEngine() {
             });
           } catch (err) {}
 
-          apiFetch(`/api/checklists/executions/${taskId}/status`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ status, timestamp: ts })
-          }).then(() => AsyncStorage.setItem(key, 'true')).catch(() => {});
+          await enqueueExecutionStatusPatch(String(taskId), { status, timestamp: ts });
+          await AsyncStorage.setItem(key, 'true');
       } catch(e) {}
   };
 
@@ -3231,11 +3398,7 @@ export default function ChecklistEngine() {
              lastPauseAt: responses.__form_paused_since,
            };
          }
-         apiFetch(`/api/checklists/executions/${taskId}/status`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(body)
-         }).catch(() => {});
+         void enqueueExecutionStatusPatch(String(taskId), body);
      }, 2000); // 2 second debounce
      
      return () => clearTimeout(timeoutId);
@@ -4250,7 +4413,19 @@ export default function ChecklistEngine() {
   ]);
 
   const handleInput = (fieldId: string, value: any, scope?: SectionRepeatScope | null) => {
-    if (isReadOnly) return;
+    if (isReadOnly) {
+      // Com OS já concluída no servidor, a visão IA ainda pode estar `pending_analysis` (captura offline).
+      // O retry automático ou «Tentar análise agora» precisa gravar `status: completed` mesmo em só leitura.
+      if (fieldId.startsWith('__')) return;
+      const roField = template?.schemaData?.find((f: any) => f.id === fieldId);
+      const roFt = roField ? effectiveSchemaFieldType(roField) : '';
+      const roVision = roFt === 'vision_checklist' || roFt === 'vision_ai_analysis';
+      const roSt =
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? String((value as Record<string, unknown>).status || '').toLowerCase()
+          : '';
+      if (!(roVision && roSt === 'completed')) return;
+    }
 
     const isMetaField = fieldId.startsWith('__');
     const fieldDef = !isMetaField ? template?.schemaData?.find((f: any) => f.id === fieldId) : null;
@@ -4364,6 +4539,7 @@ export default function ChecklistEngine() {
         const ext =
           opts?.persistExtras && typeof opts.persistExtras === 'object' ? opts.persistExtras : {};
         if (typeof hi0 !== 'function') return;
+        const geo = visionGeoFieldsFromCaptureUri(assetUri);
         hi0(
           field.id,
           {
@@ -4373,9 +4549,20 @@ export default function ChecklistEngine() {
             mediaMimeType: mimeType,
             mediaFileName: fileName,
             pendingSince: new Date().toISOString(),
+            ...geo,
           },
           scope,
         );
+        void mergeAddrIntoVisionFieldIfStillCurrent({
+          getResponses: () => responsesRefForFacial.current,
+          applyInput: (fid, val, sc) => {
+            const h = handleInputRef.current;
+            if (typeof h === 'function') h(fid, val, sc);
+          },
+          fieldId: field.id,
+          scope,
+          uriAtCommit: assetUri,
+        });
       };
 
       try {
@@ -4509,14 +4696,38 @@ export default function ChecklistEngine() {
         const hi = handleInputRef.current;
         const extra =
           opts?.persistExtras && typeof opts.persistExtras === 'object' ? opts.persistExtras : {};
+        const geo = visionGeoFieldsFromCaptureUri(assetUri);
         const merged = {
           ...json,
           localUri: assetUri,
           mediaMimeType: mimeType,
           mediaFileName: fileName,
           ...extra,
+          ...geo,
         };
         if (typeof hi === 'function') hi(field.id, merged, scope);
+        void mergeAddrIntoVisionFieldIfStillCurrent({
+          getResponses: () => responsesRefForFacial.current,
+          applyInput: (fid, val, sc) => {
+            const h = handleInputRef.current;
+            if (typeof h === 'function') h(fid, val, sc);
+          },
+          fieldId: field.id,
+          scope,
+          uriAtCommit: assetUri,
+        });
+        const { isReadOnly: roVision, taskId: tidVision } = visionPatchAfterAnalyzeRef.current;
+        if (roVision && tidVision) {
+          queueMicrotask(async () => {
+            try {
+              const snap = responsesRefForFacial.current;
+              if (!snap || typeof snap !== 'object') return;
+              await enqueueExecutionStatusPatch(String(tidVision), { responses: snap });
+            } catch (err) {
+              console.warn('[vision] PATCH responses após análise:', err);
+            }
+          });
+        }
       } catch (e: any) {
         const raw = String(e?.message || e?.cause?.message || e || '').toLowerCase();
         const looksNet =
@@ -4546,9 +4757,11 @@ export default function ChecklistEngine() {
   );
 
   const retryVisionPendingAnalysisField = useCallback(
-    (field: any, scope?: SectionRepeatScope | null) => {
+    (field: any, scope?: SectionRepeatScope | null, retryOpts?: { quiet?: boolean }) => {
       const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
       const o = parseVisionChecklistStored(raw);
+      const pending = !!(o && isVisionPendingAnalysisRecord(o));
+      const runnable = !!(o && visionStoredHasRunnableMedia(field, o));
       if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(field, o)) return;
       const uri = String(o.localUri || '').trim();
       if (!uri) return;
@@ -4558,16 +4771,61 @@ export default function ChecklistEngine() {
       );
       const layout = getVisionAnalysisGridLayout(field);
       const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
-      void runVisionChecklistAnalyze(
-        field,
-        uri,
-        mime,
-        name,
-        scope ?? null,
-        layout.count > 1 ? { persistExtras: { gridSlotUris: slots } } : undefined,
-      );
+      const quiet = !!retryOpts?.quiet;
+      const baseOpts = layout.count > 1 ? { persistExtras: { gridSlotUris: slots as string[] }, quiet } : { quiet };
+      void runVisionChecklistAnalyze(field, uri, mime, name, scope ?? null, baseOpts);
     },
     [runVisionChecklistAnalyze],
+  );
+
+  /** Ao focar o checklist com rede: tenta concluir análises de visão IA ainda `pending_analysis` (sem alertas). */
+  useFocusEffect(
+    useCallback(() => {
+      const tid = setTimeout(() => {
+        void (async () => {
+          try {
+            const net = await Network.getNetworkStateAsync();
+            if (net.isConnected !== true) return;
+          } catch {
+            return;
+          }
+          const schema = template?.schemaData;
+          if (!Array.isArray(schema) || schema.length === 0) return;
+          const res = responsesRefForFacial.current;
+          if (!res || typeof res !== 'object') return;
+
+          let currentSectionId: string | null = null;
+          let curSecRepeat = false;
+          let pendingQueued = 0;
+          for (const f of schema) {
+            if (f.type === 'section_break') {
+              currentSectionId = f.id;
+              curSecRepeat = sectionAllowsRepeat(f);
+              continue;
+            }
+            if (!isVisionSimNaoMediaFieldType(effectiveSchemaFieldType(f))) continue;
+
+            const runScope = (sc: SectionRepeatScope | null) => {
+              const raw = getScopedFieldValue(res, sc, f.id);
+              const o = parseVisionChecklistStored(raw);
+              if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return;
+              pendingQueued += 1;
+              retryVisionPendingAnalysisField(f, sc, { quiet: true });
+            };
+
+            if (!curSecRepeat) {
+              runScope(null);
+            } else if (currentSectionId) {
+              const rows = getRepeatRows(res, currentSectionId);
+              for (let ri = 0; ri < rows.length; ri++) {
+                runScope({ sectionId: currentSectionId, rowIndex: ri });
+              }
+            }
+          }
+        })();
+      }, 900);
+      return () => clearTimeout(tid);
+    }, [template?.schemaData, retryVisionPendingAnalysisField]),
   );
 
   const openVisionChecklistMedia = (field: any, scope?: SectionRepeatScope | null) => {
@@ -4612,7 +4870,9 @@ export default function ChecklistEngine() {
           const name =
             a.fileName ||
             (String(mime).startsWith('video') ? defaultVideoName : 'foto.jpg');
-          await runVisionChecklistAnalyze(field, a.uri, mime, name, scope ?? null);
+          const facialQs = await buildFacialCaptureQuerySuffix();
+          const captureUri = (a.uri || '').split('?')[0] + facialQs;
+          await runVisionChecklistAnalyze(field, captureUri, mime, name, scope ?? null);
         } catch (err: any) {
           Alert.alert(
             t('checklistForm.cameraUnavailableTitle'),
@@ -4647,7 +4907,8 @@ export default function ChecklistEngine() {
           const res = await ImagePicker.launchCameraAsync(pickerOpts);
           if (res.canceled || !res.assets?.length) return;
           const a = res.assets[0];
-          const uri = a.uri;
+          const facialQs = await buildFacialCaptureQuerySuffix();
+          const uri = (a.uri || '').split('?')[0] + facialQs;
           const hi = handleInputRef.current;
           if (typeof hi !== 'function') return;
           const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
@@ -5223,44 +5484,6 @@ export default function ChecklistEngine() {
 
     setSubmitting(true);
     try {
-      // Registrar que a tarefa (OS) foi executada para mover para 'Concluídas'
-      if (taskId) {
-          const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
-          let execs = [];
-          try { execs = JSON.parse(executedStr); } catch(e) {}
-          if (!Array.isArray(execs)) execs = [];
-          
-          const existingIdx = execs.findIndex(e => (typeof e === 'string' ? e : e.id) === String(taskId));
-          const completedItem = { id: String(taskId), refId: String(id), title: template?.title || 'OS', description: 'OS Concluída com sucesso', completedAt: new Date().toISOString() };
-          
-          if (existingIdx === -1) {
-             execs.push(completedItem);
-          } else {
-             execs[existingIdx] = completedItem;
-          }
-          await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(execs));
-          
-          // Remover status de "Em Andamento" se existia
-          const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-          let inprogs = [];
-          try { inprogs = JSON.parse(inprogStr); } catch(e) {}
-          if (!Array.isArray(inprogs)) inprogs = [];
-          
-          inprogs = inprogs.filter((t: string) => t !== String(taskId));
-          await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(inprogs));
-
-          /** RT/FT: alinhar cache `@brspark_*_cloud_tasks` ao concluir — senão RT fica `IN_PROGRESS` e «Abrir» reutiliza a mesma execução. */
-          try {
-            await patchCloudTaskById(String(taskId), (row) => ({
-              ...row,
-              status: 'COMPLETED',
-              metadata: { ...(row.metadata || {}), localCompletedAt: new Date().toISOString() },
-            }));
-          } catch {
-            /* ignore */
-          }
-      }
-
       const AuthSvc = require('../../src/services/auth').AuthService;
       let uEmail = 'unknown@empresa.com';
       try {
@@ -5403,17 +5626,59 @@ export default function ChecklistEngine() {
       }
       
         console.log("Checklist concluído offline-first. Injetando no Outbox...");
-        const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
-        let outbox = [];
-        try { outbox = JSON.parse(outboxStr); } catch(e){}
-        if (!Array.isArray(outbox)) outbox = [];
-        
-        // Evita duplicar no Outbox e injeta
-        outbox = outbox.filter(item => item.taskId !== taskId);
-        outbox.push(payload);
-        
-        await AsyncStorage.setItem('@brspark_outbox', JSON.stringify(outbox));
+        const payloadIdentityKey = checklistOutboxIdentityKey(payload);
+        const payloadTaskId = String(payload?.taskId || '').trim();
+        await updateStoredJsonArray<any>('@brspark_outbox', (outbox) => {
+          const next = Array.isArray(outbox) ? outbox.filter((item) => {
+            if (payloadTaskId) return String(item?.taskId || '').trim() !== payloadTaskId;
+            return checklistOutboxIdentityKey(item) !== payloadIdentityKey;
+          }) : [];
+          next.push(payload);
+          return next;
+        });
         await AsyncStorage.removeItem(draftKey);
+
+        // Após persistir payload na fila, atualiza estado local de cartão/abas.
+        if (taskId) {
+          const tid = String(taskId);
+          const completedItem = {
+            id: tid,
+            refId: String(id),
+            title: template?.title || 'OS',
+            description: 'OS Concluída com sucesso',
+            completedAt: String(payload.completedAt || new Date().toISOString()),
+          };
+          try {
+            await withAsyncStorageKeyLock(`@brspark_finalize_${tid}`, async () => {
+              await clearExecutionStatusOutboxForTask(tid);
+              await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+                const execs = [...current];
+                const existingIdx = execs.findIndex(
+                  (e) => (typeof e === 'string' ? e : e?.id) === tid
+                );
+                if (existingIdx === -1) execs.push(completedItem);
+                else execs[existingIdx] = completedItem;
+                return execs;
+              });
+              await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (inprogs) =>
+                inprogs.filter((t) => String(t) !== tid)
+              );
+            });
+          } catch (localStateErr) {
+            console.warn('[checklist] Falha ao marcar OS como concluída localmente:', localStateErr);
+          }
+
+          /** RT/FT: alinhar cache `@brspark_*_cloud_tasks` ao concluir — senão RT fica `IN_PROGRESS` e «Abrir» reutiliza a mesma execução. */
+          try {
+            await patchCloudTaskById(tid, (row) => ({
+              ...row,
+              status: 'COMPLETED',
+              metadata: { ...(row.metadata || {}), localCompletedAt: String(payload.completedAt || new Date().toISOString()) },
+            }));
+          } catch {
+            /* ignore */
+          }
+        }
         
         // Aciona explicitamente o Sync Worker em background se possível
         try {
@@ -6039,6 +6304,11 @@ export default function ChecklistEngine() {
     [currentTask?.locationPolygon, currentTask?.locationZoneType],
   );
 
+  const activeTransitLeg = useMemo(
+    () => getActiveTransitLegInfo(template?.schemaData, responses as Record<string, unknown>),
+    [template?.schemaData, responses],
+  );
+
   /** Deve rodar antes de qualquer return antecipado (loading / mapa), senão viola as regras dos hooks. */
   const sessionPauseOpenEvent = useMemo(() => {
     const active = Boolean(responses.__form_paused_since) && !!resolvedTaskId && !isReadOnly;
@@ -6370,9 +6640,11 @@ export default function ChecklistEngine() {
               } catch {
                 /* mantém PNG composto (já limitado no runner) */
               }
+              const facialQs = await buildFacialCaptureQuerySuffix();
+              const captureCompositeUri = uploadUri.split('?')[0] + facialQs;
               await runVisionChecklistAnalyze(
                 job.field,
-                uploadUri,
+                captureCompositeUri,
                 uploadMime,
                 uploadName,
                 job.scope,
@@ -6483,19 +6755,16 @@ export default function ChecklistEngine() {
 
         const routeCoords = liveRouteCoordsForMap;
 
-        const endField = schema.find((f: any) => f.type === 'transit_end');
-        const startField = schema.find((f: any) => f.type === 'transit_start');
+        const activeStartField = activeTransitLeg?.startField;
+        const activeEndField = activeTransitLeg?.endField;
+        const reimbursementMode = !!activeTransitLeg?.reimbursement;
 
         const startVal =
-          startField &&
-          findFieldValueInResponses(responses, startField.id, schema);
-        const endVal =
-          endField && findFieldValueInResponses(responses, endField.id, schema);
+          activeStartField &&
+          findFieldValueInResponses(responses, activeStartField.id, schema);
 
-        const isTransitFinished = !!endVal;
-        const isTransitStarted = !!startVal;
-        
-        const isVisible = showLiveMap || (isTransitStarted && !isTransitFinished);
+        const isVisible = showLiveMap || activeTransitLeg != null;
+
         const routeDest = getDestFromTaskLike(currentTask || {});
         const routeEndCoord =
           routeCoords.length > 0
@@ -6504,28 +6773,33 @@ export default function ChecklistEngine() {
                 lng: routeCoords[routeCoords.length - 1][1],
               }
             : null;
-        const mergedEta = mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
+        const mergedEta =
+          reimbursementMode
+            ? undefined
+            : mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
 
         const targetForMap =
-          routeDest ||
-          routeEndCoord ||
-          (() => {
-            const la = currentTask?.locationLat;
-            const ln = currentTask?.locationLng;
-            const latN = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
-            const lngN = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
-            if (
-              Number.isFinite(latN) &&
-              Number.isFinite(lngN) &&
-              latN >= -90 &&
-              latN <= 90 &&
-              lngN >= -180 &&
-              lngN <= 180
-            ) {
-              return { lat: latN, lng: lngN };
-            }
-            return null;
-          })();
+          reimbursementMode
+            ? null
+            : routeDest ||
+              routeEndCoord ||
+              (() => {
+                const la = currentTask?.locationLat;
+                const ln = currentTask?.locationLng;
+                const latN = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
+                const lngN = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
+                if (
+                  Number.isFinite(latN) &&
+                  Number.isFinite(lngN) &&
+                  latN >= -90 &&
+                  latN <= 90 &&
+                  lngN >= -180 &&
+                  lngN <= 180
+                ) {
+                  return { lat: latN, lng: lngN };
+                }
+                return null;
+              })();
 
         const corridorTol =
           currentTask?.locationZoneType === 'route'
@@ -6543,14 +6817,16 @@ export default function ChecklistEngine() {
           }
         }
 
-        const keepScreenAwake = startField?.transitKeepScreenAwake === true;
+        const keepScreenAwake = activeStartField?.transitKeepScreenAwake === true;
+        const routeForCard = reimbursementMode ? [] : routeCoords;
 
         return <LiveRouteMapCard 
-                  route={routeCoords} 
+                  route={routeForCard} 
                   visible={isVisible}
                   keepScreenAwake={keepScreenAwake}
                   zoneType={currentTask?.locationZoneType}
                   corridorToleranceM={corridorTol}
+                  reimbursementMode={reimbursementMode}
                   targetLoc={
                     targetForMap
                       ? { lat: targetForMap.lat, lng: targetForMap.lng }
@@ -6558,18 +6834,18 @@ export default function ChecklistEngine() {
                   }
                   etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
                   transitStartedAtIso={transitStartedAtIso}
-                  taskId={resolvedTaskId || undefined}
-                  endTransitLoading={endField ? gpsBusyFieldId === endField.id : false}
-                  onEndTransit={endField ? async () => {
+                  taskId={reimbursementMode ? undefined : resolvedTaskId || undefined}
+                  endTransitLoading={activeEndField ? gpsBusyFieldId === activeEndField.id : false}
+                  onEndTransit={activeEndField ? async () => {
                       const hasValue = !!findFieldValueInResponses(
                         responses,
-                        endField.id,
+                        activeEndField.id,
                         template?.schemaData
                       );
                       if (hasValue) return;
                       const path = routeTracker.getTraversedPath();
                       await handleTransit(
-                        endField.id,
+                        activeEndField.id,
                         'CHEGADA',
                         path,
                         lastTransitScopeRef.current
@@ -8363,19 +8639,27 @@ export default function ChecklistEngine() {
               {(field.type === 'transit_start' || field.type === 'transit_end') && (() => {
                  let isBlocked = false;
                  if (field.type === 'transit_end') {
-                     const startField = template?.schemaData?.find((f: any) => f.type === 'transit_start');
-                     const startVal = startField
-                       ? getScopedFieldValue(responses, scope, startField.id)
+                     const startForEnd = findPreviousTransitStartForEnd(template?.schemaData || [], field.id);
+                     const startVal = startForEnd
+                       ? getScopedFieldValue(responses, scope, startForEnd.id)
                        : undefined;
                      if (
-                       startField &&
+                       startForEnd &&
                        (!startVal || (typeof startVal === 'string' && startVal.trim() === ''))
                      ) {
                          isBlocked = true;
                      }
                  }
-                 
+
                  const hasValue = !!vv(field.id);
+                 /** Não iniciar outro trecho enquanto houver deslocamento aberto (início feito, fim por finalizar). */
+                 const startBlockedAnotherLeg =
+                   field.type === 'transit_start' &&
+                   !hasValue &&
+                   activeTransitLeg != null;
+                 if (startBlockedAnotherLeg) {
+                   isBlocked = true;
+                 }
                  const transitEvidence = hasValue ? parseTransitFieldEvidence(vv(field.id)) : null;
                  const transitEvidenceLines = transitEvidence ? formatTransitEvidenceLines(transitEvidence) : [];
                  const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? C.primary : C.accent));
@@ -8399,7 +8683,12 @@ export default function ChecklistEngine() {
                       disabled={isReadOnly || isBlocked || hasValue || gpsBusyAny}
                       onPress={async () => {
                        if (isBlocked) {
-                           Alert.alert("Atenção", "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo.");
+                           Alert.alert(
+                             'Atenção',
+                             startBlockedAnotherLeg
+                               ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
+                               : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
+                           );
                            return;
                        }
                        if (hasValue) {
@@ -8413,17 +8702,20 @@ export default function ChecklistEngine() {
                          scope
                        );
                        const email = await AsyncStorage.getItem('@brspark_email');
+                       const sch = template?.schemaData || [];
+                       const reimbField = isReimbursementTransitField(sch, field.id);
                        if (field.type === 'transit_start') {
                          lastTransitScopeRef.current = scope ?? null;
                          dataCollectionService.setState('IN_TRANSIT', {
                            executionId: String(taskId || ''),
                            ownerEmail: email || 'unknown',
                          }).catch(() => {});
-                         // Garantir token no servidor antes de abrir o mapa/chat — evita GET /tracking/task/…/chat 400
-                         // («deslocamento não iniciado») se o técnico abrir o chat antes do POST /tracking/start concluir.
-                         await generateTrackingLink();
+                         if (!reimbField) {
+                           await generateTrackingLink();
+                         }
                          // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))
                          if (
+                           reimbField ||
                            currentTask?.locationZoneType === 'route' ||
                            currentTask?.locationZoneType === 'segment' ||
                            currentTask?.locationZoneType === 'polygon'
@@ -8432,12 +8724,21 @@ export default function ChecklistEngine() {
                          }
                        } else {
                          lastTransitScopeRef.current = null;
-                         dataCollectionService.setState('ARRIVED', {
-                           executionId: String(taskId || ''),
-                           ownerEmail: email || 'unknown',
-                           lat: currentTask?.locationLat ? parseFloat(String(currentTask.locationLat)) : undefined,
-                           lng: currentTask?.locationLng ? parseFloat(String(currentTask.locationLng)) : undefined,
-                         }).catch(() => {});
+                         if (reimbField) {
+                           dataCollectionService
+                             .setState('IN_SERVICE', {
+                               executionId: String(taskId || ''),
+                               ownerEmail: email || 'unknown',
+                             })
+                             .catch(() => {});
+                         } else {
+                           dataCollectionService.setState('ARRIVED', {
+                             executionId: String(taskId || ''),
+                             ownerEmail: email || 'unknown',
+                             lat: currentTask?.locationLat ? parseFloat(String(currentTask.locationLat)) : undefined,
+                             lng: currentTask?.locationLng ? parseFloat(String(currentTask.locationLng)) : undefined,
+                           }).catch(() => {});
+                         }
                          setShowLiveMap(false);
                          routeTracker.stop();
                        }

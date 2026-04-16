@@ -3,85 +3,17 @@ import { loadFtCloudTasks, loadAllCloudTasksForExecutionLookup } from '../lib/cl
 import { getTaskIdsWithPendingExecutionStatusOutbox } from '../services/syncService';
 import { fetchChecklistTemplateSchema, schemaArrayHasTechnicianFinance } from '../services/checklistTemplateSchema';
 import { taskOsLabel } from './taskOsLabel';
+import {
+  effectiveProviderTaskStatus,
+  providerTaskMetadataRecord,
+  SERVER_COMPLETED_STATUSES,
+} from './providerTaskStatus';
 
 export type LinkableExpenseTask = {
   id: string;
   refId: string;
   displayLine: string;
 };
-
-// ── Mesma lógica que `effectiveProviderTaskStatus` no dashboard (Pendentes vs Iniciadas) ──
-
-function taskMetadataRecord(t: any): Record<string, unknown> {
-  const m = t?.metadata;
-  if (m == null) return {};
-  if (typeof m === 'string') {
-    try {
-      const o = JSON.parse(m);
-      return o && typeof o === 'object' ? o : {};
-    } catch {
-      return {};
-    }
-  }
-  if (typeof m === 'object') return m as Record<string, unknown>;
-  return {};
-}
-
-function metaFlagTrue(meta: Record<string, unknown>, key: string): boolean {
-  const v = meta[key];
-  return v === true || v === 'true' || String(v ?? '').toLowerCase() === 'true';
-}
-
-function isDisplacementTrackingPausedMeta(meta: Record<string, unknown>): boolean {
-  const v = meta.trackingPaused;
-  if (v === false || v === 0 || v === 'false' || v === '0') return false;
-  if (v === true || v === 1) return true;
-  if (v === 'true' || v === '1') return true;
-  return false;
-}
-
-function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown>): boolean {
-  if (metaFlagTrue(meta, 'reopenForRevisionPending') || metaFlagTrue(meta, 'revisionVisitActive')) return true;
-  const rc = Number(meta.reopenCount);
-  return Number.isFinite(rc) && rc > 0;
-}
-
-const SERVER_COMPLETED_STATUSES = new Set([
-  'COMPLETED',
-  'SYNCED',
-  'DONE',
-  'CLOSED',
-  'FINISHED',
-  'COMPLETE',
-  'ARCHIVED',
-]);
-
-export function effectiveProviderTaskStatus(
-  t: any,
-  completedIds: Set<string>,
-  inprogressIds: Set<string>,
-  acceptedIds: Set<string> = new Set()
-): string {
-  const raw = String(t.status || 'PENDING').toUpperCase();
-  if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
-  const meta = taskMetadataRecord(t);
-  const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
-  if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
-    if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
-    return 'PENDING';
-  }
-  if (completedIds.has(String(t.id))) return 'COMPLETED';
-  const pausedByMeta =
-    meta.executionPaused === true ||
-    meta.executionPaused === 'true' ||
-    String(meta.executionPaused || '').toLowerCase() === 'true';
-  if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
-  if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
-  if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
-  if (raw === 'RECEIVED') return 'PENDING';
-  if (raw === 'ACCEPTED') return 'PENDING';
-  return raw === 'PENDING' || raw === '' ? 'PENDING' : raw;
-}
 
 export function isPendingOrInAttendance(status: string): boolean {
   return status === 'PENDING' || status === 'IN_PROGRESS' || status === 'PAUSED';
@@ -103,7 +35,7 @@ export function completionTimestampMsForFinanceLink(
   const fromLocal = completedAtById.get(id);
   if (fromLocal != null && Number.isFinite(fromLocal)) return fromLocal;
 
-  const meta = taskMetadataRecord(t);
+  const meta = providerTaskMetadataRecord(t);
   const m = meta.completedAt ? new Date(String(meta.completedAt)).getTime() : NaN;
   if (Number.isFinite(m)) return m;
 

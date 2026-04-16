@@ -105,6 +105,11 @@ interface Props {
   corridorToleranceM?: number;
   /** `transit_start.transitKeepScreenAwake` no schema — evita suspensão do aparelho durante o deslocamento ativo. */
   keepScreenAwake?: boolean;
+  /**
+   * Deslocamento só para registo de trilha (reembolso): sem ETA, sem chat, sem chamadas ao link público.
+   * `taskId` deve ser omitido pelo pai para não expor chat.
+   */
+  reimbursementMode?: boolean;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -325,8 +330,16 @@ const FOLLOW_MOVE_THRESHOLD_M = 14;
 const HEADING_SMOOTH_FACTOR = 0.22;
 
 /** Zoom em modo navegação (rua a rua). */
-const NAV_FOLLOW_ZOOM = 18;
+const NAV_FOLLOW_ZOOM = 21;
 const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
+/** Região inicial do MapView antes do 1.º `animateCamera` — deltas menores = mais zoom (mais próximo). */
+const MAP_INITIAL_LAT_DELTA = 0.000875;
+const MAP_INITIAL_LNG_DELTA = 0.000875;
+
+/** Mínimo entre pedidos OSRM ao desviar / sair da linha azul (evita martelar backend/OSRM). */
+const OSRM_REFETCH_MIN_INTERVAL_MS = 18000;
+/** Se o GPS se afasta desta distância da polilinha OSRM actual, pede nova geometria. */
+const OSRM_OFF_DYNAMIC_PATH_M = 130;
 
 function formatElapsedSinceTransitPt(isoStart: string): string {
   const t0 = Date.parse(isoStart);
@@ -356,6 +369,7 @@ function EtaBadge({
   transitElapsedLabel?: string | null;
   isLandscape: boolean;
 }) {
+  const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -384,9 +398,12 @@ function EtaBadge({
   return (
     <View
       style={[
-        etaStyles.wrapper,
-        noDestination && etaStyles.wrapperWide,
-        isLandscape && etaStyles.wrapperLandscape,
+        etaStyles.wrapperCore,
+        isLandscape ? etaStyles.wrapperLandscapePos : etaStyles.wrapperPortraitPos,
+        noDestination && (isLandscape ? etaStyles.wrapperWideLandscape : etaStyles.wrapperWide),
+        isLandscape
+          ? { top: insets.top + 8, left: Math.max(12, insets.left + 4) }
+          : null,
       ]}
       pointerEvents="none"
     >
@@ -394,7 +411,10 @@ function EtaBadge({
         colors={['#f97316', '#ea580c']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[etaStyles.gradient, noDestination && etaStyles.gradientWide]}
+        style={[
+          etaStyles.gradient,
+          noDestination && (isLandscape ? etaStyles.gradientWideLandscape : etaStyles.gradientWide),
+        ]}
       >
         {/* Top Row: live dot + label */}
         <View style={etaStyles.topRow}>
@@ -433,10 +453,7 @@ function EtaBadge({
 }
 
 const etaStyles = StyleSheet.create({
-  wrapper: {
-    position: 'absolute',
-    bottom: 185,
-    left: 16,
+  wrapperCore: {
     zIndex: 20,
     borderRadius: 14,
     shadowColor: '#f97316',
@@ -445,14 +462,23 @@ const etaStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
+  wrapperPortraitPos: {
+    position: 'absolute',
+    bottom: 185,
+    left: 16,
+  },
+  /** Landscape: canto superior esquerdo (`top`/`left` vêm das safe areas no componente). */
+  wrapperLandscapePos: {
+    position: 'absolute',
+  },
   wrapperWide: {
     maxWidth: 300,
     right: 16,
     left: 16,
   },
-  /** Em landscape os botões ficam numa faixa baixa — sobe o cartão ETA para não encostar. */
-  wrapperLandscape: {
-    bottom: 92,
+  wrapperWideLandscape: {
+    maxWidth: 300,
+    alignSelf: 'flex-start',
   },
   gradient: {
     paddingHorizontal: 11,
@@ -465,6 +491,10 @@ const etaStyles = StyleSheet.create({
   gradientWide: {
     maxWidth: 300,
     alignSelf: 'stretch',
+  },
+  gradientWideLandscape: {
+    maxWidth: 300,
+    alignSelf: 'flex-start',
   },
   topRow: {
     flexDirection: 'row',
@@ -548,6 +578,7 @@ export default function LiveRouteMapCard({
   taskId,
   corridorToleranceM,
   keepScreenAwake = false,
+  reimbursementMode = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
@@ -582,6 +613,8 @@ export default function LiveRouteMapCard({
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
+  /** Trilha GPS azul no mapa: desligada por defeito; reposta ao iniciar cada deslocamento (`visible` fica ativo). */
+  const [showGpsTrail, setShowGpsTrail] = useState(false);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
   /** Comprimento (m) ao longo da linha de referência já "pintado" de laranja; só aumenta (pausa mantém o sítio). */
   const [routePaintArcM, setRoutePaintArcM] = useState(0);
@@ -605,6 +638,14 @@ export default function LiveRouteMapCard({
   useEffect(() => {
     if (!trackingChatOpen) setTrackingChatLocaleOpen(false);
   }, [trackingChatOpen]);
+
+  const prevVisibleRef = useRef(false);
+  useEffect(() => {
+    if (visible && !prevVisibleRef.current) {
+      setShowGpsTrail(false);
+    }
+    prevVisibleRef.current = visible;
+  }, [visible]);
 
   /** No iOS o `Modal` pode não refletir dimensões a tempo — `expo-screen-orientation` + `Dimensions`. */
   useEffect(() => {
@@ -659,6 +700,11 @@ export default function LiveRouteMapCard({
   dynamicRouteRef.current = dynamicRoute;
   routeRef.current = route;
 
+  /** Incrementado para voltar a pedir geometria OSRM (desvio ou saída da linha dinâmica). */
+  const [osrmRefetchNonce, setOsrmRefetchNonce] = useState(0);
+  const lastOsrmRefetchTriggerAtRef = useRef(0);
+  const prevRouteTrackerEventRef = useRef<RouteUpdate['event'] | null>(null);
+
   // Subscribe to route tracker updates
   useEffect(() => {
     if (!visible) return;
@@ -676,6 +722,28 @@ export default function LiveRouteMapCard({
       const prev = myPosRef.current;
       prevPosRef.current = prev;
       setMyPos({ lat: u.currentLat, lng: u.currentLng });
+
+      const nowTick = Date.now();
+      const prevEv = prevRouteTrackerEventRef.current;
+      prevRouteTrackerEventRef.current = u.event;
+      /** Só no momento em que passa a desviar do corredor — evita refetch repetido enquanto o estado continua «desvio». */
+      const deviationEdge =
+        u.event === 'ROUTE_DEVIATION' && prevEv !== 'ROUTE_DEVIATION';
+
+      if (nowTick - lastOsrmRefetchTriggerAtRef.current >= OSRM_REFETCH_MIN_INTERVAL_MS) {
+        let wantOsrmRefetch = deviationEdge;
+        if (!wantOsrmRefetch) {
+          const poly = dynamicRouteRef.current;
+          if (poly && poly.length >= 2) {
+            const { distM } = closestPointOnPolylineArcM(poly, u.currentLat, u.currentLng);
+            if (distM > OSRM_OFF_DYNAMIC_PATH_M) wantOsrmRefetch = true;
+          }
+        }
+        if (wantOsrmRefetch) {
+          lastOsrmRefetchTriggerAtRef.current = nowTick;
+          setOsrmRefetchNonce((n) => n + 1);
+        }
+      }
 
       const dyn = dynamicRouteRef.current;
       const tpl = routeRef.current;
@@ -763,7 +831,7 @@ export default function LiveRouteMapCard({
       routeTracker.off('status_changed', statusHandler);
       routeTracker.off('traversed_update', traversedHandler);
     };
-  }, [visible, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng, zoneType, corridorToleranceM]);
+  }, [visible, reimbursementMode, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng, zoneType, corridorToleranceM]);
 
   const fetchTrackingChat = useCallback(async () => {
     if (!taskId) return;
@@ -814,6 +882,9 @@ export default function LiveRouteMapCard({
       prevFollowUserRef.current = false;
       lastMapHeadingRef.current = 0;
       lastCompassHeadingRef.current = null;
+      lastOsrmRefetchTriggerAtRef.current = 0;
+      prevRouteTrackerEventRef.current = null;
+      setOsrmRefetchNonce(0);
       setFollowUser(true);
       setShowTransitHints(false);
       setRoutePaintArcM(0);
@@ -894,6 +965,11 @@ export default function LiveRouteMapCard({
       setDynamicRoute(null);
       return;
     }
+    if (reimbursementMode) {
+      setDynamicRoute(null);
+      return;
+    }
+    // `osrmRefetchNonce` — novo pedido quando há desvio do corredor ou o GPS sai da polilinha OSRM (ver handler do tracker).
     // Sempre pedir geometria OSRM (GPS → destino): templates com ≥3 vértices em linha quase reta
     // não traziam pedido nenhum e o mapa ficava só com a polilinha “admin”.
     const dest = pickDestinationForOsrm(targetLoc, route);
@@ -952,7 +1028,7 @@ export default function LiveRouteMapCard({
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [visible, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng]);
+  }, [visible, reimbursementMode, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng, osrmRefetchNonce]);
 
   // Encaixe quando a polilinha principal muda (ex.: chega geometria OSRM), nunca por causa de myPos.
   // Em modo navegação (seguir GPS) não fazer fit da rota inteira — rotas longas (KML) afastavam o zoom
@@ -1003,6 +1079,11 @@ export default function LiveRouteMapCard({
 
   useEffect(() => {
     if (!visible) {
+      setClientEtaMinutes(null);
+      setEtaHint(null);
+      return;
+    }
+    if (reimbursementMode) {
       setClientEtaMinutes(null);
       setEtaHint(null);
       return;
@@ -1065,7 +1146,7 @@ export default function LiveRouteMapCard({
       cancelled = true;
       clearInterval(iv);
     };
-  }, [visible, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
+  }, [visible, reimbursementMode, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
 
   /**
    * Esconde a polilinha do template só quando o despacho tem exactamente 2 pontos e há OSRM:
@@ -1096,7 +1177,7 @@ export default function LiveRouteMapCard({
     return splitPolylineByArcM(route, routePaintArcM);
   }, [zoneType, dynamicRoute, route, routePaintArcM, suppressTemplatePolyline]);
 
-  const focusOnLatLng = useCallback((lat: number, lng: number, zoom = 17) => {
+  const focusOnLatLng = useCallback((lat: number, lng: number, zoom = 20) => {
     mapRef.current?.animateCamera(
       { center: { latitude: lat, longitude: lng }, zoom },
       { duration: 450 }
@@ -1253,6 +1334,11 @@ export default function LiveRouteMapCard({
 
   const handlePauseResume = async () => {
     if (!taskId) {
+      if (reimbursementMode) {
+        if (isPaused) routeTracker.resume();
+        else routeTracker.pause();
+        return;
+      }
       Alert.alert(
         'Rastreamento',
         'Sem identificador da OS no mapa — o link do cliente não poderá ser atualizado quando houver rede.'
@@ -1322,7 +1408,7 @@ export default function LiveRouteMapCard({
           map.animateCamera(
             {
               center: { latitude: lat, longitude: lng },
-              zoom: cam.zoom ?? 16,
+              zoom: cam.zoom ?? 19,
               pitch: cam.pitch,
               heading: cam.heading,
               altitude: cam.altitude,
@@ -1330,10 +1416,10 @@ export default function LiveRouteMapCard({
             { duration: 400 }
           );
         } catch {
-          map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 16 }, { duration: 400 });
+          map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 19 }, { duration: 400 });
         }
       } else {
-        map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 16 }, { duration: 400 });
+        map.animateCamera({ center: { latitude: lat, longitude: lng }, zoom: 19 }, { duration: 400 });
       }
     };
     if (myPos) {
@@ -1387,28 +1473,6 @@ export default function LiveRouteMapCard({
 
   const sendTrackingChat = async (opts?: { moderationOverrideAck?: boolean }) => {
     const t = trackingChatDraft.trim();
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
-      body: JSON.stringify({
-        sessionId: 'a0ffcb',
-        location: 'LiveRouteMapCard.tsx:sendTrackingChat:gate',
-        message: 'envio chat técnico',
-        data: {
-          hasDraft: !!t,
-          draftLen: t.length,
-          hasTaskId: !!taskId,
-          taskIdLen: taskId ? String(taskId).length : 0,
-          sending: trackingChatSending,
-          override: !!opts?.moderationOverrideAck,
-        },
-        timestamp: Date.now(),
-        hypothesisId: 'H6',
-        runId: 'run2',
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!t || !taskId || trackingChatSending) return;
     setTrackingChatSending(true);
     try {
@@ -1425,25 +1489,6 @@ export default function LiveRouteMapCard({
         userMessage?: string;
         canOverride?: boolean;
       };
-      // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
-        body: JSON.stringify({
-          sessionId: 'a0ffcb',
-          location: 'LiveRouteMapCard.tsx:sendTrackingChat:response',
-          message: 'resposta POST chat técnico',
-          data: {
-            status: r.status,
-            code: typeof j.code === 'string' ? j.code : null,
-            hasMessages: Array.isArray(j.messages),
-          },
-          timestamp: Date.now(),
-          hypothesisId: 'H7',
-          runId: 'run2',
-        }),
-      }).catch(() => {});
-      // #endregion
       if (r.status === 422 && j.code === 'CHAT_MODERATION') {
         if (Array.isArray(j.messages)) setTrackingChatMessages(mapServerChatMessages(j.messages));
         const um =
@@ -1761,21 +1806,6 @@ export default function LiveRouteMapCard({
     ) : null;
 
   const openTrackingChatFromMap = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
-      body: JSON.stringify({
-        sessionId: 'a0ffcb',
-        location: 'LiveRouteMapCard.tsx:openTrackingChatFromMap',
-        message: 'toque abrir chat',
-        data: { expanded, hasTaskId: !!taskId, taskIdLen: taskId ? String(taskId).length : 0, visible },
-        timestamp: Date.now(),
-        hypothesisId: 'H11',
-        runId: 'run3',
-      }),
-    }).catch(() => {});
-    // #endregion
     setTrackingChatOpen(true);
   };
 
@@ -1937,12 +1967,14 @@ export default function LiveRouteMapCard({
           style={StyleSheet.absoluteFillObject}
           initialRegion={{
             latitude: centerLat, longitude: centerLng,
-            latitudeDelta: 0.01, longitudeDelta: 0.01,
+            latitudeDelta: MAP_INITIAL_LAT_DELTA,
+            longitudeDelta: MAP_INITIAL_LNG_DELTA,
           }}
           mapPadding={
             followUser
               ? isLandscape
-                ? { top: 20, right: 56, bottom: 108, left: 56 }
+                ? /* Centro útil mais baixo: top maior + bottom um pouco menor — o marcador do técnico não fica colado ao topo em landscape. */
+                  { top: 64, right: 56, bottom: 76, left: 56 }
                 : { top: 100, right: 52, bottom: 248, left: 52 }
               : { top: 0, right: 0, bottom: 0, left: 0 }
           }
@@ -2004,7 +2036,7 @@ export default function LiveRouteMapCard({
                 geodesic
               />
             ))}
-          {coveredPath && coveredPath.length >= 2 && (
+          {showGpsTrail && coveredPath && coveredPath.length >= 2 && (
             <Polyline
               coordinates={coveredPath.map((c) => ({ latitude: c[0], longitude: c[1] }))}
               strokeColor="#3b82f6"
@@ -2025,7 +2057,7 @@ export default function LiveRouteMapCard({
                 title="Destino"
                 description="Toque para aproximar"
                 onPress={() =>
-                  focusOnLatLng(route[route.length - 1][0], route[route.length - 1][1], 17)
+                  focusOnLatLng(route[route.length - 1][0], route[route.length - 1][1], 20)
                 }
               >
                  <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
@@ -2075,12 +2107,12 @@ export default function LiveRouteMapCard({
               <Marker
                 coordinate={{ latitude: route[0][0], longitude: route[0][1] }}
                 title="Ponto A"
-                onPress={() => focusOnLatLng(route[0][0], route[0][1], 17)}
+                onPress={() => focusOnLatLng(route[0][0], route[0][1], 20)}
               />
               <Marker
                 coordinate={{ latitude: route[1][0], longitude: route[1][1] }}
                 title="Ponto B"
-                onPress={() => focusOnLatLng(route[1][0], route[1][1], 17)}
+                onPress={() => focusOnLatLng(route[1][0], route[1][1], 20)}
               />
             </>
           )}
@@ -2131,7 +2163,7 @@ export default function LiveRouteMapCard({
                    focusOnLatLng(
                      dynamicRoute[dynamicRoute.length - 1][0],
                      dynamicRoute[dynamicRoute.length - 1][1],
-                     17
+                     20
                    )
                  }
                >
@@ -2178,11 +2210,28 @@ export default function LiveRouteMapCard({
           style={[styles.floatingRightGroup, isLandscape && styles.floatingRightGroupLandscape]}
           collapsable={false}
         >
-          {(route?.length > 0 || targetLoc?.lat) && (
+          {!reimbursementMode && (route?.length > 0 || targetLoc?.lat) && (
             <TouchableOpacity style={styles.navBtn} onPress={openNavOptions}>
                <Ionicons name="navigate" size={24} color="#fff" />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[styles.recenterBtn, showGpsTrail && styles.followActiveBtn]}
+            onPress={() => setShowGpsTrail((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: showGpsTrail }}
+            accessibilityLabel={
+              showGpsTrail
+                ? 'Ocultar caminho percorrido no mapa'
+                : 'Mostrar caminho percorrido no mapa'
+            }
+          >
+            <Ionicons
+              name={showGpsTrail ? 'map' : 'map-outline'}
+              size={22}
+              color={showGpsTrail ? '#fff' : '#475569'}
+            />
+          </TouchableOpacity>
           {taskId ? (
             <TouchableOpacity
               style={styles.recenterBtn}
@@ -2214,7 +2263,7 @@ export default function LiveRouteMapCard({
           )}
         </View>
 
-        {/* Controles inferiores: coluna em pé; em landscape, faixa compacta centrada para não tapar o mapa */}
+        {/* Controles inferiores: Pausar + Finalizar em linha compacta (portrait e landscape); em landscape há chip de estado à esquerda. */}
         <View
           style={[
             styles.bottomControls,
@@ -2243,26 +2292,18 @@ export default function LiveRouteMapCard({
           ) : null}
 
           <TouchableOpacity
-            style={[
-              styles.pauseBtn,
-              isLandscape && styles.pauseBtnLandscape,
-              isPaused && { backgroundColor: '#10b981', borderColor: '#10b981' },
-            ]}
+            style={[styles.pauseBtn, isPaused && { backgroundColor: '#10b981', borderColor: '#10b981' }]}
             onPress={handlePauseResume}
           >
-            <Ionicons name={isPaused ? 'play' : 'pause'} size={18} color={isPaused ? '#fff' : '#475569'} />
-            <Text style={[styles.pauseText, isPaused && { color: '#fff' }]}>
+            <Ionicons name={isPaused ? 'play' : 'pause'} size={16} color={isPaused ? '#fff' : '#475569'} />
+            <Text style={[styles.pauseText, isPaused && { color: '#fff' }]} numberOfLines={1}>
               {isPaused ? 'Retomar Rota' : 'Pausar'}
             </Text>
           </TouchableOpacity>
 
           {onEndTransit ? (
             <TouchableOpacity
-              style={[
-                styles.endTransitBtn,
-                isLandscape && styles.endTransitBtnLandscape,
-                endTransitLoading && { opacity: 0.85 },
-              ]}
+              style={[styles.endTransitBtn, endTransitLoading && { opacity: 0.85 }]}
               disabled={endTransitLoading}
               onPress={() => {
                 if (endTransitLoading) return;
@@ -2272,17 +2313,17 @@ export default function LiveRouteMapCard({
               {endTransitLoading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Ionicons name="stop-circle" size={20} color="#fff" />
+                <Ionicons name="stop-circle" size={18} color="#fff" />
               )}
-              <Text style={[styles.endTransitText, isLandscape && styles.endTransitTextLandscape]}>
-                {endTransitLoading ? 'A obter localização…' : isLandscape ? 'Finalizar' : 'FINALIZAR DESLOCAMENTO'}
+              <Text style={styles.endTransitText} numberOfLines={1}>
+                {endTransitLoading ? 'A obter localização…' : 'Finalizar'}
               </Text>
             </TouchableOpacity>
           ) : null}
         </View>
 
-        {/* ──── Premium ETA Badge — always visible during transit ──── */}
-        {!isComplete && !isPaused && (
+        {/* ──── Premium ETA Badge — deslocamento operacional (não reembolso) ──── */}
+        {!reimbursementMode && !isComplete && !isPaused && (
           <EtaBadge
             etaMinutes={displayEtaMinutes ?? null}
             pct={pct}
@@ -2293,8 +2334,8 @@ export default function LiveRouteMapCard({
           />
         )}
 
-        {/* Deviation Banner Overlay */}
-        {isDeviation && !isPaused && (
+        {/* Deviation Banner Overlay — sem rota de referência no modo «apenas registo» */}
+        {isDeviation && !isPaused && !reimbursementMode && (
           <View style={[styles.deviationBanner, { top: isLandscape ? insets.top + 10 : 120 }]}>
             <Ionicons name="warning" size={18} color="#78350f" style={{ marginRight: 8 }} />
             <Text style={styles.deviationText}>
@@ -2407,62 +2448,54 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 20,
-    flexDirection: 'column',
-    gap: 12,
-  },
-  bottomControlsLandscape: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  /** Margens laterais um pouco menores em landscape (já havia chip + dois botões). */
+  bottomControlsLandscape: {
     left: 10,
     right: 10,
-    gap: 8,
-    flexWrap: 'wrap',
   },
   pauseBtn: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
-    gap: 8,
+    gap: 6,
   },
-  pauseBtnLandscape: {
-    minWidth: 118,
-    flexShrink: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  pauseText: { fontSize: 15, fontWeight: '700', color: '#475569' },
+  pauseText: { fontSize: 14, fontWeight: '700', color: '#475569' },
 
   endTransitBtn: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     backgroundColor: '#ea580c',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#ea580c',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
-    gap: 10,
+    gap: 8,
   },
-  endTransitBtnLandscape: {
-    flexShrink: 1,
-    maxWidth: 280,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  endTransitText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
-  endTransitTextLandscape: { fontSize: 14, letterSpacing: 0.3 },
+  endTransitText: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
 
   deviationBanner: {
     position: 'absolute',

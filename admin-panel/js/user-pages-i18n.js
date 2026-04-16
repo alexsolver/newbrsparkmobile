@@ -1056,8 +1056,8 @@ const M = {
 };
 M['es-ES'] = Object.assign({}, M['en-US'], USER_PAGES_ES_MERGE);
 
-/** Valores persistidos (JSON) — rótulos variam com o locale do painel */
-export const DOC_TYPE_ROWS = {
+/** Valores persistidos (JSON) — documentos de identificação / pessoais */
+export const DOC_TYPE_ROWS_PERSONAL = {
   'pt-BR': [
     ['CPF', 'CPF'],
     ['RG', 'RG'],
@@ -1086,6 +1086,55 @@ export const DOC_TYPE_ROWS = {
     ['Outro', 'Otro'],
   ],
 };
+
+/**
+ * Valores persistidos — certificações, saúde ocupacional, NRs (mesmos códigos em todos os locales).
+ * Rótulos traduzidos para o painel.
+ */
+export const DOC_TYPE_ROWS_PROFESSIONAL = {
+  'pt-BR': [
+    ['ASO', 'ASO (saúde ocupacional)'],
+    ['NR-06', 'NR-06 (EPI / integração)'],
+    ['NR-10', 'NR-10 (eletricidade)'],
+    ['NR-11', 'NR-11 (transporte / ergonomia)'],
+    ['NR-12', 'NR-12 (máquinas e equipamentos)'],
+    ['NR-33', 'NR-33 (espaço confinado)'],
+    ['NR-35', 'NR-35 (trabalho em altura)'],
+    ['Certificacao', 'Certificação / curso'],
+    ['RegistroProfissional', 'CREA / CRQ / registro profissional'],
+    ['Habilitacao', 'Habilitação / credencial'],
+    ['Outro', 'Outro'],
+  ],
+  'en-US': [
+    ['ASO', 'Occupational health certificate (ASO)'],
+    ['NR-06', 'NR-06 (PPE / safety integration)'],
+    ['NR-10', 'NR-10 (electrical safety)'],
+    ['NR-11', 'NR-11 (transport / ergonomics)'],
+    ['NR-12', 'NR-12 (machinery & equipment)'],
+    ['NR-33', 'NR-33 (confined space)'],
+    ['NR-35', 'NR-35 (work at height)'],
+    ['Certificacao', 'Certificate / training course'],
+    ['RegistroProfissional', 'Professional council registration (e.g. CREA)'],
+    ['Habilitacao', 'License / credential'],
+    ['Outro', 'Other'],
+  ],
+  'es-ES': [
+    ['ASO', 'ASO (salud ocupacional)'],
+    ['NR-06', 'NR-06 (EPI / integración)'],
+    ['NR-10', 'NR-10 (electricidad)'],
+    ['NR-11', 'NR-11 (transporte / ergonomía)'],
+    ['NR-12', 'NR-12 (máquinas y equipos)'],
+    ['NR-33', 'NR-33 (espacio confinado)'],
+    ['NR-35', 'NR-35 (trabajo en altura)'],
+    ['Certificacao', 'Certificación / curso'],
+    ['RegistroProfissional', 'Registro profesional (CREA / CRQ)'],
+    ['Habilitacao', 'Habilitación / credencial'],
+    ['Outro', 'Otro'],
+  ],
+};
+
+/** @deprecated Preferir `DOC_TYPE_ROWS_PERSONAL` — mantido por compatibilidade com imports antigos */
+export const DOC_TYPE_ROWS = DOC_TYPE_ROWS_PERSONAL;
 
 const DAYS_PT = [
   { key: 'mon', label: 'Segunda' },
@@ -1199,9 +1248,17 @@ export function applyAddressFieldLabelsForCountry(countryCode) {
   });
 }
 
-export function docTypesForLocale() {
+/** Linhas [valor, rótulo] para o select de tipo conforme o bloco (pessoal vs profissional). */
+export function getDocTypeRowsForLocale(kind) {
   const loc = getAdminUiLocale();
-  return (DOC_TYPE_ROWS[loc] || DOC_TYPE_ROWS['en-US'] || DOC_TYPE_ROWS['pt-BR']).map((x) => x[0]);
+  const table = kind === 'professional' ? DOC_TYPE_ROWS_PROFESSIONAL : DOC_TYPE_ROWS_PERSONAL;
+  return table[loc] || table['en-US'] || table['pt-BR'];
+}
+
+export function docTypesForLocale() {
+  const p = getDocTypeRowsForLocale('personal').map((x) => x[0]);
+  const r = getDocTypeRowsForLocale('professional').map((x) => x[0]);
+  return [...new Set([...p, ...r])];
 }
 
 export function weekdaysForLocale() {

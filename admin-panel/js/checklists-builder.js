@@ -2032,7 +2032,9 @@ function createNewFieldFromToolboxType(type, rawText) {
                       'Discordo totalmente\nDiscordo\nNeutro\nConcordo\nConcordo totalmente',
               }
             : {}),
-        ...(type === 'transit_start' ? { transitKeepScreenAwake: false } : {}),
+        ...(type === 'transit_start'
+            ? { transitKeepScreenAwake: false, transitPurpose: 'service' }
+            : {}),
     };
 }
 
@@ -3030,6 +3032,7 @@ function renderProperties() {
         </div>`;
     } else if (f.type === 'transit_start') {
         const keepAwake = f.transitKeepScreenAwake === true;
+        const reimb = f.transitPurpose === 'reimbursement';
         const trHelp = fbStr(
             'fb_prop_transit_keep_awake_help_html',
             null,
@@ -3047,6 +3050,13 @@ function renderProperties() {
             <div style="font-size:10px;color:#1e40af;line-height:1.45;">
                 ${trHelp}
             </div>
+        </div>
+        <div style="background:#fff7ed;border:1px solid #fdba74;padding:14px;border-radius:10px;margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+                <input type="checkbox" ${reimb ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', this.checked ? 'reimbursement' : 'service'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_lbl', null, 'Apenas registro de deslocamento durante a atividade'))}</span>
+            </label>
+            <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_help', null, 'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.'))}</div>
         </div>`;
     } else if (f.type === 'location_pick') {
         extraProps = `

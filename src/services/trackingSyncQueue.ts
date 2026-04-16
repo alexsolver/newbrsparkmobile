@@ -33,7 +33,7 @@ export async function enqueueTrackingSync(
       }
     }
     q.push({ taskId: id, action, enqueuedAt: Date.now() });
-    await AsyncStorage.setItem(KEY, JSON.stringify(q.slice(-100)));
+    await AsyncStorage.setItem(KEY, JSON.stringify(q));
     console.log(`[tracking-sync] enfileirado ${action} → OS ${id}`);
   } catch (e) {
     console.warn('[tracking-sync] enqueue:', e);

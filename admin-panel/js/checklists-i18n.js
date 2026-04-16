@@ -194,6 +194,9 @@ const M = {
     fb_prop_transit_keep_awake_lbl: 'Manter a tela sempre acesa até finalizar o deslocamento',
     fb_prop_transit_keep_awake_help_html:
       'O equipamento pode consumir mais bateria, mas tende a aumentar a precisão e a continuidade da coleta de GPS enquanto o deslocamento estiver em curso (mapa visível ou minimizado). A opção desliga automaticamente ao tocar em <strong>Finalizar deslocamento</strong>.',
+    fb_prop_transit_reimbursement_lbl: 'Apenas registro de deslocamento durante a atividade',
+    fb_prop_transit_reimbursement_help:
+      'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.',
 
     fb_prop_location_pick_title: 'Localização (GPS + mapa)',
     fb_prop_location_pick_help:
@@ -819,6 +822,9 @@ const M = {
     fb_prop_transit_keep_awake_lbl: 'Keep the screen on until travel ends',
     fb_prop_transit_keep_awake_help_html:
       'The device may use more battery, but GPS capture tends to be more accurate and continuous while travel is in progress (map visible or minimized). The option turns off automatically when tapping <strong>End travel</strong>.',
+    fb_prop_transit_reimbursement_lbl: 'Displacement log only during the activity',
+    fb_prop_transit_reimbursement_help:
+      'Records only the GPS track in the app. No ETA, no customer chat, and no public tracking page — add a second start/end pair after operational travel.',
 
     fb_prop_location_pick_title: 'Location (GPS + map)',
     fb_prop_location_pick_help:

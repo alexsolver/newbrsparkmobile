@@ -13,6 +13,7 @@
     "ios:dev": "expo run:ios",
     "prebuild": "expo prebuild --clean",
     "theme:export-css": "npx --yes tsx scripts/export-theme-css.ts",
+    "test:sync-regression": "npx --yes tsx scripts/test-sync-policy-regression.mjs",
     "i18n:check": "node scripts/i18n-validate.mjs",
     "i18n:sync-es": "node scripts/i18n-sync-es.mjs",
     "eas:build:android": "eas build --profile production --platform android",

@@ -88,7 +88,8 @@ async function resolveTemplateForOsSync(tenantId) {
 }
 
 /**
- * Cria instância PENDING após OS SYNCED (idempotente por execução + revisão).
+ * Cria instância PENDING após OS finalizada no app (COMPLETED/SYNCED),
+ * idempotente por execução + revisão.
  * @param {string} executionId
  * @returns {Promise<import('@prisma/client').EvaluationInstance | null>}
  */
@@ -97,7 +98,9 @@ async function onChecklistExecutionSynced(executionId) {
     where: { id: executionId },
     include: { template: true },
   });
-  if (!ex || String(ex.status).toUpperCase() !== 'SYNCED') return null;
+  if (!ex) return null;
+  const st = String(ex.status || '').toUpperCase();
+  if (st !== 'SYNCED' && st !== 'COMPLETED') return null;
 
   let tenantId = ex.template?.tenantId || null;
   const techUser = await prisma.user.findFirst({

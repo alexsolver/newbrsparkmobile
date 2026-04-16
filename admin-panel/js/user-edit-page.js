@@ -7,7 +7,7 @@ import {
   getAdminUiLocale,
   setAdminUiLocale,
   t,
-  DOC_TYPE_ROWS,
+  getDocTypeRowsForLocale,
   weekdaysForLocale,
   applyUserEditStaticPageI18n,
   applyAddressFieldLabelsForCountry,
@@ -65,15 +65,25 @@ function esc(s) {
 const NAV_CTX_KEY = 'brspark_user_edit_nav';
 const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
 
-function docTypeOptionsHtml(selectedType) {
-  const loc = getAdminUiLocale();
-  const rows = DOC_TYPE_ROWS[loc] || DOC_TYPE_ROWS['pt-BR'];
-  return rows
+function docKindFromTbodyId(tbodyId) {
+  return tbodyId && String(tbodyId).includes('docs-pro') ? 'professional' : 'personal';
+}
+
+function docTypeOptionsHtml(selectedType, kind) {
+  const rows = getDocTypeRowsForLocale(kind);
+  const sel = String(selectedType ?? '').trim();
+  const keys = new Set(rows.map(([v]) => v));
+  const orphan =
+    sel && !keys.has(sel)
+      ? `<option value="${esc(sel)}" selected>${esc(sel)}</option>`
+      : '';
+  const body = rows
     .map(
       ([val, lab]) =>
-        `<option value="${esc(val)}" ${(selectedType || '') === val ? 'selected' : ''}>${esc(lab)}</option>`
+        `<option value="${esc(val)}" ${sel === val ? 'selected' : ''}>${esc(lab)}</option>`
     )
     .join('');
+  return orphan + body;
 }
 
 function docValidityBadge(validFrom, validTo) {
@@ -326,10 +336,11 @@ function parseJsonSafe(v, fallback) {
 function renderDocRows(tbodyId, docs, locations, userId) {
   const tb = document.getElementById(tbodyId);
   if (!tb) return;
+  const kind = docKindFromTbodyId(tbodyId);
   const list = Array.isArray(docs) ? docs : [];
   const locOpts = getLocationMultiselectOptionsHtml(locations);
   tb.innerHTML = list.length
-    ? list.map((d) => docRowHtml(d, locOpts)).join('')
+    ? list.map((d) => docRowHtml(d, locOpts, kind)).join('')
     : `<tr class="doc-empty"><td colspan="9" style="text-align:center;color:var(--text3);padding:16px">${esc(t('ue_docEmpty'))}</td></tr>`;
   tb.querySelectorAll('.doc-del').forEach((btn) => {
     btn.onclick = () => {
@@ -345,13 +356,13 @@ function renderDocRows(tbodyId, docs, locations, userId) {
   bindDocTableDelegation(tbodyId, userId);
 }
 
-function docRowHtml(d, locOptsHtml) {
+function docRowHtml(d, locOptsHtml, kind = 'personal') {
   const id = d.id || rid();
   const locIds = Array.isArray(d.locationIds) ? d.locationIds : [];
   const locAttr = esc(locIds.join('|'));
   return `<tr data-doc-id="${esc(id)}">
     <td><input type="hidden" class="doc-id" value="${esc(id)}" />
-      <select class="form-control doc-type" style="padding:6px;font-size:12px">${docTypeOptionsHtml(d.docType)}</select></td>
+      <select class="form-control doc-type" style="padding:6px;font-size:12px">${docTypeOptionsHtml(d.docType, kind)}</select></td>
     <td><input class="form-control doc-idnum" style="padding:6px;font-size:12px" placeholder="${esc(t('ue_docPhNumber'))}" value="${esc(d.identifier || '')}" /></td>
     <td><input class="form-control doc-from" type="date" value="${esc((d.validFrom || '').slice(0, 10))}" /></td>
     <td><input class="form-control doc-to" type="date" value="${esc((d.validTo || '').slice(0, 10))}" /></td>
@@ -1378,7 +1389,7 @@ export async function bootUserEditPage() {
     const empty = tb.querySelector('.doc-empty');
     if (empty) empty.remove();
     const locOptsNew = getLocationMultiselectOptionsHtml(cachedLocations);
-    tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'CPF' }, locOptsNew));
+    tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'CPF' }, locOptsNew, 'personal'));
     syncDocLocsMultiselectSelections(tb.lastElementChild);
     const tr = tb.querySelector('tr:last-child');
     tr.querySelector('.doc-del').onclick = (e) => {
@@ -1394,7 +1405,7 @@ export async function bootUserEditPage() {
     const empty = tb.querySelector('.doc-empty');
     if (empty) empty.remove();
     const locOptsNewP = getLocationMultiselectOptionsHtml(cachedLocations);
-    tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'Outro' }, locOptsNewP));
+    tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'ASO' }, locOptsNewP, 'professional'));
     syncDocLocsMultiselectSelections(tb.lastElementChild);
     const tr = tb.querySelector('tr:last-child');
     tr.querySelector('.doc-del').onclick = (e) => {

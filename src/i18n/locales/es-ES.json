@@ -895,6 +895,8 @@
       "altSheetTitle": "Ordenar lista de OT",
       "receiptNewest": "Fecha de recepción (más recientes primero)",
       "receiptOldest": "Fecha de recepción (más antiguas primero)",
+      "completedNewest": "Fecha de fin real (más recientes primero)",
+      "completedOldest": "Fecha de fin real (más antiguas primero)",
       "actionView": "Ver",
       "actionSave": "Guardar",
       "routerSheetTitle": "Enrutador",

@@ -483,6 +483,18 @@ export class AuthService {
         /* ignore */
       }
     }
+    // Última tentativa de enviar filas (OS/checklist) antes de apagar — import dinâmico evita ciclo auth ↔ syncService.
+    if (existing?.email) {
+      try {
+        const { pushSyncQueue } = await import('./syncService');
+        await Promise.race([
+          pushSyncQueue(existing.email),
+          new Promise<void>((resolve) => setTimeout(resolve, 18_000)),
+        ]);
+      } catch {
+        /* ignore */
+      }
+    }
     await purgeAllBrSparkLocalCaches();
   }
 

@@ -71,7 +71,7 @@ async function readOutbox(): Promise<WorkTimeOutboxPunch[]> {
 
 async function writeOutbox(items: WorkTimeOutboxPunch[]): Promise<void> {
   if (items.length === 0) await AsyncStorage.removeItem(OUTBOX_KEY);
-  else await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(items.slice(-80)));
+  else await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(items));
 }
 
 async function deleteFaceFileIfAny(item: WorkTimeOutboxPunch): Promise<void> {

@@ -70,12 +70,20 @@ import {
 } from '../../src/services/syncService';
 import { patchCloudTaskById } from '../../src/lib/cloudTasksBuckets';
 import { taskRowIsRoutineTask } from '../../src/lib/routineTaskQueueUi';
+import {
+  appendUniqueStringToStoredArray,
+  updateStoredJsonArray,
+} from '../../src/lib/asyncStorageAtomic';
 import { cacheChecklistTemplateIfMissing } from '../../src/services/routineTaskService';
 import {
   peekPendingOpenExecutionFromPush,
   takePendingOpenExecutionFromPush,
 } from '../../src/lib/pushExecutionOpenIntent';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
+import {
+  effectiveProviderTaskStatus,
+  taskMetadataIndicatesRevisionVisit,
+} from '../../src/utils/providerTaskStatus';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 import MapView, { Marker, Callout, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -226,13 +234,7 @@ type ProviderLongPressSheetMode =
 
 const PROVIDER_LONGPRESS_SORT_ROWS: {
   mode: ProviderLongPressSheetMode;
-  i18nKey:
-    | 'receiptNewest'
-    | 'receiptOldest'
-    | 'createdNew'
-    | 'createdOld'
-    | 'dueSoon'
-    | 'dueLate';
+  i18nKey: ProviderSortSheetLabelKey;
   icon: string;
 }[] = [
   { mode: 'NEWEST', i18nKey: 'receiptNewest', icon: 'arrow-down-circle-outline' },
@@ -288,6 +290,27 @@ const PROVIDER_OS_SORT_CHIP_ICON_SIZE = 16;
 const PROVIDER_OS_SORT_CHIP_FONT_SIZE = 11;
 const PROVIDER_OS_SORT_CHIP_LINE_HEIGHT = Math.round(PROVIDER_OS_SORT_CHIP_FONT_SIZE * 1.22);
 const PROVIDER_OS_SORT_CHIP_ICON_MARGIN = 5;
+
+type ProviderSortSheetLabelKey =
+  | 'receiptNewest'
+  | 'receiptOldest'
+  | 'completedNewest'
+  | 'completedOldest'
+  | 'createdNew'
+  | 'createdOld'
+  | 'dueSoon'
+  | 'dueLate';
+
+function providerSortSheetLabelI18nKey(
+  key: ProviderSortSheetLabelKey,
+  tab: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
+): ProviderSortSheetLabelKey {
+  if (tab === 'COMPLETED') {
+    if (key === 'receiptNewest') return 'completedNewest';
+    if (key === 'receiptOldest') return 'completedOldest';
+  }
+  return key;
+}
 
 function isProviderLongPressSheetMode(s: string): s is ProviderLongPressSheetMode {
   return (
@@ -518,6 +541,28 @@ function providerTaskDeviceReceivedAtIso(t: any): string | null {
     if (v == null) continue;
     const s = String(v).trim();
     if (s) return s;
+  }
+  return null;
+}
+
+/** Data/hora de fim realizado da OS (payload, metadata ou cache local de concluídas). */
+function providerTaskCompletedAtIso(
+  t: any,
+  executedMap?: Record<string, any>,
+): string | null {
+  const top = t?.completedAt;
+  if (top != null && String(top).trim() !== '') return String(top).trim();
+  const meta = taskMetadataRecord(t);
+  const metaCompleted = meta.completedAt;
+  if (metaCompleted != null && String(metaCompleted).trim() !== '') {
+    return String(metaCompleted).trim();
+  }
+  const id = String(t?.id || '').trim();
+  if (id && executedMap && executedMap[id]) {
+    const exCompleted = executedMap[id]?.completedAt;
+    if (exCompleted != null && String(exCompleted).trim() !== '') {
+      return String(exCompleted).trim();
+    }
   }
   return null;
 }
@@ -1222,30 +1267,6 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
   );
 }
 
-function metaFlagTrue(meta: Record<string, unknown>, key: string): boolean {
-  const v = meta[key];
-  return v === true || v === 'true' || String(v ?? '').toLowerCase() === 'true';
-}
-
-/** Pausa de deslocamento (POST /api/tracking/pause) — alinhado a `isTrackingPaused` no backend. */
-function isDisplacementTrackingPausedMeta(meta: Record<string, unknown>): boolean {
-  const v = meta.trackingPaused;
-  if (v === false || v === 0 || v === 'false' || v === '0') return false;
-  if (v === true || v === 1) return true;
-  if (v === 'true' || v === '1') return true;
-  return false;
-}
-
-/**
- * Ciclo de revisão após reabertura no painel: `reopenForRevisionPending` só até RECEIVED/ACCEPTED/IN_PROGRESS;
- * `revisionVisitActive` mantém-se na visita; legado: `reopenCount > 0` em execuções ainda ativas.
- */
-function taskMetadataIndicatesRevisionVisit(t: any, meta: Record<string, unknown>): boolean {
-  if (metaFlagTrue(meta, 'reopenForRevisionPending') || metaFlagTrue(meta, 'revisionVisitActive')) return true;
-  const rc = Number(meta.reopenCount);
-  return Number.isFinite(rc) && rc > 0;
-}
-
 /** OS em visita de revisão (cor índigo) enquanto ativa — cartão concluído usa verde; ver badge abaixo. */
 function isProviderRevisionTask(t: any): boolean {
   const st = String(t?.status || '').toUpperCase();
@@ -1264,46 +1285,6 @@ function providerTaskShowsRevisionBadge(t: any): boolean {
   const lsr = Number(t?.lastSubmittedRevision);
   if (Number.isFinite(lsr) && lsr > 1) return true;
   return false;
-}
-
-const SERVER_COMPLETED_STATUSES = new Set([
-  'COMPLETED',
-  'SYNCED',
-  'DONE',
-  'CLOSED',
-  'FINISHED',
-  'COMPLETE',
-  'ARCHIVED',
-]);
-
-function effectiveProviderTaskStatus(
-  t: any,
-  completedIds: Set<string>,
-  inprogressIds: Set<string>,
-  acceptedIds: Set<string> = new Set()
-): string {
-  const raw = String(t.status || 'PENDING').toUpperCase();
-  if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
-  const meta = taskMetadataRecord(t);
-  const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
-  // Revisão reaberta no admin: PENDING/RECEIVED antes do cache "executada" (evita listar como finalizada).
-  if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
-    if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
-    return 'PENDING';
-  }
-  // Conclusão local/offline: `@brspark_executed_tasks` já tem o id, mas a agenda/cache ainda pode trazer IN_PROGRESS/ACCEPTED até sincronizar.
-  if (completedIds.has(String(t.id))) return 'COMPLETED';
-  const pausedByMeta =
-    meta.executionPaused === true ||
-    meta.executionPaused === 'true' ||
-    String(meta.executionPaused || '').toLowerCase() === 'true';
-  if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
-  if (inprogressIds.has(String(t.id))) return 'IN_PROGRESS';
-  if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
-  // Aceite (app / Kanban) sem execução iniciada: fica em «Pendentes» até `inprogressIds` ou IN_PROGRESS real no servidor.
-  if (raw === 'RECEIVED') return 'PENDING';
-  if (raw === 'ACCEPTED') return 'PENDING';
-  return raw === 'PENDING' || raw === '' ? 'PENDING' : raw;
 }
 
 function providerTabMatchesTask(
@@ -2010,7 +1991,7 @@ export default function DashboardScreen() {
          const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
          const now = Date.now();
          let updatedExecs = false;
-         const validExecs = [];
+         const validExecs: any[] = [];
          
          for (const ex of executedTasksRaw) {
              const item = typeof ex === 'string' ? { id: ex, completedAt: new Date().toISOString() } : ex;
@@ -2026,7 +2007,24 @@ export default function DashboardScreen() {
          }
          
          if (updatedExecs) {
-             await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(validExecs));
+             await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+               const merged = [...validExecs];
+               const seen = new Set(
+                 merged.map((ex) => String(typeof ex === 'string' ? ex : ex?.id || '').trim()).filter(Boolean)
+               );
+               for (const ex of current) {
+                 const item = typeof ex === 'string' ? { id: ex, completedAt: new Date().toISOString() } : ex;
+                 const id = String(item?.id || '').trim();
+                 if (!id || seen.has(id)) continue;
+                 const completedTs = new Date(item?.completedAt ?? 0).getTime();
+                 const age = Number.isFinite(completedTs) ? now - completedTs : 0;
+                 if (!Number.isFinite(completedTs) || age <= THIRTY_DAYS_MS) {
+                   merged.push(item);
+                   seen.add(id);
+                 }
+               }
+               return merged;
+             });
          }
          
          const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
@@ -2064,6 +2062,7 @@ export default function DashboardScreen() {
                      source: 'CHECKLIST',
                      category: 'TASK',
                      status: 'COMPLETED',
+                     completedAt: exData.completedAt,
                      title: exData.title || `OS Fechada (ID: ${key.substring(0,6)})`,
                      description: exData.description || 'Esta Ordem de Serviço foi concluída e arquivada pelo servidor central.',
                      startDate: exData.completedAt,
@@ -2117,7 +2116,12 @@ export default function DashboardScreen() {
               parseIsoToMs(executionCreatedIso) ||
               parseIsoToMs(ymdLocalNoonToIsoUtc(t.startDate)) ||
               0;
-            const __receivedSortMs = receivedMs > 0 ? receivedMs : osCreatedMs;
+            const completedMs =
+              eff === 'COMPLETED'
+                ? parseIsoToMs(providerTaskCompletedAtIso(t, executedMap))
+                : 0;
+            const __receivedSortMs =
+              completedMs > 0 ? completedMs : receivedMs > 0 ? receivedMs : osCreatedMs;
             const __osCreatedSortMs = osCreatedMs;
             const __dueSortMs = parseIsoToMs(providerTaskDueIsoForSort(t));
 
@@ -2358,7 +2362,8 @@ export default function DashboardScreen() {
         try {
           await pushSyncQueue(user.email);
           await pullTasks(user.email);
-          await loadData(false);
+          // Primeiro tick: sync completo (bens + filas) — após offline o `loadData(false)` pode deixar UI «vazia» se o cache local estiver inconsistente.
+          await loadData(i === 0);
         } catch (e) {
           console.warn('[Dashboard] sync pós-reconexão:', e);
         }
@@ -4299,6 +4304,7 @@ export default function DashboardScreen() {
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {(providerAltSortAnchor ? providerLongPressRowsForAnchor(providerAltSortAnchor) : []).map((row) => {
                 const selected = providerAltSortPicked === row.mode;
+                const labelI18nKey = providerSortSheetLabelI18nKey(row.i18nKey, providerTab);
                 return (
                   <TouchableOpacity
                     key={row.mode}
@@ -4318,7 +4324,7 @@ export default function DashboardScreen() {
                       color={selected ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
                     />
                     <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, fontWeight: '800', color: C.slate }}>
-                      {t(`home.providerSort.${row.i18nKey}`)}
+                      {t(`home.providerSort.${labelI18nKey}`)}
                     </Text>
                     {selected ? (
                       <Ionicons name="checkmark-circle" size={24} color={MODE_SEGMENT_COLORS.PROVIDER} />
@@ -4801,16 +4807,21 @@ export default function DashboardScreen() {
                                 return;
                               }
 
-                              const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
-                              let acceptedLocal: string[] = [];
+                              await appendUniqueStringToStoredArray('@brspark_accepted_tasks', String(selectedTask.id));
                               try {
-                                acceptedLocal = JSON.parse(accStr);
-                              } catch (e) {}
-                              if (!Array.isArray(acceptedLocal)) acceptedLocal = [];
-
-                              if (!acceptedLocal.includes(String(selectedTask.id))) {
-                                acceptedLocal.push(String(selectedTask.id));
-                                await AsyncStorage.setItem('@brspark_accepted_tasks', JSON.stringify(acceptedLocal));
+                                const acceptedTs = new Date().toISOString();
+                                await enqueueExecutionStatusPatch(String(selectedTask.id), {
+                                  status: 'ACCEPTED',
+                                  timestamp: acceptedTs,
+                                  metadata: { acceptedAt: acceptedTs },
+                                });
+                                await patchCloudTaskById(String(selectedTask.id), (row) => ({
+                                  ...row,
+                                  status: 'ACCEPTED',
+                                  metadata: { ...(row.metadata || {}), acceptedAt: acceptedTs },
+                                }));
+                              } catch {
+                                /* ignore */
                               }
 
                               setSelectedTask((prev: any) => ({ ...prev, isAccepted: true }));
@@ -4822,16 +4833,10 @@ export default function DashboardScreen() {
                                   text: 'Sim, Iniciar Agora',
                                   style: 'default',
                                   onPress: async () => {
-                                    const _ip = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-                                    let _ipArr: string[] = [];
-                                    try {
-                                      _ipArr = JSON.parse(_ip);
-                                    } catch (e) {}
-                                    if (!Array.isArray(_ipArr)) _ipArr = [];
-                                    if (!_ipArr.includes(String(selectedTask.id))) {
-                                      _ipArr.push(String(selectedTask.id));
-                                      await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(_ipArr));
-                                    }
+                                    await appendUniqueStringToStoredArray(
+                                      '@brspark_inprogress_tasks',
+                                      String(selectedTask.id)
+                                    );
                                     await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
                                     setInprogressIds((prev) => {
                                       const s = new Set(prev);
@@ -4874,16 +4879,10 @@ export default function DashboardScreen() {
                           Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
                           return;
                         }
-                        const _ip = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-                        let _ipArr: string[] = [];
-                        try {
-                          _ipArr = JSON.parse(_ip);
-                        } catch (e) {}
-                        if (!Array.isArray(_ipArr)) _ipArr = [];
-                        if (!_ipArr.includes(String(selectedTask.id))) {
-                          _ipArr.push(String(selectedTask.id));
-                          await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(_ipArr));
-                        }
+                        await appendUniqueStringToStoredArray(
+                          '@brspark_inprogress_tasks',
+                          String(selectedTask.id)
+                        );
                         await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
                         setInprogressIds((prev) => {
                           const s = new Set(prev);

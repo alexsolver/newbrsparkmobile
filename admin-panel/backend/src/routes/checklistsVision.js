@@ -142,7 +142,8 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
         if (!normalized.ok) {
           return res.status(502).json({ error: normalized.error });
         }
-        return res.json(normalized.payload);
+        const pl = normalized.payload;
+        return res.json(pl);
       } catch (e) {
         const name = e && e.name;
         const msg = e && e.message ? String(e.message) : String(e);
@@ -249,7 +250,8 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       });
     }
 
-    res.json(normalized.payload);
+    const pl2 = normalized.payload;
+    res.json(pl2);
   } catch (e) {
     const name = e && e.name;
     const msg = e && e.message ? String(e.message) : String(e);

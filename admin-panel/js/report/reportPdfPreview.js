@@ -564,6 +564,27 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
     if (ih) return ih;
   }
 
+  const guessedVision =
+    buildVisionChecklistReportHtml(val, 'vision_ai_analysis', esc) ||
+    buildVisionChecklistReportHtml(val, 'vision_checklist', esc);
+  if (guessedVision) return guessedVision;
+
+  /** Tipo errado no schema (ex.: órfão como `text`) mas valor é claramente foto com traços. */
+  if (fType !== 'vision_checklist' && fType !== 'vision_ai_analysis') {
+    const maybeAnnot = tryParseObject(val);
+    if (
+      maybeAnnot &&
+      typeof maybeAnnot === 'object' &&
+      !Array.isArray(maybeAnnot) &&
+      !isTransitPayload(maybeAnnot) &&
+      (Array.isArray(maybeAnnot.strokes) || Array.isArray(maybeAnnot.annotations)) &&
+      (typeof maybeAnnot.imageUri === 'string' || typeof maybeAnnot.uri === 'string')
+    ) {
+      const ih = buildImageAnnotationReportHtml(val, esc);
+      if (ih) return ih;
+    }
+  }
+
   if (fType === 'repeatable_matrix') {
     const rh = buildRepeatableMatrixReportHtml(val, f, esc);
     if (rh) return rh;

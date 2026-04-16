@@ -646,11 +646,12 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             data: updateData
         });
 
-        if (
-            statusNorm === 'SYNCED' &&
-            prevStatus !== 'SYNCED' &&
-            String(execution.status || '').toUpperCase() === 'SYNCED'
-        ) {
+        const nextStatus = String(execution.status || '').toUpperCase();
+        const enteredEvaluationTriggerStatus =
+            (statusNorm === 'SYNCED' || statusNorm === 'COMPLETED') &&
+            !['SYNCED', 'COMPLETED'].includes(prevStatus) &&
+            (nextStatus === 'SYNCED' || nextStatus === 'COMPLETED');
+        if (enteredEvaluationTriggerStatus) {
             const { onChecklistExecutionSynced } = require('../lib/evaluationTrigger');
             onChecklistExecutionSynced(execution.id).catch((e) =>
                 console.error('[evaluationTrigger] onChecklistExecutionSynced', e)
@@ -680,23 +681,24 @@ router.post('/executions', authUser, async (req, res) => {
         let clientRev = parseInt(String(metaIn.submissionRevision ?? req.body.submissionRevision ?? ''), 10);
         const completedAtD = completedAt ? new Date(completedAt) : new Date();
 
-        /* Biometria facial pendente: após upload da foto (URL), completar verify no servidor antes de gravar a revisão. */
+        /* Biometria facial pendente + visão IA pendente com URL já pública: completar no servidor antes de gravar a revisão. */
         if (responses && typeof responses === 'object' && !Array.isArray(responses) && req.user.tenantId && req.user.id) {
             const { cloneResponsesShallow, resolvePendingFacialAuditsOnSync } = require('../lib/facialRecognitionEngine');
-            let templateForFacial = finalTemplateId;
-            if (taskId && !templateForFacial) {
+            const { resolvePendingVisionAnalysisOnSync } = require('../lib/resolvePendingVisionOnSync');
+            let templateIdForMediaResolve = finalTemplateId;
+            if (taskId && !templateIdForMediaResolve) {
                 const exQuick = await prisma.checklistExecution.findUnique({
                     where: { id: taskId },
                     select: { templateId: true },
                 });
-                templateForFacial = exQuick?.templateId || null;
+                templateIdForMediaResolve = exQuick?.templateId || null;
             }
-            if (templateForFacial) {
+            if (templateIdForMediaResolve) {
                 responses = cloneResponsesShallow(responses);
                 try {
                     const n = await resolvePendingFacialAuditsOnSync(prisma, {
                         responses,
-                        templateId: templateForFacial,
+                        templateId: templateIdForMediaResolve,
                         tenantId: req.user.tenantId,
                         sessionUserId: req.user.id,
                     });
@@ -706,9 +708,21 @@ router.post('/executions', authUser, async (req, res) => {
                 } catch (fe) {
                     console.error('[checklists] resolvePendingFacialAuditsOnSync', fe);
                 }
+                try {
+                    const nVis = await resolvePendingVisionAnalysisOnSync(prisma, {
+                        responses,
+                        templateId: templateIdForMediaResolve,
+                        tenantId: req.user.tenantId,
+                    });
+                    if (nVis > 0) {
+                        console.log(`[checklists] Visão IA pendente completada no sync: ${nVis} campo(s)`);
+                    }
+                } catch (ve) {
+                    console.error('[checklists] resolvePendingVisionAnalysisOnSync', ve);
+                }
             }
         }
-        
+
         // If the task was dispatched from the cloud, the mobile app sends taskId. 
         // We update the existing PENDING execution instead of creating a new one!
         if (taskId) {
@@ -929,6 +943,18 @@ router.post('/executions', authUser, async (req, res) => {
         // Registrar sucesso no Cockpit!
         const payloadSize = JSON.stringify(req.body).length;
         recordSync(execution.ownerEmail || authEmail, true, payloadSize);
+
+        try {
+            const st = String(execution.status || '').toUpperCase();
+            if (st === 'COMPLETED' || st === 'SYNCED') {
+                const { onChecklistExecutionSynced } = require('../lib/evaluationTrigger');
+                onChecklistExecutionSynced(execution.id).catch((e) =>
+                    console.error('[evaluationTrigger] onChecklistExecutionSynced', e)
+                );
+            }
+        } catch (e) {
+            console.error('[evaluationTrigger] pós-submissão', e);
+        }
         
         res.json({
             success: true,

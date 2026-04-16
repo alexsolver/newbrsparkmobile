@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { findCloudTaskById } from '../lib/cloudTasksBuckets';
+import { updateStoredJsonArray } from '../lib/asyncStorageAtomic';
 import { fetchChecklistTemplateSchema } from './checklistTemplateSchema';
 import type { TechnicianFinanceKind } from '../types/technicianFinance';
 
@@ -209,19 +210,13 @@ async function persistTaskResponses(taskId: string, responses: Record<string, an
       /* ignore */
     }
   }
-  const obRaw = await AsyncStorage.getItem('@brspark_outbox');
-  let ob: any[] = [];
-  try {
-    ob = obRaw ? JSON.parse(obRaw) : [];
-  } catch {
-    ob = [];
-  }
-  if (!Array.isArray(ob)) ob = [];
-  const ix = ob.findIndex((o) => o && String(o.taskId) === String(taskId));
-  if (ix >= 0) {
-    ob[ix] = { ...ob[ix], responses };
-    await AsyncStorage.setItem('@brspark_outbox', JSON.stringify(ob));
-  }
+  await updateStoredJsonArray<any>('@brspark_outbox', (ob) => {
+    const ix = ob.findIndex((o) => o && String(o.taskId) === String(taskId));
+    if (ix < 0) return ob;
+    const next = [...ob];
+    next[ix] = { ...next[ix], responses };
+    return next;
+  });
 }
 
 /**

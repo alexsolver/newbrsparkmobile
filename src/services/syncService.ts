@@ -35,6 +35,10 @@ import { uploadFile } from './storageService';
 import { ensureTechFinanceAttachmentsUploaded } from './technicianFinanceAttachmentSync';
 import { pushTrackingSyncQueue } from './trackingSyncQueue';
 import { pushWorkTimePunchOutbox } from './workTimePunchOutbox';
+import {
+  metadataIndicatesAdminRevisionCycle,
+  shouldRemoveExecutedCacheForRemoteTask,
+} from './syncPolicy';
 import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
 import {
   loadFtCloudTasks,
@@ -43,12 +47,59 @@ import {
   saveRtCloudTasks,
   partitionFtRt,
 } from '../lib/cloudTasksBuckets';
+import {
+  updateStoredJsonArray,
+  withAsyncStorageKeyLock,
+} from '../lib/asyncStorageAtomic';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
 let isSyncing = false;
 
 const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
+const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
+
+function normalizeStoredId(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s || s === 'null' || s === 'undefined') return '';
+  return s;
+}
+
+function checklistOutboxTaskId(item: any): string {
+  return (
+    normalizeStoredId(item?.taskId) ||
+    normalizeStoredId(item?.executionId) ||
+    normalizeStoredId(item?.metadata?.executionId)
+  );
+}
+
+function checklistOutboxSubmissionId(item: any): string {
+  return normalizeStoredId(item?.metadata?.submissionId || item?.submissionId);
+}
+
+export function checklistOutboxIdentityKey(item: any): string {
+  const sub = checklistOutboxSubmissionId(item);
+  if (sub) return `sub:${sub}`;
+  const task = checklistOutboxTaskId(item);
+  if (task) return `task:${task}`;
+  const tpl =
+    normalizeStoredId(item?.templateId) || normalizeStoredId(item?.metadata?.templateId);
+  const started =
+    normalizeStoredId(item?.startedAt) ||
+    normalizeStoredId(item?.metadata?.startedAt) ||
+    normalizeStoredId(item?.responses?.__form_started_at);
+  const completed =
+    normalizeStoredId(item?.completedAt) ||
+    normalizeStoredId(item?.metadata?.completedAt) ||
+    normalizeStoredId(item?.responses?.__form_completed_at);
+  const owner =
+    normalizeStoredId(item?.ownerEmail) ||
+    normalizeStoredId(item?.metadata?.ownerEmail);
+  if (tpl || started || completed || owner) {
+    return `tpl:${tpl}|st:${started}|end:${completed}|own:${owner}`;
+  }
+  return `fallback:${JSON.stringify(item ?? {})}`;
+}
 
 /** Prefixo das cópias locais do corpo da execução (respostas) — OS concluídas só devem persistir após visualização e com TTL curto. */
 const EXECUTION_CACHE_PREFIX = '@brspark_execution_';
@@ -78,7 +129,7 @@ const TERMINAL_EXEC_CACHE_STATUSES = new Set([
  */
 export async function purgeExpiredCompletedExecutionCaches(): Promise<void> {
   try {
-    const outboxRaw = await AsyncStorage.getItem('@brspark_outbox');
+    const outboxRaw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
     let outbox: unknown[] = [];
     try {
       outbox = outboxRaw ? JSON.parse(outboxRaw) : [];
@@ -86,9 +137,7 @@ export async function purgeExpiredCompletedExecutionCaches(): Promise<void> {
       outbox = [];
     }
     if (!Array.isArray(outbox)) outbox = [];
-    const outboxTaskIds = new Set(
-      outbox.map((o: any) => (o?.taskId != null ? String(o.taskId) : '')).filter(Boolean)
-    );
+    const outboxTaskIds = new Set(outbox.map((o: any) => checklistOutboxTaskId(o)).filter(Boolean));
 
     const allKeys = await AsyncStorage.getAllKeys();
     const execKeys = allKeys.filter((k) => k.startsWith(EXECUTION_CACHE_PREFIX));
@@ -144,35 +193,66 @@ export async function enqueueExecutionStatusPatch(
     /* offline */
   }
   try {
-    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
-    let arr: unknown[] = [];
-    try {
-      arr = raw ? JSON.parse(raw) : [];
-    } catch {
-      arr = [];
-    }
-    if (!Array.isArray(arr)) arr = [];
-    arr.push({ taskId, body, queuedAt: Date.now() });
-    await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(arr));
+    await updateStoredJsonArray<{ taskId: string; body: ExecutionStatusPatchBody; queuedAt: number }>(
+      EXECUTION_STATUS_OUTBOX_KEY,
+      (arr) => [...arr, { taskId, body, queuedAt: Date.now() }]
+    );
   } catch (e) {
     console.warn('[SYNC] Falha ao enfileirar PATCH de estado da OS:', e);
   }
 }
 
+export async function clearExecutionStatusOutboxForTask(taskId: string): Promise<void> {
+  const id = String(taskId || '').trim();
+  if (!id) return;
+  try {
+    await updateStoredJsonArray<{ taskId?: string; body?: ExecutionStatusPatchBody; queuedAt?: number }>(
+      EXECUTION_STATUS_OUTBOX_KEY,
+      (arr) => arr.filter((item) => String(item?.taskId || '') !== id),
+      { removeWhenEmpty: true }
+    );
+  } catch (e) {
+    console.warn('[SYNC] clearExecutionStatusOutboxForTask:', e);
+  }
+}
+
+function executionStatusOutboxItemKey(item: {
+  taskId?: string;
+  body?: ExecutionStatusPatchBody;
+  queuedAt?: number;
+}): string {
+  const taskId = String(item?.taskId || '').trim();
+  const queuedAt = Number(item?.queuedAt) || 0;
+  const body = item?.body && typeof item.body === 'object' ? item.body : {};
+  return `${taskId}|${queuedAt}|${JSON.stringify(body)}`;
+}
+
 async function pushExecutionStatusOutbox(): Promise<void> {
   try {
-    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
-    if (!raw) return;
-    let arr: { taskId: string; body: ExecutionStatusPatchBody }[] = [];
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
-      return;
-    }
+    let arr: { taskId: string; body: ExecutionStatusPatchBody; queuedAt?: number }[] = [];
+    await withAsyncStorageKeyLock(EXECUTION_STATUS_OUTBOX_KEY, async () => {
+      const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+      if (!raw) {
+        arr = [];
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        arr = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        const backupKey = `${EXECUTION_STATUS_OUTBOX_KEY}_corrupt_${Date.now()}`;
+        try {
+          await AsyncStorage.setItem(backupKey, raw);
+          await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
+        } catch {
+          /* ignore */
+        }
+        arr = [];
+      }
+    });
     if (!Array.isArray(arr) || arr.length === 0) return;
 
-    const remaining: typeof arr = [];
+    const deliveredKeys = new Set<string>();
     for (const item of arr) {
       if (!item?.taskId || !item.body) continue;
       try {
@@ -181,19 +261,44 @@ async function pushExecutionStatusOutbox(): Promise<void> {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(item.body),
         });
-        if (!res.ok) remaining.push(item);
+        if (res.ok) {
+          deliveredKeys.add(executionStatusOutboxItemKey(item));
+        }
       } catch {
-        remaining.push(item);
+        /* mantém item na fila */
       }
     }
-    if (remaining.length === 0) {
-      await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
-    } else {
-      await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(remaining));
+    if (deliveredKeys.size > 0) {
+      await updateStoredJsonArray<{ taskId: string; body: ExecutionStatusPatchBody; queuedAt?: number }>(
+        EXECUTION_STATUS_OUTBOX_KEY,
+        (current) => current.filter((item) => !deliveredKeys.has(executionStatusOutboxItemKey(item))),
+        { removeWhenEmpty: true }
+      );
     }
   } catch (e) {
     console.warn('[SYNC] pushExecutionStatusOutbox:', e);
   }
+}
+
+async function getTaskIdsWithPendingChecklistOutbox(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  try {
+    const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
+    let outbox: unknown[] = [];
+    try {
+      outbox = raw ? JSON.parse(raw) : [];
+    } catch {
+      outbox = [];
+    }
+    if (!Array.isArray(outbox)) return ids;
+    for (const item of outbox) {
+      const id = checklistOutboxTaskId(item);
+      if (id) ids.add(id);
+    }
+  } catch {
+    /* ignore */
+  }
+  return ids;
 }
 
 export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
@@ -334,7 +439,8 @@ async function uploadOneLocalMediaField(
 
 /**
  * Visão IA / foto com anotações: URIs ficam dentro de objetos (`localUri`, `gridSlotUris`, `imageUri`),
- * não como string no topo — o upload plano não as captava e o relatório recebia só `file://`.
+ * ou dentro de uma **string JSON** (`JSON.stringify` no app) — o upload plano só via `file://` no topo
+ * e objetos já parseados; strings JSON com `imageUri` local eram ignoradas até o POST.
  */
 async function maybeUploadNestedChecklistFieldMedia(
   fieldKey: string,
@@ -418,6 +524,31 @@ async function uploadLocalMediaInFlatResponseRecord(
 
     const val = record[key];
 
+    // Foto com anotações / visão IA: o app grava `JSON.stringify({ imageUri, strokes, … })`.
+    // A string completa não é `file://…`, por isso o ramo de objeto aninhado nunca corria — o POST ia com URI local e o PDF acusa sempre «só no dispositivo».
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed) as unknown;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const updated = await maybeUploadNestedChecklistFieldMedia(
+              key,
+              parsed as Record<string, unknown>,
+              payload,
+            );
+            if (updated) {
+              record[key] = JSON.stringify(updated);
+              console.log(`[SYNC] Campo ${key} (JSON com mídia aninhada) atualizado para URL remota`);
+              continue;
+            }
+          }
+        } catch {
+          /* não é JSON — segue fluxo normal */
+        }
+      }
+    }
+
     if (typeof val === 'string' && isLocalMediaUri(val)) {
       try {
         const url = await uploadOneLocalMediaField(val, payload, key, '');
@@ -436,6 +567,28 @@ async function uploadLocalMediaInFlatResponseRecord(
       const next: unknown[] = [];
       for (let i = 0; i < val.length; i++) {
         const item = val[i];
+        if (typeof item === 'string') {
+          const it = item.trim();
+          if (it.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(it) as unknown;
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const updated = await maybeUploadNestedChecklistFieldMedia(
+                  `${key}_i${i}`,
+                  parsed as Record<string, unknown>,
+                  payload,
+                );
+                if (updated) {
+                  next.push(JSON.stringify(updated));
+                  anyChange = true;
+                  continue;
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
         if (typeof item === 'string' && isLocalMediaUri(item)) {
           try {
             const url = await uploadOneLocalMediaField(item, payload, key, `_i${i}`);
@@ -778,7 +931,7 @@ async function enrichFacialBiometricAddressesInOutbox(outbox: any[]): Promise<nu
 
 async function pushChecklistOutbox() {
   try {
-     const raw = await AsyncStorage.getItem('@brspark_outbox');
+     const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
      if (!raw) return;
      let outbox: any[] = [];
      try {
@@ -788,7 +941,7 @@ async function pushChecklistOutbox() {
        const backupKey = `@brspark_outbox_corrupt_${Date.now()}`;
        try {
          await AsyncStorage.setItem(backupKey, raw);
-         await AsyncStorage.removeItem('@brspark_outbox');
+         await AsyncStorage.removeItem(CHECKLIST_OUTBOX_KEY);
          console.error(
            '[SYNC] Outbox JSON inválido — cópia em',
            backupKey,
@@ -806,11 +959,24 @@ async function pushChecklistOutbox() {
      const gpsAddrFilled = await enrichPendingGpsDerivedAddressesInOutbox(outbox);
      const facialAddrFilled = await enrichFacialBiometricAddressesInOutbox(outbox);
      if (gpsAddrFilled > 0 || facialAddrFilled > 0) {
-       await AsyncStorage.setItem('@brspark_outbox', JSON.stringify(outbox));
+       await updateStoredJsonArray<any>(
+         CHECKLIST_OUTBOX_KEY,
+         (current) => {
+           const byIdentity = new Map<string, any>();
+           for (const item of current) {
+             byIdentity.set(checklistOutboxIdentityKey(item), item);
+           }
+           for (const item of outbox) {
+             byIdentity.set(checklistOutboxIdentityKey(item), item);
+           }
+           return [...byIdentity.values()];
+         },
+       );
        for (const p of outbox) {
-         if (p?.taskId) {
+         const tid = checklistOutboxTaskId(p);
+         if (tid) {
            try {
-             await AsyncStorage.setItem(`@brspark_execution_${p.taskId}`, JSON.stringify(p));
+             await AsyncStorage.setItem(`@brspark_execution_${tid}`, JSON.stringify(p));
            } catch {
              /* ignore */
            }
@@ -828,7 +994,7 @@ async function pushChecklistOutbox() {
        }
      }
 
-     const syncedIds: any[] = [];
+     const syncedIdentityKeys = new Set<string>();
      for (const payload of outbox) {
          try {
              await uploadLocalMediaInChecklistPayload(payload);
@@ -840,10 +1006,11 @@ async function pushChecklistOutbox() {
              });
              
              if (res.ok || res.status === 409) { // 409 se já foi recebido antes
-                 syncedIds.push(payload.taskId || payload.templateId);
+                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
                  // Delete the heavy local payload since it's now archived in the cloud
-                 if (payload.taskId) {
-                     await AsyncStorage.removeItem(`@brspark_execution_${payload.taskId}`);
+                 const tid = checklistOutboxTaskId(payload);
+                 if (tid) {
+                     await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
                  }
              } else {
                  console.warn(`[SYNC] Outbox falhou: ${res.status}`);
@@ -854,10 +1021,16 @@ async function pushChecklistOutbox() {
          }
      }
      
-     if (syncedIds.length > 0) {
-         const newOutbox = outbox.filter((item: any) => !syncedIds.includes(item.taskId || item.templateId));
-         await AsyncStorage.setItem('@brspark_outbox', JSON.stringify(newOutbox));
-         console.log(`[SYNC] ✅ ${syncedIds.length} tarefas sincronizadas (concluídas). Faltam: ${newOutbox.length}`);
+     if (syncedIdentityKeys.size > 0) {
+         const next = await updateStoredJsonArray<any>(
+           CHECKLIST_OUTBOX_KEY,
+           (current) =>
+             current.filter((item) => !syncedIdentityKeys.has(checklistOutboxIdentityKey(item))),
+           { removeWhenEmpty: true }
+         );
+         console.log(
+           `[SYNC] ✅ ${syncedIdentityKeys.size} tarefas sincronizadas (concluídas). Faltam: ${next.length}`
+         );
      }
   } catch (e) {
      console.warn('[SYNC] Erro critico lendo outbox', e);
@@ -1213,12 +1386,6 @@ function remoteHasRevisionVisitActive(rMeta: Record<string, unknown>): boolean {
   );
 }
 
-function taskMetadataIndicatesAdminRevisionCycle(m: Record<string, unknown>): boolean {
-  if (remoteHasReopenRevisionPending(m) || remoteHasRevisionVisitActive(m)) return true;
-  const rc = Number(m.reopenCount);
-  return Number.isFinite(rc) && rc > 0;
-}
-
 /**
  * O servidor em PENDING (nova despacho ou reabertura) é a verdade — não deixar PATCH antigo
  * IN_PROGRESS/PAUSED na outbox sobrepor o estado ao fazer pull (senão o cartão some da aba Pendentes).
@@ -1231,22 +1398,23 @@ async function stripExecutionStatusOutboxForPendingServerTasks(remoteTasks: any[
   }
   if (pendingIds.size === 0) return;
   try {
-    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
-    if (!raw) return;
-    let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!Array.isArray(arr) || arr.length === 0) return;
-    const next = arr.filter((item) => item?.taskId == null || !pendingIds.has(String(item.taskId)));
-    if (next.length === arr.length) return;
-    if (next.length === 0) await AsyncStorage.removeItem(EXECUTION_STATUS_OUTBOX_KEY);
-    else await AsyncStorage.setItem(EXECUTION_STATUS_OUTBOX_KEY, JSON.stringify(next));
-    console.log(
-      `[pullTasks] Outbox de estado da execução limpa para ${arr.length - next.length} OS(s) em PENDING no servidor`
+    let removed = 0;
+    await updateStoredJsonArray<{ taskId?: string; body?: ExecutionStatusPatchBody }>(
+      EXECUTION_STATUS_OUTBOX_KEY,
+      (arr) => {
+        const next = arr.filter(
+          (item) => item?.taskId == null || !pendingIds.has(String(item.taskId))
+        );
+        removed = arr.length - next.length;
+        return next;
+      },
+      { removeWhenEmpty: true }
     );
+    if (removed > 0) {
+      console.log(
+        `[pullTasks] Outbox de estado da execução limpa para ${removed} OS(s) em PENDING no servidor`
+      );
+    }
   } catch (e) {
     console.warn('[pullTasks] stripExecutionStatusOutboxForPendingServerTasks:', e);
   }
@@ -1258,26 +1426,20 @@ async function stripInProgressLocalForRevisionPendingTasks(remoteTasks: any[]): 
   for (const t of remoteTasks) {
     const st = String(t?.status || '').toUpperCase();
     if (st !== 'PENDING' && st !== 'RECEIVED') continue;
-    const m = parseTaskMetadata(t?.metadata);
-    if (!taskMetadataIndicatesAdminRevisionCycle(m)) continue;
+    if (!metadataIndicatesAdminRevisionCycle(t?.metadata)) continue;
     if (t?.id != null) ids.add(String(t.id));
   }
   if (ids.size === 0) return;
   try {
-    const raw = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
-    let arr: string[] = [];
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      arr = [];
+    let removed = 0;
+    await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (arr) => {
+      const next = arr.filter((id) => !ids.has(String(id)));
+      removed = arr.length - next.length;
+      return next;
+    });
+    if (removed > 0) {
+      console.log(`[pullTasks] @brspark_inprogress_tasks: removidos ${removed} id(s) de ciclo de revisão`);
     }
-    if (!Array.isArray(arr) || arr.length === 0) return;
-    const next = arr.filter((id) => !ids.has(String(id)));
-    if (next.length === arr.length) return;
-    await AsyncStorage.setItem('@brspark_inprogress_tasks', JSON.stringify(next));
-    console.log(
-      `[pullTasks] @brspark_inprogress_tasks: removidos ${arr.length - next.length} id(s) de ciclo de revisão`
-    );
   } catch (e) {
     console.warn('[pullTasks] stripInProgressLocalForRevisionPendingTasks:', e);
   }
@@ -1386,6 +1548,7 @@ function mergeRemoteCloudTaskWithPrevious(remote: any, prev: any | undefined): a
 /** PATCH de execução ainda na fila (offline ou falha): deve vencer sobre o GET /tasks até sincronizar. */
 export async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise<any[]> {
   try {
+    const pendingChecklistOutboxTaskIds = await getTaskIdsWithPendingChecklistOutbox();
     const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
     let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
     try {
@@ -1407,6 +1570,9 @@ export async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise
     return tasks.map((t) => {
       const body = lastBodyByTask.get(String(t.id));
       if (!body) return t;
+      if (pendingChecklistOutboxTaskIds.has(String(t.id))) return t;
+      const currentSt = String(t?.status || '').toUpperCase();
+      if (TERMINAL_EXEC_CACHE_STATUSES.has(currentSt)) return t;
       const st = String(body.status || '').toUpperCase();
       if (st !== 'PAUSED' && st !== 'IN_PROGRESS') return t;
       const m = parseTaskMetadata(t.metadata);
@@ -1435,6 +1601,7 @@ export async function overlayExecutionStatusOutboxOnTasks(tasks: any[]): Promise
  */
 export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<string[]> {
   try {
+    const pendingChecklistOutboxTaskIds = await getTaskIdsWithPendingChecklistOutbox();
     const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
     let arr: { taskId?: string; body?: ExecutionStatusPatchBody }[] = [];
     try {
@@ -1452,6 +1619,7 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
     }
     const ids: string[] = [];
     for (const [id, st] of lastStatusByTask) {
+      if (pendingChecklistOutboxTaskIds.has(id)) continue;
       if (st === 'IN_PROGRESS' || st === 'PAUSED') ids.push(id);
     }
     return ids;
@@ -1470,7 +1638,7 @@ export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<strin
   const ids = new Set<string>();
 
   try {
-    const outboxRaw = await AsyncStorage.getItem('@brspark_outbox');
+    const outboxRaw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
     let outbox: unknown[] = [];
     try {
       outbox = outboxRaw ? JSON.parse(outboxRaw) : [];
@@ -1479,8 +1647,8 @@ export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<strin
     }
     if (Array.isArray(outbox)) {
       for (const o of outbox) {
-        const tid = (o as { taskId?: unknown })?.taskId;
-        if (tid != null && String(tid).trim()) ids.add(String(tid));
+        const tid = checklistOutboxTaskId(o);
+        if (tid) ids.add(tid);
       }
     }
   } catch (e) {
@@ -1507,8 +1675,6 @@ export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<strin
   return ids;
 }
 
-const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
-
 /**
  * OS reaberta para revisão: o mesmo id pode ainda estar em "aceitos" do ciclo anterior.
  * Limpa só accepted_tasks para voltar a exigir "Aceitar".
@@ -1532,51 +1698,47 @@ async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<v
   }
   if (idSet.size === 0) return;
   try {
-    const accRaw = await AsyncStorage.getItem('@brspark_accepted_tasks');
-    let acc: string[] = [];
-    try {
-      acc = accRaw ? JSON.parse(accRaw) : [];
-    } catch {
-      acc = [];
-    }
-    if (!Array.isArray(acc)) acc = [];
-    const accNext = acc.filter((id) => !idSet.has(String(id)));
-    if (accNext.length !== acc.length) {
-      const removed = acc.filter((id) => idSet.has(String(id)));
-      await AsyncStorage.setItem('@brspark_accepted_tasks', JSON.stringify(accNext));
-      console.log(`[pullTasks] revisão: removidos de accepted_tasks: ${removed.join(', ')}`);
+    let removedIds: string[] = [];
+    await updateStoredJsonArray<string>('@brspark_accepted_tasks', (acc) => {
+      removedIds = acc.filter((id) => idSet.has(String(id)));
+      return acc.filter((id) => !idSet.has(String(id)));
+    });
+    if (removedIds.length > 0) {
+      console.log(`[pullTasks] revisão: removidos de accepted_tasks: ${removedIds.join(', ')}`);
     }
   } catch {
     /* ignore */
   }
 }
 
-/** Admin reabriu a OS: tirar o id de @brspark_executed_tasks para o cartão e o checklist voltarem a editáveis. */
+/**
+ * Admin reabriu a OS: tirar o id de @brspark_executed_tasks para o cartão e o checklist voltarem a editáveis.
+ *
+ * Importante: não limpar só porque o servidor ainda devolveu estado ativo no "tick" seguinte ao push da conclusão;
+ * sem sinal explícito de revisão, isso causa efeito "vai para Em andamento e depois volta para Concluídas".
+ */
 async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]): Promise<void> {
   if (!Array.isArray(remoteTasks) || remoteTasks.length === 0) return;
+  const pendingChecklistOutboxTaskIds = await getTaskIdsWithPendingChecklistOutbox();
   const activeIds = new Set<string>();
   for (const t of remoteTasks) {
-    const st = String(t?.status || '').toUpperCase();
-    if (ACTIVE_TASK_STATUSES.has(st) && t?.id != null) activeIds.add(String(t.id));
+    if (!shouldRemoveExecutedCacheForRemoteTask(t, pendingChecklistOutboxTaskIds)) continue;
+    activeIds.add(String(t.id));
   }
   if (activeIds.size === 0) return;
   try {
-    const raw = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
-    let arr: any[] = [];
-    try {
-      arr = raw ? JSON.parse(raw) : [];
-    } catch {
-      return;
-    }
-    if (!Array.isArray(arr) || arr.length === 0) return;
-    const next = arr.filter((e) => {
-      const id = typeof e === 'string' ? e : e?.id;
-      if (id == null) return true;
-      return !activeIds.has(String(id));
+    let removed = 0;
+    await updateStoredJsonArray<any>('@brspark_executed_tasks', (arr) => {
+      const next = arr.filter((e) => {
+        const id = typeof e === 'string' ? e : e?.id;
+        if (id == null) return true;
+        return !activeIds.has(String(id));
+      });
+      removed = arr.length - next.length;
+      return next;
     });
-    if (next.length !== arr.length) {
-      await AsyncStorage.setItem('@brspark_executed_tasks', JSON.stringify(next));
-      console.log(`[pullTasks] Cache executed_tasks limpo para ${arr.length - next.length} OS(s) ativas no servidor`);
+    if (removed > 0) {
+      console.log(`[pullTasks] Cache executed_tasks limpo para ${removed} OS(s) ativas no servidor`);
     }
   } catch {
     /* ignore */
@@ -1682,11 +1844,12 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
           (t: any) => t.status === 'PENDING' && !t.metadata?.receivedAt,
         );
         if (unreceived.length > 0) {
-            Promise.all(unreceived.map((t: any) => apiFetch(`/api/checklists/executions/${t.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'RECEIVED', timestamp: new Date().toISOString() })
-            }))).catch(() => {});
+            const recvTs = new Date().toISOString();
+            Promise.all(
+              unreceived.map((t: any) =>
+                enqueueExecutionStatusPatch(String(t.id), { status: 'RECEIVED', timestamp: recvTs })
+              )
+            ).catch(() => {});
         }
 
         // Igual ao chat: aviso local quando a sync traz OS novas (push remoto do painel é independente).

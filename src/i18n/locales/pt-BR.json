@@ -895,6 +895,8 @@
       "altSheetTitle": "Ordenar lista de OS",
       "receiptNewest": "Data de recebimento (mais recentes primeiro)",
       "receiptOldest": "Data de recebimento (mais antigas primeiro)",
+      "completedNewest": "Data de fim realizado (mais recentes primeiro)",
+      "completedOldest": "Data de fim realizado (mais antigas primeiro)",
       "actionView": "Ver",
       "actionSave": "Salvar",
       "routerSheetTitle": "Roteirizador",

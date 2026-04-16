@@ -365,6 +365,21 @@
         print-color-adjust: exact !important;
         max-width: none !important;
       }
+      /* Foto com anotações: manter stack relativo para o SVG seguir exatamente a imagem no PDF. */
+      #print-report .pdf-image-annot-stack {
+        position: relative !important;
+        display: inline-block !important;
+        line-height: 0 !important;
+      }
+      #print-report .pdf-image-annot-svg {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
       @page { size: A4; margin: 0.8cm; }
     }
     #print-report {
@@ -3601,6 +3616,10 @@ function buildReportTab(t) {
         ? fieldTypeOrField
         : fieldTypeOrField?.type;
     if (fieldDef && !fieldType) fieldType = fieldDef.type;
+    fieldType = String(fieldType || '')
+      .trim()
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase();
     if (!fieldType) {
       const guessImg = buildImageAnnotationReportHtml(val, escHtml);
       if (guessImg) return guessImg;
@@ -3823,6 +3842,10 @@ function buildReportTab(t) {
       if (vh) return vh;
       return '<em style="color:var(--text3)">(sem dados de visão IA)</em>';
     }
+    const guessVis =
+      buildVisionChecklistReportHtml(val, 'vision_ai_analysis', escHtml) ||
+      buildVisionChecklistReportHtml(val, 'vision_checklist', escHtml);
+    if (guessVis) return guessVis;
     const str = String(val);
     if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
@@ -5105,9 +5128,13 @@ window.printReport = async function() {
         fieldTimeIsoPdf = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
       }
       if (!fieldTimeIsoPdf) fieldTimeIsoPdf = responses[`__time_${id}`];
+      const fieldTypeNorm = String(fieldDef && fieldDef.type ? fieldDef.type : '')
+        .trim()
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
       if (fieldDef && fieldDef.id && !isFieldVisible(cfg, fieldDef.id, fieldDef.type)) return;
       const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
-      if (fieldDef && pTypes.includes(fieldDef.type) && !mod.photoGallery) return;
+      if (fieldDef && pTypes.includes(fieldTypeNorm) && !mod.photoGallery) return;
       const rawEmptyCheck = row && typeof row === 'object' ? row[id] : responses[id];
       if (
         cfg.hideEmptyFields &&
@@ -5319,7 +5346,26 @@ window.printReport = async function() {
               })
               .join('');
           }
+      } else if (fieldDef && fieldTypeNorm === 'image_annotation') {
+          const ih = buildImageAnnotationReportHtml(val, escPdf);
+          displayVal = ih || '<span style="color:#94a3b8;font-style:italic">Sem foto anotada</span>';
+      } else if (
+        fieldDef &&
+        (fieldTypeNorm === 'vision_checklist' || fieldTypeNorm === 'vision_ai_analysis')
+      ) {
+          const vh = buildVisionChecklistReportHtml(val, fieldTypeNorm, escPdf);
+          displayVal = vh || '<span style="color:#94a3b8;font-style:italic">Sem dados de visão IA</span>';
       } else {
+          const guessAnnotation = buildImageAnnotationReportHtml(val, escPdf);
+          if (guessAnnotation) {
+              displayVal = guessAnnotation;
+          } else {
+          const guessVision =
+            buildVisionChecklistReportHtml(val, 'vision_ai_analysis', escPdf) ||
+            buildVisionChecklistReportHtml(val, 'vision_checklist', escPdf);
+          if (guessVision) {
+              displayVal = guessVision;
+          } else {
           const isSig = typeof val === 'string' && rawVal.startsWith('SIG_V1|');
           const photoUris = (function () {
             const ok = (s) =>
@@ -5514,6 +5560,8 @@ window.printReport = async function() {
               displayVal = `<span class="pdf-pill" style="background:${th.pillYesBg}">${escPdf(val)}</span>`;
           } else if (typeof val === 'object' && val !== null) {
               displayVal = `<pre style="font-family:monospace;font-size:10px;white-space:pre-wrap">${JSON.stringify(val)}</pre>`;
+          }
+          }
           }
       }
       

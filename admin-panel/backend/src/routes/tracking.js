@@ -608,24 +608,6 @@ router.post('/resume/:taskId', authUser, async (req, res) => {
 
 // ─── Chat (cliente via token público / técnico via JWT) — mensagens em metadata ──
 
-// #region agent log
-/** Debug session a0ffcb — não registar tokens nem texto de mensagens. */
-function agentDebugLog(location, message, data, hypothesisId) {
-  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a0ffcb' },
-    body: JSON.stringify({
-      sessionId: 'a0ffcb',
-      location,
-      message,
-      data: data || {},
-      timestamp: Date.now(),
-      hypothesisId: hypothesisId || 'H0',
-    }),
-  }).catch(() => {});
-}
-// #endregion
-
 function setTrackingChatCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
@@ -648,51 +630,25 @@ router.options('/:token/chat', (_req, res) => {
 router.get('/task/:taskId/chat', authUser, async (req, res) => {
   try {
     const { taskId } = req.params;
-    agentDebugLog(
-      'tracking.js:GET_task_chat:enter',
-      'tech GET chat',
-      { taskIdLen: String(taskId || '').length, hasBearer: !!(req.headers.authorization || '').startsWith('Bearer ') },
-      'H3'
-    );
     const exec = await prisma.checklistExecution.findUnique({
       where: { id: taskId },
       select: { id: true, ownerEmail: true, metadata: true },
     });
     if (!exec) {
-      agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 404, reason: 'no_exec' }, 'H1');
       return res.status(404).json({ error: 'OS não encontrada' });
     }
     if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
-      agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 403, reason: 'owner_mismatch' }, 'H3');
       return res.status(403).json({ error: 'Sem permissão para esta OS.' });
     }
     const meta = cloneExecMetadata(exec.metadata);
     if (!trackingChatAllowed(meta)) {
-      agentDebugLog(
-        'tracking.js:GET_task_chat',
-        'exit',
-        {
-          status: 400,
-          reason: 'chat_not_allowed',
-          hasTrackingToken: !!meta.trackingToken,
-          chatExpired: isTrackingChatExpired(meta),
-        },
-        'H2'
-      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
     const baseMsgs = chatMessagesForApiResponse(meta);
     const locTech = await resolveTrackingLocaleFromRequest(req, 'tech');
     const messages = await applyTrackingDisplayTranslations(exec.id, baseMsgs, 'tech', locTech);
-    agentDebugLog(
-      'tracking.js:GET_task_chat',
-      'exit',
-      { status: 200, messageCount: Array.isArray(messages) ? messages.length : -1 },
-      'H1'
-    );
     res.json({ messages });
   } catch (err) {
-    agentDebugLog('tracking.js:GET_task_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat GET (task) error:', err);
     res.status(500).json({ error: err.message });
   }
@@ -700,35 +656,12 @@ router.get('/task/:taskId/chat', authUser, async (req, res) => {
 
 router.post(
   '/task/:taskId/chat',
-  (req, res, next) => {
-    agentDebugLog(
-      'tracking.js:POST_task_chat:preauth',
-      'POST antes de authUser',
-      {
-        taskIdLen: String(req.params?.taskId || '').length,
-        hasBearer: !!(req.headers.authorization || '').startsWith('Bearer '),
-      },
-      'H9'
-    );
-    next();
-  },
   authUser,
   async (req, res) => {
   try {
     const { taskId } = req.params;
     const textIn = readChatTextFromBody(req);
-    agentDebugLog(
-      'tracking.js:POST_task_chat:enter',
-      'tech POST chat',
-      {
-        taskIdLen: String(taskId || '').length,
-        bodyLen: textIn ? String(textIn).length : 0,
-        hasBearer: !!(req.headers.authorization || '').startsWith('Bearer '),
-      },
-      'H3'
-    );
     if (!textIn) {
-      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 400, reason: 'empty_body' }, 'H5');
       return res.status(400).json({ error: 'Mensagem vazia.' });
     }
 
@@ -742,26 +675,13 @@ router.post(
       },
     });
     if (!exec) {
-      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 404, reason: 'no_exec' }, 'H1');
       return res.status(404).json({ error: 'OS não encontrada' });
     }
     if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
-      agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 403, reason: 'owner_mismatch' }, 'H3');
       return res.status(403).json({ error: 'Sem permissão para esta OS.' });
     }
     const meta = cloneExecMetadata(exec.metadata);
     if (!trackingChatAllowed(meta)) {
-      agentDebugLog(
-        'tracking.js:POST_task_chat',
-        'exit',
-        {
-          status: 400,
-          reason: 'chat_not_allowed',
-          hasTrackingToken: !!meta.trackingToken,
-          chatExpired: isTrackingChatExpired(meta),
-        },
-        'H2'
-      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
 
@@ -774,38 +694,8 @@ router.post(
       if (u?.name && String(u.name).trim()) techSenderLabel = String(u.name).trim().slice(0, 80);
     } catch (_) {}
 
-    const prevSend = res.send;
-    const prevJson = res.json;
-    let postTaskOutcome = /** @type {{ status?: number, code?: string, hasMessagesArray?: boolean } | null} */ (null);
-    res.json = function patchedJson(body) {
-      try {
-        const st = res.statusCode || 200;
-        postTaskOutcome = {
-          status: st,
-          code: body && typeof body === 'object' ? body.code : undefined,
-          hasMessagesArray: Array.isArray(body && body.messages),
-        };
-      } catch (_) {}
-      return prevJson.call(this, body);
-    };
-    res.send = function patchedSend(body) {
-      postTaskOutcome = { status: res.statusCode || 500 };
-      return prevSend.call(this, body);
-    };
-    try {
-      await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'tech', techSenderLabel });
-    } finally {
-      res.json = prevJson;
-      res.send = prevSend;
-    }
-    agentDebugLog(
-      'tracking.js:POST_task_chat',
-      'exit_after_moderation',
-      postTaskOutcome || { status: res.statusCode },
-      'H5'
-    );
+    await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'tech', techSenderLabel });
   } catch (err) {
-    agentDebugLog('tracking.js:POST_task_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat POST (task) error:', err);
     res.status(500).json({ error: err.message });
   }
@@ -815,48 +705,23 @@ router.post(
 router.get('/:token/chat', async (req, res) => {
   try {
     const { token } = req.params;
-    agentDebugLog(
-      'tracking.js:GET_token_chat:enter',
-      'client GET chat',
-      { tokenLen: String(token || '').length },
-      'H4'
-    );
     const exec = await findExecutionByTrackingToken(token);
     if (!exec) {
-      agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 404, reason: 'token_lookup_miss' }, 'H2');
       return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
     }
     const meta = cloneExecMetadata(exec.metadata);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     if (isTrackingChatExpired(meta)) {
-      agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 410, reason: 'expired' }, 'H2');
       return res.status(410).json({ expired: true, error: 'Este link de rastreamento expirou.' });
     }
     if (!trackingChatAllowed(meta)) {
-      agentDebugLog(
-        'tracking.js:GET_token_chat',
-        'exit',
-        {
-          status: 400,
-          reason: 'chat_not_allowed',
-          hasTrackingToken: !!meta.trackingToken,
-        },
-        'H2'
-      );
       return res.status(400).json({ error: 'Chat indisponível (link expirado ou deslocamento não iniciado).' });
     }
     const baseTok = chatMessagesForApiResponse(meta);
     const locClient = await resolveTrackingLocaleFromRequest(req, 'client');
     const messages = await applyTrackingDisplayTranslations(exec.id, baseTok, 'client', locClient);
-    agentDebugLog(
-      'tracking.js:GET_token_chat',
-      'exit',
-      { status: 200, messageCount: Array.isArray(messages) ? messages.length : -1 },
-      'H1'
-    );
     res.json({ messages });
   } catch (err) {
-    agentDebugLog('tracking.js:GET_token_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat GET (token) error:', err);
     res.status(500).json({ error: err.message });
   }
@@ -866,66 +731,27 @@ router.post('/:token/chat', async (req, res) => {
   try {
     const { token } = req.params;
     const textIn = readChatTextFromBody(req);
-    agentDebugLog(
-      'tracking.js:POST_token_chat:enter',
-      'client POST chat',
-      { tokenLen: String(token || '').length, bodyLen: textIn ? String(textIn).length : 0 },
-      'H4'
-    );
     if (!textIn) {
-      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 400, reason: 'empty_body' }, 'H5');
       return res.status(400).json({ error: 'Mensagem vazia.' });
     }
 
     const exec = await findExecutionByTokenForChat(token);
     if (!exec) {
-      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 404, reason: 'token_lookup_miss' }, 'H2');
       return res.status(404).json({ error: 'Link inválido ou não encontrado.' });
     }
     const meta = cloneExecMetadata(exec.metadata);
     res.setHeader('Cache-Control', 'no-store');
     if (isTrackingChatExpired(meta)) {
-      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 410, reason: 'expired' }, 'H2');
       return res.status(410).json({ expired: true, error: 'Este link de rastreamento expirou.' });
     }
     const urlTok = String(token || '').trim();
     const metaTok = String(meta.trackingToken || '').trim();
     if (!metaTok || metaTok !== urlTok) {
-      agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 404, reason: 'token_meta_mismatch' }, 'H2');
       return res.status(404).json({ error: 'Link inválido.' });
     }
 
-    const prevSend = res.send;
-    const prevJson = res.json;
-    let postTokenOutcome = /** @type {{ status?: number, code?: string, hasMessagesArray?: boolean } | null} */ (null);
-    res.json = function patchedJsonTok(body) {
-      try {
-        postTokenOutcome = {
-          status: res.statusCode || 200,
-          code: body && typeof body === 'object' ? body.code : undefined,
-          hasMessagesArray: Array.isArray(body && body.messages),
-        };
-      } catch (_) {}
-      return prevJson.call(this, body);
-    };
-    res.send = function patchedSendTok(body) {
-      postTokenOutcome = { status: res.statusCode || 500 };
-      return prevSend.call(this, body);
-    };
-    try {
-      await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'client', techSenderLabel: null });
-    } finally {
-      res.json = prevJson;
-      res.send = prevSend;
-    }
-    agentDebugLog(
-      'tracking.js:POST_token_chat',
-      'exit_after_moderation',
-      postTokenOutcome || { status: res.statusCode },
-      'H5'
-    );
+    await processModeratedChatPost(res, { req, exec, textIn, actorRole: 'client', techSenderLabel: null });
   } catch (err) {
-    agentDebugLog('tracking.js:POST_token_chat', 'exit', { status: 500, err: String(err?.message || err) }, 'H1');
     console.error('[TRACKING] chat POST (token) error:', err);
     res.status(500).json({ error: err.message });
   }

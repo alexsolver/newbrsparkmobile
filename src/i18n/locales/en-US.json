@@ -895,6 +895,8 @@
       "altSheetTitle": "Sort work order list",
       "receiptNewest": "Received date (newest first)",
       "receiptOldest": "Received date (oldest first)",
+      "completedNewest": "Actual end date (newest first)",
+      "completedOldest": "Actual end date (oldest first)",
       "actionView": "View",
       "actionSave": "Save",
       "routerSheetTitle": "Router",

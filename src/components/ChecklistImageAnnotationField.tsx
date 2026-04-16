@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -23,7 +24,39 @@ export type ImageAnnotationValue = {
   v: 1;
   imageUri: string;
   strokes: AnnotationStroke[];
+  /** Origem da imagem base — o PDF só mostra carimbo (data/GPS) para `camera`. */
+  captureSource?: 'camera' | 'gallery';
+  captureLat?: string;
+  captureLng?: string;
+  captureAddr?: string;
 };
+
+async function buildAnnotationCameraQuerySuffix(): Promise<string> {
+  let q = '?live=true';
+  q += `&capturedAt=${encodeURIComponent(new Date().toISOString())}`;
+  try {
+    const loc =
+      (await Location.getLastKnownPositionAsync({})) ||
+      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+    if (loc?.coords) {
+      const { latitude, longitude } = loc.coords;
+      q += `&lat=${latitude}&lng=${longitude}`;
+    }
+  } catch {
+    /* sem GPS */
+  }
+  return q;
+}
+
+function parseLatLngFromImageUri(u: string): { lat: number; lng: number } | null {
+  const qi = u.indexOf('?');
+  if (qi < 0) return null;
+  const sp = new URLSearchParams(u.slice(qi));
+  const lat = Number(sp.get('lat'));
+  const lng = Number(sp.get('lng'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
 
 function parseValue(raw: unknown): ImageAnnotationValue | null {
   if (raw === undefined || raw === null) return null;
@@ -67,7 +100,22 @@ function parseValue(raw: unknown): ImageAnnotationValue | null {
         })
         .filter(Boolean) as AnnotationStroke[]
     : [];
-  return { v: 1, imageUri: uri, strokes };
+  const capSrcRaw = String(rec.captureSource ?? '').trim().toLowerCase();
+  const captureSource =
+    capSrcRaw === 'gallery' || capSrcRaw === 'camera' ? (capSrcRaw as 'camera' | 'gallery') : undefined;
+  const captureLat = rec.captureLat != null ? String(rec.captureLat).trim() : undefined;
+  const captureLng = rec.captureLng != null ? String(rec.captureLng).trim() : undefined;
+  const captureAddr =
+    typeof rec.captureAddr === 'string' && rec.captureAddr.trim() ? rec.captureAddr.trim() : undefined;
+  return {
+    v: 1,
+    imageUri: uri,
+    strokes,
+    ...(captureSource ? { captureSource } : {}),
+    ...(captureLat ? { captureLat } : {}),
+    ...(captureLng ? { captureLng } : {}),
+    ...(captureAddr ? { captureAddr } : {}),
+  };
 }
 
 /** Coordenadas 0–1; SVG com viewBox 0 0 1 1. */
@@ -99,6 +147,7 @@ export function ChecklistImageAnnotationField({
   const [draftStrokes, setDraftStrokes] = useState<AnnotationStroke[]>([]);
   const [livePts, setLivePts] = useState<{ nx: number; ny: number }[] | null>(null);
   const layoutRef = useRef({ w: 300, h: 300 });
+  const captureSourceRef = useRef<'camera' | 'gallery'>('camera');
 
   const onOverlayLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -106,7 +155,8 @@ export function ChecklistImageAnnotationField({
   }, []);
 
   const openEditor = useCallback(
-    (uri: string, existing?: ImageAnnotationValue | null) => {
+    (uri: string, existing?: ImageAnnotationValue | null, source: 'camera' | 'gallery' = 'camera') => {
+      captureSourceRef.current = source;
       setDraftUri(uri);
       setDraftStrokes(existing && existing.imageUri === uri ? existing.strokes.map((s) => ({ ...s, pts: s.pts.map((p) => ({ ...p })) })) : []);
       setLivePts(null);
@@ -127,7 +177,7 @@ export function ChecklistImageAnnotationField({
       quality: 0.85,
     });
     if (res.canceled || !res.assets?.[0]?.uri) return;
-    openEditor(res.assets[0].uri, parsed);
+    openEditor(res.assets[0].uri, parsed, 'gallery');
   }, [openEditor, parsed, readOnly]);
 
   const takePhoto = useCallback(async () => {
@@ -139,7 +189,9 @@ export function ChecklistImageAnnotationField({
     }
     const res = await ImagePicker.launchCameraAsync({ quality: 0.85 });
     if (res.canceled || !res.assets?.[0]?.uri) return;
-    openEditor(res.assets[0].uri, parsed);
+    const base = res.assets[0].uri.split('?')[0];
+    const qs = await buildAnnotationCameraQuerySuffix();
+    openEditor(base + qs, parsed, 'camera');
   }, [openEditor, parsed, readOnly]);
 
   const panResponder = useMemo(
@@ -187,9 +239,40 @@ export function ChecklistImageAnnotationField({
     [draftUri, penColor, readOnly, strokeWidth],
   );
 
-  const saveDraft = useCallback(() => {
+  const saveDraft = useCallback(async () => {
     if (!draftUri) return;
-    const payload: ImageAnnotationValue = { v: 1, imageUri: draftUri, strokes: draftStrokes };
+    const src = captureSourceRef.current;
+    let captureLat: string | undefined;
+    let captureLng: string | undefined;
+    let captureAddr: string | undefined;
+    if (src === 'camera') {
+      const ll = parseLatLngFromImageUri(draftUri);
+      if (ll) {
+        captureLat = String(ll.lat);
+        captureLng = String(ll.lng);
+        try {
+          const rev = await Location.reverseGeocodeAsync({
+            latitude: ll.lat,
+            longitude: ll.lng,
+          });
+          if (rev?.length) {
+            const r = rev[0];
+            captureAddr = `${r.street || r.name}, ${r.streetNumber || 'S/N'} - ${r.subregion || r.city || r.district || r.region}`.trim();
+          }
+        } catch {
+          captureAddr = undefined;
+        }
+        if (!captureAddr) captureAddr = 'Endereço indisponível (rede ou mapas).';
+      }
+    }
+    const payload: ImageAnnotationValue = {
+      v: 1,
+      imageUri: draftUri,
+      strokes: draftStrokes,
+      captureSource: src,
+      ...(captureLat && captureLng ? { captureLat, captureLng } : {}),
+      ...(captureAddr ? { captureAddr } : {}),
+    };
     onChange(JSON.stringify(payload));
     setModalOpen(false);
     setDraftUri(null);
@@ -271,7 +354,13 @@ export function ChecklistImageAnnotationField({
       ) : null}
       {!readOnly && parsed?.imageUri ? (
         <TouchableOpacity
-          onPress={() => openEditor(parsed.imageUri, parsed)}
+          onPress={() =>
+            openEditor(
+              parsed.imageUri,
+              parsed,
+              parsed.captureSource === 'gallery' ? 'gallery' : 'camera',
+            )
+          }
           style={{ marginTop: 10, padding: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#eff6ff' }}
         >
           <Text style={{ color: '#1d4ed8', fontWeight: '700' }}>Editar anotações</Text>
@@ -343,7 +432,7 @@ export function ChecklistImageAnnotationField({
                 <Text style={{ fontWeight: '800' }}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={saveDraft}
+                onPress={() => void saveDraft()}
                 style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: '#2563eb', alignItems: 'center' }}
               >
                 <Text style={{ fontWeight: '800', color: '#fff' }}>Salvar</Text>

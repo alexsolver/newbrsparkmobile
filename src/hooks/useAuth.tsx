@@ -93,6 +93,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (fresh) {
               setUser(fresh);
               runAvatarWarm(fresh);
+            } else {
+              // 401 em /me chama logout() e apaga AsyncStorage — sem isto o React mantém o utilizador
+              // e o Dashboard corre loadData com cache já limpo (lista vazia / «sem dados»).
+              const after = await AuthService.getUser();
+              setUser(after);
+              if (!after) {
+                _setUserRole('CLIENT');
+                await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+              }
             }
           } catch {
             /* ignore */
