@@ -80,6 +80,7 @@ import {
   takePendingOpenExecutionFromPush,
 } from '../../src/lib/pushExecutionOpenIntent';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
+import { stripFormTemplateTitleLabelPrefix } from '../../src/utils/stripFormTemplateTitleLabelPrefix';
 import {
   effectiveProviderTaskStatus,
   taskMetadataIndicatesRevisionVisit,
@@ -598,16 +599,20 @@ function formatProviderTaskLocaleDateTime(iso: string | null | undefined, locale
 /** Título do formulário para o modal de OS (alinhado ao cartão: omite se for igual ao serviço). */
 function providerTaskModalFormTitle(t: any): string | null {
   const explicit = t?.formTemplateTitle;
-  if (explicit != null && String(explicit).trim()) return String(explicit).trim();
-  const raw = String(t?.templateTitle ?? taskMetadataRecord(t).templateTitle ?? '').trim();
+  const raw =
+    explicit != null && String(explicit).trim() !== ''
+      ? String(explicit).trim()
+      : String(t?.templateTitle ?? taskMetadataRecord(t).templateTitle ?? '').trim();
   if (!raw) return null;
+  const display = stripFormTemplateTitleLabelPrefix(raw);
+  if (!display) return null;
   const serviceLine = String(t?.service ?? '').trim();
-  if (serviceLine && raw === serviceLine) return null;
-  return raw;
+  if (serviceLine && display === serviceLine) return null;
+  return display;
 }
 
 /**
- * Texto do chip azul «formulário» na lista de OS.
+ * Texto do chip roxo com o nome do modelo na lista de OS (prefixo «Formulário» do payload é removido).
  * Em pausa: mostra o nome do template sempre que existir (mesmo igual à linha de serviço),
  * pois o mapeamento zera `formTemplateTitle` nesse caso e o cartão ficava sem o chip.
  */
@@ -617,7 +622,7 @@ function providerOsCardFormTemplateBadgeText(order: any, listEff: string): strin
       ? String(order.formTemplateTitle).trim()
       : '';
   const raw = String(order?.templateTitle ?? taskMetadataRecord(order).templateTitle ?? '').trim();
-  const resolved = fromMapped || raw;
+  const resolved = stripFormTemplateTitleLabelPrefix(fromMapped || raw);
   if (!resolved) return null;
   const serviceLine = String(order?.service ?? '').trim();
   if (String(listEff || '').toUpperCase() === 'PAUSED') return resolved;

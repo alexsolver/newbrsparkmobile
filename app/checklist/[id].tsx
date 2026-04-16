@@ -65,6 +65,7 @@ import {
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
+import { ExecutionOpsChatModal } from '../../src/components/ExecutionOpsChatModal';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
 import {
   enqueueExecutionStatusPatch,
@@ -2716,6 +2717,7 @@ export default function ChecklistEngine() {
   const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
 
   const [sigModalVisible, setSigModalVisible] = useState(false);
+  const [opsChatVisible, setOpsChatVisible] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
   const [currentSigField, setCurrentSigField] = useState<string|null>(null);
   const [currentSigScope, setCurrentSigScope] = useState<SectionRepeatScope | null>(null);
@@ -6964,7 +6966,15 @@ export default function ChecklistEngine() {
             </Text>
           ) : null}
         </View>
-        <View style={{ width: 40, alignItems: 'flex-end' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'flex-end', minWidth: 40 }}>
+          {resolvedTaskId ? (
+            <TouchableOpacity
+              onPress={() => setOpsChatVisible(true)}
+              accessibilityLabel="Mensagens do gestor sobre esta FT"
+            >
+              <Ionicons name="chatbubbles-outline" size={26} color="#FFF" />
+            </TouchableOpacity>
+          ) : null}
           {taskId && !isReadOnly && !responses.__form_paused_since ? (
             <TouchableOpacity
               onPress={() => {
@@ -6978,9 +6988,7 @@ export default function ChecklistEngine() {
             >
               <Ionicons name="pause-circle" size={28} color="#FFF" />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 24 }} />
-          )}
+          ) : null}
         </View>
       </LinearGradient>
       
@@ -9960,6 +9968,13 @@ export default function ChecklistEngine() {
           </View>
         </View>
       )}
+
+      <ExecutionOpsChatModal
+        visible={opsChatVisible}
+        executionId={String(resolvedTaskId || '').trim()}
+        onClose={() => setOpsChatVisible(false)}
+        colors={C}
+      />
 
       <Modal
         visible={checklistBarcodeModalOpen}

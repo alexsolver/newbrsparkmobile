@@ -23,6 +23,7 @@ import {
   type ProviderOsSearchRow,
 } from '../src/services/providerOsSearchData';
 import { MEDIA_TAG_COLORS } from '../src/theme/colors';
+import { stripFormTemplateTitleLabelPrefix } from '../src/utils/stripFormTemplateTitleLabelPrefix';
 
 type DateBasis = 'RECEIPT' | 'SCHEDULE' | 'DUE' | 'CREATED';
 
@@ -365,6 +366,9 @@ export default function ProviderOsSearchScreen() {
 
   const renderItem = ({ item }: { item: ProviderOsSearchRow }) => {
     const accent = rowAccent(item.statusEff, C);
+    const formLine = item.formTemplateTitle
+      ? stripFormTemplateTitleLabelPrefix(item.formTemplateTitle)
+      : '';
     return (
       <Pressable
         onPress={() => {
@@ -397,9 +401,9 @@ export default function ProviderOsSearchScreen() {
               <Text style={{ fontSize: 10, fontWeight: '900', color: C.slate }}>{statusLabel(item.statusEff)}</Text>
             </View>
           </View>
-          {item.formTemplateTitle ? (
+          {formLine ? (
             <Text style={{ marginTop: 6, fontSize: 12, fontWeight: '700', color: C.textSecondary }} numberOfLines={1}>
-              {item.formTemplateTitle}
+              {formLine}
             </Text>
           ) : null}
           {item.locationAddress ? (

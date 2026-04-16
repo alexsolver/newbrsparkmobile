@@ -84,6 +84,18 @@ const M = {
     ops_reopen_other_hint: 'Usuário com login no app móvel',
     ops_reopen_tech_label: 'Técnico',
     ops_reopen_confirm: 'Reabrir OS',
+    ops_card_chat_title: 'Chat desta FT (gestor e técnico)',
+    ops_chat_modal_title: 'Chat da FT · {label}',
+    ops_chat_modal_sub: 'Técnico: {tech}. O histórico é só desta execução.',
+    ops_chat_ph: 'Escreva uma mensagem…',
+    ops_chat_send: 'Enviar',
+    ops_chat_loading: 'Carregando…',
+    ops_chat_empty: 'Ainda não há mensagens nesta FT.',
+    ops_chat_error: 'Não foi possível carregar o chat.',
+    ops_chat_kind_gestor: 'Gestor',
+    ops_chat_kind_tech: 'Técnico',
+    ops_chat_missing_id: 'ID da execução ausente. Atualize o quadro (F5).',
+    ops_chat_empty_send: 'Escreva uma mensagem antes de enviar.',
     ops_dispatch_modal_title: 'Despachar nova OS',
     ops_dispatch_section_design: 'Designação',
     ops_dispatch_section_design_html:
@@ -248,6 +260,18 @@ const M = {
     ops_reopen_other_hint: 'User signed in on the mobile app',
     ops_reopen_tech_label: 'Technician',
     ops_reopen_confirm: 'Reopen work order',
+    ops_card_chat_title: 'Chat for this job (manager & technician)',
+    ops_chat_modal_title: 'Job chat · {label}',
+    ops_chat_modal_sub: 'Technician: {tech}. History is scoped to this execution only.',
+    ops_chat_ph: 'Write a message…',
+    ops_chat_send: 'Send',
+    ops_chat_loading: 'Loading…',
+    ops_chat_empty: 'No messages on this job yet.',
+    ops_chat_error: 'Could not load chat.',
+    ops_chat_kind_gestor: 'Manager',
+    ops_chat_kind_tech: 'Technician',
+    ops_chat_missing_id: 'Execution id missing. Refresh the board (F5).',
+    ops_chat_empty_send: 'Write a message before sending.',
     ops_dispatch_modal_title: 'Dispatch new work order',
     ops_dispatch_section_design: 'Assignment',
     ops_dispatch_section_design_html:
@@ -562,6 +586,14 @@ export function applyOperationsModalsStaticI18n() {
   document.querySelectorAll('#reopen-revision-modal .modal-close').forEach((el) => {
     el.setAttribute('aria-label', opsT('ops_modal_close_aria'));
   });
+
+  document.querySelectorAll('#ops-chat-modal .modal-close').forEach((el) => {
+    el.setAttribute('aria-label', opsT('ops_modal_close_aria'));
+  });
+  const occFoot = document.querySelector('#ops-chat-modal .modal-footer button');
+  if (occFoot) occFoot.textContent = opsT('ops_btn_close');
+  const occSend = document.getElementById('ops-chat-send-btn');
+  if (occSend) occSend.textContent = opsT('ops_chat_send');
 
   const dispTitle = document.querySelector('#dispatch-modal .modal-header .modal-title');
   if (dispTitle) {

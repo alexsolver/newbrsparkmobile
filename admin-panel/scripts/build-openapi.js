@@ -227,6 +227,13 @@ const ROUTES = [
   ['post', '/api/operations/tasks/{id}/reject', op('Rejeitar OS (JWT painel/admin ou JWT app — owner + tenant do formulário)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
+  ['get', '/api/operations/tasks/{id}/ops-chat', op('Chat operacional por execução — listar mensagens (JWT painel ou JWT app dono da OS)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+  })],
+  ['post', '/api/operations/tasks/{id}/ops-chat', op('Chat operacional por execução — enviar mensagem (JWT painel = gestor; JWT app = técnico)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { body: { type: 'string' } } } } } },
+  })],
   ['post', '/api/operations/tasks/{id}/reopen-for-revision', op('Reabrir para revisão (JWT painel)', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],

@@ -865,6 +865,27 @@
   </div>
 </div>
 
+<!-- ── Chat operacional por FT (gestor ↔ técnico) ─────────────── -->
+<div class="modal-overlay" id="ops-chat-modal" style="display:none;opacity:1;pointer-events:all;z-index:130010;">
+  <div class="modal" style="max-width:520px;width:95%;">
+    <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title" id="ops-chat-modal-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> Chat da FT</span>
+      <button type="button" class="modal-close" onclick="window.closeOpsChatModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:72vh;overflow-y:auto;">
+      <p id="ops-chat-modal-sub" style="font-size:12px;color:var(--text2);line-height:1.45;margin:0 0 10px;"></p>
+      <div id="ops-chat-thread" style="max-height:42vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;"></div>
+      <div style="display:flex;gap:8px;margin-top:4px;align-items:stretch;">
+        <textarea id="ops-chat-input" rows="3" style="flex:1;font-size:13px;padding:8px;border-radius:8px;border:1px solid var(--border);resize:vertical;min-height:72px;font-family:inherit"></textarea>
+        <button type="button" class="btn btn-primary btn-sm" id="ops-chat-send-btn" onclick="void window.submitOpsChatMessage()" style="align-self:flex-end;white-space:nowrap">Enviar</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeOpsChatModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Print Report (hidden, only for print) ──────────────────── -->
 <div id="print-report"></div>
 
@@ -1167,6 +1188,8 @@ applyOperationsStaticI18n();
 let allTasks = [];
 let currentDetailId = null;
 let refreshInterval = null;
+let _opsChatTaskId = null;
+let _opsChatPollTimer = null;
 
 // ── Helpers ───────────────────────────────────────────────────
 /** Tempo relativo curto (cartões / metas) — segue o idioma do painel. */
@@ -1433,6 +1456,166 @@ window.closeReopenRevisionModal = function () {
     el.dataset.reopenTaskId = '';
   }
   reopenRevisionTaskId = null;
+};
+
+function clearOpsChatPoll() {
+  if (_opsChatPollTimer) {
+    clearInterval(_opsChatPollTimer);
+    _opsChatPollTimer = null;
+  }
+}
+
+window.closeOpsChatModal = function () {
+  clearOpsChatPoll();
+  _opsChatTaskId = null;
+  const el = document.getElementById('ops-chat-modal');
+  if (el) el.style.display = 'none';
+  const ta = document.getElementById('ops-chat-input');
+  if (ta) ta.value = '';
+};
+
+function escOpsChatHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderOpsChatThread(messages) {
+  const box = document.getElementById('ops-chat-thread');
+  if (!box) return;
+  if (!messages || messages.length === 0) {
+    box.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:16px">${escOpsChatHtml(
+      opsT('ops_chat_empty')
+    )}</div>`;
+    return;
+  }
+  box.innerHTML = messages
+    .map((m) => {
+      const kind = String(m.senderKind || '').toUpperCase();
+      const who =
+        kind === 'GESTOR'
+          ? opsT('ops_chat_kind_gestor')
+          : kind === 'TECH'
+            ? opsT('ops_chat_kind_tech')
+            : escOpsChatHtml(m.senderKind || '—');
+      const dt = opsFormatCardDateTime(m.createdAt);
+      const bg = kind === 'GESTOR' ? '#eff6ff' : '#fff7ed';
+      const border = kind === 'GESTOR' ? '#bfdbfe' : '#fed7aa';
+      return `<div style="padding:10px 12px;border-radius:10px;background:${bg};border:1px solid ${border};text-align:left">
+        <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">${who} · ${escOpsChatHtml(
+        m.senderEmail || ''
+      )} · ${escOpsChatHtml(dt)}</div>
+        <div style="font-size:13px;line-height:1.45;white-space:pre-wrap;color:var(--text)">${escOpsChatHtml(m.body || '')}</div>
+      </div>`;
+    })
+    .join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function loadOpsChatMessages() {
+  if (!_opsChatTaskId) return;
+  const box = document.getElementById('ops-chat-thread');
+  if (!box) return;
+  const url = `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(_opsChatTaskId)}/ops-chat`;
+  try {
+    const r = await fetch(url, { headers: CONFIG.headers() });
+    if (r.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return;
+    }
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      box.innerHTML = `<div style="color:#b91c1c;font-size:13px">${escOpsChatHtml(j.error || opsT('ops_chat_error'))}</div>`;
+      return;
+    }
+    const data = await r.json();
+    renderOpsChatThread(data.messages || []);
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = `<div style="color:#b91c1c;font-size:13px">${escOpsChatHtml(opsT('ops_chat_error'))}</div>`;
+  }
+}
+
+window.openOpsChatModal = async function (taskId) {
+  const tid = taskId != null ? String(taskId).trim() : '';
+  if (!tid) {
+    alert(opsT('ops_chat_missing_id'));
+    return;
+  }
+  _opsChatTaskId = tid;
+  const task = allTasks.find((t) => String(t.id) === String(tid));
+  const modal = document.getElementById('ops-chat-modal');
+  if (!modal) return;
+  const titleEl = document.getElementById('ops-chat-modal-title');
+  const subEl = document.getElementById('ops-chat-modal-sub');
+  const label = task ? displayOsLabel(task) : tid.slice(0, 8).toUpperCase();
+  if (titleEl) {
+    titleEl.innerHTML = `<ion-icon name="chatbubbles-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> ${escOpsChatHtml(
+      opsT('ops_chat_modal_title', { label })
+    )}`;
+  }
+  if (subEl) {
+    const tech = task && task.ownerEmail ? String(task.ownerEmail) : '—';
+    subEl.textContent = opsT('ops_chat_modal_sub', { tech });
+  }
+  const ta = document.getElementById('ops-chat-input');
+  if (ta) {
+    ta.placeholder = opsT('ops_chat_ph');
+    ta.value = '';
+  }
+  const sendBtn = document.getElementById('ops-chat-send-btn');
+  if (sendBtn) sendBtn.textContent = opsT('ops_chat_send');
+  const thread = document.getElementById('ops-chat-thread');
+  if (thread) {
+    thread.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">${escOpsChatHtml(
+      opsT('ops_chat_loading')
+    )}</div>`;
+  }
+  modal.style.display = 'flex';
+  await loadOpsChatMessages();
+  clearOpsChatPoll();
+  _opsChatPollTimer = setInterval(() => {
+    void loadOpsChatMessages();
+  }, 12000);
+};
+
+window.submitOpsChatMessage = async function () {
+  const tid = _opsChatTaskId;
+  if (!tid) return;
+  const ta = document.getElementById('ops-chat-input');
+  const text = ta ? String(ta.value || '').trim() : '';
+  if (!text) {
+    alert(opsT('ops_chat_empty_send'));
+    return;
+  }
+  const btn = document.getElementById('ops-chat-send-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(tid)}/ops-chat`, {
+      method: 'POST',
+      headers: CONFIG.headers(),
+      body: JSON.stringify({ body: text }),
+    });
+    if (r.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return;
+    }
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(j.error || opsT('ops_chat_error'));
+      return;
+    }
+    if (ta) ta.value = '';
+    await loadOpsChatMessages();
+  } catch (e) {
+    console.error(e);
+    alert(opsT('ops_chat_error'));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 };
 
 window.openReopenRevisionModal = async function (taskId) {
@@ -1994,6 +2177,15 @@ function buildCard(task, colClass) {
       </div>
 
       <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
+        <div style="display:flex; justify-content:flex-end; width:100%; margin-bottom:2px">
+          <button type="button" title="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}" aria-label="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}"
+            data-ops-chat-task="${String(task.id).replace(/"/g, '&quot;')}"
+            onclick="event.stopPropagation(); event.preventDefault(); void window.openOpsChatModal(this.getAttribute('data-ops-chat-task'));"
+            style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;font-weight:800">
+            <ion-icon name="chatbubbles-outline" style="font-size:18px;vertical-align:-2px;color:#2563eb"></ion-icon>
+            <span style="letter-spacing:0.02em">Chat</span>
+          </button>
+        </div>
         <div style="display:flex; justify-content:flex-end; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
           <span style="display:flex; align-items:center; gap:4px; flex-wrap:wrap">
           ${completedTaskSubmissionBadgeHtml(task)}
