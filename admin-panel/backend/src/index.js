@@ -53,6 +53,7 @@ const reportsRoutes          = require('./routes/reports');
 const trackingRoutes         = require('./routes/tracking');  // public real-time tracking
 const trackingChatModerationAdminRoutes = require('./routes/trackingChatModerationAdmin');
 const osrmProxyRoutes        = require('./routes/osrm-proxy'); // app: geometria OSRM via backend
+const googleMapsRoutes       = require('./routes/googleMaps'); // app: Google Routes + quota por tenant
 const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
@@ -113,6 +114,7 @@ app.post('/api/tenant-login', authRoutes.postTenantLogin); // alias (evita 404 s
 app.use('/api/ai-technician-profile-photo', aiTechnicianProfilePhotoRoutes);
 app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
+app.use('/api/maps/google', googleMapsRoutes); // app JWT: POST route-metrics, GET quota-preview
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
 app.use('/api/storage', storageRoutes);       // app: POST /api/storage/upload | GET /api/storage/config

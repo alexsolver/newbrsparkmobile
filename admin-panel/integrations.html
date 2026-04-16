@@ -366,6 +366,29 @@
           </div>
         </div>
 
+        <!-- Google Maps Platform (Routes API — proxy com cota por tenant) -->
+        <div class="int-card" id="card-google-maps-platform">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#1a73e8;color:#fff"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Google Maps Platform</div><div class="int-cat">Mapas / Routing</div></div>
+            <span class="int-status inactive" id="status-google-maps-platform" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">
+            Chave de API com <strong>Routes API</strong> (Compute Routes) ativa e faturação no Google Cloud.
+            O <strong>app móvel</strong> chama apenas o BrSpark (<code>POST /api/maps/google/route-metrics</code> com JWT) — a chave fica no servidor.
+            <strong>Cotas:</strong> limite mensal no <strong>plano</strong> (<code>quotaGoogleMapsRoutesPerMonth</code>, -1 = ilimitado, 0 = desligado) e teto opcional por organização em
+            <code>PATCH /api/tenants/:id/features</code> com <code>{ "features": { "googleMaps": { "monthlyRouteRequestsMax": 5000 } } }</code> (o menor valor entre plano e tenant vence).
+          </div>
+          <div class="int-fields" id="fields-google-maps-platform">
+            <input class="form-control" id="key-google-maps-platform" type="password" placeholder="API key (Google Cloud — Maps Platform)" autocomplete="off" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveGoogleMapsPlatform()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-google-maps-platform" style="display:none" onclick="testInt('google-maps-platform')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-google-maps-platform" style="display:none" onclick="deleteIntByName('Google Maps Platform')">Remover</button>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── Biometria & Visão ──────────────────────────────────── -->
@@ -480,6 +503,7 @@
     'Bluesoft Cosmos':     { slug:'cosmos' },
     'UPCItemDB':           { slug:'upcitemdb' },
     'OSRM':                { slug:'osrm' },
+    'Google Maps Platform': { slug:'google-maps-platform' },
     'AWS Rekognition':     { slug:'aws-rekog' },
     'Exadel CompreFace':   { slug:'compreface' },
     'Visão IA - YOLO': { slug:'vision-checklist' },
@@ -593,6 +617,9 @@
       urlOsrm.value = activeInts['OSRM']?.baseUrl || 'http://osrm.lansolver.com:5000';
     }
 
+    const keyGmp = document.getElementById('key-google-maps-platform');
+    if (keyGmp) keyGmp.value = '';
+
     const urlNylas = document.getElementById('url-nylas');
     const grantNylas = document.getElementById('grant-nylas');
     const clientNylas = document.getElementById('client-nylas');
@@ -681,6 +708,27 @@
     });
     document.getElementById('active-count').textContent = integActiveCountText(count);
   }
+
+  window.saveGoogleMapsPlatform = async () => {
+    const key = document.getElementById('key-google-maps-platform')?.value.trim() || '';
+    if (!key) return alert('Indique a API key do Google Maps Platform (Routes).');
+    if (activeInts['Google Maps Platform']) await CONFIG.del(`/integrations/${activeInts['Google Maps Platform'].id}`);
+    const body = {
+      type: 'MAPS',
+      name: 'Google Maps Platform',
+      status: 'ACTIVE',
+      apiKey: key,
+      description:
+        'Proxy BrSpark: POST /api/maps/google/route-metrics (JWT). Cota: plano + tenant.features.googleMaps.monthlyRouteRequestsMax.',
+    };
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast('Google Maps Platform guardado.', true);
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
 
   window.saveGoogleAiStudio = async () => {
     const key = document.getElementById('key-googleai')?.value.trim() || '';

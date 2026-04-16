@@ -17,6 +17,7 @@ const {
   VISION_INTEGRATION_NAME,
   VISION_INTEGRATION_LEGACY_NAME,
 } = require('./visionChecklistAnalyze');
+const { isGoogleMapsPlatformName } = require('./integrationNameMatch');
 
 /** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
 const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
@@ -29,6 +30,11 @@ function normEnum(v) {
     .replace(/\uFEFF/g, '')
     .trim()
     .toUpperCase();
+}
+
+/** Google Maps Platform (Routes) — só pelo nome; não depende do enum `type` na BD. */
+function isGoogleMapsPlatformIntegration(integration) {
+  return isGoogleMapsPlatformName(integration?.name);
 }
 
 /** Integração OSRM no painel — nome deve ser OSRM; tipo às vezes veio legado / inconsistente na BD */
@@ -47,6 +53,11 @@ function isOsrmIntegration(integration) {
 async function testIntegration(integration) {
   const type = integration.type;   // IntType enum value
   const name = integration.name;
+
+  // ── Mapas / Google Maps Platform (antes de MAPS genérico — nome canónico; `type` pode vir inconsistente)
+  if (isGoogleMapsPlatformIntegration(integration)) {
+    return testGoogleMapsPlatform(integration);
+  }
 
   // ── AI / LLM ────────────────────────────────────────────
   if (type === 'AI_LLM') {
@@ -841,6 +852,18 @@ async function testCompreface(integration) {
 }
 
 // ── OSRM (MAPS) — testa Match (timestamps + radiuses + tidy) como telemetria/ETA ──
+async function testGoogleMapsPlatform(integration) {
+  const { computeDrivingRouteMetrics } = require('./googleMapsRoutesApi');
+  const key = String(integration.apiKey || '').trim();
+  if (!key) return { ok: false, message: 'API key não configurada.' };
+  const r = await computeDrivingRouteMetrics(key, -23.5505, -46.6333, -23.5489, -46.6417, 18000);
+  if (!r.ok) return { ok: false, message: r.message };
+  return {
+    ok: true,
+    message: `Google Maps Routes OK (≈${Math.round(r.durationSeconds / 60)} min, ${r.distanceMeters} m) ✓`,
+  };
+}
+
 async function testOsrm(integration) {
   const { normalizeOsrmBaseUrl } = require('./osrmBaseUrl');
   const base = normalizeOsrmBaseUrl(integration.baseUrl || '');

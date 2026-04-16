@@ -36,12 +36,14 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../../src/services/auth';
 import { fetchDrivingLegEtaMinutes, fetchDrivingLegMetrics } from '../../src/services/osrmClient';
+import { fetchGoogleDrivingLegMetricsOrNull } from '../../src/services/googleMapsRoutesClient';
 import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
 import RouteProgressBar from './RouteProgressBar';
 import LiveRouteMapCard, { pickDestinationForOsrm } from './LiveRouteMapCard';
+import { TransitCompletedSummaryMap, transitActualMetricsLabels } from './TransitCompletedSummaryMap';
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { computePatrolCompliance } from '../../src/services/patrolRouteMetrics';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
@@ -138,6 +140,171 @@ function formatDurationClock(totalSec: number) {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Trilha GPS no JSON (app / API): `[[lat,lng],…]`, `[{lat,lng},…]` ou string JSON —
+ * alinhado ao relatório (`normalizeTraversedPathForReport`).
+ */
+function normalizeStoredTraversedPathForTransit(raw: unknown): number[][] | null {
+  if (raw == null) return null;
+  let arr: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(arr)) return null;
+  const out: number[][] = [];
+  for (const c of arr) {
+    if (Array.isArray(c) && c.length >= 2) {
+      const la = typeof c[0] === 'number' ? c[0] : parseFloat(String(c[0]));
+      const ln = typeof c[1] === 'number' ? c[1] : parseFloat(String(c[1]));
+      if (Number.isFinite(la) && Number.isFinite(ln)) out.push([la, ln]);
+    } else if (c && typeof c === 'object' && !Array.isArray(c)) {
+      const o = c as Record<string, unknown>;
+      const la = Number(o.lat ?? o.latitude);
+      const ln = Number(o.lng ?? o.lon ?? o.longitude);
+      if (Number.isFinite(la) && Number.isFinite(ln)) out.push([la, ln]);
+    }
+  }
+  return out.length ? out : null;
+}
+
+/** Valor já guardado como evidência de deslocamento (não vazio). */
+function isTransitEvidenceNonempty(raw: unknown): boolean {
+  const ev = parseTransitFieldEvidence(raw);
+  if (!ev) return false;
+  return !!(ev.timestamp || (ev.lat != null && ev.lng != null));
+}
+
+function looksLikeTransitDisplacementJson(raw: unknown): boolean {
+  const o = coerceTransitEvidenceObject(raw);
+  if (!o) return false;
+  const act = String(o.action || '').toUpperCase();
+  return act === 'SAIDA' || act === 'CHEGADA';
+}
+
+/** Preferência na fusão rascunho/servidor: rascunho com evidência vence; senão mantém servidor. */
+function transitRawPreferNonempty(draftVal: unknown, serverVal: unknown): unknown {
+  if (isTransitEvidenceNonempty(draftVal)) return draftVal;
+  if (isTransitEvidenceNonempty(serverVal)) return serverVal;
+  return draftVal !== undefined ? draftVal : serverVal;
+}
+
+/**
+ * `{...server,...draft}` apaga deslocamentos já sincronizados se o rascunho local tiver chaves vazias.
+ * Preserva início/fim de deslocamento a partir de qualquer lado com evidência válida.
+ */
+function mergeResponsesDraftOverServerPreserveTransitDisplacement(
+  serverR: Record<string, unknown>,
+  draftRes: Record<string, unknown>
+): Record<string, any> {
+  const base = { ...serverR, ...draftRes } as Record<string, any>;
+  const allRoot = new Set([...Object.keys(serverR), ...Object.keys(draftRes)]);
+  for (const k of allRoot) {
+    if (k.startsWith('__section_repeat_')) {
+      const sr = serverR[k];
+      const dr = draftRes[k];
+      if (!Array.isArray(sr) && !Array.isArray(dr)) continue;
+      const rowsS = Array.isArray(sr) ? sr : [];
+      const rowsD = Array.isArray(dr) ? dr : [];
+      const prevMerged = Array.isArray(base[k]) ? (base[k] as unknown[]) : [];
+      const maxLen = Math.max(rowsS.length, rowsD.length, prevMerged.length);
+      const out: unknown[] = [];
+      for (let i = 0; i < maxLen; i++) {
+        const rowS =
+          rowsS[i] && typeof rowsS[i] === 'object' && !Array.isArray(rowsS[i])
+            ? (rowsS[i] as Record<string, unknown>)
+            : {};
+        const rowD =
+          rowsD[i] && typeof rowsD[i] === 'object' && !Array.isArray(rowsD[i])
+            ? (rowsD[i] as Record<string, unknown>)
+            : {};
+        const rowB =
+          prevMerged[i] && typeof prevMerged[i] === 'object' && !Array.isArray(prevMerged[i])
+            ? { ...(prevMerged[i] as Record<string, unknown>) }
+            : { ...rowS, ...rowD };
+        const cellKeys = new Set([...Object.keys(rowS), ...Object.keys(rowD), ...Object.keys(rowB)]);
+        for (const cid of cellKeys) {
+          if (
+            looksLikeTransitDisplacementJson(rowS[cid]) ||
+            looksLikeTransitDisplacementJson(rowD[cid]) ||
+            looksLikeTransitDisplacementJson(rowB[cid])
+          ) {
+            (rowB as any)[cid] = transitRawPreferNonempty(rowD[cid], rowS[cid]);
+          }
+        }
+        out.push(rowB);
+      }
+      base[k] = out;
+      continue;
+    }
+    if (looksLikeTransitDisplacementJson(serverR[k]) || looksLikeTransitDisplacementJson(draftRes[k])) {
+      base[k] = transitRawPreferNonempty(draftRes[k], serverR[k]);
+    }
+  }
+  return base;
+}
+
+/** Desembrulha JSON em string até objecto (cache/API por vezes dupla codificação). */
+function coerceTransitEvidenceObject(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  let cur: unknown = raw;
+  for (let d = 0; d < 5; d++) {
+    if (typeof cur === 'string') {
+      const t = cur.trim();
+      if (!t) return null;
+      try {
+        cur = JSON.parse(t);
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    break;
+  }
+  if (cur && typeof cur === 'object' && !Array.isArray(cur)) return cur as Record<string, unknown>;
+  return null;
+}
+
+/**
+ * Garante ≥2 pontos para pré-visualização (SVG): remove duplicados consecutivos;
+ * se início e fim forem o mesmo GPS (caso comum), desloca o 2.º ponto uns metros para o traço aparecer.
+ */
+function finalizeTransitPreviewPolyline(path: number[][] | null | undefined): number[][] | null {
+  if (!path || path.length === 0) return null;
+  const dedupeConsecutive = (pts: number[][]) => {
+    const o: number[][] = [];
+    for (const p of pts) {
+      const q = o[o.length - 1];
+      if (!q || q[0] !== p[0] || q[1] !== p[1]) o.push(p);
+    }
+    return o;
+  };
+  const d = dedupeConsecutive(path);
+  if (d.length >= 2) return d;
+  if (path.length >= 2) {
+    const a = path[0];
+    const b = path[path.length - 1];
+    if (a[0] === b[0] && a[1] === b[1]) {
+      return [
+        [a[0], a[1]],
+        [a[0] + 0.00025, a[1] + 0.00025],
+      ];
+    }
+    return dedupeConsecutive([a, b]);
+  }
+  if (d.length === 1) {
+    const a = d[0];
+    return [
+      [a[0], a[1]],
+      [a[0] + 0.00025, a[1] + 0.00025],
+    ];
+  }
+  return null;
+}
+
 /** Evidência guardada em transit_start / transit_end (JSON no mapa de respostas). */
 function parseTransitFieldEvidence(raw: unknown): {
   timestamp?: string;
@@ -145,6 +312,8 @@ function parseTransitFieldEvidence(raw: unknown): {
   lat?: number;
   lng?: number;
   accuracyMeters?: number;
+  /** Trilha GPS gravada no fim do deslocamento (`handleTransit` → `traversedPath`). */
+  traversedPath?: number[][];
   plannedMetrics?: {
     durationSeconds?: number | null;
     distanceMeters?: number | null;
@@ -159,25 +328,30 @@ function parseTransitFieldEvidence(raw: unknown): {
   if (raw == null) return null;
   if (typeof raw === 'string' && raw.trim() === '') return null;
   try {
-    const o =
-      typeof raw === 'object' && raw !== null
-        ? (raw as Record<string, unknown>)
-        : (JSON.parse(String(raw)) as Record<string, unknown>);
-    if (!o || typeof o !== 'object') return null;
+    const o = coerceTransitEvidenceObject(raw);
+    if (!o) return null;
     const coords = o.coordinates as Record<string, unknown> | undefined;
-    const latRaw = coords?.lat ?? o.lat;
-    const lngRaw = coords?.lng ?? o.lng;
+    const latRaw =
+      coords?.lat ?? coords?.latitude ?? o.lat ?? o.latitude;
+    const lngRaw =
+      coords?.lng ?? coords?.longitude ?? coords?.lon ?? o.lng ?? o.longitude;
     const lat = typeof latRaw === 'number' ? latRaw : parseFloat(String(latRaw));
     const lng = typeof lngRaw === 'number' ? lngRaw : parseFloat(String(lngRaw));
     const accRaw = o.accuracyMeters ?? o.accuracy;
     const accuracyMeters =
       accRaw != null && Number.isFinite(Number(accRaw)) ? Number(accRaw) : undefined;
+    const pathNorm =
+      normalizeStoredTraversedPathForTransit(o.traversedPath) ??
+      normalizeStoredTraversedPathForTransit(o.gpsTrack) ??
+      normalizeStoredTraversedPathForTransit(o.track);
+    const traversedPath = pathNorm ?? undefined;
     return {
       timestamp: typeof o.timestamp === 'string' ? o.timestamp : undefined,
       address: typeof o.address === 'string' ? o.address : undefined,
       lat: Number.isFinite(lat) ? lat : undefined,
       lng: Number.isFinite(lng) ? lng : undefined,
       accuracyMeters,
+      ...(traversedPath ? { traversedPath } : {}),
       plannedMetrics: o.plannedMetrics as
         | { durationSeconds?: number | null; distanceMeters?: number | null; source?: string }
         | undefined,
@@ -294,8 +468,6 @@ function executionIsViewOnly(exec: unknown): boolean {
 const REVISION_SESSION_FIELD_TYPES = new Set([
   'signature',
   'signature_summary',
-  'transit_start',
-  'transit_end',
   'geofence_check',
   'facial_recognition',
   'vision_checklist',
@@ -328,6 +500,11 @@ function effectiveSchemaFieldType(f: any): string {
   for (const p of preferFirst) {
     if (normalized.includes(p)) return p;
   }
+  /** `type` genérico (ex. `text`) + `fieldType` semântico — priorizar deslocamento. */
+  const transitPrefer = ['transit_end', 'transit_start'] as const;
+  for (const p of transitPrefer) {
+    if (normalized.includes(p)) return p;
+  }
   return normalized[0] || '';
 }
 
@@ -336,7 +513,7 @@ function isVisionSimNaoMediaFieldType(t: string): boolean {
   return t === 'vision_checklist' || t === 'vision_ai_analysis';
 }
 
-/** Assinatura, deslocamento, geofence facial, etc. — não reaproveitar na nova sessão de revisão. */
+/** Assinatura, geofence facial, etc. — não reaproveitar na nova sessão de revisão (deslocamento fica imutável após registo). */
 function stripRevisionSessionFieldResponses(res: Record<string, any>, schemaData: any[] | undefined): void {
   if (!Array.isArray(schemaData)) return;
   for (const f of schemaData) {
@@ -958,6 +1135,19 @@ function findPreviousTransitStartForEnd(schemaData: any[] | undefined, endFieldI
     if (!f || typeof f !== 'object') continue;
     if (f.type === 'transit_start') lastStart = f;
     if (f.id === endFieldId && f.type === 'transit_end') return lastStart;
+  }
+  return null;
+}
+
+/** Primeiro `transit_end` após este `transit_start` no schema (antes do próximo início). */
+function findTransitEndFieldAfterStart(schemaData: any[] | undefined, startFieldId: string): any | null {
+  if (!Array.isArray(schemaData) || !startFieldId) return null;
+  let seen = false;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    if (f.id === startFieldId && f.type === 'transit_start') seen = true;
+    else if (seen && f.type === 'transit_end') return f;
+    else if (seen && f.type === 'transit_start') return null;
   }
   return null;
 }
@@ -2967,6 +3157,29 @@ export default function ChecklistEngine() {
       return;
     }
     if (gpsCaptureLockRef.current) return;
+
+    const existingFieldVal = getScopedFieldValue(responses, scope ?? null, fieldId);
+    if (isTransitEvidenceNonempty(existingFieldVal)) {
+      Alert.alert(
+        'Atenção',
+        'Este registo de deslocamento já foi guardado e não pode ser alterado ou refeito.'
+      );
+      return;
+    }
+    if (label === 'SAIDA') {
+      const endF = findTransitEndFieldAfterStart(template?.schemaData, fieldId);
+      if (endF?.id) {
+        const endVal = getScopedFieldValue(responses, scope ?? null, endF.id);
+        if (isTransitEvidenceNonempty(endVal)) {
+          Alert.alert(
+            'Atenção',
+            'O fim deste deslocamento já foi registado. Não é possível iniciar ou alterar o trecho novamente.'
+          );
+          return;
+        }
+      }
+    }
+
     gpsCaptureLockRef.current = true;
     setGpsBusyFieldId(fieldId);
     const isReimbursementTransit = isReimbursementTransitField(template?.schemaData, fieldId);
@@ -3264,7 +3477,14 @@ export default function ChecklistEngine() {
                 routeCoords
               );
               if (dest) {
-                const osrm = await fetchDrivingLegMetrics(lat, lng, dest.lat, dest.lng);
+                const google = await fetchGoogleDrivingLegMetricsOrNull(lat, lng, dest.lat, dest.lng);
+                const osrm = google?.ok
+                  ? {
+                      ok: true as const,
+                      durationSeconds: google.durationSeconds,
+                      distanceMeters: google.distanceMeters,
+                    }
+                  : await fetchDrivingLegMetrics(lat, lng, dest.lat, dest.lng);
                 const straightDist = Math.round(haversineMeters(lat, lng, dest.lat, dest.lng));
                 if (osrm.ok && osrm.durationSeconds != null) {
                   const dm =
@@ -3274,7 +3494,7 @@ export default function ChecklistEngine() {
                   plannedMetrics = {
                     durationSeconds: Math.round(osrm.durationSeconds),
                     distanceMeters: dm,
-                    source: 'osrm',
+                    source: google?.ok ? 'google_routes' : 'osrm',
                   };
                 } else {
                   const etaMin = normalizeEtaMinutes(task?.etaMinutes);
@@ -3664,7 +3884,10 @@ export default function ChecklistEngine() {
                   } catch {
                     dmergeRv = {};
                   }
-                  initialRes = { ...serverOnlyRes, ...dmergeRv };
+                  initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                    serverOnlyRes as Record<string, unknown>,
+                    dmergeRv as Record<string, unknown>
+                  );
                 }
                 const ts = Date.now();
                 const cachePayload = {
@@ -3734,7 +3957,10 @@ export default function ChecklistEngine() {
                 } catch {
                   dmergeRv = {};
                 }
-                initialRes = { ...serverOnlyRes, ...dmergeRv };
+                initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                  serverOnlyRes as Record<string, unknown>,
+                  dmergeRv as Record<string, unknown>
+                );
               } else {
                 initialRes = serverOnlyRes;
               }
@@ -3818,7 +4044,10 @@ export default function ChecklistEngine() {
                    remoteExec.responses && typeof remoteExec.responses === 'object' && !Array.isArray(remoteExec.responses)
                      ? remoteExec.responses
                      : {};
-                 initialRes = { ...serverR, ...draftRes };
+                 initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                   serverR as Record<string, unknown>,
+                   draftRes as Record<string, unknown>
+                 );
                }
                if (remoteExec.templateId) realTemplateId = remoteExec.templateId;
                lastSubmittedRevForNext = Math.max(
@@ -3916,9 +4145,9 @@ export default function ChecklistEngine() {
         }
       }
 
-      // Nova visita de revisão explícita (metadata): zerar cronômetros e limpar assinatura/deslocamento/geofence dessa sessão.
-      // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" — apagava transit_start/end em execuções ainda ativas
-      // (ex.: PATCH atrasado, outro dispositivo, cache) e o relatório ficava sem deslocamento.
+      // Nova visita de revisão explícita (metadata): zerar cronômetros e limpar assinatura/geofence dessa sessão.
+      // Deslocamento (transit_start/end) mantém-se: após «Finalizar deslocamento» não pode ser refeito nem apagado aqui.
+      // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" para apagar transit em execuções ainda ativas.
       if (taskId && !readOnlyMode && reopenRevisionPending) {
         stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
         stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
@@ -4434,6 +4663,30 @@ export default function ChecklistEngine() {
       (fieldDef.type === 'transit_start' || fieldDef.type === 'transit_end');
     if (serverPausedExecution && !isTransitField) return;
     if (responses.__form_paused_since && !isTransitField) return;
+
+    if (isTransitField && fieldDef) {
+      const prevVal = scope
+        ? getScopedFieldValue(responses, scope, fieldId)
+        : responses[fieldId];
+      const clearing =
+        value === '' ||
+        value === null ||
+        value === undefined ||
+        (typeof value === 'string' && !String(value).trim());
+
+      if (clearing && isTransitEvidenceNonempty(prevVal)) return;
+      if (fieldDef.type === 'transit_end' && !clearing && isTransitEvidenceNonempty(prevVal)) return;
+
+      if (fieldDef.type === 'transit_start') {
+        const endF = findTransitEndFieldAfterStart(template?.schemaData, fieldId);
+        const endVal = endF?.id
+          ? scope
+            ? getScopedFieldValue(responses, scope, endF.id)
+            : responses[endF.id]
+          : undefined;
+        if (isTransitEvidenceNonempty(endVal)) return;
+      }
+    }
 
     let stored = value;
     if (fieldDef && fieldAllowsMultiple(fieldDef) && (value === null || value === '')) {
@@ -6918,14 +7171,23 @@ export default function ChecklistEngine() {
         </View>
       ) : null}
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingBottom: 12 }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            /** Rodapé (badges + «Fim do relatório») sobrepõe o scroll — evitar cortar mapa / «Dados coletados». */
+            paddingBottom: Math.max(32, insets.bottom + 120),
+          },
+        ]}
+      >
         {isReadOnly && (
             <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
                 <Ionicons name="information-circle" size={24} color="#3B82F6" style={{marginRight: 8}}/>
                 <Text style={{flex: 1, color: '#1E3A8A', fontWeight: '600', fontSize: 13}}>Esta OS já foi concluída e os campos estão bloqueados para alteração.</Text>
             </View>
         )}
-        <View pointerEvents={isReadOnly ? "none" : "auto"} style={{ gap: 16 }}>
+        <View pointerEvents={isReadOnly ? 'box-none' : 'auto'} style={{ gap: 16 }}>
         {useSectionHub && hubPicking && pages.length > 1 ? (
           <View style={{ gap: 12 }}>
             <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>
@@ -8638,8 +8900,9 @@ export default function ChecklistEngine() {
                 ))}
               {(field.type === 'transit_start' || field.type === 'transit_end') && (() => {
                  let isBlocked = false;
+                 let startForEnd: ReturnType<typeof findPreviousTransitStartForEnd> = null;
                  if (field.type === 'transit_end') {
-                     const startForEnd = findPreviousTransitStartForEnd(template?.schemaData || [], field.id);
+                     startForEnd = findPreviousTransitStartForEnd(template?.schemaData || [], field.id);
                      const startVal = startForEnd
                        ? getScopedFieldValue(responses, scope, startForEnd.id)
                        : undefined;
@@ -8660,8 +8923,99 @@ export default function ChecklistEngine() {
                  if (startBlockedAnotherLeg) {
                    isBlocked = true;
                  }
+                 let transitLegFinalizedLock = false;
+                 if (field.type === 'transit_start') {
+                   const endF = findTransitEndFieldAfterStart(template?.schemaData, field.id);
+                   if (endF?.id) {
+                     const endRaw = getScopedFieldValue(responses, scope, endF.id);
+                     transitLegFinalizedLock = isTransitEvidenceNonempty(endRaw);
+                   }
+                 } else if (field.type === 'transit_end') {
+                   transitLegFinalizedLock = isTransitEvidenceNonempty(vv(field.id));
+                 }
+                 if (transitLegFinalizedLock) {
+                   isBlocked = true;
+                 }
                  const transitEvidence = hasValue ? parseTransitFieldEvidence(vv(field.id)) : null;
                  const transitEvidenceLines = transitEvidence ? formatTransitEvidenceLines(transitEvidence) : [];
+                 const metricsLabels =
+                   field.type === 'transit_end' && transitEvidence?.actualMetrics
+                     ? transitActualMetricsLabels(transitEvidence.actualMetrics)
+                     : { durationLabel: null as string | null, distanceLabel: null as string | null };
+                 const completedTransitMapPath: number[][] | null =
+                   field.type === 'transit_end' && hasValue
+                     ? (() => {
+                         const rawObj = coerceTransitEvidenceObject(vv(field.id));
+                         const endLat =
+                           transitEvidence?.lat ??
+                           (rawObj
+                             ? Number(
+                                 (rawObj.coordinates as Record<string, unknown> | undefined)?.lat ??
+                                   (rawObj.coordinates as Record<string, unknown> | undefined)?.latitude ??
+                                   rawObj.lat ??
+                                   rawObj.latitude
+                               )
+                             : NaN);
+                         const endLng =
+                           transitEvidence?.lng ??
+                           (rawObj
+                             ? Number(
+                                 (rawObj.coordinates as Record<string, unknown> | undefined)?.lng ??
+                                   (rawObj.coordinates as Record<string, unknown> | undefined)?.longitude ??
+                                   (rawObj.coordinates as Record<string, unknown> | undefined)?.lon ??
+                                   rawObj.lng ??
+                                   rawObj.longitude
+                               )
+                             : NaN);
+                         const tp =
+                           transitEvidence?.traversedPath ??
+                           (rawObj
+                             ? normalizeStoredTraversedPathForTransit(rawObj.traversedPath) ??
+                               normalizeStoredTraversedPathForTransit(rawObj.gpsTrack) ??
+                               normalizeStoredTraversedPathForTransit(rawObj.track)
+                             : null);
+                         if (tp && tp.length >= 2) {
+                           const fin = finalizeTransitPreviewPolyline(tp);
+                           if (fin) return fin;
+                         }
+                         if (
+                           tp &&
+                           tp.length === 1 &&
+                           Number.isFinite(endLat) &&
+                           Number.isFinite(endLng)
+                         ) {
+                           const fin = finalizeTransitPreviewPolyline([
+                             [tp[0][0], tp[0][1]],
+                             [endLat, endLng],
+                           ]);
+                           if (fin) return fin;
+                         }
+                         if (startForEnd) {
+                           let startRaw = getScopedFieldValue(responses, scope, startForEnd.id);
+                           if (startRaw == null || (typeof startRaw === 'string' && startRaw.trim() === '')) {
+                             startRaw = findFieldValueInResponses(
+                               responses,
+                               startForEnd.id,
+                               template?.schemaData || []
+                             );
+                           }
+                           const startEv = parseTransitFieldEvidence(startRaw);
+                           if (
+                             startEv?.lat != null &&
+                             startEv?.lng != null &&
+                             Number.isFinite(endLat) &&
+                             Number.isFinite(endLng)
+                           ) {
+                             const fin = finalizeTransitPreviewPolyline([
+                               [startEv.lat, startEv.lng],
+                               [endLat, endLng],
+                             ]);
+                             if (fin) return fin;
+                           }
+                         }
+                         return null;
+                       })()
+                     : null;
                  const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? C.primary : C.accent));
                  const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
                  const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
@@ -8756,6 +9110,16 @@ export default function ChecklistEngine() {
                       <Text style={{ fontSize: 12, color: '#64748b', marginTop: 8, paddingHorizontal: 4 }}>
                         O GPS pode demorar em campo ou com sinal fraco. Aguarde.
                       </Text>
+                    ) : null}
+                    {field.type === 'transit_end' &&
+                    hasValue &&
+                    completedTransitMapPath &&
+                    completedTransitMapPath.length >= 2 ? (
+                      <TransitCompletedSummaryMap
+                        pathLatLng={completedTransitMapPath}
+                        durationLabel={metricsLabels.durationLabel}
+                        distanceLabel={metricsLabels.distanceLabel}
+                      />
                     ) : null}
                     {hasValue ? (
                       <View

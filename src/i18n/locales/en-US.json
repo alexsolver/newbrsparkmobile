@@ -870,6 +870,9 @@
     "providerSearchPlaceholder": "Search by WO no., service…",
     "revisionBadge": "Revision",
     "providerOsAwaitingAcceptBadge": "Awaiting acceptance",
+    "providerOsAwaitAcceptMinutes": "{{count}} min",
+    "providerOsAwaitAcceptMinutesSub": "Awaiting acceptance",
+    "providerOsAwaitAcceptA11y": "{{count}} minutes awaiting acceptance",
     "osReceivedAtLabel": "Received:",
     "osReceivedAtLine": "Received: {{date}}",
     "osEtaChip": "ETA {{minutes}} min",
@@ -1476,6 +1479,8 @@
     "blockedHint": "Unpause to continue filling the form.",
     "unpauseBtn": "Unpause visit",
     "listBadge": "Paused",
+    "listBadgeMinutesUnit": "min",
+    "listBadgeA11y": "Paused for {{count}} minutes",
     "validationDetail": "Describe the reason (min. 12 characters).",
     "cat": {
       "personal": "Personal needs",

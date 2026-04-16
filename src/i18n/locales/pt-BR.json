@@ -870,6 +870,9 @@
     "providerSearchPlaceholder": "Buscar por nº da OS, serviço…",
     "revisionBadge": "Revisão",
     "providerOsAwaitingAcceptBadge": "Aguardando aceitação",
+    "providerOsAwaitAcceptMinutes": "{{count}} min",
+    "providerOsAwaitAcceptMinutesSub": "Aguardando aceite",
+    "providerOsAwaitAcceptA11y": "{{count}} minutos aguardando aceite",
     "osReceivedAtLabel": "Recebimento:",
     "osReceivedAtLine": "Recebimento: {{date}}",
     "osEtaChip": "ETA {{minutes}} min",
@@ -1476,6 +1479,8 @@
     "blockedHint": "Despause para preencher o formulário de novo.",
     "unpauseBtn": "Despausar atendimento",
     "listBadge": "Pausada",
+    "listBadgeMinutesUnit": "min",
+    "listBadgeA11y": "Pausada há {{count}} minutos",
     "validationDetail": "Descreva o motivo (mín. 12 caracteres).",
     "cat": {
       "personal": "Pessoal / necessidades",

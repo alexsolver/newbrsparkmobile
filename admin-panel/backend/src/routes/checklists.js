@@ -625,6 +625,10 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
                     : existing.responses && typeof existing.responses === 'object' && !Array.isArray(existing.responses)
                       ? existing.responses
                       : {};
+            const completedAtEff = updateData.completedAt ?? existing.completedAt;
+            const snapshotAtMsPatch = completedAtEff
+                ? new Date(completedAtEff).getTime()
+                : Date.now();
             updateData.businessMetrics = computeExecutionBusinessMetrics({
                 responses: finalResp,
                 metadata: mergedMeta,
@@ -633,10 +637,12 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
                     locationLat: existing.locationLat,
                     locationLng: existing.locationLng,
                     startedAt: updateData.startedAt ?? existing.startedAt,
-                    completedAt: existing.completedAt,
+                    completedAt: completedAtEff,
                     expectedFormDurationMinutes: existing.expectedFormDurationMinutes,
                 },
                 revision: existing.lastSubmittedRevision,
+                snapshotAtMs: snapshotAtMsPatch,
+                template: existing.template || null,
             });
         }
 
@@ -726,7 +732,10 @@ router.post('/executions', authUser, async (req, res) => {
         // If the task was dispatched from the cloud, the mobile app sends taskId. 
         // We update the existing PENDING execution instead of creating a new one!
         if (taskId) {
-            const existing = await prisma.checklistExecution.findUnique({ where: { id: taskId } });
+            const existing = await prisma.checklistExecution.findUnique({
+                where: { id: taskId },
+                include: { template: true },
+            });
             if (existing) {
                 if (!sameOwnerEmail(existing.ownerEmail, authEmail)) {
                     return res.status(403).json({ error: 'Acesso negado a esta OS.' });
@@ -807,6 +816,8 @@ router.post('/executions', authUser, async (req, res) => {
                         expectedFormDurationMinutes: existing.expectedFormDurationMinutes,
                     },
                     revision: clientRev,
+                    snapshotAtMs: completedAtD.getTime(),
+                    template: existing.template || null,
                 });
 
                 const shouldSpawnNextRoutine =
@@ -879,6 +890,12 @@ router.post('/executions', authUser, async (req, res) => {
                 }
             }
             const osNumber = await allocateNextFtOsNumber(prisma);
+            let templateForMetrics = null;
+            if (finalTemplateId) {
+                templateForMetrics = await prisma.checklistTemplate.findUnique({
+                    where: { id: finalTemplateId },
+                });
+            }
             const businessSnapAdHoc = computeExecutionBusinessMetrics({
                 responses: responses || {},
                 metadata: metaIn,
@@ -891,6 +908,8 @@ router.post('/executions', authUser, async (req, res) => {
                     expectedFormDurationMinutes: null,
                 },
                 revision: 1,
+                snapshotAtMs: completedAtD.getTime(),
+                template: templateForMetrics,
             });
             execution = await prisma.$transaction(async (tx) => {
                 const ex = await tx.checklistExecution.create({

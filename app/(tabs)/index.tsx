@@ -545,6 +545,27 @@ function providerTaskDeviceReceivedAtIso(t: any): string | null {
   return null;
 }
 
+/** Início do relógio «aguardando aceite»: recebimento no aparelho, senão criação da OS. */
+function providerTaskAwaitAcceptStartMs(t: any): number {
+  const recvMs = parseIsoToMs(providerTaskDeviceReceivedAtIso(t));
+  if (recvMs > 0) return recvMs;
+  const createdMs = parseIsoToMs(t?.createdAt);
+  if (createdMs > 0) return createdMs;
+  return Date.now();
+}
+
+function computeProviderAwaitAcceptElapsedMinutes(t: any, nowMs: number = Date.now()): number {
+  const start = providerTaskAwaitAcceptStartMs(t);
+  return Math.max(0, Math.floor((nowMs - start) / 60_000));
+}
+
+/** Cartão/modal: mostrar contador até o técnico aceitar (PENDING/RECEIVED e ainda não aceite local). */
+function providerTaskShowsAwaitAcceptCounter(t: any): boolean {
+  if (t?.isAccepted) return false;
+  const st = String(t?.status || '').toUpperCase();
+  return st === 'PENDING' || st === 'RECEIVED';
+}
+
 /** Data/hora de fim realizado da OS (payload, metadata ou cache local de concluídas). */
 function providerTaskCompletedAtIso(
   t: any,
@@ -583,6 +604,25 @@ function providerTaskModalFormTitle(t: any): string | null {
   const serviceLine = String(t?.service ?? '').trim();
   if (serviceLine && raw === serviceLine) return null;
   return raw;
+}
+
+/**
+ * Texto do chip azul «formulário» na lista de OS.
+ * Em pausa: mostra o nome do template sempre que existir (mesmo igual à linha de serviço),
+ * pois o mapeamento zera `formTemplateTitle` nesse caso e o cartão ficava sem o chip.
+ */
+function providerOsCardFormTemplateBadgeText(order: any, listEff: string): string | null {
+  const fromMapped =
+    order?.formTemplateTitle != null && String(order.formTemplateTitle).trim() !== ''
+      ? String(order.formTemplateTitle).trim()
+      : '';
+  const raw = String(order?.templateTitle ?? taskMetadataRecord(order).templateTitle ?? '').trim();
+  const resolved = fromMapped || raw;
+  if (!resolved) return null;
+  const serviceLine = String(order?.service ?? '').trim();
+  if (String(listEff || '').toUpperCase() === 'PAUSED') return resolved;
+  if (serviceLine && resolved === serviceLine) return null;
+  return resolved;
 }
 
 /** Tipografia do valor numérico (duração, distância, ETA) — uma única definição para não haver diferença visual. */
@@ -675,15 +715,45 @@ function providerTaskServiceAddressTextOnly(t: any): string {
   return '';
 }
 
+/** Nome amigável do local de atendimento (bem, metadata ou integração). */
+function providerTaskServiceLocationName(t: any): string {
+  const ln = t?.locationName;
+  if (ln != null && String(ln).trim()) return String(ln).trim();
+  const at = t?.assetTitle;
+  if (at != null && String(at).trim()) return String(at).trim();
+  const ast = t?.asset;
+  if (ast && typeof ast === 'object' && ast.title != null && String(ast.title).trim()) {
+    return String(ast.title).trim();
+  }
+  const meta = taskMetadataRecord(t);
+  for (const k of [
+    'locationName',
+    'serviceLocationName',
+    'localName',
+    'nomeLocal',
+    'placeName',
+    'establishmentName',
+    'nome_do_local',
+    'localNome',
+  ]) {
+    const v = meta[k];
+    const s = v != null ? String(v).trim() : '';
+    if (s) return s;
+  }
+  return '';
+}
+
 /** Mapa compacto no card ou mensagem (Alert) se não houver coordenadas — usado pelo mapinha e pelo badge de tipo de local. */
 function runProviderOsMapMiniPress(order: any, setMiniMapTask: (t: any) => void): void {
   const coords = providerTaskMapTargetCoords(order);
   if (!coords) {
+    const name = providerTaskServiceLocationName(order);
     const addrText = providerTaskServiceAddressTextOnly(order);
-    if (addrText) {
+    const head = [name, addrText].filter(Boolean).join('\n\n');
+    if (head) {
       Alert.alert(
         'Local de atendimento',
-        `${addrText}\n\nNão há coordenadas geográficas para mostrar no mapa.`
+        `${head}\n\nNão há coordenadas geográficas para mostrar no mapa.`
       );
     } else {
       Alert.alert('Local de atendimento', 'Não há local de atendimento especificado nesta OS.');
@@ -926,42 +996,42 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
       <View
         style={{
           backgroundColor: P.background,
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 20,
+          borderRadius: 14,
+          padding: 11,
+          marginBottom: 12,
           borderWidth: 1,
           borderColor: P.border,
         }}
       >
         <Text
           style={{
-            fontSize: 13,
+            fontSize: 11,
             fontWeight: '800',
             color: P.textLight,
             textTransform: 'uppercase',
-            marginBottom: 10,
-            letterSpacing: 0.5,
+            marginBottom: 8,
+            letterSpacing: 0.45,
           }}
         >
           Cliente e local
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 }}>
           <Ionicons
             name="person-outline"
-            size={18}
+            size={15}
             color={P.textLight}
-            style={{ marginRight: 12, marginTop: 2 }}
+            style={{ marginRight: 10, marginTop: 2 }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>Solicitante</Text>
-            <Text style={{ fontSize: 15, color: P.slate, fontWeight: '700' }}>
+            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Solicitante</Text>
+            <Text style={{ fontSize: 13, color: P.slate, fontWeight: '700' }}>
               {providerTaskRequesterDisplayName(task) || '—'}
             </Text>
           </View>
         </View>
         {segmentEnds ? (
           <>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 }}>
               <TouchableOpacity
                 onPress={() => openLatLngInExternalMaps(segmentEnds.a.lat, segmentEnds.a.lng, segmentLineA || 'Extremo A')}
                 accessibilityRole="button"
@@ -969,10 +1039,10 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={{ marginRight: 10, marginTop: 0, padding: 4 }}
               >
-                <Ionicons name="location-outline" size={22} color={linkBlue} />
+                <Ionicons name="location-outline" size={18} color={linkBlue} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   Trecho — extremo A (início)
                 </Text>
                 <TouchableOpacity
@@ -981,10 +1051,10 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 >
                   <Text
                     style={{
-                      fontSize: 15,
+                      fontSize: 13,
                       color: linkBlue,
                       fontWeight: '600',
-                      lineHeight: 22,
+                      lineHeight: 19,
                       textDecorationLine: 'underline',
                     }}
                   >
@@ -1001,10 +1071,10 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={{ marginRight: 10, marginTop: 0, padding: 4 }}
               >
-                <Ionicons name="location-outline" size={22} color={linkBlue} />
+                <Ionicons name="location-outline" size={18} color={linkBlue} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   Trecho — extremo B (fim)
                 </Text>
                 <TouchableOpacity
@@ -1013,10 +1083,10 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 >
                   <Text
                     style={{
-                      fontSize: 15,
+                      fontSize: 13,
                       color: linkBlue,
                       fontWeight: '600',
-                      lineHeight: 22,
+                      lineHeight: 19,
                       textDecorationLine: 'underline',
                     }}
                   >
@@ -1035,10 +1105,10 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={{ marginRight: 10, marginTop: 0, padding: 4 }}
             >
-              <Ionicons name="location-outline" size={22} color={linkBlue} />
+              <Ionicons name="location-outline" size={18} color={linkBlue} />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>Local de atendimento</Text>
+              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Local de atendimento</Text>
               <TouchableOpacity
                 onPress={() => openProviderTaskInExternalMaps(task)}
                 activeOpacity={0.65}
@@ -1046,11 +1116,11 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               >
                 <Text
                   style={{
-                    fontSize: 15,
+                    fontSize: 13,
                     color:
                       providerTaskServiceAddressLine(task) || providerTaskMapTargetCoords(task) ? linkBlue : P.textSecondary,
                     fontWeight: '600',
-                    lineHeight: 22,
+                    lineHeight: 19,
                     textDecorationLine:
                       providerTaskServiceAddressLine(task) || providerTaskMapTargetCoords(task) ? 'underline' : 'none',
                   }}
@@ -1066,61 +1136,61 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
       <View
         style={{
           backgroundColor: P.background,
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 24,
+          borderRadius: 14,
+          padding: 11,
+          marginBottom: 14,
           borderWidth: 1,
           borderColor: P.divider,
         }}
       >
         <Text
           style={{
-            fontSize: 13,
+            fontSize: 11,
             fontWeight: '800',
             color: P.textLight,
             textTransform: 'uppercase',
-            marginBottom: 8,
-            letterSpacing: 0.5,
+            marginBottom: 6,
+            letterSpacing: 0.45,
           }}
         >
           Detalhes
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-          <Ionicons name="time" size={18} color={P.textLight} style={{ marginRight: 12 }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+          <Ionicons name="time" size={15} color={P.textLight} style={{ marginRight: 10 }} />
           <View>
-            <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>Criado em</Text>
-            <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Criado em</Text>
+            <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
               {new Date(task.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
             </Text>
           </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-          <Ionicons name="phone-portrait-outline" size={18} color={P.textLight} style={{ marginRight: 12 }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+          <Ionicons name="phone-portrait-outline" size={15} color={P.textLight} style={{ marginRight: 10 }} />
           <View>
-            <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>{t('home.osReceivedAtLabel')}</Text>
-            <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>{t('home.osReceivedAtLabel')}</Text>
+            <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
               {formatProviderTaskLocaleDateTime(providerTaskDeviceReceivedAtIso(task), i18n.language)}
             </Text>
           </View>
         </View>
         {providerTaskExpectedFormDurationMinutes(task) != null ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
             <Ionicons
               name="hourglass-outline"
-              size={18}
+              size={15}
               color={P.status.info.fg}
-              style={{ marginRight: 12 }}
+              style={{ marginRight: 10 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                 {t('home.expectedFormScheduleLabel')}
               </Text>
-              <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+              <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
                 {t('agenda.expectedFormMinutes', {
                   count: providerTaskExpectedFormDurationMinutes(task)!,
                 })}
               </Text>
-              <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600', marginTop: 6, lineHeight: 16 }}>
+              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600', marginTop: 4, lineHeight: 14 }}>
                 {t('home.osFormWindowHint')}
               </Text>
             </View>
@@ -1129,26 +1199,26 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
         {providerTaskHasAgendaFormWindow(task) ||
         (task?.startedAt && String(task.startedAt).trim() !== '') ||
         (task?.completedAt && String(task.completedAt).trim() !== '') ? (
-          <View style={{ marginBottom: 12 }}>
+          <View style={{ marginBottom: 10 }}>
             <Text
               style={{
-                fontSize: 11,
+                fontSize: 10,
                 color: P.textLight,
                 fontWeight: '800',
                 textTransform: 'uppercase',
-                marginBottom: 10,
-                letterSpacing: 0.5,
+                marginBottom: 8,
+                letterSpacing: 0.45,
               }}
             >
               {t('home.osFormWindowSectionTitle')}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-              <Ionicons name="calendar-outline" size={18} color={P.status.info.fg} style={{ marginRight: 12 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Ionicons name="calendar-outline" size={15} color={P.status.info.fg} style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   {t('home.osPlannedStartLabel')}
                 </Text>
-                <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+                <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
                   {providerTaskPlannedStartIso(task)
                     ? formatProviderTaskWindowDateTime(
                         providerTaskPlannedStartIso(task)!,
@@ -1158,13 +1228,13 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 </Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-              <Ionicons name="calendar" size={18} color={P.status.info.fg} style={{ marginRight: 12 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Ionicons name="calendar" size={15} color={P.status.info.fg} style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   {t('home.osPlannedEndLabel')}
                 </Text>
-                <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+                <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
                   {providerTaskPlannedEndIso(task)
                     ? formatProviderTaskWindowDateTime(
                         providerTaskPlannedEndIso(task)!,
@@ -1175,15 +1245,15 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               </View>
             </View>
             {vencDetailIso ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                <Ionicons name="alert-circle-outline" size={18} color={P.textSecondary} style={{ marginRight: 12 }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Ionicons name="alert-circle-outline" size={15} color={P.textSecondary} style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                  <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                     {t('home.osVencimentoDetailLabel')}
                   </Text>
                   <Text
                     style={{
-                      fontSize: 14,
+                      fontSize: 12,
                       color: vencDetailOverdue ? P.destructive : P.textSecondary,
                       fontWeight: '800',
                     }}
@@ -1193,13 +1263,13 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
                 </View>
               </View>
             ) : null}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-              <Ionicons name="play-circle-outline" size={18} color={P.textSecondary} style={{ marginRight: 12 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Ionicons name="play-circle-outline" size={15} color={P.textSecondary} style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   {t('home.osActualStartLabel')}
                 </Text>
-                <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+                <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
                   {task?.startedAt && String(task.startedAt).trim() !== ''
                     ? formatProviderTaskWindowDateTime(String(task.startedAt), i18n.language || 'pt-BR')
                     : '—'}
@@ -1207,12 +1277,12 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="checkmark-done-outline" size={18} color={P.textSecondary} style={{ marginRight: 12 }} />
+              <Ionicons name="checkmark-done-outline" size={15} color={P.textSecondary} style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+                <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                   {t('home.osActualEndLabel')}
                 </Text>
-                <Text style={{ fontSize: 14, color: P.textSecondary, fontWeight: '800' }}>
+                <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
                   {task?.completedAt && String(task.completedAt).trim() !== ''
                     ? formatProviderTaskWindowDateTime(String(task.completedAt), i18n.language || 'pt-BR')
                     : t('home.osActualEndPending')}
@@ -1224,17 +1294,17 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons
               name="calendar-outline"
-              size={18}
+              size={15}
               color={vencDetailIso ? (vencDetailOverdue ? P.destructive : P.textSecondary) : P.textLight}
-              style={{ marginRight: 12 }}
+              style={{ marginRight: 10 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: P.textLight, fontWeight: '600' }}>
+              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
                 {t('home.osVencimentoDetailLabel')}
               </Text>
               <Text
                 style={{
-                  fontSize: 14,
+                  fontSize: 12,
                   color: vencDetailIso ? (vencDetailOverdue ? P.destructive : P.textSecondary) : P.textLight,
                   fontWeight: '800',
                 }}
@@ -1248,20 +1318,20 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
         )}
       </View>
 
-      <View style={{ marginBottom: 32 }}>
+      <View style={{ marginBottom: 18 }}>
         <Text
           style={{
-            fontSize: 13,
+            fontSize: 11,
             fontWeight: '800',
             color: P.textLight,
             textTransform: 'uppercase',
-            marginBottom: 8,
-            letterSpacing: 0.5,
+            marginBottom: 6,
+            letterSpacing: 0.45,
           }}
         >
           Descrição
         </Text>
-        <Text style={{ fontSize: 15, color: P.textSecondary, lineHeight: 24 }}>{task.description}</Text>
+        <Text style={{ fontSize: 13, color: P.textSecondary, lineHeight: 20 }}>{task.description}</Text>
       </View>
     </>
   );
@@ -1380,57 +1450,327 @@ async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<
   }
 }
 
-/** Selo circular na lista prestador: OS a aguardar confirmação (prancheta) + tempo (ampulheta), com pulso no pai. */
-function ProviderAwaitAcceptOrb(props: {
-  pulseOpacity: Animated.Value;
-  pulseScale: Animated.Value;
-  warning: { fg: string; bg: string; border: string };
-  cardWhite: string;
-  accessibilityLabel: string;
+/** Pill creme/terracota + pulso + ícone à esquerda — compartilhado por pausa e «aguardando aceite». */
+function ProviderTerracottaDurationPillBadge(props: {
+  task: any;
+  computeMinutes: (task: any) => number;
+  tickIntervalMs: number;
+  getA11y: (minutes: number) => string;
+  /** Se true (padrão), minutos < 0 mostram «—» (ex.: pausa sem `lastPauseAt`). */
+  dashWhenNegative?: boolean;
+  alignSelf?: 'flex-start' | 'center';
+  renderBelow?: (minutes: number) => React.ReactNode;
+  /** Ícone à esquerda do contador (padrão: ampulheta para espera). */
+  leadingIcon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** Animação do ícone: giro 180° (ampulheta), pulso de escala (pausa) ou estático. */
+  leadingIconAnimation?: 'flip' | 'pulse' | 'none';
 }) {
-  const { pulseOpacity, pulseScale, warning, cardWhite, accessibilityLabel } = props;
-  return (
-    <Animated.View
-      accessibilityRole="image"
-      accessibilityLabel={accessibilityLabel}
-      style={{
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: warning.bg,
-        borderWidth: 2,
-        borderColor: warning.border,
-        justifyContent: 'center',
-        alignItems: 'center',
-        opacity: pulseOpacity,
-        transform: [{ scale: pulseScale }],
-        shadowColor: warning.fg,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 4,
-      }}
-    >
-      <MaterialCommunityIcons name="clipboard-check-outline" size={22} color={warning.fg} />
-      <View
+  const {
+    task,
+    computeMinutes,
+    tickIntervalMs,
+    getA11y,
+    dashWhenNegative = true,
+    alignSelf = 'flex-start',
+    renderBelow,
+    leadingIcon = 'hourglass-outline',
+    leadingIconAnimation = 'flip',
+  } = props;
+  const { t } = useTranslation();
+  const [minutes, setMinutes] = useState(() => computeMinutes(task));
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.35)).current;
+  const flip = useRef(new Animated.Value(0)).current;
+  const iconPulseScale = useRef(new Animated.Value(1)).current;
+  const taskRef = useRef(task);
+  taskRef.current = task;
+
+  useEffect(() => {
+    const tick = () => setMinutes(computeMinutes(taskRef.current));
+    tick();
+    const id = setInterval(tick, tickIntervalMs);
+    return () => clearInterval(id);
+  }, [task?.id, task?.lastPauseAt, tickIntervalMs, computeMinutes]);
+
+  useEffect(() => {
+    const dur = 780;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(pulseScale, {
+            toValue: 1.045,
+            duration: dur,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0.55,
+            duration: dur,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulseScale, {
+            toValue: 1,
+            duration: dur,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0.22,
+            duration: dur,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      pulseScale.setValue(1);
+      pulseOpacity.setValue(0.35);
+    };
+  }, [pulseOpacity, pulseScale]);
+
+  useEffect(() => {
+    iconPulseScale.stopAnimation();
+    iconPulseScale.setValue(1);
+    if (leadingIconAnimation !== 'flip') {
+      flip.stopAnimation();
+      flip.setValue(0);
+      return;
+    }
+    const spin = Animated.loop(
+      Animated.sequence([
+        Animated.timing(flip, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(400),
+        Animated.timing(flip, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(400),
+      ]),
+    );
+    spin.start();
+    return () => {
+      spin.stop();
+      flip.setValue(0);
+    };
+  }, [flip, leadingIconAnimation]);
+
+  useEffect(() => {
+    flip.stopAnimation();
+    flip.setValue(0);
+    if (leadingIconAnimation !== 'pulse') {
+      iconPulseScale.stopAnimation();
+      iconPulseScale.setValue(1);
+      return;
+    }
+    const dur = 700;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(iconPulseScale, {
+          toValue: 1.14,
+          duration: dur,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(iconPulseScale, {
+          toValue: 1,
+          duration: dur,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      iconPulseScale.setValue(1);
+    };
+  }, [leadingIconAnimation, iconPulseScale]);
+
+  const rotate = flip.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const dash = dashWhenNegative && minutes < 0;
+  const valueLabel = dash ? '—' : String(Math.max(0, minutes));
+  const a11y = getA11y(minutes);
+
+  const bg = '#FFF5E6';
+  const border = '#FFCBA4';
+  const iconC = '#D35400';
+  const textC = '#8B4513';
+
+  const pillBody = (
+    <>
+      <Animated.View
         pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         style={{
           position: 'absolute',
+          left: -2,
           right: -2,
+          top: -2,
           bottom: -2,
-          width: 18,
-          height: 18,
-          borderRadius: 9,
-          backgroundColor: cardWhite,
-          borderWidth: 1.5,
-          borderColor: warning.border,
-          justifyContent: 'center',
-          alignItems: 'center',
+          borderRadius: 20,
+          backgroundColor: border,
+          opacity: pulseOpacity,
+          transform: [{ scale: pulseScale }],
         }}
+        collapsable={false}
+      />
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 5,
+          paddingHorizontal: 10,
+          borderRadius: 18,
+          backgroundColor: bg,
+          borderWidth: 2,
+          borderColor: border,
+          gap: 8,
+          zIndex: 2,
+        }}
+        collapsable={false}
       >
-        <Ionicons name="hourglass-outline" size={10} color={warning.fg} />
+        {leadingIconAnimation === 'flip' ? (
+          <Animated.View style={{ transform: [{ rotate }] }} collapsable={false}>
+            <Ionicons name={leadingIcon} size={16} color={iconC} />
+          </Animated.View>
+        ) : leadingIconAnimation === 'pulse' ? (
+          <Animated.View
+            style={{
+              width: 22,
+              height: 22,
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: [{ scale: iconPulseScale }],
+            }}
+            collapsable={false}
+          >
+            <Ionicons name={leadingIcon} size={18} color={iconC} />
+          </Animated.View>
+        ) : (
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }} collapsable={false}>
+            <Ionicons name={leadingIcon} size={18} color={iconC} />
+          </View>
+        )}
+        <View style={{ alignItems: 'flex-start', justifyContent: 'center' }} collapsable={false}>
+          <Text style={{ fontSize: 15, fontWeight: '900', color: textC, fontVariant: ['tabular-nums'], lineHeight: 17 }}>
+            {valueLabel}
+          </Text>
+          <Text style={{ fontSize: 8, fontWeight: '700', color: textC, opacity: 0.92, marginTop: 0 }}>
+            {t('pause.listBadgeMinutesUnit')}
+          </Text>
+        </View>
       </View>
-    </Animated.View>
+    </>
+  );
+
+  if (renderBelow) {
+    return (
+      <View style={{ alignItems: 'center', alignSelf }} collapsable={false}>
+        <View accessibilityRole="text" accessibilityLabel={a11y} style={{ position: 'relative' }} collapsable={false}>
+          {pillBody}
+        </View>
+        {renderBelow(minutes)}
+      </View>
+    );
+  }
+
+  return (
+    <View
+      accessibilityRole="text"
+      accessibilityLabel={a11y}
+      style={{ alignSelf, position: 'relative' }}
+      collapsable={false}
+    >
+      {pillBody}
+    </View>
+  );
+}
+
+/** Contador (minutos) desde recebimento no aparelho ou criação da OS até aceitar — lista compacta ou modal. */
+function ProviderAwaitAcceptMinutesChip(props: { task: any; C: ColorPalette; compact: boolean }) {
+  const { task, C, compact } = props;
+  const { t } = useTranslation();
+  const pill = (
+    <ProviderTerracottaDurationPillBadge
+      task={task}
+      computeMinutes={computeProviderAwaitAcceptElapsedMinutes}
+      tickIntervalMs={15_000}
+      getA11y={(m) => t('home.providerOsAwaitAcceptA11y', { count: Math.max(0, m) })}
+      dashWhenNegative={false}
+      alignSelf={compact ? 'flex-start' : 'center'}
+      renderBelow={
+        compact
+          ? undefined
+          : (minutes) => (
+              <>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '800',
+                    color: '#8B4513',
+                    marginTop: 8,
+                    textAlign: 'center',
+                  }}
+                >
+                  {t('home.providerOsAwaitAcceptMinutes', { count: minutes })}
+                </Text>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: C.slate, marginTop: 5, textAlign: 'center' }}>
+                  {t('home.providerOsAwaitAcceptMinutesSub')}
+                </Text>
+              </>
+            )
+      }
+    />
+  );
+  if (compact) {
+    return pill;
+  }
+  return (
+    <View accessibilityRole="text" style={{ alignSelf: 'center', marginBottom: 12, alignItems: 'center' }}>
+      {pill}
+    </View>
+  );
+}
+
+/** ISO da última pausa de atendimento (metadata servidor / checklist). */
+function providerTaskLastPauseIso(t: any): string | null {
+  const top = t?.lastPauseAt != null ? String(t.lastPauseAt).trim() : '';
+  if (top) return top;
+  const m = t?.metadata;
+  if (m && typeof m === 'object' && m.lastPauseAt != null) {
+    const s = String(m.lastPauseAt).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+function computeProviderPausedElapsedMinutes(t: any): number {
+  const iso = providerTaskLastPauseIso(t);
+  if (!iso) return -1;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return -1;
+  return Math.max(0, Math.floor((Date.now() - ms) / 60_000));
+}
+
+/** Badge de minutos em pausa — mesmo pill/animacao que «aguardando aceite». */
+function ProviderPausedDurationBadge(props: { task: any }) {
+  const { task } = props;
+  const { t } = useTranslation();
+  return (
+    <ProviderTerracottaDurationPillBadge
+      task={task}
+      computeMinutes={computeProviderPausedElapsedMinutes}
+      tickIntervalMs={30_000}
+      getA11y={(m) => (m < 0 ? t('pause.listBadge') : t('pause.listBadgeA11y', { count: m }))}
+      dashWhenNegative
+      alignSelf="center"
+      leadingIcon="pause-circle-outline"
+      leadingIconAnimation="pulse"
+    />
   );
 }
 
@@ -1501,9 +1841,6 @@ export default function DashboardScreen() {
   const [savedAltSortRecent, setSavedAltSortRecent] = useState<ProviderLongPressSheetMode>('NEWEST');
   const [savedAltSortOld, setSavedAltSortOld] = useState<ProviderLongPressSheetMode>('OLDEST');
   const [providerRouteSheetOpen, setProviderRouteSheetOpen] = useState(false);
-  /** Pulso no selo «aguardando aceite» (lista prestador). */
-  const providerAwaitAcceptPulseOpacity = useRef(new Animated.Value(1)).current;
-  const providerAwaitAcceptPulseScale = useRef(new Animated.Value(1)).current;
   const [isProviderMenuExpanded, setIsProviderMenuExpanded] = useState(true);
   // Which list section is currently in drag-reorder mode ('MY' | 'SHARED' | null)
   const [reorderingList, setReorderingList] = useState<'MY' | 'SHARED' | null>(null);
@@ -1523,6 +1860,12 @@ export default function DashboardScreen() {
   const [routeMapCenterObj, setRouteMapCenterObj] = useState<{lat: number, lng: number} | null>(null);
   /** Mapa compacto no card da OS (local de atendimento). */
   const [providerOsMiniMapTask, setProviderOsMiniMapTask] = useState<any | null>(null);
+  const providerOsMiniMapHeaderName = providerOsMiniMapTask
+    ? providerTaskServiceLocationName(providerOsMiniMapTask) || 'Local de atendimento'
+    : '';
+  const providerOsMiniMapHeaderAddress = providerOsMiniMapTask
+    ? providerTaskServiceAddressTextOnly(providerOsMiniMapTask)
+    : '';
   const [osrmRouteCoords, setOsrmRouteCoords] = useState<{latitude: number, longitude: number}[]>([]);
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -1563,55 +1906,6 @@ export default function DashboardScreen() {
       cancelled = true;
     };
   }, [mode]);
-
-  useEffect(() => {
-    if (mode !== 'PROVIDER') {
-      providerAwaitAcceptPulseOpacity.stopAnimation();
-      providerAwaitAcceptPulseOpacity.setValue(1);
-      providerAwaitAcceptPulseScale.stopAnimation();
-      providerAwaitAcceptPulseScale.setValue(1);
-      return;
-    }
-    const pulseMs = 520;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(providerAwaitAcceptPulseOpacity, {
-            toValue: 0.38,
-            duration: pulseMs,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(providerAwaitAcceptPulseScale, {
-            toValue: 1.16,
-            duration: pulseMs,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(providerAwaitAcceptPulseOpacity, {
-            toValue: 1,
-            duration: pulseMs,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(providerAwaitAcceptPulseScale, {
-            toValue: 1,
-            duration: pulseMs,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      providerAwaitAcceptPulseOpacity.setValue(1);
-      providerAwaitAcceptPulseScale.setValue(1);
-    };
-  }, [mode, providerAwaitAcceptPulseOpacity, providerAwaitAcceptPulseScale]);
 
   useEffect(() => {
     if (mode !== 'PROVIDER') return;
@@ -2164,6 +2458,7 @@ export default function DashboardScreen() {
                iconLibrary: t.metadata?.iconLibrary || null,
                isAccepted: acceptedTasks.includes(String(t.id)),
                pauseReasonSummary: t.metadata?.lastPauseReasonSummary || null,
+               lastPauseAt: t.metadata?.lastPauseAt ?? null,
             };
          });
          // Ordem inicial alinhada a «Recentes»: data de recebimento no aparelho (fallback criação).
@@ -3697,7 +3992,7 @@ export default function DashboardScreen() {
               initialNumToRender={7}
               windowSize={9}
               maxToRenderPerBatch={12}
-              removeClippedSubviews={Platform.OS === 'android'}
+              removeClippedSubviews={false}
               contentContainerStyle={{
                 flexGrow: 1,
                 paddingTop: 4,
@@ -3734,6 +4029,7 @@ export default function DashboardScreen() {
                   providerCardShowsFieldMetrics(listEff) &&
                   providerCardMapDest &&
                   providerCardDistanceReady(providerMyLocationStatus, providerMyLocation);
+                const formBadgeText = providerOsCardFormTemplateBadgeText(order, listEff);
                 return (
                 <View
                   style={{ flexDirection: 'row', alignItems: 'stretch', marginBottom: 12, paddingHorizontal: 16 }}
@@ -3828,75 +4124,21 @@ export default function DashboardScreen() {
                                     {taskOsLabel(order)}
                                   </Text>
                                 </View>
-                                {listEff === 'PAUSED' ? (
-                                  <View
-                                    style={{
-                                      alignSelf: 'flex-start',
-                                      backgroundColor: C.status.danger.bg,
-                                      paddingHorizontal: 6,
-                                      paddingVertical: 3,
-                                      borderRadius: 10,
-                                      borderWidth: 1,
-                                      borderColor: C.status.danger.border,
-                                      flexDirection: 'row',
-                                      alignItems: 'center',
-                                    }}
-                                  >
-                                    <Ionicons name="pause-circle" size={10} color={C.status.danger.fg} style={{ marginRight: 2 }} />
-                                    <Text style={{ fontSize: 9, color: C.status.danger.fg, fontWeight: '900' }}>
-                                      {t('pause.listBadge')}
-                                    </Text>
-                                  </View>
-                                ) : null}
                               </View>
-                              {order.formTemplateTitle ? (
-                                providerTab === 'PENDING' && !order.isAccepted ? (
+                              {formBadgeText ? (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    marginTop: 6,
+                                    gap: 10,
+                                  }}
+                                >
                                   <View
                                     style={{
-                                      flexDirection: 'row',
-                                      alignItems: 'center',
-                                      marginTop: 6,
-                                      gap: 10,
-                                    }}
-                                  >
-                                    <View
-                                      style={{
-                                        flex: 1,
-                                        minWidth: 0,
-                                        alignSelf: 'flex-start',
-                                        maxWidth: '100%',
-                                        paddingVertical: 5,
-                                        paddingHorizontal: 11,
-                                        borderRadius: 999,
-                                        backgroundColor: C.primary,
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 11,
-                                          fontWeight: '800',
-                                          color: C.cardWhite,
-                                          letterSpacing: -0.08,
-                                          lineHeight: 15,
-                                        }}
-                                        numberOfLines={2}
-                                      >
-                                        {order.formTemplateTitle}
-                                      </Text>
-                                    </View>
-                                    <ProviderAwaitAcceptOrb
-                                      pulseOpacity={providerAwaitAcceptPulseOpacity}
-                                      pulseScale={providerAwaitAcceptPulseScale}
-                                      warning={C.status.warning}
-                                      cardWhite={C.cardWhite}
-                                      accessibilityLabel={t('home.providerOsAwaitingAcceptBadge')}
-                                    />
-                                  </View>
-                                ) : (
-                                  <View
-                                    style={{
+                                      flex: 1,
+                                      minWidth: 0,
                                       alignSelf: 'flex-start',
-                                      marginTop: 6,
                                       maxWidth: '100%',
                                       paddingVertical: 5,
                                       paddingHorizontal: 11,
@@ -3914,10 +4156,26 @@ export default function DashboardScreen() {
                                       }}
                                       numberOfLines={2}
                                     >
-                                      {order.formTemplateTitle}
+                                      {formBadgeText}
                                     </Text>
                                   </View>
-                                )
+                                  {listEff === 'PAUSED' ? (
+                                    <ProviderPausedDurationBadge task={order} />
+                                  ) : providerTab === 'PENDING' && !order.isAccepted ? (
+                                    <ProviderAwaitAcceptMinutesChip task={order} C={C} compact />
+                                  ) : null}
+                                </View>
+                              ) : listEff === 'PAUSED' ? (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    marginTop: 6,
+                                    justifyContent: 'flex-end',
+                                    width: '100%',
+                                  }}
+                                >
+                                  <ProviderPausedDurationBadge task={order} />
+                                </View>
                               ) : providerTab === 'PENDING' && !order.isAccepted ? (
                                 <View
                                   style={{
@@ -3927,13 +4185,7 @@ export default function DashboardScreen() {
                                     width: '100%',
                                   }}
                                 >
-                                  <ProviderAwaitAcceptOrb
-                                    pulseOpacity={providerAwaitAcceptPulseOpacity}
-                                    pulseScale={providerAwaitAcceptPulseScale}
-                                    warning={C.status.warning}
-                                    cardWhite={C.cardWhite}
-                                    accessibilityLabel={t('home.providerOsAwaitingAcceptBadge')}
-                                  />
+                                  <ProviderAwaitAcceptMinutesChip task={order} C={C} compact />
                                 </View>
                               ) : null}
                               <Text
@@ -4510,11 +4762,11 @@ export default function DashboardScreen() {
               styles.sortSheet,
               {
                 backgroundColor: C.cardWhite,
-                paddingHorizontal: 24,
+                paddingHorizontal: 16,
                 paddingBottom: 0,
-                paddingTop: 10,
-                height: Dimensions.get('window').height * 0.85,
-                maxHeight: Dimensions.get('window').height * 0.85,
+                paddingTop: 6,
+                height: Dimensions.get('window').height * 0.52,
+                maxHeight: Dimensions.get('window').height * 0.52,
                 flexDirection: 'column',
               },
             ]}
@@ -4524,38 +4776,40 @@ export default function DashboardScreen() {
             {selectedTask && (
               <>
                 <ScrollView
-                  style={{ flex: 1, marginTop: 8, minHeight: 0 }}
-                  contentContainerStyle={{ paddingBottom: 16 }}
+                  style={{ flex: 1, marginTop: 4, minHeight: 0 }}
+                  contentContainerStyle={{ paddingBottom: 12 }}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
                 >
-                  <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                    {selectedTask.icon ? (
+                  <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    {providerTaskShowsAwaitAcceptCounter(selectedTask) ? (
+                      <ProviderAwaitAcceptMinutesChip task={selectedTask} C={C} compact={false} />
+                    ) : selectedTask.icon ? (
                       <View
                         style={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: 20,
+                          width: 52,
+                          height: 52,
+                          borderRadius: 16,
                           backgroundColor: C.warning.background,
                           borderWidth: 2,
                           borderColor: C.status.warning.border,
                           justifyContent: 'center',
                           alignItems: 'center',
-                          marginBottom: 16,
+                          marginBottom: 10,
                           shadowColor: C.accent,
-                          shadowOffset: { width: 0, height: 6 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 10,
-                          elevation: 6,
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.16,
+                          shadowRadius: 8,
+                          elevation: 4,
                         }}
                       >
                         {selectedTask.icon.startsWith('http') ? (
-                          <Image source={{ uri: selectedTask.icon }} style={{ width: 32, height: 32 }} resizeMode="contain" />
+                          <Image source={{ uri: selectedTask.icon }} style={{ width: 26, height: 26 }} resizeMode="contain" />
                         ) : (
                           <TaskMetadataGlyph
                             icon={selectedTask.icon as any}
                             iconLibrary={selectedTask.iconLibrary}
-                            size={32}
+                            size={26}
                             color={C.accent}
                           />
                         )}
@@ -4566,18 +4820,18 @@ export default function DashboardScreen() {
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 8,
-                        marginBottom: 6,
+                        gap: 6,
+                        marginBottom: 4,
                         flexWrap: 'wrap',
-                        paddingHorizontal: 8,
+                        paddingHorizontal: 6,
                       }}
                     >
                       <View
                         style={{
                           backgroundColor: `${(selectedTask as { color?: string }).color || MEDIA_TAG_COLORS.OTHER}26`,
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 8,
                           borderWidth: 1,
                           borderColor: `${(selectedTask as { color?: string }).color || MEDIA_TAG_COLORS.OTHER}4D`,
                           maxWidth: '100%',
@@ -4585,10 +4839,10 @@ export default function DashboardScreen() {
                       >
                         <Text
                           style={{
-                            fontSize: 13,
+                            fontSize: 11,
                             fontWeight: '900',
                             color: C.slate,
-                            letterSpacing: 0.4,
+                            letterSpacing: 0.35,
                             textAlign: 'center',
                           }}
                         >
@@ -4597,18 +4851,18 @@ export default function DashboardScreen() {
                       </View>
                       <LocationZoneTypeBadge
                         zoneType={(selectedTask as { locationZoneType?: string | null }).locationZoneType}
-                        containerSize={26}
-                        iconSize={15}
+                        containerSize={22}
+                        iconSize={13}
                       />
                     </View>
                     <Text
                       style={{
-                        fontSize: 22,
+                        fontSize: 16,
                         fontWeight: '900',
                         color: C.slate,
                         textAlign: 'center',
-                        lineHeight: 28,
-                        marginBottom: providerTaskModalFormTitle(selectedTask) ? 10 : 16,
+                        lineHeight: 21,
+                        marginBottom: providerTaskModalFormTitle(selectedTask) ? 8 : 12,
                       }}
                     >
                       {selectedTask.service}
@@ -4618,21 +4872,21 @@ export default function DashboardScreen() {
                         style={{
                           alignSelf: 'center',
                           maxWidth: '92%',
-                          marginBottom: 16,
-                          paddingVertical: 6,
-                          paddingHorizontal: 14,
+                          marginBottom: 12,
+                          paddingVertical: 4,
+                          paddingHorizontal: 11,
                           borderRadius: 999,
                           backgroundColor: C.primary,
                         }}
                       >
                         <Text
                           style={{
-                            fontSize: 12,
+                            fontSize: 10,
                             fontWeight: '800',
                             color: C.cardWhite,
                             textAlign: 'center',
-                            letterSpacing: -0.08,
-                            lineHeight: 16,
+                            letterSpacing: -0.06,
+                            lineHeight: 14,
                           }}
                           numberOfLines={3}
                         >
@@ -4710,8 +4964,8 @@ export default function DashboardScreen() {
 
                 <View
                   style={{
-                    paddingTop: 12,
-                    paddingBottom: Math.max(insets.bottom, 12),
+                    paddingTop: 8,
+                    paddingBottom: Math.max(insets.bottom, 10),
                     borderTopWidth: StyleSheet.hairlineWidth,
                     borderTopColor: C.border,
                     backgroundColor: C.cardWhite,
@@ -4720,7 +4974,7 @@ export default function DashboardScreen() {
                   {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') && !selectedTask.isAccepted && (
                     <>
                       {rejectingTaskId === selectedTask.id ? (
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
                           <TouchableOpacity
                             onPress={() => {
                               setRejectingTaskId(null);
@@ -4729,14 +4983,14 @@ export default function DashboardScreen() {
                             style={{
                               flex: 1,
                               backgroundColor: C.cardWhite,
-                              paddingVertical: 14,
-                              borderRadius: 12,
+                              paddingVertical: 11,
+                              borderRadius: 11,
                               alignItems: 'center',
                               borderWidth: 1,
                               borderColor: C.status.danger.border,
                             }}
                           >
-                            <Text style={{ color: C.status.danger.fg, fontWeight: '800' }}>Voltar</Text>
+                            <Text style={{ color: C.status.danger.fg, fontWeight: '800', fontSize: 13 }}>Voltar</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             onPress={async () => {
@@ -4773,16 +5027,16 @@ export default function DashboardScreen() {
                             style={{
                               flex: 1,
                               backgroundColor: C.destructive,
-                              paddingVertical: 14,
-                              borderRadius: 12,
+                              paddingVertical: 11,
+                              borderRadius: 11,
                               alignItems: 'center',
                             }}
                           >
-                            <Text style={{ color: C.cardWhite, fontWeight: '800' }}>Confirmar</Text>
+                            <Text style={{ color: C.cardWhite, fontWeight: '800', fontSize: 13 }}>Confirmar</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
                           <TouchableOpacity
                             onPress={() => {
                               setRejectingTaskId(selectedTask.id);
@@ -4791,14 +5045,14 @@ export default function DashboardScreen() {
                             style={{
                               flex: 1,
                               backgroundColor: C.status.danger.bg,
-                              paddingVertical: 16,
-                              borderRadius: 14,
+                              paddingVertical: 12,
+                              borderRadius: 12,
                               alignItems: 'center',
                               borderWidth: 1,
                               borderColor: C.status.danger.border,
                             }}
                           >
-                            <Text style={{ color: C.destructive, fontWeight: '800', fontSize: 15 }}>Rejeitar</Text>
+                            <Text style={{ color: C.destructive, fontWeight: '800', fontSize: 13 }}>Rejeitar</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             onPress={async () => {
@@ -4855,17 +5109,17 @@ export default function DashboardScreen() {
                             style={{
                               flex: 2,
                               backgroundColor: C.success.text,
-                              paddingVertical: 16,
-                              borderRadius: 14,
+                              paddingVertical: 12,
+                              borderRadius: 12,
                               alignItems: 'center',
                               shadowColor: C.success.text,
-                              shadowOffset: { width: 0, height: 4 },
-                              shadowOpacity: 0.3,
-                              shadowRadius: 8,
-                              elevation: 4,
+                              shadowOffset: { width: 0, height: 3 },
+                              shadowOpacity: 0.22,
+                              shadowRadius: 6,
+                              elevation: 3,
                             }}
                           >
-                            <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>Aceitar Ordem</Text>
+                            <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Aceitar Ordem</Text>
                           </TouchableOpacity>
                         </View>
                       )}
@@ -4897,17 +5151,17 @@ export default function DashboardScreen() {
                       }}
                       style={{
                         backgroundColor: MEDIA_TAG_COLORS.DURING,
-                        paddingVertical: 16,
-                        borderRadius: 14,
+                        paddingVertical: 12,
+                        borderRadius: 12,
                         alignItems: 'center',
                         shadowColor: MEDIA_TAG_COLORS.DURING,
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                        elevation: 4,
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: 0.22,
+                        shadowRadius: 6,
+                        elevation: 3,
                       }}
                     >
-                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>Iniciar Ordem (Em Campo)</Text>
+                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Iniciar Ordem (Em Campo)</Text>
                     </TouchableOpacity>
                   )}
 
@@ -4930,17 +5184,17 @@ export default function DashboardScreen() {
                           }}
                           style={{
                             backgroundColor: C.destructive,
-                            paddingVertical: 16,
-                            borderRadius: 14,
+                            paddingVertical: 12,
+                            borderRadius: 12,
                             alignItems: 'center',
                             shadowColor: C.destructive,
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 8,
-                            elevation: 4,
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.22,
+                            shadowRadius: 6,
+                            elevation: 3,
                           }}
                         >
-                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>{t('pause.unpauseBtn')}</Text>
+                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>{t('pause.unpauseBtn')}</Text>
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
@@ -4957,17 +5211,17 @@ export default function DashboardScreen() {
                           }}
                           style={{
                             backgroundColor: MEDIA_TAG_COLORS.BEFORE,
-                            paddingVertical: 16,
-                            borderRadius: 14,
+                            paddingVertical: 12,
+                            borderRadius: 12,
                             alignItems: 'center',
                             shadowColor: MEDIA_TAG_COLORS.BEFORE,
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 8,
-                            elevation: 4,
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.22,
+                            shadowRadius: 6,
+                            elevation: 3,
                           }}
                         >
-                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>Iniciar / Retomar</Text>
+                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Iniciar / Retomar</Text>
                         </TouchableOpacity>
                       )}
                     </>
@@ -4985,17 +5239,17 @@ export default function DashboardScreen() {
                       }}
                       style={{
                         backgroundColor: MEDIA_TAG_COLORS.AFTER,
-                        paddingVertical: 16,
-                        borderRadius: 14,
+                        paddingVertical: 12,
+                        borderRadius: 12,
                         alignItems: 'center',
                         shadowColor: MEDIA_TAG_COLORS.AFTER,
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                        elevation: 4,
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: 0.22,
+                        shadowRadius: 6,
+                        elevation: 3,
                       }}
                     >
-                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>Visualizar</Text>
+                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Visualizar</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -5039,7 +5293,7 @@ export default function DashboardScreen() {
               <View
                 style={{
                   flexDirection: 'row',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   justifyContent: 'space-between',
                   paddingHorizontal: 14,
                   paddingVertical: 12,
@@ -5047,9 +5301,19 @@ export default function DashboardScreen() {
                   borderBottomColor: C.divider,
                 }}
               >
-                <Text style={{ fontSize: 16, fontWeight: '800', color: C.slate, flex: 1, paddingRight: 8 }} numberOfLines={1}>
-                  Local de atendimento
-                </Text>
+                <View style={{ flex: 1, paddingRight: 8, minWidth: 0 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: C.slate }} numberOfLines={2}>
+                    {providerOsMiniMapHeaderName}
+                  </Text>
+                  {providerOsMiniMapHeaderAddress ? (
+                    <Text
+                      style={{ fontSize: 13, color: C.textSecondary, marginTop: 4, lineHeight: 18, fontWeight: '500' }}
+                      numberOfLines={4}
+                    >
+                      {providerOsMiniMapHeaderAddress}
+                    </Text>
+                  ) : null}
+                </View>
                 <TouchableOpacity
                   onPress={() => setProviderOsMiniMapTask(null)}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -5078,6 +5342,12 @@ export default function DashboardScreen() {
                     const polyCoords = providerTaskMiniMapPolygonCoords(mini);
                     const lineCoords = providerTaskMiniMapPolylineCoords(mini);
                     const pin = providerTaskMapTargetCoords(mini)!;
+                    const pinTitle = (
+                      providerTaskServiceLocationName(mini) ||
+                      String(mini?.service || 'OS').trim() ||
+                      'OS'
+                    ).slice(0, 80);
+                    const pinDesc = providerTaskServiceAddressTextOnly(mini).slice(0, 200);
                     return (
                       <>
                         {polyCoords ? (
@@ -5100,7 +5370,8 @@ export default function DashboardScreen() {
                         <Marker
                           coordinate={{ latitude: pin.lat, longitude: pin.lng }}
                           tracksViewChanges={false}
-                          title={String(mini?.service || 'OS').slice(0, 80)}
+                          title={pinTitle}
+                          description={pinDesc || undefined}
                         />
                       </>
                     );

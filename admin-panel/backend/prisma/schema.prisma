@@ -44,6 +44,8 @@ model Plan {
   /// Limite mensal de OS de campo (FT) e de tarefas de rotina (RT) criadas/concluídas — -1 = ilimitado.
   quotaFieldTasksMonthly          Int @default(-1)
   quotaRoutineTasksMonthly        Int @default(-1)
+  /// Pedidos proxy «Google Maps Routes» (ETA trecho) por mês, por tenant. -1 = ilimitado; 0 = desativado.
+  quotaGoogleMapsRoutesPerMonth   Int @default(-1)
   /// Modelos no Form Builder (ChecklistTemplate). -1 = ilimitado.
   maxChecklistTemplates           Int @default(-1)
   isActive      Boolean  @default(true)
@@ -328,6 +330,8 @@ model TenantPlanUsagePeriod {
   aiVisionAnalysisCount    Int        @default(0)
   fieldTasksCount          Int        @default(0)
   routineTasksCount        Int        @default(0)
+  /// Chamadas ao proxy Google Maps Routes (computeRoutes) no período.
+  googleMapsRouteCount     Int        @default(0)
   createdAt                DateTime   @default(now())
   updatedAt                DateTime   @updatedAt
 
@@ -957,7 +961,7 @@ model ChecklistExecution {
   status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SYNCED
   responses   Json?    // Respostas nativas das perguntas (null enquanto PENDING)
   metadata    Json?    // Metadata do smartphone
-  /// Snapshot derivado (deslocamento, % vs previsto, produtividade) — alinhado ao PDF; atualizado a cada submissão concluída
+  /// Snapshot derivado: `transit`, `productivity`, `formExecution`, `reportSnapshot` (produtividade congelada p/ relatórios; schema em executionBusinessMetrics.js)
   businessMetrics Json?
   /// Última revisão concluída e sincronizada (0 = nunca; próximo submit = +1)
   lastSubmittedRevision Int @default(0)
@@ -1028,7 +1032,7 @@ model ChecklistExecutionRevision {
   revision         Int
   responses        Json
   metadataSnapshot Json?
-  /// Métricas derivadas congeladas para esta revisão (igual à lógica do PDF na data da submissão)
+  /// Métricas derivadas congeladas por submissão (`reportSnapshot` + transit/produtividade; ver executionBusinessMetrics.js)
   businessMetrics  Json?
   completedAt      DateTime?
   /// Idempotência CRM / retries do outbox (único quando preenchido)

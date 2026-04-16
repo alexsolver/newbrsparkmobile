@@ -103,12 +103,12 @@
 
 <!-- Plan Modal -->
 <div class="modal-overlay" id="plan-modal">
-  <div class="modal">
+  <div class="modal" style="max-width:760px">
     <div class="modal-header">
       <span class="modal-title" id="plan-modal-title">Novo Plano</span>
       <button class="modal-close" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
       <input type="hidden" id="plan-id" />
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
@@ -129,13 +129,15 @@
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:10px;">Cotas do pacote (por tenant com este plano)</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:12px;line-height:1.35;">Use <b>−1</b> para ilimitado nos limites mensais e em formulários. Técnicos = usuários de campo (papéis <code>USER</code> e <code>PROVIDER</code> ativos).</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:12px;line-height:1.35;">Técnicos = equipe em campo que usa o app no terreno. Use <b>−1</b> para ilimitado onde aplicável. <b>0</b> nas cotas Google (Mapas ou visão para análise) bloqueia o uso neste plano.</div>
         <div class="form-group"><label class="form-label">Máx. técnicos (pacote)</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label">IA — reconhecimento facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
           <div class="form-group"><label class="form-label">IA — Visão detecção / mês</label><input class="form-control" id="plan-quota-ai-vision-det" type="number" placeholder="-1" /></div>
         </div>
-        <div class="form-group"><label class="form-label">IA — Visão análise (Gemini) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
+        <div style="font-size:11px;font-weight:800;color:var(--text2);margin:10px 0 6px;">APIs Google (por tenant / mês)</div>
+        <div class="form-group"><label class="form-label">Google Maps — rotas (ETA) / mês</label><input class="form-control" id="plan-quota-google-maps-routes" type="number" placeholder="-1" /></div>
+        <div class="form-group"><label class="form-label">Visão IA — análise (Google Gemini, checklist) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label">OS de campo (FT) / mês</label><input class="form-control" id="plan-quota-ft" type="number" placeholder="-1" /></div>
           <div class="form-group"><label class="form-label">Tarefas de rotina (RT) / mês</label><input class="form-control" id="plan-quota-rt" type="number" placeholder="-1" /></div>
@@ -143,8 +145,56 @@
         <div class="form-group"><label class="form-label">Máx. formulários (modelos Form Builder)</label><input class="form-control" id="plan-max-templates" type="number" placeholder="-1" /></div>
       </div>
 
-      <div class="form-group"><label class="form-label">Features (JSON)</label>
-        <textarea class="form-control" id="plan-features" rows="3" placeholder='{"stock":true,"vault":false,"ai":true}'></textarea>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:4px;">Recursos do pacote</div>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 14px;line-height:1.45;">Ative ou desative módulos do produto para quem assinar este plano. Limites numéricos (IA, Mapas, OS de campo) ficam na secção «Cotas» acima.</p>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Estoque</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Controle de inventário e bens.</span></span>
+            <input type="checkbox" id="plan-feat-stock" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Cofre</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Área para documentos com reforço de segurança.</span></span>
+            <input type="checkbox" id="plan-feat-vault" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Assistente de IA</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Recursos de IA no produto (além das cotas mensais acima).</span></span>
+            <input type="checkbox" id="plan-feat-ai" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Documentos</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Gestão de documentos e anexos no fluxo habitual.</span></span>
+            <input type="checkbox" id="plan-feat-documents" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Seguros</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Funcionalidades ligadas a seguros e sinistros.</span></span>
+            <input type="checkbox" id="plan-feat-insurance" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Relatórios avançados</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Relatórios e exportações para gestão.</span></span>
+            <input type="checkbox" id="plan-feat-reports" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0"><span style="display:block;font-weight:700;font-size:13px;">Tempo real</span><span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;">Atualizações em tempo quase real.</span></span>
+            <input type="checkbox" id="plan-feat-realtime" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+        </div>
+        <div class="form-group" style="margin-top:16px;margin-bottom:0">
+          <label class="form-label" for="plan-feat-facial-provider">Motor de reconhecimento facial</label>
+          <p style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.35;">Define qual integração de biometria usar neste plano.</p>
+          <select class="form-control" id="plan-feat-facial-provider">
+            <option value="COMPREFACE">Compreface (recomendado)</option>
+            <option value="AWS">Amazon Rekognition</option>
+            <option value="AUTO">Automático</option>
+          </select>
+        </div>
+        <details style="margin-top:16px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;background:rgba(0,0,0,.015);">
+          <summary style="font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none;">Avançado — JSON extra (só suporte técnico)</summary>
+          <div class="form-group" style="margin-top:12px;margin-bottom:0">
+            <label class="form-label" for="plan-features-advanced">Chaves extras (JSON)</label>
+            <p style="font-size:10px;color:var(--text3);margin:0 0 8px;line-height:1.4;">Deixe vazio na maior parte dos casos. Só preencha se a equipa técnica pedir chaves adicionais.</p>
+            <textarea class="form-control" id="plan-features-advanced" rows="3" spellcheck="false" placeholder="{}"></textarea>
+          </div>
+        </details>
       </div>
     </div>
     <div class="modal-footer">
@@ -186,6 +236,11 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG }   from './js/config.js';
+  import {
+    writePlanFeaturesToDom,
+    readPlanFeaturesFromDom,
+    defaultPlanFeaturesForNew,
+  } from './js/plan-features-ui.js';
   await initPage();
 
   const statusMap = { ACTIVE:'badge-green', TRIALING:'badge-amber', PAST_DUE:'badge-red', CANCELLED:'badge-gray' };
@@ -213,7 +268,8 @@
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Bens: ${fmt(p.maxAssets)}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Usuários (painel): ${fmt(p.maxUsers)}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${fmt(p.maxTechnicians)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">IA/mês · facial ${fmtQuota(p.quotaAiFacialPerMonth)} · visão det. ${fmtQuota(p.quotaAiVisionDetectionPerMonth)} · visão análise ${fmtQuota(p.quotaAiVisionAnalysisPerMonth)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">IA/mês · facial ${fmtQuota(p.quotaAiFacialPerMonth)} · visão det. ${fmtQuota(p.quotaAiVisionDetectionPerMonth)} · visão análise (Gemini) ${fmtQuota(p.quotaAiVisionAnalysisPerMonth)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">Google Maps (rotas) ${fmtQuota(p.quotaGoogleMapsRoutesPerMonth)}</div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">FT ${fmtQuota(p.quotaFieldTasksMonthly)}/mês · RT ${fmtQuota(p.quotaRoutineTasksMonthly)}/mês · Formulários ${fmtQuota(p.maxChecklistTemplates)}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:14px"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> ${p.storageGb} GB</div>
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -283,10 +339,12 @@
     document.getElementById('plan-quota-ai-facial').value = p.quotaAiFacialPerMonth ?? -1;
     document.getElementById('plan-quota-ai-vision-det').value = p.quotaAiVisionDetectionPerMonth ?? -1;
     document.getElementById('plan-quota-ai-vision-anal').value = p.quotaAiVisionAnalysisPerMonth ?? -1;
+    document.getElementById('plan-quota-google-maps-routes').value =
+      p.quotaGoogleMapsRoutesPerMonth != null ? p.quotaGoogleMapsRoutesPerMonth : -1;
     document.getElementById('plan-quota-ft').value = p.quotaFieldTasksMonthly ?? -1;
     document.getElementById('plan-quota-rt').value = p.quotaRoutineTasksMonthly ?? -1;
     document.getElementById('plan-max-templates').value = p.maxChecklistTemplates ?? -1;
-    document.getElementById('plan-features').value      = JSON.stringify(p.features || {}, null, 2);
+    writePlanFeaturesToDom(p.features);
     openModal('plan-modal');
   };
 
@@ -296,22 +354,32 @@
     document.getElementById('plan-is-active').checked = true;
     ['plan-name','plan-price-monthly','plan-price-yearly','plan-max-assets','plan-max-users','plan-storage',
      'plan-max-technicians','plan-quota-ai-facial','plan-quota-ai-vision-det','plan-quota-ai-vision-anal',
-     'plan-quota-ft','plan-quota-rt','plan-max-templates','plan-features']
+     'plan-quota-google-maps-routes','plan-quota-ft','plan-quota-rt','plan-max-templates']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     document.getElementById('plan-max-technicians').value = '5';
     document.getElementById('plan-quota-ai-facial').value = '-1';
     document.getElementById('plan-quota-ai-vision-det').value = '-1';
     document.getElementById('plan-quota-ai-vision-anal').value = '-1';
+    document.getElementById('plan-quota-google-maps-routes').value = '-1';
     document.getElementById('plan-quota-ft').value = '-1';
     document.getElementById('plan-quota-rt').value = '-1';
     document.getElementById('plan-max-templates').value = '-1';
+    writePlanFeaturesToDom(defaultPlanFeaturesForNew());
     openModal('plan-modal');
   };
 
   document.getElementById('save-plan-btn').addEventListener('click', async () => {
     const id = document.getElementById('plan-id').value;
     let features = {};
-    try { features = JSON.parse(document.getElementById('plan-features').value || '{}'); } catch { features = {}; }
+    try {
+      features = readPlanFeaturesFromDom();
+    } catch (e) {
+      if (e && e.code === 'INVALID_ADVANCED_JSON') {
+        alert('O JSON extra em «Avançado» está inválido. Corrija ou apague o conteúdo desse campo.');
+        return;
+      }
+      throw e;
+    }
     const parseSigned = (id, def) => {
       const raw = document.getElementById(id).value;
       if (raw === '' || raw === null || raw === undefined) return def;
@@ -329,6 +397,7 @@
       quotaAiFacialPerMonth: parseSigned('plan-quota-ai-facial', -1),
       quotaAiVisionDetectionPerMonth: parseSigned('plan-quota-ai-vision-det', -1),
       quotaAiVisionAnalysisPerMonth: parseSigned('plan-quota-ai-vision-anal', -1),
+      quotaGoogleMapsRoutesPerMonth: parseSigned('plan-quota-google-maps-routes', -1),
       quotaFieldTasksMonthly: parseSigned('plan-quota-ft', -1),
       quotaRoutineTasksMonthly: parseSigned('plan-quota-rt', -1),
       maxChecklistTemplates: parseSigned('plan-max-templates', -1),

@@ -117,7 +117,8 @@ const M = {
     sub_plan_card_tech: 'Técnicos:',
     sub_plan_card_ia: 'IA/mês facial',
     sub_plan_card_vis_det: 'visão det.',
-    sub_plan_card_vis_an: 'análise',
+    sub_plan_card_vis_an: 'visão IA análise (Gemini)',
+    sub_plan_card_maps_routes: 'Google Maps (rotas)',
     sub_plan_card_ft: 'FT',
     sub_plan_card_rt: 'RT',
     sub_plan_card_forms: 'Formulários',
@@ -141,7 +142,7 @@ const M = {
     pln_bc_here: 'Planos (pacotes)',
     pln_hero_title: 'Catálogo de planos',
     pln_hero_sub_html:
-      'Defina preços, limites e cotas mensais (IA, OS de campo, rotina, formulários). Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>. <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.',
+      'Defina preços, limites e cotas mensais (IA, <strong>APIs Google</strong> — Maps rotas e visão IA análise Gemini, OS de campo, rotina, formulários). Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>. <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.',
     pln_link_subs: 'Assinaturas',
     pln_link_billing: 'Billing e MRR',
     pln_btn_new: 'Novo plano',
@@ -168,15 +169,44 @@ const M = {
     pln_lbl_max_users: 'Usuários do painel (−1 = ilimitado)',
     pln_lbl_storage: 'Armazenamento (GB)',
     pln_quotas_title: 'Cotas por tenant neste plano',
-    pln_quotas_hint: 'Técnicos = papéis USER e PROVIDER ativos. <strong>−1</strong> = ilimitado.',
+    pln_quotas_hint:
+      'Técnicos = equipe em campo que usa o app no terreno. <strong>−1</strong> = ilimitado. <strong>0</strong> nas cotas Google (Mapas ou visão para análise) bloqueia o uso nesse plano.',
     pln_lbl_max_tech: 'Máx. técnicos',
     pln_lbl_ai_face: 'IA — facial / mês',
     pln_lbl_ai_vis_det: 'IA — visão detecção / mês',
-    pln_lbl_ai_vis_an: 'IA — visão análise (Gemini) / mês',
+    pln_lbl_ai_vis_an: 'Visão IA — análise (Google Gemini, checklist) / mês',
+    pln_api_section_title: 'APIs Google (por tenant / mês)',
+    pln_lbl_google_maps: 'Google Maps — rotas (ETA, computeRoutes) / mês',
     pln_lbl_ft: 'OS campo (FT) / mês',
     pln_lbl_rt: 'Rotina (RT) / mês',
     pln_lbl_max_tpl: 'Máx. formulários (tenantId no modelo)',
-    pln_lbl_features: 'Features (JSON)',
+    pln_features_title: 'Recursos do pacote',
+    pln_features_intro:
+      'Ative ou desative módulos do produto para quem assinar este plano. Limites numéricos (IA, Mapas, OS de campo) ficam na secção «Cotas» acima — não são alterados aqui.',
+    pln_feat_stock: 'Estoque',
+    pln_feat_stock_hint: 'Controle de inventário e bens.',
+    pln_feat_vault: 'Cofre',
+    pln_feat_vault_hint: 'Área para documentos e arquivos com reforço de segurança.',
+    pln_feat_ai: 'Assistente de IA',
+    pln_feat_ai_hint: 'Recursos de inteligência artificial no produto (além das cotas mensais acima).',
+    pln_feat_documents: 'Documentos',
+    pln_feat_documents_hint: 'Gestão de documentos e anexos no fluxo habitual.',
+    pln_feat_insurance: 'Seguros',
+    pln_feat_insurance_hint: 'Funcionalidades ligadas a seguros e sinistros.',
+    pln_feat_reports: 'Relatórios avançados',
+    pln_feat_reports_hint: 'Relatórios e exportações para gestão.',
+    pln_feat_realtime: 'Tempo real',
+    pln_feat_realtime_hint: 'Atualizações e sincronização em tempo quase real.',
+    pln_feat_facial_lbl: 'Motor de reconhecimento facial',
+    pln_feat_facial_hint: 'Define qual integração de biometria usar neste plano.',
+    pln_facial_compreface: 'Compreface (recomendado)',
+    pln_facial_aws: 'Amazon Rekognition',
+    pln_facial_auto: 'Automático (usa a integração ativa disponível)',
+    pln_features_adv_summary: 'Avançado — JSON extra (só suporte técnico)',
+    pln_lbl_features_adv: 'Chaves extras (JSON)',
+    pln_features_adv_hint:
+      'Deixe vazio na maior parte dos casos. Só preencha se a equipa técnica pedir chaves adicionais em «features».',
+    pln_lbl_features: 'Recursos (legado)',
     pln_btn_save_plan: 'Salvar plano',
     pln_empty_title: 'Nenhum plano cadastrado',
     pln_empty_sub: 'Crie o primeiro pacote com «Novo plano».',
@@ -192,6 +222,7 @@ const M = {
     pln_alert_dup_err: 'Falha ao duplicar.',
     pln_save_fail: 'Falha ao salvar.',
     pln_alert_json: 'JSON de features inválido.',
+    pln_alert_json_adv: 'O JSON extra em «Avançado» está inválido. Corrija ou apague o conteúdo desse campo.',
     pln_alert_name: 'Nome é obrigatório.',
     pln_alert_save_err: 'Erro: {detail}',
 
@@ -587,7 +618,8 @@ M['en-US'] = {
   sub_plan_card_tech: 'Technicians:',
   sub_plan_card_ia: 'AI/mo facial',
   sub_plan_card_vis_det: 'vision det.',
-  sub_plan_card_vis_an: 'analysis',
+  sub_plan_card_vis_an: 'vision AI analysis (Gemini)',
+  sub_plan_card_maps_routes: 'Google Maps (routes)',
   sub_plan_card_ft: 'FT',
   sub_plan_card_rt: 'RT',
   sub_plan_card_forms: 'Forms',
@@ -610,7 +642,7 @@ M['en-US'] = {
   pln_bc_here: 'Plans (packages)',
   pln_hero_title: 'Plan catalog',
   pln_hero_sub_html:
-    'Set prices, limits and monthly quotas (AI, field OS, routine, forms). Tenants inherit these via <a href="subscriptions.html" style="color:var(--accent);font-weight:700">subscription</a>. <span style="color:var(--text3)">−1 = unlimited</span> where applicable.',
+    'Set prices, limits and monthly quotas (AI, <strong>Google APIs</strong> — Maps routes and Gemini vision analysis, field OS, routine, forms). Tenants inherit these via <a href="subscriptions.html" style="color:var(--accent);font-weight:700">subscription</a>. <span style="color:var(--text3)">−1 = unlimited</span> where applicable.',
   pln_link_subs: 'Subscriptions',
   pln_link_billing: 'Billing & MRR',
   pln_btn_new: 'New plan',
@@ -637,15 +669,43 @@ M['en-US'] = {
   pln_lbl_max_users: 'Panel users (−1 = unlimited)',
   pln_lbl_storage: 'Storage (GB)',
   pln_quotas_title: 'Per-tenant quotas in this plan',
-  pln_quotas_hint: 'Technicians = active USER and PROVIDER roles. <strong>−1</strong> = unlimited.',
+    pln_quotas_hint:
+      'Technicians = field team using the app on the ground. <strong>−1</strong> = unlimited. <strong>0</strong> on Google quotas (Maps or vision analysis) blocks use on this plan.',
   pln_lbl_max_tech: 'Max technicians',
   pln_lbl_ai_face: 'AI — facial / month',
   pln_lbl_ai_vis_det: 'AI — vision detection / month',
-  pln_lbl_ai_vis_an: 'AI — vision analysis (Gemini) / month',
+  pln_lbl_ai_vis_an: 'Vision AI — analysis (Google Gemini, checklists) / month',
+  pln_api_section_title: 'Google APIs (per tenant / month)',
+  pln_lbl_google_maps: 'Google Maps — routes (ETA, computeRoutes) / month',
   pln_lbl_ft: 'Field tasks (FT) / month',
   pln_lbl_rt: 'Routine (RT) / month',
-  pln_lbl_max_tpl: 'Max forms (tenantId on model)',
-  pln_lbl_features: 'Features (JSON)',
+    pln_lbl_max_tpl: 'Max forms (tenantId on model)',
+    pln_features_title: 'Package features',
+    pln_features_intro:
+      'Turn product modules on or off for subscribers on this plan. Numeric limits (AI, Maps, field tasks) stay in the «Quotas» section above — they are not changed here.',
+    pln_feat_stock: 'Stock / inventory',
+    pln_feat_stock_hint: 'Inventory and asset control.',
+    pln_feat_vault: 'Vault',
+    pln_feat_vault_hint: 'Stronger security for sensitive files.',
+    pln_feat_ai: 'AI assistant',
+    pln_feat_ai_hint: 'AI product features (separate from monthly quotas above).',
+    pln_feat_documents: 'Documents',
+    pln_feat_documents_hint: 'Standard document and attachment management.',
+    pln_feat_insurance: 'Insurance',
+    pln_feat_insurance_hint: 'Insurance and claims-related features.',
+    pln_feat_reports: 'Advanced reports',
+    pln_feat_reports_hint: 'Reporting and exports for management.',
+    pln_feat_realtime: 'Realtime',
+    pln_feat_realtime_hint: 'Near real-time updates and sync.',
+    pln_feat_facial_lbl: 'Facial recognition engine',
+    pln_feat_facial_hint: 'Which biometric integration to use on this plan.',
+    pln_facial_compreface: 'Compreface (recommended)',
+    pln_facial_aws: 'Amazon Rekognition',
+    pln_facial_auto: 'Automatic (uses whichever active integration is available)',
+    pln_features_adv_summary: 'Advanced — extra JSON (technical support only)',
+    pln_lbl_features_adv: 'Extra keys (JSON)',
+    pln_features_adv_hint: 'Leave empty in most cases. Only fill in if engineering asks for extra «features» keys.',
+    pln_lbl_features: 'Features (legacy)',
   pln_btn_save_plan: 'Save plan',
   pln_empty_title: 'No plans yet',
   pln_empty_sub: 'Create the first package with «New plan».',
@@ -660,7 +720,8 @@ M['en-US'] = {
   pln_alert_dup_ok: 'Plan duplicated. It stays inactive by default — edit and enable when ready.',
   pln_alert_dup_err: 'Could not duplicate.',
   pln_save_fail: 'Could not save.',
-  pln_alert_json: 'Invalid features JSON.',
+    pln_alert_json: 'Invalid features JSON.',
+    pln_alert_json_adv: 'The extra JSON under «Advanced» is invalid. Fix or clear that field.',
   pln_alert_name: 'Name is required.',
   pln_alert_save_err: 'Error: {detail}',
 
@@ -1197,10 +1258,39 @@ export function applyPlansPageI18n() {
   setText('pln-lbl-ai-face', 'pln_lbl_ai_face');
   setText('pln-lbl-ai-det', 'pln_lbl_ai_vis_det');
   setText('pln-lbl-ai-anal', 'pln_lbl_ai_vis_an');
+  setText('pln-api-quotas-title', 'pln_api_section_title');
+  setText('pln-lbl-google-maps', 'pln_lbl_google_maps');
   setText('pln-lbl-ft', 'pln_lbl_ft');
   setText('pln-lbl-rt', 'pln_lbl_rt');
   setText('pln-lbl-max-tpl', 'pln_lbl_max_tpl');
-  setText('pln-lbl-features', 'pln_lbl_features');
+  setText('pln-features-title', 'pln_features_title');
+  setText('pln-features-intro', 'pln_features_intro');
+  const featPairs = [
+    ['stock', 'pln_feat_stock', 'pln_feat_stock_hint'],
+    ['vault', 'pln_feat_vault', 'pln_feat_vault_hint'],
+    ['ai', 'pln_feat_ai', 'pln_feat_ai_hint'],
+    ['documents', 'pln_feat_documents', 'pln_feat_documents_hint'],
+    ['insurance', 'pln_feat_insurance', 'pln_feat_insurance_hint'],
+    ['reports', 'pln_feat_reports', 'pln_feat_reports_hint'],
+    ['realtime', 'pln_feat_realtime', 'pln_feat_realtime_hint'],
+  ];
+  featPairs.forEach(([k, lk, hk]) => {
+    setText(`pln-feat-lbl-${k}`, lk);
+    setText(`pln-feat-hint-${k}`, hk);
+  });
+  setText('pln-feat-lbl-facial', 'pln_feat_facial_lbl');
+  setText('pln-feat-hint-facial', 'pln_feat_facial_hint');
+  const fsel = document.getElementById('plan-feat-facial-provider');
+  if (fsel) {
+    [...fsel.options].forEach((o) => {
+      if (o.value === 'COMPREFACE') o.textContent = mpT('pln_facial_compreface');
+      if (o.value === 'AWS') o.textContent = mpT('pln_facial_aws');
+      if (o.value === 'AUTO') o.textContent = mpT('pln_facial_auto');
+    });
+  }
+  setText('pln-features-adv-summary', 'pln_features_adv_summary');
+  setText('pln-lbl-features-adv', 'pln_lbl_features_adv');
+  setText('pln-features-adv-hint', 'pln_features_adv_hint');
   setText('pln-modal-cancel', 'common_cancel');
   const pms = document.getElementById('pln-modal-save');
   if (pms) pms.textContent = mpT('pln_btn_save_plan');

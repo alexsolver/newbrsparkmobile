@@ -99,4 +99,50 @@ router.put('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/**
+ * PATCH /api/tenants/:id/features — merge em `Tenant.features` (objeto JSON).
+ * Ex.: { "features": { "googleMaps": { "monthlyRouteRequestsMax": 2000 } } } aperta o teto mensal de rotas Google (além do plano).
+ */
+router.patch('/:id/features', async (req, res) => {
+  try {
+    const patch = req.body?.features;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return res.status(400).json({ error: 'Envie JSON { features: { ... } } com objeto em «features».' });
+    }
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      select: { features: true },
+    });
+    if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+    const cur =
+      tenant.features && typeof tenant.features === 'object' && !Array.isArray(tenant.features)
+        ? tenant.features
+        : {};
+    const next = { ...cur };
+    for (const k of Object.keys(patch)) {
+      const v = patch[k];
+      if (
+        v != null &&
+        typeof v === 'object' &&
+        !Array.isArray(v) &&
+        next[k] &&
+        typeof next[k] === 'object' &&
+        !Array.isArray(next[k])
+      ) {
+        next[k] = { ...next[k], ...v };
+      } else {
+        next[k] = v;
+      }
+    }
+    const updated = await prisma.tenant.update({
+      where: { id: req.params.id },
+      data: { features: next },
+    });
+    await auditFromReq(req, 'TENANT_FEATURES_PATCH', updated.name || updated.id, updated.id);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

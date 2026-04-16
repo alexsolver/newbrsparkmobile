@@ -13,6 +13,10 @@ import {
   computeTransitSecondsFromEndpoints,
   buildTransitDisplayMetrics,
   fmtDurationPtBr,
+  resolveExecutionWallSecondsForDisplay,
+  effectiveFormTimesForProductivityDisplay,
+  formatPlannedSourceFootnotePtBr,
+  formatPlannedSourceShortPtBr,
   transitPctDeltaVsPlanned,
   normalizeTraversedPathForReport,
   resolveProductivityFromTask,
@@ -673,14 +677,7 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
     const plannedTimeStr = fmtDurationPtBr(tm.plannedDurationSec);
     const plannedDistStr =
       tm.plannedDistanceM != null ? `${(tm.plannedDistanceM / 1000).toFixed(2)} km` : '—';
-    let plannedFoot = '—';
-    if (tm.plannedSourceKey === 'osrm') plannedFoot = 'Mapa rodoviário (OSRM)';
-    else if (tm.plannedSourceKey === 'task_eta') plannedFoot = 'Com base no ETA da OS';
-    else if (tm.plannedSourceKey === 'straight_line') {
-      plannedFoot = 'Distância em linha reta · tempo não estimado';
-    } else if (tm.plannedSourceKey === 'task_eta_legacy') {
-      plannedFoot = 'ETA da OS (sem registro detalhado na saída)';
-    }
+    const plannedFoot = formatPlannedSourceFootnotePtBr(tm.plannedSourceKey) || '—';
 
     let transitSeconds = tm.actualDurationSec;
     if (transitSeconds == null || !Number.isFinite(transitSeconds) || transitSeconds <= 0) {
@@ -811,6 +808,10 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
       tm0.actualDistanceM,
       'Distância',
     );
+    const plannedSrcShort0 = formatPlannedSourceShortPtBr(tm0.plannedSourceKey);
+    const plannedSrcLine0 = plannedSrcShort0
+      ? `<div style="flex-basis:100%;text-align:center;font-size:9px;color:#64748b;margin-top:6px;line-height:1.35">Origem do tempo e da distância previstos: <strong>${esc(plannedSrcShort0)}</strong></div>`
+      : '';
     speedBadgeHtml = `
         <div style="background:#f8fafc; border:1px dashed #e2e8f0; border-radius:8px; padding:6px; margin-top:8px; display:flex; justify-content:space-around; align-items:center; flex-wrap:wrap; gap:4px;">
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">PREVISTO (tempo)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${pTime}</div></div>
@@ -822,6 +823,7 @@ function buildSpeedBadgeHtmlPreview(startGPS, endGPS, t, th) {
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">REAL (dist.)</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">${aDist}</div>${pctDist0}</div>
            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
            <div style="text-align:center;min-width:80px;"><div style="font-size:9px;color:#94a3b8;font-weight:bold;">VMÉDIA</div><div style="font-size:13px;font-weight:700;color:#cbd5e1;margin-top:2px;">—</div></div>
+           ${plannedSrcLine0}
         </div>`;
   }
   return speedBadgeHtml;
@@ -1395,25 +1397,13 @@ const ZONE_LABEL_PDF = {
 function buildPdfProdBlockForPreview(th, t, responses) {
   const { startGPS: sgProd, endGPS: egProd } = extractTransitEndpointsForReport(responses);
   const transitSecProd = computeTransitSecondsFromEndpoints(sgProd, egProd);
-  const osWallSecProd =
-    t.startedAt && t.completedAt
-      ? Math.max(
-          0,
-          Math.floor(
-            (new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime()) / 1000,
-          ),
-        )
-      : null;
+  const osWallSecProd = resolveExecutionWallSecondsForDisplay(t.startedAt, t.completedAt);
   const exTransitSecProd =
     osWallSecProd != null && transitSecProd != null ? Math.max(0, osWallSecProd - transitSecProd) : null;
 
   let durationStr = '—';
-  if (t.startedAt && t.completedAt) {
-    const durationMs = new Date(t.completedAt) - new Date(t.startedAt);
-    const h = Math.floor(durationMs / 3600000);
-    const m = Math.floor((durationMs % 3600000) / 60000);
-    const s = Math.floor((durationMs % 60000) / 1000);
-    durationStr = `${h}h ${m}m ${s}s`;
+  if (osWallSecProd != null) {
+    durationStr = fmtDurationPtBr(osWallSecProd);
   }
 
   const fillSecPdf = Number(
@@ -1422,8 +1412,17 @@ function buildPdfProdBlockForPreview(th, t, responses) {
       responses.__form_fill_duration_sec,
   );
   const activeSecPdf = Number(t.metadata?.formActiveSeconds ?? responses.__form_active_seconds_final);
-  const formFillStrPdf = fmtDurationPtBr(fillSecPdf);
-  const formActiveStrPdf = fmtDurationPtBr(activeSecPdf);
+  const timesPdf = effectiveFormTimesForProductivityDisplay(
+    fillSecPdf,
+    activeSecPdf,
+    osWallSecProd,
+    transitSecProd,
+  );
+  const formFillStrPdf = fmtDurationPtBr(timesPdf.fill);
+  const formActiveStrPdf = fmtDurationPtBr(timesPdf.active);
+  const formFillProdFootnote = timesPdf.excludesTransit
+    ? `<div style="font-size:7px;color:#64748b;padding:6px 10px 0;line-height:1.35;font-weight:600">* «Formulário» e «App foco» não incluem o deslocamento (saída→chegada): mínimo entre o relógio do app e o tempo da OS fora desse intervalo (não somar com «Desloc.»).</div>`
+    : '';
   const prodSnap = resolveProductivityFromTask(t);
   const plannedFormMinPdf = prodSnap.plannedFormDurationMinutes;
   const schedStartPdf = t.scheduledStartAt;
@@ -1485,9 +1484,10 @@ function buildPdfProdBlockForPreview(th, t, responses) {
               ${pdfProdMetricCell('OS (ini→fim)', durationStr, false)}
               ${pdfProdMetricCell('Desloc.', transitSecProd != null ? fmtDurationPtBr(transitSecProd) : '—', false)}
               ${pdfProdMetricCell('Fora desl. (est.)', exTransitSecProd != null ? fmtDurationPtBr(exTransitSecProd) : '—', false)}
-              ${pdfProdMetricCell('No form.', formFillStrPdf, false)}
+              ${pdfProdMetricCell('Formulário', formFillStrPdf, false)}
               ${pdfProdMetricCell('App foco', formActiveStrPdf, true)}
             </div>
+            ${formFillProdFootnote}
             ${agendaWindowLinePdf}
             ${formPrevVsRealLine}
           </div>

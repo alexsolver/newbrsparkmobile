@@ -188,6 +188,93 @@ export function buildTransitDisplayMetrics(startGPS, endGPS, task) {
   };
 }
 
+/** Rótulo curto (painel / PDF) da origem do tempo e da distância previstos na saída. */
+export function formatPlannedSourceShortPtBr(plannedSourceKey) {
+  const k = String(plannedSourceKey || '').trim();
+  if (k === 'google_routes') return 'Google Maps (rotas)';
+  if (k === 'osrm') return 'OSRM';
+  if (k === 'task_eta') return 'ETA da OS';
+  if (k === 'straight_line') return 'Linha reta';
+  if (k === 'task_eta_legacy') return 'ETA (legado)';
+  return '';
+}
+
+/** Rodapé do bloco «previsto na saída» (frase completa, pt-BR). */
+export function formatPlannedSourceFootnotePtBr(plannedSourceKey) {
+  const k = String(plannedSourceKey || '').trim();
+  if (k === 'google_routes') return 'Origem: Google Maps (Routes API)';
+  if (k === 'osrm') return 'Origem: mapa rodoviário (OSRM)';
+  if (k === 'task_eta') return 'Origem: ETA da ordem de serviço';
+  if (k === 'straight_line') return 'Origem: distância em linha reta (tempo pode não estar estimado)';
+  if (k === 'task_eta_legacy') return 'Origem: ETA da OS (sem registro detalhado na saída)';
+  return '';
+}
+
+/**
+ * Duração «muralha» da execução para métricas no painel: concluída = conclusão − início;
+ * em andamento (sem `completedAt`) = agora − início no browser.
+ */
+export function resolveExecutionWallSecondsForDisplay(startedAt, completedAt, nowMs = Date.now()) {
+  if (!startedAt) return null;
+  const t0 = new Date(startedAt).getTime();
+  if (!Number.isFinite(t0)) return null;
+  const now = Number(nowMs);
+  const clock = Number.isFinite(now) ? now : Date.now();
+  if (completedAt) {
+    const t1 = new Date(completedAt).getTime();
+    if (!Number.isFinite(t1)) return null;
+    return Math.max(0, Math.floor((t1 - t0) / 1000));
+  }
+  return Math.max(0, Math.floor((clock - t0) / 1000));
+}
+
+/**
+ * Tempos de formulário e app em foco não devem incluir o deslocamento (SAÍDA→CHEGADA): com deslocamento
+ * registado, `min(relógio, duração da OS − deslocamento)` para cada métrica.
+ */
+export function effectiveFormTimesForProductivityDisplay(fillSec, activeSec, osWallSec, transitSec) {
+  const fill = Number(fillSec);
+  const act = Number(activeSec);
+  const wall =
+    osWallSec != null && Number.isFinite(Number(osWallSec)) && Number(osWallSec) > 0
+      ? Math.floor(Number(osWallSec))
+      : null;
+  const tr =
+    transitSec != null && Number.isFinite(Number(transitSec)) && Number(transitSec) >= 1
+      ? Math.floor(Number(transitSec))
+      : null;
+
+  const safeFill = Number.isFinite(fill) && fill >= 0 ? fill : null;
+  const safeAct = Number.isFinite(act) && act >= 0 ? act : null;
+
+  if (wall == null || tr == null) {
+    return {
+      fill: safeFill != null ? safeFill : fill,
+      active: safeAct != null ? safeAct : act,
+      adjustedFill: false,
+      adjustedActive: false,
+      excludesTransit: false,
+    };
+  }
+
+  const outside = Math.max(0, wall - tr);
+  const fillOut = safeFill != null ? Math.min(safeFill, outside) : fill;
+  const activeOut = safeAct != null ? Math.min(safeAct, outside) : act;
+  return {
+    fill: fillOut,
+    active: activeOut,
+    adjustedFill: safeFill != null && fillOut + 0.5 < safeFill,
+    adjustedActive: safeAct != null && activeOut + 0.5 < safeAct,
+    excludesTransit: true,
+  };
+}
+
+/** @deprecated Use `effectiveFormTimesForProductivityDisplay` quando também houver tempo em foco. */
+export function effectiveFormFillSecondsForProductivityDisplay(fillSec, osWallSec, transitSec) {
+  const r = effectiveFormTimesForProductivityDisplay(fillSec, NaN, osWallSec, transitSec);
+  return { fill: r.fill, adjusted: r.adjustedFill, excludesTransit: r.excludesTransit };
+}
+
 export function fmtDurationPtBr(sec) {
   if (sec == null || !Number.isFinite(Number(sec)) || Number(sec) < 0) return '—';
   const n = Math.floor(Number(sec));

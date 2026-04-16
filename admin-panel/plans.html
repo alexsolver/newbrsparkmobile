@@ -19,7 +19,7 @@
       <header class="page-hero fade-in">
         <h1 class="page-hero-title" id="mpc-hero-title">Catálogo de planos</h1>
         <p class="page-hero-sub" id="mpc-hero-sub">
-          Defina preços, limites e cotas mensais (IA, OS de campo, rotina, formulários). Os tenants herdam estes valores pela
+          Defina preços, limites e cotas mensais (IA, APIs Google Maps e visão IA análise, OS de campo, rotina, formulários). Os tenants herdam estes valores pela
           <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>.
           <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.
         </p>
@@ -97,13 +97,15 @@
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
         <div id="pln-quotas-title" style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Cotas por tenant neste plano</div>
-        <div id="pln-quotas-hint" style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35;">Técnicos = papéis <code>USER</code> e <code>PROVIDER</code> ativos. <strong>−1</strong> = ilimitado.</div>
+        <div id="pln-quotas-hint" style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35;"></div>
         <div class="form-group"><label class="form-label" id="pln-lbl-max-tech">Máx. técnicos</label><input class="form-control" id="plan-max-technicians" type="number" placeholder="5" /></div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label" id="pln-lbl-ai-face">IA — facial / mês</label><input class="form-control" id="plan-quota-ai-facial" type="number" placeholder="-1" /></div>
           <div class="form-group"><label class="form-label" id="pln-lbl-ai-det">IA — visão detecção / mês</label><input class="form-control" id="plan-quota-ai-vision-det" type="number" placeholder="-1" /></div>
         </div>
-        <div class="form-group"><label class="form-label" id="pln-lbl-ai-anal">IA — visão análise (Gemini) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" /></div>
+        <div id="pln-api-quotas-title" style="font-size:11px;font-weight:800;color:var(--text2);margin:12px 0 6px;">APIs Google (por tenant / mês)</div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-google-maps">Google Maps — rotas (ETA, computeRoutes) / mês</label><input class="form-control" id="plan-quota-google-maps-routes" type="number" placeholder="-1" title="Pedidos ao proxy BrSpark que chamam a Routes API. −1 ilimitado; 0 desligado." /></div>
+        <div class="form-group"><label class="form-label" id="pln-lbl-ai-anal">Visão IA — análise (Google Gemini, checklist) / mês</label><input class="form-control" id="plan-quota-ai-vision-anal" type="number" placeholder="-1" title="Campo vision_ai_analysis e fluxos que consomem quota AI_VISION_ANALYSIS." /></div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label" id="pln-lbl-ft">OS campo (FT) / mês</label><input class="form-control" id="plan-quota-ft" type="number" placeholder="-1" /></div>
           <div class="form-group"><label class="form-label" id="pln-lbl-rt">Rotina (RT) / mês</label><input class="form-control" id="plan-quota-rt" type="number" placeholder="-1" /></div>
@@ -111,8 +113,77 @@
         <div class="form-group"><label class="form-label" id="pln-lbl-max-tpl">Máx. formulários (tenantId no modelo)</label><input class="form-control" id="plan-max-templates" type="number" placeholder="-1" /></div>
       </div>
 
-      <div class="form-group"><label class="form-label" id="pln-lbl-features">Features (JSON)</label>
-        <textarea class="form-control" id="plan-features" rows="4" placeholder='{"stock":true,"facialVisionProvider":"COMPREFACE"}'></textarea>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div id="pln-features-title" style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:4px;"></div>
+        <p id="pln-features-intro" style="font-size:11px;color:var(--text3);margin:0 0 14px;line-height:1.45;"></p>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-stock" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-stock" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-stock" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-vault" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-vault" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-vault" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-ai" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-ai" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-ai" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-documents" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-documents" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-documents" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-insurance" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-insurance" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-insurance" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-reports" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-reports" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-reports" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+          <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2, rgba(0,0,0,.02));">
+            <span style="min-width:0">
+              <span id="pln-feat-lbl-realtime" style="display:block;font-weight:700;font-size:13px;color:var(--text);"></span>
+              <span id="pln-feat-hint-realtime" style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;"></span>
+            </span>
+            <input type="checkbox" id="plan-feat-realtime" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+          </label>
+        </div>
+        <div class="form-group" style="margin-top:16px;margin-bottom:0">
+          <label class="form-label" id="pln-feat-lbl-facial" for="plan-feat-facial-provider"></label>
+          <p id="pln-feat-hint-facial" style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.35;"></p>
+          <select class="form-control" id="plan-feat-facial-provider">
+            <option value="COMPREFACE">Compreface</option>
+            <option value="AWS">Amazon Rekognition</option>
+            <option value="AUTO">Automático</option>
+          </select>
+        </div>
+        <details style="margin-top:16px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;background:rgba(0,0,0,.015);">
+          <summary id="pln-features-adv-summary" style="font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none;"></summary>
+          <div class="form-group" style="margin-top:12px;margin-bottom:0">
+            <label class="form-label" id="pln-lbl-features-adv" for="plan-features-advanced"></label>
+            <p id="pln-features-adv-hint" style="font-size:10px;color:var(--text3);margin:0 0 8px;line-height:1.4;"></p>
+            <textarea class="form-control" id="plan-features-advanced" rows="3" spellcheck="false" placeholder="{}"></textarea>
+          </div>
+        </details>
       </div>
     </div>
     <div class="modal-footer">
@@ -133,6 +204,11 @@
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
   import { applyPlansPageI18n, mpT } from './js/menu-pages-i18n.js';
+  import {
+    writePlanFeaturesToDom,
+    readPlanFeaturesFromDom,
+    defaultPlanFeaturesForNew,
+  } from './js/plan-features-ui.js';
 
   await initPage();
   applyPlansPageI18n();
@@ -198,10 +274,12 @@
     document.getElementById('plan-quota-ai-facial').value = p.quotaAiFacialPerMonth ?? -1;
     document.getElementById('plan-quota-ai-vision-det').value = p.quotaAiVisionDetectionPerMonth ?? -1;
     document.getElementById('plan-quota-ai-vision-anal').value = p.quotaAiVisionAnalysisPerMonth ?? -1;
+    document.getElementById('plan-quota-google-maps-routes').value =
+      p.quotaGoogleMapsRoutesPerMonth != null ? p.quotaGoogleMapsRoutesPerMonth : -1;
     document.getElementById('plan-quota-ft').value = p.quotaFieldTasksMonthly ?? -1;
     document.getElementById('plan-quota-rt').value = p.quotaRoutineTasksMonthly ?? -1;
     document.getElementById('plan-max-templates').value = p.maxChecklistTemplates ?? -1;
-    document.getElementById('plan-features').value = JSON.stringify(p.features || {}, null, 2);
+    writePlanFeaturesToDom(p.features);
     openModal('plan-modal');
   };
 
@@ -209,25 +287,21 @@
     document.getElementById('plan-id').value = '';
     document.getElementById('pln-modal-title').textContent = mpT('pln_modal_new');
     document.getElementById('plan-is-active').checked = true;
-    [
-      'plan-name',
-      'plan-price-monthly',
-      'plan-price-yearly',
-      'plan-max-assets',
-      'plan-max-users',
-      'plan-storage',
-      'plan-features',
-    ].forEach((hid) => {
-      const el = document.getElementById(hid);
-      if (el) el.value = '';
-    });
+    ['plan-name', 'plan-price-monthly', 'plan-price-yearly', 'plan-max-assets', 'plan-max-users', 'plan-storage'].forEach(
+      (hid) => {
+        const el = document.getElementById(hid);
+        if (el) el.value = '';
+      },
+    );
     document.getElementById('plan-max-technicians').value = '5';
     document.getElementById('plan-quota-ai-facial').value = '-1';
     document.getElementById('plan-quota-ai-vision-det').value = '-1';
     document.getElementById('plan-quota-ai-vision-anal').value = '-1';
+    document.getElementById('plan-quota-google-maps-routes').value = '-1';
     document.getElementById('plan-quota-ft').value = '-1';
     document.getElementById('plan-quota-rt').value = '-1';
     document.getElementById('plan-max-templates').value = '-1';
+    writePlanFeaturesToDom(defaultPlanFeaturesForNew());
     openModal('plan-modal');
   };
 
@@ -253,6 +327,7 @@
       quotaAiFacialPerMonth: Number(p.quotaAiFacialPerMonth ?? -1),
       quotaAiVisionDetectionPerMonth: Number(p.quotaAiVisionDetectionPerMonth ?? -1),
       quotaAiVisionAnalysisPerMonth: Number(p.quotaAiVisionAnalysisPerMonth ?? -1),
+      quotaGoogleMapsRoutesPerMonth: Number(p.quotaGoogleMapsRoutesPerMonth ?? -1),
       quotaFieldTasksMonthly: Number(p.quotaFieldTasksMonthly ?? -1),
       quotaRoutineTasksMonthly: Number(p.quotaRoutineTasksMonthly ?? -1),
       maxChecklistTemplates: Number(p.maxChecklistTemplates ?? -1),
@@ -270,10 +345,13 @@
     const id = document.getElementById('plan-id').value;
     let features = {};
     try {
-      features = JSON.parse(document.getElementById('plan-features').value || '{}');
-    } catch {
-      alert(mpT('pln_alert_json'));
-      return;
+      features = readPlanFeaturesFromDom();
+    } catch (e) {
+      if (e && e.code === 'INVALID_ADVANCED_JSON') {
+        alert(mpT('pln_alert_json_adv'));
+        return;
+      }
+      throw e;
     }
     const parseSigned = (hid, def) => {
       const raw = document.getElementById(hid).value;
@@ -292,6 +370,7 @@
       quotaAiFacialPerMonth: parseSigned('plan-quota-ai-facial', -1),
       quotaAiVisionDetectionPerMonth: parseSigned('plan-quota-ai-vision-det', -1),
       quotaAiVisionAnalysisPerMonth: parseSigned('plan-quota-ai-vision-anal', -1),
+      quotaGoogleMapsRoutesPerMonth: parseSigned('plan-quota-google-maps-routes', -1),
       quotaFieldTasksMonthly: parseSigned('plan-quota-ft', -1),
       quotaRoutineTasksMonthly: parseSigned('plan-quota-rt', -1),
       maxChecklistTemplates: parseSigned('plan-max-templates', -1),

@@ -9,6 +9,7 @@ const PLAN_INT_DEFAULTS = {
   quotaAiVisionAnalysisPerMonth: -1,
   quotaFieldTasksMonthly: -1,
   quotaRoutineTasksMonthly: -1,
+  quotaGoogleMapsRoutesPerMonth: -1,
   maxChecklistTemplates: -1,
 };
 
@@ -68,6 +69,17 @@ function planWritableFields(body, { forCreate } = {}) {
   ) {
     out.quotaRoutineTasksMonthly = pickInt(body, 'quotaRoutineTasksMonthly', PLAN_INT_DEFAULTS.quotaRoutineTasksMonthly);
   } else if (forCreate) out.quotaRoutineTasksMonthly = PLAN_INT_DEFAULTS.quotaRoutineTasksMonthly;
+  if (
+    body.quotaGoogleMapsRoutesPerMonth !== undefined &&
+    body.quotaGoogleMapsRoutesPerMonth !== null &&
+    body.quotaGoogleMapsRoutesPerMonth !== ''
+  ) {
+    out.quotaGoogleMapsRoutesPerMonth = pickInt(
+      body,
+      'quotaGoogleMapsRoutesPerMonth',
+      PLAN_INT_DEFAULTS.quotaGoogleMapsRoutesPerMonth,
+    );
+  } else if (forCreate) out.quotaGoogleMapsRoutesPerMonth = PLAN_INT_DEFAULTS.quotaGoogleMapsRoutesPerMonth;
   if (body.maxChecklistTemplates !== undefined && body.maxChecklistTemplates !== null && body.maxChecklistTemplates !== '') {
     out.maxChecklistTemplates = pickInt(body, 'maxChecklistTemplates', PLAN_INT_DEFAULTS.maxChecklistTemplates);
   } else if (forCreate) out.maxChecklistTemplates = PLAN_INT_DEFAULTS.maxChecklistTemplates;
@@ -105,6 +117,7 @@ router.post('/', async (req, res) => {
         quotaAiVisionAnalysisPerMonth: extra.quotaAiVisionAnalysisPerMonth,
         quotaFieldTasksMonthly: extra.quotaFieldTasksMonthly,
         quotaRoutineTasksMonthly: extra.quotaRoutineTasksMonthly,
+        quotaGoogleMapsRoutesPerMonth: extra.quotaGoogleMapsRoutesPerMonth,
         maxChecklistTemplates: extra.maxChecklistTemplates,
         isActive: extra.isActive !== undefined ? extra.isActive : true,
         features: features || {},
