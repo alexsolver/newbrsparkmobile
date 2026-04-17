@@ -10,6 +10,13 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { ChatService, ChatMessage, ChatRoom, ChatMessagingState } from '../../src/services/chat';
 import {
+  fetchExecutionOpsChat,
+  getOpsChatCacheRoomId,
+  mapExecutionOpsMessagesToChat,
+  persistOpsChatReadAck,
+  postExecutionOpsChat,
+} from '../../src/services/executionOpsChat';
+import {
   appendOutboxItem,
   flushChatOutboxForRoom,
   loadMessagesCache,
@@ -62,10 +69,31 @@ function outboxToMessage(item: ChatOutboxItem, email: string, displayName: strin
 type MediaAttach = { type: 'image'; uri: string } | null;
 
 export default function ChatRoomScreen() {
-  const { id: roomId, name, color, avatarUrl } = useLocalSearchParams<{ id: string; name: string; color: string; avatarUrl?: string }>();
+  const { id: roomId, name, color, avatarUrl, ops } = useLocalSearchParams<{
+    id: string;
+    name: string;
+    color: string;
+    avatarUrl?: string;
+    ops?: string;
+  }>();
+  const isOpsChat =
+    String(ops || '') === '1' ||
+    String(ops || '').toLowerCase() === 'true' ||
+    String(ops || '').toLowerCase() === 'yes';
+  const executionIdForOps = isOpsChat ? String(roomId || '').trim() : '';
+  const cacheRoomId = useMemo(() => {
+    if (!roomId) return '';
+    const rid = typeof roomId === 'string' ? roomId : Array.isArray(roomId) ? String(roomId[0] || '') : String(roomId);
+    return isOpsChat && rid ? getOpsChatCacheRoomId(rid) : rid;
+  }, [roomId, isOpsChat]);
+
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, patchUser } = useAuth();
+  const opsViewerLocale = useMemo(
+    () => user?.preferredChatLocale?.trim() || i18n.language || null,
+    [user?.preferredChatLocale, i18n.language],
+  );
   const { isOnline } = useConnectivity(6000);
   const { colors: C } = useTheme();
   const styles = useMemo(() => createChatRoomStyles(C), [C]);
@@ -93,11 +121,13 @@ export default function ChatRoomScreen() {
   const [messagingState, setMessagingState] = useState<ChatMessagingState | null>(null);
 
   const loadMessagingState = useCallback(async () => {
+    if (isOpsChat) return;
     const s = await ChatService.getMessagingState(roomId!);
     if (s) setMessagingState(s);
-  }, [roomId]);
+  }, [roomId, isOpsChat]);
 
   const loadRoomInfo = useCallback(async () => {
+    if (isOpsChat) return;
     const info = await ChatService.getRoomInfo(roomId!);
     setRoomInfo(info);
     if (info) {
@@ -105,11 +135,28 @@ export default function ChatRoomScreen() {
     }
     const c = await ChatService.getAvailableContacts();
     setContacts(c || []);
-  }, [roomId]);
+  }, [roomId, isOpsChat]);
+
+  const loadOpsMessagesRemote = useCallback(async () => {
+    if (!isOpsChat || !executionIdForOps || !user?.id || isOnline === false) return;
+    try {
+      const rows = await fetchExecutionOpsChat(executionIdForOps, opsViewerLocale);
+      const mapped = mapExecutionOpsMessagesToChat(executionIdForOps, rows, user.email);
+      setMessages((prev) => {
+        const merged = mergeRemoteWithPending(mapped, prev);
+        void saveMessagesCache(user.id, cacheRoomId, merged);
+        if (merged.length) lastTs.current = merged[merged.length - 1]!.timestamp;
+        return merged;
+      });
+      await persistOpsChatReadAck(executionIdForOps, rows);
+    } catch {
+      /* ignore */
+    }
+  }, [isOpsChat, executionIdForOps, user?.id, user?.email, isOnline, cacheRoomId, opsViewerLocale]);
 
   const loadMessages = useCallback(
     async (since = 0) => {
-      if (isOnline === false) return;
+      if (isOpsChat || isOnline === false) return;
       const msgs = await ChatService.getMessages(roomId!, since);
       if (msgs.length > 0) {
         setMessages((prev) => {
@@ -122,11 +169,11 @@ export default function ChatRoomScreen() {
         lastTs.current = msgs[msgs.length - 1].timestamp;
       }
     },
-    [roomId, user?.id, isOnline],
+    [roomId, user?.id, isOnline, isOpsChat],
   );
 
   const runFlush = useCallback(async () => {
-    if (!user?.id || !roomId || isOnline !== true) return;
+    if (!user?.id || !roomId || isOnline !== true || isOpsChat) return;
     try {
       const flushed = await flushChatOutboxForRoom(user.id, roomId, (rid, payload) =>
         ChatService.sendMessage(rid, payload as { type: 'text' | 'image'; content?: string; mediaUrl?: string }),
@@ -144,7 +191,7 @@ export default function ChatRoomScreen() {
     } catch {
       /* ignore */
     }
-  }, [user?.id, roomId, isOnline]);
+  }, [user?.id, roomId, isOnline, isOpsChat]);
 
   useFocusEffect(
     useCallback(() => {
@@ -160,6 +207,36 @@ export default function ChatRoomScreen() {
     let cancelled = false;
     (async () => {
       if (!roomId || !user?.id) return;
+
+      if (isOpsChat && executionIdForOps) {
+        setRoomInfo({
+          id: cacheRoomId,
+          name: String(name || 'Gestor'),
+          isGroup: false,
+          avatarColor: String(color || '#1d4ed8'),
+          avatarUrl: typeof avatarUrl === 'string' && avatarUrl ? avatarUrl : undefined,
+          memberCount: 2,
+          members: [],
+        });
+        setMessagingState(null);
+        try {
+          const cached = await loadMessagesCache(user.id, cacheRoomId);
+          const rows = await fetchExecutionOpsChat(executionIdForOps, opsViewerLocale);
+          if (cancelled) return;
+          const mapped = mapExecutionOpsMessagesToChat(executionIdForOps, rows, user.email);
+          setMessages((prev) => {
+            const merged = mergeRemoteWithPending(mapped, prev.length ? prev : cached);
+            void saveMessagesCache(user.id, cacheRoomId, merged);
+            if (merged.length) lastTs.current = merged[merged.length - 1]!.timestamp;
+            return merged;
+          });
+          await persistOpsChatReadAck(executionIdForOps, rows);
+        } catch {
+          /* mantém cache local se houver */
+        }
+        return;
+      }
+
       const [cached, outboxAll] = await Promise.all([
         loadMessagesCache(user.id, roomId),
         loadOutbox(user.id),
@@ -200,17 +277,34 @@ export default function ChatRoomScreen() {
     return () => {
       cancelled = true;
     };
-  }, [roomId, user?.id, user?.email, user?.name, loadRoomInfo, loadMessagingState]);
+  }, [
+    roomId,
+    user?.id,
+    user?.email,
+    user?.name,
+    loadRoomInfo,
+    loadMessagingState,
+    isOpsChat,
+    executionIdForOps,
+    cacheRoomId,
+    name,
+    color,
+    avatarUrl,
+    opsViewerLocale,
+  ]);
 
   useEffect(() => {
     pollRef.current = setInterval(() => {
       if (isOnline === false) return;
-      loadMessagingState();
-      if (lastTs.current > 0) void loadMessages(lastTs.current);
-      else void loadMessages(0);
+      if (isOpsChat) void loadOpsMessagesRemote();
+      else {
+        loadMessagingState();
+        if (lastTs.current > 0) void loadMessages(lastTs.current);
+        else void loadMessages(0);
+      }
     }, 3000);
     return () => clearInterval(pollRef.current);
-  }, [loadMessages, loadMessagingState, isOnline]);
+  }, [loadMessages, loadMessagingState, loadOpsMessagesRemote, isOnline, isOpsChat]);
 
   // Track whether initial messages have been loaded to control scroll animation
   const initialScrollDone = useRef(false);
@@ -229,6 +323,7 @@ export default function ChatRoomScreen() {
   const [uploading, setUploading] = useState(false);
 
   const chatInputLocked =
+    !isOpsChat &&
     messagingState != null &&
     messagingState.technicianClientGated &&
     !messagingState.messagingActive;
@@ -242,6 +337,40 @@ export default function ChatRoomScreen() {
     if (!trimmed && !attach) return;
     if (chatInputLocked) {
       Alert.alert(t('chat.chatInactiveTitle'), t('chat.chatInactiveBody'));
+      return;
+    }
+
+    if (isOpsChat) {
+      if (!executionIdForOps || !user?.id) return;
+      if (attach) {
+        Alert.alert('', 'Neste chat só é possível enviar texto.');
+        return;
+      }
+      if (!trimmed) return;
+      if (isOnline === false) {
+        Alert.alert('Sem conexão', 'Este chat precisa de internet para enviar.');
+        return;
+      }
+      setSending(true);
+      try {
+        const created = await postExecutionOpsChat(executionIdForOps, trimmed, opsViewerLocale);
+        const mappedOne = mapExecutionOpsMessagesToChat(executionIdForOps, [created], user.email)[0]!;
+        setMessages((prev) => {
+          const next = [...prev, mappedOne];
+          void saveMessagesCache(user.id, cacheRoomId, next);
+          return next;
+        });
+        lastTs.current = mappedOne.timestamp;
+        setText('');
+        setAttach(null);
+        setShowAttach(false);
+        const fullRows = await fetchExecutionOpsChat(executionIdForOps, opsViewerLocale);
+        await persistOpsChatReadAck(executionIdForOps, fullRows);
+      } catch (e: any) {
+        Alert.alert('Erro', e?.message || 'Falha ao enviar mensagem');
+      } finally {
+        setSending(false);
+      }
       return;
     }
 
@@ -380,7 +509,8 @@ export default function ChatRoomScreen() {
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isMe = item.senderId === user?.email;
+    const isMe =
+      String(item.senderId || '').toLowerCase() === String(user?.email || '').toLowerCase();
     const textBody = item.displayContent ?? item.content ?? '';
 
     const bubble = () => {
@@ -452,7 +582,26 @@ export default function ChatRoomScreen() {
     setLocaleModalVisible(false);
     try {
       await patchUser({ preferredChatLocale: loc });
-      if (!roomId || isOnline === false) {
+      if (isOnline === false) {
+        Alert.alert('', t('chat.localeSaved'));
+        return;
+      }
+      if (isOpsChat && executionIdForOps && user?.id) {
+        const explicitLocale =
+          loc != null && String(loc).trim() !== '' ? String(loc).trim() : undefined;
+        const rows = await fetchExecutionOpsChat(executionIdForOps, explicitLocale);
+        const mapped = mapExecutionOpsMessagesToChat(executionIdForOps, rows, user.email);
+        setMessages((prev) => {
+          const merged = mergeRemoteWithPending(mapped, prev);
+          void saveMessagesCache(user.id, cacheRoomId, merged);
+          if (merged.length) lastTs.current = merged[merged.length - 1]!.timestamp;
+          return merged;
+        });
+        await persistOpsChatReadAck(executionIdForOps, rows);
+        Alert.alert('', t('chat.localeSaved'));
+        return;
+      }
+      if (!roomId) {
         Alert.alert('', t('chat.localeSaved'));
         return;
       }
@@ -469,13 +618,15 @@ export default function ChatRoomScreen() {
     }
   };
 
-  const headerSubtitle = roomInfo
-    ? roomInfo.isGroup
-      ? `${roomInfo.memberCount} membros`
-      : chatInputLocked
-        ? t('chat.headerInactive')
-        : 'Chat privado'
-    : 'Carregando...';
+  const headerSubtitle = isOpsChat
+    ? 'Mensagens da operação com o gestor'
+    : roomInfo
+      ? roomInfo.isGroup
+        ? `${roomInfo.memberCount} membros`
+        : chatInputLocked
+          ? t('chat.headerInactive')
+          : 'Chat privado'
+      : 'Carregando...';
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: C.cardWhite }]}>
@@ -500,11 +651,11 @@ export default function ChatRoomScreen() {
         <TouchableOpacity onPress={() => setLocaleModalVisible(true)} style={styles.settingsBtn} accessibilityLabel={t('chat.localeTitle')}>
           <Ionicons name="language-outline" size={22} color={C.primary} />
         </TouchableOpacity>
-        {roomInfo?.isGroup && (
+        {!isOpsChat && roomInfo?.isGroup ? (
           <TouchableOpacity onPress={() => setSettingsVisible(true)} style={styles.settingsBtn}>
             <Ionicons name="settings-outline" size={22} color={C.primary} />
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       {isOnline === false && (
@@ -581,12 +732,12 @@ export default function ChatRoomScreen() {
           <TouchableOpacity
             onPress={() => setShowAttach(!showAttach)}
             style={styles.iconBtn}
-            disabled={uploading || chatInputLocked}
+            disabled={uploading || chatInputLocked || isOpsChat}
           >
             <Ionicons
               name="add"
               size={28}
-              color={uploading || chatInputLocked ? C.border : C.textSecondary}
+              color={uploading || chatInputLocked || isOpsChat ? C.border : C.textSecondary}
             />
           </TouchableOpacity>
 
@@ -597,7 +748,7 @@ export default function ChatRoomScreen() {
             value={text}
             onChangeText={setText}
             multiline
-            maxLength={500}
+            maxLength={isOpsChat ? 8000 : 500}
             editable={!chatInputLocked}
            returnKeyType="done"/>
           
@@ -613,7 +764,7 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         </View>
 
-        {showAttach && !chatInputLocked && (
+        {showAttach && !chatInputLocked && !isOpsChat && (
           <View style={styles.attachMenu}>
             <TouchableOpacity style={styles.attachMenuItem} onPress={takeCamera}>
               <View style={[styles.attachIconBg, { backgroundColor: C.status.info.bg }]}><Ionicons name="camera" size={22} color={SERVICE_CATEGORY_COLORS.Tecnologia} /></View>

@@ -182,6 +182,20 @@ export interface User {
     id: string;
     name: string;
     status: string;
+    branding?: {
+      enabled?: boolean;
+      appDisplayName?: string;
+      tagline?: string;
+      primaryColor?: string;
+      accentColor?: string;
+      secondaryColor?: string;
+      surfaceColor?: string;
+      logoLightUrl?: string;
+      logoDarkUrl?: string;
+      loginBackgroundUrl?: string;
+      brandingVersion?: number;
+      updatedAt?: string | null;
+    };
   };
   technicianProfile?: {
     id: string;

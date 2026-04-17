@@ -10,7 +10,43 @@ module.exports = async function authUser(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    // payload.tenantId distingue do admin (que não tem tenantId)
+
+    /**
+     * JWT do painel (tenant-login / impersonação): utilizador real da org, sem `sessionId` no token.
+     * Mesmas rotas que o app (chat, storage) com `req.user` alinhado ao utilizador em base de dados.
+     */
+    if (payload.panel === true && payload.userId && payload.tenantId) {
+      const user = await prisma.user.findUnique({
+        where: { id: String(payload.userId).trim() },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          tenantId: true,
+          role: true,
+          isActive: true,
+          currentSessionId: true,
+        },
+      });
+      if (!user || !user.isActive) {
+        return res.status(403).json({ error: 'Conta desativada.', code: 'ACCOUNT_INACTIVE' });
+      }
+      if (String(user.tenantId) !== String(payload.tenantId)) {
+        return res.status(403).json({ error: 'Token inválido para este utilizador.' });
+      }
+      req.user = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        tenantId: user.tenantId,
+        role: user.role,
+        sessionId: user.currentSessionId,
+        panel: true,
+      };
+      return next();
+    }
+
+    // payload.tenantId distingue do admin legado (que não tem tenantId)
     if (!payload.tenantId) return res.status(403).json({ error: 'Token de admin não pode acessar rotas de usuário.' });
 
     if (!payload.sessionId) {

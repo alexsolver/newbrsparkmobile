@@ -12,9 +12,12 @@ import type { ColorPalette } from '../theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import {
   fetchExecutionOpsChat,
+  persistOpsChatReadAck,
   postExecutionOpsChat,
   type ExecutionOpsChatMessage,
 } from '../services/executionOpsChat';
+import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from 'react-i18next';
 
 export type ExecutionOpsChatPanelProps = {
   executionId: string;
@@ -44,6 +47,12 @@ function formatWhen(iso: string): string {
 
 /** Lista + envio do chat operacional por FT (reutilizado no modal do checklist e no ecrã «Conversas»). */
 export function ExecutionOpsChatPanel({ executionId, colors, active, compact }: ExecutionOpsChatPanelProps) {
+  const { user } = useAuth();
+  const { i18n } = useTranslation();
+  const viewerLocale = useMemo(
+    () => user?.preferredChatLocale?.trim() || i18n.language || null,
+    [user?.preferredChatLocale, i18n.language],
+  );
   const [messages, setMessages] = useState<ExecutionOpsChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -100,20 +109,25 @@ export function ExecutionOpsChatPanel({ executionId, colors, active, compact }: 
     [colors, compact],
   );
 
+  useEffect(() => {
+    setMessages([]);
+  }, [executionId]);
+
   const load = useCallback(async () => {
     const id = String(executionId || '').trim();
     if (!id) return;
     setLoading(true);
     setError(null);
     try {
-      const rows = await fetchExecutionOpsChat(id);
+      const rows = await fetchExecutionOpsChat(id, viewerLocale);
       setMessages(rows);
+      if (active) await persistOpsChatReadAck(id, rows);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar.');
     } finally {
       setLoading(false);
     }
-  }, [executionId]);
+  }, [executionId, viewerLocale, active]);
 
   useEffect(() => {
     if (!active) {
@@ -150,7 +164,7 @@ export function ExecutionOpsChatPanel({ executionId, colors, active, compact }: 
     setSending(true);
     setError(null);
     try {
-      await postExecutionOpsChat(id, text);
+      await postExecutionOpsChat(id, text, viewerLocale);
       setDraft('');
       await load();
     } catch (e: unknown) {
@@ -174,7 +188,7 @@ export function ExecutionOpsChatPanel({ executionId, colors, active, compact }: 
                 <Text style={styles.meta}>
                   {kindLabel(m.senderKind)} · {m.senderEmail} · {formatWhen(m.createdAt)}
                 </Text>
-                <Text style={styles.body}>{m.body}</Text>
+                <Text style={styles.body}>{m.displayBody != null && String(m.displayBody).trim() !== '' ? m.displayBody : m.body}</Text>
               </View>
             );
           })

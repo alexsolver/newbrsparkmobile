@@ -49,7 +49,7 @@ function buildStatusMap(C: ColorPalette): Record<string, { labelKey: string; col
 }
 
 export default function OrdersScreen() {
-  const { colors: C } = useTheme();
+  const { colors: C, resolvedLogoUrl, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createOrdersStyles(C), [C]);
   const statusMap = useMemo(() => buildStatusMap(C), [C]);
   const router = useRouter();
@@ -136,6 +136,15 @@ export default function OrdersScreen() {
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
+          <View style={styles.brandHero}>
+            {resolvedLogoUrl ? (
+              <View style={styles.brandLogoWrap}>
+                <Ionicons name="business-outline" size={14} color={C.accent} style={{ marginRight: 6 }} />
+                <Text style={styles.brandName}>{appDisplayName}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.brandTagline} numberOfLines={1}>{appTagline}</Text>
+          </View>
           <Text style={[styles.title, { color: C.primary }]}>{t('orders.myRequests')}</Text>
           <Text style={styles.subtitle}>{orders.length} {t('orders.ordersCount')}</Text>
         </View>
@@ -235,6 +244,10 @@ function createOrdersStyles(C: ColorPalette) {
   return StyleSheet.create({
     container: { flex: 1 },
     header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+    brandHero: { marginBottom: 10 },
+    brandLogoWrap: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+    brandName: { fontSize: 12, fontWeight: '900', color: C.accent, textTransform: 'uppercase', letterSpacing: 0.45 },
+    brandTagline: { fontSize: 11, fontWeight: '700', color: C.textLight },
     title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
     subtitle: { fontSize: 13, fontWeight: '700', color: C.textSecondary, marginTop: 2 },
 

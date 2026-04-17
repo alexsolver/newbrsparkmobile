@@ -23,6 +23,33 @@ export function defaultPlanFeaturesForNew() {
     reports: false,
     realtime: false,
     facialVisionProvider: 'COMPREFACE',
+    branding: {
+      enabled: false,
+      allowLogo: false,
+      allowColors: false,
+      allowLoginScreen: false,
+      allowAppDisplayName: false,
+    },
+  };
+}
+
+const BRANDING_BOOL_KEYS = [
+  'enabled',
+  'allowLogo',
+  'allowColors',
+  'allowLoginScreen',
+  'allowAppDisplayName',
+];
+
+function readBrandingFeature(feat) {
+  const raw = feat && typeof feat === 'object' && !Array.isArray(feat) ? feat.branding : null;
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return {
+    enabled: !!src.enabled,
+    allowLogo: !!src.allowLogo,
+    allowColors: !!src.allowColors,
+    allowLoginScreen: !!src.allowLoginScreen,
+    allowAppDisplayName: !!src.allowAppDisplayName,
   };
 }
 
@@ -43,9 +70,15 @@ export function writePlanFeaturesToDom(feat) {
       .toUpperCase();
     sel.value = FACIAL_VALUES.includes(v) ? v : 'COMPREFACE';
   }
+  const branding = readBrandingFeature(f);
+  for (const key of BRANDING_BOOL_KEYS) {
+    const el = document.getElementById(`plan-feat-branding-${key}`);
+    if (el && el.type === 'checkbox') el.checked = !!branding[key];
+  }
   const extra = { ...f };
   for (const key of PLAN_FEATURE_BOOL_KEYS) delete extra[key];
   delete extra.facialVisionProvider;
+  delete extra.branding;
   const ta = document.getElementById('plan-features-advanced');
   if (ta) ta.value = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : '';
 }
@@ -66,6 +99,12 @@ export function readPlanFeaturesFromDom() {
     const v = String(sel.value || 'COMPREFACE').trim().toUpperCase();
     out.facialVisionProvider = FACIAL_VALUES.includes(v) ? v : 'COMPREFACE';
   }
+  const branding = {};
+  for (const key of BRANDING_BOOL_KEYS) {
+    const el = document.getElementById(`plan-feat-branding-${key}`);
+    if (el && el.type === 'checkbox') branding[key] = !!el.checked;
+  }
+  out.branding = branding;
   const ta = document.getElementById('plan-features-advanced');
   if (ta && ta.value.trim()) {
     let extra;
@@ -77,7 +116,7 @@ export function readPlanFeaturesFromDom() {
       throw err;
     }
     if (!extra || typeof extra !== 'object' || Array.isArray(extra)) extra = {};
-    for (const key of [...PLAN_FEATURE_BOOL_KEYS, 'facialVisionProvider']) delete extra[key];
+    for (const key of [...PLAN_FEATURE_BOOL_KEYS, 'facialVisionProvider', 'branding']) delete extra[key];
     Object.assign(out, extra);
   }
   return out;

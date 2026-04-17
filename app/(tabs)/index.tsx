@@ -16,6 +16,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  AccessibilityInfo,
   ActivityIndicator,
   Linking,
   FlatList,
@@ -285,6 +286,9 @@ function normalizeSavedLongPressForSlot(
 }
 
 const OS_ALT_SORT_STORAGE_KEY = '@brspark_provider_os_alt_sort_v1';
+const PROVIDER_CARD_HIGH_CONTRAST_KEY = '@brspark_provider_cards_high_contrast_v1';
+const PROVIDER_CARD_VARIANT_KEY = '@brspark_provider_cards_variant_v1';
+type ProviderCardVariant = 'premium';
 
 /** Chips Recentes / Antigas / Roteirizador — mesma métrica de ícone e texto. */
 const PROVIDER_OS_SORT_CHIP_ICON_SIZE = 16;
@@ -628,6 +632,50 @@ function providerOsCardFormTemplateBadgeText(order: any, listEff: string): strin
   if (String(listEff || '').toUpperCase() === 'PAUSED') return resolved;
   if (serviceLine && resolved === serviceLine) return null;
   return resolved;
+}
+
+function parseProviderVoiceNoteStored(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return null;
+    try {
+      const j = JSON.parse(s);
+      return j && typeof j === 'object' && !Array.isArray(j) ? (j as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function providerValueHasPendingVoiceNote(raw: unknown): boolean {
+  const o = parseProviderVoiceNoteStored(raw);
+  if (!o) return false;
+  const transcript = String(o.transcript || '').trim();
+  if (transcript) return false;
+  const phase = String(o.phase || o.status || '').trim().toLowerCase();
+  const localUri = String(o.localUri || '').trim();
+  return phase === 'pending_transcription' && !!localUri;
+}
+
+function providerTaskHasPendingVoiceTranscription(task: any): boolean {
+  const r = task?.responses;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+  for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(v)) {
+      for (const row of v) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const rv of Object.values(row as Record<string, unknown>)) {
+          if (providerValueHasPendingVoiceNote(rv)) return true;
+        }
+      }
+      continue;
+    }
+    if (providerValueHasPendingVoiceNote(v)) return true;
+  }
+  return false;
 }
 
 /** Tipografia do valor numérico (duração, distância, ETA) — uma única definição para não haver diferença visual. */
@@ -1390,6 +1438,142 @@ function providerTaskListAccentColor(
   return P.textLight;
 }
 
+const PROVIDER_CARD_SURFACE = {
+  radius: 20,
+  headerPadTop: 14,
+  headerPadSide: 14,
+  headerPadBottom: 10,
+  sectionPadSide: 14,
+  sectionPadBottom: 14,
+};
+
+function providerCardPremiumTone(
+  listEff: string,
+  listAccent: string,
+  overdue: boolean,
+  highContrast: boolean,
+  C: ColorPalette,
+): {
+  stripe: string;
+  cardBorder: string;
+  cardBg: string;
+  idBg: string;
+  idBorder: string;
+  idInk: string;
+  statusBg: string;
+  statusBorder: string;
+  statusInk: string;
+} {
+  const strongBorder = highContrast ? `${C.slate}5C` : C.border;
+  const neutralStatusBg = highContrast ? '#E2E8F0' : '#E2E8F0';
+  const neutralStatusInk = highContrast ? C.slate : C.textSecondary;
+  const pendingCardBg = highContrast ? '#E2E8F0' : '#E2E8F0';
+  const inProgressCardBg = highContrast ? '#FED7AA' : '#FED7AA';
+  const pausedCardBg = highContrast ? '#FECACA' : '#FECACA';
+  const completedCardBg = highContrast ? '#D9EFE1' : '#E4F3E8';
+  const completedStatusBg = highContrast ? '#CFE6D8' : '#D8EEDF';
+  const completedStatusBorder = highContrast ? '#6B9E84' : '#8DBAA4';
+  const base = {
+    stripe: listAccent,
+    cardBorder: strongBorder,
+    cardBg: pendingCardBg,
+    idBg: highContrast ? `${C.slate}1A` : `${C.slate}0D`,
+    idBorder: highContrast ? `${C.slate}50` : `${C.slate}1F`,
+    idInk: C.slate,
+    statusBg: neutralStatusBg,
+    statusBorder: strongBorder,
+    statusInk: neutralStatusInk,
+  };
+  const applyOverdue = (tone: {
+    stripe: string;
+    cardBorder: string;
+    cardBg: string;
+    idBg: string;
+    idBorder: string;
+    idInk: string;
+    statusBg: string;
+    statusBorder: string;
+    statusInk: string;
+  }) =>
+    overdue
+      ? {
+          ...tone,
+          cardBorder: highContrast ? C.destructive : tone.cardBorder,
+          statusBg: C.status.danger.bg,
+          statusBorder: highContrast ? C.destructive : C.status.danger.border,
+          statusInk: C.status.danger.fg,
+        }
+      : tone;
+  if (listEff === 'PAUSED') {
+    return applyOverdue({
+      ...base,
+      stripe: C.destructive,
+      cardBg: pausedCardBg,
+      cardBorder: highContrast ? C.destructive : C.status.danger.border,
+      idBg: `${C.destructive}12`,
+      idBorder: highContrast ? `${C.destructive}7A` : `${C.destructive}2E`,
+      idInk: C.destructive,
+      statusBg: C.status.danger.bg,
+      statusBorder: highContrast ? C.destructive : C.status.danger.border,
+      statusInk: C.status.danger.fg,
+    });
+  }
+  if (listEff === 'COMPLETED') {
+    return applyOverdue({
+      ...base,
+      stripe: C.status.success.fg,
+      cardBg: completedCardBg,
+      cardBorder: highContrast ? '#6B9E84' : '#8DBAA4',
+      idBg: `${C.status.success.fg}12`,
+      idBorder: highContrast ? `${C.status.success.fg}78` : `${C.status.success.fg}2A`,
+      idInk: C.status.success.fg,
+      statusBg: completedStatusBg,
+      statusBorder: completedStatusBorder,
+      statusInk: C.status.success.fg,
+    });
+  }
+  if (listEff === 'IN_PROGRESS') {
+    return applyOverdue({
+      ...base,
+      stripe: MEDIA_TAG_COLORS.DURING,
+      cardBg: inProgressCardBg,
+      cardBorder: highContrast ? `${MEDIA_TAG_COLORS.DURING}80` : C.status.warning.border,
+      idBg: highContrast ? `${MEDIA_TAG_COLORS.DURING}1D` : `${MEDIA_TAG_COLORS.DURING}14`,
+      idBorder: highContrast ? `${MEDIA_TAG_COLORS.DURING}6D` : `${MEDIA_TAG_COLORS.DURING}33`,
+      idInk: C.slate,
+      statusBg: highContrast ? `${MEDIA_TAG_COLORS.DURING}1C` : `${MEDIA_TAG_COLORS.DURING}14`,
+      statusBorder: highContrast ? `${MEDIA_TAG_COLORS.DURING}6D` : `${MEDIA_TAG_COLORS.DURING}30`,
+      statusInk: MEDIA_TAG_COLORS.DURING,
+    });
+  }
+  return applyOverdue({
+    ...base,
+    stripe: C.textLight,
+    cardBg: pendingCardBg,
+    idBg: highContrast ? `${C.textLight}1E` : `${C.textLight}12`,
+    idBorder: highContrast ? `${C.textLight}68` : `${C.textLight}28`,
+    idInk: C.slate,
+    statusBg: neutralStatusBg,
+    statusBorder: strongBorder,
+    statusInk: neutralStatusInk,
+  });
+}
+
+function providerCardEnterMotionProfile(
+  status: string,
+  index: number,
+  reduceMotion: boolean,
+): { duration: number; delay: number; translateY: number; fromScale: number } {
+  if (reduceMotion) return { duration: 1, delay: 0, translateY: 0, fromScale: 1 };
+  const i = Math.min(Math.max(0, index), 8);
+  const baseDelay = i * 58;
+  const st = String(status || '').toUpperCase();
+  if (st === 'PAUSED') return { duration: 190, delay: baseDelay, translateY: 12, fromScale: 0.992 };
+  if (st === 'IN_PROGRESS') return { duration: 210, delay: baseDelay, translateY: 14, fromScale: 0.99 };
+  if (st === 'COMPLETED') return { duration: 180, delay: baseDelay, translateY: 10, fromScale: 0.994 };
+  return { duration: 220, delay: baseDelay, translateY: 16, fromScale: 0.988 };
+}
+
 /**
  * Mesma abordagem do mapa de deslocamento (`LiveRouteMapCard`): cada perna usa `fetchDrivingGeometryLatLng`
  * via `fetchStitchedDrivingRouteLatLng` (OSRM direto → várias bases → proxy backend por trecho).
@@ -1469,6 +1653,10 @@ function ProviderTerracottaDurationPillBadge(props: {
   leadingIcon?: React.ComponentProps<typeof Ionicons>['name'];
   /** Animação do ícone: giro 180° (ampulheta), pulso de escala (pausa) ou estático. */
   leadingIconAnimation?: 'flip' | 'pulse' | 'none';
+  /** Versão compacta para cards: ocupa menos espaço e enfatiza alerta de ação. */
+  compact?: boolean;
+  /** Cor semântica do alerta (pausa = danger, aguardo aceite = warning). */
+  tone?: 'warning' | 'danger';
 }) {
   const {
     task,
@@ -1480,6 +1668,8 @@ function ProviderTerracottaDurationPillBadge(props: {
     renderBelow,
     leadingIcon = 'hourglass-outline',
     leadingIconAnimation = 'flip',
+    compact = false,
+    tone = 'warning',
   } = props;
   const { t } = useTranslation();
   const [minutes, setMinutes] = useState(() => computeMinutes(task));
@@ -1487,6 +1677,7 @@ function ProviderTerracottaDurationPillBadge(props: {
   const pulseOpacity = useRef(new Animated.Value(0.35)).current;
   const flip = useRef(new Animated.Value(0)).current;
   const iconPulseScale = useRef(new Animated.Value(1)).current;
+  const shakeX = useRef(new Animated.Value(0)).current;
   const taskRef = useRef(task);
   taskRef.current = task;
 
@@ -1498,18 +1689,21 @@ function ProviderTerracottaDurationPillBadge(props: {
   }, [task?.id, task?.lastPauseAt, tickIntervalMs, computeMinutes]);
 
   useEffect(() => {
-    const dur = 780;
+    const dur = compact ? 520 : 780;
+    const upScale = compact ? 1.1 : 1.045;
+    const downOpacity = compact ? 0.24 : 0.22;
+    const upOpacity = compact ? 0.7 : 0.55;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(pulseScale, {
-            toValue: 1.045,
+            toValue: upScale,
             duration: dur,
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
           Animated.timing(pulseOpacity, {
-            toValue: 0.55,
+            toValue: upOpacity,
             duration: dur,
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
@@ -1523,7 +1717,7 @@ function ProviderTerracottaDurationPillBadge(props: {
             useNativeDriver: true,
           }),
           Animated.timing(pulseOpacity, {
-            toValue: 0.22,
+            toValue: downOpacity,
             duration: dur,
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
@@ -1537,7 +1731,30 @@ function ProviderTerracottaDurationPillBadge(props: {
       pulseScale.setValue(1);
       pulseOpacity.setValue(0.35);
     };
-  }, [pulseOpacity, pulseScale]);
+  }, [compact, pulseOpacity, pulseScale]);
+
+  useEffect(() => {
+    if (!compact) {
+      shakeX.stopAnimation();
+      shakeX.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(2600),
+        Animated.timing(shakeX, { toValue: -2.2, duration: 55, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue: 2.2, duration: 55, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue: -1.6, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue: 1.6, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue: 0, duration: 50, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      shakeX.setValue(0);
+    };
+  }, [compact, shakeX]);
 
   useEffect(() => {
     iconPulseScale.stopAnimation();
@@ -1599,10 +1816,10 @@ function ProviderTerracottaDurationPillBadge(props: {
   const valueLabel = dash ? '—' : String(Math.max(0, minutes));
   const a11y = getA11y(minutes);
 
-  const bg = '#FFF5E6';
-  const border = '#FFCBA4';
-  const iconC = '#D35400';
-  const textC = '#8B4513';
+  const bg = tone === 'danger' ? '#FFE7E7' : '#FFF1DD';
+  const border = tone === 'danger' ? '#FCA5A5' : '#FDBA74';
+  const iconC = tone === 'danger' ? '#B91C1C' : '#C2410C';
+  const textC = tone === 'danger' ? '#7F1D1D' : '#7C2D12';
 
   const pillBody = (
     <>
@@ -1616,25 +1833,26 @@ function ProviderTerracottaDurationPillBadge(props: {
           right: -2,
           top: -2,
           bottom: -2,
-          borderRadius: 20,
+          borderRadius: compact ? 14 : 20,
           backgroundColor: border,
           opacity: pulseOpacity,
-          transform: [{ scale: pulseScale }],
+          transform: [{ scale: pulseScale }, ...(compact ? [{ translateX: shakeX }] : [])],
         }}
         collapsable={false}
       />
-      <View
+      <Animated.View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingVertical: 5,
-          paddingHorizontal: 10,
-          borderRadius: 18,
+          paddingVertical: compact ? 3 : 5,
+          paddingHorizontal: compact ? 8 : 10,
+          borderRadius: compact ? 12 : 18,
           backgroundColor: bg,
-          borderWidth: 2,
+          borderWidth: compact ? 1.5 : 2,
           borderColor: border,
-          gap: 8,
+          gap: compact ? 6 : 8,
           zIndex: 2,
+          transform: compact ? [{ translateX: shakeX }] : undefined,
         }}
         collapsable={false}
       >
@@ -1645,30 +1863,43 @@ function ProviderTerracottaDurationPillBadge(props: {
         ) : leadingIconAnimation === 'pulse' ? (
           <Animated.View
             style={{
-              width: 22,
-              height: 22,
+              width: compact ? 18 : 22,
+              height: compact ? 18 : 22,
               alignItems: 'center',
               justifyContent: 'center',
               transform: [{ scale: iconPulseScale }],
             }}
             collapsable={false}
           >
-            <Ionicons name={leadingIcon} size={18} color={iconC} />
+            <Ionicons name={leadingIcon} size={compact ? 14 : 18} color={iconC} />
           </Animated.View>
         ) : (
-          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }} collapsable={false}>
-            <Ionicons name={leadingIcon} size={18} color={iconC} />
+          <View
+            style={{ width: compact ? 14 : 18, height: compact ? 14 : 18, alignItems: 'center', justifyContent: 'center' }}
+            collapsable={false}
+          >
+            <Ionicons name={leadingIcon} size={compact ? 14 : 18} color={iconC} />
           </View>
         )}
         <View style={{ alignItems: 'flex-start', justifyContent: 'center' }} collapsable={false}>
-          <Text style={{ fontSize: 15, fontWeight: '900', color: textC, fontVariant: ['tabular-nums'], lineHeight: 17 }}>
-            {valueLabel}
+          <Text
+            style={{
+              fontSize: compact ? 13 : 15,
+              fontWeight: '900',
+              color: textC,
+              fontVariant: ['tabular-nums'],
+              lineHeight: compact ? 15 : 17,
+            }}
+          >
+            {compact ? `${valueLabel}m` : valueLabel}
           </Text>
-          <Text style={{ fontSize: 8, fontWeight: '700', color: textC, opacity: 0.92, marginTop: 0 }}>
-            {t('pause.listBadgeMinutesUnit')}
-          </Text>
+          {!compact ? (
+            <Text style={{ fontSize: 8, fontWeight: '700', color: textC, opacity: 0.92, marginTop: 0 }}>
+              {t('pause.listBadgeMinutesUnit')}
+            </Text>
+          ) : null}
         </View>
-      </View>
+      </Animated.View>
     </>
   );
 
@@ -1707,6 +1938,8 @@ function ProviderAwaitAcceptMinutesChip(props: { task: any; C: ColorPalette; com
       getA11y={(m) => t('home.providerOsAwaitAcceptA11y', { count: Math.max(0, m) })}
       dashWhenNegative={false}
       alignSelf={compact ? 'flex-start' : 'center'}
+      compact={compact}
+      tone="warning"
       renderBelow={
         compact
           ? undefined
@@ -1773,6 +2006,8 @@ function ProviderPausedDurationBadge(props: { task: any }) {
       getA11y={(m) => (m < 0 ? t('pause.listBadge') : t('pause.listBadgeA11y', { count: m }))}
       dashWhenNegative
       alignSelf="center"
+      compact
+      tone="danger"
       leadingIcon="pause-circle-outline"
       leadingIconAnimation="pulse"
     />
@@ -1781,7 +2016,7 @@ function ProviderPausedDurationBadge(props: { task: any }) {
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { colors: C, dark: themeDark } = useTheme();
+  const { colors: C, dark: themeDark, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createDashboardStyles(C), [C]);
   const { user, userRole } = useAuth();
   const { isOnline } = useConnectivity(8000);
@@ -1831,6 +2066,11 @@ export default function DashboardScreen() {
   /** IDs em `@brspark_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
   const [providerSortMode, setProviderSortMode] = useState<ProviderListSortMode>('NEWEST');
+  const providerCardEnterAnimMapRef = useRef<Map<string, Animated.Value>>(new Map());
+  const providerCardEnterSeenRef = useRef<Set<string>>(new Set());
+  const [providerCardVariant] = useState<ProviderCardVariant>('premium');
+  const [providerCardHighContrast, setProviderCardHighContrast] = useState(false);
+  const [providerReduceMotion, setProviderReduceMotion] = useState(false);
   const [osrmDurations, setOsrmDurations] = useState<Record<string, number>>({});
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
   /** Qual modo está a ser calculado (spinner nos chips — não confundir com providerSortMode até terminar) */
@@ -1980,6 +2220,89 @@ export default function DashboardScreen() {
     if (providerTab !== 'COMPLETED') return providerOsListSorted;
     return providerOsListSorted.slice(0, providerCompletedListCap);
   }, [providerTab, providerOsListSorted, providerCompletedListCap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [hcRaw, rm, boldText] = await Promise.all([
+          AsyncStorage.getItem(PROVIDER_CARD_HIGH_CONTRAST_KEY),
+          AccessibilityInfo.isReduceMotionEnabled(),
+          AccessibilityInfo.isBoldTextEnabled(),
+        ]);
+        if (cancelled) return;
+        const hc = hcRaw === '1' || hcRaw === 'true' || boldText === true;
+        setProviderCardHighContrast(hc);
+        void AsyncStorage.setItem(PROVIDER_CARD_VARIANT_KEY, 'premium').catch(() => {});
+        setProviderReduceMotion(!!rm);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    providerCardEnterSeenRef.current = new Set();
+    providerCardEnterAnimMapRef.current.clear();
+  }, [providerTab]);
+
+  useEffect(() => {
+    const existingIds = new Set(providerOsFlatData.map((row) => String(row?.id || '')));
+    for (const id of [...providerCardEnterAnimMapRef.current.keys()]) {
+      if (!existingIds.has(id)) providerCardEnterAnimMapRef.current.delete(id);
+    }
+    providerOsFlatData.forEach((row, idx) => {
+      const id = String(row?.id || '').trim();
+      if (!id || providerCardEnterSeenRef.current.has(id)) return;
+      providerCardEnterSeenRef.current.add(id);
+      const status = effectiveProviderTaskStatus(row, completedIds, inprogressIds, acceptedIds);
+      const profile = providerCardEnterMotionProfile(status, idx, providerReduceMotion);
+      const v = new Animated.Value(0);
+      providerCardEnterAnimMapRef.current.set(id, v);
+      if (providerReduceMotion) {
+        v.setValue(1);
+        return;
+      }
+      Animated.timing(v, {
+        toValue: 1,
+        duration: profile.duration,
+        delay: profile.delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        providerCardEnterAnimMapRef.current.set(id, new Animated.Value(1));
+      });
+    });
+  }, [providerOsFlatData, completedIds, inprogressIds, acceptedIds, providerReduceMotion]);
+
+  const providerCardAnimatedStyle = useCallback((taskId: string, status: string, index: number) => {
+    const id = String(taskId || '').trim();
+    if (!id) return undefined;
+    const profile = providerCardEnterMotionProfile(status, index, providerReduceMotion);
+    if (providerReduceMotion) return undefined;
+    const v = providerCardEnterAnimMapRef.current.get(id);
+    if (!v) return undefined;
+    return {
+      opacity: v,
+      transform: [
+        {
+          translateY: v.interpolate({
+            inputRange: [0, 1],
+            outputRange: [profile.translateY, 0],
+          }),
+        },
+        {
+          scale: v.interpolate({
+            inputRange: [0, 1],
+            outputRange: [profile.fromScale, 1],
+          }),
+        },
+      ],
+    };
+  }, [providerReduceMotion]);
 
   /** Geometria “Rota do dia” = mesmo padrão que deslocamento: tentar ao abrir e a cada 12s até haver polilinha. */
   useEffect(() => {
@@ -3494,7 +3817,11 @@ export default function DashboardScreen() {
             style={styles.premiumHeader}
           >
             <View style={styles.premiumHeaderRow}>
-              <Text style={styles.premiumHeaderText}>{t('home.searchTitle')}</Text>
+              <View>
+                <Text style={styles.premiumHeaderEyebrow}>{appDisplayName}</Text>
+                <Text style={styles.premiumHeaderText}>{t('home.searchTitle')}</Text>
+                <Text style={styles.premiumHeaderSub} numberOfLines={1}>{appTagline}</Text>
+              </View>
             </View>
 
             <ScrollView
@@ -3990,7 +4317,7 @@ export default function DashboardScreen() {
               style={{ flex: 1 }}
               data={providerOsFlatData}
               keyExtractor={(row) => String(row.id)}
-              extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}`}
+              extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}-${providerCardVariant}-${providerCardHighContrast ? 1 : 0}`}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -4035,28 +4362,56 @@ export default function DashboardScreen() {
                   providerCardMapDest &&
                   providerCardDistanceReady(providerMyLocationStatus, providerMyLocation);
                 const formBadgeText = providerOsCardFormTemplateBadgeText(order, listEff);
+                const cardTone = providerCardPremiumTone(
+                  listEff,
+                  listAccent,
+                  cardVencOverdue,
+                  providerCardHighContrast,
+                  C,
+                );
+                const cardStatusChipText =
+                  listEff === 'PAUSED'
+                    ? t('osSearch.status.PAUSED', { defaultValue: 'Em pausa' })
+                    : listEff === 'IN_PROGRESS'
+                      ? t('osSearch.status.IN_PROGRESS', { defaultValue: 'Em andamento' })
+                      : listEff === 'COMPLETED'
+                        ? t('osSearch.status.COMPLETED', { defaultValue: 'Concluída' })
+                        : t('osSearch.status.PENDING', { defaultValue: 'Pendente' });
+                const hasPendingVoiceNote = providerTaskHasPendingVoiceTranscription(order);
+                const cardMetaLabelColor = providerCardHighContrast ? C.slate : C.textSecondary;
+                const cardMetaBodyColor = providerCardHighContrast ? C.slate : C.textSecondary;
+                const isPremiumCard = providerCardVariant === 'premium';
                 return (
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'stretch', marginBottom: 12, paddingHorizontal: 16 }}
+                <Animated.View
+                  style={[
+                    { flexDirection: 'row', alignItems: 'stretch', marginBottom: 12, paddingHorizontal: 16 },
+                    providerCardAnimatedStyle(String(order.id), listEff, index),
+                  ]}
                 >
                   <View
                     style={{
                       flex: 1,
-                      borderRadius: 16,
+                      borderRadius: isPremiumCard ? PROVIDER_CARD_SURFACE.radius : 16,
                       overflow: 'hidden',
-                      shadowColor: listAccent,
-                      shadowOffset: { width: 0, height: 3 },
-                      shadowOpacity: 0.18,
-                      shadowRadius: 8,
-                      elevation: 4,
+                      shadowColor: '#0f172a',
+                      shadowOffset: { width: 0, height: isPremiumCard ? 4 : 3 },
+                      shadowOpacity: isPremiumCard
+                        ? providerCardHighContrast
+                          ? 0.12
+                          : 0.08
+                        : providerCardHighContrast
+                          ? 0.1
+                          : 0.06,
+                      shadowRadius: isPremiumCard ? (providerCardHighContrast ? 12 : 10) : 8,
+                      elevation: isPremiumCard ? (providerCardHighContrast ? 3 : 2) : 2,
                     }}
                   >
                     <View
                       style={{
-                        borderRadius: 16,
+                        borderRadius: isPremiumCard ? PROVIDER_CARD_SURFACE.radius : 16,
                         borderWidth: 1,
-                        borderColor: listAccent,
-                        backgroundColor: `${listAccent}22`,
+                        borderColor: cardTone.cardBorder,
+                        backgroundColor: cardTone.cardBg,
                       }}
                     >
                     <Pressable
@@ -4068,13 +4423,14 @@ export default function DashboardScreen() {
                       style={({ pressed }) => ({
                         flexDirection: 'row',
                         alignItems: 'stretch',
-                        opacity: pressed ? 0.88 : 1,
+                        opacity: pressed ? 0.96 : 1,
+                        transform: [{ scale: pressed ? (isPremiumCard ? 0.987 : 0.992) : 1 }],
                       })}
                     >
                       <View
                         style={{
-                          width: 6,
-                          backgroundColor: listAccent,
+                          width: isPremiumCard ? 4 : 5,
+                          backgroundColor: cardTone.stripe,
                         }}
                       />
                       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
@@ -4084,51 +4440,88 @@ export default function DashboardScreen() {
                             width: 64,
                             justifyContent: 'flex-start',
                             alignItems: 'center',
-                            paddingTop: 14,
+                            paddingTop: isPremiumCard ? PROVIDER_CARD_SURFACE.headerPadTop : 12,
                             paddingBottom: 12,
-                            paddingLeft: 10,
+                            paddingLeft: 8,
                           }}
                         >
                           <View
                             style={{
-                              width: 48,
-                              height: 48,
-                              borderRadius: 12,
-                              backgroundColor: `${listAccent}20`,
+                              width: isPremiumCard ? 52 : 48,
+                              height: isPremiumCard ? 52 : 48,
+                              borderRadius: 14,
+                              backgroundColor: `${cardTone.stripe}24`,
                               borderWidth: 1.5,
-                              borderColor: `${listAccent}40`,
+                              borderColor: `${cardTone.stripe}70`,
                               justifyContent: 'center',
                               alignItems: 'center',
+                              shadowColor: cardTone.stripe,
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.22,
+                              shadowRadius: 6,
+                              elevation: 3,
                             }}
                           >
                             <TaskMetadataGlyph
                               icon={(order.icon as any) || 'construct-outline'}
                               iconLibrary={order.iconLibrary}
-                              size={24}
+                              size={28}
                               color={listAccent}
                             />
                           </View>
                         </View>
 
-                        <View style={{ flex: 1, minWidth: 0, paddingTop: 12, paddingRight: 12, paddingBottom: 8 }}>
+                        <View
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            paddingTop: isPremiumCard ? PROVIDER_CARD_SURFACE.headerPadTop : 12,
+                            paddingRight: PROVIDER_CARD_SURFACE.headerPadSide,
+                            paddingBottom: PROVIDER_CARD_SURFACE.headerPadBottom,
+                          }}
+                        >
                           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                             <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                                 <View
                                   style={{
                                     alignSelf: 'flex-start',
-                                    backgroundColor: `${listAccent}26`,
+                                    backgroundColor: cardTone.idBg,
                                     paddingHorizontal: 8,
                                     paddingVertical: 4,
                                     borderRadius: 8,
                                     borderWidth: 1,
-                                    borderColor: `${listAccent}4D`,
+                                    borderColor: cardTone.idBorder,
                                   }}
                                 >
-                                  <Text style={{ fontSize: 10, fontWeight: '900', color: C.slate, letterSpacing: 0.35 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '900', color: cardTone.idInk, letterSpacing: 0.3 }}>
                                     {taskOsLabel(order)}
                                   </Text>
                                 </View>
+                                {isPremiumCard ? (
+                                  <View
+                                    style={{
+                                      alignSelf: 'flex-start',
+                                      backgroundColor: cardTone.statusBg,
+                                      borderColor: cardTone.statusBorder,
+                                      borderWidth: 1,
+                                      borderRadius: 999,
+                                      paddingHorizontal: 9,
+                                      paddingVertical: 4,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: '900',
+                                        color: cardTone.statusInk,
+                                        letterSpacing: 0.25,
+                                      }}
+                                    >
+                                      {cardStatusChipText}
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
                               {formBadgeText ? (
                                 <View
@@ -4148,7 +4541,7 @@ export default function DashboardScreen() {
                                       paddingVertical: 5,
                                       paddingHorizontal: 11,
                                       borderRadius: 999,
-                                      backgroundColor: C.primary,
+                                      backgroundColor: `${C.primary}F0`,
                                     }}
                                   >
                                     <Text
@@ -4195,12 +4588,12 @@ export default function DashboardScreen() {
                               ) : null}
                               <Text
                                 style={{
-                                  marginTop: 6,
-                                  fontSize: 13,
-                                  color: C.slate,
-                                  fontWeight: '500',
-                                  lineHeight: 18,
-                                  letterSpacing: -0.12,
+                                  marginTop: 8,
+                                  fontSize: isPremiumCard ? 17 : 15,
+                                  color: providerCardHighContrast ? '#020617' : C.slate,
+                                  fontWeight: isPremiumCard ? '800' : '700',
+                                  lineHeight: isPremiumCard ? 22 : 20,
+                                  letterSpacing: isPremiumCard ? -0.2 : -0.1,
                                 }}
                                 numberOfLines={2}
                               >
@@ -4208,7 +4601,7 @@ export default function DashboardScreen() {
                               </Text>
                             </View>
 
-                            <View style={{ alignItems: 'center', gap: 10, paddingTop: 2 }}>
+                            <View style={{ alignItems: 'center', gap: 9, paddingTop: 3 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 {providerTaskShowsRevisionBadge(order) ? (
                                   <Pressable
@@ -4223,33 +4616,52 @@ export default function DashboardScreen() {
                                     style={({ pressed }) => ({
                                       width: 30,
                                       height: 30,
-                                      borderRadius: 10,
+                                      borderRadius: 11,
                                       justifyContent: 'center',
                                       alignItems: 'center',
                                       backgroundColor: C.status.info.bg,
-                                      borderWidth: StyleSheet.hairlineWidth,
+                                      borderWidth: 1,
                                       borderColor: C.status.info.border,
                                       opacity: pressed ? 0.82 : 1,
                                     })}
                                   >
-                                    <Ionicons name="layers-outline" size={18} color={C.status.info.fg} />
+                                    <Ionicons name="layers-outline" size={16} color={C.status.info.fg} />
                                   </Pressable>
                                 ) : null}
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View
+                                  style={{
+                                  width: 30,
+                                  height: 30,
+                                    borderRadius: 11,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    backgroundColor: order.isPendingSync ? C.status.warning.bg : C.status.success.bg,
+                                    borderWidth: 1,
+                                    borderColor: order.isPendingSync ? C.status.warning.border : C.status.success.border,
+                                  }}
+                                >
                                   <Ionicons
                                     name={order.isPendingSync ? 'cloud-offline' : 'cloud-done'}
-                                    size={22}
-                                    color={order.isPendingSync ? MEDIA_TAG_COLORS.DURING : MEDIA_TAG_COLORS.AFTER}
+                                    size={16}
+                                    color={order.isPendingSync ? C.status.warning.fg : C.status.success.fg}
                                   />
-                                  {listEff === 'COMPLETED' && order.isCachedLocally && !order.isPendingSync ? (
-                                    <Ionicons
-                                      name="arrow-down"
-                                      size={12}
-                                      color={MEDIA_TAG_COLORS.AFTER}
-                                      style={{ marginLeft: 2 }}
-                                    />
-                                  ) : null}
                                 </View>
+                                {hasPendingVoiceNote ? (
+                                  <View
+                                    style={{
+                                      width: 30,
+                                      height: 30,
+                                      borderRadius: 11,
+                                      justifyContent: 'center',
+                                      alignItems: 'center',
+                                      backgroundColor: C.status.warning.bg,
+                                      borderWidth: 1,
+                                      borderColor: C.status.warning.border,
+                                    }}
+                                  >
+                                    <Ionicons name="mic-outline" size={16} color={C.status.warning.fg} />
+                                  </View>
+                                ) : null}
                               </View>
                               <Pressable
                                 onPress={() => runProviderOsMapMiniPress(order, setProviderOsMiniMapTask)}
@@ -4257,9 +4669,9 @@ export default function DashboardScreen() {
                                 accessibilityLabel={`${osMapZoneVisual.label}. Ver local no mapa`}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 style={({ pressed }) => ({
-                                  width: 44,
-                                  height: 44,
-                                  borderRadius: 22,
+                                  width: isPremiumCard ? 46 : 44,
+                                  height: isPremiumCard ? 46 : 44,
+                                  borderRadius: isPremiumCard ? 23 : 22,
                                   backgroundColor: zoneChrome.backgroundColor,
                                   justifyContent: 'center',
                                   alignItems: 'center',
@@ -4268,7 +4680,11 @@ export default function DashboardScreen() {
                                   opacity: pressed ? 0.88 : 1,
                                 })}
                               >
-                                <Ionicons name={osMapZoneVisual.icon} size={22} color={zoneChrome.iconColor} />
+                                <Ionicons
+                                  name={osMapZoneVisual.icon}
+                                  size={isPremiumCard ? 21 : 20}
+                                  color={zoneChrome.iconColor}
+                                />
                               </Pressable>
                             </View>
                           </View>
@@ -4277,9 +4693,9 @@ export default function DashboardScreen() {
 
                       <View
                         style={{
-                          paddingHorizontal: 12,
+                          paddingHorizontal: PROVIDER_CARD_SURFACE.sectionPadSide,
                           paddingTop: 12,
-                          paddingBottom: 14,
+                          paddingBottom: PROVIDER_CARD_SURFACE.sectionPadBottom,
                           borderTopWidth: StyleSheet.hairlineWidth,
                           borderTopColor: C.divider,
                           flexGrow: 0,
@@ -4300,14 +4716,14 @@ export default function DashboardScreen() {
                             <Ionicons
                               name="phone-portrait-outline"
                               size={16}
-                              color={C.textSecondary}
+                              color={cardMetaLabelColor}
                               style={{ marginTop: 1 }}
                             />
                             <Text
                               style={{
                                 flex: 1,
                                 fontSize: 12,
-                                color: C.slate,
+                                color: cardMetaBodyColor,
                                 fontWeight: '900',
                                 lineHeight: 16,
                                 letterSpacing: -0.12,
@@ -4326,14 +4742,14 @@ export default function DashboardScreen() {
                             <Ionicons
                               name="calendar-outline"
                               size={16}
-                              color={cardVencIso ? (cardVencOverdue ? C.destructive : C.slate) : C.textSecondary}
+                              color={cardVencIso ? (cardVencOverdue ? C.destructive : cardMetaBodyColor) : cardMetaLabelColor}
                               style={{ marginTop: 1 }}
                             />
                             <Text
                               style={{
                                 flex: 1,
                                 fontSize: 12,
-                                color: cardVencIso ? (cardVencOverdue ? C.destructive : C.slate) : C.textSecondary,
+                                color: cardVencIso ? (cardVencOverdue ? C.destructive : cardMetaBodyColor) : cardMetaLabelColor,
                                 fontWeight: '900',
                                 lineHeight: 16,
                                 letterSpacing: -0.12,
@@ -4440,7 +4856,7 @@ export default function DashboardScreen() {
                        <View style={{ flex: 1, width: 2, backgroundColor: index === providerOsFlatData.length - 1 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : MODE_SEGMENT_COLORS.PROVIDER), opacity: 0.3 }} />
                     </View>
                 )}
-                </View>
+                </Animated.View>
               );
               }}
             />
@@ -5580,7 +5996,9 @@ function createDashboardStyles(C: ColorPalette) {
   // Premium Services UI (Refined Typo & Deep Slate Ardósia)
   premiumHeader: { paddingBottom: 24, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingHorizontal: 16, paddingTop: 10 },
   premiumHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  premiumHeaderEyebrow: { fontSize: 11, fontWeight: '900', color: 'rgba(255,255,255,0.86)', textTransform: 'uppercase', letterSpacing: 0.65, marginBottom: 2 },
   premiumHeaderText: { fontSize: 15, fontWeight: '900', color: C.cardWhite, letterSpacing: -0.4 },
+  premiumHeaderSub: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.86)', marginTop: 4 },
   
   circularCatScroll: { paddingRight: 20 },
   circularCatItem: { alignItems: 'center', width: 95 },

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Chat corporativo</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span>Chat corporativo</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title">Chat corporativo</h1>
+        <p class="page-hero-sub">
+          Mesmas conversas e contatos do aplicativo móvel: salas, grupos, pedidos de contato e fios da operação (gestor ↔ técnico).
+        </p>
+      </header>
+
+      <div id="admin-chat-app" class="admin-chat-layout" aria-busy="true">
+        <div class="admin-chat-col-list">
+          <div class="admin-chat-list-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <strong style="font-size:15px">Conversas</strong>
+              <span id="admin-chat-total-unread" style="display:none;margin-left:8px;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:800"></span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="admin-chat-btn-new" title="Nova conversa">
+              <ion-icon name="create-outline" style="font-size:17px;vertical-align:-3px"></ion-icon>
+              Nova
+            </button>
+          </div>
+          <div class="admin-chat-filters" id="admin-chat-filters"></div>
+          <div class="admin-chat-scroll" id="admin-chat-list-scroll">
+            <div style="padding:20px;color:var(--text3);font-weight:600" id="admin-chat-list-placeholder">Carregando…</div>
+          </div>
+        </div>
+        <div class="admin-chat-col-thread">
+          <div class="admin-chat-thread-head">
+            <button type="button" class="btn btn-ghost btn-sm" id="admin-chat-back" hidden style="min-width:auto">
+              <ion-icon name="arrow-back-outline" style="font-size:20px;vertical-align:-4px"></ion-icon>
+            </button>
+            <h2 id="admin-chat-thread-title">Selecione uma conversa</h2>
+            <label for="admin-chat-locale" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);font-weight:700">
+              Idioma
+              <select id="admin-chat-locale" class="form-control" style="min-width:120px;padding:6px 8px;height:32px">
+                <option value="pt-BR">Português (BR)</option>
+                <option value="en-US">English (US)</option>
+                <option value="es-ES">Español (ES)</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn-outline btn-sm" id="admin-chat-group-settings" hidden>Grupo</button>
+          </div>
+          <div id="admin-chat-locked" class="admin-chat-compose-locked" hidden></div>
+          <div class="admin-chat-msgs" id="admin-chat-msgs"></div>
+          <div class="admin-chat-compose" id="admin-chat-compose">
+            <div class="admin-chat-compose-row">
+              <input type="file" id="admin-chat-file" accept="image/*" hidden />
+              <button type="button" class="btn btn-outline btn-sm" id="admin-chat-pick-img" title="Anexar imagem">
+                <ion-icon name="image-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              </button>
+              <textarea id="admin-chat-input" rows="2" placeholder="Escreva uma mensagem…"></textarea>
+              <button type="button" class="btn btn-primary" id="admin-chat-send">Enviar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="admin-chat-modal-overlay" id="admin-chat-modal" hidden>
+  <div class="admin-chat-modal" role="dialog" aria-modal="true" aria-labelledby="admin-chat-modal-title">
+    <div class="admin-chat-modal-head">
+      <strong id="admin-chat-modal-title">Nova conversa</strong>
+      <button type="button" class="btn btn-ghost btn-sm" id="admin-chat-modal-close" aria-label="Fechar">
+        <ion-icon name="close-outline" style="font-size:22px;vertical-align:-4px"></ion-icon>
+      </button>
+    </div>
+    <div class="admin-chat-modal-body">
+      <div class="admin-chat-modal-tabs">
+        <button type="button" data-tab="GROUP" class="is-active">Criar grupo</button>
+        <button type="button" data-tab="ADD">Adicionar contato</button>
+      </div>
+      <div id="admin-chat-modal-panel-group">
+        <div class="form-group">
+          <label class="form-label">Nome do grupo</label>
+          <input class="form-control" id="admin-chat-group-name" placeholder="Ex.: Equipe de manutenção" />
+        </div>
+        <p class="form-label" style="margin-top:12px">Membros</p>
+        <div id="admin-chat-group-members" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+        <button type="button" class="btn btn-primary" style="margin-top:16px;width:100%" id="admin-chat-create-group">Criar grupo</button>
+      </div>
+      <div id="admin-chat-modal-panel-add" hidden>
+        <div class="form-group">
+          <label class="form-label" for="admin-chat-user-search">Buscar usuário do tenant</label>
+          <div class="search-wrap" style="width:100%">
+            <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+            <input
+              id="admin-chat-user-search"
+              type="search"
+              placeholder="Buscar por nome, e-mail ou papel…"
+              autocomplete="off"
+              style="width:100%;max-width:none"
+            />
+          </div>
+        </div>
+        <div id="admin-chat-user-results" class="admin-chat-user-results" aria-live="polite"></div>
+        <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-top:10px">
+          Selecione um usuário ativo do tenant para abrir uma conversa 1 a 1 imediatamente.
+        </p>
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+        <div class="form-group">
+          <label class="form-label">Convidar por e-mail</label>
+          <input class="form-control" type="email" id="admin-chat-invite-email" placeholder="joao@empresa.com" autocomplete="email" />
+        </div>
+        <p style="font-size:12px;color:var(--text3);line-height:1.45;margin-top:8px">
+          Envia um convite no sistema. Use este campo se preferir localizar alguém pelo e-mail.
+        </p>
+        <button type="button" class="btn btn-primary" style="margin-top:16px;width:100%" id="admin-chat-send-invite">Enviar convite</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="admin-chat-modal-overlay" id="admin-chat-settings-modal" hidden>
+  <div class="admin-chat-modal" role="dialog" aria-modal="true" aria-labelledby="admin-chat-settings-title">
+    <div class="admin-chat-modal-head">
+      <strong id="admin-chat-settings-title">Participantes do grupo</strong>
+      <button type="button" class="btn btn-ghost btn-sm" id="admin-chat-settings-close" aria-label="Fechar">
+        <ion-icon name="close-outline" style="font-size:22px;vertical-align:-4px"></ion-icon>
+      </button>
+    </div>
+    <div class="admin-chat-modal-body">
+      <div id="admin-chat-settings-members" style="max-height:280px;overflow-y:auto"></div>
+      <button type="button" class="btn btn-primary" style="margin-top:16px;width:100%" id="admin-chat-save-members">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initPage } from './js/sidebar.js';
+  import { initAdminChatPage } from './js/admin-chat-page.js';
+  await initPage();
+  initAdminChatPage();
+</script>
+</body>
+</html>

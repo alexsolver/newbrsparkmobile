@@ -118,13 +118,29 @@ interface HeaderProps {
   onLeftPress?: () => void;
 }
 
+const TAB_ROOT_PATHS = new Set([
+  'index',
+  'agenda',
+  'assets',
+  'calendar',
+  'chat',
+  'costs',
+  'documents',
+  'media',
+  'notifications',
+  'orders',
+  'scanner',
+  'services',
+  'stock',
+]);
+
 export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }: HeaderProps) {
   const router = useRouter();
   const segments = useSegments() as string[];
   const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, resolvedLogoUrl } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const { mode, setMode, guardRef } = useAppContext();
   const { user, userRole } = useAuth();
@@ -165,12 +181,18 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
+  const firstPathSegment = String(pathname || '')
+    .replace(/^\/+/, '')
+    .split('/')[0]
+    .trim()
+    .toLowerCase();
   /** Rotas em que o cabeçalho global aparece — `useSegments` por vezes omite o grupo `(tabs)` no arranque. */
   const isTabs =
     segments[0] === '(tabs)' ||
     pathname.startsWith('/(tabs)') ||
     pathname === '/' ||
-    pathname === '/index';
+    pathname === '/index' ||
+    TAB_ROOT_PATHS.has(firstPathSegment);
 
   // O Header global (injetado no _layout.tsx) não recebe `title`.
   // Devemos escondê-lo completamente se não estivermos nas abas principais, no perfil ou no detalhe do ativo.
@@ -411,11 +433,19 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               <Ionicons name={(leftIcon as any) || 'arrow-back'} size={22} color={C.slate} />
             </TouchableOpacity>
 
-            <Image 
-              source={require('../../assets/logo.png')} 
-              style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }} 
-              resizeMode="contain" 
-            />
+            {resolvedLogoUrl ? (
+              <Image
+                source={{ uri: resolvedLogoUrl }}
+                style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }}
+                resizeMode="contain"
+              />
+            ) : (
+              <Image
+                source={require('../../assets/logo.png')}
+                style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }}
+                resizeMode="contain"
+              />
+            )}
 
             {title ? (
               <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}>
@@ -475,11 +505,27 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
         {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}
         <View style={{ flexShrink: 0, marginRight: 8 }}>
-          <Image
-            source={require('../../assets/logo.png')}
-            style={{ width: 100, height: 32 }}
-            resizeMode="contain"
-          />
+          {resolvedLogoUrl ? (
+            <Image
+              source={{ uri: resolvedLogoUrl }}
+              style={{ width: 100, height: 32 }}
+              resizeMode="contain"
+            />
+          ) : (
+            <Image
+              source={require('../../assets/logo.png')}
+              style={{ width: 100, height: 32 }}
+              resizeMode="contain"
+            />
+          )}
+          {!resolvedLogoUrl ? null : (
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 9, fontWeight: '800', color: C.textLight, marginTop: -2 }}
+            >
+              {appDisplayName}
+            </Text>
+          )}
         </View>
 
         {/* Centro: só o espaço entre logo e avatar (o seletor já não invade o logo) */}

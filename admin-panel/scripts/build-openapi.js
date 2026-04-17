@@ -209,6 +209,7 @@ const ROUTES = [
 
   // ── Operations (Kanban — JWT painel/admin; reject também aceita JWT do app)
   ['get', '/api/operations/tasks', op('Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os; tenant via JWT)', ['Operações & OS'], bearerAdmin)],
+  ['get', '/api/operations/my-ops-chat-threads', op('Lista FTs/RTs com chat operacional (JWT app: dono da OS; JWT painel: âmbito do tenant)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]])],
   ['get', '/api/operations/tasks/{id}/revisions/export', op('Exportar revisões', ['Operações & OS'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
@@ -228,10 +229,16 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
   ['get', '/api/operations/tasks/{id}/ops-chat', op('Chat operacional por execução — listar mensagens (JWT painel ou JWT app dono da OS)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'viewerLocale', in: 'query', required: false, schema: { type: 'string', description: 'BCP-47 (pt-BR, en-US, es-ES). Omite-se = perfil/tenant.' } },
+    ],
   })],
   ['post', '/api/operations/tasks/{id}/ops-chat', op('Chat operacional por execução — enviar mensagem (JWT painel = gestor; JWT app = técnico)', ['Operações & OS'], [[...bearerAdmin], [...bearerApp]], {
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'viewerLocale', in: 'query', required: false, schema: { type: 'string' } },
+    ],
     requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { body: { type: 'string' } } } } } },
   })],
   ['post', '/api/operations/tasks/{id}/reopen-for-revision', op('Reabrir para revisão (JWT painel)', ['Operações & OS'], bearerAdmin, {

@@ -2,6 +2,11 @@
 const router = require('express').Router();
 const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
+const {
+  buildEffectiveTenantBranding,
+  mergeTenantFeaturesWithBranding,
+  sanitizeTenantBranding,
+} = require('../lib/tenantBranding');
 
 function auditFromReq(req, action, resource, tenantId = null) {
   const { adminId, userId } = auditActor(req);
@@ -46,6 +51,38 @@ router.get('/:id', async (req, res) => {
     });
     if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
     res.json(tenant);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/tenants/:id/branding
+router.get('/:id/branding', async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      include: {
+        subscription: { include: { plan: true } },
+      },
+    });
+    if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+    const branding = buildEffectiveTenantBranding({
+      tenantName: tenant.name,
+      planFeatures: tenant.subscription?.plan?.features,
+      tenantFeatures: tenant.features,
+    });
+    res.json({
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        status: tenant.status,
+        planName: tenant.subscription?.plan?.name || null,
+      },
+      permissions: branding.permissions,
+      branding: branding.saved,
+      effectiveBranding: branding.effective,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -97,6 +134,60 @@ router.put('/:id', async (req, res) => {
     await auditFromReq(req, 'TENANT_UPDATE', tenant.name, tenant.id);
     res.json(tenant);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/tenants/:id/branding
+router.put('/:id/branding', async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      include: {
+        subscription: { include: { plan: true } },
+      },
+    });
+    if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+    const resolved = buildEffectiveTenantBranding({
+      tenantName: tenant.name,
+      planFeatures: tenant.subscription?.plan?.features,
+      tenantFeatures: tenant.features,
+    });
+    if (!resolved.permissions.enabled) {
+      return res.status(403).json({
+        error: 'O plano atual deste tenant não permite branding do app móvel.',
+      });
+    }
+    const prevSaved = resolved.saved;
+    const sanitized = sanitizeTenantBranding(req.body?.branding, resolved.permissions);
+    const nextBranding = {
+      ...prevSaved,
+      ...sanitized,
+      brandingVersion: (Number(prevSaved.brandingVersion) || 0) + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    const updated = await prisma.tenant.update({
+      where: { id: req.params.id },
+      data: {
+        features: mergeTenantFeaturesWithBranding(tenant.features, nextBranding),
+      },
+      include: {
+        subscription: { include: { plan: true } },
+      },
+    });
+    const out = buildEffectiveTenantBranding({
+      tenantName: updated.name,
+      planFeatures: updated.subscription?.plan?.features,
+      tenantFeatures: updated.features,
+    });
+    await auditFromReq(req, 'TENANT_BRANDING_UPDATE', updated.name, updated.id);
+    res.json({
+      ok: true,
+      permissions: out.permissions,
+      branding: out.saved,
+      effectiveBranding: out.effective,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**

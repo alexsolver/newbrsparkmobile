@@ -98,7 +98,7 @@ async function requestOsLocationPermissions(isTechnician: boolean, consents: Con
 export default function OnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { user, userRole, loading: authLoading } = useAuth();
-  const { colors: C } = useTheme();
+  const { colors: C, resolvedLogoUrl, appDisplayName, appTagline } = useTheme();
   const isTechnician = useMemo(
     () => userRole === 'TECHNICIAN' && isTechnicianProfileActive(user),
     [user, userRole]
@@ -281,13 +281,24 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.heroLogoWrap}>
-                <Image
-                  source={require('../../assets/logo.png')}
-                  style={s.heroLogoImg}
-                  resizeMode="contain"
-                  accessibilityLabel={t('consentFlow.a11yLogo')}
-                />
+                {resolvedLogoUrl ? (
+                  <Image
+                    source={{ uri: resolvedLogoUrl }}
+                    style={s.heroLogoImg}
+                    resizeMode="contain"
+                    accessibilityLabel={t('consentFlow.a11yLogo')}
+                  />
+                ) : (
+                  <Image
+                    source={require('../../assets/logo.png')}
+                    style={s.heroLogoImg}
+                    resizeMode="contain"
+                    accessibilityLabel={t('consentFlow.a11yLogo')}
+                  />
+                )}
               </View>
+              <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
+              <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
               <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
               <Text style={s.heroSubtitle}>{t('consentFlow.welcomeTechBody')}</Text>
               <View style={s.collectGrid}>
@@ -321,13 +332,24 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.heroLogoWrap}>
-              <Image
-                source={require('../../assets/logo.png')}
-                style={s.heroLogoImg}
-                resizeMode="contain"
-                accessibilityLabel={t('consentFlow.a11yLogo')}
-              />
+              {resolvedLogoUrl ? (
+                <Image
+                  source={{ uri: resolvedLogoUrl }}
+                  style={s.heroLogoImg}
+                  resizeMode="contain"
+                  accessibilityLabel={t('consentFlow.a11yLogo')}
+                />
+              ) : (
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={s.heroLogoImg}
+                  resizeMode="contain"
+                  accessibilityLabel={t('consentFlow.a11yLogo')}
+                />
+              )}
             </View>
+            <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
+            <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
             <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
             <Text style={s.heroSubtitle}>{t('consentFlow.welcomeClientBody')}</Text>
             <View style={s.collectGrid}>
@@ -652,6 +674,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   heroLogoImg: { width: 220, height: 72 },
+  heroBrandName: { fontSize: 16, fontWeight: '900', textAlign: 'center', marginTop: -8, marginBottom: 4 },
+  heroBrandTagline: { fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 10 },
   /** Ícone circular (ex.: confirmação final). */
   heroIcon: { width: 96, height: 96, borderRadius: 28, backgroundColor: '#fff7ed', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 20, marginTop: 16, shadowColor: '#EA580C', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   heroTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b', textAlign: 'center', marginBottom: 10 },

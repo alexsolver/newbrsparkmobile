@@ -17,6 +17,7 @@ import { NotificationService } from '../../src/services/notifications';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatService } from '../../src/services/chat';
+import { countGestorUnreadAcrossOpsThreads } from '../../src/services/executionOpsChat';
 import {
   FloatingRadialMenu,
   TAB_BAR_ICON_SIZE,
@@ -73,7 +74,7 @@ function workTimeJourneyAuraStyle(phase: 'in_work' | 'on_break'): {
  * aba ativa em `slate`, inativas em cinza secundário; última coluna abre ações rápidas (+).
  */
 
-function CustomTabBar({ state, descriptors, navigation }: any) {
+function CustomTabBar({ state, descriptors, navigation, chatUnreadTotal = 0 }: any) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -285,12 +286,45 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
               accessibilityRole="button"
               accessibilityState={{ selected: isFocused }}
             >
-              {options.tabBarIcon &&
+              {route.name === 'chat' ? (
+                <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                  {options.tabBarIcon &&
+                    options.tabBarIcon({
+                      focused: isFocused,
+                      color: tint,
+                      size: TAB_BAR_ICON_SIZE,
+                    })}
+                  {chatUnreadTotal > 0 ? (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -6,
+                        backgroundColor: C.destructive,
+                        minWidth: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        paddingHorizontal: 3,
+                        borderWidth: 1.5,
+                        borderColor: C.cardWhite,
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>
+                        {chatUnreadTotal > 99 ? '99+' : String(chatUnreadTotal)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                options.tabBarIcon &&
                 options.tabBarIcon({
                   focused: isFocused,
                   color: tint,
                   size: TAB_BAR_ICON_SIZE,
-                })}
+                })
+              )}
               <Text style={[navStyles.tabLabel, { color: tint }]} numberOfLines={1}>
                 {label}
               </Text>
@@ -427,16 +461,34 @@ function createNavStyles() {
 }
 
 export default function TabLayout() {
-  const { colors: C } = useTheme();
   const [unreadChat, setUnreadChat] = useState(0);
   const prevRoomCounts = useRef<Record<string, number>>({});
+  const lastOpsUnreadPollAtRef = useRef<number | null>(null);
+  const lastOpsUnreadValueRef = useRef(0);
 
   useEffect(() => {
+    const OPS_UNREAD_POLL_MS = 22_000;
     const fetchChatUnread = async () => {
       try {
         const rooms = await ChatService.getRooms();
-        const totalUnread = rooms.reduce((acc, r) => acc + (r.unreadCount || 0), 0);
-        setUnreadChat(totalUnread);
+        const totalCorp = rooms.reduce((acc, r) => acc + (r.unreadCount || 0), 0);
+
+        const now = Date.now();
+        const shouldRefreshOps =
+          lastOpsUnreadPollAtRef.current == null ||
+          now - lastOpsUnreadPollAtRef.current >= OPS_UNREAD_POLL_MS;
+        let opsUnread = lastOpsUnreadValueRef.current;
+        if (shouldRefreshOps) {
+          lastOpsUnreadPollAtRef.current = now;
+          try {
+            opsUnread = await countGestorUnreadAcrossOpsThreads();
+            lastOpsUnreadValueRef.current = opsUnread;
+          } catch {
+            opsUnread = lastOpsUnreadValueRef.current;
+          }
+        }
+
+        setUnreadChat(totalCorp + opsUnread);
 
         const prev = prevRoomCounts.current;
         const isFirstPoll = Object.keys(prev).length === 0;
@@ -470,7 +522,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <CustomTabBar {...props} chatUnreadTotal={unreadChat} />}
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
@@ -512,31 +564,11 @@ export default function TabLayout() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ position: 'relative' }}>
-              <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={TAB_BAR_ICON_SIZE} color={color} />
-              {unreadChat > 0 && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -4,
-                    right: -8,
-                    backgroundColor: C.destructive,
-                    minWidth: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    paddingHorizontal: 3,
-                    borderWidth: 1.5,
-                    borderColor: C.cardWhite,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>
-                    {unreadChat > 9 ? '9+' : unreadChat}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <Ionicons
+              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+              size={TAB_BAR_ICON_SIZE}
+              color={color}
+            />
           ),
         }}
       />

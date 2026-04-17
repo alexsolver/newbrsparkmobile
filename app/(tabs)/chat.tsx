@@ -7,6 +7,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ChatService, ChatRoom, ChatContact } from '../../src/services/chat';
+import { fetchMyOpsChatThreads, type OpsChatThreadSummary } from '../../src/services/executionOpsChat';
+import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { loadRoomListCache, saveRoomListCache } from '../../src/services/chatOfflineStorage';
 import { useConnectivity } from '../../src/hooks/useConnectivity';
 import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
@@ -41,11 +43,13 @@ const FILTERS: { id: FilterTab; label: string }[] = [
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const isManager = String(user?.role || '').toUpperCase() === 'MANAGER';
   const { isOnline } = useConnectivity(8000);
   const { colors: C } = useTheme();
   const styles = useMemo(() => createChatStyles(C), [C]);
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
+  const [opsThreads, setOpsThreads] = useState<OpsChatThreadSummary[]>([]);
   const [pending, setPending] = useState<ChatContact[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,14 +107,16 @@ export default function ChatScreen() {
     }
     setLoading(false);
     try {
-      const [r, p, c] = await Promise.all([
+      const [r, p, c, ot] = await Promise.all([
         ChatService.getRooms(),
         ChatService.getPendingContacts(),
-        ChatService.getAvailableContacts()
+        ChatService.getAvailableContacts(),
+        fetchMyOpsChatThreads().catch(() => [] as OpsChatThreadSummary[]),
       ]);
       setRooms(Array.isArray(r) ? r : []);
       setPending(Array.isArray(p) ? p : []);
       setContacts(Array.isArray(c) ? c : []);
+      setOpsThreads(Array.isArray(ot) ? ot : []);
       if (user?.id && Array.isArray(r) && r.length > 0) {
         await saveRoomListCache(user.id, r);
       }
@@ -153,6 +159,9 @@ export default function ChatScreen() {
   };
 
   const handleCreateGroup = async () => {
+    if (!isManager) {
+      return Alert.alert('Permissão', 'Somente gestores podem criar grupos.');
+    }
     if (!groupName.trim()) return Alert.alert('Atenção', 'Digite o nome do grupo');
     if (selectedContacts.length === 0) return Alert.alert('Atenção', 'Selecione participantes');
     try {
@@ -203,6 +212,72 @@ export default function ChatScreen() {
 
   const renderHeader = () => (
     <View style={{ gap: 12, marginBottom: 12 }}>
+      {opsThreads.length > 0 ? (
+        <View style={{ marginBottom: 4 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: '900',
+              color: C.textSecondary,
+              marginBottom: 8,
+              textTransform: 'uppercase',
+              letterSpacing: 0.6,
+            }}
+          >
+            Mensagens da operação (gestor)
+          </Text>
+          {opsThreads.map((row) => {
+            const label = taskOsLabel({
+              id: row.executionId,
+              osNumber: row.osNumber,
+              routineTaskNumber: row.routineTaskNumber,
+            });
+            const preview = String(row.lastPreview || '').trim();
+            const who =
+              String(row.lastSenderKind || '').toUpperCase() === 'GESTOR'
+                ? 'Gestor: '
+                : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
+                  ? 'Você: '
+                  : '';
+            const ts = row.lastMessageAt ? new Date(row.lastMessageAt).getTime() : undefined;
+            return (
+              <TouchableOpacity
+                key={row.executionId}
+                style={[styles.roomRow, { marginBottom: 8 }]}
+                activeOpacity={0.75}
+                onPress={() =>
+                  router.push({
+                    pathname: '/chat/[id]',
+                    params: {
+                      id: row.executionId,
+                      ops: '1',
+                      name: `Gestor · ${label}`,
+                      color: '#1d4ed8',
+                    },
+                  } as never)
+                }
+              >
+                <View style={[styles.avatar, { backgroundColor: '#1d4ed8' }]}>
+                  <Ionicons name="briefcase-outline" size={20} color="#fff" />
+                </View>
+                <View style={styles.roomContent}>
+                  <View style={styles.roomTop}>
+                    <Text style={[styles.roomName, { fontWeight: '800' }]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                    <Text style={styles.roomTime}>{ts != null && Number.isFinite(ts) ? timeAgo(ts) : ''}</Text>
+                  </View>
+                  <Text style={styles.roomPreview} numberOfLines={2}>
+                    {row.title ? `${row.title} · ` : ''}
+                    {who}
+                    {preview || '—'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
       {/* Solicitações Pendentes */}
       {pending.map(p => (
         <View key={p.id} style={styles.pendingCard}>
@@ -313,7 +388,13 @@ export default function ChatScreen() {
           </View>
           <Text style={styles.headerSub}>Caixa de entrada corporativa</Text>
         </View>
-        <TouchableOpacity style={styles.headerAction} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => {
+            setModalTab(isManager ? 'GROUP' : 'ADD');
+            setModalVisible(true);
+          }}
+        >
           <Ionicons name="create-outline" size={24} color={C.primary} />
         </TouchableOpacity>
       </View>
@@ -409,9 +490,11 @@ export default function ChatScreen() {
 
             {/* TAB SELECTOR */}
             <View style={styles.tabRow}>
-              <TouchableOpacity style={[styles.tab, modalTab === 'GROUP' && styles.tabActive]} onPress={() => setModalTab('GROUP')}>
-                <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>Criar Grupo</Text>
-              </TouchableOpacity>
+              {isManager ? (
+                <TouchableOpacity style={[styles.tab, modalTab === 'GROUP' && styles.tabActive]} onPress={() => setModalTab('GROUP')}>
+                  <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>Criar Grupo</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity style={[styles.tab, modalTab === 'ADD' && styles.tabActive]} onPress={() => setModalTab('ADD')}>
                 <Text style={[styles.tabText, modalTab === 'ADD' && styles.tabTextActive]}>Adicionar</Text>
               </TouchableOpacity>
@@ -420,7 +503,7 @@ export default function ChatScreen() {
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }} keyboardShouldPersistTaps="handled">
 
               {/* ABA CRIAR GRUPO */}
-              {modalTab === 'GROUP' && (
+              {modalTab === 'GROUP' && isManager && (
                 <View style={{ paddingTop: 10 }}>
                   <Text style={styles.inputLabel}>Nome do Grupo</Text>
                   <TextInput

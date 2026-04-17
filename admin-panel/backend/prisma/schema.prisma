@@ -1036,6 +1036,8 @@ model ChecklistExecutionOpsChatMessage {
   /// GESTOR (painel) ou TECH (app — dono da execução)
   senderKind  String   @map("sender_kind")
   body        String   @db.Text
+  /// Cache de traduções por locale canónico (pt-BR, en-US, es-ES), igual ao chat corporativo.
+  translations Json?   @map("translations")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([executionId, createdAt])

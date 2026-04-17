@@ -89,6 +89,100 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="tenant-branding-modal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title">Branding do app móvel</span>
+      <button type="button" class="modal-close" onclick="closeModal('tenant-branding-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
+      <input type="hidden" id="tenant-branding-id" />
+      <div id="tenant-branding-plan-hint" style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.4;"></div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="tenant-branding-enabled" style="transform:scale(1.15)" />
+          <span>Ativar identidade visual personalizada no app</span>
+        </label>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Nome exibido do app</label>
+          <input class="form-control" id="tenant-branding-app-name" placeholder="Ex.: Acme Field" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Slogan</label>
+          <input class="form-control" id="tenant-branding-tagline" placeholder="Ex.: Precisão no campo" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Logo claro (URL)</label>
+          <input class="form-control" id="tenant-branding-logo-light" placeholder="https://..." />
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+            <input type="file" id="tenant-branding-logo-light-file" accept="image/*" />
+            <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-logo-light-upload">Upload</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Logo escuro (URL)</label>
+          <input class="form-control" id="tenant-branding-logo-dark" placeholder="https://..." />
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+            <input type="file" id="tenant-branding-logo-dark-file" accept="image/*" />
+            <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-logo-dark-upload">Upload</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Imagem de topo/login (URL)</label>
+        <input class="form-control" id="tenant-branding-login-bg" placeholder="https://..." />
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <input type="file" id="tenant-branding-login-bg-file" accept="image/*" />
+          <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-login-bg-upload">Upload</button>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Cor primária</label>
+          <input class="form-control" id="tenant-branding-primary" placeholder="#0F766E" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor de destaque</label>
+          <input class="form-control" id="tenant-branding-accent" placeholder="#14B8A6" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Cor secundária</label>
+          <input class="form-control" id="tenant-branding-secondary" placeholder="#334155" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor de superfície</label>
+          <input class="form-control" id="tenant-branding-surface" placeholder="#F8FAFC" />
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:12px;background:rgba(0,0,0,.015);">
+        <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Prévia rápida</div>
+        <div id="tenant-branding-preview" style="border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;">
+          <div id="tenant-branding-preview-top" style="padding:18px;background:#F8FAFC;">
+            <div style="font-size:18px;font-weight:900;color:#0F172A;" id="tenant-branding-preview-name">BrSpark</div>
+            <div style="font-size:12px;color:#64748B;margin-top:4px;" id="tenant-branding-preview-tagline">Precisou, resolveu.</div>
+          </div>
+          <div style="padding:16px;">
+            <div id="tenant-branding-preview-card" style="padding:14px;border-radius:14px;background:#FFF7ED;border:1px solid #FDBA74;">
+              <div style="font-size:13px;font-weight:800;color:#EA580C;">Botão / destaque</div>
+              <div style="font-size:11px;color:#475569;margin-top:6px;">As cores abaixo simulam login, header e CTAs do app.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('tenant-branding-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="save-tenant-branding-btn">Salvar branding</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Tenant Modal -->
 <div class="modal-overlay" id="new-tenant-modal">
   <div class="modal">
@@ -152,6 +246,7 @@
 
   const planSel   = document.getElementById('new-plan-id');
   const localeSel = document.getElementById('new-locale-id');
+  let cachedTenants = [];
 
   (planData || []).forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
   (localeData || []).forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
@@ -203,6 +298,7 @@
       return;
     }
     const tenants = data.data || [];
+    cachedTenants = tenants;
 
     const total  = data.total || tenants.length;
     const active = tenants.filter(t => t.status === 'ACTIVE').length;
@@ -255,6 +351,7 @@
         <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${escHtml(tenantsStatusLabel(t.status) || t.status)}</span></td>
         <td style="color:var(--text3);font-size:11px">${created}</td>
         <td class="text-right">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openBrandingModal('${idAttr}')">Branding</button>
           ${isActive
             ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">${mpT('ten_row_suspend')}</button>`
             : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">${mpT('ten_row_activate')}</button>`}
@@ -267,6 +364,118 @@
   window.toggleStatus = async (id, status) => {
     await CONFIG.patch(`/tenants/${id}/status`, { status });
     loadTenants();
+  };
+
+  function setBrandingPreview() {
+    const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
+    const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
+    const primary = document.getElementById('tenant-branding-primary').value.trim() || '#F97316';
+    const accent = document.getElementById('tenant-branding-accent').value.trim() || '#EA580C';
+    const surface = document.getElementById('tenant-branding-surface').value.trim() || '#FFF7ED';
+    document.getElementById('tenant-branding-preview-name').textContent = name;
+    document.getElementById('tenant-branding-preview-tagline').textContent = tagline;
+    document.getElementById('tenant-branding-preview-top').style.background = surface;
+    document.getElementById('tenant-branding-preview-card').style.background = `${accent}14`;
+    document.getElementById('tenant-branding-preview-card').style.borderColor = `${accent}66`;
+    document.getElementById('tenant-branding-preview-card').style.color = primary;
+  }
+
+  ['tenant-branding-app-name','tenant-branding-tagline','tenant-branding-primary','tenant-branding-accent','tenant-branding-surface']
+    .forEach((id) => document.getElementById(id).addEventListener('input', setBrandingPreview));
+
+  async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const out = String(reader.result || '');
+        const base64 = out.includes(',') ? out.split(',')[1] : out;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadBrandingAsset(kind) {
+    const tenantId = document.getElementById('tenant-branding-id').value;
+    if (!tenantId) return alert('Selecione um tenant antes de enviar arquivos.');
+    const fileInput = document.getElementById(`tenant-branding-${kind}-file`);
+    const targetInput = document.getElementById(`tenant-branding-${kind}`);
+    const file = fileInput?.files?.[0];
+    if (!file) return alert('Escolha um arquivo primeiro.');
+    const fileBase64 = await fileToBase64(file);
+    const safeName = String(file.name || `${kind}.png`).replace(/[^a-zA-Z0-9._-]/g, '-');
+    const path = `branding/${tenantId}/${kind}-${Date.now()}-${safeName}`;
+    const res = await CONFIG.post('/storage/upload', {
+      fileBase64,
+      mimeType: file.type || 'application/octet-stream',
+      name: safeName,
+      path,
+    });
+    if (!res || res.error || !res.url) {
+      alert(res?.error || 'Falha no upload do arquivo.');
+      return;
+    }
+    targetInput.value = res.url;
+    setBrandingPreview();
+  }
+
+  document.getElementById('tenant-branding-logo-light-upload').onclick = () => uploadBrandingAsset('logo-light');
+  document.getElementById('tenant-branding-logo-dark-upload').onclick = () => uploadBrandingAsset('logo-dark');
+  document.getElementById('tenant-branding-login-bg-upload').onclick = () => uploadBrandingAsset('login-bg');
+
+  window.openBrandingModal = async (tenantId) => {
+    const row = cachedTenants.find((t) => t.id === tenantId);
+    const data = await CONFIG.get(`/tenants/${tenantId}/branding`);
+    if (!data || data.error) {
+      alert(data?.error || 'Não foi possível carregar o branding do tenant.');
+      return;
+    }
+    const perms = data.permissions || {};
+    const branding = data.branding || {};
+    document.getElementById('tenant-branding-id').value = tenantId;
+    document.getElementById('tenant-branding-plan-hint').innerHTML =
+      `Tenant: <strong>${escHtml(row?.name || data?.tenant?.name || tenantId)}</strong><br>` +
+      `Plano: <strong>${escHtml(data?.tenant?.planName || 'Sem plano')}</strong><br>` +
+      `${perms.enabled ? 'Este plano permite branding runtime no app.' : 'Este plano não permite branding. Ajuste o plano antes de publicar.'}`;
+    document.getElementById('tenant-branding-enabled').checked = !!branding.enabled;
+    document.getElementById('tenant-branding-app-name').value = branding.appDisplayName || '';
+    document.getElementById('tenant-branding-tagline').value = branding.tagline || '';
+    document.getElementById('tenant-branding-logo-light').value = branding.logoLightUrl || '';
+    document.getElementById('tenant-branding-logo-dark').value = branding.logoDarkUrl || '';
+    document.getElementById('tenant-branding-login-bg').value = branding.loginBackgroundUrl || '';
+    document.getElementById('tenant-branding-primary').value = branding.primaryColor || '';
+    document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
+    document.getElementById('tenant-branding-secondary').value = branding.secondaryColor || '';
+    document.getElementById('tenant-branding-surface').value = branding.surfaceColor || '';
+    setBrandingPreview();
+    openModal('tenant-branding-modal');
+  };
+
+  document.getElementById('save-tenant-branding-btn').onclick = async () => {
+    const id = document.getElementById('tenant-branding-id').value;
+    if (!id) return;
+    const body = {
+      branding: {
+        enabled: document.getElementById('tenant-branding-enabled').checked,
+        appDisplayName: document.getElementById('tenant-branding-app-name').value.trim(),
+        tagline: document.getElementById('tenant-branding-tagline').value.trim(),
+        logoLightUrl: document.getElementById('tenant-branding-logo-light').value.trim(),
+        logoDarkUrl: document.getElementById('tenant-branding-logo-dark').value.trim(),
+        loginBackgroundUrl: document.getElementById('tenant-branding-login-bg').value.trim(),
+        primaryColor: document.getElementById('tenant-branding-primary').value.trim(),
+        accentColor: document.getElementById('tenant-branding-accent').value.trim(),
+        secondaryColor: document.getElementById('tenant-branding-secondary').value.trim(),
+        surfaceColor: document.getElementById('tenant-branding-surface').value.trim(),
+      },
+    };
+    const res = await CONFIG.put(`/tenants/${id}/branding`, body);
+    if (res?.error) {
+      alert(res.error);
+      return;
+    }
+    closeModal('tenant-branding-modal');
+    await loadTenants();
   };
 
   document.getElementById('save-tenant-btn').onclick = async () => {

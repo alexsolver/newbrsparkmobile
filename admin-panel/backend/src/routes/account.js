@@ -11,6 +11,22 @@ const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation')
 const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = require('../lib/technicianIdentityLock');
 const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
 const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
+const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
+
+function buildSafeTenantForApp(tenant) {
+  if (!tenant) return null;
+  const branding = buildEffectiveTenantBranding({
+    tenantName: tenant.name,
+    planFeatures: tenant.subscription?.plan?.features,
+    tenantFeatures: tenant.features,
+  });
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    status: tenant.status,
+    branding: branding.effective,
+  };
+}
 
 /**
  * Atualiza sessão de um utilizador do app, regista auditoria e devolve JWT + payload de /api/login.
@@ -51,7 +67,10 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
 
   const fresh = await prisma.user.findUnique({
     where: { id: user.id },
-    include: { tenant: true, technicianProfile: true },
+    include: {
+      tenant: { include: { subscription: { include: { plan: true } } } },
+      technicianProfile: true,
+    },
   });
 
   const token = jwt.sign(
@@ -77,7 +96,7 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
       preferredChatLocale: fresh.preferredChatLocale ?? null,
       employeeMatricula: fresh.employeeMatricula ?? null,
       tenantId: fresh.tenantId,
-      tenant: { id: fresh.tenant.id, name: fresh.tenant.name, status: fresh.tenant.status },
+      tenant: buildSafeTenantForApp(fresh.tenant),
       technicianProfile: fresh.technicianProfile,
     },
   };
@@ -611,13 +630,14 @@ router.get('/me', authUser, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { 
+      include: {
         tenant: { include: { subscription: { include: { plan: true } } } },
-        technicianProfile: true
+        technicianProfile: true,
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const { password: _, ...safe } = user;
+    if (safe.tenant) safe.tenant = buildSafeTenantForApp(safe.tenant);
     res.json(safe);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

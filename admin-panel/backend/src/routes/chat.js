@@ -13,6 +13,51 @@ const {
 
 router.use(authUser);
 
+const CONTACTABLE_ROLES = new Set(['USER', 'PROVIDER']);
+
+function normEmail(v) {
+  return String(v || '').trim().toLowerCase();
+}
+
+function normRole(v) {
+  return String(v || '').trim().toUpperCase();
+}
+
+function isManagerRole(role) {
+  return normRole(role) === 'MANAGER';
+}
+
+async function getTenantScopedUserByEmail(email) {
+  return prisma.user.findFirst({
+    where: { email: normEmail(email), isActive: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
+  });
+}
+
+async function validateTenantScopedParticipants(requester, participantEmails) {
+  const uniq = Array.from(new Set((Array.isArray(participantEmails) ? participantEmails : []).map(normEmail).filter(Boolean)));
+  if (uniq.length === 0) {
+    return { ok: false, code: 400, error: 'Selecione participantes' };
+  }
+  if (!requester?.tenantId) {
+    return { ok: false, code: 403, error: 'Tenant do usuário não identificado.' };
+  }
+  const rows = await prisma.user.findMany({
+    where: { email: { in: uniq }, isActive: true },
+    select: { email: true, tenantId: true },
+  });
+  const map = new Map(rows.map((u) => [normEmail(u.email), u]));
+  const missing = uniq.filter((e) => !map.has(e));
+  if (missing.length) {
+    return { ok: false, code: 404, error: 'Um ou mais participantes não foram encontrados.' };
+  }
+  const crossTenant = uniq.find((e) => String(map.get(e)?.tenantId || '') !== String(requester.tenantId || ''));
+  if (crossTenant) {
+    return { ok: false, code: 403, error: 'Só é permitido conversar com usuários do mesmo tenant.' };
+  }
+  return { ok: true, emails: uniq };
+}
+
 /**
  * @param {string} roomId
  * @param {string} senderEmail
@@ -127,21 +172,33 @@ async function maybePrefetchTranslationForRecipient(roomId, msg, senderEmail) {
 router.post('/contacts/request', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { contactEmail } = req.body;
+    const targetEmail = normEmail(contactEmail);
 
-    if (!contactEmail) return res.status(400).json({ error: 'Email inválido' });
-    if (email.toLowerCase() === contactEmail.toLowerCase()) {
+    if (!targetEmail) return res.status(400).json({ error: 'Email inválido' });
+    if (email === targetEmail) {
       return res.status(400).json({ error: 'Você não pode se adicionar' });
     }
 
-    // Verificar se o usuário existe no sistema
-    const userExists = await prisma.user.findFirst({
-      where: { email: contactEmail.toLowerCase() }
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true, tenantId: true, role: true },
     });
+    if (!me || !me.tenantId) {
+      return res.status(403).json({ error: 'Usuário inválido para chat.' });
+    }
+
+    const userExists = await getTenantScopedUserByEmail(targetEmail);
 
     if (!userExists) {
       return res.status(404).json({ error: 'Usuário não encontrado na plataforma Brspark' });
+    }
+    if (String(userExists.tenantId || '') !== String(me.tenantId || '')) {
+      return res.status(403).json({ error: 'Só é permitido adicionar usuários do mesmo tenant.' });
+    }
+    if (!CONTACTABLE_ROLES.has(normRole(userExists.role))) {
+      return res.status(403).json({ error: 'Só é permitido adicionar técnicos e usuários do tenant.' });
     }
 
     // Upsert contato (se foi rejeitado antes, pode tentar de novo e volta pra PENDING)
@@ -149,13 +206,13 @@ router.post('/contacts/request', async (req, res) => {
       where: {
         requesterId_addresseeId: {
           requesterId: email,
-          addresseeId: contactEmail.toLowerCase()
+          addresseeId: targetEmail
         }
       },
       update: { status: 'PENDING' },
       create: {
         requesterId: email,
-        addresseeId: contactEmail.toLowerCase(),
+        addresseeId: targetEmail,
         status: 'PENDING'
       }
     });
@@ -193,7 +250,8 @@ router.post('/contacts/request', async (req, res) => {
 router.get('/contacts/pending', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
+    const tenantId = String(req.user?.tenantId || '').trim();
     const pending = await prisma.chatContact.findMany({
       where: { addresseeId: email, status: 'PENDING' },
       orderBy: { createdAt: 'desc' }
@@ -202,14 +260,15 @@ router.get('/contacts/pending', async (req, res) => {
     // Pega os dados dos solicitantes
     const emails = pending.map(p => p.requesterId);
     const users = await prisma.user.findMany({
-      where: { email: { in: emails } },
+      where: { email: { in: emails }, ...(tenantId ? { tenantId } : {}) },
       select: { email: true, name: true, avatarUrl: true }
     });
+    const allowed = new Set(users.map((u) => normEmail(u.email)));
 
     const results = pending.map(p => {
       const u = users.find(x => x.email === p.requesterId);
       return { ...p, user: u };
-    });
+    }).filter((p) => allowed.has(normEmail(p.requesterId)));
 
     res.json(results);
   } catch (err) {
@@ -221,7 +280,7 @@ router.get('/contacts/pending', async (req, res) => {
 router.put('/contacts/:id/status', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { id } = req.params;
     const { status, userIds: rawUserIds } = req.body; // ACCEPTED ou REJECTED
 
@@ -236,6 +295,12 @@ router.put('/contacts/:id/status', async (req, res) => {
     const contact = await prisma.chatContact.findUnique({ where: { id } });
     if (!contact || contact.addresseeId !== email) {
       return res.status(404).json({ error: 'Solicitação não encontrada' });
+    }
+
+    const me = await getTenantScopedUserByEmail(email);
+    const requester = await getTenantScopedUserByEmail(contact.requesterId);
+    if (!me || !requester || String(me.tenantId || '') !== String(requester.tenantId || '')) {
+      return res.status(403).json({ error: 'Solicitação inválida para este tenant.' });
     }
 
     const updated = await prisma.chatContact.update({
@@ -277,47 +342,23 @@ router.put('/contacts/:id/status', async (req, res) => {
   }
 });
 
-// Lista contatos disponíveis (União de ChatContacts aceitos + AssetShares aceitos)
+// Lista usuários ativos disponíveis no mesmo tenant para iniciar chats e montar grupos
 router.get('/contacts', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
-    const lowerEmail = email.toLowerCase();
-
-    // 1. Contatos Diretos Onde sou Requester e foi aceito
-    const myRequests = await prisma.chatContact.findMany({
-      where: { requesterId: lowerEmail, status: 'ACCEPTED' }
-    });
-    
-    // 2. Contatos Diretos Onde sou Destinatário e aceitei
-    const acceptedRequests = await prisma.chatContact.findMany({
-      where: { addresseeId: lowerEmail, status: 'ACCEPTED' }
-    });
-
-    const directEmails = new Set();
-    myRequests.forEach(r => directEmails.add(r.addresseeId));
-    acceptedRequests.forEach(r => directEmails.add(r.requesterId));
-
-    // 3. Contatos Vindos de Compartilhamento (AssetShare)
-    // Pessoas que eu convidei e aceitaram
-    const sharedByMe = await prisma.assetShare.findMany({
-      where: { ownerEmail: lowerEmail, status: 'ACCEPTED' }
-    });
-    // Pessoas que me convidaram e eu aceitei
-    const sharedWithMe = await prisma.assetShare.findMany({
-      where: { sharedWithEmail: lowerEmail, status: 'ACCEPTED' }
-    });
-
-    const shareEmails = new Set();
-    sharedByMe.forEach(s => shareEmails.add(s.sharedWithEmail));
-    sharedWithMe.forEach(s => shareEmails.add(s.ownerEmail));
-
-    // Unir tudo
-    const allEmails = Array.from(new Set([...directEmails, ...shareEmails]));
+    const email = normEmail(rawEmail);
+    const tenantId = String(req.user?.tenantId || '').trim();
+    if (!tenantId) return res.status(400).json({ error: 'tenantId não encontrado para o usuário.' });
 
     const users = await prisma.user.findMany({
-      where: { email: { in: allEmails } },
-      select: { email: true, name: true, avatarUrl: true }
+      where: {
+        tenantId,
+        isActive: true,
+        email: { not: email },
+        deletedAt: null,
+      },
+      select: { email: true, name: true, avatarUrl: true, role: true },
+      orderBy: [{ name: 'asc' }, { email: 'asc' }],
     });
 
     res.json(users);
@@ -333,15 +374,23 @@ router.get('/contacts', async (req, res) => {
 // Cria um grupo ou sala 1-1
 router.post('/rooms', async (req, res) => {
   try {
-    const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const { email: rawEmail, role: rawRole } = req.user;
+    const email = normEmail(rawEmail);
     const { isGroup, name, userIds: rawUserIds } = req.body;
     
     if (!rawUserIds || rawUserIds.length === 0) return res.status(400).json({ error: 'Selecione participantes' });
-    const userIds = rawUserIds.map(u => u.toLowerCase());
+    const userIds = rawUserIds.map(normEmail);
 
     // Incluir o criador
     const allUsers = Array.from(new Set([email, ...userIds]));
+    const participantsValidation = await validateTenantScopedParticipants(req.user, allUsers);
+    if (!participantsValidation.ok) {
+      return res.status(participantsValidation.code).json({ error: participantsValidation.error });
+    }
+
+    if (Boolean(isGroup) && !isManagerRole(rawRole)) {
+      return res.status(403).json({ error: 'Somente gestores podem criar grupos.' });
+    }
 
     if (!isGroup && allUsers.length > 2) {
       return res.status(400).json({ error: 'Salas 1-a-1 só podem ter 2 pessoas' });
@@ -383,10 +432,10 @@ router.post('/rooms', async (req, res) => {
 router.put('/rooms/:roomId/members', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { roomId } = req.params;
     const { userIds: rawUserIds } = req.body; // lista completa de emails desejados
-    const userIds = rawUserIds ? rawUserIds.map(u => u.toLowerCase()) : [];
+    const userIds = rawUserIds ? rawUserIds.map(normEmail) : [];
 
     const room = await prisma.chatRoom.findUnique({
       where: { id: roomId },
@@ -398,6 +447,10 @@ router.put('/rooms/:roomId/members', async (req, res) => {
 
     // Todos os membros finais
     const finalUsers = Array.from(new Set([email, ...userIds]));
+    const participantsValidation = await validateTenantScopedParticipants(req.user, finalUsers);
+    if (!participantsValidation.ok) {
+      return res.status(participantsValidation.code).json({ error: participantsValidation.error });
+    }
     
     // Apaga quem não está na lista final
     await prisma.chatRoomMember.deleteMany({

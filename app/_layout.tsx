@@ -1,7 +1,7 @@
 import '../src/tasks/routeTrackingTask';
 import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { View, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
@@ -165,17 +165,15 @@ function AppInitializer() {
 
 function MainLayout() {
   const segments = useSegments();
-  const { width, height } = useWindowDimensions();
   const segs: string[] = Array.isArray(segments) ? (segments as string[]) : [];
   const inAuth = segs[0] === 'auth';
-  const isAgendaLandscape = width > height && segs.includes('agenda');
 
   return (
     <RouteGuard>
       <View style={{ flex: 1 }}>
         <PushNotificationResponseBridge />
         <AppInitializer />
-        {!inAuth && !isAgendaLandscape && <Header />}
+        {!inAuth && <Header />}
         <View style={{ flex: 1 }}>
           <Stack
             screenOptions={{
@@ -189,6 +187,7 @@ function MainLayout() {
             <Stack.Screen name="profile" />
             <Stack.Screen name="provider-os-search" />
             <Stack.Screen name="work-time" />
+            <Stack.Screen name="ops-chat/[taskId]" />
             <Stack.Screen name="provider-services/[tenantId]" />
             <Stack.Screen name="+not-found" options={{ headerShown: true }} />
           </Stack>
@@ -205,17 +204,17 @@ export default function RootLayout() {
 
   return (
     <I18nextProvider i18n={i18n}>
-      <ThemeProvider>
-        <AutomaticTimeGate>
-          <GpsIntegrityGate>
-            <AuthProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <AutomaticTimeGate>
+            <GpsIntegrityGate>
               <AppProvider>
                 <MainLayout />
               </AppProvider>
-            </AuthProvider>
-          </GpsIntegrityGate>
-        </AutomaticTimeGate>
-      </ThemeProvider>
+            </GpsIntegrityGate>
+          </AutomaticTimeGate>
+        </ThemeProvider>
+      </AuthProvider>
     </I18nextProvider>
   );
 }

@@ -76,7 +76,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
-  const { dark: darkMode, colors: C, toggleDarkMode } = useTheme();
+  const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
   const { t, i18n } = useTranslation();
   const [queueCount, setQueueCount] = useState(0);
@@ -714,6 +714,8 @@ export default function ProfileScreen() {
 
         {/* ─── Profile Summary Card ─── */}
         <View style={styles.profileHeaderCard}>
+          <Text style={[styles.headerBrandName, { color: C.accent }]}>{appDisplayName}</Text>
+          <Text style={[styles.headerBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} style={styles.headerAvatarWrap}>
             {displayAvatarUri ? (
               <Image
@@ -739,10 +741,10 @@ export default function ProfileScreen() {
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
           
           <TouchableOpacity 
-            style={[styles.editInfoBtn, { backgroundColor: '#F1F5F9' }]} 
+            style={[styles.editInfoBtn, { backgroundColor: C.surfaceLow }]} 
             onPress={() => setIsEditing(!isEditing)}
           >
-            <Ionicons name={isEditing ? "close" : "create-outline"} size={14} color="#191C1D" style={{ marginRight: 6 }} />
+            <Ionicons name={isEditing ? "close" : "create-outline"} size={14} color={C.slate} style={{ marginRight: 6 }} />
             <Text style={styles.editInfoBtnText}>{isEditing ? "Fechar Edição" : t('profile.editBtn') || "Editar Perfil"}</Text>
           </TouchableOpacity>
         </View>
@@ -1411,6 +1413,8 @@ function createProfileStyles(C: ColorPalette) {
 
   // ─── Profile Header ───
   profileHeaderCard: { alignItems: 'center', paddingVertical: 32, marginBottom: 8 },
+  headerBrandName: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.65, marginBottom: 4 },
+  headerBrandTagline: { fontSize: 12, fontWeight: '700', marginBottom: 14 },
   headerAvatarWrap: {
     width: 90,
     height: 90,
@@ -1429,7 +1433,7 @@ function createProfileStyles(C: ColorPalette) {
   headerName: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   headerSub: { fontSize: 13, fontWeight: '500', opacity: 0.7, marginTop: 2 },
   editInfoBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 14 },
-  editInfoBtnText: { fontSize: 11, fontWeight: '800', color: '#191C1D' },
+  editInfoBtnText: { fontSize: 11, fontWeight: '800', color: C.slate },
 
   // ─── Sections ───
   sectionHeaderWrap: { marginTop: 20, marginBottom: 10, paddingLeft: 4 },

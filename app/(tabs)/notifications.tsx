@@ -43,7 +43,7 @@ function timeAgo(ts: number): string {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createNotificationsStyles(C), [C]);
   const categoryConfig = useMemo(() => buildCategoryConfig(C), [C]);
 
@@ -81,6 +81,16 @@ export default function NotificationsScreen() {
       ) {
         const eid = data?.evaluationInstanceId;
         if (eid) router.push(`/productivity/${eid}` as any);
+        return;
+      }
+      if (t === 'execution_ops_chat') {
+        const tid = data?.taskId != null ? String(data.taskId).trim() : '';
+        if (tid) {
+          router.push({
+            pathname: '/chat/[id]',
+            params: { id: tid, ops: '1', name: 'Gestor · FT', color: '#1d4ed8' },
+          } as never);
+        }
         return;
       }
       if (data?.assetId) router.push(`/asset/${data.assetId}` as any);
@@ -177,8 +187,11 @@ export default function NotificationsScreen() {
     <SafeAreaView edges={['left', 'right']} style={styles.container}>
       <View style={styles.header}>
         <View>
+          <Text style={styles.headerBrand}>{appDisplayName}</Text>
           <Text style={styles.headerTitle}>Central de Avisos</Text>
-          <Text style={styles.headerSub}>{unread > 0 ? `${unread} não lido${unread > 1 ? 's' : ''}` : 'Tudo em dia ✓'}</Text>
+          <Text style={styles.headerSub}>
+            {unread > 0 ? `${unread} não lido${unread > 1 ? 's' : ''}` : 'Tudo em dia ✓'} · {appTagline}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerBtn} onPress={testPush}>
@@ -245,6 +258,7 @@ function createNotificationsStyles(C: ColorPalette) {
       borderBottomWidth: 1,
       borderBottomColor: C.border,
     },
+    headerBrand: { fontSize: 11, color: C.accent, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
     headerTitle: { fontSize: 18, fontWeight: '900', color: C.primary, letterSpacing: -0.4 },
     headerSub: { fontSize: 11, color: C.textSecondary, fontWeight: '800', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
     headerActions: { flexDirection: 'row', gap: 8 },

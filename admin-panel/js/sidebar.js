@@ -3,6 +3,7 @@
  */
 
 import {
+  CONFIG,
   ensureAdminApiDetected,
   restoreAdminSessionBundleIfNeeded,
   persistAdminSessionBundleFromSessionStorage,
@@ -104,6 +105,7 @@ export const NAV_ITEMS = [
   { page: 'plans.html', icon: 'layers-outline', labelKey: 'nav_plans', sectionKey: null },
   { page: 'integrations.html', icon: 'flash-outline', labelKey: 'nav_integrations', sectionKey: null },
   { page: 'notifications.html', icon: 'notifications-outline', labelKey: 'nav_notifications', sectionKey: null },
+  { page: 'chat.html', icon: 'chatbubbles-outline', labelKey: 'nav_chat', sectionKey: 'nav_sec_ops' },
   { page: 'compliance.html', icon: 'shield-checkmark-outline', labelKey: 'nav_compliance', sectionKey: null },
   {
     page: 'tracking-chat-moderation.html',
@@ -138,6 +140,7 @@ export const MANAGER_PANEL_PAGES = new Set([
   'reports.html',
   'evaluations.html',
   'cockpit.html',
+  'chat.html',
   'technician-applications.html',
   'work-time.html',
 ]);
@@ -173,6 +176,59 @@ export function adminPanelLogout() {
   window.location.href = 'index.html';
 }
 
+async function fetchPanelChatTopbarBadgeCount() {
+  try {
+    const rooms = await CONFIG.get('/chat/rooms');
+    if (!Array.isArray(rooms)) return 0;
+    const corp = rooms.reduce((acc, r) => acc + (Number(r.unreadCount) || 0), 0);
+    let ops = 0;
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/operations/my-ops-chat-threads`, {
+        headers: CONFIG.headers(),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const threads = Array.isArray(j.threads) ? j.threads : [];
+        ops = threads.filter((t) => String(t.lastSenderKind || '').toUpperCase() === 'TECH').length;
+      }
+    } catch {
+      /* ignore */
+    }
+    return corp + ops;
+  } catch {
+    return 0;
+  }
+}
+
+function updatePanelChatTopbarBadgeElement(n) {
+  const badge = document.querySelector('[data-brspark-chat-badge]');
+  if (!badge) return;
+  const countEl = badge.querySelector('[data-brspark-chat-badge-count]') || badge;
+  if (n > 0) {
+    badge.hidden = false;
+    countEl.textContent = n > 99 ? '99+' : String(n);
+  } else {
+    badge.hidden = true;
+    countEl.textContent = '';
+  }
+}
+
+function setupPanelChatTopbarBadgePolling() {
+  if (typeof window === 'undefined') return;
+  if (window.__brsparkChatBadgeInterval) {
+    clearInterval(window.__brsparkChatBadgeInterval);
+    window.__brsparkChatBadgeInterval = null;
+  }
+  const run = async () => {
+    const link = document.querySelector('[data-brspark-topbar-chat]');
+    if (!link) return;
+    const n = await fetchPanelChatTopbarBadgeCount();
+    updatePanelChatTopbarBadgeElement(n);
+  };
+  void run();
+  window.__brsparkChatBadgeInterval = setInterval(() => void run(), 12000);
+}
+
 /**
  * Barra superior do conteúdo: idioma + avatar/resumo da conta (todas as páginas com `.main-content > .topbar`).
  */
@@ -191,7 +247,13 @@ function injectGlobalTopbarActions() {
   const actions = document.createElement('div');
   actions.className = 'topbar-actions brspark-app-topbar';
   actions.setAttribute('data-brspark-app-topbar', '1');
+  const chatTitle = String(t('topbarChat')).replace(/"/g, '&quot;');
+  const chatUnreadHint = String(t('topbarChatUnread')).replace(/"/g, '&quot;');
   actions.innerHTML = `
+    <a href="chat.html" class="topbar-chat-link" data-brspark-topbar-chat="1" title="${chatTitle}" aria-label="${chatUnreadHint}">
+      <span class="topbar-chat-ic-wrap" aria-hidden="true"><ion-icon name="chatbubbles-outline"></ion-icon></span>
+      <span class="topbar-chat-badge" data-brspark-chat-badge hidden aria-live="polite"><span data-brspark-chat-badge-count></span></span>
+    </a>
     <label class="topbar-locale-wrap" for="brspark-topbar-locale">
       <span class="topbar-locale-icon" title="${String(t('localeLabel')).replace(/"/g, '&quot;')}" aria-hidden="true"><ion-icon name="language-outline"></ion-icon></span>
       <select id="brspark-topbar-locale" class="form-control topbar-locale-select">
@@ -416,5 +478,13 @@ export async function initPage() {
     injectGlobalTopbarActions();
   } catch (e) {
     console.warn('[admin] injectGlobalTopbarActions:', e);
+  }
+
+  try {
+    if (document.querySelector('.main-content .topbar')) {
+      setupPanelChatTopbarBadgePolling();
+    }
+  } catch (e) {
+    console.warn('[admin] setupPanelChatTopbarBadgePolling:', e);
   }
 }

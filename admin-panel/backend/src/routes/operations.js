@@ -11,6 +11,12 @@ const {
 } = require('../lib/revisionSessionFields');
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
 const { resolveFieldTaskAssigneeEmail } = require('../lib/technicianEligibility');
+const {
+  translateChatText,
+  normalizeChatLocale,
+  parseTranslationsJson,
+  chatTranslationEnabled,
+} = require('../lib/chatTranslation');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -48,6 +54,44 @@ function panelTenantIdForUserScope(req) {
   return tid;
 }
 
+/**
+ * Execução atribuída ao técnico (JWT app) — duas consultas simples em vez de um `OR` grande no Prisma
+ * (planos mais estáveis) e compatível com formulário global (`template.tenantId` null) ou sem template.
+ * @param {object|undefined} select — campos Prisma `select`; omitir para devolver o registro completo.
+ */
+async function findChecklistExecutionForAppUser(prismaClient, executionId, email, tenantId, select) {
+  const id = String(executionId || '').trim();
+  const em = String(email || '').trim();
+  const tid = String(tenantId || '').trim();
+  if (!id || !em) return null;
+
+  const ownerClause = { id, ownerEmail: { equals: em, mode: 'insensitive' } };
+  const opt = select && typeof select === 'object' ? { select } : {};
+
+  if (tid) {
+    const strict = await prismaClient.checklistExecution.findFirst({
+      where: { ...ownerClause, template: { tenantId: tid } },
+      ...opt,
+    });
+    if (strict) return strict;
+  }
+
+  const globalOrNoTpl = await prismaClient.checklistExecution.findFirst({
+    where: {
+      ...ownerClause,
+      OR: [{ template: { tenantId: null } }, { templateId: null }],
+    },
+    ...opt,
+  });
+  if (globalOrNoTpl) return globalOrNoTpl;
+
+  /** Último recurso: só dono — evita 404 quando o tenant do JWT não coincide com o do template (dados legados / edge). */
+  return prismaClient.checklistExecution.findFirst({
+    where: ownerClause,
+    ...opt,
+  });
+}
+
 // ─── POST /api/operations/tasks/:id/reject (app móvel Live Activity / painel) ──
 // Registado **antes** de `router.use(adminAuthThenPanel)` para aceitar JWT de utilizador do app.
 router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
@@ -56,13 +100,13 @@ router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
     const { reason } = req.body;
     let ex;
     if (req.appUser) {
-      ex = await prisma.checklistExecution.findFirst({
-        where: {
-          id,
-          ownerEmail: { equals: String(req.appUser.email || '').trim(), mode: 'insensitive' },
-          template: { tenantId: String(req.appUser.tenantId || '').trim() },
-        },
-      });
+      ex = await findChecklistExecutionForAppUser(
+        prisma,
+        id,
+        req.appUser.email,
+        req.appUser.tenantId,
+        undefined
+      );
     } else {
       ex = await prisma.checklistExecution.findFirst({
         where: mergeExecutionWhere({ id }, req),
@@ -105,17 +149,139 @@ router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
 
 const OPS_CHAT_BODY_MAX = 8000;
 
+/**
+ * E-mail do ator autenticado (app ou painel) em minúsculas.
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+function resolveOpsChatViewerEmail(req) {
+  if (req.appUser) return String(req.appUser.email || '').trim().toLowerCase();
+  if (req.admin) return String(req.admin.email || '').trim().toLowerCase();
+  return '';
+}
+
+/**
+ * @param {import('express').Request} req
+ * @param {unknown} rawViewerLocale
+ * @returns {Promise<string>}
+ */
+async function resolveOpsChatViewerLocale(req, rawViewerLocale) {
+  let viewerLocale =
+    rawViewerLocale != null && String(rawViewerLocale).trim()
+      ? normalizeChatLocale(String(rawViewerLocale))
+      : null;
+
+  let userId = null;
+  if (req.appUser?.id) userId = req.appUser.id;
+  else if (req.admin?.userId) userId = req.admin.userId;
+  else if (req.admin?.id) userId = req.admin.id;
+
+  if (!viewerLocale && userId) {
+    const meRow = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { preferredChatLocale: true, tenantId: true },
+    });
+    if (meRow?.preferredChatLocale && String(meRow.preferredChatLocale).trim()) {
+      viewerLocale = normalizeChatLocale(meRow.preferredChatLocale);
+    }
+    if (!viewerLocale && meRow?.tenantId) {
+      const t = await prisma.tenant.findUnique({
+        where: { id: meRow.tenantId },
+        select: { defaultLang: true },
+      });
+      viewerLocale = normalizeChatLocale(t?.defaultLang || 'pt-BR');
+    }
+  }
+  if (!viewerLocale) viewerLocale = 'pt-BR';
+  return viewerLocale;
+}
+
+/**
+ * @param {{ id: string, senderEmail: string, body: string, translations?: unknown }} msg
+ * @param {string} viewerEmail
+ * @param {string} viewerLocaleHint
+ * @returns {Promise<string>}
+ */
+async function resolveOpsChatDisplayBody(msg, viewerEmail, viewerLocaleHint) {
+  const raw = msg.body != null ? String(msg.body) : '';
+  const viewer = String(viewerEmail || '').trim().toLowerCase();
+  const sender = String(msg.senderEmail || '').trim().toLowerCase();
+  if (sender === viewer) return raw;
+
+  const locale = normalizeChatLocale(viewerLocaleHint);
+  const trans = parseTranslationsJson(msg.translations);
+  if (trans[locale]) return trans[locale];
+
+  if (!raw.trim() || !chatTranslationEnabled()) return raw;
+
+  const translated = await translateChatText(raw, locale);
+  if (!translated) return raw;
+
+  const merged = { ...trans, [locale]: translated };
+  try {
+    await prisma.checklistExecutionOpsChatMessage.update({
+      where: { id: msg.id },
+      data: { translations: merged },
+    });
+  } catch (e) {
+    console.warn('[OPS-CHAT] Falha ao gravar tradução em cache:', e.message);
+  }
+  return translated;
+}
+
+/**
+ * Quando o gestor envia, pré-calcula tradução para o locale preferido do técnico (dono da execução).
+ * @param {{ ownerEmail?: string|null }} ex
+ * @param {{ id: string, body: string|null|undefined, translations?: unknown }} msg
+ */
+async function maybePrefetchOpsChatTranslationForTechnician(ex, msg) {
+  if (!chatTranslationEnabled()) return;
+  const text = msg.body != null ? String(msg.body).trim() : '';
+  if (!text) return;
+  const techEmail = String(ex.ownerEmail || '').trim().toLowerCase();
+  if (!techEmail) return;
+
+  const u = await prisma.user.findFirst({
+    where: { email: { equals: techEmail, mode: 'insensitive' } },
+    select: { preferredChatLocale: true, tenantId: true },
+  });
+  let target = 'pt-BR';
+  if (u?.preferredChatLocale && String(u.preferredChatLocale).trim()) {
+    target = normalizeChatLocale(u.preferredChatLocale);
+  } else if (u?.tenantId) {
+    const t = await prisma.tenant.findUnique({
+      where: { id: u.tenantId },
+      select: { defaultLang: true },
+    });
+    target = normalizeChatLocale(t?.defaultLang || 'pt-BR');
+  }
+
+  const trans = parseTranslationsJson(msg.translations);
+  if (trans[target]) return;
+
+  const translated = await translateChatText(text, target);
+  if (!translated) return;
+
+  const merged = { ...trans, [target]: translated };
+  try {
+    await prisma.checklistExecutionOpsChatMessage.update({
+      where: { id: msg.id },
+      data: { translations: merged },
+    });
+  } catch (e) {
+    console.warn('[OPS-CHAT] Falha ao pré-traduzir para técnico:', e.message);
+  }
+}
+
 async function findExecutionForOpsChat(req, executionId) {
   const id = String(executionId || '').trim();
   if (!id) return null;
   if (req.appUser) {
-    return prisma.checklistExecution.findFirst({
-      where: {
-        id,
-        ownerEmail: { equals: String(req.appUser.email || '').trim(), mode: 'insensitive' },
-        template: { tenantId: String(req.appUser.tenantId || '').trim() },
-      },
-      select: { id: true, ownerEmail: true, osNumber: true, routineTaskNumber: true },
+    return findChecklistExecutionForAppUser(prisma, id, req.appUser.email, req.appUser.tenantId, {
+      id: true,
+      ownerEmail: true,
+      osNumber: true,
+      routineTaskNumber: true,
     });
   }
   if (req.admin) {
@@ -127,12 +293,84 @@ async function findExecutionForOpsChat(req, executionId) {
   return null;
 }
 
+// ─── GET /api/operations/my-ops-chat-threads (app: dono da FT; painel: FTs do âmbito do JWT) ──
+router.get('/my-ops-chat-threads', rejectOsAuth, async (req, res) => {
+  try {
+    const threadSelect = {
+      id: true,
+      osNumber: true,
+      routineTaskNumber: true,
+      opsChatMessages: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { body: true, createdAt: true, senderKind: true },
+      },
+    };
+
+    const mapThreads = (rows) => {
+      const sorted = [...rows].sort((a, b) => {
+        const ta = a.opsChatMessages[0]?.createdAt?.getTime() ?? 0;
+        const tb = b.opsChatMessages[0]?.createdAt?.getTime() ?? 0;
+        return tb - ta;
+      });
+      return sorted.map((ex) => {
+        const last = ex.opsChatMessages[0];
+        return {
+          executionId: ex.id,
+          osNumber: ex.osNumber ?? null,
+          routineTaskNumber: ex.routineTaskNumber ?? null,
+          title: null,
+          lastMessageAt: last?.createdAt ? last.createdAt.toISOString() : null,
+          lastPreview: last?.body != null ? String(last.body).slice(0, 200) : '',
+          lastSenderKind: last?.senderKind ?? null,
+        };
+      });
+    };
+
+    if (req.appUser) {
+      const email = String(req.appUser.email || '').trim();
+      const baseWhere = {
+        ownerEmail: { equals: email, mode: 'insensitive' },
+        opsChatMessages: { some: {} },
+      };
+      const rows = await prisma.checklistExecution.findMany({
+        where: baseWhere,
+        select: threadSelect,
+        take: 40,
+      });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ threads: mapThreads(rows) });
+    }
+
+    if (req.admin) {
+      const baseWhere = { opsChatMessages: { some: {} } };
+      const where = mergeExecutionWhere(baseWhere, req);
+      const rows = await prisma.checklistExecution.findMany({
+        where,
+        select: threadSelect,
+        take: 120,
+      });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ threads: mapThreads(rows) });
+    }
+
+    return res.status(403).json({ error: 'Sem permissão.' });
+  } catch (err) {
+    console.error('[operations/my-ops-chat-threads GET]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/operations/tasks/:id/ops-chat (painel ou app — thread por execução) ──
 router.get('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const ex = await findExecutionForOpsChat(req, id);
     if (!ex) return res.status(404).json({ error: 'Execução não encontrada ou sem permissão.' });
+
+    const { viewerLocale: rawViewerLocale } = req.query;
+    const viewerLocale = await resolveOpsChatViewerLocale(req, rawViewerLocale);
+    const viewerEmail = resolveOpsChatViewerEmail(req);
 
     const rows = await prisma.checklistExecutionOpsChatMessage.findMany({
       where: { executionId: ex.id },
@@ -142,20 +380,29 @@ router.get('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
         senderEmail: true,
         senderKind: true,
         body: true,
+        translations: true,
         createdAt: true,
       },
     });
 
+    const messages = await Promise.all(
+      rows.map(async (m) => {
+        const displayBody = await resolveOpsChatDisplayBody(m, viewerEmail, viewerLocale);
+        return {
+          id: m.id,
+          senderEmail: m.senderEmail,
+          senderKind: m.senderKind,
+          body: m.body,
+          displayBody,
+          createdAt: m.createdAt.toISOString(),
+        };
+      }),
+    );
+
     res.set('Cache-Control', 'no-store');
     res.json({
       executionId: ex.id,
-      messages: rows.map((m) => ({
-        id: m.id,
-        senderEmail: m.senderEmail,
-        senderKind: m.senderKind,
-        body: m.body,
-        createdAt: m.createdAt.toISOString(),
-      })),
+      messages,
     });
   } catch (err) {
     console.error('[operations/tasks/:id/ops-chat GET]', err);
@@ -169,6 +416,10 @@ router.post('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
     const { id } = req.params;
     const ex = await findExecutionForOpsChat(req, id);
     if (!ex) return res.status(404).json({ error: 'Execução não encontrada ou sem permissão.' });
+
+    const { viewerLocale: rawPostViewerLocale } = req.query;
+    const viewerLocale = await resolveOpsChatViewerLocale(req, rawPostViewerLocale);
+    const viewerEmail = resolveOpsChatViewerEmail(req);
 
     const rawBody =
       req.body && typeof req.body.body === 'string'
@@ -200,11 +451,15 @@ router.post('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
         senderEmail: true,
         senderKind: true,
         body: true,
+        translations: true,
         createdAt: true,
       },
     });
 
+    const displayBody = await resolveOpsChatDisplayBody(row, viewerEmail, viewerLocale);
+
     if (senderKind === 'GESTOR') {
+      await maybePrefetchOpsChatTranslationForTechnician(ex, row).catch(() => {});
       const notifyEmail = String(ex.ownerEmail || '').trim();
       try {
         const users = await prisma.user.findMany({
@@ -244,6 +499,7 @@ router.post('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
         senderEmail: row.senderEmail,
         senderKind: row.senderKind,
         body: row.body,
+        displayBody,
         createdAt: row.createdAt.toISOString(),
       },
     });

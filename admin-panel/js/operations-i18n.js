@@ -48,12 +48,13 @@ const M = {
     ops_sort_key_completed: 'Data de conclusão',
     ops_empty_col: 'Nenhuma atividade aqui',
     ops_trunc_banner:
-      'Está a ver no máximo {limit} OS mais recentes (limite da API). Aumente o limite na barra ou refine os filtros na API.',
+      'Você está vendo no máximo {limit} OS mais recentes (limite da API). Aumente o limite na barra ou refine os filtros na API.',
     ops_tenant_chip: 'Organização: {name}',
     ops_tenant_chip_slug: '{name} · {slug}',
     ops_time_dash: '—',
-    ops_submission_badge: '{n}.ª submissão',
-    ops_api_unexpected: 'A API devolveu um formato inesperado ao carregar o quadro. Veja a consola (F12) ou confirme o início de sessão.',
+    ops_submission_badge: '{n}ª submissão',
+    ops_api_unexpected:
+      'A API devolveu um formato inesperado ao carregar o quadro. Abra o console (F12) ou confirme se você está logado.',
     ops_detail_pdf_preset_default: 'Padrão (todos os blocos)',
     ops_modal_close_aria: 'Fechar',
     ops_btn_cancel: 'Cancelar',
@@ -70,7 +71,7 @@ const M = {
     ops_detail_cancel_os: 'Cancelar OS',
     ops_rev_pick_title: 'Qual submissão abrir?',
     ops_rev_pick_hint:
-      'Esta FT tem mais do que uma submissão concluída indexada. Escolha qual snapshot deseja ver no relatório e nas informações.',
+      'Esta FT tem mais de uma submissão concluída indexada. Escolha qual snapshot deseja ver no relatório e nas informações.',
     ops_rev_snap_title: 'Submissão',
     ops_rev_snap_tab_form: 'Relatório',
     ops_rev_snap_tab_meta: 'Metadados do envio',
@@ -117,7 +118,7 @@ const M = {
     ops_dispatch_section_schedule: 'Agenda (bloco horário)',
     ops_dispatch_sched_lbl: 'Início na agenda *',
     ops_dispatch_sched_hint:
-      'Define quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).',
+      'Defina quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).',
     ops_dispatch_dur_lbl: 'Tempo previsto do formulário (min) — opcional',
     ops_dispatch_dur_ph: 'Usar valor do formulário (ou 60 min se vazio)',
     ops_dispatch_dur_hint:
@@ -146,13 +147,13 @@ const M = {
     ops_geo_radius_help_html:
       '<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> <strong>Ponto:</strong> o técnico deve estar dentro do raio definido ao redor do endereço.<br/>Validação: <code>distância ≤ raio</code>',
     ops_geo_route_help_html:
-      '<ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> <strong>Rota:</strong> o técnico deve seguir o trajeto definido. Alerta caso se afaste mais que a tolerância.<br/>Validação: <code>distância perpendicular da linha ≤ tolerância</code>',
+      '<ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> <strong>Rota:</strong> o técnico deve seguir o trajeto definido. Alerta se se afastar além da tolerância.<br/>Validação: <code>distância perpendicular da linha ≤ tolerância</code>',
     ops_geo_segment_help_html:
       '<ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> <strong>Trecho (A↔B):</strong> o técnico deve estar perto do <strong>ponto A</strong> ou do <strong>ponto B</strong>.<br/>Preencha os endereços ou coordenadas abaixo ou clique no mapa para os 2 pontos.',
     ops_geo_polygon_help_html:
       '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polígono:</strong> o técnico deve estar <strong>dentro</strong> da área delimitada.<br/>Validação: dentro / fora — sem tolerância de borda.',
     ops_geo_none_help_html:
-      '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico poderá executar a OS de qualquer local. Campos do tipo "Validar cerca" apenas registram a posição GPS como evidência.',
+      '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico pode executar a OS de qualquer local. Campos do tipo "Validar cerca" apenas registram a posição GPS como evidência.',
     ops_label_address: 'Endereço (busca por nome)',
     ops_label_lat: 'Latitude',
     ops_label_lng: 'Longitude',
@@ -383,7 +384,7 @@ export function opsSortLocale() {
   return 'pt';
 }
 
-/** Linha «Fim previsto…» no despacho (data/hora + cópia conforme locale do painel). */
+/** Linha "Fim previsto…" no despacho (data/hora + cópia conforme locale do painel). */
 export function opsDispatchPlannedEndPreviewText(schedStart, durationMinutes) {
   if (!schedStart || !(schedStart instanceof Date) || !Number.isFinite(schedStart.getTime())) return '';
   const mins = Math.max(0, Math.floor(Number(durationMinutes)) || 0);

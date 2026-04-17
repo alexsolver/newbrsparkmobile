@@ -65,7 +65,7 @@ import {
 import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
-import { ExecutionOpsChatModal } from '../../src/components/ExecutionOpsChatModal';
+import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
 import {
   enqueueExecutionStatusPatch,
@@ -2639,7 +2639,7 @@ function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any 
 }
 
 export default function ChecklistEngine() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { id, taskId, routineTask, rtNumber } = useLocalSearchParams();
   const router = useRouter();
@@ -2717,7 +2717,8 @@ export default function ChecklistEngine() {
   const [trackingUrl, setTrackingUrl]       = useState<string|null>(null);
 
   const [sigModalVisible, setSigModalVisible] = useState(false);
-  const [opsChatVisible, setOpsChatVisible] = useState(false);
+  /** Indicador no ícone: mensagem do gestor mais recente que a última leitura no app. */
+  const [opsChatGestorBadge, setOpsChatGestorBadge] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
   const [currentSigField, setCurrentSigField] = useState<string|null>(null);
   const [currentSigScope, setCurrentSigScope] = useState<SectionRepeatScope | null>(null);
@@ -2746,6 +2747,38 @@ export default function ChecklistEngine() {
       taskId: resolvedTaskId ? String(resolvedTaskId) : '',
     };
   }, [isReadOnly, resolvedTaskId]);
+
+  useEffect(() => {
+    const tid = String(resolvedTaskId || '').trim();
+    if (!tid) {
+      setOpsChatGestorBadge(false);
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const viewerLoc = user?.preferredChatLocale?.trim() || i18n.language || null;
+        const msgs = await fetchExecutionOpsChat(tid, viewerLoc);
+        if (cancelled) return;
+        const ackStr = await AsyncStorage.getItem(getOpsChatAckStorageKey(tid));
+        const ack = ackStr ? Number(ackStr) : 0;
+        const hasGestorNew = msgs.some((m) => {
+          if (String(m.senderKind).toUpperCase() !== 'GESTOR') return false;
+          const ts = new Date(m.createdAt).getTime();
+          return Number.isFinite(ts) && ts > ack;
+        });
+        setOpsChatGestorBadge(hasGestorNew);
+      } catch {
+        if (!cancelled) setOpsChatGestorBadge(false);
+      }
+    };
+    void run();
+    const iv = setInterval(run, 12000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [resolvedTaskId, user?.preferredChatLocale, i18n.language]);
 
   const [ruleTick, setRuleTick] = useState(0);
   const fgSegmentStartRef = useRef<number | null>(null);
@@ -6969,10 +7002,44 @@ export default function ChecklistEngine() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'flex-end', minWidth: 40 }}>
           {resolvedTaskId ? (
             <TouchableOpacity
-              onPress={() => setOpsChatVisible(true)}
+              onPress={() => {
+                const tid = String(resolvedTaskId || '').trim();
+                if (!tid) return;
+                const label = taskOsLabel({
+                  id: tid,
+                  osNumber: currentTask?.osNumber ?? null,
+                  routineTaskNumber: currentTask?.routineTaskNumber ?? null,
+                });
+                router.push({
+                  pathname: '/chat/[id]',
+                  params: {
+                    id: tid,
+                    ops: '1',
+                    name: `Gestor · ${label}`,
+                    color: '#1d4ed8',
+                  },
+                } as never);
+              }}
               accessibilityLabel="Mensagens do gestor sobre esta FT"
+              style={{ position: 'relative' }}
             >
               <Ionicons name="chatbubbles-outline" size={26} color="#FFF" />
+              {opsChatGestorBadge ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: -1,
+                    right: -2,
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: '#EF4444',
+                    borderWidth: 2,
+                    borderColor: 'rgba(255,255,255,0.95)',
+                  }}
+                />
+              ) : null}
             </TouchableOpacity>
           ) : null}
           {taskId && !isReadOnly && !responses.__form_paused_since ? (
@@ -9968,13 +10035,6 @@ export default function ChecklistEngine() {
           </View>
         </View>
       )}
-
-      <ExecutionOpsChatModal
-        visible={opsChatVisible}
-        executionId={String(resolvedTaskId || '').trim()}
-        onClose={() => setOpsChatVisible(false)}
-        colors={C}
-      />
 
       <Modal
         visible={checklistBarcodeModalOpen}

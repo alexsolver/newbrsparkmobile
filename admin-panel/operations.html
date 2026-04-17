@@ -594,8 +594,8 @@
 <body>
 <div class="admin-layout">
   <div class="main-content">
-    <div class="topbar topbar--data">
-      <nav class="topbar-breadcrumb" aria-label="Trilha" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
+    <div class="topbar topbar--data" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;justify-content:flex-start">
+      <nav class="topbar-breadcrumb" aria-label="Trilha" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:0">
         <a href="dashboard.html" id="ops-bc-panel" style="color:inherit;text-decoration:none;font-weight:600">Painel</a>
         <span class="topbar-breadcrumb-sep">/</span>
         <span id="ops-bc-current">Central de operações</span>
@@ -802,7 +802,7 @@
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p id="revision-picker-hint" style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 14px;">
-        Esta FT tem mais do que uma submissão concluída indexada. Escolha qual snapshot deseja ver no relatório e nas informações.
+        Esta FT tem mais de uma submissão concluída indexada. Escolha qual snapshot deseja ver no relatório e nas informações.
       </p>
       <div id="revision-picker-options" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
@@ -928,7 +928,7 @@
       <div class="form-group">
         <label class="form-label" for="d-scheduled-start">Início na agenda *</label>
         <input class="form-control" id="d-scheduled-start" type="datetime-local" required oninput="window.updateDispatchPlannedEndPreview && window.updateDispatchPlannedEndPreview()" />
-        <div id="d-hint-scheduled" style="font-size:10px; color:var(--text3); margin-top:4px;">Define quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).</div>
+        <div id="d-hint-scheduled" style="font-size:10px; color:var(--text3); margin-top:4px;">Defina quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).</div>
       </div>
       <div class="form-group">
         <label class="form-label" for="d-expected-duration-override">Tempo previsto do formulário (min) — opcional</label>
@@ -1102,7 +1102,7 @@
       <!-- TAB: Sem Validação -->
       <div id="geo-panel-none" style="display:none;">
         <div id="geo-help-none" style="background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:12px; font-size:12px; color:#92400e;">
-          <ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico poderá executar a OS de qualquer local.
+          <ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico pode executar a OS de qualquer local.
           Campos do tipo "Validar Cerca" apenas registrarão a posição GPS como evidência.
         </div>
       </div>
@@ -1148,6 +1148,7 @@ import {
   opsFormatCardDateTime,
   refreshOpsTenantChip,
 } from './js/operations-i18n.js';
+import { getAdminUiLocale } from './js/user-pages-i18n.js';
 
 await initPage();
 
@@ -1211,8 +1212,8 @@ function displayLastConcludedRevisionNumber(t) {
 }
 
 /**
- * A 1.ª conclusão é indexada como 1 na BD, mas não é "revisão" no sentido de nova visita.
- * Badge nos cartões só a partir da 2.ª submissão.
+ * A 1ª conclusão é indexada como 1 na BD, mas não é "revisão" no sentido de nova visita.
+ * Badge nos cartões só a partir da 2ª submissão.
  */
 function completedTaskSubmissionBadgeHtml(task) {
   const st = String(task && task.status || '').toUpperCase();
@@ -1230,14 +1231,14 @@ function reopenRevisionPendingFromTask(t) {
   return false;
 }
 
-/** Texto curto para cabeçalho PDF: não chamar 1.ª conclusão de "revisão". */
+/** Texto curto para cabeçalho PDF: não chamar 1ª conclusão de "revisão". */
 function revisionContextSubtitle(t) {
   if (!t) return '';
   const n = displayLastConcludedRevisionNumber(t);
   const rc = Number(t.metadata && t.metadata.reopenCount) || 0;
   const pen = reopenRevisionPendingFromTask(t);
   const parts = [];
-  if (n >= 2) parts.push(`${n}.ª submissão indexada`);
+  if (n >= 2) parts.push(`${n}ª submissão indexada`);
   if (rc > 0) parts.push(`${rc} reabertura${rc !== 1 ? 's' : ''}`);
   if (pen) parts.push('nova visita pendente');
   return parts.length ? ' · ' + parts.join(' · ') : '';
@@ -1502,11 +1503,13 @@ function renderOpsChatThread(messages) {
       const dt = opsFormatCardDateTime(m.createdAt);
       const bg = kind === 'GESTOR' ? '#eff6ff' : '#fff7ed';
       const border = kind === 'GESTOR' ? '#bfdbfe' : '#fed7aa';
+      const line =
+        m.displayBody != null && String(m.displayBody).trim() !== '' ? m.displayBody : m.body || '';
       return `<div style="padding:10px 12px;border-radius:10px;background:${bg};border:1px solid ${border};text-align:left">
         <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">${who} · ${escOpsChatHtml(
         m.senderEmail || ''
       )} · ${escOpsChatHtml(dt)}</div>
-        <div style="font-size:13px;line-height:1.45;white-space:pre-wrap;color:var(--text)">${escOpsChatHtml(m.body || '')}</div>
+        <div style="font-size:13px;line-height:1.45;white-space:pre-wrap;color:var(--text)">${escOpsChatHtml(line)}</div>
       </div>`;
     })
     .join('');
@@ -1517,7 +1520,8 @@ async function loadOpsChatMessages() {
   if (!_opsChatTaskId) return;
   const box = document.getElementById('ops-chat-thread');
   if (!box) return;
-  const url = `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(_opsChatTaskId)}/ops-chat`;
+  const loc = encodeURIComponent(getAdminUiLocale());
+  const url = `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(_opsChatTaskId)}/ops-chat?viewerLocale=${loc}`;
   try {
     const r = await fetch(url, { headers: CONFIG.headers() });
     if (r.status === 401) {
@@ -1593,11 +1597,15 @@ window.submitOpsChatMessage = async function () {
   const btn = document.getElementById('ops-chat-send-btn');
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch(`${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(tid)}/ops-chat`, {
-      method: 'POST',
-      headers: CONFIG.headers(),
-      body: JSON.stringify({ body: text }),
-    });
+    const locQ = encodeURIComponent(getAdminUiLocale());
+    const r = await fetch(
+      `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(tid)}/ops-chat?viewerLocale=${locQ}`,
+      {
+        method: 'POST',
+        headers: CONFIG.headers(),
+        body: JSON.stringify({ body: text }),
+      },
+    );
     if (r.status === 401) {
       clearAdminSessionFully();
       window.location.href = 'index.html';
@@ -2087,10 +2095,10 @@ function buildCard(task, colClass) {
     : 'background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;border:1px solid #1e40af;box-shadow:0 2px 8px rgba(37,99,235,0.35)';
   const ftRtBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:900;letter-spacing:0.02em;${ftRtPillStyle}"><ion-icon name="${isRt ? 'reader-outline' : 'pricetag-outline'}" style="font-size:16px;vertical-align:-2px;opacity:0.95"></ion-icon><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace">#${osLabelEsc}</span></span>`;
   const formNameHtml = formDisplayName
-    ? `<span style="display:inline-flex;align-self:flex-start;max-width:100%;margin-top:2px;padding:6px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.02em;line-height:1.35;word-break:break-word;background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);color:#fff;border:1px solid #5b21b6;box-shadow:0 2px 8px rgba(124,58,237,0.28)"><span style="opacity:0.92;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.35px;margin-right:6px">Formulário</span><span>${String(formDisplayName)
+    ? `<span style="display:inline-flex;align-self:flex-start;max-width:100%;margin-top:2px;padding:6px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.02em;line-height:1.35;word-break:break-word;background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);color:#fff;border:1px solid #5b21b6;box-shadow:0 2px 8px rgba(124,58,237,0.28)">${String(formDisplayName)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</span></span>`
+        .replace(/>/g, '&gt;')}</span>`
     : '';
   const refId  = task.refId || task.metadata?.refId || '—';
   
@@ -3417,7 +3425,7 @@ function formatPlannedSourceShortPtBr(key) {
   return '';
 }
 
-/** Rodapé do bloco «previsto na saída» (frase completa, alinhado ao PDF). */
+/** Rodapé do bloco "previsto na saída" (frase completa, alinhado ao PDF). */
 function formatPlannedSourceFootnotePtBr(key) {
   const k = String(key || '').trim();
   if (k === 'google_routes') return 'Origem: Google Maps (Routes API)';
@@ -3937,7 +3945,7 @@ function buildInfoTab(t) {
           <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">Formulário</span><br><strong>${fmtDurationPtBr(fillDisplayI)}</strong>${timesI.excludesTransit ? ' <span style="font-size:9px;color:var(--text3);font-weight:600">(exc. desloc.)</span>' : ''}</div>
           <div><span style="color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">App em foco</span><br><strong>${fmtDurationPtBr(actDisplayI)}</strong>${timesI.excludesTransit ? ' <span style="font-size:9px;color:var(--text3);font-weight:600">(exc. desloc.)</span>' : ''}</div>
         </div>
-        ${timesI.excludesTransit ? '<div style="margin-top:8px;font-size:10px;color:var(--text3);line-height:1.35">* Formulário e app em foco não incluem o intervalo entre o registo de saída e o de chegada (deslocamento). O valor é o mínimo entre o relógio do app e o tempo da OS fora desse intervalo — não some com «Deslocamento».</div>' : ''}
+        ${timesI.excludesTransit ? '<div style="margin-top:8px;font-size:10px;color:var(--text3);line-height:1.35">* Formulário e app em foco não incluem o intervalo entre o registro de saída e o de chegada (deslocamento). O valor é o mínimo entre o relógio do app e o tempo da OS fora desse intervalo — não some com "Deslocamento".</div>' : ''}
         <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--text)">
           <div style="line-height:1.45;margin-bottom:8px">
             <div><span style="font-weight:800;color:var(--text2)">Previsto na saída:</span> ${fmtDurationPtBr(tmI.plannedDurationSec)} · ${fmtKmI(tmI.plannedDistanceM)}</div>
@@ -6192,7 +6200,7 @@ window.printReport = async function() {
   const formFillStrPdf = fmtDurPdf(timesPdf.fill);
   const formActiveStrPdf = fmtDurPdf(timesPdf.active);
   const formFillProdFootnote = timesPdf.excludesTransit
-    ? `<div style="font-size:7px;color:#64748b;padding:6px 10px 0;line-height:1.35;font-weight:600">* «Formulário» e «App foco» não incluem o deslocamento (saída→chegada): mínimo entre o relógio do app e o tempo da OS fora desse intervalo (não somar com «Desloc.»).</div>`
+    ? `<div style="font-size:7px;color:#64748b;padding:6px 10px 0;line-height:1.35;font-weight:600">* "Formulário" e "App foco" não incluem o deslocamento (saída→chegada): mínimo entre o relógio do app e o tempo da OS fora desse intervalo (não somar com "Desloc.").</div>`
     : '';
   const sectionRowsProd = collectSectionTimingRows(t.template?.sectionBreaks, responses, t.template);
   let sectionLineProd = sectionRowsProd

@@ -66,6 +66,18 @@ async function handleNotificationResponse(
     return;
   }
 
+  /** Gestor escreveu no chat operacional da FT — mesmo ecrã do chat corporativo. */
+  if (type === 'execution_ops_chat') {
+    if (!isDefault) return;
+    const taskId = String(data.taskId || '').trim();
+    if (!taskId) return;
+    router.push({
+      pathname: '/chat/[id]',
+      params: { id: taskId, ops: '1', name: 'Gestor · FT', color: '#1d4ed8' },
+    } as never);
+    return;
+  }
+
   /** Despacho novo ou OS reaberta para revisão — mesmas ações (Aceitar / Recusar / OK). */
   if (type !== 'os_dispatched' && type !== 'os_reopened_revision') return;
 

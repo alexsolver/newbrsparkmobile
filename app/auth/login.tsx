@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
   ActivityIndicator, Linking, Image, Modal, ActionSheetIOS,
 } from 'react-native';
 
@@ -38,6 +38,22 @@ function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
     container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
+    heroBg: {
+      marginHorizontal: -28,
+      marginBottom: 20,
+      minHeight: 150,
+      justifyContent: 'flex-end',
+      backgroundColor: C.surfaceLow,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
+      overflow: 'hidden',
+    },
+    heroOverlay: {
+      paddingHorizontal: 28,
+      paddingTop: 18,
+      paddingBottom: 22,
+      backgroundColor: 'rgba(15,23,42,0.35)',
+    },
 
     logoBlock: { alignItems: 'center', paddingTop: 40, paddingBottom: 36 },
     logoImage: { width: 220, height: 80, marginBottom: 8 },
@@ -202,7 +218,7 @@ export default function LoginScreen() {
       : undefined;
   const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline, resolvedLogoUrl, loginBackgroundUrl } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
   const [mode, setMode] = useState<Mode>('LOGIN');
@@ -586,15 +602,37 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo */}
-          <View style={styles.logoBlock}>
-            <Image
-              source={require('../../assets/logo.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.logoSub}>Precisou, resolveu.</Text>
-          </View>
+          {loginBackgroundUrl ? (
+            <ImageBackground source={{ uri: loginBackgroundUrl }} style={styles.heroBg} resizeMode="cover">
+              <View style={styles.heroOverlay}>
+                {resolvedLogoUrl ? (
+                  <Image source={{ uri: resolvedLogoUrl }} style={styles.logoImage} resizeMode="contain" />
+                ) : (
+                  <Image
+                    source={require('../../assets/logo.png')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                )}
+                <Text style={[styles.logoSub, { color: '#fff' }]}>{appTagline}</Text>
+                <Text style={[styles.logoSub, { marginTop: 6, fontSize: 13, color: '#fff' }]}>{appDisplayName}</Text>
+              </View>
+            </ImageBackground>
+          ) : (
+            <View style={styles.logoBlock}>
+              {resolvedLogoUrl ? (
+                <Image source={{ uri: resolvedLogoUrl }} style={styles.logoImage} resizeMode="contain" />
+              ) : (
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.logoSub}>{appTagline}</Text>
+              <Text style={[styles.logoSub, { marginTop: 6, fontSize: 13, color: C.primary }]}>{appDisplayName}</Text>
+            </View>
+          )}
 
 
           {/* Mode Tabs */}

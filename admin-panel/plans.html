@@ -167,6 +167,49 @@
             <input type="checkbox" id="plan-feat-realtime" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
           </label>
         </div>
+        <div style="margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2, rgba(0,0,0,.02));">
+          <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:4px;">Branding do app móvel</div>
+          <p style="font-size:11px;color:var(--text3);margin:0 0 12px;line-height:1.45;">
+            Define se tenants deste plano podem customizar logo, cores e identidade visual do app compartilhado.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;">
+              <span style="min-width:0">
+                <span style="display:block;font-weight:700;font-size:13px;color:var(--text);">Habilitar branding por tenant</span>
+                <span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;">Sem isso, o tenant usa a identidade visual padrão do BrSpark.</span>
+              </span>
+              <input type="checkbox" id="plan-feat-branding-enabled" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            </label>
+            <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;">
+              <span style="min-width:0">
+                <span style="display:block;font-weight:700;font-size:13px;color:var(--text);">Permitir logos próprios</span>
+                <span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;">Logo claro e escuro no login e no cabeçalho do app.</span>
+              </span>
+              <input type="checkbox" id="plan-feat-branding-allowLogo" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            </label>
+            <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;">
+              <span style="min-width:0">
+                <span style="display:block;font-weight:700;font-size:13px;color:var(--text);">Permitir cores da marca</span>
+                <span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;">Sobrescreve `primary`, `accent` e tons de apoio no app móvel.</span>
+              </span>
+              <input type="checkbox" id="plan-feat-branding-allowColors" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            </label>
+            <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;">
+              <span style="min-width:0">
+                <span style="display:block;font-weight:700;font-size:13px;color:var(--text);">Permitir fundo de login</span>
+                <span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;">Aceita imagem de fundo no topo da tela de autenticação.</span>
+              </span>
+              <input type="checkbox" id="plan-feat-branding-allowLoginScreen" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            </label>
+            <label class="plan-feat-toggle" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;">
+              <span style="min-width:0">
+                <span style="display:block;font-weight:700;font-size:13px;color:var(--text);">Permitir nome e slogan próprios</span>
+                <span style="display:block;font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35;">Nome exibido do app dentro do layout e slogan abaixo do logo.</span>
+              </span>
+              <input type="checkbox" id="plan-feat-branding-allowAppDisplayName" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            </label>
+          </div>
+        </div>
         <div class="form-group" style="margin-top:16px;margin-bottom:0">
           <label class="form-label" id="pln-feat-lbl-facial" for="plan-feat-facial-provider"></label>
           <p id="pln-feat-hint-facial" style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.35;"></p>
