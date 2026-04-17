@@ -10,6 +10,7 @@ const {
   parseTranslationsJson,
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
+const { canManageTenantAppData } = require('../lib/authorization');
 
 router.use(authUser);
 
@@ -21,10 +22,6 @@ function normEmail(v) {
 
 function normRole(v) {
   return String(v || '').trim().toUpperCase();
-}
-
-function isManagerRole(role) {
-  return normRole(role) === 'MANAGER';
 }
 
 async function getTenantScopedUserByEmail(email) {
@@ -374,7 +371,7 @@ router.get('/contacts', async (req, res) => {
 // Cria um grupo ou sala 1-1
 router.post('/rooms', async (req, res) => {
   try {
-    const { email: rawEmail, role: rawRole } = req.user;
+    const { email: rawEmail } = req.user;
     const email = normEmail(rawEmail);
     const { isGroup, name, userIds: rawUserIds } = req.body;
     
@@ -388,7 +385,7 @@ router.post('/rooms', async (req, res) => {
       return res.status(participantsValidation.code).json({ error: participantsValidation.error });
     }
 
-    if (Boolean(isGroup) && !isManagerRole(rawRole)) {
+    if (Boolean(isGroup) && !canManageTenantAppData(req.user)) {
       return res.status(403).json({ error: 'Somente gestores podem criar grupos.' });
     }
 

@@ -43,6 +43,7 @@ import { MODE_SEGMENT_COLORS } from '../src/theme/colors';
 import type { ColorPalette } from '../src/theme/colors';
 import { fontSize, fontWeight, radius, space } from '../src/theme/layout';
 import type { User } from '../src/services/auth';
+import { userHasCapability } from '../src/services/auth';
 import {
   deriveEmployeeMatriculaFromUser,
   formatDeviceSummaryFromSnapshot,
@@ -211,6 +212,7 @@ export default function WorkTimeScreen() {
   const styles = useMemo(() => createStyles(C, themeDark), [C, themeDark]);
   const { user } = useAuth();
   const accountRole = String(user?.role || '').toUpperCase();
+  const canAccessWorkTime = userHasCapability(user, 'mobile.workTime.access');
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
@@ -228,6 +230,11 @@ export default function WorkTimeScreen() {
     justification: string;
   }>({ visible: false, punchType: null, summaryText: '', justification: '' });
   const pendingCollectRef = useRef<CollectedPunch | null>(null);
+
+  React.useEffect(() => {
+    if (canAccessWorkTime) return;
+    router.replace('/(tabs)' as any);
+  }, [canAccessWorkTime, router]);
 
   const loadAll = useCallback(async () => {
     try {
@@ -353,6 +360,10 @@ export default function WorkTimeScreen() {
       setRefreshing(false);
     }
   }, [loadAll]);
+
+  if (!canAccessWorkTime) {
+    return null;
+  }
 
   const punchLabel = (type: string) => {
     const k = `workTime.punchTypes.${type}` as const;

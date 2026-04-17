@@ -3,6 +3,8 @@
 const path = require('path');
 const fs = require('fs').promises;
 const { REGISTRATION_PRIMARY_FACE_ID, isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
+const { isProviderFirstNetworkEnabled } = require('./providerFirstNetwork');
+const { normalizeServiceCoverageGeo } = require('./technicianServiceCoverage');
 
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
@@ -145,10 +147,80 @@ function buildTechnicianProfilePayload(technician) {
         : {},
     skillsJson: parseSkills(technician.skillsJson),
     serviceLocationIds: Array.isArray(technician.serviceLocationIds) ? technician.serviceLocationIds : [],
+    serviceCoverageGeoJson: normalizeServiceCoverageGeo(technician.serviceCoverageGeoJson),
     professionalDocuments: Array.isArray(technician.professionalDocuments)
       ? technician.professionalDocuments
       : [],
   };
+}
+
+async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenantId, userId, technician }) {
+  if (!tenantId || !userId) return null;
+  const enabled = await isProviderFirstNetworkEnabled(tenantId);
+  if (!enabled) return null;
+
+  const tech = technician && typeof technician === 'object' ? technician : {};
+  const score = Number(tech.score);
+  const normalizedScore = Number.isFinite(score) && score >= 0 && score <= 10 ? score : 5;
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const providerIdentity = await tx.providerIdentity.upsert({
+      where: { userId: String(userId) },
+      create: {
+        userId: String(userId),
+        globalStatus: 'VERIFIED',
+        kycStatus: 'APPROVED',
+        kycReviewedAt: now,
+        score: normalizedScore,
+        cft: tech.cft ? String(tech.cft).trim() : null,
+        specialty: tech.specialty ? String(tech.specialty).trim() : null,
+        skillsJson: parseSkills(tech.skillsJson),
+        profileJson: {
+          source: 'legacy_technician_registration',
+          mirroredAt: now.toISOString(),
+        },
+      },
+      update: {
+        globalStatus: 'VERIFIED',
+        kycStatus: 'APPROVED',
+        kycReviewedAt: now,
+        score: normalizedScore,
+        cft: tech.cft ? String(tech.cft).trim() : null,
+        specialty: tech.specialty ? String(tech.specialty).trim() : null,
+        skillsJson: parseSkills(tech.skillsJson),
+        profileJson: {
+          source: 'legacy_technician_registration',
+          mirroredAt: now.toISOString(),
+        },
+      },
+    });
+
+    await tx.providerTenantAffiliation.upsert({
+      where: {
+        tenantId_providerIdentityId: {
+          tenantId: String(tenantId),
+          providerIdentityId: providerIdentity.id,
+        },
+      },
+      create: {
+        tenantId: String(tenantId),
+        providerIdentityId: providerIdentity.id,
+        status: 'ACTIVE',
+        invitedAt: now,
+        requestedAt: now,
+        activatedAt: now,
+        note: 'Criado automaticamente pela aprovação no fluxo legado.',
+      },
+      update: {
+        status: 'ACTIVE',
+        activatedAt: now,
+        note: 'Atualizado automaticamente pela aprovação no fluxo legado.',
+      },
+    });
+
+    return providerIdentity.id;
+  });
 }
 
 /**
@@ -334,6 +406,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
 
 module.exports = {
   materializeApprovedApplication,
+  mirrorApprovedLegacyRegistrationToProviderNetwork,
   copyRegistrationFacePhotosToUser,
   buildFaceEnrollmentFromApprovedRegistration,
   normalizeFacePhotos,

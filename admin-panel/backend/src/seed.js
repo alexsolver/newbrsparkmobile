@@ -370,6 +370,13 @@ async function main() {
       icon: 'finger-print-outline',
       enabled: true,
     },
+    {
+      key: 'provider_first_network',
+      label: 'Rede de prestadores (provider-first)',
+      description: 'Onboarding global de prestador + parcerias por tenant (rollout gradual)',
+      icon: 'people-circle-outline',
+      enabled: false,
+    },
   ];
   for (const flag of flags) {
     const existing = await prisma.featureFlag.findFirst({ where: { key: flag.key, tenantId: null } });
@@ -639,6 +646,15 @@ async function main() {
     { key: 'stock_low',      label: 'Estoque Crítico',       channel: 'PUSH',  body: '⚠️ {{itemName}} atingiu nível crítico no {{assetName}} ({{currentStock}} {{unit}} restantes)' },
     { key: 'policy_expiring',label: 'Apólice Vencendo',     channel: 'EMAIL', subject: 'Apólice vencendo em {{days}} dias', body: 'Sua apólice {{policyName}} vence em {{dueDate}}.' },
     { key: 'trial_ending',   label: 'Trial Encerrando',     channel: 'EMAIL', subject: 'Seu período trial encerra em {{days}} dias', body: 'Olá {{tenantName}},\n\nSeu trial encerra em {{days}} dias. Escolha um plano para continuar usando.' },
+    { key: 'tech_reg_submitted_candidate_push', label: 'Cadastro prestador enviado (candidato/push)', channel: 'PUSH', subject: 'Cadastro enviado', body: 'Recebemos sua candidatura para {{tenantName}}.' },
+    { key: 'tech_reg_submitted_candidate_email', label: 'Cadastro prestador enviado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — candidatura de prestador recebida ({{tenantName}})', body: 'Olá,\n\nRecebemos sua candidatura de prestador para {{tenantName}}. Nossa equipe fará a análise e você será avisado quando houver atualização de status.' },
+    { key: 'tech_reg_submitted_reviewer_push', label: 'Novo cadastro prestador (revisor/push)', channel: 'PUSH', subject: 'Nova candidatura de prestador', body: '{{invitedEmail}} enviou candidatura ({{tenantName}}).' },
+    { key: 'tech_reg_needs_revision_candidate_push', label: 'Cadastro prestador com ajustes (candidato/push)', channel: 'PUSH', subject: 'Ajustes no cadastro', body: 'A equipe solicitou ajustes na sua candidatura de prestador.' },
+    { key: 'tech_reg_needs_revision_candidate_email', label: 'Cadastro prestador com ajustes (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — ajustes solicitados no cadastro de prestador', body: 'Olá,\n\nA equipe solicitou ajustes na sua candidatura de prestador ({{tenantName}}).\n\nMensagem da revisão:\n{{revisionNote}}\n\nAbra o app BrSpark para corrigir e reenviar.' },
+    { key: 'tech_reg_approved_candidate_push', label: 'Cadastro prestador aprovado (candidato/push)', channel: 'PUSH', subject: 'Cadastro aprovado', body: 'Seu cadastro de prestador foi aprovado. O modo Prestador já está disponível no app.' },
+    { key: 'tech_reg_approved_candidate_email', label: 'Cadastro prestador aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — cadastro de prestador aprovado', body: 'Olá,\n\nSeu cadastro de prestador foi aprovado para {{tenantName}}.\nVocê já pode usar o modo Prestador no app BrSpark.' },
+    { key: 'tech_reg_rejected_candidate_push', label: 'Cadastro prestador não aprovado (candidato/push)', channel: 'PUSH', subject: 'Cadastro não aprovado', body: 'Sua candidatura de prestador foi encerrada sem aprovação.' },
+    { key: 'tech_reg_rejected_candidate_email', label: 'Cadastro prestador não aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — cadastro de prestador não aprovado', body: 'Olá,\n\nSua candidatura de prestador ({{tenantName}}) foi encerrada sem aprovação.\n\nMotivo informado:\n{{reason}}' },
   ];
   for (const t of templates) {
     await prisma.notificationTemplate.upsert({

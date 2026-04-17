@@ -262,6 +262,103 @@ const M = {
       'Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code> e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por <code>admin-panel/scripts/build-openapi.js</code> — após alterar rotas, execute <code>npm run openapi</code> na pasta <code>admin-panel/backend</code>.',
     apidoc_intro_2_html:
       '<strong>Admin:</strong> obtenha JWT com <code>POST /api/auth/login</code> e use <em>Authorize → bearerAdmin</em>.<br /><strong>App:</strong> <code>POST /api/login</code> ou <code>POST /api/register</code> → <em>bearerApp</em>. Rotas públicas não exigem cabeçalho <code>Authorization</code>.',
+    apidoc_fbapi_title: 'Form Builder — Campos alimentados por API',
+    apidoc_fbapi_sub:
+      'Resumo prático para configurar integrações no app móvel sem quebrar comportamento offline.',
+    apidoc_fbapi_item_1_html:
+      '<code>lookup_select</code>: suporta <code>lookupSource = preset</code>, <code>inline_json</code> e <code>api</code> (com <code>lookupApiPath</code>).',
+    apidoc_fbapi_item_2_html:
+      '<code>API_FETCH</code> (Regras): busca em endpoint externo e preenche campo de destino; aceita <code>GET</code>/<code>POST</code>, <code>apiResponsePath</code> e mensagem de erro.',
+    apidoc_fbapi_item_3_html:
+      '<code>API_VALIDATION</code> (Regras): valida resposta via API e pode bloquear o valor do campo monitorado quando a condição não é atendida.',
+    apidoc_fbapi_item_4_html:
+      '<code>voice_note</code>: transcrição usa <code>POST /api/checklists/voice/transcribe</code>.',
+    apidoc_fbapi_item_5_html:
+      '<code>facial_recognition</code> e <code>vision_*</code>: usam <code>/api/vision/verify-face</code> e <code>/api/checklists/vision/analyze</code>.',
+    apidoc_fbapi_item_6_html:
+      '<code>materials_consumption</code> e <code>materials_receipt</code> carregam do estoque técnico local (não têm endpoint remoto direto no campo).',
+    apidoc_audit_title: 'Auditoria da Cobertura da Documentação',
+    apidoc_audit_sub:
+      'Leitura automática do <code>openapi.json</code> atual para validar escopo, segurança e volume de rotas publicadas.',
+    apidoc_stat_paths: 'Paths documentados',
+    apidoc_stat_ops: 'Operações HTTP',
+    apidoc_stat_tags: 'Tags funcionais',
+    apidoc_stat_security: 'Esquemas de segurança',
+    apidoc_audit_result:
+      'Resumo: {paths} paths, {tags} tags e {protectedOps} operações protegidas vs {publicOps} públicas. O Swagger cobre as rotas; os guias abaixo cobrem uso operacional.',
+    apidoc_audit_fail:
+      'Não foi possível ler o openapi.json para a auditoria automática. Verifique permissões/servidor do painel.',
+    apidoc_pack_title: 'Pacote de Documentos Necessários (produzido nesta página)',
+    apidoc_pack_sub:
+      'Além do Swagger, estes documentos complementam onboarding, integração e governança da API.',
+    apidoc_doc_auth_title: '1) Guia de Autenticação e Escopos',
+    apidoc_doc_auth_item_1:
+      'Painel admin: autenticar em <code>POST /api/auth/login</code> e usar <code>Authorize → bearerAdmin</code>.',
+    apidoc_doc_auth_item_2:
+      'App móvel: autenticar em <code>POST /api/login</code> ou <code>POST /api/register</code> e usar <code>bearerApp</code>.',
+    apidoc_doc_auth_item_3:
+      'Rotas públicas têm <code>security: []</code> no OpenAPI e não exigem <code>Authorization</code>.',
+    apidoc_doc_auth_item_4:
+      'Para suporte, separar erros de token inválido/expirado (401) de erro de permissão (403).',
+    apidoc_doc_contract_title: '2) Contratos e Convenções de Integração',
+    apidoc_doc_contract_item_1:
+      'Formato de erro padrão usa o schema <code>Error</code> (campos <code>error</code> e <code>code</code>).',
+    apidoc_doc_contract_item_2:
+      'Quando criar endpoints novos, manter semântica HTTP consistente com respostas padrão (<code>400/401/403/404/500</code>).',
+    apidoc_doc_contract_item_3:
+      'Documentar claramente rotas multipart (upload/IA/voz) e payload JSON esperado nas rotas POST/PATCH.',
+    apidoc_doc_contract_item_4:
+      'Para integrações externas no Form Builder, explicitar timeout, fallback offline e mensagens de bloqueio.',
+    apidoc_doc_flow_title: '3) Fluxos Essenciais para Equipes',
+    apidoc_doc_flow_item_1:
+      'Fluxo App: login → <code>/api/me</code> → sync (<code>/api/sync/*</code>) → envio de execução/checklist.',
+    apidoc_doc_flow_item_2:
+      'Fluxo Operações: gestão de execução em <code>/api/operations/tasks*</code> + chat operacional.',
+    apidoc_doc_flow_item_3:
+      'Fluxo Visão/Biometria: <code>/api/vision/verify-face</code> e <code>/api/checklists/vision/analyze</code> com políticas de rede.',
+    apidoc_doc_flow_item_4:
+      'Fluxo Tracking público: técnico inicia/pausa/retoma/encerra e cliente consome estado por token.',
+    apidoc_doc_govern_title: '4) Governança da Especificação',
+    apidoc_doc_govern_item_1:
+      'Fonte da verdade: <code>admin-panel/scripts/build-openapi.js</code> + rotas reais do backend.',
+    apidoc_doc_govern_item_2:
+      'Sempre que alterar rotas, regenerar <code>openapi.json</code> e validar esta página.',
+    apidoc_doc_govern_item_3:
+      'Manter títulos/tags legíveis para operações críticas (Conta, Sync, Operações, Compliance, Tracking).',
+    apidoc_doc_govern_item_4:
+      'Revisão recomendada por release: autenticação, rotas públicas, contratos de erro e endpoints de upload.',
+    apidoc_ai_title: 'Help IA Técnico-Operacional BrSpark',
+    apidoc_ai_sub:
+      'Assistente alimentado com OpenAPI, estrutura de rotas, schema Prisma e documentação técnica para dúvidas de arquitetura, APIs, banco e automações.',
+    apidoc_ai_welcome:
+      'Sou o especialista técnico-operacional do BrSpark. Pergunte sobre endpoints, modelos de dados, fluxos e integrações.',
+    apidoc_ai_input_placeholder:
+      'Ex.: Quais endpoints do fluxo de operações e quais models do Prisma esse fluxo usa?',
+    apidoc_ai_send: 'Perguntar',
+    apidoc_ai_clear: 'Limpar conversa',
+    apidoc_ai_you: 'Você',
+    apidoc_ai_assistant: 'Especialista BrSpark',
+    apidoc_ai_status_ready: 'Pronto para responder.',
+    apidoc_ai_status_loading: 'Consultando a base técnica e gerando resposta…',
+    apidoc_ai_status_error: 'Falha ao gerar resposta.',
+    apidoc_ai_status_no_token: 'Sessão de admin ausente. Faça login novamente.',
+    apidoc_ai_source_info: 'Contexto técnico: {count} fontes analisadas · modelo: {model}.',
+    apidoc_ai_error_prefix: 'Erro no assistente:',
+    apidoc_ai_error_empty: 'A IA retornou resposta vazia.',
+    apidoc_ai_error_generic: 'Não foi possível obter resposta da IA agora.',
+    apidoc_ai_quick_title: 'Perguntas rápidas',
+    apidoc_ai_quick_1_label: 'Mapa de autenticação',
+    apidoc_ai_quick_1_question:
+      'Mapeie a autenticação do BrSpark: quais endpoints geram JWT, quais esquemas de segurança existem e em quais fluxos usar bearerAdmin vs bearerApp.',
+    apidoc_ai_quick_2_label: 'Fluxo de operações',
+    apidoc_ai_quick_2_question:
+      'Explique o fluxo técnico de operações/OS no backend: endpoints principais, sequência típica e pontos de integração com chat e tracking.',
+    apidoc_ai_quick_3_label: 'Modelos de banco',
+    apidoc_ai_quick_3_question:
+      'Quais são os principais models do Prisma para API, operações e formulários? Resuma a responsabilidade de cada um e relações críticas.',
+    apidoc_ai_quick_4_label: 'Automações API',
+    apidoc_ai_quick_4_question:
+      'Quais automações com API já são suportadas no BrSpark (ex.: API_FETCH, API_VALIDATION, IA visão/voz)? Liste limites e boas práticas.',
     apidoc_err_load: 'Falha ao carregar: {src}',
     apidoc_err_swagger: 'Não foi possível carregar o Swagger UI (rede ou CDN).',
 
@@ -759,6 +856,103 @@ M['en-US'] = {
     'This page reflects routes exposed by the backend in <code>admin-panel/backend/src/index.js</code> and <code>routes/</code>. OpenAPI is built with <code>admin-panel/scripts/build-openapi.js</code> — after route changes, run <code>npm run openapi</code> in <code>admin-panel/backend</code>.',
   apidoc_intro_2_html:
     '<strong>Admin:</strong> obtain JWT with <code>POST /api/auth/login</code> and use <em>Authorize → bearerAdmin</em>.<br /><strong>App:</strong> <code>POST /api/login</code> or <code>POST /api/register</code> → <em>bearerApp</em>. Public routes do not require <code>Authorization</code>.',
+  apidoc_fbapi_title: 'Form Builder — API-fed Fields',
+  apidoc_fbapi_sub:
+    'Practical summary to configure mobile integrations without breaking offline behavior.',
+  apidoc_fbapi_item_1_html:
+    '<code>lookup_select</code>: supports <code>lookupSource = preset</code>, <code>inline_json</code>, and <code>api</code> (with <code>lookupApiPath</code>).',
+  apidoc_fbapi_item_2_html:
+    '<code>API_FETCH</code> (Rules): calls an external endpoint and fills a target field; supports <code>GET</code>/<code>POST</code>, <code>apiResponsePath</code>, and custom error message.',
+  apidoc_fbapi_item_3_html:
+    '<code>API_VALIDATION</code> (Rules): validates via API and can block the monitored field value when the condition fails.',
+  apidoc_fbapi_item_4_html:
+    '<code>voice_note</code>: transcription uses <code>POST /api/checklists/voice/transcribe</code>.',
+  apidoc_fbapi_item_5_html:
+    '<code>facial_recognition</code> and <code>vision_*</code>: use <code>/api/vision/verify-face</code> and <code>/api/checklists/vision/analyze</code>.',
+  apidoc_fbapi_item_6_html:
+    '<code>materials_consumption</code> and <code>materials_receipt</code> read from local technician stock (no direct remote endpoint in-field).',
+  apidoc_audit_title: 'Documentation Coverage Audit',
+  apidoc_audit_sub:
+    'Automatic read of the current <code>openapi.json</code> to validate scope, security, and published route volume.',
+  apidoc_stat_paths: 'Documented paths',
+  apidoc_stat_ops: 'HTTP operations',
+  apidoc_stat_tags: 'Functional tags',
+  apidoc_stat_security: 'Security schemes',
+  apidoc_audit_result:
+    'Summary: {paths} paths, {tags} tags, and {protectedOps} protected operations vs {publicOps} public ones. Swagger covers routes; guides below cover operational usage.',
+  apidoc_audit_fail:
+    'Could not read openapi.json for automatic audit. Check panel server/permissions.',
+  apidoc_pack_title: 'Required Documentation Pack (produced on this page)',
+  apidoc_pack_sub:
+    'Beyond Swagger, these documents complete onboarding, integration, and API governance.',
+  apidoc_doc_auth_title: '1) Authentication & Scope Guide',
+  apidoc_doc_auth_item_1:
+    'Admin panel: authenticate at <code>POST /api/auth/login</code> and use <code>Authorize → bearerAdmin</code>.',
+  apidoc_doc_auth_item_2:
+    'Mobile app: authenticate at <code>POST /api/login</code> or <code>POST /api/register</code> and use <code>bearerApp</code>.',
+  apidoc_doc_auth_item_3:
+    'Public routes have <code>security: []</code> in OpenAPI and do not require <code>Authorization</code>.',
+  apidoc_doc_auth_item_4:
+    'For support, distinguish invalid/expired token errors (401) from permission errors (403).',
+  apidoc_doc_contract_title: '2) Integration Contracts & Conventions',
+  apidoc_doc_contract_item_1:
+    'Default error shape uses <code>Error</code> schema (<code>error</code> and <code>code</code>).',
+  apidoc_doc_contract_item_2:
+    'For new endpoints, keep HTTP semantics aligned with default responses (<code>400/401/403/404/500</code>).',
+  apidoc_doc_contract_item_3:
+    'Clearly document multipart routes (upload/AI/voice) and expected JSON payloads for POST/PATCH routes.',
+  apidoc_doc_contract_item_4:
+    'For external integrations in Form Builder, document timeout, offline fallback, and blocking messages.',
+  apidoc_doc_flow_title: '3) Essential Team Flows',
+  apidoc_doc_flow_item_1:
+    'App flow: login → <code>/api/me</code> → sync (<code>/api/sync/*</code>) → checklist/execution submit.',
+  apidoc_doc_flow_item_2:
+    'Operations flow: execution management at <code>/api/operations/tasks*</code> + operations chat.',
+  apidoc_doc_flow_item_3:
+    'Vision/biometrics flow: <code>/api/vision/verify-face</code> and <code>/api/checklists/vision/analyze</code> with network policies.',
+  apidoc_doc_flow_item_4:
+    'Public tracking flow: technician starts/pauses/resumes/ends and customer reads state by token.',
+  apidoc_doc_govern_title: '4) Specification Governance',
+  apidoc_doc_govern_item_1:
+    'Source of truth: <code>admin-panel/scripts/build-openapi.js</code> + actual backend routes.',
+  apidoc_doc_govern_item_2:
+    'Whenever routes change, regenerate <code>openapi.json</code> and validate this page.',
+  apidoc_doc_govern_item_3:
+    'Keep readable titles/tags for critical operations (Account, Sync, Operations, Compliance, Tracking).',
+  apidoc_doc_govern_item_4:
+    'Recommended release review: auth, public routes, error contracts, and upload endpoints.',
+  apidoc_ai_title: 'BrSpark Technical AI Help',
+  apidoc_ai_sub:
+    'Assistant fed with OpenAPI, route structure, Prisma schema, and technical docs for architecture, API, database, and automation questions.',
+  apidoc_ai_welcome:
+    'I am BrSpark’s technical operations specialist. Ask about endpoints, data models, flows, and integrations.',
+  apidoc_ai_input_placeholder:
+    'Example: Which operations-flow endpoints exist and which Prisma models are involved?',
+  apidoc_ai_send: 'Ask',
+  apidoc_ai_clear: 'Clear chat',
+  apidoc_ai_you: 'You',
+  apidoc_ai_assistant: 'BrSpark Specialist',
+  apidoc_ai_status_ready: 'Ready to answer.',
+  apidoc_ai_status_loading: 'Consulting technical context and generating answer…',
+  apidoc_ai_status_error: 'Could not generate answer.',
+  apidoc_ai_status_no_token: 'Missing admin session. Please sign in again.',
+  apidoc_ai_source_info: 'Technical context: {count} sources analyzed · model: {model}.',
+  apidoc_ai_error_prefix: 'Assistant error:',
+  apidoc_ai_error_empty: 'The AI returned an empty answer.',
+  apidoc_ai_error_generic: 'Could not get an AI answer right now.',
+  apidoc_ai_quick_title: 'Quick prompts',
+  apidoc_ai_quick_1_label: 'Auth map',
+  apidoc_ai_quick_1_question:
+    'Map BrSpark authentication: which endpoints issue JWTs, which security schemes exist, and when to use bearerAdmin vs bearerApp.',
+  apidoc_ai_quick_2_label: 'Operations flow',
+  apidoc_ai_quick_2_question:
+    'Explain the backend operations/work-order technical flow: key endpoints, typical sequence, and integration points with chat and tracking.',
+  apidoc_ai_quick_3_label: 'Database models',
+  apidoc_ai_quick_3_question:
+    'What are the main Prisma models for API, operations, and forms? Summarize each responsibility and critical relationships.',
+  apidoc_ai_quick_4_label: 'API automations',
+  apidoc_ai_quick_4_question:
+    'Which API-based automations are already supported in BrSpark (e.g., API_FETCH, API_VALIDATION, vision/voice AI)? List limits and best practices.',
   apidoc_err_load: 'Failed to load: {src}',
   apidoc_err_swagger: 'Could not load Swagger UI (network or CDN).',
 
@@ -1335,6 +1529,49 @@ export function applyApiDocsPageI18n() {
   setText('apidoc-btn-open-text', 'apidoc_btn_open');
   setHtml('apidoc-intro-1', 'apidoc_intro_1_html');
   setHtml('apidoc-intro-2', 'apidoc_intro_2_html');
+  setText('apidoc-fbapi-title', 'apidoc_fbapi_title');
+  setText('apidoc-fbapi-sub', 'apidoc_fbapi_sub');
+  setHtml('apidoc-fbapi-item-1', 'apidoc_fbapi_item_1_html');
+  setHtml('apidoc-fbapi-item-2', 'apidoc_fbapi_item_2_html');
+  setHtml('apidoc-fbapi-item-3', 'apidoc_fbapi_item_3_html');
+  setHtml('apidoc-fbapi-item-4', 'apidoc_fbapi_item_4_html');
+  setHtml('apidoc-fbapi-item-5', 'apidoc_fbapi_item_5_html');
+  setHtml('apidoc-fbapi-item-6', 'apidoc_fbapi_item_6_html');
+  setText('apidoc-audit-title', 'apidoc_audit_title');
+  setHtml('apidoc-audit-sub', 'apidoc_audit_sub');
+  setText('apidoc-stat-paths-label', 'apidoc_stat_paths');
+  setText('apidoc-stat-ops-label', 'apidoc_stat_ops');
+  setText('apidoc-stat-tags-label', 'apidoc_stat_tags');
+  setText('apidoc-stat-security-label', 'apidoc_stat_security');
+  setText('apidoc-pack-title', 'apidoc_pack_title');
+  setText('apidoc-pack-sub', 'apidoc_pack_sub');
+  setText('apidoc-doc-auth-title', 'apidoc_doc_auth_title');
+  setHtml('apidoc-doc-auth-item-1', 'apidoc_doc_auth_item_1');
+  setHtml('apidoc-doc-auth-item-2', 'apidoc_doc_auth_item_2');
+  setHtml('apidoc-doc-auth-item-3', 'apidoc_doc_auth_item_3');
+  setHtml('apidoc-doc-auth-item-4', 'apidoc_doc_auth_item_4');
+  setText('apidoc-doc-contract-title', 'apidoc_doc_contract_title');
+  setHtml('apidoc-doc-contract-item-1', 'apidoc_doc_contract_item_1');
+  setHtml('apidoc-doc-contract-item-2', 'apidoc_doc_contract_item_2');
+  setHtml('apidoc-doc-contract-item-3', 'apidoc_doc_contract_item_3');
+  setHtml('apidoc-doc-contract-item-4', 'apidoc_doc_contract_item_4');
+  setText('apidoc-doc-flow-title', 'apidoc_doc_flow_title');
+  setHtml('apidoc-doc-flow-item-1', 'apidoc_doc_flow_item_1');
+  setHtml('apidoc-doc-flow-item-2', 'apidoc_doc_flow_item_2');
+  setHtml('apidoc-doc-flow-item-3', 'apidoc_doc_flow_item_3');
+  setHtml('apidoc-doc-flow-item-4', 'apidoc_doc_flow_item_4');
+  setText('apidoc-doc-govern-title', 'apidoc_doc_govern_title');
+  setHtml('apidoc-doc-govern-item-1', 'apidoc_doc_govern_item_1');
+  setHtml('apidoc-doc-govern-item-2', 'apidoc_doc_govern_item_2');
+  setHtml('apidoc-doc-govern-item-3', 'apidoc_doc_govern_item_3');
+  setHtml('apidoc-doc-govern-item-4', 'apidoc_doc_govern_item_4');
+  setText('apidoc-ai-title', 'apidoc_ai_title');
+  setText('apidoc-ai-sub', 'apidoc_ai_sub');
+  setText('apidoc-ai-quick-title', 'apidoc_ai_quick_title');
+  setText('apidoc-ai-q1', 'apidoc_ai_quick_1_label');
+  setText('apidoc-ai-q2', 'apidoc_ai_quick_2_label');
+  setText('apidoc-ai-q3', 'apidoc_ai_quick_3_label');
+  setText('apidoc-ai-q4', 'apidoc_ai_quick_4_label');
 }
 
 export function applyNotificationsPageI18n() {

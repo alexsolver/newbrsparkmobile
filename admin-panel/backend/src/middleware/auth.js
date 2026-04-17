@@ -1,6 +1,7 @@
 'use strict';
 const jwt = require('jsonwebtoken');
 const { enforcePanelPermissions } = require('./panelPermissions');
+const { buildAdminAuthorization } = require('../lib/authorization');
 
 function attachAdminFromPayload(payload) {
   if (payload.panel === true && payload.userId) {
@@ -38,6 +39,7 @@ function adminAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     req.admin = attachAdminFromPayload(payload);
+    req.authorization = buildAdminAuthorization(req.admin);
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
@@ -66,6 +68,7 @@ function adminOrReportsApiKey(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     req.admin = attachAdminFromPayload(payload);
+    req.authorization = buildAdminAuthorization(req.admin);
     return next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
@@ -90,6 +93,7 @@ function rejectOsAuth(req, res, next) {
   }
   if (payload.panel === true && payload.userId) {
     req.admin = attachAdminFromPayload(payload);
+    req.authorization = buildAdminAuthorization(req.admin);
     return enforcePanelPermissions(req, res, () => next());
   }
   if (payload.sessionId != null && payload.id) {
@@ -102,6 +106,7 @@ function rejectOsAuth(req, res, next) {
     return next();
   }
   req.admin = attachAdminFromPayload(payload);
+  req.authorization = buildAdminAuthorization(req.admin);
   return next();
 }
 

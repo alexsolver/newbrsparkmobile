@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
+import { canUseProviderMode } from '../../src/services/auth';
 
 interface ConsentRecord {
   id: string;
@@ -63,7 +64,7 @@ function consentLabelForRole(
 
 export default function PrivacySettings() {
   const { user, userRole } = useAuth();
-  const isTechnician = userRole === 'TECHNICIAN' && isTechnicianProfileActive(user);
+  const isTechnician = userRole === 'TECHNICIAN' && canUseProviderMode(user) && isTechnicianProfileActive(user);
   const visibleConsentTypes = useMemo(
     () =>
       isTechnician

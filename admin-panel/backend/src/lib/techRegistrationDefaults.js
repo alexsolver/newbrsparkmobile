@@ -18,6 +18,7 @@ function initialTechRegistrationResponsesJson(email) {
     technician: {
       workScheduleJson: defaultEmptySchedule(),
       serviceLocationIds: [],
+      serviceCoverageGeoJson: null,
       professionalDocuments: [],
       skillsJson: [],
     },

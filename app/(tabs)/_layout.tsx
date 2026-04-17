@@ -35,6 +35,8 @@ import { readWorkTimeMeCacheForUser, writeWorkTimeMeCache } from '../../src/serv
 import { mergePendingWithServerPunches } from '../../src/services/workTimePunchesCache';
 import { pushWorkTimePunchOutbox } from '../../src/services/workTimePunchOutbox';
 import { emitWorkTimeJourneyChanged, WORK_TIME_JOURNEY_CHANGED } from '../../src/lib/workTimeJourneyEvents';
+import { CHAT_UNREAD_CHANGED_EVENT } from '../../src/lib/chatUnreadEvents';
+import { userHasCapability } from '../../src/services/auth';
 
 /** Destaque do ícone de ponto no menu — jornada ativa (vermelho) / em intervalo (amarelo). */
 const WORK_TIME_TAB_RED = '#DC2626';
@@ -83,6 +85,8 @@ function CustomTabBar({ state, descriptors, navigation, chatUnreadTotal = 0 }: a
   const pathname = usePathname();
   const { userRole, user } = useAuth();
   const { mode } = useAppContext();
+  const canOpenProviderOsSearch = userHasCapability(user, 'mobile.provider.osSearch');
+  const canAccessWorkTime = userHasCapability(user, 'mobile.workTime.access');
   const [showWorkTimeTab, setShowWorkTimeTab] = useState(false);
   /** Tenant BR + utilizador em PJ: rótulo do separador «Registro» em pt-BR. */
   const [workTimeTabBrazilPj, setWorkTimeTabBrazilPj] = useState(false);
@@ -331,21 +335,34 @@ function CustomTabBar({ state, descriptors, navigation, chatUnreadTotal = 0 }: a
             </TouchableOpacity>
           );
         })}
-        {userRole === 'TECHNICIAN' && (
+        {userRole === 'TECHNICIAN' && canOpenProviderOsSearch && (
           <TouchableOpacity
-            onPress={() => router.push('/provider-os-search' as any)}
+            onPress={() => router.push('/provider-os-search-tab' as any)}
             style={navStyles.tabBtn}
             activeOpacity={0.65}
             accessibilityRole="button"
             accessibilityLabel={t('tabs.providerOsSearch')}
           >
-            <Ionicons name="search" size={TAB_BAR_ICON_SIZE} color={inactiveTint} />
-            <Text style={[navStyles.tabLabel, { color: inactiveTint }]} numberOfLines={1}>
-              {t('tabs.providerOsSearch')}
-            </Text>
+            {(() => {
+              const providerOsSearchFocused =
+                pathname === '/provider-os-search-tab' || pathname === '/provider-os-search';
+              const providerOsSearchTint = providerOsSearchFocused ? activeTint : inactiveTint;
+              return (
+                <>
+                  <Ionicons
+                    name={providerOsSearchFocused ? 'search' : 'search-outline'}
+                    size={TAB_BAR_ICON_SIZE}
+                    color={providerOsSearchTint}
+                  />
+                  <Text style={[navStyles.tabLabel, { color: providerOsSearchTint }]} numberOfLines={1}>
+                    {t('tabs.providerOsSearch')}
+                  </Text>
+                </>
+              );
+            })()}
           </TouchableOpacity>
         )}
-        {showWorkTimeTab && mode === 'PROVIDER' && (() => {
+        {showWorkTimeTab && canAccessWorkTime && mode === 'PROVIDER' && (() => {
           const onWorkTimeRoute = pathname === '/work-time';
           const highlightJourney = workTimeJourneyPhase === 'in_work' || workTimeJourneyPhase === 'on_break';
 
@@ -468,27 +485,28 @@ export default function TabLayout() {
 
   useEffect(() => {
     const OPS_UNREAD_POLL_MS = 22_000;
-    const fetchChatUnread = async () => {
+    const fetchChatUnread = async (options?: { forceOpsRefresh?: boolean }) => {
       try {
         const rooms = await ChatService.getRooms();
-        const totalCorp = rooms.reduce((acc, r) => acc + (r.unreadCount || 0), 0);
+        const pendingCorp = rooms.filter((r) => (r.unreadCount ?? 0) > 0).length;
 
         const now = Date.now();
         const shouldRefreshOps =
+          options?.forceOpsRefresh === true ||
           lastOpsUnreadPollAtRef.current == null ||
           now - lastOpsUnreadPollAtRef.current >= OPS_UNREAD_POLL_MS;
-        let opsUnread = lastOpsUnreadValueRef.current;
+        let pendingOps = lastOpsUnreadValueRef.current;
         if (shouldRefreshOps) {
           lastOpsUnreadPollAtRef.current = now;
           try {
-            opsUnread = await countGestorUnreadAcrossOpsThreads();
-            lastOpsUnreadValueRef.current = opsUnread;
+            pendingOps = await countGestorUnreadAcrossOpsThreads();
+            lastOpsUnreadValueRef.current = pendingOps;
           } catch {
-            opsUnread = lastOpsUnreadValueRef.current;
+            pendingOps = lastOpsUnreadValueRef.current;
           }
         }
 
-        setUnreadChat(totalCorp + opsUnread);
+        setUnreadChat(pendingCorp + pendingOps);
 
         const prev = prevRoomCounts.current;
         const isFirstPoll = Object.keys(prev).length === 0;
@@ -511,11 +529,15 @@ export default function TabLayout() {
       } catch (e) {}
     };
     void fetchChatUnread().catch(() => {});
+    const unreadChangedSub = DeviceEventEmitter.addListener(CHAT_UNREAD_CHANGED_EVENT, () => {
+      void fetchChatUnread({ forceOpsRefresh: true }).catch(() => {});
+    });
     const interval = setInterval(() => {
       void fetchChatUnread().catch(() => {});
     }, 5000);
 
     return () => {
+      unreadChangedSub.remove();
       clearInterval(interval);
     };
   }, []);
@@ -574,6 +596,7 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen name="notifications" options={{ href: null, title: 'Alertas' }} />
+      <Tabs.Screen name="provider-os-search-tab" options={{ href: null }} />
 
       <Tabs.Screen name="costs" options={{ href: null }} />
       <Tabs.Screen name="stock" options={{ href: null }} />

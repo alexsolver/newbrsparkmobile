@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BrSpark Admin — Editar usuário</title>
   <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 <div id="page-root" class="admin-layout">
@@ -61,21 +62,33 @@
     <div class="ue-scroll">
       <div class="ue-sticky-tools">
         <div class="hint-box" id="ue-sticky-hint">
-          <strong>Dica de uso:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica — alinhado ao modelo Multi-Location do painel.
+          <strong>Fluxo recomendado:</strong> ajuste primeiro <strong>Conta</strong> e <strong>Acesso</strong>. Expanda <strong>Prestador</strong>, <strong>Compliance</strong> e <strong>Administração</strong> só quando precisar de configuração avançada.
         </div>
         <nav class="ue-nav" aria-label="Seções do formulário">
-          <a href="#sec-dados" id="ue-nav-dados">Dados pessoais</a>
-          <a href="#sec-face" id="ue-nav-face">Reconhecimento facial</a>
-          <a href="#sec-work-time" id="ue-nav-worktime">Registro de horas</a>
-          <a href="#sec-endereco" id="ue-nav-addr">Endereço</a>
-          <a href="#sec-acesso" id="ue-nav-access">Tipo de acesso</a>
-          <a href="#sec-tecnico" id="ue-nav-tech">Prestador</a>
-          <a href="#sec-docs-p" id="ue-nav-docs-p">Docs. pessoais</a>
-          <a href="#sec-docs-pro" id="ue-nav-docs-pro">Docs. profissionais</a>
-          <a href="#sec-horarios" id="ue-nav-schedule">Horários</a>
-          <a href="#sec-regioes" id="ue-nav-regions">Regiões atendidas</a>
-          <a href="#sec-ops" id="ue-nav-ops">Sessão e notas</a>
-          <a href="#sec-audit" id="ue-nav-audit">Atividade</a>
+          <div class="ue-nav-group">
+            <span class="ue-nav-group__label">Conta</span>
+            <a href="#sec-dados" id="ue-nav-dados">Dados pessoais</a>
+            <a href="#sec-endereco" id="ue-nav-addr">Endereço</a>
+            <a href="#sec-acesso" id="ue-nav-access">Acesso</a>
+          </div>
+          <div class="ue-nav-group">
+            <span class="ue-nav-group__label">Prestador</span>
+            <a href="#sec-tecnico" id="ue-nav-tech">Prestador</a>
+            <a href="#sec-horarios" id="ue-nav-schedule">Horários</a>
+            <a href="#sec-regioes" id="ue-nav-regions">Regiões</a>
+          </div>
+          <div class="ue-nav-group">
+            <span class="ue-nav-group__label">Compliance</span>
+            <a href="#sec-face" id="ue-nav-face">FaceMatch</a>
+            <a href="#sec-work-time" id="ue-nav-worktime">Ponto</a>
+            <a href="#sec-docs-p" id="ue-nav-docs-p">Docs. pessoais</a>
+            <a href="#sec-docs-pro" id="ue-nav-docs-pro">Docs. profissionais</a>
+          </div>
+          <div class="ue-nav-group">
+            <span class="ue-nav-group__label">Administração</span>
+            <a href="#sec-ops" id="ue-nav-ops">Sessão e notas</a>
+            <a href="#sec-audit" id="ue-nav-audit">Atividade</a>
+          </div>
         </nav>
       </div>
 
@@ -85,6 +98,7 @@
           <p class="page-hero-sub" id="ue-sub"></p>
         </header>
         <div id="ue-summary-bar" class="ue-summary-bar fade-in" aria-label="Resumo da conta"></div>
+        <div id="ue-workspace-bar" class="ue-workspace-bar fade-in" aria-label="Resumo operacional da ficha"></div>
 
         <section class="data-shell ue-section fade-in" id="sec-dados">
           <div class="panel-header"><span class="panel-title" id="ue-sec-dados-title">Dados pessoais</span></div>
@@ -108,70 +122,92 @@
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-face">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-face" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="ue-sec-face-title">Reconhecimento facial — fotos base</span></div>
           <div class="data-shell-body">
-            <p id="ue-face-intro" style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fotos base para o motor de reconhecimento: <strong>JPEG, PNG ou WebP</strong> (máx. <strong>5 MB</strong> cada; até <strong>12</strong>). HEIC do iPhone não é aceito. Quem veio do <strong>cadastro em etapas</strong> traz a foto do passo 1 como referência principal (não removível aqui; só muda com novo cadastro aprovado ou exclusão do usuário). Reforce com fotos nítidas adicionais do rosto. O campo «URL foto de perfil» em Dados pessoais é gestão administrativa (o app do colaborador <strong>não</strong> permite trocar foto nem matrícula após o perfil de prestador ficar <strong>ACTIVE</strong>).</p>
-            <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
-            <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
-            <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
-            <span id="face-upload-status" style="font-size:12px;color:var(--text3);margin-left:10px"></span>
-            <div id="face-upload-progress" class="ue-face-progress" hidden><div class="ue-face-progress__bar"></div></div>
-            <div class="face-grid" id="face-gallery"></div>
-            <div class="ue-compreface-sync" id="compreface-sync-card">
-              <div class="ue-compreface-sync__row">
-                <div class="ue-compreface-sync__icon" aria-hidden="true">
-                  <ion-icon name="cloud-upload-outline"></ion-icon>
+            <div class="ue-task-grid">
+              <section class="ue-task-card ue-task-card--wide">
+                <div class="ue-inline-kicker">Matrícula facial</div>
+                <h3 class="ue-task-card__title">Base visual do colaborador</h3>
+                <p id="ue-face-intro" class="ue-task-card__hint">Use esta área só para gestão da matrícula facial: fotos base nítidas, sincronizadas com o FaceMatch. Formatos aceitos: <strong>JPEG, PNG ou WebP</strong>, até <strong>12</strong> imagens de <strong>5 MB</strong>.</p>
+                <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
+                <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
+                <div class="ue-inline-actions">
+                  <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>
+                  <span id="face-upload-status" style="font-size:12px;color:var(--text3)"></span>
                 </div>
-                <div class="ue-compreface-sync__text">
-                  <strong id="ue-cf-gallery-title">Galeria FaceMatch (Recognition)</strong>
-                  <span class="desc" id="ue-cf-gallery-desc">Ao adicionar ou remover fotos base ou ao gravar alteração de avatar, o <strong>servidor envia na hora</strong> a galeria ao FaceMatch (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas).</span>
+                <div id="face-upload-progress" class="ue-face-progress" hidden><div class="ue-face-progress__bar"></div></div>
+                <div class="face-grid" id="face-gallery"></div>
+              </section>
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Sincronização</div>
+                <h3 class="ue-task-card__title">Estado do FaceMatch</h3>
+                <p class="ue-task-card__hint">Este bloco concentra a sincronização automática da galeria biométrica e a identificação usada pelo mecanismo de reconhecimento.</p>
+                <div class="ue-compreface-sync" id="compreface-sync-card">
+                  <div class="ue-compreface-sync__row">
+                    <div class="ue-compreface-sync__icon" aria-hidden="true">
+                      <ion-icon name="cloud-upload-outline"></ion-icon>
+                    </div>
+                    <div class="ue-compreface-sync__text">
+                      <strong id="ue-cf-gallery-title">Galeria FaceMatch (Recognition)</strong>
+                      <span class="desc" id="ue-cf-gallery-desc">Ao adicionar ou remover fotos base ou ao gravar alteração de avatar, o <strong>servidor envia na hora</strong> a galeria ao FaceMatch (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas).</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+                <p id="ue-cf-subject-foot" style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no FaceMatch segue o formato tenant:usuário definido pelo painel.</p>
+              </section>
             </div>
-            <p id="ue-cf-subject-foot" style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">O subject no FaceMatch segue o formato tenant:usuário definido pelo painel.</p>
           </div>
         </section>
 
         <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-work-time">
           <div class="panel-header"><span class="panel-title" id="ue-sec-worktime-title">Registro de horas (ponto)</span></div>
           <div class="data-shell-body">
-            <div class="form-group" style="margin-bottom:14px;max-width:420px">
-              <label class="form-label" for="f-employee-matricula" id="ue-lbl-matricula">Matrícula funcional</label>
-              <input class="form-control" id="f-employee-matricula" maxlength="80" placeholder="Ex.: 12345, FT-00042…" autocomplete="off" />
-              <p id="ue-matricula-hint" style="font-size:11px;color:var(--text3);margin:6px 0 0;line-height:1.4">Um valor por usuário, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).</p>
-            </div>
-            <div id="wt-user-hint" class="hint-box" style="margin-bottom:12px">
-              A carregar política do tenant…
-            </div>
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-              <input type="checkbox" id="f-work-time" />
-              <span id="ue-wt-enable-lbl" style="font-size:13px;font-weight:700">Habilitar registro de horas para este usuário</span>
-            </label>
-            <div id="wt-br-regime-wrap" hidden style="margin-top:14px;max-width:440px">
-              <div id="wt-br-regime-title" style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px"></div>
-              <div class="wt-br-regime-seg" role="radiogroup" aria-labelledby="wt-br-regime-title" style="display:flex;gap:8px;flex-wrap:wrap">
-                <label class="btn btn-secondary wt-br-lbl" style="min-width:88px;font-weight:700;cursor:pointer;margin:0;position:relative">
-                  <input type="radio" name="f-wt-br-regime" value="CLT" id="wt-br-r-clt" autocomplete="off" />
-                  CLT
+            <div class="ue-task-grid">
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Habilitação</div>
+                <h3 class="ue-task-card__title">Acesso ao ponto</h3>
+                <div id="wt-user-hint" class="hint-box" style="margin-bottom:12px">
+                  A carregar política do tenant…
+                </div>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                  <input type="checkbox" id="f-work-time" />
+                  <span id="ue-wt-enable-lbl" style="font-size:13px;font-weight:700">Habilitar registro de horas para este usuário</span>
                 </label>
-                <label class="btn btn-secondary wt-br-lbl" style="min-width:88px;font-weight:700;cursor:pointer;margin:0;position:relative">
-                  <input type="radio" name="f-wt-br-regime" value="PJ" id="wt-br-r-pj" autocomplete="off" />
-                  PJ
-                </label>
-              </div>
-              <p id="wt-br-regime-hint" style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.45"></p>
+                <p id="ue-wt-policy" style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">
+                  O ponto só funciona no app quando a política do tenant está ativa em <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, este usuário está habilitado e a validação facial exigida pela política está ok.
+                </p>
+              </section>
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Identificação</div>
+                <h3 class="ue-task-card__title">Matrícula e vínculo</h3>
+                <div class="form-group" style="margin-bottom:14px;max-width:420px">
+                  <label class="form-label" for="f-employee-matricula" id="ue-lbl-matricula">Matrícula funcional</label>
+                  <input class="form-control" id="f-employee-matricula" maxlength="80" placeholder="Ex.: 12345, FT-00042…" autocomplete="off" />
+                  <p id="ue-matricula-hint" style="font-size:11px;color:var(--text3);margin:6px 0 0;line-height:1.4">Um valor por usuário, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).</p>
+                </div>
+                <div id="wt-br-regime-wrap" hidden style="margin-top:14px;max-width:440px">
+                  <div id="wt-br-regime-title" style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px"></div>
+                  <div class="wt-br-regime-seg" role="radiogroup" aria-labelledby="wt-br-regime-title" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <label class="btn btn-secondary wt-br-lbl" style="min-width:88px;font-weight:700;cursor:pointer;margin:0;position:relative">
+                      <input type="radio" name="f-wt-br-regime" value="CLT" id="wt-br-r-clt" autocomplete="off" />
+                      CLT
+                    </label>
+                    <label class="btn btn-secondary wt-br-lbl" style="min-width:88px;font-weight:700;cursor:pointer;margin:0;position:relative">
+                      <input type="radio" name="f-wt-br-regime" value="PJ" id="wt-br-r-pj" autocomplete="off" />
+                      PJ
+                    </label>
+                  </div>
+                  <p id="wt-br-regime-hint" style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.45"></p>
+                </div>
+                <div id="wt-face-status" class="ue-inline-status"></div>
+              </section>
             </div>
-            <p id="ue-wt-policy" style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.4">
-              Efetivo no app para todos os papéis <strong>exceto cliente</strong> (papel «Usuário» / <code>USER</code>): com a flag <strong>work_time</strong>, módulo ligado em
-              <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, esta opção ativa no usuário e matrícula facial conforme a política.
-            </p>
-            <div id="wt-face-status" style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text3)"></div>
           </div>
         </section>
 
         <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-endereco">
-          <div class="panel-header"><span class="panel-title" id="ue-sec-addr-title">Endereço (JSON estruturado / multi-location)</span></div>
+          <div class="panel-header"><span class="panel-title" id="ue-sec-addr-title">Endereço</span></div>
           <div class="data-shell-body">
             <div class="grid-2">
               <div class="form-group"><label class="form-label" id="ue-addr-l1">Linha 1 (rua, nº)</label><input class="form-control" id="a-line1" /></div>
@@ -187,7 +223,7 @@
         </section>
 
         <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-acesso">
-          <div class="panel-header"><span class="panel-title" id="ue-sec-access-title">Tipo de acesso na conta</span></div>
+          <div class="panel-header"><span class="panel-title" id="ue-sec-access-title">Acesso da conta</span></div>
           <div class="data-shell-body">
             <div class="form-group"><label class="form-label" id="ue-lbl-f-role">Papel na conta</label>
               <select class="form-control" id="f-role">
@@ -209,34 +245,52 @@
         <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-tecnico">
           <div class="panel-header"><span class="panel-title" id="ue-sec-tech-title">Prestador de serviço (técnico)</span></div>
           <div class="data-shell-body">
-            <p id="ue-tech-intro" style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Estes campos aplicam-se quando o papel é <strong>Prestador</strong> (ou quando já existe perfil técnico). Se mudar o papel para outro, o perfil técnico fica <code>INACTIVE</code> (não apaga histórico).</p>
+            <p id="ue-tech-intro" style="font-size:12px;color:var(--text3);margin:0 0 16px;line-height:1.45">Configure aqui somente o que define a operação do técnico: estado, registro profissional, especialidade e habilidades.</p>
             <div id="tech-panel" style="display:none">
-              <div class="grid-2">
-                <div class="form-group"><label class="form-label" id="ue-lbl-t-status">Estado do prestador (habilitação para receber OS)</label>
-                  <select class="form-control" id="t-status">
-                    <option value="PENDING">Pendente</option>
-                    <option value="ACTIVE">Ativo</option>
-                    <option value="INACTIVE">Inativo</option>
-                    <option value="SUSPENDED">Suspenso</option>
-                  </select>
-                </div>
-                <div class="form-group"><label class="form-label" id="ue-lbl-t-score">Score interno</label><input class="form-control" id="t-score" type="number" step="0.1" min="0" max="10" /></div>
-                <div class="form-group"><label class="form-label" id="ue-lbl-t-cft">CFT / registro profissional</label><input class="form-control" id="t-cft" /></div>
-                <div class="form-group"><label class="form-label" id="ue-lbl-t-specialty">Especialidade principal</label><input class="form-control" id="t-specialty" /></div>
-                <div class="form-group" style="grid-column:1/-1"><label class="form-label" id="ue-lbl-t-skills">Habilidades (tags separadas por vírgula)</label>
-                  <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
-                </div>
+              <div id="ue-tech-summary" class="ue-tech-summary" aria-label="Resumo operacional do prestador"></div>
+              <div class="ue-task-grid">
+                <section class="ue-task-card">
+                  <div class="ue-inline-kicker">Habilitação</div>
+                  <h3 class="ue-task-card__title">Status e prontidão</h3>
+                  <div class="grid-2">
+                    <div class="form-group"><label class="form-label" id="ue-lbl-t-status">Estado do prestador (habilitação para receber OS)</label>
+                      <select class="form-control" id="t-status">
+                        <option value="PENDING">Pendente</option>
+                        <option value="ACTIVE">Ativo</option>
+                        <option value="INACTIVE">Inativo</option>
+                        <option value="SUSPENDED">Suspenso</option>
+                      </select>
+                    </div>
+                    <div class="form-group"><label class="form-label" id="ue-lbl-t-score">Score interno</label><input class="form-control" id="t-score" type="number" step="0.1" min="0" max="10" /></div>
+                  </div>
+                </section>
+                <section class="ue-task-card">
+                  <div class="ue-inline-kicker">Qualificação</div>
+                  <h3 class="ue-task-card__title">Registro e especialidade</h3>
+                  <div class="grid-2">
+                    <div class="form-group"><label class="form-label" id="ue-lbl-t-cft">CFT / registro profissional</label><input class="form-control" id="t-cft" /></div>
+                    <div class="form-group"><label class="form-label" id="ue-lbl-t-specialty">Especialidade principal</label><input class="form-control" id="t-specialty" /></div>
+                  </div>
+                </section>
+                <section class="ue-task-card ue-task-card--wide">
+                  <div class="ue-inline-kicker">Capacidade</div>
+                  <h3 class="ue-task-card__title">Habilidades operacionais</h3>
+                  <div class="form-group" style="margin-bottom:0"><label class="form-label" id="ue-lbl-t-skills">Habilidades (tags separadas por vírgula)</label>
+                    <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
+                  </div>
+                </section>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-p">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-p" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="ue-sec-docs-p-title">Documentos pessoais — escopo por base (multi-location)</span></div>
           <div class="data-shell-body">
+            <p class="ue-section-intro">Use para documentos civis e cadastrais da pessoa. Mantenha só o que for realmente necessário para operação e conformidade.</p>
             <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-p">+ Adicionar documento</button>
             <div class="table-wrap" style="margin-top:12px">
-              <table class="doc-table table-data">
+              <table class="doc-table table-data ue-docs-table">
                 <thead><tr>
                   <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th class="ue-doc-sit-th">Situação</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Anexo (URL)</th><th>Notas / ações</th>
                 </tr></thead>
@@ -246,12 +300,13 @@
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-pro">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-docs-pro" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="ue-sec-docs-pro-title">Documentos profissionais (certificações, ASO, NR, etc.)</span></div>
           <div class="data-shell-body">
+            <p class="ue-section-intro">Use para comprovações ligadas à execução do serviço. O ideal é manter aqui somente o que influencia habilitação técnica e compliance.</p>
             <button type="button" class="btn btn-sm btn-primary" id="btn-add-doc-pro">+ Adicionar documento</button>
             <div class="table-wrap" style="margin-top:12px">
-              <table class="doc-table table-data">
+              <table class="doc-table table-data ue-docs-table">
                 <thead><tr>
                   <th>Tipo</th><th>Identificador</th><th>Emissão</th><th>Validade</th><th class="ue-doc-sit-th">Situação</th><th>Órgão emissor</th><th>Bases (Location)</th><th>Anexo (URL)</th><th>Notas / ações</th>
                 </tr></thead>
@@ -261,35 +316,93 @@
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-horarios">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-horarios" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="ue-sec-schedule-title">Horários de trabalho (prestador)</span></div>
           <div class="data-shell-body">
-            <p id="ue-schedule-intro" style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.45">Use <strong>+ Turno neste dia</strong> para vários blocos no mesmo dia (ex.: manhã numa base, tarde em outra). Cada dia pode ter turnos com <strong>regiões diferentes</strong>. Em cada turno, «Regiões» vazio significa que o turno não fixa base (continua limitado pelo universo <a href="#sec-regioes">Regiões atendidas</a> abaixo).</p>
+            <p id="ue-schedule-intro" style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.45">Defina turnos quando o técnico tiver disponibilidade operacional fixa. Use vários blocos no mesmo dia só quando isso realmente fizer diferença no despacho.</p>
             <div id="schedule-rows"></div>
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-regioes" style="margin-bottom:40px">
-          <div class="panel-header"><span class="panel-title" id="ue-sec-regions-title">Regiões / bases atendidas</span></div>
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-regioes" style="margin-bottom:40px" data-ue-default-collapsed="true">
+          <div class="panel-header"><span class="panel-title" id="ue-sec-regions-title">Área de atendimento</span></div>
           <div class="data-shell-body">
-            <p id="ue-regions-intro" style="font-size:12px;color:var(--text3);margin-bottom:10px">Seleção múltipla das <strong>Locations</strong> do tenant onde o técnico pode operar (Ctrl/Cmd + clique).</p>
-            <div class="form-group" style="max-width:320px;margin-bottom:10px">
-              <input type="search" class="form-control" id="t-service-locs-filter" placeholder="Filtrar bases…" autocomplete="off" />
+            <p id="ue-regions-intro" style="font-size:12px;color:var(--text3);margin-bottom:10px">Defina as bases onde o prestador atua, visualize tudo no mapa e escolha com um clique o centro operacional e o raio de cobertura.</p>
+            <div class="ue-coverage-shell">
+              <div class="ue-inline-actions ue-coverage-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-coverage-open-modal">
+                  <ion-icon name="map-outline" style="font-size:16px;vertical-align:-3px"></ion-icon>
+                  Selecionar bases no mapa
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-coverage-center-selected">
+                  <ion-icon name="locate-outline" style="font-size:16px;vertical-align:-3px"></ion-icon>
+                  Usar bases selecionadas como referência
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-coverage-clear-center">
+                  Limpar centro
+                </button>
+              </div>
+
+              <div class="ue-coverage-layout">
+                <section class="ue-task-card ue-coverage-map-card">
+                  <div class="ue-inline-kicker">Mapa operacional</div>
+                  <h3 class="ue-task-card__title">Área de atendimento visual</h3>
+                  <p class="ue-task-card__hint">
+                    Clique no mapa para definir o centro da operação. Os alfinetes mostram as bases do tenant; o círculo mostra o raio configurado.
+                  </p>
+                  <div id="ue-coverage-map" class="ue-coverage-map" aria-label="Mapa da área de atendimento do prestador"></div>
+                  <div id="ue-coverage-map-status" class="ue-inline-status">Carregando mapa…</div>
+                </section>
+
+                <section class="ue-task-card">
+                  <div class="ue-inline-kicker">Resumo</div>
+                  <h3 class="ue-task-card__title">Bases e centro atuais</h3>
+                  <div id="ue-coverage-summary" class="ue-coverage-summary"></div>
+                  <div id="ue-coverage-selected-bases" class="ue-coverage-chip-list"></div>
+                </section>
+
+                <section class="ue-task-card">
+                  <div class="ue-inline-kicker">Ajustes</div>
+                  <h3 class="ue-task-card__title">Raio e observações</h3>
+                  <div class="form-group">
+                    <label class="form-label" for="t-coverage-radius-km">Raio em km</label>
+                    <input type="number" min="1" max="500" step="0.1" class="form-control" id="t-coverage-radius-km" placeholder="50" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="t-coverage-notes">Observações</label>
+                    <textarea class="form-control" id="t-coverage-notes" rows="4" placeholder="Ex.: atende Campinas, Valinhos, Vinhedo e Paulínia."></textarea>
+                  </div>
+                  <div class="ue-coverage-coords-card">
+                    <div class="ue-coverage-coords-card__label">Centro atual</div>
+                    <div id="ue-coverage-coords" class="ue-coverage-coords-card__value">Nenhum centro definido.</div>
+                  </div>
+                </section>
+              </div>
+
+              <div hidden aria-hidden="true">
+                <input type="number" step="any" class="form-control" id="t-coverage-lat" />
+                <input type="number" step="any" class="form-control" id="t-coverage-lng" />
+                <input type="search" class="form-control" id="t-service-locs-filter" autocomplete="off" />
+                <select class="form-control" id="t-service-locs" multiple size="8"></select>
+              </div>
             </div>
-            <select class="form-control" id="t-service-locs" multiple size="8" style="min-height:160px;font-size:13px"></select>
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-ops">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-ops" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="sec-ops-title">Sessão, notas e preferências</span></div>
           <div class="data-shell-body">
-            <div class="grid-2" style="margin-bottom:16px">
-              <div class="form-group">
+            <div class="ue-task-grid">
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Sessão</div>
+                <h3 class="ue-task-card__title">Acesso atual do usuário</h3>
                 <label class="form-label" id="lbl-session">Sessão atual (painel / app)</label>
                 <div id="ue-session-info" style="font-size:12px;line-height:1.5;color:var(--text2)">—</div>
                 <button type="button" class="btn btn-sm btn-outline" id="btn-disconnect" style="margin-top:10px">Encerrar sessão e dispositivo</button>
-              </div>
-              <div class="form-group">
+              </section>
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Segurança</div>
+                <h3 class="ue-task-card__title">Verificação e autenticação</h3>
                 <label class="form-label" id="lbl-mfa">MFA / SSO</label>
                 <p id="ue-mfa-hint" style="font-size:12px;color:var(--text3);line-height:1.45">—</p>
                 <label class="form-label" id="lbl-email-ver" style="margin-top:12px">Verificação de e-mail</label>
@@ -298,32 +411,38 @@
                   <button type="button" class="btn btn-sm btn-outline" id="btn-email-ver-send">Enviar link de verificação</button>
                   <button type="button" class="btn btn-sm btn-outline" id="btn-email-ver-mark" hidden>Marcar como verificado (manual)</button>
                 </div>
-              </div>
+              </section>
             </div>
-            <div class="form-group" style="margin-bottom:16px">
-              <label class="form-label" for="f-admin-notes" id="lbl-admin-notes">Notas internas</label>
-              <textarea class="form-control" id="f-admin-notes" rows="4" placeholder="…"></textarea>
-              <p id="hint-admin-notes" style="font-size:11px;color:var(--text3);margin-top:6px">—</p>
-            </div>
-            <div class="form-group" style="max-width:420px">
-              <label class="form-label" for="f-preferred-locale" id="lbl-preferred-locale">Idioma preferido (app)</label>
-              <select class="form-control" id="f-preferred-locale">
-                <option value="">(Padrão do dispositivo / tenant)</option>
-                <option value="pt-BR">pt-BR</option>
-                <option value="en-US">en-US</option>
-                <option value="es-ES">es-ES</option>
-                <option value="fr-FR">fr-FR</option>
-                <option value="de-DE">de-DE</option>
-              </select>
-              <p id="hint-preferred-locale" style="font-size:11px;color:var(--text3);margin-top:6px">—</p>
+            <div class="ue-task-grid ue-task-grid--compact">
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Notas</div>
+                <h3 class="ue-task-card__title">Contexto interno da operação</h3>
+                <label class="form-label" for="f-admin-notes" id="lbl-admin-notes">Notas internas</label>
+                <textarea class="form-control" id="f-admin-notes" rows="4" placeholder="…"></textarea>
+                <p id="hint-admin-notes" style="font-size:11px;color:var(--text3);margin-top:6px">—</p>
+              </section>
+              <section class="ue-task-card">
+                <div class="ue-inline-kicker">Preferência</div>
+                <h3 class="ue-task-card__title">Idioma do app</h3>
+                <label class="form-label" for="f-preferred-locale" id="lbl-preferred-locale">Idioma preferido (app)</label>
+                <select class="form-control" id="f-preferred-locale">
+                  <option value="">(Padrão do dispositivo / tenant)</option>
+                  <option value="pt-BR">pt-BR</option>
+                  <option value="en-US">en-US</option>
+                  <option value="es-ES">es-ES</option>
+                  <option value="fr-FR">fr-FR</option>
+                  <option value="de-DE">de-DE</option>
+                </select>
+                <p id="hint-preferred-locale" style="font-size:11px;color:var(--text3);margin-top:6px">—</p>
+              </section>
             </div>
           </div>
         </section>
 
-        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-audit" style="margin-bottom:40px">
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-audit" style="margin-bottom:40px" data-ue-default-collapsed="true">
           <div class="panel-header"><span class="panel-title" id="sec-audit-title">Atividade (auditoria)</span></div>
           <div class="data-shell-body">
-            <p id="sec-audit-desc" style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.45">Eventos recentes ligados a este utilizador.</p>
+            <p id="sec-audit-desc" class="ue-section-intro">Eventos recentes ligados a este utilizador. Use esta área para validar contexto administrativo, não para edição operacional.</p>
             <div class="table-wrap">
               <table class="table-data" style="font-size:12px">
                 <thead><tr>
@@ -368,6 +487,35 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="coverage-bases-modal">
+  <div class="modal modal-lg ue-coverage-modal">
+    <div class="modal-header">
+      <span class="modal-title">Selecionar bases atendidas</span>
+      <button type="button" class="modal-close" id="coverage-bases-close" aria-label="Fechar">
+        <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="ue-coverage-modal-toolbar">
+        <div class="search-wrap search-wrap--toolbar ue-coverage-modal-search">
+          <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+          <input type="search" id="coverage-modal-search" placeholder="Buscar bases por nome, tipo ou endereço…" autocomplete="off" />
+        </div>
+        <div id="coverage-modal-meta" class="ue-inline-status" style="margin-top:0">Selecione as bases no mapa ou na lista.</div>
+      </div>
+      <div class="ue-coverage-modal-layout">
+        <div id="coverage-modal-list" class="ue-coverage-modal-list"></div>
+        <div id="coverage-modal-map" class="ue-coverage-modal-map" aria-label="Mapa para seleção de bases"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" id="coverage-bases-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="coverage-bases-apply">Aplicar seleção</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
   import { bootUserEditPage } from './js/user-edit-page.js';
   bootUserEditPage();

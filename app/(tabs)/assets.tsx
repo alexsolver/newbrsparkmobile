@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -8,13 +8,22 @@ import { getLocalAssets } from '../../src/database';
 import { Asset } from '../../src/types/asset';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../src/hooks/useAuth';
+import { userHasCapability } from '../../src/services/auth';
 
 export default function AssetsScreen() {
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createAssetsStyles(C), [C]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [search, setSearch] = useState('');
   const router = useRouter();
+  const { user, userRole, loading } = useAuth();
+  const providerModeOnly = userRole === 'TECHNICIAN' && userHasCapability(user, 'mobile.mode.provider');
+
+  useEffect(() => {
+    if (loading || !providerModeOnly) return;
+    router.replace('/(tabs)' as any);
+  }, [loading, providerModeOnly, router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -28,8 +37,17 @@ export default function AssetsScreen() {
       a.details?.address?.toLowerCase().includes(search.toLowerCase())
   );
 
+  if (providerModeOnly) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.brandName}>{appDisplayName}</Text>
+        <Text style={styles.title}>Bens</Text>
+        <Text style={styles.subtitle} numberOfLines={1}>{appTagline}</Text>
+      </View>
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={C.textLight} style={styles.searchIcon} />
         <TextInput
@@ -65,6 +83,10 @@ export default function AssetsScreen() {
 function createAssetsStyles(C: ColorPalette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: C.background },
+    header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 0 },
+    brandName: { fontSize: 11, fontWeight: '900', color: C.accent, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+    title: { fontSize: 22, fontWeight: '900', color: C.primary, letterSpacing: -0.5 },
+    subtitle: { fontSize: 11, fontWeight: '700', color: C.textLight, marginTop: 2 },
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',

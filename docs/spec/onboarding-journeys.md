@@ -22,6 +22,9 @@ Referência de produto alinhada ao app + backend. Última revisão: fluxo tenant
 
 **Backend:** `account.js` (`/me/technician`, `/me/technician-registration`) + rotas `technician-registration`.
 
+> Nota de evolução de produto: este é o fluxo **tenant-first** atualmente em produção.  
+> Está em estudo/migração o modelo **provider-first** (cadastro global + parcerias por tenant), descrito em `docs/spec/provider-first-network-migration.md`.
+
 ## 3. Cadastrar a minha empresa
 
 1. No app, **Perfil** → secção **Cadastrar minha empresa** → abre o portal web (por defeito `https://www.brspark.com/empresa`).

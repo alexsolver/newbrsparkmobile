@@ -166,17 +166,24 @@
 
         <div id="filter-chips" class="filter-chips" hidden></div>
 
+        <div id="users-context-bar" class="users-context-bar" aria-label="Resumo da listagem"></div>
+
         <div class="data-table-head">
           <h2 id="users-table-title" class="data-table-title">Lista de usuários</h2>
           <span class="badge badge-accent" id="count-badge" aria-live="polite" aria-atomic="true">—</span>
         </div>
 
-        <div class="ul-columns-bar" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 14px;font-size:12px;color:var(--text2)">
-          <span id="ul-cols-label" style="font-weight:700">Colunas extra</span>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-id" /> <span id="ul-col-lbl-id">ID</span></label>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-created" /> <span id="ul-col-lbl-created">Criado em</span></label>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-country" /> <span id="ul-col-lbl-country">País</span></label>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="col-show-emailver" /> <span id="ul-col-lbl-emailver">E-mail verificado</span></label>
+        <div class="ul-columns-bar">
+          <div class="ul-columns-bar__title">
+            <span id="ul-cols-label">Colunas extra</span>
+            <small>Personalize a leitura da tabela sem alterar os filtros ativos.</small>
+          </div>
+          <div class="ul-columns-bar__options">
+            <label><input type="checkbox" id="col-show-id" /> <span id="ul-col-lbl-id">ID</span></label>
+            <label><input type="checkbox" id="col-show-created" /> <span id="ul-col-lbl-created">Criado em</span></label>
+            <label><input type="checkbox" id="col-show-country" /> <span id="ul-col-lbl-country">País</span></label>
+            <label><input type="checkbox" id="col-show-emailver" /> <span id="ul-col-lbl-emailver">E-mail verificado</span></label>
+          </div>
         </div>
 
         <div id="ul-bulk-bar" class="ul-bulk-bar" hidden>
@@ -324,9 +331,17 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG, persistAdminSessionBundleFromSessionStorage } from './js/config.js';
+  import { CONFIG, applyPanelSessionBootstrap, persistAdminSessionBundleFromSessionStorage, getPanelCapabilities } from './js/config.js';
   import { getAdminUiLocale, setAdminUiLocale, t, applyUsersListPageI18n, syncUsersListFiltersToggle } from './js/user-pages-i18n.js';
   await initPage();
+  const panelCaps = new Set(getPanelCapabilities());
+  const isPlatformAdmin = panelCaps.has('platform.users.write');
+  const canImpersonateAny = panelCaps.has('platform.users.impersonate');
+  const canImpersonateOwnTenant = panelCaps.has('tenant.users.impersonate.self');
+  const canManageTenantUsers =
+    panelCaps.has('tenant.users.write.self') ||
+    panelCaps.has('tenant.users.write.limited') ||
+    panelCaps.has('tenant.users.write.any');
   const USER_FILTERS_EXPANDED_LS = 'brspark_users_filters_expanded';
   try {
     const ufPanel0 = document.getElementById('users-filters-panel');
@@ -335,6 +350,10 @@
     /* ignore */
   }
   applyUsersListPageI18n();
+  const tenantFilterField = document.getElementById('filter-tenant')?.closest('.filter-field');
+  if (tenantFilterField) tenantFilterField.hidden = !isPlatformAdmin;
+  const newUserBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
+  if (newUserBtn) newUserBtn.hidden = !canManageTenantUsers;
 
   (function initUsersFiltersCollapse() {
     const panel = document.getElementById('users-filters-panel');
@@ -425,9 +444,8 @@
 
   function canImpersonatePanelTarget(u) {
     if (!u || !PANEL_LOGIN_ROLES.has(u.role)) return false;
-    const myRole = (sessionStorage.getItem('brspark_admin_role') || '').trim();
-    if (myRole === 'SAAS_ADMIN') return true;
-    if (myRole === 'TENANT_ADMIN') {
+    if (canImpersonateAny) return true;
+    if (canImpersonateOwnTenant) {
       try {
         const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || 'null');
         return t && t.id === u.tenantId;
@@ -437,6 +455,27 @@
     }
     return false;
   }
+
+  function restrictNewUserRoleOptions() {
+    const roleSelect = document.getElementById('new-role');
+    if (!roleSelect) return;
+    const allowed = new Set(['USER', 'PROVIDER', 'MANAGER']);
+    if (panelCaps.has('tenant.users.write.self') || panelCaps.has('tenant.users.write.any')) {
+      allowed.add('TENANT_ADMIN');
+    }
+    if (panelCaps.has('platform.users.write')) {
+      allowed.add('SAAS_ADMIN');
+    }
+    Array.from(roleSelect.options).forEach((opt) => {
+      const ok = allowed.has(String(opt.value || '').toUpperCase());
+      opt.hidden = !ok;
+      opt.disabled = !ok;
+    });
+    if (!allowed.has(String(roleSelect.value || '').toUpperCase())) {
+      roleSelect.value = 'USER';
+    }
+  }
+  restrictNewUserRoleOptions();
 
   window.ulStartImpersonate = async (rawId) => {
     const id = String(rawId || '').trim();
@@ -470,6 +509,7 @@
     sessionStorage.setItem('brspark_admin_role', res.user.role || '');
     sessionStorage.setItem('brspark_panel_mode', 'tenant');
     sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(res.tenant));
+    applyPanelSessionBootstrap(res);
     persistAdminSessionBundleFromSessionStorage();
     window.location.href = 'dashboard.html';
   };
@@ -896,6 +936,71 @@
     });
   }
 
+  function paintUsersContextBar(rows, total) {
+    const bar = document.getElementById('users-context-bar');
+    if (!bar) return;
+    const q = document.getElementById('search-input').value.trim();
+    const role = document.getElementById('filter-role').value;
+    const tenantLabel = document.getElementById('filter-tenant')?.selectedOptions?.[0]?.textContent || '';
+    const active = document.getElementById('filter-active')?.value || '';
+    const tech = document.getElementById('filter-technician')?.value || '';
+    const cf = document.getElementById('filter-compreface')?.value || '';
+    const emailVer = document.getElementById('filter-email-verification')?.value || '';
+    const workTime = !!document.getElementById('filter-worktime')?.checked;
+    const sort = document.getElementById('filter-sort')?.value || 'createdAt';
+    const sortDir = document.getElementById('filter-sort-dir')?.value || 'desc';
+
+    const activeFilters = [];
+    if (q) activeFilters.push(`Busca: ${q}`);
+    if (role) activeFilters.push(`Papel: ${rolePlainText(role)}`);
+    if (active === '1') activeFilters.push('Conta ativa');
+    if (active === '0') activeFilters.push('Conta inativa');
+    if (tenantLabel && document.getElementById('filter-tenant')?.value) activeFilters.push(`Tenant: ${tenantLabel}`);
+    if (tech) activeFilters.push(`Prestador: ${tech}`);
+    if (cf) activeFilters.push(`FaceMatch: ${cf}`);
+    if (emailVer) activeFilters.push(`E-mail: ${emailVer}`);
+    if (workTime) activeFilters.push('Só ponto ativo');
+
+    const providerCount = rows.filter((u) => String(u.role || '').toUpperCase() === 'PROVIDER').length;
+    const tenantAdminCount = rows.filter((u) => String(u.role || '').toUpperCase() === 'TENANT_ADMIN').length;
+    const faceSyncedCount = rows.filter((u) => String(u.comprefaceRecognitionSync?.status || '').toLowerCase() === 'synced').length;
+    const sortLabelMap = {
+      createdAt: 'Criação',
+      lastLogin: 'Último acesso',
+      name: 'Nome',
+      email: 'E-mail',
+      updatedAt: 'Atualização',
+      id: 'ID',
+      employeeMatricula: 'Matrícula',
+      role: 'Papel',
+      isActive: 'Conta ativa',
+      workTimeTrackingEnabled: 'Ponto',
+      emailVerifiedAt: 'E-mail verificado',
+    };
+
+    bar.innerHTML = `
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Escopo atual</div>
+        <div class="users-context-card__title">${activeFilters.length ? 'Visão filtrada da operação' : 'Visão geral da base'}</div>
+        <div class="users-context-card__meta">${activeFilters.length ? activeFilters.join(' · ') : 'Nenhum filtro específico aplicado. A tabela mostra a listagem conforme o escopo de acesso atual.'}</div>
+      </div>
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Leitura rápida</div>
+        <div class="users-context-card__chips">
+          <span class="users-context-chip">${rows.length} na página</span>
+          <span class="users-context-chip">${total} no total</span>
+          <span class="users-context-chip">${providerCount} prestador(es)</span>
+          <span class="users-context-chip">${tenantAdminCount} admin(s) tenant</span>
+          <span class="users-context-chip">${faceSyncedCount} FaceMatch ok</span>
+        </div>
+      </div>
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Ordenação</div>
+        <div class="users-context-card__title">${sortLabelMap[sort] || sort}</div>
+        <div class="users-context-card__meta">${sortDir === 'asc' ? 'Crescente' : 'Decrescente'} · personalize colunas extras logo abaixo para adaptar a leitura.</div>
+      </div>`;
+  }
+
   function renderSkeletonTbody() {
     const cs = usersListColspan();
     return `<tr><td colspan="${cs}" style="padding:0;border:none">
@@ -1107,10 +1212,10 @@
       (res?.data || []).forEach((t) => {
         const opt = `<option value="${escAttr(t.id)}">${escAttr(t.name)} (${escAttr(t.email)})</option>`;
         if (sel) sel.innerHTML += opt;
-        if (ft) ft.innerHTML += opt;
+        if (ft && isPlatformAdmin) ft.innerHTML += opt;
         if (rten) rten.innerHTML += opt;
       });
-      if (ft && ft.options[0]) ft.options[0].textContent = t('ul_filterTenantAll');
+      if (ft && ft.options[0]) ft.options[0].textContent = isPlatformAdmin ? t('ul_filterTenantAll') : t('summaryTenant');
       loadUsers(initialLoadPageFromResumeIfNeeded());
     })
     .catch(() => {
@@ -1200,6 +1305,7 @@
     const { data = [], total = 0 } = res;
     lastRows = data;
     lastTotal = total;
+    paintUsersContextBar(data, total);
 
     document.getElementById('count-badge').textContent =
       total === 1 ? t('ul_countOne') : `${total} ${t('ul_countMany')}`;
@@ -1233,9 +1339,9 @@
       const x = lines[st];
       if (!x) return '';
       const sub = x.sub
-        ? `<span style="display:block;font-size:9px;font-weight:500;color:var(--text3);margin-top:6px;max-width:280px;line-height:1.35">${x.sub}</span>`
+        ? `<span class="list-cell-sub">${x.sub}</span>`
         : '';
-      return `<span style="display:block;font-size:10px;font-weight:600;color:${x.c};margin-top:5px;line-height:1.25">${x.t}</span>${sub}`;
+      return `<span class="list-cell-metric" style="color:${x.c}">${x.t}</span>${sub}`;
     };
 
     /** Nome + e-mail do tenant; fallback se relação ausente. */
@@ -1248,15 +1354,19 @@
       if (t && (t.name || t.email)) {
         const name = (t.name && String(t.name).trim()) || '—';
         const mail = t.email && String(t.email).trim();
-        return `<div style="max-width:240px" title="${title}">
-          <span class="badge badge-gray" style="white-space:normal;text-align:left;line-height:1.3;display:inline-block;max-width:100%">${escAttr(name)}</span>
-          ${mail ? `<span style="display:block;font-size:10px;color:var(--text3);margin-top:4px;line-height:1.3;word-break:break-all">${escAttr(mail)}</span>` : ''}
+        return `<div class="list-cell-stack" title="${title}">
+          <span class="list-cell-title">${escAttr(name)}</span>
+          ${mail ? `<span class="list-cell-sub">${escAttr(mail)}</span>` : ''}
         </div>`;
       }
       if (u.tenantId) {
-        return `<span class="badge badge-gray" style="font-size:10px;white-space:normal;max-width:220px;line-height:1.25" title="${title}">ID: ${escAttr(String(u.tenantId))}</span>`;
+        return `<div class="list-cell-stack" title="${title}">
+          <span class="list-cell-title">ID: ${escAttr(String(u.tenantId))}</span>
+        </div>`;
       }
-      return '<span style="color:var(--text3);font-size:12px">—</span>';
+      return `<div class="list-cell-stack">
+        <span class="list-cell-title">—</span>
+      </div>`;
     };
 
     const pontoCell = (u) =>
@@ -1272,7 +1382,9 @@
 
     const comprefaceListCell = (sync) => {
       if (!sync || typeof sync !== 'object') {
-        return `<span style="font-size:11px;color:var(--text3)" title="${escAttr(t('ul_cfNoSync'))}">—</span>`;
+        return `<div class="list-cell-stack" title="${escAttr(t('ul_cfNoSync'))}">
+          <span class="badge badge-gray" style="font-size:10px;display:inline-flex;width:max-content">${escAttr(t('ul_cfNoSync'))}</span>
+        </div>`;
       }
       const st = String(sync.status || '').toLowerCase();
       const shortDate = sync.at
@@ -1291,17 +1403,29 @@
             : st === 'error'
               ? `${t('ul_cfError')} · ${shortDate} · ${sync.message || ''}`
               : JSON.stringify(sync);
-      const dateSub = `<div style="font-size:10px;color:var(--text3);margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.2" title="${escAttr(tip)}">${escAttr(t('ul_cfSyncedAt'))}: ${escAttr(shortDate || '—')}</div>`;
+      const dateSub = `<div class="list-cell-sub" title="${escAttr(tip)}">${escAttr(t('ul_cfSyncedAt'))}: ${escAttr(shortDate || '—')}</div>`;
       if (st === 'synced') {
-        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-green" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="checkmark-done-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfSynced'))}</span>${dateSub}</div>`;
+        return `<div class="list-cell-stack">
+          <span class="badge badge-green" style="font-size:10px;display:inline-flex;width:max-content"><ion-icon name="checkmark-done-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfSynced'))}</span>
+          ${dateSub}
+        </div>`;
       }
       if (st === 'pending') {
-        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-amber" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="time-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfPending'))}</span>${dateSub}</div>`;
+        return `<div class="list-cell-stack">
+          <span class="badge badge-amber" style="font-size:10px;display:inline-flex;width:max-content"><ion-icon name="time-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfPending'))}</span>
+          ${dateSub}
+        </div>`;
       }
       if (st === 'error') {
-        return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-red" style="font-size:10px;font-weight:700;white-space:normal;max-width:140px;line-height:1.25;text-align:left;display:inline-block" title="${escAttr(tip)}"><ion-icon name="alert-circle-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfError'))}</span>${dateSub}</div>`;
+        return `<div class="list-cell-stack">
+          <span class="badge badge-red" style="font-size:10px;display:inline-flex;width:max-content"><ion-icon name="alert-circle-outline" style="font-size:14px;vertical-align:-2px"></ion-icon> ${escAttr(t('ul_cfError'))}</span>
+          ${dateSub}
+        </div>`;
       }
-      return `<div class="ul-cf-cell" style="max-width:168px"><span class="badge badge-gray" style="font-size:10px;display:inline-block" title="${escAttr(tip)}">${escAttr(st || '?')}</span>${dateSub}</div>`;
+      return `<div class="list-cell-stack">
+        <span class="badge badge-gray" style="font-size:10px;display:inline-flex;width:max-content">${escAttr(st || '?')}</span>
+        ${dateSub}
+      </div>`;
     };
 
     const uid = (id) => escAttr(id);
@@ -1333,18 +1457,23 @@
             </div>
           </div>
         </td>
-        <td class="ul-col-opt ul-col-id col-hide-md" style="font-size:10px;vertical-align:middle"><code style="word-break:break-all">${escAttr(u.id)}</code></td>
-        <td class="ul-col-opt ul-col-created col-hide-md" style="font-size:11px;color:var(--text3);vertical-align:middle;white-space:nowrap">${escAttr(fmt(u.createdAt))}</td>
-        <td class="ul-col-opt ul-col-country col-hide-md" style="font-size:11px;vertical-align:middle">${escAttr(co || '—')}</td>
+        <td class="ul-col-opt ul-col-id col-hide-md table-subtle" style="vertical-align:middle"><code style="word-break:break-all">${escAttr(u.id)}</code></td>
+        <td class="ul-col-opt ul-col-created col-hide-md table-subtle" style="vertical-align:middle;white-space:nowrap">${escAttr(fmt(u.createdAt))}</td>
+        <td class="ul-col-opt ul-col-country col-hide-md table-subtle" style="vertical-align:middle">${escAttr(co || '—')}</td>
         <td class="ul-col-opt ul-col-emailver col-hide-md" style="vertical-align:middle">${emailVerListCell(u, fmt, locBr)}</td>
-        <td class="col-hide-md" style="vertical-align:middle;white-space:nowrap">${matriculaCell(u)}</td>
+        <td class="col-hide-md table-num" style="vertical-align:middle;white-space:nowrap">${matriculaCell(u)}</td>
         <td style="vertical-align:top">${tenantListCell(u)}</td>
         <td><span class="badge ${roleMap[u.role] || 'badge-gray'}">${roleBadgeHtml(u.role)}</span></td>
         <td class="col-hide-md" style="vertical-align:middle">${pontoCell(u)}</td>
-        <td style="color:var(--text3);font-size:11px" title="${escAttr(fmt(u.lastLogin))}">${escAttr(relativeLastSeen(u.lastLogin))}</td>
-        <td style="vertical-align:top"><span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}">${u.isActive ? `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountActive'))}` : `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountInactive'))}`}</span>${prestadorOsHint(u.technicianProfile)}</td>
+        <td class="table-subtle" title="${escAttr(fmt(u.lastLogin))}">${escAttr(relativeLastSeen(u.lastLogin))}</td>
+        <td style="vertical-align:top">
+          <div class="list-cell-stack">
+            <span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}" style="font-size:10px;display:inline-flex;width:max-content">${u.isActive ? `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountActive'))}` : `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountInactive'))}`}</span>
+            ${prestadorOsHint(u.technicianProfile)}
+          </div>
+        </td>
         <td class="col-hide-wide" style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
-        <td class="text-right">
+        <td class="text-right table-actions">
           <div class="row-actions">
             <a class="icon-action" href="user-edit.html?id=${encodeURIComponent(u.id)}" title="${escAttr(t('ul_editUser'))}" onclick="storeUserEditNav(${idx})"><ion-icon name="create-outline"></ion-icon></a>
             <div class="ue-dropdown-wrap">
@@ -1462,6 +1591,7 @@
   });
 
   document.getElementById('save-user-btn').addEventListener('click', async () => {
+    if (!canManageTenantUsers) return;
     const body = {
       name:     document.getElementById('new-name').value.trim(),
       email:    document.getElementById('new-email').value.trim(),

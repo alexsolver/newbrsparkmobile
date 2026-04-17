@@ -44,7 +44,7 @@ Método: POST
 Content-Type: multipart/form-data; boundary=...
 Partes:
   - media       (arquivo)  imagem ou vídeo
-  - questions   (texto)     JSON: [{"id":"...","text":"..."}, ...] (máx. 10 no proxy)
+  - questions   (texto)     JSON: [{"id":"...","text":"..."}] (detecção YOLO: máx. 1 no proxy; análise Gemini: até 10)
   - schemaVersion (texto)   "1"
 Opcional: Authorization: Bearer <token configurado no painel>
 

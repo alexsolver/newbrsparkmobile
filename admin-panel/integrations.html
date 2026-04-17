@@ -474,7 +474,7 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG }   from './js/config.js';
+  import { CONFIG, getPanelCapabilities }   from './js/config.js';
   import {
     applyIntegrationsPageI18n,
     integT,
@@ -486,6 +486,9 @@
 
   await initPage();
   applyIntegrationsPageI18n();
+  const panelCaps = new Set(getPanelCapabilities());
+  const canManageIntegrations =
+    panelCaps.has('platform.integrations.write') || panelCaps.has('platform.system.write');
 
   // Mapa: name → id do card e slug
   const CARD_MAP = {
@@ -573,6 +576,7 @@
 
   // Testa a integração chamando o backend
   window.testInt = async (slug) => {
+    if (!canManageIntegrations) return;
     const name = Object.keys(CARD_MAP).find(k => CARD_MAP[k].slug === slug);
     let intObj = activeInts[name];
     if (slug === 'vision-checklist') intObj = activeVisionChecklistInt();
@@ -707,9 +711,16 @@
       setConnected(slug, connected, intForCard);
     });
     document.getElementById('active-count').textContent = integActiveCountText(count);
+    document.querySelectorAll('.int-actions .btn').forEach((btn) => {
+      if (!canManageIntegrations) {
+        btn.hidden = true;
+        btn.disabled = true;
+      }
+    });
   }
 
   window.saveGoogleMapsPlatform = async () => {
+    if (!canManageIntegrations) return;
     const key = document.getElementById('key-google-maps-platform')?.value.trim() || '';
     if (!key) return alert('Indique a API key do Google Maps Platform (Routes).');
     if (activeInts['Google Maps Platform']) await CONFIG.del(`/integrations/${activeInts['Google Maps Platform'].id}`);
@@ -731,6 +742,7 @@
   };
 
   window.saveGoogleAiStudio = async () => {
+    if (!canManageIntegrations) return;
     const key = document.getElementById('key-googleai')?.value.trim() || '';
     let base = document.getElementById('url-googleai')?.value.trim() || '';
     const model = document.getElementById('model-googleai')?.value.trim() || '';
@@ -759,6 +771,7 @@
   };
 
   window.deleteGoogleAiStudioInt = async () => {
+    if (!canManageIntegrations) return;
     const intObj = activeGoogleAiStudioInt();
     if (!intObj) return;
     const label = intObj.name || 'Google AI Studio';
@@ -769,6 +782,7 @@
 
   // Salva integração genérica
   window.saveInt = async (slug, type, name, fieldIds, bodyKeys) => {
+    if (!canManageIntegrations) return;
     const vals = fieldIds.map(id => document.getElementById(id)?.value.trim() || '');
     const body = { type, name, status: 'ACTIVE' };
     bodyKeys.forEach((k, i) => { if (vals[i]) body[k] = vals[i]; });
@@ -781,6 +795,7 @@
 
   // Nylas — API Key + URI + Grant ID (envio) + Client ID opcional (OAuth hospedado)
   window.saveNylas = async () => {
+    if (!canManageIntegrations) return;
     const key = document.getElementById('key-nylas').value.trim();
     const url = document.getElementById('url-nylas').value.trim() || 'https://api.us.nylas.com';
     const grant = document.getElementById('grant-nylas')?.value.trim() || '';
@@ -805,6 +820,7 @@
 
   // MailerSend — API REST (Bearer); baseUrl = raiz da API (ex.: https://api.mailersend.com/v1)
   window.saveMailerSend = async () => {
+    if (!canManageIntegrations) return;
     const url = document.getElementById('url-mailersend')?.value.trim() || 'https://api.mailersend.com/v1';
     const key = document.getElementById('key-mailersend')?.value.trim() || '';
     if (!key) return alert(integT('integ_alert_mailersend_token'));
@@ -828,6 +844,7 @@
 
   // SMTP — salva com campos específicos no description
   window.saveSmtp = async () => {
+    if (!canManageIntegrations) return;
     const host = document.getElementById('host-smtp').value.trim();
     const port = document.getElementById('port-smtp').value.trim();
     const user = document.getElementById('user-smtp').value.trim();
@@ -846,6 +863,7 @@
 
   // Dropbox — salva credenciais de OAuth2 Refresh
   window.saveDropbox = async () => {
+    if (!canManageIntegrations) return;
     const appKey = document.getElementById('key-app-dropbox').value.trim();
     const appSecret = document.getElementById('secret-dropbox').value.trim();
     const refreshToken = document.getElementById('refresh-dropbox').value.trim();
@@ -865,6 +883,7 @@
 
   // Cloudflare R2 — salva account id no description
   window.saveR2 = async () => {
+    if (!canManageIntegrations) return;
     const account = document.getElementById('account-r2').value.trim();
     const keyid   = document.getElementById('keyid-r2').value.trim();
     const secret  = document.getElementById('secret-r2').value.trim();
@@ -883,6 +902,7 @@
 
   // Amazon S3
   window.saveS3 = async () => {
+    if (!canManageIntegrations) return;
     const keyid  = document.getElementById('keyid-s3').value.trim();
     const secret = document.getElementById('secret-s3').value.trim();
     const bucket = document.getElementById('bucket-s3').value.trim();
@@ -900,6 +920,7 @@
   };
 
   window.deleteIntByName = async (name) => {
+    if (!canManageIntegrations) return;
     const intObj = activeInts[name];
     if (!intObj) return;
     if (!confirm(integT('integ_confirm_remove', { name }))) return;
@@ -908,6 +929,7 @@
   };
 
   window.deleteVisionChecklistInt = async () => {
+    if (!canManageIntegrations) return;
     const intObj = activeVisionChecklistInt();
     if (!intObj) return;
     if (!confirm(integT('integ_confirm_remove', { name: VISION_CHECKLIST_INT_NAME }))) return;
@@ -916,6 +938,7 @@
   };
 
   window.saveVisionInt = async (name, slug) => {
+    if (!canManageIntegrations) return;
     const body = { type: 'AI_LLM', name, status: 'ACTIVE' }; // Reusing AI_LLM to avoid schema resets
     if (slug === 'aws-rekog') {
       const region = document.getElementById('region-aws-rekog').value.trim();
@@ -964,6 +987,7 @@
 
   /** Visão IA - YOLO — tipo VISION; URL = POST multipart completo no serviço externo. */
   window.saveVisionChecklistInt = async () => {
+    if (!canManageIntegrations) return;
     const url = document.getElementById('url-vision-checklist').value.trim();
     const key = document.getElementById('key-vision-checklist').value.trim();
     const timeoutRaw = document.getElementById('timeout-vision-checklist').value.trim();

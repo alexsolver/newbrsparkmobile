@@ -69,6 +69,16 @@ const M = {
     tp_cancel: 'Cancelar',
     tp_invite_submit: 'Enviar convite',
     tp_modal_rev_title: 'Pedir ajustes ao candidato',
+    tp_lbl_revision_template: 'Template de ajustes',
+    tp_revision_tpl_placeholder: 'Escolher template…',
+    tp_revision_tpl_docs:
+      'Revise e reenviar os documentos obrigatórios: a foto do documento deve estar legível, sem cortes e sem reflexos; também confirme tipo e número do documento.',
+    tp_revision_tpl_face:
+      'Refaça as fotos de biometria facial: envie imagens nítidas, apenas do seu rosto, com boa iluminação e sem outras pessoas no enquadramento.',
+    tp_revision_tpl_schedule_regions:
+      'Complete disponibilidade e regiões atendidas: marque pelo menos um dia/horário e selecione as bases onde você pode atuar.',
+    tp_revision_tpl_data:
+      'Atualize os dados cadastrais: confirme nome completo, telefone de contato e endereço (cidade/UF) antes de reenviar.',
     tp_ph_revision: 'Descreva o que falta ou deve ser corrigido…',
     tp_rev_submit: 'Enviar pedido',
     tp_alert_email: 'Informe o e-mail.',
@@ -156,6 +166,16 @@ const M = {
     tp_cancel: 'Cancel',
     tp_invite_submit: 'Send invite',
     tp_modal_rev_title: 'Ask applicant to fix issues',
+    tp_lbl_revision_template: 'Revision template',
+    tp_revision_tpl_placeholder: 'Choose a template…',
+    tp_revision_tpl_docs:
+      'Please review and re-submit required documents: document photo must be readable, uncropped, and without glare; also confirm document type and number.',
+    tp_revision_tpl_face:
+      'Please retake face enrollment photos: submit clear images with only your face, good lighting, and no other people in frame.',
+    tp_revision_tpl_schedule_regions:
+      'Please complete availability and service regions: set at least one day/time and select the locations where you can operate.',
+    tp_revision_tpl_data:
+      'Please update profile data: confirm full name, contact phone, and address (city/state) before submitting again.',
     tp_ph_revision: 'Describe what is missing or must be corrected…',
     tp_rev_submit: 'Send request',
     tp_alert_email: 'Enter the email.',
@@ -299,6 +319,9 @@ export function applyTechnicianApplicationsPageI18n() {
   });
   set('invite-submit', 'tp_invite_submit');
   set('modal-revision-title', 'tp_modal_rev_title');
+  set('tp-lbl-revision-template', 'tp_lbl_revision_template');
+  const rt = document.getElementById('revision-template');
+  if (rt && rt.options[0]) rt.options[0].textContent = tpT('tp_revision_tpl_placeholder');
   const ta = document.getElementById('revision-msg');
   if (ta) ta.placeholder = tpT('tp_ph_revision');
   document.querySelectorAll('[data-close-rev]').forEach((b) => {

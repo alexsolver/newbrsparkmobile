@@ -58,6 +58,9 @@ export const SERVER_COMPLETED_STATUSES = new Set([
   'ARCHIVED',
 ]);
 
+/** Estados ativos na fila do prestador; não podem ser mascarados por cache local de concluídas. */
+const SERVER_ACTIVE_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
+
 export function effectiveProviderTaskStatus(
   t: any,
   completedIds: Set<string>,
@@ -65,21 +68,26 @@ export function effectiveProviderTaskStatus(
   acceptedIds: Set<string> = new Set()
 ): string {
   void acceptedIds;
+  const taskId = String(t?.id ?? '');
   const raw = String(t?.status || 'PENDING').toUpperCase();
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
   const meta = providerTaskMetadataRecord(t);
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
-    if (inprogressIds.has(String(t?.id))) return 'IN_PROGRESS';
+    if (inprogressIds.has(taskId)) return 'IN_PROGRESS';
     return 'PENDING';
   }
-  if (completedIds.has(String(t?.id))) return 'COMPLETED';
+  /**
+   * Cache local de concluídas pode ficar desatualizado após reabertura/reentrega;
+   * quando o servidor disser que está ativa, a fila ativa prevalece.
+   */
+  if (completedIds.has(taskId) && !SERVER_ACTIVE_STATUSES.has(raw)) return 'COMPLETED';
   const pausedByMeta =
     meta.executionPaused === true ||
     meta.executionPaused === 'true' ||
     String(meta.executionPaused || '').toLowerCase() === 'true';
   if (raw === 'PAUSED' || pausedByMeta || isDisplacementTrackingPausedMeta(meta)) return 'PAUSED';
-  if (inprogressIds.has(String(t?.id))) return 'IN_PROGRESS';
+  if (inprogressIds.has(taskId)) return 'IN_PROGRESS';
   if (raw === 'IN_PROGRESS') return 'IN_PROGRESS';
   if (raw === 'RECEIVED') return 'PENDING';
   if (raw === 'ACCEPTED') return 'PENDING';

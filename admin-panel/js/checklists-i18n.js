@@ -26,6 +26,7 @@ const M = {
     fb_preview: 'Pré-visualização no app',
     fb_geofence: 'Cerca global',
     fb_duration: 'Tempo do formulário',
+    fb_form_qa: 'QA do formulário',
     fb_duration_title:
       'Minutos previstos só do preenchimento (sem deslocamento), usados no despacho',
     fb_save: 'Salvar formulário',
@@ -169,9 +170,6 @@ const M = {
     fb_prop_online_validation_generic:
       'Se ativado, bloqueia o preenchimento caso o dispositivo esteja sem internet no momento. Caso contrário, permite modo assíncrono (validado depois), quando aplicável.',
 
-    fb_prop_depends_none_option: '(Nenhuma condição — sempre visível)',
-    fb_prop_depends_id_suffix: ' (ID: {id})',
-
     fb_prop_tech_finance_title: 'PDF e compartilhamento com o cliente',
     fb_prop_tech_finance_help_html:
       'Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de compartilhar.',
@@ -216,8 +214,6 @@ const M = {
     fb_prop_facial_identify_help:
       'Em «identificar», qualquer usuário com sessão na app pode preencher o campo: o rosto é comparado à galeria FaceMatch e o servidor devolve nome e e-mail de quem for reconhecido no <b>mesmo tenant</b> da sessão. Quem é identificado <b>não</b> precisa estar logado na app.',
     fb_prop_facial_camera_note: 'A captura facial na app usa sempre a câmera do sistema (alta resolução).',
-    fb_prop_facial_online_note_html:
-      '<b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.',
 
     fb_prop_vision_title_analysis_html:
       '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão de IA — análise</span>',
@@ -226,11 +222,16 @@ const M = {
     fb_prop_vision_body_analysis_html:
       'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
     fb_prop_vision_body_detection_html:
-      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. Abaixo pode ser <b>um único prompt</b> ou <b>uma pergunta sim/não por linha</b> (até 10); a API devolve sim/não + confiança para cada critério.',
-    fb_prop_vision_detection_prompt_lbl: 'Perguntas (sim/não)',
+      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. Abaixo define-se <b>um único critério</b> por envio de mídia; a API devolve sim/não + confiança para esse critério.',
+    fb_prop_vision_detection_prompt_lbl: 'Prompt (sim/não)',
     fb_prop_vision_detection_prompt_hint:
-      'Use <b>uma linha por pergunta</b> (sim/não), até <b>{maxLines}</b> linhas. Com várias linhas, cada texto tem até <b>{maxPer}</b> caracteres; com uma única linha, até <b>{maxSingle}</b> caracteres. A API devolve JSON com <code>answers</code> e <code>questionId</code> (<code>q1</code>…<code>q10</code>).',
-    fb_prop_vision_default_structured_prompt: 'A evidência visual confirma o item verificado?',
+      'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres). A API devolve JSON com <code>answers</code> (sempre <code>q1</code>) e valor <code>yes</code>, <code>no</code> ou <code>unknown</code> quando o critério é sim/não.',
+    fb_prop_vision_default_structured_prompt:
+      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+      'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+      'Explique de forma breve, citando elementos objetivos observados na mídia.',
+    fb_prop_vision_default_detection_prompt:
+      'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
     fb_prop_vision_rating_chk_lbl: 'Classificação 0–10 (preenchida pela API após a análise)',
     fb_prop_vision_rating_hint_html:
       'Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
@@ -260,6 +261,12 @@ const M = {
     fb_vision_prompt_ex_empty_filter: 'Nenhum modelo nesta área. Escolha «Todas as áreas» ou outro setor.',
     fb_vision_prompt_ex_catalog_missing:
       'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder (o script visionAiAnalysisPromptExamplesData.js deve estar disponível).',
+    fb_vision_detection_ex_btn_title: 'Exemplos de perguntas para objetos e contagem (Visão de IA — detecção)',
+    fb_vision_detection_ex_modal_title: 'Exemplos de perguntas para detecção',
+    fb_vision_detection_ex_modal_intro:
+      'Escolha um exemplo e adapte os objetos, sinônimos e exclusões ao seu modelo YOLO. Prefira uma linha por pergunta e, para contagem, explicite o que deve ser ignorado.',
+    fb_vision_detection_ex_catalog_missing:
+      'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder (o script visionDetectionPromptExamplesData.js deve estar disponível).',
 
     fb_prop_voice_title: 'Nota de voz',
     fb_prop_voice_help_html:
@@ -280,13 +287,28 @@ const M = {
     fb_prop_lookup_title: 'Lista dinâmica',
     fb_prop_lookup_source_lbl: 'Origem',
     fb_prop_lookup_src_preset: 'Preset no servidor (GET com sessão)',
+    fb_prop_lookup_src_api: 'Endpoint da API (GET com sessão)',
     fb_prop_lookup_src_inline: 'JSON no modelo (sem rede)',
     fb_prop_lookup_preset_lbl: 'Preset',
+    fb_prop_lookup_api_path_lbl: 'Caminho da API',
+    fb_prop_lookup_api_path_help:
+      'Use caminho relativo da API do backend (ex.: /api/checklists/lookup-options/equipamentos_demo). Resposta esperada: { options:[{value,label}] } ou array direto.',
     fb_prop_lookup_json_lbl: 'JSON (array de pares value / label)',
 
     fb_prop_matrix_title: 'Matriz repetível',
     fb_prop_matrix_intro_html:
-      'Colunas (até 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. O app salva um array JSON de linhas.',
+      'Defina até 8 colunas com nome e tipo. No app o técnico preenche várias linhas numa tabela; os dados guardam-se em JSON.',
+    fb_prop_matrix_cols_ui_lbl: 'Colunas da tabela',
+    fb_prop_matrix_col_label_ph: 'Nome da coluna no app (ex.: Item)',
+    fb_prop_matrix_type_text: 'Texto',
+    fb_prop_matrix_type_number: 'Número',
+    fb_prop_matrix_type_yesno: 'Sim / Não',
+    fb_prop_matrix_add_col: 'Adicionar coluna',
+    fb_prop_matrix_remove_col: 'Remover coluna',
+    fb_prop_matrix_col_empty_fallback: 'Coluna {n}',
+    fb_prop_matrix_json_adv: 'Avançado — editar JSON',
+    fb_prop_matrix_json_adv_hint:
+      'Ao sair deste campo, o JSON substitui a grelha acima. Use só se souber o formato.',
     fb_prop_matrix_cols_lbl: 'Colunas (JSON)',
     fb_prop_matrix_min_rows: 'Mín. linhas',
     fb_prop_matrix_max_rows: 'Máx. linhas',
@@ -513,6 +535,8 @@ const M = {
 
     fb_logic_vision_hint_html:
       '<strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, «Entre dois números» e «Fora do intervalo» comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.',
+    fb_logic_vision_detection_hint_html:
+      '<strong>Visão de IA — detecção:</strong> com análise concluída, <code>==</code>, <code>!=</code>, «contém», «um de», <b>É verdadeiro</b> (resposta <code>yes</code>) e <b>É falso</b> (resposta <code>no</code>) usam o valor de <code>answers[0]</code> (normalizado para <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está preenchido</b> se só precisar de detecção concluída.',
 
     fb_logic_api_fetch_offline: 'Se offline, não buscar nem alterar o campo',
     fb_logic_api_allow_offline: 'Permitir que o técnico pule a regra se estiver offline',
@@ -572,10 +596,21 @@ const M = {
     mdl_copilot_prev_optional: 'Tornar todos opcionais',
     mdl_copilot_prev_reprocess: 'Reprocessar com instruções',
     mdl_copilot_prev_apply: 'Aplicar no canvas',
-    mdl_delete_form_title: 'Excluir formulário?',
+    mdl_copilot_feedback_applied:
+      '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, definições do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
+    mdl_copilot_feedback_preview:
+      '**Estado do painel:** abriu-se a **tabela de revisão** com os campos sugeridos. Confirme com **«Aplicar no canvas»** quando estiver pronto, ou ajuste as linhas antes.',
+    fb_copilot_empty_reply: '(A IA não devolveu texto — veja avisos ao lado ou tente de novo.)',
+    fb_guided_title: 'Monte seu formulário com ajuda guiada',
+    fb_guided_sub:
+      'Descreva o objetivo, quem vai preencher e o cenário. O copiloto monta um primeiro rascunho profissional e já sugere estrutura, evidências e próximos passos.',
+    fb_audit_title: 'QA do formulário',
+    fb_audit_sub:
+      'Checagem rápida antes de salvar para evitar formulário vago, técnico demais ou incompleto para o app.',
+    mdl_delete_form_title: 'Arquivar formulário?',
     mdl_delete_form_body:
-      'Tem certeza de que deseja excluir este formulário permanentemente? Esta ação não pode ser desfeita.',
-    mdl_delete_form_yes: 'Sim, excluir',
+      'O formulário será arquivado e poderá ser restaurado depois pelo histórico/versões. Isso evita perda acidental.',
+    mdl_delete_form_yes: 'Sim, arquivar',
 
     fb_alert_upload_rejected: 'Upload recusado.',
     fb_alert_no_image_url: 'O servidor não devolveu o URL da imagem.',
@@ -654,6 +689,7 @@ const M = {
     fb_preview: 'App preview',
     fb_geofence: 'Global geofence',
     fb_duration: 'Form duration',
+    fb_form_qa: 'Form QA',
     fb_duration_title:
       'Expected minutes for filling only (excluding travel), used in dispatch',
     fb_save: 'Save form',
@@ -797,9 +833,6 @@ const M = {
     fb_prop_online_validation_generic:
       'If enabled, blocks filling when the device is offline at that moment. Otherwise allows async mode (validated later) when applicable.',
 
-    fb_prop_depends_none_option: '(No condition — always visible)',
-    fb_prop_depends_id_suffix: ' (ID: {id})',
-
     fb_prop_tech_finance_title: 'PDF and sharing with the client',
     fb_prop_tech_finance_help_html:
       'By default, <strong>this field is not included in the general PDF</strong>. In the PDF report builder (Reports), it only appears if you enable visibility for this field. When you do, <strong>information that may correspond to the technician’s internal operating costs could become available to the client</strong> or anyone who receives the document — always confirm the preset before sharing.',
@@ -844,8 +877,6 @@ const M = {
     fb_prop_facial_identify_help:
       'In “identify”, any user with an app session can fill the field: the face is compared to the FaceMatch gallery and the server returns the name and email of whoever is recognized in the <b>same tenant</b> as the session. The identified person does <b>not</b> need to be logged into the app.',
     fb_prop_facial_camera_note: 'Face capture in the app always uses the <b>system camera</b> (high resolution).',
-    fb_prop_facial_online_note_html:
-      '<b>Mandatory online validation</b> (checkbox below, like other fields): <b>unchecked</b> = can capture offline; the app tries to validate on the server when online and when reopening the work order. <b>Checked</b> = requires network at capture time and immediate validation.',
 
     fb_prop_vision_title_analysis_html:
       '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">AI vision — analysis</span>',
@@ -854,11 +885,16 @@ const M = {
     fb_prop_vision_body_analysis_html:
       'In the app, the technician uses <b>camera only</b> — no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response returns yes/no + confidence (and rationale) for the set.',
     fb_prop_vision_body_detection_html:
-      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. BrSpark forwards to the URL under <b>Integrations → Vision AI - YOLO</b>. Below can be a <b>single prompt</b> or <b>one yes/no question per line</b> (up to 10); the API returns yes/no + confidence for each criterion.',
-    fb_prop_vision_detection_prompt_lbl: 'Yes/no questions',
+      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. BrSpark forwards to the URL under <b>Integrations → Vision AI - YOLO</b>. Below defines <b>one criterion</b> per media upload; the API returns yes/no + confidence for that criterion.',
+    fb_prop_vision_detection_prompt_lbl: 'Prompt (yes/no)',
     fb_prop_vision_detection_prompt_hint:
-      'Use <b>one line per question</b> (yes/no), up to <b>{maxLines}</b> lines. With multiple lines, each text is limited to <b>{maxPer}</b> characters; with a single line, up to <b>{maxSingle}</b> characters. The API returns JSON with <code>answers</code> and <code>questionId</code> (<code>q1</code>…<code>q10</code>).',
-    fb_prop_vision_default_structured_prompt: 'Does the visual evidence confirm the verified item?',
+      'A <b>single</b> criterion per media upload (up to <b>{maxSingle}</b> characters). The API returns JSON with <code>answers</code> (always <code>q1</code>) and <code>yes</code>, <code>no</code>, or <code>unknown</code> when the criterion is yes/no.',
+    fb_prop_vision_default_structured_prompt:
+      'Single criterion (id q1). Based only on the photo or video:\n' +
+      'Is the visible equipment or site condition consistent with a positive outcome for this work-order step (work or installation materially present, reasonable state, no clearly severe nonconformity)?\n' +
+      'Briefly explain citing objective details from the media.',
+    fb_prop_vision_default_detection_prompt:
+      'Single criterion (id q1): can you state unambiguously that the expected object or situation for this checklist step is present (or absent, when applicable) according to your YOLO model’s criterion?',
     fb_prop_vision_rating_chk_lbl: '0–10 rating (filled by the API after analysis)',
     fb_prop_vision_rating_hint_html:
       'With this option, Gemini returns <code>rating0To10</code> at the JSON root (integer 0–10, or <code>null</code> if not possible). The app shows the score with the result and in reports.',
@@ -888,6 +924,12 @@ const M = {
     fb_vision_prompt_ex_empty_filter: 'No templates in this area. Choose “All areas” or another sector.',
     fb_vision_prompt_ex_catalog_missing:
       'Example catalog failed to load. Reload the Form Builder page (visionAiAnalysisPromptExamplesData.js must be available).',
+    fb_vision_detection_ex_btn_title: 'Question examples for objects and counting (AI vision — detection)',
+    fb_vision_detection_ex_modal_title: 'Detection question examples',
+    fb_vision_detection_ex_modal_intro:
+      'Pick an example and adapt the objects, synonyms, and exclusions to your YOLO model. Prefer one line per question and, for counting, state clearly what must be ignored.',
+    fb_vision_detection_ex_catalog_missing:
+      'Example catalog failed to load. Reload the Form Builder page (visionDetectionPromptExamplesData.js must be available).',
 
     fb_prop_voice_title: 'Voice note',
     fb_prop_voice_help_html:
@@ -908,13 +950,28 @@ const M = {
     fb_prop_lookup_title: 'Dynamic list',
     fb_prop_lookup_source_lbl: 'Source',
     fb_prop_lookup_src_preset: 'Server preset (GET with session)',
+    fb_prop_lookup_src_api: 'API endpoint (GET with session)',
     fb_prop_lookup_src_inline: 'JSON in the model (no network)',
     fb_prop_lookup_preset_lbl: 'Preset',
+    fb_prop_lookup_api_path_lbl: 'API path',
+    fb_prop_lookup_api_path_help:
+      'Use a backend relative API path (e.g. /api/checklists/lookup-options/equipamentos_demo). Expected response: { options:[{value,label}] } or a direct array.',
     fb_prop_lookup_json_lbl: 'JSON (array of value / label pairs)',
 
     fb_prop_matrix_title: 'Repeatable matrix',
     fb_prop_matrix_intro_html:
-      'Columns (up to 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. The app stores a JSON array of rows.',
+      'Define up to 8 columns with a name and type. In the app the technician fills multiple table rows; data is stored as JSON.',
+    fb_prop_matrix_cols_ui_lbl: 'Table columns',
+    fb_prop_matrix_col_label_ph: 'Column name in the app (e.g. Item)',
+    fb_prop_matrix_type_text: 'Text',
+    fb_prop_matrix_type_number: 'Number',
+    fb_prop_matrix_type_yesno: 'Yes / No',
+    fb_prop_matrix_add_col: 'Add column',
+    fb_prop_matrix_remove_col: 'Remove column',
+    fb_prop_matrix_col_empty_fallback: 'Column {n}',
+    fb_prop_matrix_json_adv: 'Advanced — edit JSON',
+    fb_prop_matrix_json_adv_hint:
+      'When you leave this field, the JSON replaces the grid above. Use only if you know the format.',
     fb_prop_matrix_cols_lbl: 'Columns (JSON)',
     fb_prop_matrix_min_rows: 'Min rows',
     fb_prop_matrix_max_rows: 'Max rows',
@@ -1141,6 +1198,8 @@ const M = {
 
     fb_logic_vision_hint_html:
       '<strong>0–10 rating active on this field:</strong> operators <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, “Between two numbers”, and “Outside range” compare the <code>rating0To10</code> value (0–10) from Gemini. Use <b>Has any value</b> if you only need analysis done. If there is no score, <b>!=</b> with a number is true; <b>==</b> and other numeric comparisons fail.',
+    fb_logic_vision_detection_hint_html:
+      '<strong>AI vision — detection:</strong> once analysis completes, <code>==</code>, <code>!=</code>, “contains”, “one of”, <b>Is true</b> (<code>yes</code>) and <b>Is false</b> (<code>no</code>) use <code>answers[0]</code> (normalized to <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Has any value</b> if you only need detection done.',
 
     fb_logic_api_fetch_offline: 'If offline, do not fetch or change the field',
     fb_logic_api_allow_offline: 'Allow technician to skip rule when offline',
@@ -1200,10 +1259,21 @@ const M = {
     mdl_copilot_prev_optional: 'Mark all optional',
     mdl_copilot_prev_reprocess: 'Reprocess with instructions',
     mdl_copilot_prev_apply: 'Apply to canvas',
-    mdl_delete_form_title: 'Delete form?',
+    mdl_copilot_feedback_applied:
+      '**Done:** changes from this message **have already been applied** in the editor (canvas, model settings, and/or suggested rules). Use **«Undo last change»** if you need to revert.',
+    mdl_copilot_feedback_preview:
+      '**Panel state:** the **review table** with suggested fields is open. Confirm with **«Apply to canvas»** when ready, or adjust rows first.',
+    fb_copilot_empty_reply: '(The AI returned no text — check side notes or try again.)',
+    fb_guided_title: 'Build your form with guided help',
+    fb_guided_sub:
+      'Describe the goal, who will fill it out, and the scenario. The copilot will create a professional first draft and suggest structure, evidence, and next steps.',
+    fb_audit_title: 'Form QA',
+    fb_audit_sub:
+      'Quick review before saving to catch vague, overly technical, or incomplete forms.',
+    mdl_delete_form_title: 'Archive form?',
     mdl_delete_form_body:
-      'Are you sure you want to permanently delete this form? This cannot be undone.',
-    mdl_delete_form_yes: 'Yes, delete',
+      'The form will be archived and can be restored later from history/versions. This helps avoid accidental loss.',
+    mdl_delete_form_yes: 'Yes, archive',
 
     fb_alert_upload_rejected: 'Upload rejected.',
     fb_alert_no_image_url: 'The server did not return the image URL.',
@@ -1279,6 +1349,25 @@ Object.assign(M['es-ES'], {
     'No hay modelos en esta área. Elija «Todas las áreas» u otro sector.',
   fb_vision_prompt_ex_catalog_missing:
     'No se cargó el catálogo de ejemplos. Recargue la página del Form Builder (debe existir visionAiAnalysisPromptExamplesData.js).',
+  fb_vision_detection_ex_btn_title: 'Ejemplos de preguntas para objetos y conteo (visión IA — detección)',
+  fb_vision_detection_ex_modal_title: 'Ejemplos de preguntas para detección',
+  fb_vision_detection_ex_modal_intro:
+    'Elija un ejemplo y adapte los objetos, sinónimos y exclusiones a su modelo YOLO. Solo hay <b>un criterio</b> por envío de medios; indique con claridad qué debe ignorarse en conteos.',
+  fb_prop_vision_body_detection_html:
+    'En la app, el técnico usa <b>solo la cámara</b> — sin galería ni selector de archivos. BrSpark reenvía a la URL en <b>Integraciones → Visión IA - YOLO</b>. Abajo se define <b>un único criterio</b> por envío de medios; la API devuelve sí/no + confianza para ese criterio.',
+  fb_prop_vision_detection_prompt_lbl: 'Prompt (sí/no)',
+  fb_prop_vision_detection_prompt_hint:
+    'Un <b>único</b> criterio por envío de medios (hasta <b>{maxSingle}</b> caracteres). La API devuelve JSON con <code>answers</code> (siempre <code>q1</code>) y valor <code>yes</code>, <code>no</code> o <code>unknown</code> cuando el criterio es sí/no.',
+  fb_prop_vision_default_structured_prompt:
+    'Criterio único (identificador q1). Solo con base en la foto o el video:\n' +
+    '¿La condición del equipo o del lugar visible es compatible con cerrar positivamente esta etapa de la OS (trabajo o instalación materialmente presente, estado razonable y sin evidencia clara de no conformidad grave)?\n' +
+    'Explique brevemente citando elementos objetivos observados en el medio.',
+  fb_prop_vision_default_detection_prompt:
+    'Criterio único (identificador q1): ¿la imagen permite afirmar, sin ambigüedad relevante, que el objeto o situación esperados para este punto del checklist están presentes (o ausentes, cuando corresponda) según el criterio de su modelo YOLO?',
+  fb_logic_vision_detection_hint_html:
+    '<strong>Visión IA — detección:</strong> con análisis terminado, <code>==</code>, <code>!=</code>, «contiene», «uno de», <b>Es verdadero</b> (<code>yes</code>) y <b>Es falso</b> (<code>no</code>) usan <code>answers[0]</code> (normalizado a <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está rellenado</b> si solo necesita detección completada.',
+  fb_vision_detection_ex_catalog_missing:
+    'No se cargó el catálogo de ejemplos. Recargue la página del Form Builder (debe existir visionDetectionPromptExamplesData.js).',
   fb_app_nav_scroll_hint: 'Desplace horizontalmente la barra si los controles no caben en pantalla.',
   fb_app_layout_modal_title: 'Diseño en la app',
   fb_app_layout_modal_intro:
@@ -1372,6 +1461,7 @@ export function applyChecklistsBuilderChromeI18n() {
   setText('fb-btn-preview-lbl', fbT('fb_preview'));
   setText('fb-btn-geofence-lbl', fbT('fb_geofence'));
   setText('fb-btn-duration-lbl', fbT('fb_duration'));
+  setText('fb-btn-form-qa-lbl', fbT('fb_form_qa'));
   const geoNav = document.getElementById('fb-btn-geofence-nav');
   if (geoNav) geoNav.title = fbT('mdl_geofence_title');
   const durBtn = document.querySelector('[data-fb-action="form-duration"]');
@@ -1395,10 +1485,11 @@ export function applyChecklistsBuilderChromeI18n() {
   setText('fb-toolbox-tab-audit', fbT('fb_cat_audit'));
   setText('fb-toolbox-tab-launches', fbT('fb_cat_launches'));
   setText('fb-toolbox-tab-ai', fbT('fb_cat_ai'));
-
   applyChecklistsToolboxI18n();
 
   setText('fb-canvas-panel-title', fbT('fb_canvas_panel'));
+  setText('fb-form-audit-title', fbT('fb_audit_title'));
+  setText('fb-form-audit-sub', fbT('fb_audit_sub'));
 
   setText('fb-label-tpl-title', fbT('fb_label_form_title'));
   setInputPh('tpl-title', fbT('fb_placeholder_form_title'));
@@ -1527,12 +1618,6 @@ export function applyChecklistsModalsI18n() {
   if (mNotice) {
     mNotice.textContent = fbT('mdl_mobile_preview_notice');
   }
-
-  setText('mdl-new-form-title', fbT('mdl_new_form_title'));
-  setText('mdl-new-form-label', fbT('mdl_new_form_label'));
-  setInputPh('new-form-name-input', fbT('mdl_new_form_ph'));
-  setText('mdl-new-form-cancel', fbT('mdl_cancel'));
-  setText('mdl-new-form-create', fbT('mdl_new_form_create'));
 
   setText('mdl-forms-title', fbT('mdl_forms_title'));
   setText('mdl-forms-sub', fbT('mdl_forms_sub'));

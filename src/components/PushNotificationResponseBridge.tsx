@@ -3,6 +3,7 @@ import { Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../theme/ThemeContext';
 import {
   CLIENT_PUSH_ACTION_TRACK,
   TECH_PUSH_ACTION_ACCEPT,
@@ -32,7 +33,14 @@ function readData(
 
 async function handleNotificationResponse(
   response: Notifications.NotificationResponse,
-  router: ReturnType<typeof useRouter>
+  router: ReturnType<typeof useRouter>,
+  branding: {
+    appDisplayName?: string;
+    primaryColor?: string;
+    accentColor?: string;
+    secondaryColor?: string;
+    surfaceColor?: string;
+  } | null
 ): Promise<void> {
   const data = readData(response);
   const action = response.actionIdentifier;
@@ -140,6 +148,12 @@ async function handleNotificationResponse(
       taskId,
       title: liveTitle,
       subtitle: liveSub || undefined,
+      appDisplayName: String(data.appDisplayName || branding?.appDisplayName || 'BrSpark'),
+      liveActivityBadgeKey: String(data.liveActivityBadgeKey || 'brspark-badge'),
+      primaryColor: branding?.primaryColor,
+      accentColor: branding?.accentColor,
+      secondaryColor: branding?.secondaryColor,
+      surfaceColor: branding?.surfaceColor,
     });
     setPendingOpenExecutionFromPush(taskId);
     router.replace('/(tabs)' as never);
@@ -152,13 +166,20 @@ async function handleNotificationResponse(
 export function PushNotificationResponseBridge() {
   const router = useRouter();
   const handledColdStartRef = useRef(false);
+  const { branding, appDisplayName } = useTheme();
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      void handleNotificationResponse(response, router);
+      void handleNotificationResponse(response, router, {
+        appDisplayName,
+        primaryColor: branding?.primaryColor,
+        accentColor: branding?.accentColor,
+        secondaryColor: branding?.secondaryColor,
+        surfaceColor: branding?.surfaceColor,
+      });
     });
     return () => sub.remove();
-  }, [router]);
+  }, [router, branding, appDisplayName]);
 
   /** Com o app em primeiro plano, mostra Live Activity ao chegar OS/revisão (cartão no Lock Screen ao bloquear de novo). */
   useEffect(() => {
@@ -179,10 +200,16 @@ export function PushNotificationResponseBridge() {
           .map((x) => String(x).trim())
           .join(' — ')
           .slice(0, 120),
+        appDisplayName: String(d.appDisplayName || appDisplayName || 'BrSpark'),
+        liveActivityBadgeKey: String(d.liveActivityBadgeKey || 'brspark-badge'),
+        primaryColor: branding?.primaryColor,
+        accentColor: branding?.accentColor,
+        secondaryColor: branding?.secondaryColor,
+        surfaceColor: branding?.surfaceColor,
       });
     });
     return () => sub.remove();
-  }, []);
+  }, [branding, appDisplayName]);
 
   useEffect(() => {
     if (handledColdStartRef.current) return;
@@ -192,7 +219,13 @@ export function PushNotificationResponseBridge() {
         try {
           const last = await Notifications.getLastNotificationResponseAsync();
           if (last) {
-            await handleNotificationResponse(last, router);
+            await handleNotificationResponse(last, router, {
+              appDisplayName,
+              primaryColor: branding?.primaryColor,
+              accentColor: branding?.accentColor,
+              secondaryColor: branding?.secondaryColor,
+              surfaceColor: branding?.surfaceColor,
+            });
           }
         } catch {
           /* ignore */
@@ -200,7 +233,7 @@ export function PushNotificationResponseBridge() {
       })();
     }, 700);
     return () => clearTimeout(t);
-  }, [router]);
+  }, [router, branding, appDisplayName]);
 
   return null;
 }

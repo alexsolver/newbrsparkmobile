@@ -6,8 +6,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ChatService, ChatRoom, ChatContact } from '../../src/services/chat';
-import { fetchMyOpsChatThreads, type OpsChatThreadSummary } from '../../src/services/executionOpsChat';
+import {
+  fetchMyOpsChatThreads,
+  listPendingGestorOpsThreadIds,
+  type OpsChatThreadSummary,
+} from '../../src/services/executionOpsChat';
+import { SERVER_COMPLETED_STATUSES } from '../../src/utils/providerTaskStatus';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { loadRoomListCache, saveRoomListCache } from '../../src/services/chatOfflineStorage';
 import { useConnectivity } from '../../src/hooks/useConnectivity';
@@ -15,8 +21,37 @@ import { ColorPalette, MEDIA_TAG_COLORS, SERVICE_CATEGORY_COLORS } from '../../s
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CHAT_UNREAD_CHANGED_EVENT } from '../../src/lib/chatUnreadEvents';
+import { DeviceEventEmitter } from 'react-native';
 
 const ARCHIVED_KEY = '@brspark_archived_rooms';
+const ROOM_ARCHIVE_PREFIX = 'room:';
+const OPS_ARCHIVE_PREFIX = 'ops:';
+const AUTO_ARCHIVE_GENERAL_MS = 30 * 24 * 60 * 60 * 1000;
+const AUTO_ARCHIVE_OPS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function roomArchiveKey(roomId: string) {
+  return `${ROOM_ARCHIVE_PREFIX}${String(roomId || '').trim()}`;
+}
+
+function opsArchiveKey(executionId: string) {
+  return `${OPS_ARCHIVE_PREFIX}${String(executionId || '').trim()}`;
+}
+
+function isRoomArchived(archivedIds: Set<string>, roomId: string) {
+  const id = String(roomId || '').trim();
+  return archivedIds.has(id) || archivedIds.has(roomArchiveKey(id));
+}
+
+function isOpsArchived(archivedIds: Set<string>, executionId: string) {
+  return archivedIds.has(opsArchiveKey(executionId));
+}
+
+function removeRoomArchiveEntry(next: Set<string>, roomId: string) {
+  const id = String(roomId || '').trim();
+  next.delete(id);
+  next.delete(roomArchiveKey(id));
+}
 
 function timeAgo(ts?: number) {
   if (!ts) return '';
@@ -31,17 +66,36 @@ function timeAgo(ts?: number) {
   return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-type FilterTab = 'ALL' | 'UNREAD' | 'GROUPS' | 'ARCHIVED';
+function sortByLastMessageDesc<T extends { lastMessageAt?: number | string | null }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const ta =
+      typeof a.lastMessageAt === 'number'
+        ? a.lastMessageAt
+        : a.lastMessageAt
+          ? new Date(a.lastMessageAt).getTime()
+          : 0;
+    const tb =
+      typeof b.lastMessageAt === 'number'
+        ? b.lastMessageAt
+        : b.lastMessageAt
+          ? new Date(b.lastMessageAt).getTime()
+          : 0;
+    return tb - ta;
+  });
+}
+
+type FilterTab = 'PENDING' | 'OPS' | 'GROUPS' | 'ARCHIVED';
 
 const FILTERS: { id: FilterTab; label: string }[] = [
-  { id: 'ALL', label: 'Todas' },
-  { id: 'UNREAD', label: 'Não lidas' },
+  { id: 'PENDING', label: 'Pendentes' },
+  { id: 'OPS', label: 'Operacionais' },
   { id: 'GROUPS', label: 'Grupos' },
   { id: 'ARCHIVED', label: 'Arquivadas' },
 ];
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const isManager = String(user?.role || '').toUpperCase() === 'MANAGER';
   const { isOnline } = useConnectivity(8000);
@@ -54,8 +108,10 @@ export default function ChatScreen() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('ALL');
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('PENDING');
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+  const [pendingOpsIds, setPendingOpsIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Modals state
   const [modalVisible, setModalVisible] = useState(false);
@@ -89,7 +145,8 @@ export default function ChatScreen() {
   const toggleArchive = async (roomId: string) => {
     setArchivedIds(prev => {
       const next = new Set(prev);
-      if (next.has(roomId)) next.delete(roomId); else next.add(roomId);
+      if (isRoomArchived(next, roomId)) removeRoomArchiveEntry(next, roomId);
+      else next.add(roomArchiveKey(roomId));
       saveArchived(next);
       return next;
     });
@@ -113,10 +170,57 @@ export default function ChatScreen() {
         ChatService.getAvailableContacts(),
         fetchMyOpsChatThreads().catch(() => [] as OpsChatThreadSummary[]),
       ]);
-      setRooms(Array.isArray(r) ? r : []);
-      setPending(Array.isArray(p) ? p : []);
-      setContacts(Array.isArray(c) ? c : []);
-      setOpsThreads(Array.isArray(ot) ? ot : []);
+      const nextRooms = Array.isArray(r) ? r : [];
+      const nextPending = Array.isArray(p) ? p : [];
+      const nextContacts = Array.isArray(c) ? c : [];
+      const nextOpsThreads = Array.isArray(ot) ? ot : [];
+      const opsPending = await listPendingGestorOpsThreadIds(nextOpsThreads);
+      const opsPendingSet = new Set(opsPending);
+      setRooms(nextRooms);
+      setPending(nextPending);
+      setContacts(nextContacts);
+      setOpsThreads(nextOpsThreads);
+      setPendingOpsIds(opsPendingSet);
+      setArchivedIds((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+
+        for (const room of nextRooms) {
+          const archived = isRoomArchived(next, room.id);
+          const hasFreshPending = (room.unreadCount ?? 0) > 0;
+          if (hasFreshPending && archived) {
+            removeRoomArchiveEntry(next, room.id);
+            changed = true;
+            continue;
+          }
+          if (archived || !room.lastMessageAt) continue;
+          const age = Date.now() - Number(room.lastMessageAt);
+          if (Number.isFinite(age) && age >= AUTO_ARCHIVE_GENERAL_MS) {
+            next.add(roomArchiveKey(room.id));
+            changed = true;
+          }
+        }
+
+        for (const row of nextOpsThreads) {
+          const archived = isOpsArchived(next, row.executionId);
+          const hasFreshPending = opsPendingSet.has(row.executionId);
+          if (hasFreshPending && archived) {
+            next.delete(opsArchiveKey(row.executionId));
+            changed = true;
+            continue;
+          }
+          if (archived || !row.lastMessageAt) continue;
+          const ts = new Date(row.lastMessageAt).getTime();
+          const age = Date.now() - ts;
+          if (Number.isFinite(age) && age >= AUTO_ARCHIVE_OPS_MS) {
+            next.add(opsArchiveKey(row.executionId));
+            changed = true;
+          }
+        }
+
+        if (changed) saveArchived(next);
+        return changed ? next : prev;
+      });
       if (user?.id && Array.isArray(r) && r.length > 0) {
         await saveRoomListCache(user.id, r);
       }
@@ -126,9 +230,17 @@ export default function ChatScreen() {
   }, [user?.id]);
 
   useFocusEffect(useCallback(() => {
+    setActiveFilter('PENDING');
     if (user) { loadData(); loadArchived(); }
     else setLoading(false);
   }, [user, loadData]));
+
+  React.useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(CHAT_UNREAD_CHANGED_EVENT, () => {
+      void loadData().catch(() => {});
+    });
+    return () => sub.remove();
+  }, [loadData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -175,17 +287,107 @@ export default function ChatScreen() {
     }
   };
 
-  // ── Filter rooms ──────────────────────────────────────────────────────────
-  const filteredRooms = rooms.filter(r => {
-    const isArchived = archivedIds.has(r.id);
-    if (activeFilter === 'ARCHIVED') return isArchived;
-    if (isArchived) return false; // hide archived in other tabs
-    if (activeFilter === 'UNREAD') return (r.unreadCount ?? 0) > 0;
-    if (activeFilter === 'GROUPS') return r.isGroup;
-    return true; // ALL
-  });
+  const nonArchivedRooms = useMemo(
+    () => rooms.filter((r) => !isRoomArchived(archivedIds, r.id)),
+    [rooms, archivedIds],
+  );
+  const pendingRooms = useMemo(
+    () => sortByLastMessageDesc(nonArchivedRooms.filter((r) => (r.unreadCount ?? 0) > 0)),
+    [nonArchivedRooms],
+  );
+  const groupedRooms = useMemo(
+    () => sortByLastMessageDesc(nonArchivedRooms.filter((r) => r.isGroup)),
+    [nonArchivedRooms],
+  );
+  const archivedRooms = useMemo(
+    () => sortByLastMessageDesc(rooms.filter((r) => isRoomArchived(archivedIds, r.id))),
+    [rooms, archivedIds],
+  );
+  const pendingOpsThreads = useMemo(
+    () =>
+      sortByLastMessageDesc(
+        opsThreads.filter((row) => pendingOpsIds.has(row.executionId) && !isOpsArchived(archivedIds, row.executionId)),
+      ),
+    [opsThreads, pendingOpsIds, archivedIds],
+  );
+  const activeOpsThreads = useMemo(
+    () =>
+      [...opsThreads.filter((row) => !isOpsArchived(archivedIds, row.executionId))].sort((a, b) => {
+        const aResolved = SERVER_COMPLETED_STATUSES.has(String(a.executionStatus || '').toUpperCase()) ? 1 : 0;
+        const bResolved = SERVER_COMPLETED_STATUSES.has(String(b.executionStatus || '').toUpperCase()) ? 1 : 0;
+        if (aResolved !== bResolved) return aResolved - bResolved;
+        const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return tb - ta;
+      }),
+    [opsThreads, archivedIds],
+  );
+  const archivedOpsThreads = useMemo(
+    () => sortByLastMessageDesc(opsThreads.filter((row) => isOpsArchived(archivedIds, row.executionId))),
+    [opsThreads, archivedIds],
+  );
+  const visibleOpsThreads = useMemo(
+    () =>
+      activeFilter === 'PENDING'
+        ? pendingOpsThreads
+        : activeFilter === 'OPS'
+          ? activeOpsThreads
+          : activeFilter === 'ARCHIVED'
+            ? archivedOpsThreads
+            : [],
+    [activeFilter, pendingOpsThreads, activeOpsThreads, archivedOpsThreads],
+  );
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredPendingContacts = useMemo(() => {
+    if (!normalizedSearch) return pending;
+    return pending.filter((p) => {
+      const name = String(p.user?.name || '').trim().toLowerCase();
+      const requester = String(p.requesterId || '').trim().toLowerCase();
+      const email = String(p.user?.email || '').trim().toLowerCase();
+      return (
+        name.includes(normalizedSearch) ||
+        requester.includes(normalizedSearch) ||
+        email.includes(normalizedSearch)
+      );
+    });
+  }, [pending, normalizedSearch]);
+  const filteredOpsThreads = useMemo(() => {
+    if (!normalizedSearch) return visibleOpsThreads;
+    return visibleOpsThreads.filter((row) => {
+      const label = taskOsLabel({
+        id: row.executionId,
+        osNumber: row.osNumber,
+        routineTaskNumber: row.routineTaskNumber,
+      }).toLowerCase();
+      const preview = String(row.lastPreview || '').trim().toLowerCase();
+      const title = String(row.title || '').trim().toLowerCase();
+      return (
+        label.includes(normalizedSearch) ||
+        preview.includes(normalizedSearch) ||
+        title.includes(normalizedSearch) ||
+        String(row.executionId || '').toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [visibleOpsThreads, normalizedSearch]);
+  const filteredRooms = useMemo(() => {
+    let base: ChatRoom[] = [];
+    if (activeFilter === 'ARCHIVED') base = archivedRooms;
+    else if (activeFilter === 'GROUPS') base = groupedRooms;
+    else if (activeFilter === 'PENDING') base = pendingRooms;
+    if (!normalizedSearch) return base;
+    return base.filter((item) => {
+      const name = String(item.name || '').toLowerCase();
+      const lastMessage = String(item.lastMessage || '').toLowerCase();
+      const lastSender = String(item.lastSender || '').toLowerCase();
+      return (
+        name.includes(normalizedSearch) ||
+        lastMessage.includes(normalizedSearch) ||
+        lastSender.includes(normalizedSearch)
+      );
+    });
+  }, [activeFilter, archivedRooms, groupedRooms, pendingRooms, normalizedSearch]);
 
-  const totalUnread = rooms.filter(r => !archivedIds.has(r.id)).reduce((s, r) => s + (r.unreadCount ?? 0), 0);
+  const totalPending = pendingRooms.length + pendingOpsThreads.length;
 
   // ── Loading / Auth Guards ─────────────────────────────────────────────────
   if (loading) {
@@ -212,74 +414,8 @@ export default function ChatScreen() {
 
   const renderHeader = () => (
     <View style={{ gap: 12, marginBottom: 12 }}>
-      {opsThreads.length > 0 ? (
-        <View style={{ marginBottom: 4 }}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: '900',
-              color: C.textSecondary,
-              marginBottom: 8,
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-            }}
-          >
-            Mensagens da operação (gestor)
-          </Text>
-          {opsThreads.map((row) => {
-            const label = taskOsLabel({
-              id: row.executionId,
-              osNumber: row.osNumber,
-              routineTaskNumber: row.routineTaskNumber,
-            });
-            const preview = String(row.lastPreview || '').trim();
-            const who =
-              String(row.lastSenderKind || '').toUpperCase() === 'GESTOR'
-                ? 'Gestor: '
-                : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
-                  ? 'Você: '
-                  : '';
-            const ts = row.lastMessageAt ? new Date(row.lastMessageAt).getTime() : undefined;
-            return (
-              <TouchableOpacity
-                key={row.executionId}
-                style={[styles.roomRow, { marginBottom: 8 }]}
-                activeOpacity={0.75}
-                onPress={() =>
-                  router.push({
-                    pathname: '/chat/[id]',
-                    params: {
-                      id: row.executionId,
-                      ops: '1',
-                      name: `Gestor · ${label}`,
-                      color: '#1d4ed8',
-                    },
-                  } as never)
-                }
-              >
-                <View style={[styles.avatar, { backgroundColor: '#1d4ed8' }]}>
-                  <Ionicons name="briefcase-outline" size={20} color="#fff" />
-                </View>
-                <View style={styles.roomContent}>
-                  <View style={styles.roomTop}>
-                    <Text style={[styles.roomName, { fontWeight: '800' }]} numberOfLines={1}>
-                      {label}
-                    </Text>
-                    <Text style={styles.roomTime}>{ts != null && Number.isFinite(ts) ? timeAgo(ts) : ''}</Text>
-                  </View>
-                  <Text style={styles.roomPreview} numberOfLines={2}>
-                    {row.title ? `${row.title} · ` : ''}
-                    {who}
-                    {preview || '—'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ) : null}
       {/* Solicitações Pendentes */}
-      {pending.map(p => (
+      {filteredPendingContacts.map(p => (
         <View key={p.id} style={styles.pendingCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={[styles.avatar, { width: 36, height: 36, backgroundColor: MEDIA_TAG_COLORS.DURING }]}>
@@ -308,7 +444,7 @@ export default function ChatScreen() {
   );
 
   const renderRoom = ({ item }: { item: ChatRoom }) => {
-    const isArchived = archivedIds.has(item.id);
+    const isArchived = isRoomArchived(archivedIds, item.id);
     const unread = item.unreadCount ?? 0;
     const isLongPressed = longPressedRoom === item.id;
 
@@ -379,10 +515,10 @@ export default function ChatScreen() {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={styles.headerTitle}>Conversas</Text>
-            {totalUnread > 0 && (
+            <Text style={styles.headerTitle}>{t('chat.title')}</Text>
+            {totalPending > 0 && (
               <View style={{ backgroundColor: C.accent, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, minWidth: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{totalPending > 99 ? '99+' : totalPending}</Text>
               </View>
             )}
           </View>
@@ -399,15 +535,19 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs (WhatsApp-style) */}
+      {/* Filter Tabs */}
       <View style={styles.filterRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
           {FILTERS.map(f => {
             const isActive = activeFilter === f.id;
-            const badge = f.id === 'UNREAD'
-              ? rooms.filter(r => !archivedIds.has(r.id) && (r.unreadCount ?? 0) > 0).length
+            const badge = f.id === 'PENDING'
+              ? totalPending
+              : f.id === 'OPS'
+              ? activeOpsThreads.length
+              : f.id === 'GROUPS'
+              ? groupedRooms.length
               : f.id === 'ARCHIVED'
-              ? archivedIds.size
+              ? archivedRooms.length + archivedOpsThreads.length
               : 0;
             return (
               <TouchableOpacity
@@ -427,6 +567,25 @@ export default function ChatScreen() {
         </ScrollView>
       </View>
 
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={18} color={C.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por conversa, OS/FT ou mensagem"
+          placeholderTextColor={C.textLight}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {searchQuery.trim() ? (
+          <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Limpar busca">
+            <Ionicons name="close-circle" size={18} color={C.textLight} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       {isOnline === false && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={20} color={C.status.warning.fg} />
@@ -436,32 +595,165 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {filteredOpsThreads.length > 0 ? (
+        <View style={{ backgroundColor: C.background, paddingTop: 12 }}>
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '900',
+                color: C.textSecondary,
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+              }}
+            >
+              {activeFilter === 'PENDING'
+                ? 'Pendências operacionais'
+                : activeFilter === 'ARCHIVED'
+                  ? 'Operacionais arquivadas'
+                  : 'Chat operacional'}
+            </Text>
+          </View>
+          {filteredOpsThreads.map((row) => {
+            const label = taskOsLabel({
+              id: row.executionId,
+              osNumber: row.osNumber,
+              routineTaskNumber: row.routineTaskNumber,
+            });
+            const preview = String(row.lastPreview || '').trim();
+            const who =
+              String(row.lastSenderKind || '').toUpperCase() === 'GESTOR'
+                ? 'Gestor: '
+                : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
+                  ? 'Você: '
+                  : '';
+            const ts = row.lastMessageAt ? new Date(row.lastMessageAt).getTime() : undefined;
+            const isPending = pendingOpsIds.has(row.executionId);
+            const isResolved = SERVER_COMPLETED_STATUSES.has(String(row.executionStatus || '').toUpperCase());
+            const stateMeta =
+              activeFilter === 'ARCHIVED'
+                ? {
+                    label: 'Arquivada',
+                    bg: C.background,
+                    border: C.border,
+                    fg: C.textSecondary,
+                  }
+                : isResolved
+                  ? {
+                      label: 'Resolvida',
+                      bg: C.status.success.bg,
+                      border: C.status.success.border,
+                      fg: C.status.success.fg,
+                    }
+                : isPending
+                  ? {
+                      label: 'Aguardando você',
+                      bg: C.status.warning.bg,
+                      border: C.status.warning.border,
+                      fg: C.status.warning.fg,
+                    }
+                  : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
+                    ? {
+                        label: 'Aguardando retorno',
+                        bg: C.status.info.bg,
+                        border: C.status.info.border,
+                        fg: C.status.info.fg,
+                      }
+                    : {
+                        label: 'Em andamento',
+                        bg: C.background,
+                        border: C.border,
+                        fg: C.textSecondary,
+                      };
+            return (
+              <TouchableOpacity
+                key={row.executionId}
+                style={styles.roomRow}
+                activeOpacity={0.75}
+                onPress={() =>
+                  router.push({
+                    pathname: '/chat/[id]',
+                    params: {
+                      id: row.executionId,
+                      ops: '1',
+                      name: `Gestor · ${label}`,
+                      color: '#1d4ed8',
+                    },
+                  } as never)
+                }
+              >
+                <View style={[styles.avatar, { backgroundColor: '#1d4ed8' }]}>
+                  <Ionicons name="briefcase-outline" size={20} color="#fff" />
+                </View>
+                <View style={styles.roomContent}>
+                  <View style={styles.roomTop}>
+                    <Text style={[styles.roomName, isPending && { fontWeight: '900', color: C.slate }]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                    <Text style={[styles.roomTime, isPending && { color: C.accent, fontWeight: '800' }]}>
+                      {ts != null && Number.isFinite(ts) ? timeAgo(ts) : ''}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.roomPreview, isPending && { fontWeight: '700', color: C.slate }]} numberOfLines={2}>
+                      {row.title ? `${row.title} · ` : ''}
+                      {who}
+                      {preview || '—'}
+                    </Text>
+                    <View
+                      style={[
+                        styles.pendingPill,
+                        {
+                          backgroundColor: stateMeta.bg,
+                          borderColor: stateMeta.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.pendingPillText, { color: stateMeta.fg }]}>{stateMeta.label}</Text>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <View style={{ height: 12 }} />
+        </View>
+      ) : null}
+
       <FlatList
         style={{ backgroundColor: C.background }}
         data={filteredRooms}
         keyExtractor={r => r.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={activeFilter === 'ALL' ? renderHeader : undefined}
+        ListHeaderComponent={activeFilter === 'PENDING' ? renderHeader : undefined}
         ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: C.border, marginLeft: 76 }} />}
-        ListEmptyComponent={
+        ListEmptyComponent={filteredOpsThreads.length > 0 ? null : (
           <View style={styles.empty}>
             <Ionicons
-              name={activeFilter === 'ARCHIVED' ? 'archive-outline' : activeFilter === 'UNREAD' ? 'mail-unread-outline' : 'chatbubbles-outline'}
+              name={activeFilter === 'ARCHIVED' ? 'archive-outline' : activeFilter === 'PENDING' ? 'mail-unread-outline' : activeFilter === 'OPS' ? 'briefcase-outline' : 'chatbubbles-outline'}
               size={56}
               color={C.textLight}
             />
             <Text style={styles.emptyText}>
               {activeFilter === 'ARCHIVED'
                 ? 'Nenhuma conversa arquivada.'
-                : activeFilter === 'UNREAD'
-                ? 'Nenhuma mensagem não lida.'
+                : activeFilter === 'PENDING'
+                ? normalizedSearch
+                  ? 'Nenhuma pendência encontrada para a busca.'
+                  : 'Nenhuma pendência no chat.'
+                : activeFilter === 'OPS'
+                ? normalizedSearch
+                  ? 'Nenhuma conversa operacional encontrada para a busca.'
+                  : 'Nenhuma conversa operacional.'
                 : activeFilter === 'GROUPS'
-                ? 'Nenhum grupo ainda.'
+                ? normalizedSearch
+                  ? 'Nenhum grupo encontrado para a busca.'
+                  : 'Nenhum grupo ainda.'
                 : 'Sem mensagens ainda.\nAdicione contatos para começar.'}
             </Text>
           </View>
-        }
+        )}
         renderItem={renderRoom}
       />
 
@@ -593,6 +885,26 @@ function createChatStyles(C: ColorPalette) {
     filterChipTextActive: { color: '#fff' },
     filterBadge: { marginLeft: 5, backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
     filterBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 4,
+      paddingHorizontal: 14,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: C.background,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '600',
+      color: C.slate,
+    },
 
     offlineBanner: {
       flexDirection: 'row',
@@ -629,6 +941,17 @@ function createChatStyles(C: ColorPalette) {
     roomName: { fontSize: 15, fontWeight: '700', color: C.slate, flex: 1, marginRight: 8 },
     roomTime: { fontSize: 11, color: C.textLight, fontWeight: '600' },
     roomPreview: { fontSize: 13, color: C.textSecondary, fontWeight: '500', flex: 1, marginRight: 8 },
+    pendingPill: {
+      marginLeft: 8,
+      backgroundColor: C.status.warning.bg,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: C.status.warning.border,
+      alignSelf: 'flex-start',
+    },
+    pendingPillText: { fontSize: 10, fontWeight: '900', color: C.status.warning.fg },
 
     unreadBadge: {
       backgroundColor: C.accent, borderRadius: 10,

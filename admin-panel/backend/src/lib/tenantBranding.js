@@ -19,6 +19,7 @@ const BRANDING_DEFAULTS = Object.freeze({
   logoLightUrl: '',
   logoDarkUrl: '',
   loginBackgroundUrl: '',
+  liveActivityBadgeKey: '',
   brandingVersion: 0,
   updatedAt: null,
 });
@@ -44,6 +45,32 @@ function asHexColor(v) {
   const s = asTrimmedString(v, 32).toUpperCase();
   if (!s) return '';
   return /^#([0-9A-F]{6}|[0-9A-F]{8})$/.test(s) ? s : '';
+}
+
+function asLiveActivityBadgeKey(v) {
+  const s = asTrimmedString(v, 80);
+  if (!s) return '';
+  return s === 'brspark-badge' ? s : '';
+}
+
+function brandingValidationIssues(branding, permissions) {
+  const out = [];
+  const b = isPlainObject(branding) ? branding : {};
+  const p = sanitizeBrandingPermissions(permissions);
+  if (!p.enabled && b.enabled) {
+    out.push('O plano atual não permite ativar branding para este tenant.');
+  }
+  if (p.allowLogo && b.enabled) {
+    if (!asOptionalUrl(b.logoLightUrl) && !asOptionalUrl(b.logoDarkUrl)) {
+      out.push('Informe pelo menos um logo válido (claro ou escuro).');
+    }
+  }
+  if (p.allowColors && b.enabled) {
+    if (!asHexColor(b.primaryColor) && !asHexColor(b.accentColor)) {
+      out.push('Informe ao menos uma cor válida de marca (#RRGGBB).');
+    }
+  }
+  return out;
 }
 
 function sanitizeBrandingPermissions(raw) {
@@ -77,6 +104,7 @@ function sanitizeTenantBranding(raw, permissions) {
     logoLightUrl: ent.allowLogo ? asOptionalUrl(src.logoLightUrl) : '',
     logoDarkUrl: ent.allowLogo ? asOptionalUrl(src.logoDarkUrl) : '',
     loginBackgroundUrl: ent.allowLoginScreen ? asOptionalUrl(src.loginBackgroundUrl) : '',
+    liveActivityBadgeKey: asLiveActivityBadgeKey(src.liveActivityBadgeKey),
     brandingVersion: Number.isFinite(Number(src.brandingVersion)) ? Number(src.brandingVersion) : 0,
     updatedAt: src.updatedAt ? new Date(src.updatedAt).toISOString() : null,
   };
@@ -115,6 +143,7 @@ module.exports = {
   BRANDING_DEFAULTS,
   readBrandingPermissionsFromPlanFeatures,
   sanitizeTenantBranding,
+  brandingValidationIssues,
   buildEffectiveTenantBranding,
   mergeTenantFeaturesWithBranding,
 };

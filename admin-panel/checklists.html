@@ -78,6 +78,74 @@
       outline: 2px solid var(--primary, #4f46e5);
       outline-offset: 2px;
     }
+    .fb-form-audit-panel {
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: var(--color-surface);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+    .fb-form-audit-panel[hidden] {
+      display: none !important;
+    }
+    .fb-form-audit-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .fb-form-audit-head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text1);
+    }
+    .fb-form-audit-head p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--text3);
+      line-height: 1.45;
+    }
+    .fb-form-audit-list,
+    .ai-copilot-quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ai-copilot-quick-actions .btn {
+      min-height: 34px;
+    }
+    .fb-form-audit-list {
+      flex-direction: column;
+    }
+    .fb-form-audit-item {
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: var(--color-surface-low);
+    }
+    .fb-form-audit-item[data-severity="error"] {
+      border-color: var(--color-danger-border, #fecaca);
+      background: var(--color-danger-bg, #fef2f2);
+    }
+    .fb-form-audit-item[data-severity="warning"] {
+      border-color: var(--color-warning-border, #fde68a);
+      background: var(--color-warning-bg, #fffbeb);
+    }
+    .fb-form-audit-item strong {
+      display: block;
+      font-size: 12px;
+      color: var(--text1);
+      margin-bottom: 3px;
+    }
+    .fb-form-audit-item span {
+      display: block;
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.45;
+    }
     .fb-toolbox-panes {
       flex: 1;
       min-height: 0;
@@ -961,6 +1029,67 @@
       border-radius: 18px 18px 18px 6px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
     }
+    .ai-copilot-bubble p {
+      margin: 0 0 8px;
+      line-height: 1.55;
+    }
+    .ai-copilot-bubble p:last-child {
+      margin-bottom: 0;
+    }
+    .ai-copilot-bubble ul,
+    .ai-copilot-bubble ol {
+      margin: 0 0 8px 18px;
+      padding: 0;
+    }
+    .ai-copilot-bubble li {
+      margin: 0 0 4px;
+      line-height: 1.5;
+    }
+    .ai-copilot-bubble strong {
+      font-weight: 800;
+    }
+    .ai-copilot-insights {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .ai-copilot-insights[hidden] {
+      display: none !important;
+    }
+    .ai-copilot-insight-card {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 12px;
+      background: var(--color-surface);
+      padding: 10px 12px;
+    }
+    .ai-copilot-insight-card h5 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text1);
+    }
+    .ai-copilot-insight-card p,
+    .ai-copilot-insight-card ul {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+    .ai-copilot-insight-card ul {
+      padding-left: 18px;
+    }
+    .ai-copilot-insight-card li + li {
+      margin-top: 4px;
+    }
+    .ai-copilot-quick-actions {
+      margin-bottom: 12px;
+    }
+    .ai-copilot-source-footnote {
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--color-text-light);
+      line-height: 1.45;
+    }
     .ai-copilot-details {
       flex-shrink: 0;
       border-bottom: 1px solid var(--color-border);
@@ -1559,6 +1688,8 @@
         </div>
         <div class="data-toolbar-actions">
           <span id="fb-unsaved-badge" class="badge badge-amber" style="display:none;font-size:11px;font-weight:700;margin-right:4px;"></span>
+          <span id="fb-current-template-version" style="display:none;"></span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="void window.openChecklistVersionHistory()" title="Ver histórico de versões do formulário atual"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> <span>Versões</span></button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-preview-lbl">Preview no App</span></button>
           <button type="button" class="btn btn-primary btn-sm" id="fb-save-schema-btn" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-save-lbl">Salvar Schema</span></button>
         </div>
@@ -1616,6 +1747,15 @@
           >
             <ion-icon name="time-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
             <span id="fb-btn-duration-lbl">Tempo do formulário</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
+            data-fb-action="form-qa"
+            onclick="window.openFormSemanticAuditModal && window.openFormSemanticAuditModal()"
+          >
+            <ion-icon name="shield-checkmark-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+            <span id="fb-btn-form-qa-lbl">QA do formulário</span>
           </button>
         </div>
         </div>
@@ -1707,6 +1847,22 @@
   </div>
 </div>
 
+<div id="fb-form-audit-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeFormSemanticAuditModal()">
+  <div style="background:white; width:min(760px,94vw); max-height:min(88vh,760px); overflow:auto; padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+    <div class="fb-form-audit-head">
+      <div>
+        <h3 id="fb-form-audit-title">QA do formulário</h3>
+        <p id="fb-form-audit-sub">Checagem rápida antes de salvar para evitar formulário vago, técnico demais ou incompleto para o app.</p>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkRunFormSemanticAudit(true)">Atualizar análise</button>
+    </div>
+    <div id="fb-form-audit-list" class="fb-form-audit-list"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+      <button type="button" class="btn btn-ghost" onclick="window.closeFormSemanticAuditModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Propriedades do campo (modal — abre pela engrenagem no cartão ou ao criar/clonar campo) -->
 <div id="field-properties-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.82); z-index:99990; justify-content:center; align-items:center; backdrop-filter: blur(4px); padding:16px;" onclick="if(event.target===this)window.closeFieldPropertiesModal()">
   <div role="dialog" aria-modal="true" aria-labelledby="field-properties-modal-title" style="width:min(560px,100%); max-height:min(90vh,920px); background:var(--color-surface); border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
@@ -1761,20 +1917,6 @@
      </div>
   </div>
 </div>
-<!-- Modal criar novo formulário -->
-<div id="new-checklist-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
-  <div style="width: 400px; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-    <h3 style="margin-top:0; color:#1e293b; font-size:18px;"><ion-icon name="sparkles-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> <span id="mdl-new-form-title">Novo Formulário</span></h3>
-    <label id="mdl-new-form-label" style="display:block; font-size:13px; font-weight:600; color:var(--color-text-light); margin-bottom:8px; margin-top:20px;">Dê um nome / título para o documento:</label>
-    <input type="text" id="new-form-name-input" placeholder="Ex: Roteiro de Ar Condicionado" style="width:90%; padding:12px; border:1px solid var(--color-border); border-radius:8px; font-size:15px; margin-bottom:20px;" />
-    
-    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
-      <button type="button" id="mdl-new-form-cancel" class="btn btn-ghost" onclick="document.getElementById('new-checklist-modal').style.display='none'">Cancelar</button>
-      <button type="button" id="mdl-new-form-create" class="btn btn-primary" onclick="window.confirmCreateNewChecklist()">Criar Painel Limpo</button>
-    </div>
-  </div>
-</div>
-
 <script src="./js/icons-db.js"></script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -2043,6 +2185,14 @@
   <div class="ai-copilot-body">
     <div class="ai-copilot-col-chat">
       <div class="ai-copilot-chat-scroll">
+        <div id="ai-copilot-insights" class="ai-copilot-insights" hidden></div>
+        <div id="ai-copilot-quick-actions" class="ai-copilot-quick-actions">
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Quero um primeiro rascunho profissional e simples para celular.')">Primeiro rascunho</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Simplifique o formulário para um usuário leigo no celular e reduza termos técnicos.')">Simplificar</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Adicione evidências úteis como fotos, assinatura, localização e comentários onde fizer sentido.')">Adicionar evidências</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Gere uma versão enxuta, mais curta e rápida de preencher.')">Versão enxuta</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkRunFormSemanticAudit(true)">Rodar QA do formulário</button>
+        </div>
         <div id="ai-copilot-messages"></div>
         <div id="ai-copilot-thinking" role="status" aria-live="polite" aria-atomic="true">
           <div class="ai-copilot-thinking-bar" aria-hidden="true"></div>
@@ -2118,6 +2268,7 @@
               <div id="copilot-excel-status" style="font-size:11px;color:#475569;min-height:18px;line-height:1.35;"></div>
             </div>
             <p id="copilot-rag-footnote" style="font-size:10px;color:var(--color-text-light);margin:12px 0 0;line-height:1.45;"></p>
+            <p id="copilot-telemetry-footnote" class="ai-copilot-source-footnote"></p>
           </div>
         </details>
         <div class="ai-copilot-confirm-block">
@@ -2188,6 +2339,19 @@
     </div>
 </div>
 
+<div id="template-history-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.78); z-index:999999; justify-content:center; align-items:center; backdrop-filter: blur(4px);" onclick="if(event.target===this)window.closeChecklistVersionHistory()">
+    <div style="background:white; width:min(820px,94vw); max-height:min(86vh,860px); border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+        <div style="padding:18px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+            <div>
+                <h3 id="template-history-title" style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Histórico de versões</h3>
+                <p style="margin:6px 0 0; font-size:12px; color:#64748b; line-height:1.45;">Cada salvamento cria uma revisão do formulário. Você pode restaurar uma versão anterior sem perder o estado atual.</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeChecklistVersionHistory()">Fechar</button>
+        </div>
+        <div id="template-history-list" style="padding:18px 20px; overflow:auto; display:flex; flex-direction:column; gap:12px; background:#f8fafc;"></div>
+    </div>
+</div>
+
 <script type="module">
   // Descobre a API real (evita POST para :5500 Live Server) antes do builder
   import { ensureAdminApiDetected, resolveApiBase } from './js/config.js';
@@ -2201,6 +2365,7 @@
     setFbSyncStatus,
   } from './js/checklists-i18n.js';
   import { getVisionAiExampleCatalog } from './js/visionAiAnalysisPromptExamplesData.js';
+  import { getVisionDetectionExampleCatalog } from './js/visionDetectionPromptExamplesData.js';
   import { getAdminUiLocale } from './js/user-pages-i18n.js';
   await ensureAdminApiDetected();
   window.__BRSPARK_API_BASE__ = resolveApiBase();
@@ -2214,6 +2379,7 @@
   window.fbT = fbT;
   window.fbFormatInt = fbFormatInt;
   window.getVisionAiExampleCatalog = () => getVisionAiExampleCatalog(getAdminUiLocale());
+  window.getVisionDetectionExampleCatalog = () => getVisionDetectionExampleCatalog(getAdminUiLocale());
   window.applyChecklistsModalsI18n = applyChecklistsModalsI18n;
   window.setFbSyncStatus = setFbSyncStatus;
   applyChecklistsBuilderChromeI18n();

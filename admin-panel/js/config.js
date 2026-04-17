@@ -7,6 +7,8 @@ const LS_API_ORIGIN = 'brspark_admin_api_origin';
 
 /** Cópia da sessão do painel (JWT + metadados) — compartilhada entre abas; limpa no logout e em 401. */
 const LS_ADMIN_SESSION_BUNDLE = 'brspark_admin_session_bundle';
+const SS_ADMIN_CONTEXT = 'brspark_admin_context';
+const SS_ADMIN_CAPABILITIES = 'brspark_admin_capabilities';
 
 /**
  * Grava no `localStorage` o mesmo conteúdo relevante do `sessionStorage` (login válido).
@@ -27,6 +29,8 @@ export function persistAdminSessionBundleFromSessionStorage() {
       role: sessionStorage.getItem('brspark_admin_role') || '',
       panelMode: sessionStorage.getItem('brspark_panel_mode') || '',
       panelTenant: sessionStorage.getItem('brspark_panel_tenant') || '',
+      adminContext: sessionStorage.getItem(SS_ADMIN_CONTEXT) || '',
+      adminCapabilities: sessionStorage.getItem(SS_ADMIN_CAPABILITIES) || '',
     };
     localStorage.setItem(LS_ADMIN_SESSION_BUNDLE, JSON.stringify(bundle));
   } catch {
@@ -51,6 +55,12 @@ export function restoreAdminSessionBundleIfNeeded() {
     if (b.panelTenant != null && String(b.panelTenant).trim() !== '') {
       sessionStorage.setItem('brspark_panel_tenant', String(b.panelTenant));
     }
+    if (b.adminContext != null && String(b.adminContext).trim() !== '') {
+      sessionStorage.setItem(SS_ADMIN_CONTEXT, String(b.adminContext));
+    }
+    if (b.adminCapabilities != null && String(b.adminCapabilities).trim() !== '') {
+      sessionStorage.setItem(SS_ADMIN_CAPABILITIES, String(b.adminCapabilities));
+    }
   } catch {
     /* JSON inválido */
   }
@@ -72,6 +82,83 @@ export function clearAdminSessionFully() {
     /* ignore */
   }
   clearAdminSessionBundle();
+}
+
+export function applyPanelSessionBootstrap(payload) {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  const context = payload?.context && typeof payload.context === 'object' ? payload.context : null;
+  const capabilities = Array.isArray(payload?.capabilities) ? payload.capabilities : [];
+  if (context) {
+    sessionStorage.setItem(SS_ADMIN_CONTEXT, JSON.stringify(context));
+  } else {
+    sessionStorage.removeItem(SS_ADMIN_CONTEXT);
+  }
+  if (capabilities.length) {
+    sessionStorage.setItem(SS_ADMIN_CAPABILITIES, JSON.stringify(capabilities));
+  } else {
+    sessionStorage.removeItem(SS_ADMIN_CAPABILITIES);
+  }
+}
+
+export function getPanelContext() {
+  try {
+    const raw = sessionStorage.getItem(SS_ADMIN_CONTEXT);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getPanelCapabilities() {
+  try {
+    const raw = sessionStorage.getItem(SS_ADMIN_CAPABILITIES);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function refreshPanelSessionBootstrap() {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
+  const token = sessionStorage.getItem('brspark_admin_token');
+  if (!token) return null;
+  try {
+    const res = await fetch(`${resolveApiBase()}/auth/me`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (res.status === 401) {
+      clearAdminSessionFully();
+      window.location.href = 'index.html';
+      return null;
+    }
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.user) {
+      sessionStorage.setItem('brspark_admin_email', data.user.email || '');
+      sessionStorage.setItem('brspark_admin_name', data.user.name || '');
+      sessionStorage.setItem('brspark_admin_role', data.user.role || '');
+    } else if (data?.admin) {
+      sessionStorage.setItem('brspark_admin_email', data.admin.email || '');
+      sessionStorage.setItem('brspark_admin_name', data.admin.name || '');
+      sessionStorage.setItem('brspark_admin_role', '');
+    }
+    if (data?.tenant) {
+      sessionStorage.setItem('brspark_panel_mode', 'tenant');
+      sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(data.tenant));
+    } else if (data?.mode === 'global') {
+      sessionStorage.setItem('brspark_panel_mode', 'global');
+      sessionStorage.removeItem('brspark_panel_tenant');
+    }
+    applyPanelSessionBootstrap(data);
+    persistAdminSessionBundleFromSessionStorage();
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 /** Base da API após ensureAdminApiDetected() — evita usar Live Server (:5500) como API. */

@@ -63,6 +63,26 @@ function extractVisionAiRating0To10(raw: unknown): number | null {
   return null;
 }
 
+/**
+ * Primeira resposta de «Visão de IA — detecção» (`answers[0].value`) para comparações em regras.
+ * Normaliza sim/não para `yes` / `no` / `unknown` em minúsculas; texto livre em minúsculas.
+ */
+function extractVisionChecklistPrimaryAnswerNorm(raw: unknown): string | null {
+  const o = parseVisionStoredObject(raw);
+  if (!o) return null;
+  const st = String((o as { status?: string }).status || '').toLowerCase();
+  if (st !== 'completed') return null;
+  const ans = (o as { answers?: unknown }).answers;
+  if (!Array.isArray(ans) || ans.length === 0) return null;
+  const a0 = ans[0] as { value?: unknown };
+  const s = String(a0?.value ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'sim' || s === 'true' || s === '1' || s === 'yes' || s === 'y') return 'yes';
+  if (s === 'não' || s === 'nao' || s === 'false' || s === '0' || s === 'no' || s === 'n') return 'no';
+  if (s === 'unknown' || s === 'indefinido' || s === 'indeterminado') return 'unknown';
+  return s;
+}
+
 function parseJsonObjectArray(raw: unknown): Record<string, unknown>[] {
   if (raw === undefined || raw === null) return [];
   let v: unknown = raw;
@@ -320,15 +340,20 @@ export function evaluateBusinessCondition(
   }
 
   const rawDepVal = dataModel[condFieldId];
-  const depNorm = parseToNorm(rawDepVal);
-  const depDisplay = responseDisplayString(rawDepVal).trim();
-  const targetNorm = parseToNorm(condValue);
-  const targetDisplay = String(condValue ?? '').trim();
-
   const condFieldType = String(condFieldDef?.type ?? '')
     .trim()
     .replace(/[\s-]+/g, '_')
     .toLowerCase();
+
+  let depValueForNorm: unknown = rawDepVal;
+  if (condFieldType === 'vision_checklist') {
+    const vn = extractVisionChecklistPrimaryAnswerNorm(rawDepVal);
+    if (vn != null) depValueForNorm = vn;
+  }
+  const depNorm = parseToNorm(depValueForNorm);
+  const depDisplay = responseDisplayString(depValueForNorm).trim();
+  const targetNorm = parseToNorm(condValue);
+  const targetDisplay = String(condValue ?? '').trim();
   if (condFieldType === 'vision_checklist' || condFieldType === 'vision_ai_analysis') {
     const visionFilled = (() => {
       if (rawDepVal === undefined || rawDepVal === null) return false;
@@ -398,8 +423,20 @@ export function evaluateBusinessCondition(
   if (op === 'is_empty') return depNorm === '';
   if (op === 'not_empty') return depNorm !== '';
 
-  if (op === 'is_true') return parseBoolish(rawDepVal) === true;
-  if (op === 'is_false') return parseBoolish(rawDepVal) === false;
+  if (op === 'is_true') {
+    if (condFieldType === 'vision_checklist') {
+      const yn = extractVisionChecklistPrimaryAnswerNorm(rawDepVal);
+      return yn === 'yes';
+    }
+    return parseBoolish(rawDepVal) === true;
+  }
+  if (op === 'is_false') {
+    if (condFieldType === 'vision_checklist') {
+      const yn = extractVisionChecklistPrimaryAnswerNorm(rawDepVal);
+      return yn === 'no';
+    }
+    return parseBoolish(rawDepVal) === false;
+  }
 
   if (op === '==') return depNorm === targetNorm;
   if (op === '!=') return depNorm !== targetNorm;

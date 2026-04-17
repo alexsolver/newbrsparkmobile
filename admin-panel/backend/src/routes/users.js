@@ -6,12 +6,20 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const prisma = require('../db');
-const { auditActor } = require('../lib/auditActor');
+const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
 const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
 const { assertTechnicianSeatForNewUser, assertTechnicianSeatForUserPatch } = require('../lib/planQuotaService');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const {
+  assertTenantAccess,
+  isPlatformAdmin,
+  normalizeRole,
+  nonPlatformUserReadWhere,
+  resolveScopedTenantId,
+} = require('../lib/authorization');
+const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -146,6 +154,26 @@ const USER_LIST_SORT_FIELDS = new Set([
   'emailVerifiedAt',
 ]);
 
+function scopedTenantIdFromReq(req, requestedTenantId = null) {
+  return resolveScopedTenantId(req.authorization, requestedTenantId);
+}
+
+async function findScopedUserOrNull(req, userId, extra = {}) {
+  const id = String(userId || '').trim();
+  const base = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, tenantId: true, role: true },
+  });
+  if (!base) return null;
+  if (!assertTenantAccess(req.authorization, base.tenantId)) return null;
+  if (!isPlatformAdmin(req.authorization) && normalizeRole(base.role) === 'SAAS_ADMIN') return null;
+  if (!extra || Object.keys(extra).length === 0) return base;
+  return prisma.user.findUnique({
+    where: { id },
+    ...extra,
+  });
+}
+
 // GET /api/users
 router.get('/', async (req, res) => {
   try {
@@ -166,8 +194,9 @@ router.get('/', async (req, res) => {
       sortDir,
     } = req.query;
 
+    const scopedTenantId = scopedTenantIdFromReq(req, tenantId);
     const where = {
-      ...(tenantId && { tenantId: String(tenantId) }),
+      ...(scopedTenantId && { tenantId: String(scopedTenantId) }),
       ...(role && { role }),
       ...(workTime === '1' && { workTimeTrackingEnabled: true }),
       ...(active === '1' || active === 'true' ? { isActive: true } : {}),
@@ -226,6 +255,9 @@ router.get('/', async (req, res) => {
     if (andExtra.length) {
       where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...andExtra];
     }
+    if (!isPlatformAdmin(req.authorization)) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), nonPlatformUserReadWhere(req.authorization)];
+    }
 
     const sortKey = USER_LIST_SORT_FIELDS.has(String(sort || '')) ? String(sort) : 'createdAt';
     const dir = String(sortDir || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
@@ -251,15 +283,19 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { name, email, password, tenantId, role: bodyRole = 'USER', employeeMatricula: rawMatricula } = req.body;
-    if (!name || !email || !password || !tenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    const scopedTenantId = scopedTenantIdFromReq(req, tenantId);
+    if (!name || !email || !password || !scopedTenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
     const role = String(bodyRole).toUpperCase();
     if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Papel inválido.' });
+    if (!isPlatformAdmin(req.authorization) && role === 'SAAS_ADMIN') {
+      return res.status(403).json({ error: 'Apenas a plataforma pode criar contas SaaS.' });
+    }
     const employeeMatricula = normalizeEmployeeMatricula(rawMatricula);
     if (employeeMatricula) {
-      const dup = await prisma.user.findFirst({ where: { tenantId, employeeMatricula } });
+      const dup = await prisma.user.findFirst({ where: { tenantId: scopedTenantId, employeeMatricula } });
       if (dup) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
     }
-    const seat = await assertTechnicianSeatForNewUser(prisma, tenantId, role);
+    const seat = await assertTechnicianSeatForNewUser(prisma, scopedTenantId, role);
     if (!seat.ok) {
       return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
     }
@@ -267,7 +303,7 @@ router.post('/', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await prisma.$transaction(async (tx) => {
       const u = await tx.user.create({
-        data: { name, email, password: hash, tenantId, role, employeeMatricula },
+        data: { name, email, password: hash, tenantId: scopedTenantId, role, employeeMatricula },
       });
       if (role === 'PROVIDER') {
         await tx.technicianProfile.create({
@@ -278,7 +314,14 @@ router.post('/', async (req, res) => {
     });
     const _a = auditActor(req);
     await prisma.auditLog.create({
-      data: { ..._a, tenantId, action: 'USER_CREATE', resource: email, category: 'ADMIN' },
+      data: {
+        ..._a,
+        tenantId: scopedTenantId,
+        action: 'USER_CREATE',
+        resource: email,
+        category: 'ADMIN',
+        metadata: auditContextMetadata(req, { targetTenantId: scopedTenantId }),
+      },
     });
     res
       .status(201)
@@ -311,8 +354,21 @@ router.patch('/bulk-active', async (req, res) => {
     if (!clean.length) {
       return res.status(400).json({ error: 'Nenhum id válido.' });
     }
+    const scopedRows = await prisma.user.findMany({
+      where: {
+        id: { in: clean },
+        ...(isPlatformAdmin(req.authorization)
+          ? {}
+          : {
+              tenantId: scopedTenantIdFromReq(req),
+              NOT: { role: 'SAAS_ADMIN' },
+            }),
+      },
+      select: { id: true },
+    });
+    const allowedIds = scopedRows.map((row) => row.id);
     const result = await prisma.user.updateMany({
-      where: { id: { in: clean } },
+      where: { id: { in: allowedIds } },
       data: { isActive },
     });
     const _a = auditActor(req);
@@ -323,7 +379,13 @@ router.patch('/bulk-active', async (req, res) => {
           action: isActive ? 'USER_BULK_ACTIVATE' : 'USER_BULK_DEACTIVATE',
           resource: `${result.count} usuários`,
           category: 'ADMIN',
-          metadata: { count: result.count, requested: clean.length, isActive },
+          metadata: auditContextMetadata(req, {
+            count: result.count,
+            requested: clean.length,
+            allowed: allowedIds.length,
+            isActive,
+            targetTenantId: scopedTenantIdFromReq(req),
+          }),
         },
       })
       .catch(() => {});
@@ -344,13 +406,23 @@ router.patch('/reset-password-by-email', async (req, res) => {
       return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
     }
     const em = String(email).toLowerCase().trim();
-    const tid = tenantId && String(tenantId).trim() ? String(tenantId).trim() : null;
+    const tid = scopedTenantIdFromReq(req, tenantId);
     let user;
     if (tid) {
-      user = await prisma.user.findFirst({ where: { email: em, tenantId: tid } });
+      user = await prisma.user.findFirst({
+        where: {
+          email: em,
+          tenantId: tid,
+          ...(isPlatformAdmin(req.authorization) ? {} : { NOT: { role: 'SAAS_ADMIN' } }),
+        },
+      });
     } else {
       const matches = await prisma.user.findMany({
-        where: { email: em },
+        where: {
+          email: em,
+          ...(tid ? { tenantId: tid } : {}),
+          ...(isPlatformAdmin(req.authorization) ? {} : { NOT: { role: 'SAAS_ADMIN' } }),
+        },
         take: 12,
         select: { id: true },
       });
@@ -363,7 +435,7 @@ router.patch('/reset-password-by-email', async (req, res) => {
             'Vários utilizadores com este e-mail. Selecione a organização (tenant) ou utilize o reset a partir da linha na lista.',
         });
       }
-      user = await prisma.user.findUnique({ where: { id: matches[0].id } });
+      user = await findScopedUserOrNull(req, matches[0].id);
     }
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
@@ -376,7 +448,11 @@ router.patch('/reset-password-by-email', async (req, res) => {
         action: 'USER_RESET_PASSWORD',
         resource: updated.email,
         category: 'ADMIN',
-        metadata: { byEmail: true },
+        metadata: auditContextMetadata(req, {
+          byEmail: true,
+          targetTenantId: updated.tenantId,
+          targetUserId: updated.id,
+        }),
       },
     });
     res.json({ ok: true, userId: updated.id });
@@ -390,11 +466,20 @@ router.patch('/:id/reset-password', async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ error: 'Nova senha ausente.' });
+    const existing = await findScopedUserOrNull(req, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { password: hash } });
+    const user = await prisma.user.update({ where: { id: existing.id }, data: { password: hash } });
     const _a2 = auditActor(req);
     await prisma.auditLog.create({
-      data: { ..._a2, action: 'USER_RESET_PASSWORD', resource: user.email, category: 'ADMIN' },
+      data: {
+        ..._a2,
+        tenantId: user.tenantId,
+        action: 'USER_RESET_PASSWORD',
+        resource: user.email,
+        category: 'ADMIN',
+        metadata: auditContextMetadata(req, { targetTenantId: user.tenantId, targetUserId: user.id }),
+      },
     });
     res.json({ ok: true });
   } catch (err) {
@@ -409,8 +494,7 @@ router.patch('/:id/technician-profile', async (req, res) => {
     const st = String(req.body.status || '').toUpperCase();
     if (!allowed.has(st)) return res.status(400).json({ error: 'status inválido.' });
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+    const user = await findScopedUserOrNull(req, req.params.id, {
       include: { technicianProfile: true },
     });
     if (!user || !user.technicianProfile) {
@@ -444,9 +528,9 @@ router.patch('/:id/technician-profile', async (req, res) => {
 // PATCH /api/users/:id/toggle-active
 router.patch('/:id/toggle-active', async (req, res) => {
   try {
-    const current = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const current = await findScopedUserOrNull(req, req.params.id);
     if (!current) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: !current.isActive } });
+    const user = await prisma.user.update({ where: { id: current.id }, data: { isActive: !current.isActive } });
     res.json({ id: user.id, isActive: user.isActive });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -456,11 +540,11 @@ router.patch('/:id/toggle-active', async (req, res) => {
 // POST /api/users/:id/disconnect
 router.post('/:id/disconnect', async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const user = await findScopedUserOrNull(req, req.params.id);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
     await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: user.id },
       data: { currentSessionId: null, currentDeviceId: null },
     });
 
@@ -507,7 +591,7 @@ router.post('/:id/face-enrollment', async (req, res) => {
     }
     if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await findScopedUserOrNull(req, id);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
     const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
@@ -594,7 +678,7 @@ router.post('/:id/document-attachment', async (req, res) => {
     }
     if (!ext) return res.status(400).json({ error: 'Use PDF, JPEG, PNG ou WebP.' });
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await findScopedUserOrNull(req, id);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
     const attId = `doc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -658,7 +742,7 @@ router.post('/:id/avatar-attachment', async (req, res) => {
     }
     if (!ext) return res.status(400).json({ error: 'Use JPEG, PNG ou WebP.' });
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await findScopedUserOrNull(req, id);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
     const attId = `av_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -693,7 +777,7 @@ router.post('/:id/avatar-attachment', async (req, res) => {
 router.post('/:id/send-email-verification', express.json(), async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await findScopedUserOrNull(req, id);
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     if (existing.emailVerifiedAt) {
       return res.status(400).json({ error: 'Este e-mail já está verificado.' });
@@ -705,7 +789,7 @@ router.post('/:id/send-email-verification', express.json(), async (req, res) => 
     for (let attempt = 0; attempt < 5 && !saved; attempt++) {
       try {
         await prisma.user.update({
-          where: { id },
+          where: { id: existing.id },
           data: {
             emailVerificationToken: token,
             emailVerificationExpiresAt: exp,
@@ -776,9 +860,11 @@ router.post('/:id/send-email-verification', express.json(), async (req, res) => 
 router.post('/:id/sync-compreface', async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await findScopedUserOrNull(req, id);
+    if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const { comprefaceRecognitionSync: syncPayload, syncResult } = await syncComprefaceGalleryAfterUserChange(
       prisma,
-      id,
+      existing.id,
       req,
       'manual_api',
     );
@@ -811,7 +897,7 @@ router.post('/:id/sync-compreface', async (req, res) => {
 router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
   try {
     const { id, photoId } = req.params;
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await findScopedUserOrNull(req, id);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
     const found = list.find((p) => p.id === photoId);
@@ -857,8 +943,7 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
 // GET /api/users/:id/admin-activity — últimos eventos de auditoria ligados a este usuário (painel)
 router.get('/:id/admin-activity', async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+    const user = await findScopedUserOrNull(req, req.params.id, {
       select: { id: true, email: true, tenantId: true },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -889,8 +974,7 @@ router.get('/:id/admin-activity', async (req, res) => {
 // GET /api/users/:id — ficha completa (sem password)
 router.get('/:id', async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+    const user = await findScopedUserOrNull(req, req.params.id, {
       include: {
         tenant: { select: { id: true, name: true, email: true, locale: { select: { countryCode: true } } } },
         technicianProfile: true,
@@ -922,6 +1006,9 @@ function buildTechnicianData(technician) {
   if (technician.workScheduleJson !== undefined) data.workScheduleJson = technician.workScheduleJson;
   if (technician.skillsJson !== undefined) data.skillsJson = technician.skillsJson;
   if (technician.serviceLocationIds !== undefined) data.serviceLocationIds = technician.serviceLocationIds;
+  if (technician.serviceCoverageGeoJson !== undefined) {
+    data.serviceCoverageGeoJson = normalizeServiceCoverageGeo(technician.serviceCoverageGeoJson);
+  }
   if (technician.professionalDocuments !== undefined) data.professionalDocuments = technician.professionalDocuments;
   return data;
 }
@@ -930,8 +1017,7 @@ function buildTechnicianData(technician) {
 router.patch('/:id', express.json(), async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.user.findUnique({
-      where: { id },
+    const existing = await findScopedUserOrNull(req, id, {
       include: {
         technicianProfile: true,
         tenant: { select: { locale: { select: { countryCode: true } } } },
@@ -1183,7 +1269,7 @@ router.patch('/:id', express.json(), async (req, res) => {
       }
 
       if (Object.keys(userPatch).length) {
-        await tx.user.update({ where: { id }, data: userPatch });
+        await tx.user.update({ where: { id: existing.id }, data: userPatch });
       }
 
       const techPayload = buildTechnicianData(technician);
@@ -1207,7 +1293,7 @@ router.patch('/:id', express.json(), async (req, res) => {
         if (!existing.technicianProfile) {
           await tx.technicianProfile.create({
             data: {
-              userId: id,
+              userId: existing.id,
               status: techPayload.status || 'PENDING',
               score: techPayload.score ?? 5,
               cft: techPayload.cft ?? null,
@@ -1220,13 +1306,13 @@ router.patch('/:id', express.json(), async (req, res) => {
           });
         } else if (Object.keys(techPayload).length) {
           await tx.technicianProfile.update({
-            where: { userId: id },
+            where: { userId: existing.id },
             data: techPayload,
           });
         }
       } else if (existing.technicianProfile && Object.keys(techPayload).length) {
         await tx.technicianProfile.update({
-          where: { userId: id },
+          where: { userId: existing.id },
           data: techPayload,
         });
       }
@@ -1234,7 +1320,7 @@ router.patch('/:id', express.json(), async (req, res) => {
     });
 
     if (needsComprefaceSync) {
-      await syncComprefaceGalleryAfterUserChange(prisma, id, req, 'user_patch');
+      await syncComprefaceGalleryAfterUserChange(prisma, existing.id, req, 'user_patch');
     }
 
     await prisma.auditLog
@@ -1251,7 +1337,7 @@ router.patch('/:id', express.json(), async (req, res) => {
       .catch(() => {});
 
     const fresh = await prisma.user.findUnique({
-      where: { id },
+      where: { id: existing.id },
       include: {
         tenant: { select: { id: true, name: true, email: true } },
         technicianProfile: true,

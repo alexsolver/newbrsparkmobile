@@ -8,6 +8,37 @@
   <style>
     .api-docs-intro { font-size:12px; color:var(--text2); line-height:1.55; max-width:920px; margin-bottom:16px; }
     .api-docs-intro code { font-size:11px; background:var(--surface2); padding:2px 6px; border-radius:4px; }
+    .api-docs-note-title { font-size:13px; font-weight:800; color:var(--text1); margin:0 0 10px; }
+    .api-docs-note-sub { font-size:12px; color:var(--text2); line-height:1.6; margin:0 0 10px; }
+    .api-docs-note-list { margin:0; padding-left:18px; color:var(--text2); font-size:12px; line-height:1.6; }
+    .api-docs-note-list li { margin-bottom:6px; }
+    .api-docs-note-list code { font-size:11px; background:var(--surface2); padding:2px 6px; border-radius:4px; }
+    .api-docs-audit-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:8px; }
+    .api-docs-audit-stat { border:1px solid var(--line); border-radius:10px; background:var(--panel); padding:12px; }
+    .api-docs-audit-stat-value { font-size:18px; font-weight:900; color:var(--text1); line-height:1.1; }
+    .api-docs-audit-stat-label { font-size:11px; color:var(--text3); margin-top:5px; }
+    .api-docs-docs { display:grid; grid-template-columns:1fr; gap:10px; }
+    .api-docs-docs details { border:1px solid var(--line); border-radius:10px; background:var(--panel); padding:10px 12px; }
+    .api-docs-docs summary { cursor:pointer; font-size:13px; font-weight:800; color:var(--text1); }
+    .api-docs-docs-body { font-size:12px; color:var(--text2); line-height:1.6; margin-top:10px; }
+    .api-docs-docs-body ul { margin:0; padding-left:18px; }
+    .api-docs-docs-body li { margin-bottom:6px; }
+    .api-docs-docs-body code { font-size:11px; background:var(--surface2); padding:2px 6px; border-radius:4px; }
+    .api-docs-ai-wrap { display:grid; gap:10px; }
+    .api-docs-ai-sticky { position:sticky; top:12px; z-index:30; }
+    .api-docs-ai-status { font-size:12px; color:var(--text3); }
+    .api-docs-ai-quick { display:grid; gap:6px; }
+    .api-docs-ai-quick-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; }
+    .api-docs-ai-quick-list { display:flex; flex-wrap:wrap; gap:6px; }
+    .api-docs-ai-messages { border:1px solid var(--line); border-radius:12px; background:var(--panel); padding:10px; min-height:220px; max-height:420px; overflow:auto; display:grid; gap:8px; }
+    .api-docs-ai-msg { border:1px solid var(--line); border-radius:10px; padding:10px; font-size:12px; line-height:1.6; white-space:pre-wrap; }
+    .api-docs-ai-msg.user { background:rgba(37, 99, 235, .08); border-color:rgba(37, 99, 235, .28); }
+    .api-docs-ai-msg.assistant { background:var(--surface2); }
+    .api-docs-ai-msg-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:11px; color:var(--text3); }
+    .api-docs-ai-controls { display:grid; gap:8px; }
+    .api-docs-ai-input { width:100%; resize:vertical; min-height:78px; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--panel); color:var(--text1); font:inherit; font-size:12px; line-height:1.5; }
+    .api-docs-ai-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .api-docs-ai-source { font-size:11px; color:var(--text3); }
     #swagger-ui { min-height:calc(100vh - 200px); }
     #swagger-ui .swagger-ui { font-family: inherit; }
     #swagger-ui .topbar { display: none; }
@@ -43,10 +74,128 @@
           </a>
         </div>
       </div>
+      <section class="data-shell fade-in api-docs-ai-sticky" style="margin-bottom:16px">
+        <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
+          <h3 class="api-docs-note-title" id="apidoc-ai-title"></h3>
+          <p class="api-docs-note-sub" id="apidoc-ai-sub"></p>
+          <div class="api-docs-ai-wrap">
+            <div class="api-docs-ai-quick">
+              <div class="api-docs-ai-quick-title" id="apidoc-ai-quick-title"></div>
+              <div class="api-docs-ai-quick-list">
+                <button type="button" class="btn btn-ghost btn-sm" id="apidoc-ai-q1"></button>
+                <button type="button" class="btn btn-ghost btn-sm" id="apidoc-ai-q2"></button>
+                <button type="button" class="btn btn-ghost btn-sm" id="apidoc-ai-q3"></button>
+                <button type="button" class="btn btn-ghost btn-sm" id="apidoc-ai-q4"></button>
+              </div>
+            </div>
+            <div class="api-docs-ai-status" id="apidoc-ai-status"></div>
+            <div class="api-docs-ai-messages" id="apidoc-ai-messages"></div>
+            <div class="api-docs-ai-controls">
+              <textarea class="api-docs-ai-input" id="apidoc-ai-input"></textarea>
+              <div class="api-docs-ai-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="apidoc-ai-clear-btn"></button>
+                <button type="button" class="btn btn-primary btn-sm" id="apidoc-ai-send-btn"></button>
+              </div>
+            </div>
+            <div class="api-docs-ai-source" id="apidoc-ai-source"></div>
+          </div>
+        </div>
+      </section>
       <section class="data-shell fade-in" style="margin-bottom:16px">
         <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
           <p class="api-docs-intro" id="apidoc-intro-1"></p>
           <p class="api-docs-intro" id="apidoc-intro-2"></p>
+        </div>
+      </section>
+      <section class="data-shell fade-in" style="margin-bottom:16px">
+        <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
+          <h3 class="api-docs-note-title" id="apidoc-fbapi-title"></h3>
+          <p class="api-docs-note-sub" id="apidoc-fbapi-sub"></p>
+          <ul class="api-docs-note-list">
+            <li id="apidoc-fbapi-item-1"></li>
+            <li id="apidoc-fbapi-item-2"></li>
+            <li id="apidoc-fbapi-item-3"></li>
+            <li id="apidoc-fbapi-item-4"></li>
+            <li id="apidoc-fbapi-item-5"></li>
+            <li id="apidoc-fbapi-item-6"></li>
+          </ul>
+        </div>
+      </section>
+      <section class="data-shell fade-in" style="margin-bottom:16px">
+        <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
+          <h3 class="api-docs-note-title" id="apidoc-audit-title"></h3>
+          <p class="api-docs-note-sub" id="apidoc-audit-sub"></p>
+          <div class="api-docs-audit-grid">
+            <article class="api-docs-audit-stat">
+              <div class="api-docs-audit-stat-value" id="apidoc-stat-paths-value">—</div>
+              <div class="api-docs-audit-stat-label" id="apidoc-stat-paths-label"></div>
+            </article>
+            <article class="api-docs-audit-stat">
+              <div class="api-docs-audit-stat-value" id="apidoc-stat-ops-value">—</div>
+              <div class="api-docs-audit-stat-label" id="apidoc-stat-ops-label"></div>
+            </article>
+            <article class="api-docs-audit-stat">
+              <div class="api-docs-audit-stat-value" id="apidoc-stat-tags-value">—</div>
+              <div class="api-docs-audit-stat-label" id="apidoc-stat-tags-label"></div>
+            </article>
+            <article class="api-docs-audit-stat">
+              <div class="api-docs-audit-stat-value" id="apidoc-stat-security-value">—</div>
+              <div class="api-docs-audit-stat-label" id="apidoc-stat-security-label"></div>
+            </article>
+          </div>
+          <p class="api-docs-note-sub" id="apidoc-audit-result" style="margin-top:12px;margin-bottom:0"></p>
+        </div>
+      </section>
+      <section class="data-shell fade-in" style="margin-bottom:16px">
+        <div class="data-shell-body" style="padding-top:16px;padding-bottom:16px">
+          <h3 class="api-docs-note-title" id="apidoc-pack-title"></h3>
+          <p class="api-docs-note-sub" id="apidoc-pack-sub"></p>
+          <div class="api-docs-docs">
+            <details open>
+              <summary id="apidoc-doc-auth-title"></summary>
+              <div class="api-docs-docs-body">
+                <ul>
+                  <li id="apidoc-doc-auth-item-1"></li>
+                  <li id="apidoc-doc-auth-item-2"></li>
+                  <li id="apidoc-doc-auth-item-3"></li>
+                  <li id="apidoc-doc-auth-item-4"></li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary id="apidoc-doc-contract-title"></summary>
+              <div class="api-docs-docs-body">
+                <ul>
+                  <li id="apidoc-doc-contract-item-1"></li>
+                  <li id="apidoc-doc-contract-item-2"></li>
+                  <li id="apidoc-doc-contract-item-3"></li>
+                  <li id="apidoc-doc-contract-item-4"></li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary id="apidoc-doc-flow-title"></summary>
+              <div class="api-docs-docs-body">
+                <ul>
+                  <li id="apidoc-doc-flow-item-1"></li>
+                  <li id="apidoc-doc-flow-item-2"></li>
+                  <li id="apidoc-doc-flow-item-3"></li>
+                  <li id="apidoc-doc-flow-item-4"></li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary id="apidoc-doc-govern-title"></summary>
+              <div class="api-docs-docs-body">
+                <ul>
+                  <li id="apidoc-doc-govern-item-1"></li>
+                  <li id="apidoc-doc-govern-item-2"></li>
+                  <li id="apidoc-doc-govern-item-3"></li>
+                  <li id="apidoc-doc-govern-item-4"></li>
+                </ul>
+              </div>
+            </details>
+          </div>
         </div>
       </section>
       <div id="swagger-ui"></div>
@@ -56,10 +205,211 @@
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
+  import { resolveApiBase } from './js/config.js';
   import { applyApiDocsPageI18n, mpT } from './js/menu-pages-i18n.js';
 
   await initPage();
   applyApiDocsPageI18n();
+
+  async function renderSpecAuditSummary() {
+    try {
+      const res = await fetch('openapi.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const spec = await res.json();
+      const pathsObj = spec && typeof spec === 'object' && spec.paths && typeof spec.paths === 'object' ? spec.paths : {};
+      const tagsArr = Array.isArray(spec?.tags) ? spec.tags : [];
+      const pathKeys = Object.keys(pathsObj);
+      let operationCount = 0;
+      let publicOps = 0;
+      let protectedOps = 0;
+      for (const p of pathKeys) {
+        const byMethod = pathsObj[p] && typeof pathsObj[p] === 'object' ? pathsObj[p] : {};
+        for (const m of Object.keys(byMethod)) {
+          const mm = String(m || '').toLowerCase();
+          if (!['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(mm)) continue;
+          operationCount += 1;
+          const op = byMethod[m] || {};
+          const sec = Array.isArray(op.security) ? op.security : null;
+          if (sec && sec.length === 0) publicOps += 1;
+          else protectedOps += 1;
+        }
+      }
+      const hasAdmin = !!spec?.components?.securitySchemes?.bearerAdmin;
+      const hasApp = !!spec?.components?.securitySchemes?.bearerApp;
+      const secLabel = hasAdmin && hasApp ? 'bearerAdmin + bearerApp' : hasAdmin ? 'bearerAdmin' : hasApp ? 'bearerApp' : mpT('common_no');
+
+      const set = (id, txt) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(txt);
+      };
+      set('apidoc-stat-paths-value', pathKeys.length);
+      set('apidoc-stat-ops-value', operationCount);
+      set('apidoc-stat-tags-value', tagsArr.length);
+      set('apidoc-stat-security-value', secLabel);
+      set(
+        'apidoc-audit-result',
+        mpT('apidoc_audit_result', { protectedOps, publicOps, tags: tagsArr.length, paths: pathKeys.length }),
+      );
+    } catch {
+      const el = document.getElementById('apidoc-audit-result');
+      if (el) el.textContent = mpT('apidoc_audit_fail');
+    }
+  }
+
+  await renderSpecAuditSummary();
+
+  const aiMessagesEl = document.getElementById('apidoc-ai-messages');
+  const aiInputEl = document.getElementById('apidoc-ai-input');
+  const aiSendBtn = document.getElementById('apidoc-ai-send-btn');
+  const aiClearBtn = document.getElementById('apidoc-ai-clear-btn');
+  const aiStatusEl = document.getElementById('apidoc-ai-status');
+  const aiSourceEl = document.getElementById('apidoc-ai-source');
+  const aiQuickButtons = [
+    document.getElementById('apidoc-ai-q1'),
+    document.getElementById('apidoc-ai-q2'),
+    document.getElementById('apidoc-ai-q3'),
+    document.getElementById('apidoc-ai-q4'),
+  ];
+
+  const aiState = {
+    busy: false,
+    messages: [],
+  };
+
+  const fmtTime = () => new Date().toLocaleTimeString();
+  const docsAssistantEndpoint = (() => {
+    const base = String(resolveApiBase() || '').replace(/\/+$/, '');
+    return `${base}/docs/assistant`;
+  })();
+  const getAdminToken = () => String(sessionStorage.getItem('brspark_admin_token') || '').trim();
+
+  function setAiStatus(msgKey, vars = {}) {
+    if (!aiStatusEl) return;
+    aiStatusEl.textContent = mpT(msgKey, vars);
+  }
+
+  function renderAiMessage(role, content, stamp) {
+    if (!aiMessagesEl) return;
+    const box = document.createElement('article');
+    box.className = `api-docs-ai-msg ${role === 'user' ? 'user' : 'assistant'}`;
+    const hd = document.createElement('div');
+    hd.className = 'api-docs-ai-msg-header';
+    const who = document.createElement('strong');
+    who.textContent = role === 'user' ? mpT('apidoc_ai_you') : mpT('apidoc_ai_assistant');
+    const ts = document.createElement('span');
+    ts.textContent = stamp || fmtTime();
+    hd.appendChild(who);
+    hd.appendChild(ts);
+    const body = document.createElement('div');
+    body.textContent = content || '';
+    box.appendChild(hd);
+    box.appendChild(body);
+    aiMessagesEl.appendChild(box);
+    aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+  }
+
+  function syncAiActionState() {
+    if (aiSendBtn) aiSendBtn.disabled = aiState.busy;
+    if (aiInputEl) aiInputEl.disabled = aiState.busy;
+    if (aiClearBtn) aiClearBtn.disabled = aiState.busy || aiState.messages.length === 0;
+    aiQuickButtons.forEach((b) => {
+      if (b) b.disabled = aiState.busy;
+    });
+  }
+
+  function resetAiConversation() {
+    aiState.messages = [];
+    if (aiMessagesEl) aiMessagesEl.innerHTML = '';
+    if (aiSourceEl) aiSourceEl.textContent = '';
+    renderAiMessage('assistant', mpT('apidoc_ai_welcome'));
+    setAiStatus('apidoc_ai_status_ready');
+    syncAiActionState();
+  }
+
+  async function sendAiQuestion() {
+    if (aiState.busy) return;
+    const token = getAdminToken();
+    if (!token) {
+      setAiStatus('apidoc_ai_status_no_token');
+      return;
+    }
+    const q = aiInputEl ? String(aiInputEl.value || '').trim() : '';
+    if (!q) return;
+
+    aiState.messages.push({ role: 'user', content: q });
+    renderAiMessage('user', q);
+    if (aiInputEl) aiInputEl.value = '';
+    aiState.busy = true;
+    syncAiActionState();
+    setAiStatus('apidoc_ai_status_loading');
+
+    try {
+      const res = await fetch(docsAssistantEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          messages: aiState.messages.slice(-12),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const fallback = mpT('apidoc_ai_error_generic');
+        const msg = data && typeof data.error === 'string' ? data.error : fallback;
+        throw new Error(msg);
+      }
+      const answer = data && typeof data.answer === 'string' ? data.answer.trim() : '';
+      if (!answer) throw new Error(mpT('apidoc_ai_error_empty'));
+      aiState.messages.push({ role: 'assistant', content: answer });
+      renderAiMessage('assistant', answer);
+      const sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
+      if (aiSourceEl) {
+        aiSourceEl.textContent = mpT('apidoc_ai_source_info', { count: sourceCount, model: data.model || 'n/a' });
+      }
+      setAiStatus('apidoc_ai_status_ready');
+    } catch (e) {
+      const errText = e && e.message ? e.message : mpT('apidoc_ai_error_generic');
+      renderAiMessage('assistant', `${mpT('apidoc_ai_error_prefix')} ${errText}`);
+      setAiStatus('apidoc_ai_status_error');
+    } finally {
+      aiState.busy = false;
+      syncAiActionState();
+    }
+  }
+
+  async function sendAiPreset(questionText) {
+    const q = String(questionText || '').trim();
+    if (!q || aiState.busy) return;
+    if (aiInputEl) aiInputEl.value = q;
+    await sendAiQuestion();
+  }
+
+  if (aiInputEl) aiInputEl.placeholder = mpT('apidoc_ai_input_placeholder');
+  if (aiSendBtn) aiSendBtn.textContent = mpT('apidoc_ai_send');
+  if (aiClearBtn) aiClearBtn.textContent = mpT('apidoc_ai_clear');
+  const aiQuickTitle = document.getElementById('apidoc-ai-quick-title');
+  if (aiQuickTitle) aiQuickTitle.textContent = mpT('apidoc_ai_quick_title');
+  if (aiQuickButtons[0]) aiQuickButtons[0].textContent = mpT('apidoc_ai_quick_1_label');
+  if (aiQuickButtons[1]) aiQuickButtons[1].textContent = mpT('apidoc_ai_quick_2_label');
+  if (aiQuickButtons[2]) aiQuickButtons[2].textContent = mpT('apidoc_ai_quick_3_label');
+  if (aiQuickButtons[3]) aiQuickButtons[3].textContent = mpT('apidoc_ai_quick_4_label');
+  if (aiSendBtn) aiSendBtn.addEventListener('click', sendAiQuestion);
+  if (aiClearBtn) aiClearBtn.addEventListener('click', resetAiConversation);
+  if (aiQuickButtons[0]) aiQuickButtons[0].addEventListener('click', () => sendAiPreset(mpT('apidoc_ai_quick_1_question')));
+  if (aiQuickButtons[1]) aiQuickButtons[1].addEventListener('click', () => sendAiPreset(mpT('apidoc_ai_quick_2_question')));
+  if (aiQuickButtons[2]) aiQuickButtons[2].addEventListener('click', () => sendAiPreset(mpT('apidoc_ai_quick_3_question')));
+  if (aiQuickButtons[3]) aiQuickButtons[3].addEventListener('click', () => sendAiPreset(mpT('apidoc_ai_quick_4_question')));
+  if (aiInputEl) {
+    aiInputEl.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        sendAiQuestion();
+      }
+    });
+  }
+  resetAiConversation();
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {

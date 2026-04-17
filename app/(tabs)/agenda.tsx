@@ -12,6 +12,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useAppContext } from '../../src/context/AppContext';
 import { AgendaService, type AgendaScope } from '../../src/services/agendaService';
+import { userHasCapability } from '../../src/services/auth';
 import type { AgendaEvent } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database/index';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
@@ -108,10 +109,11 @@ function formatEventPeriod(ev: AgendaEvent, locale: string): string | null {
 export default function AgendaScreen() {
   const router = useRouter();
   const { user, userRole } = useAuth();
+  const { mode } = useAppContext();
   const { t, i18n } = useTranslation();
   const { width: winW, height: winH } = useWindowDimensions();
   const isLandscape = winW > winH;
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createAgendaStyles(C), [C]);
   
   const [events, setEvents] = useState<AgendaEvent[]>([]);
@@ -153,7 +155,12 @@ export default function AgendaScreen() {
     if (!user?.email) return;
     setLoading(true);
     try {
-      const scope: AgendaScope = userRole === 'TECHNICIAN' ? 'PROVIDER' : 'CLIENT';
+      const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
+      const hasProviderProfileFallback =
+        String(user?.role || '').toUpperCase() === 'PROVIDER' ||
+        String(userRole || '').toUpperCase() === 'TECHNICIAN';
+      const scope: AgendaScope =
+        mode === 'PROVIDER' && (canUseProviderMode || hasProviderProfileFallback) ? 'PROVIDER' : 'CLIENT';
       const data = await AgendaService.getUnifiedAgenda(user.email, scope);
       setEvents(data);
     } catch (e: any) {
@@ -162,7 +169,7 @@ export default function AgendaScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, userRole, mode]);
 
   const activityPreviewPeriod = useMemo(() => {
     if (!activityPreview) return null;
@@ -275,13 +282,12 @@ export default function AgendaScreen() {
     );
   };
 
-  const { mode } = useAppContext();
   const [isExpanded, setIsExpanded] = useState(false);
   /** Em portrait a vista padrão é lista + semana (calendário); em landscape, prestador abre em Gantt. */
   const [isGantt, setIsGantt] = useState(
     () =>
       isLandscape &&
-      (mode === 'PROVIDER' || user?.role === 'PROVIDER' || userRole === 'TECHNICIAN'),
+      (userHasCapability(user, 'mobile.mode.provider') && mode === 'PROVIDER'),
   );
 
   useEffect(() => {
@@ -290,14 +296,14 @@ export default function AgendaScreen() {
       return;
     }
     const openGanttInLandscape =
-      mode === 'PROVIDER' || user?.role === 'PROVIDER' || userRole === 'TECHNICIAN';
+      userHasCapability(user, 'mobile.mode.provider') && mode === 'PROVIDER';
     if (openGanttInLandscape) {
       setIsGantt(true);
       setTodaySlotMode(true);
     }
   }, [isLandscape, mode, user?.role, userRole]);
 
-  const isProvider = mode === 'PROVIDER' || user?.role === 'PROVIDER';
+  const isProvider = userHasCapability(user, 'mobile.mode.provider') && mode === 'PROVIDER';
 
   const [zoomLevel, setZoomLevel] = useState<1 | 2 | 3 | 4>(2);
   /** Vista do dia corrente: eixo horizontal em slots de 5 min (padrão ao abrir a agenda em modo Gantt). */
@@ -398,7 +404,7 @@ export default function AgendaScreen() {
       const totalCells = HOJE_VIEW_DAY_COUNT * cellsPerDay;
       const cellW = timelineGridStepMin * HOJE_PX_PER_MINUTE;
 
-      const showTechPortraitTimeRail = !isLandscape && userRole === 'TECHNICIAN';
+      const showTechPortraitTimeRail = !isLandscape && isProvider;
       const TIME_RAIL_W = 50;
       const hojeRowBlocks = activeRows.map((r) => {
         const clippedPairs = r.events
@@ -417,7 +423,7 @@ export default function AgendaScreen() {
         const minsFromAnchor = (Date.now() - dayAnchor.getTime()) / 60000;
         const nowLeftPx = minsFromAnchor * HOJE_PX_PER_MINUTE;
         const showNowLine =
-          userRole === 'TECHNICIAN' &&
+          isProvider &&
           Number.isFinite(minsFromAnchor) &&
           nowLeftPx >= -2 &&
           nowLeftPx <= timelineW + 2;
@@ -929,7 +935,11 @@ export default function AgendaScreen() {
             <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.push('/(tabs)'))} style={{ marginRight: 12, padding: 4 }}>
               <Ionicons name="arrow-back" size={22} color={C.slate} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Agenda</Text>
+            <View>
+              <Text style={styles.headerBrand}>{appDisplayName}</Text>
+              <Text style={styles.headerTitle}>Agenda</Text>
+              <Text style={styles.headerSub}>{appTagline}</Text>
+            </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => setIsGantt(!isGantt)}>
@@ -1145,7 +1155,9 @@ function createAgendaStyles(C: ColorPalette) {
       borderBottomColor: C.divider,
       zIndex: 10,
     },
+    headerBrand: { fontSize: 10, fontWeight: '900', color: C.accent, textTransform: 'uppercase', letterSpacing: 0.55, marginBottom: 2 },
     headerTitle: { fontSize: 26, fontWeight: '900', color: C.slate, letterSpacing: -0.5 },
+    headerSub: { fontSize: 11, fontWeight: '700', color: C.textLight, marginTop: 2 },
     fab: {
       width: 36, height: 36, borderRadius: 18, backgroundColor: C.accent,
       justifyContent: 'center', alignItems: 'center',

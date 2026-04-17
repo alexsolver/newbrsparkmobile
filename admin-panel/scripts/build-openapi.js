@@ -206,6 +206,31 @@ const ROUTES = [
   ['post', '/api/checklists/ai/suggest-logic', op('Sugerir lógica de formulário', ['Admin — Formulários IA'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
   })],
+  ['post', '/api/docs/assistant', op('Assistente técnico-operacional da API Docs', ['Admin — API Docs IA'], bearerAdmin, {
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              messages: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    role: { type: 'string', enum: ['user', 'assistant'] },
+                    content: { type: 'string' },
+                  },
+                  required: ['role', 'content'],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })],
 
   // ── Operations (Kanban — JWT painel/admin; reject também aceita JWT do app)
   ['get', '/api/operations/tasks', op('Lista execuções (filtros: email, status, id, limit; scope=os|rt|all, padrão os; tenant via JWT)', ['Operações & OS'], bearerAdmin)],

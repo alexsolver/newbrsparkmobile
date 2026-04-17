@@ -2,7 +2,7 @@
  * Lista e detalhe de candidaturas de cadastro de prestador + convite.
  */
 import { initPage } from './sidebar.js';
-import { CONFIG } from './config.js';
+import { CONFIG, getPanelCapabilities } from './config.js';
 import {
   applyTechnicianApplicationsPageI18n,
   tpT,
@@ -32,6 +32,50 @@ function closeModal(id) {
 let currentDetailId = null;
 let revisionTargetId = null;
 let searchDebounce = null;
+const panelCaps = new Set(getPanelCapabilities());
+const canManageTechApplications =
+  panelCaps.has('tenant.technicianRegistration.write.self') ||
+  panelCaps.has('tenant.technicianRegistration.write.any');
+
+function revisionTemplates() {
+  return [
+    { id: 'docs', text: tpT('tp_revision_tpl_docs') },
+    { id: 'face', text: tpT('tp_revision_tpl_face') },
+    { id: 'schedule_regions', text: tpT('tp_revision_tpl_schedule_regions') },
+    { id: 'data', text: tpT('tp_revision_tpl_data') },
+  ];
+}
+
+function resetRevisionModalFields() {
+  const msgEl = document.getElementById('revision-msg');
+  if (msgEl) msgEl.value = '';
+  const tplEl = document.getElementById('revision-template');
+  if (tplEl) tplEl.value = '';
+}
+
+function bindRevisionTemplateUi() {
+  const tplEl = document.getElementById('revision-template');
+  const msgEl = document.getElementById('revision-msg');
+  if (!tplEl || !msgEl) return;
+
+  const opts = [`<option value="">${escapeHtml(tpT('tp_revision_tpl_placeholder'))}</option>`]
+    .concat(
+      revisionTemplates().map(
+        (t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.text.slice(0, 72))}</option>`,
+      ),
+    )
+    .join('');
+  tplEl.innerHTML = opts;
+
+  tplEl.onchange = () => {
+    const id = String(tplEl.value || '');
+    if (!id) return;
+    const hit = revisionTemplates().find((t) => t.id === id);
+    if (!hit) return;
+    msgEl.value = hit.text;
+    msgEl.focus();
+  };
+}
 
 function listSearchQueryValue() {
   const raw = document.getElementById('filter-search')?.value ?? '';
@@ -110,7 +154,9 @@ function actionsCellHtml(r) {
     const em = escapeHtml(r.invitedEmail || '');
     return `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">
       <a class="btn btn-sm btn-outline" href="user-edit.html?id=${uid}">${escapeHtml(tpT('tp_act_user'))}</a>
-      <button type="button" class="btn btn-sm btn-primary" data-invite-email="${em}" data-invite-tenant="${escapeHtml(r.tenantId || '')}">${escapeHtml(tpT('tp_act_invite'))}</button>
+      ${canManageTechApplications
+        ? `<button type="button" class="btn btn-sm btn-primary" data-invite-email="${em}" data-invite-tenant="${escapeHtml(r.tenantId || '')}">${escapeHtml(tpT('tp_act_invite'))}</button>`
+        : ''}
     </div>`;
   }
   if (r.id) {
@@ -268,7 +314,7 @@ async function loadDetail(id) {
     .join('');
 
   actions.innerHTML = '';
-  if (res.status === 'SUBMITTED') {
+  if (res.status === 'SUBMITTED' && canManageTechApplications) {
     actions.innerHTML = `
       <button type="button" class="btn btn-primary" id="act-approve">${escapeHtml(tpT('tp_act_approve'))}</button>
       <button type="button" class="btn btn-outline" id="act-revision">${escapeHtml(tpT('tp_act_revision'))}</button>
@@ -285,7 +331,7 @@ async function loadDetail(id) {
     };
     document.getElementById('act-revision').onclick = () => {
       revisionTargetId = id;
-      document.getElementById('revision-msg').value = '';
+      resetRevisionModalFields();
       openModal('modal-revision');
     };
     document.getElementById('act-reject').onclick = async () => {
@@ -325,6 +371,9 @@ async function loadTenantsForInvite() {
 export async function bootTechnicianApplicationsPage() {
   await initPage();
   applyTechnicianApplicationsPageI18n();
+  bindRevisionTemplateUi();
+  const inviteBtn = document.getElementById('btn-invite');
+  if (inviteBtn) inviteBtn.hidden = !canManageTechApplications;
   readTechAppsStatusFromUrl();
   readTechAppsQFromUrl();
 
@@ -337,6 +386,7 @@ export async function bootTechnicianApplicationsPage() {
     });
   }
   document.getElementById('btn-invite').onclick = async () => {
+    if (!canManageTechApplications) return;
     document.getElementById('invite-email').value = '';
     await loadTenantsForInvite();
     openModal('modal-invite');
@@ -345,9 +395,13 @@ export async function bootTechnicianApplicationsPage() {
     b.onclick = () => closeModal('modal-invite');
   });
   document.querySelectorAll('[data-close-rev]').forEach((b) => {
-    b.onclick = () => closeModal('modal-revision');
+    b.onclick = () => {
+      closeModal('modal-revision');
+      resetRevisionModalFields();
+    };
   });
   document.getElementById('invite-submit').onclick = async () => {
+    if (!canManageTechApplications) return;
     const email = document.getElementById('invite-email').value.trim();
     if (!email) {
       alert(tpT('tp_alert_email'));
@@ -385,6 +439,7 @@ export async function bootTechnicianApplicationsPage() {
     loadList();
   };
   document.getElementById('revision-submit').onclick = async () => {
+    if (!canManageTechApplications) return;
     const msg = document.getElementById('revision-msg').value.trim();
     if (!msg) {
       alert(tpT('tp_alert_rev_msg'));
@@ -400,6 +455,7 @@ export async function bootTechnicianApplicationsPage() {
       return;
     }
     closeModal('modal-revision');
+    resetRevisionModalFields();
     loadDetail(rid);
   };
   document.getElementById('btn-close-detail').onclick = () => showList();

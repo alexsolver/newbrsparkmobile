@@ -188,7 +188,7 @@ function ProviderCard({
 export default function ServicesScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createServicesStyles(C), [C]);
   const numLocale = useMemo(() => numberLocaleForApp(i18n.language), [i18n.language]);
   const [providers, setProviders] = useState<any[]>([]);
@@ -268,7 +268,9 @@ export default function ServicesScreen() {
       <View style={{ flexShrink: 0 }}>
       {/* Header */}
       <View style={styles.header}>
+        <Text style={styles.brandName}>{appDisplayName}</Text>
         <Text style={[styles.title, { color: C.primary }]}>{t('services.title')}</Text>
+        <Text style={styles.brandTagline} numberOfLines={1}>{appTagline}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={styles.subtitle}>
             {fromCache
@@ -424,7 +426,9 @@ function createServicesStyles(C: ColorPalette) {
   return StyleSheet.create({
     container: { flex: 1 },
     header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+    brandName: { fontSize: 11, fontWeight: '900', color: C.accent, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
     title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+    brandTagline: { fontSize: 11, fontWeight: '700', color: C.textLight, marginTop: 2, marginBottom: 6 },
     subtitle: { fontSize: 13, fontWeight: '700', color: C.textSecondary, marginTop: 2 },
 
     searchBar: {

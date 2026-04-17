@@ -31,6 +31,7 @@ import {
 import { useConnectivity } from '../hooks/useConnectivity';
 import { loadRtCloudTasks } from '../lib/cloudTasksBuckets';
 import { countRoutineTasksInLocalRtCacheForTemplate } from '../lib/routineTaskQueueUi';
+import { userHasCapability } from '../services/auth';
 
 const ADMIN_MENU_ITEMS = [
   { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
@@ -244,6 +245,8 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isOnline } = useConnectivity(6000);
+  const canUseProviderQuickActions = userHasCapability(user, 'mobile.provider.quickActions');
+  const canUseAdminQuickActions = userHasCapability(user, 'mobile.admin.quickActions');
 
   const [isOpen, setIsOpen] = useState(false);
   const [rtAssignments, setRtAssignments] = useState<RoutineTaskAssignmentDto[]>([]);
@@ -315,7 +318,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
     })();
   };
 
-  if (mode === 'PROVIDER') {
+  if (mode === 'PROVIDER' && canUseProviderQuickActions) {
     const triggerColor = isOpen ? C.slate : C.textSecondary;
     return (
       <View style={tabBarSlot ? listStyles.tabBarSlotRoot : listStyles.container}>
@@ -484,6 +487,10 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
         </Modal>
       </View>
     );
+  }
+
+  if (!canUseAdminQuickActions) {
+    return <View style={tabBarSlot ? radialStyles.tabBarSlotRoot : radialStyles.container} />;
   }
 
   return (

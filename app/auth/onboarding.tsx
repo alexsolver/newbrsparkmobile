@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
+import { canUseProviderMode } from '../../src/services/auth';
 import { getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -100,7 +101,7 @@ export default function OnboardingScreen() {
   const { user, userRole, loading: authLoading } = useAuth();
   const { colors: C, resolvedLogoUrl, appDisplayName, appTagline } = useTheme();
   const isTechnician = useMemo(
-    () => userRole === 'TECHNICIAN' && isTechnicianProfileActive(user),
+    () => userRole === 'TECHNICIAN' && canUseProviderMode(user) && isTechnicianProfileActive(user),
     [user, userRole]
   );
 

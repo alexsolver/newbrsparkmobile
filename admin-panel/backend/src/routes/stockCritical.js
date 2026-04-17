@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const { Prisma } = require('@prisma/client');
 const prisma = require('../db');
+const { resolveScopedTenantId } = require('../lib/authorization');
 
 const MAX_LIMIT = 200;
 const MAX_CSV = 5000;
@@ -19,12 +20,7 @@ function parseLimit(raw, cap) {
 
 /** Escopo: TENANT_ADMIN só vê o próprio tenant; demais podem filtrar por `tenantId`. */
 function resolveTenantId(req, queryTenantId) {
-  const a = req.admin;
-  if (a && a.panelUser && a.role === 'TENANT_ADMIN' && a.tenantId) {
-    return String(a.tenantId);
-  }
-  const q = queryTenantId != null ? String(queryTenantId).trim() : '';
-  return q || null;
+  return resolveScopedTenantId(req.authorization, queryTenantId != null ? String(queryTenantId).trim() : null);
 }
 
 function buildWhereParts(tenantId, qRaw) {

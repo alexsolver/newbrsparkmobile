@@ -1,0 +1,1 @@
+/opt/yolo-api/.venv/bin/python -c "import ultralytics, os; p='/opt/yolo-api/yolov8m.pt'; print('ultralytics=' + ultralytics.__version__); print('weights=' + p); print('weights_exists=' + str(os.path.exists(p))); print('weights_size_bytes=' + str(os.path.getsize(p)))"

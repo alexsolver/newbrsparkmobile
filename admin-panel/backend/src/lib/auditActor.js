@@ -10,4 +10,15 @@ function auditActor(req) {
   return { adminId: a.id || null, userId: null };
 }
 
-module.exports = { auditActor };
+function auditContextMetadata(req, extra = {}) {
+  const authz = req?.authorization || {};
+  const merged = {
+    actorScope: authz.scope || null,
+    actorRole: authz.roleKey || null,
+    contextTenantId: authz.contextTenantId || null,
+    ...extra,
+  };
+  return Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined));
+}
+
+module.exports = { auditActor, auditContextMetadata };

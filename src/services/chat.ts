@@ -1,4 +1,5 @@
 import { apiFetch, API_BASE } from './auth';
+import { emitChatUnreadChanged } from '../lib/chatUnreadEvents';
 
 export interface ChatContact {
   id: string;
@@ -116,7 +117,8 @@ export const ChatService = {
   },
 
   async markAsRead(roomId: string): Promise<void> {
-    await apiFetch(`/api/chat/rooms/${roomId}/read`, { method: 'PUT' });
+    const res = await apiFetch(`/api/chat/rooms/${roomId}/read`, { method: 'PUT' });
+    if (res.ok) emitChatUnreadChanged();
   },
 
   async getRoomInfo(roomId: string): Promise<ChatRoom | null> {

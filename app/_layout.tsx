@@ -21,6 +21,7 @@ import { NotificationService, preparePushNotificationInfrastructure } from '../s
 import { PushNotificationResponseBridge } from '../src/components/PushNotificationResponseBridge';
 import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -203,18 +204,20 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <ThemeProvider>
-          <AutomaticTimeGate>
-            <GpsIntegrityGate>
-              <AppProvider>
-                <MainLayout />
-              </AppProvider>
-            </GpsIntegrityGate>
-          </AutomaticTimeGate>
-        </ThemeProvider>
-      </AuthProvider>
-    </I18nextProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <I18nextProvider i18n={i18n}>
+        <AuthProvider>
+          <ThemeProvider>
+            <AutomaticTimeGate>
+              <GpsIntegrityGate>
+                <AppProvider>
+                  <MainLayout />
+                </AppProvider>
+              </GpsIntegrityGate>
+            </AutomaticTimeGate>
+          </ThemeProvider>
+        </AuthProvider>
+      </I18nextProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -63,7 +63,7 @@ export default function ProviderCatalogScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
-  const { colors: C } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createStyles(C), [C]);
   const locale = i18n.language?.startsWith('en') ? 'en-US' : 'pt-BR';
 
@@ -304,6 +304,9 @@ export default function ProviderCatalogScreen() {
           ) : null}
           <Text style={[styles.screenTitle, { color: C.primary }]} numberOfLines={1}>
             {companyName}
+          </Text>
+          <Text style={[styles.screenSubTitle, { color: C.textSecondary }]} numberOfLines={1}>
+            {appDisplayName} · {appTagline}
           </Text>
         </View>
         <View style={{ width: 40 }} />
@@ -568,6 +571,7 @@ function createStyles(C: ColorPalette) {
     },
     companyLogoImg: { width: '100%', height: '100%' },
     screenTitle: { flex: 1, fontSize: 16, fontWeight: '900', textAlign: 'left', minWidth: 0 },
+    screenSubTitle: { position: 'absolute', left: 46, right: 0, top: 22, fontSize: 11, fontWeight: '700' },
     /** Uma linha por categoria: título + carrossel horizontal de cards */
     categoryStripe: { marginTop: 22 },
     categoryStripeFirst: { marginTop: 10 },

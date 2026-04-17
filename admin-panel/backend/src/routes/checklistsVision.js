@@ -15,6 +15,7 @@ const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('..
 const { consumeQuota } = require('../lib/planQuotaService');
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_CHECKLIST_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
   MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
@@ -63,6 +64,10 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       return res.status(400).json({ error: 'Envie o arquivo no campo "media".' });
     }
 
+    const engineEarly = String((req.body && req.body.engine) || '').trim().toLowerCase();
+    const useGoogleStudioEarly =
+      engineEarly === 'google_ai_studio' || engineEarly === 'gemini' || engineEarly === 'google_ai';
+
     let questions = [];
     const rawQ = req.body && req.body.questions != null ? req.body.questions : '';
     if (typeof rawQ === 'string' && rawQ.trim()) {
@@ -77,9 +82,9 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
             })
             .filter((x) => x && x.rawText);
           const textMax =
-            mapped.length <= 1
-              ? MAX_VISION_STRUCTURED_PROMPT_CHARS
-              : MAX_VISION_MULTI_SIMNAO_TEXT_CHARS;
+            useGoogleStudioEarly && mapped.length > 1
+              ? MAX_VISION_MULTI_SIMNAO_TEXT_CHARS
+              : MAX_VISION_STRUCTURED_PROMPT_CHARS;
           questions = mapped
             .map((x) => {
               const text = x.rawText.slice(0, textMax);
@@ -95,9 +100,14 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
     if (!questions.length) {
       return res.status(400).json({ error: 'Indique pelo menos uma pergunta (questions).' });
     }
-    if (questions.length > MAX_VISION_SIMNAO_QUESTIONS) {
+    const maxQuestionsAllowed = useGoogleStudioEarly
+      ? MAX_VISION_SIMNAO_QUESTIONS
+      : MAX_VISION_CHECKLIST_QUESTIONS;
+    if (questions.length > maxQuestionsAllowed) {
       return res.status(400).json({
-        error: `Máximo de ${MAX_VISION_SIMNAO_QUESTIONS} perguntas por análise.`,
+        error: useGoogleStudioEarly
+          ? `Máximo de ${MAX_VISION_SIMNAO_QUESTIONS} perguntas por análise.`
+          : `Detecção (YOLO) aceita apenas ${MAX_VISION_CHECKLIST_QUESTIONS} pergunta por envio de mídia.`,
       });
     }
 
@@ -108,9 +118,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       return res.status(400).json({ error: 'O arquivo deve ser imagem ou vídeo.' });
     }
 
-    const engine = String((req.body && req.body.engine) || '').trim().toLowerCase();
-    const useGoogleStudio =
-      engine === 'google_ai_studio' || engine === 'gemini' || engine === 'google_ai';
+    const useGoogleStudio = useGoogleStudioEarly;
     const visionRating0To10 =
       req.body &&
       (req.body.visionRating0To10 === true ||

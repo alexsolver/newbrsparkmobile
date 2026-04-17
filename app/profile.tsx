@@ -22,6 +22,8 @@ import {
   isTechnicianProfileActive,
   isFieldTaskEligibleRole,
   canUseFieldWorkAppRole,
+  canUseProviderMode,
+  userHasCapability,
 } from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -113,8 +115,7 @@ export default function ProfileScreen() {
     submittedAwaitingReview?: boolean;
   } | null>(null);
 
-  const canManageDirectoryHero =
-    user?.role === 'TENANT_ADMIN' || user?.role === 'MANAGER';
+  const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
 
   const [dirHeroLoading, setDirHeroLoading] = useState(false);
   const [dirHeroSaving, setDirHeroSaving] = useState(false);
@@ -172,7 +173,7 @@ export default function ProfileScreen() {
   };
 
   const loadDirectoryHero = useCallback(async () => {
-    if (!user || !(user.role === 'TENANT_ADMIN' || user.role === 'MANAGER')) return;
+    if (!user || !canManageDirectoryHero) return;
     setDirHeroLoading(true);
     try {
       const token = await getToken();
@@ -200,7 +201,7 @@ export default function ProfileScreen() {
     } finally {
       setDirHeroLoading(false);
     }
-  }, [user, t]);
+  }, [canManageDirectoryHero, user, t]);
 
   const saveDirectoryHeroUrl = async (url: string | null) => {
     if (!user) return;
@@ -830,7 +831,7 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {isTechnicianProfileActive(user) || isFieldTaskEligibleRole(user.role) ? (
+        {canUseProviderMode(user) || isFieldTaskEligibleRole(user.role) ? (
           <>
             <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
               <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
@@ -856,7 +857,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
-                    if (!canUseFieldWorkAppRole(user)) {
+                    if (!canUseProviderMode(user)) {
                       Alert.alert(
                         'Prestador indisponível',
                         'Sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',

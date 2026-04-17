@@ -18,8 +18,10 @@ const { fetchDocumentationForCopilot } = require('./formAiDocumentationFetch');
  * @returns {Promise<{ out: Awaited<ReturnType<typeof runFormCopilot>>, ragMeta: object, ragLibraryMeta: object }>}
  */
 async function executeCopilotChatSession(input) {
+  const startedAt = Date.now();
   const body = input.body && typeof input.body === 'object' ? input.body : {};
   const onProgress = typeof input.onProgress === 'function' ? input.onProgress : null;
+  const meta = { retries: [], timings: {} };
   const prog = (step, message) => {
     try {
       onProgress?.({ step, message, ts: Date.now() });
@@ -48,12 +50,14 @@ async function executeCopilotChatSession(input) {
   let ragMeta = { revisionCount: 0, skipped: 'no_template_id' };
   if (templateId) {
     prog('rag_exec', 'Carregando exemplos de preenchimentos deste modelo…');
+    const t0 = Date.now();
     const rag = await buildFilledFormsRagContext({
       templateId,
       schemaData,
       maxRevisions: 10,
       maxChars: 14_000,
     });
+    meta.timings.ragExecMs = Date.now() - t0;
     ragFilledFormsSummary = rag.text || '';
     ragMeta = rag.meta || { revisionCount: 0 };
   }
@@ -63,6 +67,7 @@ async function executeCopilotChatSession(input) {
   if (!skipTemplateLibraryRag) {
     try {
       prog('rag_library', 'Consultando a biblioteca de formulários…');
+      const t0 = Date.now();
       const retrievalQuery = buildCopilotRetrievalQuery({ messages, formContext });
       const tenantId =
         input.admin && typeof input.admin.tenantId === 'string' && input.admin.tenantId.trim()
@@ -77,6 +82,7 @@ async function executeCopilotChatSession(input) {
         maxChars: 12_000,
         useEmbeddings,
       });
+      meta.timings.ragLibraryMs = Date.now() - t0;
       ragSimilarTemplatesSummary = lib.text || '';
       ragLibraryMeta = lib.meta || { usedCount: 0, skipped: 'empty' };
     } catch (eLib) {
@@ -148,7 +154,9 @@ async function executeCopilotChatSession(input) {
     documentationFetch.attempted = true;
     documentationFetch.url = docUrl;
     prog('docs', 'A carregar documentação da URL…');
+    const t0 = Date.now();
     const r = await fetchDocumentationForCopilot(docUrl);
+    meta.timings.docsMs = Date.now() - t0;
     if (r.ok && r.text) {
       documentationFetchedText = r.text;
       documentationFetch.ok = true;
@@ -162,25 +170,46 @@ async function executeCopilotChatSession(input) {
   }
 
   prog('llm', 'Gerando resposta com a IA…');
-  const out = await runFormCopilot({
-    messages,
-    schemaData,
-    formContext,
-    spreadsheetSummary,
-    ragFilledFormsSummary,
-    ragSimilarTemplatesSummary,
-    templateSettings,
-    templateMetadata,
-    templateDraftTitle,
-    templateFolderId,
-    templateId: templateId || null,
-    templateSiblingTitles,
-    documentationFetchedText: documentationFetchedText || undefined,
-    documentationFetchWarning: documentationFetchWarning || undefined,
-  });
+  const llmStartedAt = Date.now();
+  let out = null;
+  let llmError = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      out = await runFormCopilot({
+        messages,
+        schemaData,
+        formContext,
+        spreadsheetSummary,
+        ragFilledFormsSummary,
+        ragSimilarTemplatesSummary,
+        templateSettings,
+        templateMetadata,
+        templateDraftTitle,
+        templateFolderId,
+        templateId: templateId || null,
+        templateSiblingTitles,
+        documentationFetchedText: documentationFetchedText || undefined,
+        documentationFetchWarning: documentationFetchWarning || undefined,
+      });
+      llmError = null;
+      break;
+    } catch (e) {
+      llmError = e;
+      const code = e && e.code ? String(e.code) : 'LLM_ERROR';
+      const msg = e && e.message ? String(e.message) : 'Falha desconhecida.';
+      meta.retries.push('tentativa ' + String(attempt + 1) + ': ' + code);
+      if (attempt >= 1 || code === 'NO_OPENAI_KEY' || code === 'BAD_REQUEST') {
+        break;
+      }
+      prog('llm_retry', 'A IA falhou uma vez e vamos tentar novamente…');
+    }
+  }
+  meta.timings.llmMs = Date.now() - llmStartedAt;
+  if (llmError) throw llmError;
   prog('done', 'Resposta pronta.');
+  meta.timings.totalMs = Date.now() - startedAt;
 
-  return { out, ragMeta, ragLibraryMeta, documentationFetch };
+  return { out: { ...out, meta }, ragMeta, ragLibraryMeta, documentationFetch };
 }
 
 module.exports = {

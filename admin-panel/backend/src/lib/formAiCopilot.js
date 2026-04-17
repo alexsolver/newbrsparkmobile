@@ -23,6 +23,7 @@ const {
 const { analyzeLogicSuggestionIssues } = require('./formAiLogicConflicts');
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
+  MAX_VISION_CHECKLIST_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
 const prisma = require('../db');
@@ -89,6 +90,8 @@ O schema **ainda não tem campos de preenchimento** (só estrutura mínima ou va
 - Se o pedido descreve um **processo clínico, pré-cirúrgico, legal, de auditoria ou operação de campo** com alguma profundidade, é **inaceitável** responder só com **3 a 6** campos genéricos (ex.: apenas «histórico», «exames», «consentimento», «assinatura») **sem** secções, **sem** detalhe clínico ou administrativo útil e **sem** opções concretas em listas.
 - Para a **primeira proposta** nesses casos, mire **mínimo ~18–40 campos operacionais** (orientação — ajuste ao caso), repartidos por **várias** \`section_break\` com títulos claros (identificação e contatos, antecedentes, medicação e alergias, sinais vitais ou equivalentes, jejum e preparação, exames e resultados, avaliação de risco orientativa, consentimentos específicos, observações, revisão final, etc.) — **adaptado ao domínio**; inclua campos que o usuário **não nomeou** mas que são **padrão** na prática (sempre com linguagem prudente nas descrições; não finja diagnóstico).
 - **Proatividade:** traga na mesma proposta rótulos e \`description\` que **orientem** o preenchimento no **celular**; o administrador pode **excluir** linhas na pré-visualização — prefira **sobre-propor** a **sub-propor**.
+- **Autonomia e criatividade:** não se limite ao pedido literal quando houver um problema ou necessidade mais ampla por trás. Identifique a intenção operacional e proponha **várias soluções plausíveis** dentro do produto (estrutura do formulário, regras, validações, evidências, UX no app, geofence, fotos, assinatura, API, automações suportadas) — depois **priorize** a solução recomendada e entregue JSON útil para avançar.
+- **Troubleshooting orientado à resolução:** se o usuário relatar que algo «não funciona», «não aparece», «não trava», «não valida», «não busca», «quebra o fluxo» ou trouxer um sintoma semelhante, aja como **analista funcional + solucionador**: infira a causa provável com base no schema/settings/lógicas atuais, explique o diagnóstico de forma curta em \`replyText\`, e proponha **2 a 4 caminhos concretos**. Se houver um caminho claramente implementável e melhor, **já devolva** o patch ou as \`logicSuggestions\` correspondentes em vez de só listar ideias.
 
 **Tipos, listas e recursos:**
 - Combine \`section_break\`, texto curto/longo, datas, números, \`yes_no\`, \`multiple_choice\`, \`radio\`, \`select\`, anexos/fotos quando fizer sentido, \`signature\`, \`photo_stamped\`, \`barcode_scan\`, \`location_pick\`, \`geofence_check\`, par \`transit_start\`/\`transit_end\`, **settingsPatch** (cerca global, etc.) — **inferidos do contexto**; explique **numa frase** quando sugerir recurso avançado.
@@ -122,6 +125,9 @@ Tipos que pode usar em novos campos ou alterações (inclui avançados; escolha 
 - **Amplie o alcance:** sugira seções (\`section_break\`), campos que boas práticas ou o contexto regulatório **típico** do setor costumam exigir, dados de rastreio, evidências (foto, documento, assinatura), triagem e contato de emergência **quando** fizer sentido — **mesmo que o usuário não liste cada item**.
 - **Evite respostas pobres:** conjuntos mínimos de campos genéricos sem seções, sem \`description\` útil e sem **\`options\`** concretas em listas são **fracos** — prefira proposta **densa e organizada**; o usuário pode simplificar na pré-visualização ou pedir «menos campos» na mensagem seguinte.
 - Campos de escolha: **sempre** preencha \`options\` com alternativas plausíveis (várias, em pt-BR).
+- Seja **proativo, autônomo e criativo**: não trabalhe só no modo «obedecer campo a campo». Quando o usuário descrever uma necessidade, dor operacional, bloqueio, risco, retrabalho ou objetivo de negócio, proponha soluções complementares **dentro do que o BrSpark suporta**.
+- Sempre que fizer sentido, apresente mentalmente **múltiplas abordagens** e escolha a melhor: por exemplo, combinar campos + lógica + configuração global + evidência visual, ou sugerir uma alternativa mais robusta se a primeira tiver limitações.
+- Em pedidos de ajuste/correção, entre em **modo troubleshooting**: use o JSON compacto atual como fonte de verdade para localizar lacunas prováveis (campo inadequado, tipo errado, lógica contraditória, obrigatoriedade excessiva, falta de opções, regra SHOW/HIDE em falta ou mal formulada, validação inviável, etc.). No \`replyText\`, diga o problema provável, o que você vai fazer e eventuais alternativas.
 
 Se incluir ou mover \`transit_start\` / \`transit_end\`, siga a seção «### Deslocamento» no final deste prompt: no BrSpark esse par fica **sempre** no **início** do formulário (primeiro bloco operacional), nunca no meio nem no final.
 
@@ -131,8 +137,9 @@ Fluxo:
 1) Se o pedido for **vagamente** ambíguo ou faltar um detalhe **crítico** para não errar o fluxo, NÃO envie schemaPatch, settingsPatch nem logicSuggestions. Preencha "clarifyOptions" (perguntas com botões). No painel, **cada pergunta aceita várias opções marcadas**; o usuário envia tudo de uma vez — nas mensagens seguintes pode vir uma linha por pergunta no formato \`[Pergunta <id>] opção A, opção B\` com **vários** rótulos após os dois pontos. Em **formulário novo**, use clarifyOptions para bifurcações **reais** — **mas** se o usuário já descreveu um **caso concreto** (ex.: pré-cirurgia, vistoria NR-12, devolução de equipamento), **prefira enviar já um schemaPatch substancial** e use clarifyOptions só para o que for **inevitavelmente** incerto; **não** adie um primeiro rascunho completo só por hábito de perguntar.
 2) **Honestidade e limites do produto:** se o pedido **não for implementável** com o que o BrSpark oferece hoje (ex.: regra por **distância de deslocamento em km**, comparação **numérica** tipo «menor que 1», métricas de tracking que **não existem** como valor de campo no formulário, condições em tempo real que o motor de regras **não** suporta), **não invente** schemaPatch, settingsPatch nem logicSuggestions «para agradar». Nesse caso: **schemaPatch**, **settingsPatch**, **logicSuggestions** e **templateMetadataPatch** devem ficar **null**; em **"replyText"** diga com franqueza que **não é possível** fazer exatamente isso no builder, explique **porquê** numa ou duas frases, e ofereça **2 a 4 opções reais** (ex.: usar **cerca global** ou **geofence_check** se o objetivo for proximidade; esconder campo com base num **valor de campo** que o técnico preenche; **tornar opcional** em vez de ocultar; regra por **sim/não** ou **lista**). Para **buscar dados numa API e preencher um campo**, quando o usuário der **URL concreta** e os campos forem claros, pode usar **logicSuggestions** com **actionType** \`API_FETCH\` (ver formato abaixo) — **nunca** inclua tokens ou segredos no JSON; use placeholders (ex.: \`https://api.exemplo.com/dados?chave=SUBSTITUIR\`) e avise em **replyText** para o administrador rever no modal **Lógica do campo**. Se faltar URL, método ou campos, use **clarifyOptions** em vez de inventar. Se fizer sentido, use **clarifyOptions** para o usuário escolher entre caminhos alternativos.
 3) Quando o pedido for **claramente** implementável com add_field/update_field/settingsPatch ou com logicSuggestions nos moldes suportados, envie os patches. O painel pode mostrar uma **revisão em tabela** antes de aplicar muitos campos novos — no "replyText" avise que o administrador pode ajustar **incluir** e **obrigatório** na pré-visualização. No "replyText" resuma o que propôs — **não** diga que já está aplicado no canvas até o administrador confirmar quando houver pré-visualização.
-4) Se enviar "clarifyOptions" (array não vazio), "schemaPatch", "settingsPatch", "logicSuggestions", "templateMetadataPatch" e "templateTitlePatch" DEVEM ser null — primeiro o usuário responde às opções.
-5) Se o usuário confirmar verbalmente («sim», «ok», etc.) após uma pergunta sua, na mesma resposta deve trazer os patches concretos **só se** forem válidos (não responda só com JSON vazio nem prometa o impossível).
+4) Quando o usuário trouxer **um problema, sintoma, falha, bloqueio ou necessidade de melhoria**, não responda de forma passiva. Faça um mini-troubleshooting: identifique a causa mais provável pelo schema/settings/lógicas atuais, proponha **2 a 4 soluções viáveis** por ordem de recomendação e, se a melhor opção for implementável agora, **já devolva** o patch correspondente. Só use \`clarifyOptions\` se realmente faltar uma informação crítica para não errar a correção.
+5) Se enviar "clarifyOptions" (array não vazio), "schemaPatch", "settingsPatch", "logicSuggestions", "templateMetadataPatch" e "templateTitlePatch" DEVEM ser null — primeiro o usuário responde às opções.
+6) Se o usuário confirmar verbalmente («sim», «ok», etc.) após uma pergunta sua, na mesma resposta deve trazer os patches concretos **só se** forem válidos (não responda só com JSON vazio nem prometa o impossível).
 
 Definições globais do modelo (templateSettings — pode enviar "settingsPatch" só com as chaves a alterar):
 - "requireGlobalGeofence": boolean — exige que o técnico esteja dentro do raio do local da OS para usar o formulário.
@@ -148,12 +155,16 @@ Nota: isto é validação global por GPS; não confundir com o campo opcional "g
 ${formatAutomaticIconRulesForPrompt()}
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
-- "replyText": texto para o usuário.
+- "replyText": texto para o usuário — **obrigatório** em frases completas: **não** termine com «vou…» ou com **dois pontos (:)** sem o resumo ou lista prometida a seguir. Se enviou \`schemaPatch\`, \`settingsPatch\`, \`logicSuggestions\`, \`templateMetadataPatch\` ou \`templateTitlePatch\`, feche com **1–3 frases curtas** dizendo concretamente o que mudou (ex.: ícones, secções, regras, título). Se for só orientação sem patches, conclua a explicação no mesmo campo.
 - "clarifyOptions": array OU null. Cada item: { "id": "pergunta_1", "question": "texto curto", "choices": [ { "id": "a", "label": "…" }, … ] } com pelo menos 2 escolhas por pergunta, **até 6 perguntas** (use só o necessário). O usuário pode marcar **várias** opções na mesma pergunta antes de enviar — interprete todas as que vierem na mesma linha \`[Pergunta id]\`.
 - "schemaPatch": { "operations": [ … ] } OU null. Operações:
   - { "op": "add_field", "afterId": null|string, "field": { "type", "label", "required"?, "options"?, "description"?, "icon"?, "iconLibrary"?, "iconColor"? … } }
-  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "contentHtml" (tipo \`leitura\`), "voiceTranscribeLanguage" (tipo \`voice_note\`, ex.: pt), "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "dependsOnId", "dependsOnOperator", "dependsOnValue", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionStructuredPrompt" (texto longo único para visão IA), "visionQuestions" (legado), "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`), "visionAnalysisGrid" (\`1x1\` | \`2x2\`, só \`vision_ai_analysis\`), "visionRating0To10Enabled" (boolean, só \`vision_ai_analysis\` — nota 0–10 na resposta da API), "visionShowAiResponseInForm" (boolean, só \`vision_ai_analysis\` — mostrar texto/confiança/nota no app) } }
+  - { "op": "update_field", "id": "<field_id>", "patch": { qualquer subconjunto dos campos do item no schema compacto + "label", "type", "required", "options", "description", "icon", "iconLibrary", "iconColor", "helpHtml", "contentHtml" (tipo \`leitura\`), "voiceTranscribeLanguage" (tipo \`voice_note\`, ex.: pt), "showFieldInstructions", "defaultValue", "minItems", "maxItems", "multiple", "sectionFillMode", "geofenceRadius", "requireOnlineValidation", "calcFormula", "textMask", "allowTechnicianComment", "allowMediaDescription", "visionStructuredPrompt" (texto longo único para visão IA), "visionQuestions" (para \`vision_checklist\` use só \`[{ "id": "q1", "text": "…" }]\`; para \`vision_ai_analysis\` pode haver até 10 entradas), "visionCaptureMode" (\`photo_only\` | \`video_only\` | \`photo_and_video\`), "visionAnalysisGrid" (\`1x1\` | \`2x2\`, só \`vision_ai_analysis\`), "visionRating0To10Enabled" (boolean, só \`vision_ai_analysis\` — nota 0–10 na resposta da API), "visionShowAiResponseInForm" (boolean, só \`vision_ai_analysis\` — mostrar texto/confiança/nota no app) } }
   - { "op": "remove_field", "id": "<field_id>" } — só com pedido explícito de remoção.
+
+### Visibilidade condicional — **sem** \`dependsOn*\` (obrigatório)
+- **Nunca** envie \`dependsOnId\`, \`dependsOnOperator\` nem \`dependsOnValue\` dentro de \`add_field.field\` nem de \`update_field.patch\` — o servidor **ignora** essas chaves nos patches do copiloto; visibilidade condicional é **só** com \`logicSuggestions\` (**SHOW** / **HIDE**).
+- Para «mostrar/ocultar quando…», use **sempre** entradas em \`logicSuggestions\` com \`actionType\` \`SHOW\` ou \`HIDE\`, monitor, operador e valor (ex.: visão detecção → valores normalizados \`yes\`, \`no\`, \`unknown\`).
 
 - "logicSuggestions": array OU null. Cada entrada **deve** identificar campos pelo **id** do JSON compacto quando possível (preferido), com **rótulo** como cópia legível.
   - Ações simples: { "monitorFieldId"?, "monitorLabel", "operator", "value", "targetFieldId"?, "targetLabel", "actionType": "SHOW" | "HIDE" | "REQUIRE" | "OPTIONAL" }.
@@ -210,13 +221,16 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
       (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
       Array.isArray(f.visionQuestions)
     ) {
+      const maxQ = f.type === 'vision_checklist' ? MAX_VISION_CHECKLIST_QUESTIONS : MAX_VISION_SIMNAO_QUESTIONS;
+      const textCap =
+        f.type === 'vision_checklist' ? MAX_VISION_STRUCTURED_PROMPT_CHARS : 220;
       o.visionQuestions = f.visionQuestions
         .map((q) => ({
           id: String(q?.id || '').slice(0, 64),
-          text: String(q?.text || '').slice(0, 220),
+          text: String(q?.text || '').slice(0, textCap),
         }))
         .filter((q) => q.text)
-        .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
+        .slice(0, maxQ);
     }
     if (
       (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
@@ -234,6 +248,7 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
     if (f.type === 'lookup_select') {
       if (f.lookupSource) o.lookupSource = String(f.lookupSource);
       if (f.lookupPreset) o.lookupPreset = String(f.lookupPreset).slice(0, 80);
+      if (f.lookupApiPath) o.lookupApiPath = String(f.lookupApiPath).slice(0, 240);
     }
     if (f.type === 'repeatable_matrix' && Array.isArray(f.matrixColumns)) {
       o.matrixColumns = f.matrixColumns
@@ -254,10 +269,6 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
       if (f.annotationPenColor) o.annotationPenColor = String(f.annotationPenColor).slice(0, 20);
       if (f.annotationStrokeWidth != null) o.annotationStrokeWidth = f.annotationStrokeWidth;
     }
-    if (f.dependsOnId != null && String(f.dependsOnId).trim()) o.dependsOnId = String(f.dependsOnId).trim();
-    if (f.dependsOnOperator) o.dependsOnOperator = String(f.dependsOnOperator);
-    if (f.dependsOnValue != null && String(f.dependsOnValue) !== '')
-      o.dependsOnValue = String(f.dependsOnValue).slice(0, 100);
     if (f.geofenceRadius != null && String(f.geofenceRadius) !== '') o.geofenceRadius = f.geofenceRadius;
     if (f.defaultValue != null && String(f.defaultValue).trim()) o.defaultValue = String(f.defaultValue).slice(0, 100);
     if (f.showFieldInstructions === true || f.showFieldInstructions === 'true') o.showFieldInstructions = true;
@@ -327,20 +338,28 @@ async function openAiCopilotJson(systemPrompt, messages, temperature = 0.32) {
   try {
     data = JSON.parse(rawText);
   } catch {
-    throw new Error(`Resposta OpenAI inválida (HTTP ${res.status}): ${rawText.slice(0, 200)}`);
+    const err = new Error(`Resposta OpenAI inválida (HTTP ${res.status}): ${rawText.slice(0, 200)}`);
+    err.code = 'OPENAI_BAD_RESPONSE';
+    throw err;
   }
   if (!res.ok) {
     const msg = data?.error?.message || rawText.slice(0, 300);
-    throw new Error(`OpenAI: ${msg}`);
+    const err = new Error(`OpenAI: ${msg}`);
+    err.code = 'OPENAI_BAD_RESPONSE';
+    throw err;
   }
   const content = data?.choices?.[0]?.message?.content;
   if (!content || typeof content !== 'string') {
-    throw new Error('Resposta OpenAI sem conteúdo JSON.');
+    const err = new Error('Resposta OpenAI sem conteúdo JSON.');
+    err.code = 'OPENAI_EMPTY_JSON';
+    throw err;
   }
   try {
     return JSON.parse(content);
   } catch (e) {
-    throw new Error('JSON devolvido pelo modelo é inválido: ' + e.message);
+    const err = new Error('JSON devolvido pelo modelo é inválido: ' + e.message);
+    err.code = 'OPENAI_JSON_INVALID';
+    throw err;
   }
 }
 

@@ -137,7 +137,7 @@
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG }   from './js/config.js';
+  import { CONFIG, getPanelCapabilities }   from './js/config.js';
   import {
     applySubscriptionsPageI18n,
     subscriptionsCycleLabel,
@@ -149,6 +149,12 @@
 
   await initPage();
   applySubscriptionsPageI18n();
+  const panelCaps = new Set(getPanelCapabilities());
+  const canManagePlatformSubscriptions =
+    panelCaps.has('platform.tenants.write') || panelCaps.has('platform.system.write');
+  document.getElementById('sub-link-plans').hidden = !canManagePlatformSubscriptions;
+  document.getElementById('sub-link-billing').hidden = !canManagePlatformSubscriptions;
+  document.getElementById('sub-btn-assign').hidden = !canManagePlatformSubscriptions;
 
   function escHtml(s) {
     return String(s ?? '')
@@ -185,6 +191,7 @@
     </div>`).join('') || `<div class="empty-state-pro" style="padding:24px"><p class="empty-state-pro-sub">${mpT('sub_empty_plans')}</p></div>`;
 
   plansGrid.addEventListener('click', (e) => {
+    if (!canManagePlatformSubscriptions) return;
     const btn = e.target.closest('.facial-plan-cfg');
     if (!btn || !btn.dataset.planId) return;
     const plan = plans.find((x) => x.id === btn.dataset.planId);
@@ -198,6 +205,7 @@
   });
 
   document.getElementById('save-facial-plan-btn').addEventListener('click', async () => {
+    if (!canManagePlatformSubscriptions) return;
     const id = document.getElementById('facial-plan-id').value;
     const val = document.getElementById('facial-provider-sel').value;
     if (!id) return;
@@ -241,7 +249,9 @@
         <td style="color:var(--text3);font-size:11px">${new Date(s.currentStart).toLocaleDateString(mpIntlLocale())}</td>
         <td style="color:var(--text3);font-size:11px">${new Date(s.currentEnd).toLocaleDateString(mpIntlLocale())}</td>
         <td class="text-right">
-          ${s.status !== 'CANCELLED' ? `<button type="button" class="btn btn-danger btn-sm" onclick="cancelSub('${tid}')">${mpT('sub_btn_cancel_sub')}</button>` : ''}
+          ${canManagePlatformSubscriptions && s.status !== 'CANCELLED'
+            ? `<button type="button" class="btn btn-danger btn-sm" onclick="cancelSub('${tid}')">${mpT('sub_btn_cancel_sub')}</button>`
+            : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`;
     }).join('');
@@ -251,12 +261,14 @@
   document.getElementById('filter-status').addEventListener('change', loadSubs);
 
   window.cancelSub = async (id) => {
+    if (!canManagePlatformSubscriptions) return;
     if (!confirm(mpT('sub_confirm_cancel'))) return;
     await CONFIG.patch(`/subscriptions/${id}/cancel`, {});
     loadSubs();
   };
 
   document.getElementById('save-sub-btn').addEventListener('click', async () => {
+    if (!canManagePlatformSubscriptions) return;
     const body = { tenantId: document.getElementById('sub-tenant').value, planId: document.getElementById('sub-plan').value, billingCycle: document.getElementById('sub-cycle').value };
     if (!body.tenantId || !body.planId) return alert(mpT('sub_alert_pick'));
     await CONFIG.post('/subscriptions', body);

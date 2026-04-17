@@ -1,8 +1,8 @@
 /**
  * Edição completa de usuário (admin) — dados, endereço, prestador, documentos multi-location, horários.
  */
-import { initPage, getStoredPanelRole } from './sidebar.js';
-import { CONFIG } from './config.js';
+import { initPage } from './sidebar.js';
+import { CONFIG, getPanelCapabilities } from './config.js';
 import {
   getAdminUiLocale,
   setAdminUiLocale,
@@ -15,11 +15,16 @@ import {
 import { adminIntlLocale } from './admin-i18n-resolve.js';
 
 /** Atualizado em `bootUserEditPage` para acionar indicador «não guardado» */
-const dirtyHooks = { mark: () => {} };
+const dirtyHooks = { mark: () => {}, refreshWorkspace: () => {} };
 /** Definido em `bootUserEditPage` — atualiza a secção de ponto após alterar a galeria facial. */
 let bumpUserRefFaceState = null;
 /** Tenant com `locale.countryCode === 'BR'` — mostra vínculo CLT/PJ no registro de horas. */
 let ueTenantCountryBr = false;
+const userEditPanelCaps = new Set(getPanelCapabilities());
+const isLimitedTenantManager = userEditPanelCaps.has('tenant.users.write.limited');
+const isTenantUserAdmin =
+  userEditPanelCaps.has('tenant.users.write.self') || userEditPanelCaps.has('tenant.users.write.any');
+const isPlatformUserAdmin = userEditPanelCaps.has('platform.users.write');
 
 function readWtBrRegimeFromDom() {
   const wrap = document.getElementById('wt-br-regime-wrap');
@@ -53,6 +58,7 @@ function updateWtBrRegimeRow() {
 
 function markDirty() {
   dirtyHooks.mark();
+  dirtyHooks.refreshWorkspace();
 }
 
 function esc(s) {
@@ -64,6 +70,15 @@ function esc(s) {
 
 const NAV_CTX_KEY = 'brspark_user_edit_nav';
 const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
+const COLLAPSIBLE_SECTION_SUMMARIES = {
+  'sec-face': 'Fotos base e situação da biometria.',
+  'sec-docs-p': 'Documentos civis e pessoais do colaborador.',
+  'sec-docs-pro': 'Certificações, NR, ASO e anexos operacionais.',
+  'sec-horarios': 'Turnos e disponibilidade por dia.',
+  'sec-regioes': 'Cobertura geográfica e bases habilitadas.',
+  'sec-ops': 'Sessão ativa, notas internas e preferências.',
+  'sec-audit': 'Histórico recente de ações administrativas.',
+};
 
 function docKindFromTbodyId(tbodyId) {
   return tbodyId && String(tbodyId).includes('docs-pro') ? 'professional' : 'personal';
@@ -107,6 +122,98 @@ function docValidityBadge(validFrom, validTo) {
     return `<span class="ue-doc-badge ue-doc-badge--muted">${esc(t('docUnknown'))}</span>`;
   }
   return `<span class="ue-doc-badge ue-doc-badge--muted">${esc(t('docUnknown'))}</span>`;
+}
+
+function setUserEditSectionCollapsed(section, collapsed) {
+  if (!(section instanceof HTMLElement)) return;
+  section.dataset.ueCollapsed = collapsed ? 'true' : 'false';
+  const toggle = section.querySelector('.ue-section-toggle');
+  if (toggle instanceof HTMLElement) {
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggle.innerHTML = collapsed
+      ? `<ion-icon name="chevron-down-outline"></ion-icon><span>Expandir</span>`
+      : `<ion-icon name="chevron-up-outline"></ion-icon><span>Recolher</span>`;
+  }
+}
+
+function expandUserEditSectionByHash() {
+  const hash = String(window.location.hash || '').trim();
+  if (!hash.startsWith('#')) return;
+  const section = document.querySelector(hash);
+  if (!(section instanceof HTMLElement)) return;
+  if (section.classList.contains('ue-section')) {
+    setUserEditSectionCollapsed(section, false);
+  }
+}
+
+function highlightActiveUserEditSection(sectionId) {
+  document.querySelectorAll('.ue-nav a[href^="#"]').forEach((link) => {
+    if (!(link instanceof HTMLElement)) return;
+    link.classList.toggle('is-active', link.getAttribute('href') === `#${sectionId}`);
+  });
+  document.querySelectorAll('.ue-section').forEach((section) => {
+    if (!(section instanceof HTMLElement)) return;
+    section.classList.toggle('is-active', section.id === sectionId);
+  });
+}
+
+function setupUserEditSectionObserver() {
+  const sections = [...document.querySelectorAll('.ue-section')].filter((section) => section instanceof HTMLElement);
+  if (!sections.length) return;
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible?.target instanceof HTMLElement) {
+        highlightActiveUserEditSection(visible.target.id);
+      }
+    },
+    {
+      root: document.querySelector('.ue-scroll'),
+      threshold: [0.2, 0.45, 0.7],
+      rootMargin: '-18% 0px -55% 0px',
+    },
+  );
+  sections.forEach((section) => observer.observe(section));
+}
+
+function setupUserEditProgressiveSections() {
+  document.querySelectorAll('.ue-section').forEach((section) => {
+    if (!(section instanceof HTMLElement)) return;
+    const header = section.querySelector('.panel-header');
+    const title = section.querySelector('.panel-title');
+    if (!(header instanceof HTMLElement) || !(title instanceof HTMLElement)) return;
+    const collapsible = section.dataset.ueDefaultCollapsed === 'true';
+    if (!collapsible) return;
+    if (!header.querySelector('.ue-section-summary')) {
+      const summary = document.createElement('div');
+      summary.className = 'ue-section-summary';
+      summary.textContent = COLLAPSIBLE_SECTION_SUMMARIES[section.id] || 'Conteúdo avançado.';
+      header.appendChild(summary);
+    }
+    if (!header.querySelector('.ue-section-toggle')) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ue-section-toggle';
+      btn.addEventListener('click', () => {
+        const collapsed = section.dataset.ueCollapsed !== 'false';
+        setUserEditSectionCollapsed(section, !collapsed);
+      });
+      header.appendChild(btn);
+    }
+    setUserEditSectionCollapsed(section, true);
+  });
+  document.querySelectorAll('.ue-nav a[href^="#"]').forEach((link) => {
+    link.addEventListener('click', () => {
+      const id = String(link.getAttribute('href') || '').replace(/^#/, '');
+      if (id) highlightActiveUserEditSection(id);
+    });
+  });
+  expandUserEditSectionByHash();
+  highlightActiveUserEditSection((String(window.location.hash || '').replace(/^#/, '')) || 'sec-dados');
+  setupUserEditSectionObserver();
+  window.addEventListener('hashchange', expandUserEditSectionByHash);
 }
 
 function refreshDocValidityInTable(tbodyId) {
@@ -341,12 +448,12 @@ function renderDocRows(tbodyId, docs, locations, userId) {
   const locOpts = getLocationMultiselectOptionsHtml(locations);
   tb.innerHTML = list.length
     ? list.map((d) => docRowHtml(d, locOpts, kind)).join('')
-    : `<tr class="doc-empty"><td colspan="9" style="text-align:center;color:var(--text3);padding:16px">${esc(t('ue_docEmpty'))}</td></tr>`;
+    : docEmptyStateHtml();
   tb.querySelectorAll('.doc-del').forEach((btn) => {
     btn.onclick = () => {
       btn.closest('tr')?.remove();
       if (!tb.querySelector('tr:not(.doc-empty)')) {
-        tb.innerHTML = `<tr class="doc-empty"><td colspan="9" style="text-align:center;color:var(--text3);padding:16px">${esc(t('ue_docEmpty'))}</td></tr>`;
+        tb.innerHTML = docEmptyStateHtml();
       }
       markDirty();
     };
@@ -356,25 +463,62 @@ function renderDocRows(tbodyId, docs, locations, userId) {
   bindDocTableDelegation(tbodyId, userId);
 }
 
+function docEmptyStateHtml() {
+  return `<tr class="doc-empty"><td colspan="9" class="ue-doc-empty-cell">${esc(t('ue_docEmpty'))}</td></tr>`;
+}
+
 function docRowHtml(d, locOptsHtml, kind = 'personal') {
   const id = d.id || rid();
   const locIds = Array.isArray(d.locationIds) ? d.locationIds : [];
   const locAttr = esc(locIds.join('|'));
   return `<tr data-doc-id="${esc(id)}">
-    <td><input type="hidden" class="doc-id" value="${esc(id)}" />
-      <select class="form-control doc-type" style="padding:6px;font-size:12px">${docTypeOptionsHtml(d.docType, kind)}</select></td>
-    <td><input class="form-control doc-idnum" style="padding:6px;font-size:12px" placeholder="${esc(t('ue_docPhNumber'))}" value="${esc(d.identifier || '')}" /></td>
-    <td><input class="form-control doc-from" type="date" value="${esc((d.validFrom || '').slice(0, 10))}" /></td>
-    <td><input class="form-control doc-to" type="date" value="${esc((d.validTo || '').slice(0, 10))}" /></td>
-    <td class="doc-valid-wrap">${docValidityBadge(d.validFrom, d.validTo)}</td>
-    <td><input class="form-control doc-issuer" style="padding:6px;font-size:12px" placeholder="${esc(t('ue_docPhIssuer'))}" value="${esc(d.issuingBody || '')}" /></td>
-    <td><select class="form-control doc-locs" multiple size="2" style="padding:4px;font-size:11px;min-width:120px" title="${esc(t('ue_docLocsTitle'))}" data-initial-locs="${locAttr}">${locOptsHtml}</select>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${esc(t('ue_docLocsHint'))}</div></td>
-    <td class="ue-doc-attach-cell"><input class="form-control doc-attach" style="padding:6px;font-size:12px;margin-bottom:4px" placeholder="${esc(t('ue_docPhAttach'))}" value="${esc(d.attachmentUrl || d.fileUrl || '')}" />
-      <input type="file" class="doc-file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" style="display:none" />
-      <button type="button" class="btn btn-sm btn-outline doc-upload-btn" style="width:100%">${esc(t('ue_docUploadBtn'))}</button></td>
-    <td><input class="form-control doc-notes" style="padding:6px;font-size:12px" placeholder="${esc(t('ue_docPhNotes'))}" value="${esc(d.notes || '')}" />
-      <button type="button" class="btn btn-sm doc-del" style="margin-top:4px;color:var(--red)">${esc(t('ue_docRemove'))}</button></td>
+    <td colspan="9" class="ue-doc-card-cell"><input type="hidden" class="doc-id" value="${esc(id)}" />
+      <div class="ue-doc-card">
+        <div class="ue-doc-card__head">
+          <div class="ue-doc-card__head-main">
+            <div class="ue-inline-kicker">Documento</div>
+            <div class="ue-doc-card__title-row">
+              <select class="form-control doc-type ue-doc-card__type">${docTypeOptionsHtml(d.docType, kind)}</select>
+              <div class="doc-valid-wrap">${docValidityBadge(d.validFrom, d.validTo)}</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm doc-del ue-doc-card__remove">${esc(t('ue_docRemove'))}</button>
+        </div>
+        <div class="ue-doc-card__grid">
+          <div class="form-group">
+            <label class="form-label">Identificador</label>
+            <input class="form-control doc-idnum" placeholder="${esc(t('ue_docPhNumber'))}" value="${esc(d.identifier || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Órgão emissor</label>
+            <input class="form-control doc-issuer" placeholder="${esc(t('ue_docPhIssuer'))}" value="${esc(d.issuingBody || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Emissão</label>
+            <input class="form-control doc-from" type="date" value="${esc((d.validFrom || '').slice(0, 10))}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Validade</label>
+            <input class="form-control doc-to" type="date" value="${esc((d.validTo || '').slice(0, 10))}" />
+          </div>
+          <div class="form-group ue-doc-card__locs">
+            <label class="form-label">Bases</label>
+            <select class="form-control doc-locs" multiple size="3" title="${esc(t('ue_docLocsTitle'))}" data-initial-locs="${locAttr}">${locOptsHtml}</select>
+            <div class="ue-doc-card__microcopy">${esc(t('ue_docLocsHint'))}</div>
+          </div>
+          <div class="form-group ue-doc-attach-cell">
+            <label class="form-label">Anexo</label>
+            <input class="form-control doc-attach" placeholder="${esc(t('ue_docPhAttach'))}" value="${esc(d.attachmentUrl || d.fileUrl || '')}" />
+            <input type="file" class="doc-file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" style="display:none" />
+            <button type="button" class="btn btn-sm btn-outline doc-upload-btn">${esc(t('ue_docUploadBtn'))}</button>
+          </div>
+          <div class="form-group ue-doc-card__notes">
+            <label class="form-label">Notas internas</label>
+            <input class="form-control doc-notes" placeholder="${esc(t('ue_docPhNotes'))}" value="${esc(d.notes || '')}" />
+          </div>
+        </div>
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -556,9 +700,408 @@ function resolveFaceUploadMime(file) {
 }
 
 let cachedLocations = [];
+let cachedLocationsLoadError = '';
 /** Cache do HTML das `<option>` de bases (evita reconstruir N×M strings por render da tabela de documentos / horários). */
 let _locationMultiselectOptsKey = '';
 let _locationMultiselectOptsHtml = '';
+let coverageMainMap = null;
+let coverageMainTileLayer = null;
+let coverageMainCircle = null;
+let coverageMainCenterMarker = null;
+let coverageMainLocationMarkers = [];
+let coverageModalMap = null;
+let coverageModalTileLayer = null;
+let coverageModalMarkers = [];
+let coverageModalDraftSelected = new Set();
+let coverageModalSearch = '';
+
+function getLeafletGlobal() {
+  return typeof window !== 'undefined' && window.L ? window.L : null;
+}
+
+function normalizeCoverageCoord(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getCoverageCenterFromDom() {
+  const lat = normalizeCoverageCoord(document.getElementById('t-coverage-lat')?.value);
+  const lng = normalizeCoverageCoord(document.getElementById('t-coverage-lng')?.value);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { latitude: lat, longitude: lng };
+}
+
+function getCoverageRadiusKmFromDom() {
+  const radius = Number(document.getElementById('t-coverage-radius-km')?.value);
+  return Number.isFinite(radius) && radius > 0 ? radius : 0;
+}
+
+function getSelectedServiceLocationIds() {
+  const sel = document.getElementById('t-service-locs');
+  return sel ? [...sel.selectedOptions].map((o) => o.value) : [];
+}
+
+function isValidLocationCoordinate(location) {
+  const lat = Number(location?.latitude);
+  const lng = Number(location?.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+function formatCoverageCoordLine(center) {
+  if (!center) return 'Nenhum centro definido.';
+  return `${Number(center.latitude).toFixed(5)}, ${Number(center.longitude).toFixed(5)}`;
+}
+
+function serviceLocationLabel(location) {
+  const name = String(location?.name || '').trim() || 'Base sem nome';
+  const type = String(location?.type || '').trim();
+  return type ? `${name} (${type})` : name;
+}
+
+function serviceLocationSearchText(location) {
+  return [location?.name, location?.type, location?.address, location?.tenant?.name]
+    .map((part) => String(part || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function getFilteredCoverageLocations() {
+  const q = String(coverageModalSearch || '').trim().toLowerCase();
+  if (!q) return cachedLocations;
+  return cachedLocations.filter((location) => serviceLocationSearchText(location).includes(q));
+}
+
+function updateServiceLocationSelect(selectedIds, filterText = '') {
+  const sel = document.getElementById('t-service-locs');
+  if (!sel) return;
+  const selected = new Set((Array.isArray(selectedIds) ? selectedIds : []).map(String));
+  const filter = String(filterText || '').trim().toLowerCase();
+  const rows = cachedLocations.filter((location) => {
+    if (!filter) return true;
+    return serviceLocationSearchText(location).includes(filter);
+  });
+  sel.innerHTML = rows
+    .map((location) => {
+      const selectedAttr = selected.has(String(location.id)) ? ' selected' : '';
+      return `<option value="${esc(location.id)}"${selectedAttr}>${esc(serviceLocationLabel(location))}</option>`;
+    })
+    .join('');
+}
+
+function syncCoverageHiddenSelect(selectedIds) {
+  const filterEl = document.getElementById('t-service-locs-filter');
+  updateServiceLocationSelect(selectedIds, filterEl?.value || '');
+}
+
+function getCoverageSelectedLocations() {
+  const selected = new Set(getSelectedServiceLocationIds());
+  return cachedLocations.filter((location) => selected.has(String(location.id)));
+}
+
+function fitLeafletMapToPoints(map, points, fallback = [-15.788, -47.879], fallbackZoom = 5) {
+  if (!map) return;
+  if (Array.isArray(points) && points.length) {
+    map.fitBounds(points, { padding: [24, 24] });
+    return;
+  }
+  map.setView(fallback, fallbackZoom);
+}
+
+function ensureCoverageMainMap() {
+  const L = getLeafletGlobal();
+  const el = document.getElementById('ue-coverage-map');
+  if (!L || !el) return null;
+  if (!coverageMainMap) {
+    coverageMainMap = L.map(el, { zoomControl: true, attributionControl: true }).setView([-15.788, -47.879], 5);
+    coverageMainTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(coverageMainMap);
+    coverageMainMap.on('click', (event) => {
+      if (isUserEditReadonly()) return;
+      document.getElementById('t-coverage-lat').value = String(event.latlng.lat);
+      document.getElementById('t-coverage-lng').value = String(event.latlng.lng);
+      refreshCoverageUi({ fit: false });
+      markDirty();
+    });
+  }
+  setTimeout(() => coverageMainMap?.invalidateSize(), 0);
+  return coverageMainMap;
+}
+
+function renderCoverageMainMap() {
+  const L = getLeafletGlobal();
+  const map = ensureCoverageMainMap();
+  const statusEl = document.getElementById('ue-coverage-map-status');
+  if (!L || !map) {
+    if (statusEl) statusEl.textContent = 'Mapa indisponível neste navegador.';
+    return;
+  }
+
+  coverageMainLocationMarkers.forEach((marker) => marker.remove());
+  coverageMainLocationMarkers = [];
+
+  const selectedLocations = getCoverageSelectedLocations();
+  const selectedIds = new Set(selectedLocations.map((location) => String(location.id)));
+  const center = getCoverageCenterFromDom();
+  const radiusKm = getCoverageRadiusKmFromDom();
+  const bounds = [];
+
+  cachedLocations.forEach((location) => {
+    if (!isValidLocationCoordinate(location)) return;
+    const lat = Number(location.latitude);
+    const lng = Number(location.longitude);
+    const selected = selectedIds.has(String(location.id));
+    const marker = L.circleMarker([lat, lng], {
+      radius: selected ? 8 : 6,
+      color: selected ? '#f97316' : '#64748b',
+      weight: selected ? 3 : 2,
+      fillColor: selected ? '#f97316' : '#cbd5e1',
+      fillOpacity: selected ? 0.95 : 0.9,
+    })
+      .addTo(map)
+      .bindPopup(`<strong>${esc(serviceLocationLabel(location))}</strong>${location.address ? `<br>${esc(location.address)}` : ''}`);
+    coverageMainLocationMarkers.push(marker);
+    if (selected) bounds.push([lat, lng]);
+  });
+
+  if (coverageMainCenterMarker) {
+    coverageMainCenterMarker.remove();
+    coverageMainCenterMarker = null;
+  }
+  if (coverageMainCircle) {
+    coverageMainCircle.remove();
+    coverageMainCircle = null;
+  }
+
+  if (center) {
+    coverageMainCenterMarker = L.marker([center.latitude, center.longitude], { draggable: !isUserEditReadonly() }).addTo(map);
+    coverageMainCenterMarker.bindPopup('<strong>Centro operacional</strong>');
+    coverageMainCenterMarker.on('dragend', () => {
+      const latlng = coverageMainCenterMarker.getLatLng();
+      document.getElementById('t-coverage-lat').value = String(latlng.lat);
+      document.getElementById('t-coverage-lng').value = String(latlng.lng);
+      refreshCoverageUi({ fit: false });
+      markDirty();
+    });
+    bounds.push([center.latitude, center.longitude]);
+    if (radiusKm > 0) {
+      coverageMainCircle = L.circle([center.latitude, center.longitude], {
+        radius: radiusKm * 1000,
+        color: '#2563eb',
+        fillColor: '#60a5fa',
+        fillOpacity: 0.12,
+        weight: 2,
+      }).addTo(map);
+    }
+  }
+
+  if (statusEl) {
+    if (cachedLocationsLoadError) statusEl.textContent = cachedLocationsLoadError;
+    else if (!selectedLocations.length) statusEl.textContent = 'Nenhuma base selecionada ainda. Use o botão acima para escolher no mapa.';
+    else if (!center) statusEl.textContent = 'Bases selecionadas. Agora defina um centro clicando no mapa ou usando o botão de referência.';
+    else statusEl.textContent = `Cobertura aplicada a ${selectedLocations.length} base(s).`;
+  }
+
+  fitLeafletMapToPoints(map, bounds);
+}
+
+function renderCoverageSummary() {
+  const summaryEl = document.getElementById('ue-coverage-summary');
+  const chipListEl = document.getElementById('ue-coverage-selected-bases');
+  const coordsEl = document.getElementById('ue-coverage-coords');
+  if (!summaryEl || !chipListEl || !coordsEl) return;
+
+  const selectedLocations = getCoverageSelectedLocations();
+  const center = getCoverageCenterFromDom();
+  const radiusKm = getCoverageRadiusKmFromDom();
+
+  summaryEl.innerHTML = `
+    <div class="ue-coverage-summary__grid">
+      <div class="ue-coverage-summary__item">
+        <span class="ue-coverage-summary__label">Bases atendidas</span>
+        <strong>${esc(String(selectedLocations.length))}</strong>
+      </div>
+      <div class="ue-coverage-summary__item">
+        <span class="ue-coverage-summary__label">Raio operacional</span>
+        <strong>${esc(radiusKm > 0 ? `${radiusKm} km` : 'Não definido')}</strong>
+      </div>
+      <div class="ue-coverage-summary__item">
+        <span class="ue-coverage-summary__label">Centro</span>
+        <strong>${esc(center ? 'Definido' : 'Pendente')}</strong>
+      </div>
+    </div>
+  `;
+  coordsEl.textContent = formatCoverageCoordLine(center);
+  chipListEl.innerHTML = selectedLocations.length
+    ? selectedLocations
+        .map((location) => `<span class="ue-coverage-chip">${esc(String(location.name || 'Base'))}</span>`)
+        .join('')
+    : '<span class="ue-coverage-empty">Nenhuma base selecionada.</span>';
+}
+
+function refreshCoverageUi({ fit = true } = {}) {
+  syncCoverageHiddenSelect(getSelectedServiceLocationIds());
+  renderCoverageSummary();
+  if (fit) renderCoverageMainMap();
+  else {
+    renderCoverageMainMap();
+    if (coverageMainMap) coverageMainMap.invalidateSize();
+  }
+  dirtyHooks.refreshWorkspace();
+}
+
+function closeCoverageBasesModal() {
+  const modal = document.getElementById('coverage-bases-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+function ensureCoverageModalMap() {
+  const L = getLeafletGlobal();
+  const el = document.getElementById('coverage-modal-map');
+  if (!L || !el) return null;
+  if (!coverageModalMap) {
+    coverageModalMap = L.map(el, { zoomControl: true, attributionControl: true }).setView([-15.788, -47.879], 5);
+    coverageModalTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(coverageModalMap);
+  }
+  setTimeout(() => coverageModalMap?.invalidateSize(), 0);
+  return coverageModalMap;
+}
+
+function toggleCoverageModalDraftLocation(locationId) {
+  const id = String(locationId || '');
+  if (!id) return;
+  if (coverageModalDraftSelected.has(id)) coverageModalDraftSelected.delete(id);
+  else coverageModalDraftSelected.add(id);
+  renderCoverageModalList();
+  renderCoverageModalMap();
+}
+
+function renderCoverageModalList() {
+  const listEl = document.getElementById('coverage-modal-list');
+  const metaEl = document.getElementById('coverage-modal-meta');
+  if (!listEl || !metaEl) return;
+  const rows = getFilteredCoverageLocations();
+  metaEl.textContent = `${rows.length} base(s) na busca · ${coverageModalDraftSelected.size} selecionada(s)`;
+  listEl.innerHTML = rows.length
+    ? rows
+        .map((location) => {
+          const id = String(location.id);
+          const active = coverageModalDraftSelected.has(id);
+          const disabled = !isValidLocationCoordinate(location) ? ' ue-coverage-list-row--disabled' : '';
+          return `<button type="button" class="ue-coverage-list-row${active ? ' is-active' : ''}${disabled}" data-coverage-loc="${esc(id)}">
+            <span class="ue-coverage-list-row__title">${esc(serviceLocationLabel(location))}</span>
+            <span class="ue-coverage-list-row__meta">${esc(location.address || 'Sem endereço cadastrado')}${!isValidLocationCoordinate(location) ? ' · sem coordenadas' : ''}</span>
+          </button>`;
+        })
+        .join('')
+    : '<div class="ue-coverage-empty">Nenhuma base encontrada para esse filtro.</div>';
+  listEl.querySelectorAll('[data-coverage-loc]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleCoverageModalDraftLocation(btn.getAttribute('data-coverage-loc') || ''));
+  });
+}
+
+function renderCoverageModalMap() {
+  const L = getLeafletGlobal();
+  const map = ensureCoverageModalMap();
+  if (!L || !map) return;
+  coverageModalMarkers.forEach((marker) => marker.remove());
+  coverageModalMarkers = [];
+  const rows = getFilteredCoverageLocations();
+  const bounds = [];
+  rows.forEach((location) => {
+    if (!isValidLocationCoordinate(location)) return;
+    const lat = Number(location.latitude);
+    const lng = Number(location.longitude);
+    const active = coverageModalDraftSelected.has(String(location.id));
+    const marker = L.marker([lat, lng]).addTo(map);
+    marker.bindPopup(`<strong>${esc(serviceLocationLabel(location))}</strong>${location.address ? `<br>${esc(location.address)}` : ''}`);
+    marker.on('click', () => toggleCoverageModalDraftLocation(String(location.id)));
+    if (active) marker.openPopup();
+    coverageModalMarkers.push(marker);
+    bounds.push([lat, lng]);
+  });
+  fitLeafletMapToPoints(map, bounds);
+}
+
+function openCoverageBasesModal() {
+  const modal = document.getElementById('coverage-bases-modal');
+  const searchEl = document.getElementById('coverage-modal-search');
+  if (!modal) return;
+  coverageModalDraftSelected = new Set(getSelectedServiceLocationIds());
+  coverageModalSearch = '';
+  if (searchEl) searchEl.value = '';
+  renderCoverageModalList();
+  renderCoverageModalMap();
+  modal.classList.add('open');
+}
+
+function bindCoverageUx() {
+  const openBtn = document.getElementById('btn-coverage-open-modal');
+  const centerBtn = document.getElementById('btn-coverage-center-selected');
+  const clearCenterBtn = document.getElementById('btn-coverage-clear-center');
+  const radiusEl = document.getElementById('t-coverage-radius-km');
+  const notesEl = document.getElementById('t-coverage-notes');
+  const closeBtn = document.getElementById('coverage-bases-close');
+  const cancelBtn = document.getElementById('coverage-bases-cancel');
+  const applyBtn = document.getElementById('coverage-bases-apply');
+  const modal = document.getElementById('coverage-bases-modal');
+  const searchEl = document.getElementById('coverage-modal-search');
+  const sectionToggle = document.querySelector('#sec-regioes .ue-section-toggle');
+
+  openBtn?.addEventListener('click', () => {
+    if (isUserEditReadonly()) return;
+    openCoverageBasesModal();
+  });
+  centerBtn?.addEventListener('click', () => {
+    if (isUserEditReadonly()) return;
+    const rows = getCoverageSelectedLocations().filter(isValidLocationCoordinate);
+    if (!rows.length) {
+      alert('Selecione pelo menos uma base com coordenadas para definir a referência.');
+      return;
+    }
+    const avgLat = rows.reduce((sum, location) => sum + Number(location.latitude), 0) / rows.length;
+    const avgLng = rows.reduce((sum, location) => sum + Number(location.longitude), 0) / rows.length;
+    document.getElementById('t-coverage-lat').value = String(avgLat);
+    document.getElementById('t-coverage-lng').value = String(avgLng);
+    refreshCoverageUi({ fit: true });
+    markDirty();
+  });
+  clearCenterBtn?.addEventListener('click', () => {
+    if (isUserEditReadonly()) return;
+    document.getElementById('t-coverage-lat').value = '';
+    document.getElementById('t-coverage-lng').value = '';
+    refreshCoverageUi({ fit: true });
+    markDirty();
+  });
+  radiusEl?.addEventListener('input', () => {
+    refreshCoverageUi({ fit: false });
+    markDirty();
+  });
+  notesEl?.addEventListener('input', markDirty);
+  searchEl?.addEventListener('input', () => {
+    coverageModalSearch = searchEl.value || '';
+    renderCoverageModalList();
+    renderCoverageModalMap();
+  });
+  closeBtn?.addEventListener('click', closeCoverageBasesModal);
+  cancelBtn?.addEventListener('click', closeCoverageBasesModal);
+  modal?.addEventListener('click', (event) => {
+    if (event.target === modal) closeCoverageBasesModal();
+  });
+  sectionToggle?.addEventListener('click', () => {
+    setTimeout(() => refreshCoverageUi({ fit: false }), 180);
+  });
+  applyBtn?.addEventListener('click', () => {
+    syncCoverageHiddenSelect([...coverageModalDraftSelected]);
+    closeCoverageBasesModal();
+    refreshCoverageUi({ fit: true });
+    markDirty();
+  });
+}
 
 function getLocationMultiselectOptionsHtml(locations) {
   const list = Array.isArray(locations) ? locations : [];
@@ -622,6 +1165,7 @@ function syncTechPanelVisibility() {
   if (!roleEl || !panel) return;
   const show = roleEl.value === 'PROVIDER' || hasTechnicianProfile;
   panel.style.display = show ? 'block' : 'none';
+  dirtyHooks.refreshWorkspace();
 }
 
 function renderFaceGallery() {
@@ -686,8 +1230,15 @@ function buildUserPatchPayload() {
     .split(/[,;\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const svcSel = document.getElementById('t-service-locs');
-  const serviceLocationIds = svcSel ? [...svcSel.selectedOptions].map((o) => o.value) : [];
+  const coverageLat = Number(document.getElementById('t-coverage-lat')?.value);
+  const coverageLng = Number(document.getElementById('t-coverage-lng')?.value);
+  const coverageRadiusKm = Number(document.getElementById('t-coverage-radius-km')?.value);
+  const coverageNotes = document.getElementById('t-coverage-notes')?.value || '';
+  const hasCoverage =
+    Number.isFinite(coverageLat) &&
+    Number.isFinite(coverageLng) &&
+    Number.isFinite(coverageRadiusKm) &&
+    coverageRadiusKm > 0;
   const selRole = document.getElementById('f-role')?.value || 'USER';
   const isProviderRole = selRole === 'PROVIDER';
   const includeTechnician = isProviderRole || hasTechnicianProfile;
@@ -730,7 +1281,21 @@ function buildUserPatchPayload() {
           score: Number(document.getElementById('t-score').value) || 5,
           workScheduleJson: collectSchedule(),
           skillsJson,
-          serviceLocationIds,
+          serviceCoverageGeoJson: hasCoverage
+            ? {
+                homeBase: {
+                  latitude: coverageLat,
+                  longitude: coverageLng,
+                  address: document.getElementById('a-line1').value.trim() || null,
+                  city: document.getElementById('a-city').value.trim() || null,
+                  state: document.getElementById('a-state').value.trim() || null,
+                  postalCode: document.getElementById('a-postal').value.trim() || null,
+                  countryCode: document.getElementById('a-country').value.trim() || 'BR',
+                },
+                radiusKm: coverageRadiusKm,
+                notes: coverageNotes.trim() || null,
+              }
+            : null,
           professionalDocuments: collectDocTable('tbody-docs-pro'),
         }
       : undefined,
@@ -811,6 +1376,195 @@ function paintSummaryBar(u) {
   bar.innerHTML = chips.join('');
 }
 
+function countEnabledScheduleSlots(schedule) {
+  if (!schedule || typeof schedule !== 'object') return 0;
+  return Object.values(schedule).reduce((acc, day) => {
+    if (!Array.isArray(day)) return acc;
+    return acc + day.filter((slot) => slot && slot.enabled).length;
+  }, 0);
+}
+
+function workspaceCardHtml({ href, eyebrow, title, meta, chips, tone }) {
+  return `<a class="ue-workspace-card ue-workspace-tone--${esc(tone || 'muted')}" href="${esc(href)}">
+    <div class="ue-workspace-card__top">
+      <div>
+        <div class="ue-workspace-card__eyebrow">${esc(eyebrow)}</div>
+        <div class="ue-workspace-card__title">${esc(title)}</div>
+      </div>
+    </div>
+    <div class="ue-workspace-card__meta">${esc(meta)}</div>
+    <div class="ue-workspace-card__chips">${chips.map((chip) => `<span class="ue-workspace-card__chip">${esc(chip)}</span>`).join('')}</div>
+    <div class="ue-workspace-card__cta">Abrir bloco</div>
+  </a>`;
+}
+
+function paintWorkspaceBar(currentUser) {
+  const bar = document.getElementById('ue-workspace-bar');
+  if (!bar) return;
+  const role = normalizeRoleForForm(document.getElementById('f-role')?.value || currentUser?.role || 'USER');
+  const payload = buildUserPatchPayload();
+  const technician = payload.technician || null;
+  const providerEnabled = role === 'PROVIDER' || !!technician;
+  const technicianStatus = String(technician?.status || currentUser?.technicianProfile?.status || '').toUpperCase();
+  const providerTitle = !providerEnabled
+    ? 'Sem operação como prestador'
+    : technicianStatus === 'ACTIVE'
+      ? 'Pronto para receber OS'
+      : technicianStatus === 'PENDING'
+        ? 'Cadastro operacional pendente'
+        : technicianStatus === 'SUSPENDED'
+          ? 'Prestador suspenso'
+          : 'Perfil operacional inativo';
+  const providerTone = !providerEnabled
+    ? 'muted'
+    : technicianStatus === 'ACTIVE'
+      ? 'good'
+      : technicianStatus === 'PENDING'
+        ? 'warn'
+        : 'muted';
+  const providerSkills = Array.isArray(technician?.skillsJson) ? technician.skillsJson.length : 0;
+  const providerCoverageRadius = Number(technician?.serviceCoverageGeoJson?.radiusKm || 0);
+  const providerShifts = countEnabledScheduleSlots(technician?.workScheduleJson);
+
+  const personalDocs = Array.isArray(payload.personalDocuments) ? payload.personalDocuments.length : 0;
+  const professionalDocs = Array.isArray(technician?.professionalDocuments) ? technician.professionalDocuments.length : 0;
+  const faceCount = Array.isArray(faceEnrollmentList) ? faceEnrollmentList.length : 0;
+  const workTimeEnabled = !!payload.workTimeTrackingEnabled;
+  const complianceTitle = workTimeEnabled && faceCount > 0
+    ? 'Base operacional consistente'
+    : workTimeEnabled
+      ? 'Ponto ativo com atenção na biometria'
+      : personalDocs + professionalDocs > 0 || faceCount > 0
+        ? 'Evidências cadastradas parcialmente'
+        : 'Sem evidências operacionais';
+  const complianceTone = workTimeEnabled && faceCount > 0
+    ? 'good'
+    : workTimeEnabled || personalDocs + professionalDocs > 0 || faceCount > 0
+      ? 'warn'
+      : 'muted';
+
+  const sessionActive = !!currentUser?.currentSessionId;
+  const emailVerified = !!currentUser?.emailVerifiedAt;
+  const notesFilled = !!String(document.getElementById('f-admin-notes')?.value || '').trim();
+  const locale = String(document.getElementById('f-preferred-locale')?.value || '').trim() || 'Padrão';
+  const adminTitle = !emailVerified
+    ? 'Conta pede atenção administrativa'
+    : sessionActive
+      ? 'Usuário com sessão ativa'
+      : 'Conta administrativamente estável';
+  const adminTone = !emailVerified ? 'warn' : sessionActive ? 'info' : 'muted';
+
+  const cards = [
+    workspaceCardHtml({
+      href: '#sec-tecnico',
+      eyebrow: 'Prestador',
+      title: providerTitle,
+      meta: providerEnabled
+        ? 'Use este bloco para ajustar despacho, habilitação técnica e cobertura operacional.'
+        : 'Ative o papel de prestador apenas para usuários que realmente operam ordens de serviço.',
+      chips: [
+        `Papel: ${role}`,
+        `Status: ${providerEnabled ? technicianStatus || 'PENDING' : 'não habilitado'}`,
+        `${providerSkills} habilidade(s)`,
+        providerCoverageRadius > 0 ? `${providerCoverageRadius} km de raio` : 'Cobertura indefinida',
+        `${providerShifts} turno(s) ativo(s)`,
+      ],
+      tone: providerTone,
+    }),
+    workspaceCardHtml({
+      href: '#sec-face',
+      eyebrow: 'Compliance',
+      title: complianceTitle,
+      meta: 'Biometria, ponto e documentos ficam concentrados aqui para evitar varrer a ficha inteira.',
+      chips: [
+        workTimeEnabled ? 'Ponto habilitado' : 'Ponto desligado',
+        `${faceCount} foto(s) faciais`,
+        `${personalDocs} doc(s) pessoais`,
+        `${professionalDocs} doc(s) profissionais`,
+      ],
+      tone: complianceTone,
+    }),
+    workspaceCardHtml({
+      href: '#sec-ops',
+      eyebrow: 'Administração',
+      title: adminTitle,
+      meta: 'Sessão, verificação de e-mail, notas internas e idioma preferido ficam neste bloco final.',
+      chips: [
+        sessionActive ? 'Sessão ativa' : 'Sem sessão',
+        emailVerified ? 'E-mail verificado' : 'E-mail pendente',
+        notesFilled ? 'Notas preenchidas' : 'Sem notas',
+        `Idioma: ${locale}`,
+      ],
+      tone: adminTone,
+    }),
+  ];
+  bar.innerHTML = cards.join('');
+}
+
+function paintTechSummary(currentUser) {
+  const box = document.getElementById('ue-tech-summary');
+  if (!box) return;
+  const role = normalizeRoleForForm(document.getElementById('f-role')?.value || currentUser?.role || 'USER');
+  const payload = buildUserPatchPayload();
+  const technician = payload.technician || null;
+  const enabled = role === 'PROVIDER' || !!technician;
+  if (!enabled) {
+    box.innerHTML = `
+      <div class="ue-tech-summary__card ue-tech-summary__card--muted">
+        <div class="ue-tech-summary__eyebrow">Prestador</div>
+        <div class="ue-tech-summary__title">Perfil técnico não habilitado</div>
+        <div class="ue-tech-summary__meta">Mude o papel da conta para <strong>Prestador</strong> quando este usuário realmente operar ordens de serviço.</div>
+      </div>`;
+    return;
+  }
+
+  const status = String(technician?.status || currentUser?.technicianProfile?.status || 'PENDING').toUpperCase();
+  const scoreNum = Number(technician?.score ?? currentUser?.technicianProfile?.score ?? 5);
+  const score = Number.isFinite(scoreNum) ? scoreNum.toFixed(1) : '5.0';
+  const specialty = String(technician?.specialty || currentUser?.technicianProfile?.specialty || '').trim() || 'Sem especialidade principal';
+  const cft = String(technician?.cft || currentUser?.technicianProfile?.cft || '').trim() || 'Não informado';
+  const skills = Array.isArray(technician?.skillsJson) ? technician.skillsJson : [];
+  const coverageRadiusKm = Number(technician?.serviceCoverageGeoJson?.radiusKm || 0);
+  const coverageCenter = technician?.serviceCoverageGeoJson?.homeBase || null;
+  const shifts = countEnabledScheduleSlots(technician?.workScheduleJson);
+  const tone =
+    status === 'ACTIVE' ? 'good' : status === 'PENDING' ? 'warn' : status === 'SUSPENDED' ? 'danger' : 'muted';
+  const readiness =
+    status === 'ACTIVE'
+      ? 'Pronto para operação'
+      : status === 'PENDING'
+        ? 'Aguardando ativação operacional'
+        : status === 'SUSPENDED'
+          ? 'Operação bloqueada temporariamente'
+          : 'Sem despacho ativo';
+
+  box.innerHTML = `
+    <div class="ue-tech-summary__card ue-tech-summary__card--${esc(tone)}">
+      <div class="ue-tech-summary__eyebrow">Status operacional</div>
+      <div class="ue-tech-summary__title">${esc(readiness)}</div>
+      <div class="ue-tech-summary__meta">Especialidade: <strong>${esc(specialty)}</strong></div>
+      <div class="ue-tech-summary__chips">
+        <span class="ue-tech-summary__chip">Status: ${esc(status)}</span>
+        <span class="ue-tech-summary__chip">Score: ${esc(score)}</span>
+        <span class="ue-tech-summary__chip">Raio: ${esc(coverageRadiusKm > 0 ? `${coverageRadiusKm} km` : 'não definido')}</span>
+        <span class="ue-tech-summary__chip">Turnos: ${esc(String(shifts))}</span>
+      </div>
+    </div>
+    <div class="ue-tech-summary__card">
+      <div class="ue-tech-summary__eyebrow">Qualificação</div>
+      <div class="ue-tech-summary__title">${esc(cft)}</div>
+      <div class="ue-tech-summary__meta">${
+        coverageCenter && Number.isFinite(Number(coverageCenter.latitude)) && Number.isFinite(Number(coverageCenter.longitude))
+          ? `Centro: ${esc(`${Number(coverageCenter.latitude).toFixed(5)}, ${Number(coverageCenter.longitude).toFixed(5)}`)}`
+          : 'Centro geográfico ainda não definido.'
+      }</div>
+      <div class="ue-tech-summary__chips">
+        <span class="ue-tech-summary__chip">${skills.length} habilidade(s)</span>
+        <span class="ue-tech-summary__chip">${esc(specialty)}</span>
+      </div>
+    </div>`;
+}
+
 async function loadUserAudit(userId) {
   const tb = document.getElementById('ue-audit-tbody');
   if (!tb) return;
@@ -874,8 +1628,6 @@ function applyUserEditToolbarI18n() {
   set('ue-avatar-upload-txt', t('ue_avatarUploadBtn'));
   const locSel = document.getElementById('ue-panel-locale');
   if (locSel) locSel.value = getAdminUiLocale();
-  const fl = document.getElementById('t-service-locs-filter');
-  if (fl) fl.placeholder = t('filterLocs');
   document.querySelectorAll('.ue-doc-sit-th').forEach((th) => {
     th.textContent = t('docSituation');
   });
@@ -890,27 +1642,6 @@ function applyUserEditToolbarI18n() {
   document.getElementById('lbl-preferred-locale') && (document.getElementById('lbl-preferred-locale').textContent = t('appLocale'));
   document.getElementById('hint-preferred-locale') && (document.getElementById('hint-preferred-locale').textContent = t('appLocaleHint'));
   document.getElementById('role-matrix-title') && (document.getElementById('role-matrix-title').textContent = t('roleMatrixTitle'));
-}
-
-function renderServiceLocationOptions(selectedIdList, filterText) {
-  const sel = document.getElementById('t-service-locs');
-  if (!sel) return;
-  const ft = String(filterText || '').trim().toLowerCase();
-  const selected = new Set(Array.isArray(selectedIdList) ? selectedIdList : []);
-  let list = cachedLocations;
-  if (ft) {
-    const hit = cachedLocations.filter((l) => `${l.name} ${l.type}`.toLowerCase().includes(ft));
-    const selectedObjs = cachedLocations.filter((l) => selected.has(l.id));
-    const map = new Map();
-    [...selectedObjs, ...hit].forEach((l) => map.set(l.id, l));
-    list = [...map.values()];
-  }
-  sel.innerHTML = list
-    .map((l) => {
-      const on = selected.has(l.id);
-      return `<option value="${esc(l.id)}" ${on ? 'selected' : ''}>${esc(l.name)} — ${esc(l.type)}</option>`;
-    })
-    .join('');
 }
 
 function paintAddressCountryHint() {
@@ -952,14 +1683,13 @@ function paintEmailVerificationUx(u) {
     hint.textContent = t('ue_emailVerPendingDesc');
     if (sendBtn) sendBtn.hidden = false;
     if (markBtn) {
-      const actor = (getStoredPanelRole() || '').trim().toUpperCase();
-      markBtn.hidden = actor === 'MANAGER';
+      markBtn.hidden = isLimitedTenantManager;
     }
   }
 }
 
 function isManagerPanelSession() {
-  return (getStoredPanelRole() || '').trim().toUpperCase() === 'MANAGER';
+  return isLimitedTenantManager;
 }
 
 /** Papéis elevados na ficha: esconde opções e bloqueia alteração conforme o papel do painel. */
@@ -985,13 +1715,10 @@ function applyUserEditSensitiveFieldRbac(targetUser) {
   clearNotesRbac();
   if (!targetUser) return;
 
-  const actor = (getStoredPanelRole() || '').trim().toUpperCase();
-  if (!actor) return;
-
   const targetRole = normalizeRoleForForm(targetUser.role);
 
   if (sel) {
-    if (actor === 'MANAGER') {
+    if (isLimitedTenantManager) {
       ['TENANT_ADMIN', 'SAAS_ADMIN'].forEach((val) => {
         const o = sel.querySelector(`option[value="${val}"]`);
         if (o) o.hidden = true;
@@ -1000,7 +1727,7 @@ function applyUserEditSensitiveFieldRbac(targetUser) {
         sel.disabled = true;
         sel.title = t('ue_rbacRoleFieldLocked');
       }
-    } else if (actor === 'TENANT_ADMIN') {
+    } else if (isTenantUserAdmin && !isPlatformUserAdmin) {
       const o = sel.querySelector('option[value="SAAS_ADMIN"]');
       if (o) o.hidden = true;
       if (targetRole === 'SAAS_ADMIN') {
@@ -1010,7 +1737,7 @@ function applyUserEditSensitiveFieldRbac(targetUser) {
     }
   }
 
-  if (notes && actor === 'MANAGER') {
+  if (notes && isLimitedTenantManager) {
     notes.readOnly = true;
     notes.classList.add('ue-rbac-readonly-field');
     notes.title = t('ue_rbacAdminNotesReadonly');
@@ -1031,11 +1758,17 @@ export async function bootUserEditPage() {
     return;
   }
 
-  cachedLocations = await CONFIG.get('/locations?tenantId=' + encodeURIComponent(u.tenantId)).catch(() => []);
-  if (!Array.isArray(cachedLocations)) cachedLocations = [];
+  const locationsRes = await CONFIG.get('/locations?tenantId=' + encodeURIComponent(u.tenantId));
+  cachedLocationsLoadError = '';
+  cachedLocations = Array.isArray(locationsRes) ? locationsRes : [];
+  if (!Array.isArray(locationsRes)) {
+    cachedLocationsLoadError = String(locationsRes?.error || 'Não foi possível carregar as bases deste tenant.');
+  }
 
   applyUserEditToolbarI18n();
   applyUserEditStaticPageI18n();
+  setupUserEditProgressiveSections();
+  bindCoverageUx();
   const backList = document.getElementById('ue-back-list');
   if (backList) backList.href = 'users.html?resume=1';
 
@@ -1061,6 +1794,10 @@ export async function bootUserEditPage() {
     }, 64);
   };
   dirtyHooks.mark = () => refreshDirty();
+  dirtyHooks.refreshWorkspace = () => {
+    paintWorkspaceBar(uRef);
+    paintTechSummary(uRef);
+  };
 
   document.getElementById('ue-title').textContent = u.name || u.email;
   const subBits = [u.tenant?.name, u.tenant?.email].filter(Boolean);
@@ -1087,6 +1824,8 @@ export async function bootUserEditPage() {
   if (fPrefLoc) fPrefLoc.value = u.preferredChatLocale || '';
 
   paintSummaryBar(u);
+  paintWorkspaceBar(u);
+  paintTechSummary(u);
 
   const sess = document.getElementById('ue-session-info');
   if (sess) {
@@ -1107,6 +1846,7 @@ export async function bootUserEditPage() {
         if (u2 && !u2.error) {
           uRef = u2;
           paintSummaryBar(u2);
+          paintWorkspaceBar(u2);
           paintEmailVerificationUx(u2);
           if (sess) {
             sess.innerHTML = `<span style="color:var(--text3)">${esc(t('summarySessionNone'))}</span>`;
@@ -1146,6 +1886,7 @@ export async function bootUserEditPage() {
       const res = await CONFIG.patch(`/users/${encodeURIComponent(id)}`, { emailVerifiedAt: true }).catch(() => null);
       if (res && !res.error) {
         uRef = res;
+        paintWorkspaceBar(res);
         paintEmailVerificationUx(res);
         alert(t('ue_emailVerMarkOk'));
       } else alert(res?.error || t('ue_emailVerMarkErr'));
@@ -1232,12 +1973,14 @@ export async function bootUserEditPage() {
   bumpUserRefFaceState = (partial) => {
     uRef = { ...uRef, ...partial };
     paintWorkTimeHints(uRef, wtSet);
+    paintWorkspaceBar(uRef);
   };
 
   faceUserId = id;
   faceEnrollmentList = sortFaceEnrollmentForDisplay(parseJsonSafe(u.faceEnrollmentPhotos, []));
   if (!Array.isArray(faceEnrollmentList)) faceEnrollmentList = [];
   renderFaceGallery();
+  paintWorkspaceBar(uRef);
 
   const faceIdentityHint = document.getElementById('face-identity-admin-hint');
   if (faceIdentityHint) {
@@ -1352,26 +2095,29 @@ export async function bootUserEditPage() {
     const skills = parseJsonSafe(tp.skillsJson, []);
     document.getElementById('t-skills').value = Array.isArray(skills) ? skills.join(', ') : '';
     renderSchedule(tp.workScheduleJson, cachedLocations);
+    const cov = parseJsonSafe(tp.serviceCoverageGeoJson, null);
+    const homeBase = cov && typeof cov === 'object' ? cov.homeBase || null : null;
+    document.getElementById('t-coverage-lat').value =
+      homeBase && Number.isFinite(Number(homeBase.latitude)) ? String(homeBase.latitude) : '';
+    document.getElementById('t-coverage-lng').value =
+      homeBase && Number.isFinite(Number(homeBase.longitude)) ? String(homeBase.longitude) : '';
+    document.getElementById('t-coverage-radius-km').value =
+      cov && Number.isFinite(Number(cov.radiusKm)) ? String(cov.radiusKm) : '';
+    document.getElementById('t-coverage-notes').value = cov?.notes ? String(cov.notes) : '';
     const svc = parseJsonSafe(tp.serviceLocationIds, []);
-    const ids = Array.isArray(svc) ? svc : [];
-    renderServiceLocationOptions(ids, '');
+    syncCoverageHiddenSelect(Array.isArray(svc) ? svc : []);
     renderDocRows('tbody-docs-pro', parseJsonSafe(tp.professionalDocuments, []), cachedLocations, u.id);
   } else {
     renderSchedule({}, cachedLocations);
-    renderServiceLocationOptions([], '');
+    document.getElementById('t-coverage-lat').value = '';
+    document.getElementById('t-coverage-lng').value = '';
+    document.getElementById('t-coverage-radius-km').value = '';
+    document.getElementById('t-coverage-notes').value = '';
+    syncCoverageHiddenSelect([]);
     renderDocRows('tbody-docs-pro', [], cachedLocations, u.id);
   }
 
-  const locFilter = document.getElementById('t-service-locs-filter');
-  const svcSelEl = document.getElementById('t-service-locs');
-  if (locFilter && svcSelEl && !locFilter.dataset.ueBound) {
-    locFilter.dataset.ueBound = '1';
-    locFilter.addEventListener('input', () => {
-      const selected = [...svcSelEl.selectedOptions].map((o) => o.value);
-      renderServiceLocationOptions(selected, locFilter.value);
-    });
-    svcSelEl.addEventListener('change', markDirty);
-  }
+  refreshCoverageUi({ fit: true });
 
   renderDocRows('tbody-docs-personal', parseJsonSafe(u.personalDocuments, []), cachedLocations, u.id);
 
@@ -1432,6 +2178,7 @@ export async function bootUserEditPage() {
     el.addEventListener('change', markDirty);
     el.addEventListener('input', markDirty);
   });
+  paintWorkspaceBar(uRef);
 
   let matriculaTimer = null;
   const fMatricula = document.getElementById('f-employee-matricula');
@@ -1675,6 +2422,7 @@ export async function bootUserEditPage() {
     if (fAdminNotes) fAdminNotes.value = res.adminInternalNotes != null ? String(res.adminInternalNotes) : '';
     if (fPrefLoc) fPrefLoc.value = res.preferredChatLocale || '';
     paintSummaryBar(res);
+    paintWorkspaceBar(res);
     paintEmailVerificationUx(res);
     paintWorkTimeHints(res, wtSet);
     void loadUserAudit(id);

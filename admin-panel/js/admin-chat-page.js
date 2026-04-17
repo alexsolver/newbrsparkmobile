@@ -1,16 +1,21 @@
 /**
  * Chat corporativo no painel admin — alinhado ao app móvel (salas, filtros, arquivadas locais, convites, grupos, ops).
  */
-import { CONFIG } from './config.js';
+import { CONFIG, getPanelCapabilities } from './config.js';
 import { getAdminUiLocale } from './user-pages-i18n.js';
 
 const ARCHIVED_KEY = 'brspark_panel_archived_chat_rooms';
 const VIEWER_LOCALE_KEY = 'brspark_panel_chat_viewer_locale';
 const VIEWER_LOCALE_OPTIONS = ['pt-BR', 'en-US', 'es-ES'];
+const ROOM_ARCHIVE_PREFIX = 'room:';
+const OPS_ARCHIVE_PREFIX = 'ops:';
+const AUTO_ARCHIVE_GENERAL_MS = 30 * 24 * 60 * 60 * 1000;
+const AUTO_ARCHIVE_OPS_MS = 7 * 24 * 60 * 60 * 1000;
+const COMPLETED_OP_STATUSES = new Set(['COMPLETED', 'SYNCED', 'DONE', 'CLOSED', 'FINISHED', 'COMPLETE', 'ARCHIVED']);
 
 const FILTERS = [
-  { id: 'ALL', label: 'Todas' },
-  { id: 'UNREAD', label: 'Não lidas' },
+  { id: 'PENDING', label: 'Pendentes' },
+  { id: 'OPS', label: 'Operacionais' },
   { id: 'GROUPS', label: 'Grupos' },
   { id: 'ARCHIVED', label: 'Arquivadas' },
 ];
@@ -52,6 +57,37 @@ function roleLabel(role) {
   if (norm === 'PROVIDER') return 'Prestador';
   if (norm === 'USER') return 'Usuário';
   return norm || 'Usuário';
+}
+
+function roomArchiveKey(roomId) {
+  return `${ROOM_ARCHIVE_PREFIX}${String(roomId || '').trim()}`;
+}
+
+function opsArchiveKey(executionId) {
+  return `${OPS_ARCHIVE_PREFIX}${String(executionId || '').trim()}`;
+}
+
+function isRoomArchived(archived, roomId) {
+  const id = String(roomId || '').trim();
+  return archived.has(id) || archived.has(roomArchiveKey(id));
+}
+
+function isOpsArchived(archived, executionId) {
+  return archived.has(opsArchiveKey(executionId));
+}
+
+function removeRoomArchiveEntry(archived, roomId) {
+  const id = String(roomId || '').trim();
+  archived.delete(id);
+  archived.delete(roomArchiveKey(id));
+}
+
+function normalizeSearch(v) {
+  return String(v || '').trim().toLowerCase();
+}
+
+function sortByLastMessageDesc(items, getTs) {
+  return [...items].sort((a, b) => (getTs(b) || 0) - (getTs(a) || 0));
 }
 
 function loadArchived() {
@@ -118,10 +154,14 @@ export function initAdminChatPage() {
   const saveMembersBtn = document.getElementById('admin-chat-save-members');
   const userSearchEl = document.getElementById('admin-chat-user-search');
   const userResultsEl = document.getElementById('admin-chat-user-results');
+  const searchEl = document.getElementById('admin-chat-search');
 
   const myEmail = (sessionStorage.getItem('brspark_admin_email') || '').trim().toLowerCase();
-  const myRole = (sessionStorage.getItem('brspark_admin_role') || '').trim().toUpperCase();
-  const isManager = myRole === 'MANAGER';
+  const panelCaps = new Set(getPanelCapabilities());
+  const canManageGroups =
+    panelCaps.has('tenant.users.write.limited') ||
+    panelCaps.has('tenant.users.write.self') ||
+    panelCaps.has('tenant.users.write.any');
 
   function normalizeViewerLocale(input) {
     const raw = String(input || '').trim();
@@ -146,12 +186,13 @@ export function initAdminChatPage() {
   }
 
   const state = {
-    filter: 'ALL',
+    filter: 'PENDING',
     archived: loadArchived(),
     rooms: [],
     pending: [],
     contacts: [],
     opsThreads: [],
+    pendingOpsIds: new Set(),
     mode: 'list',
     corpRoomId: '',
     corpMeta: null,
@@ -165,6 +206,7 @@ export function initAdminChatPage() {
     modalTab: 'GROUP',
     settingsMembersSel: [],
     contactSearch: '',
+    search: '',
     viewerLocale: readViewerLocale(),
   };
 
@@ -210,27 +252,85 @@ export function initAdminChatPage() {
     state.pending = Array.isArray(r2.data) ? r2.data : [];
     state.contacts = Array.isArray(r3.data) ? r3.data : [];
     state.opsThreads = Array.isArray(r4.threads) ? r4.threads : [];
+    state.pendingOpsIds = new Set(
+      state.opsThreads
+        .filter((t) => String(t.lastSenderKind || '').toUpperCase() === 'GESTOR')
+        .map((t) => String(t.executionId || '').trim()),
+    );
+
+    let changed = false;
+    for (const room of state.rooms) {
+      const archived = isRoomArchived(state.archived, room.id);
+      const hasFreshPending = (room.unreadCount ?? 0) > 0;
+      if (hasFreshPending && archived) {
+        removeRoomArchiveEntry(state.archived, room.id);
+        changed = true;
+        continue;
+      }
+      if (archived || !room.lastMessageAt) continue;
+      const age = Date.now() - new Date(room.lastMessageAt).getTime();
+      if (Number.isFinite(age) && age >= AUTO_ARCHIVE_GENERAL_MS) {
+        state.archived.add(roomArchiveKey(room.id));
+        changed = true;
+      }
+    }
+    for (const row of state.opsThreads) {
+      const archived = isOpsArchived(state.archived, row.executionId);
+      const hasFreshPending = state.pendingOpsIds.has(String(row.executionId || '').trim());
+      if (hasFreshPending && archived) {
+        state.archived.delete(opsArchiveKey(row.executionId));
+        changed = true;
+        continue;
+      }
+      if (archived || !row.lastMessageAt) continue;
+      const age = Date.now() - new Date(row.lastMessageAt).getTime();
+      if (Number.isFinite(age) && age >= AUTO_ARCHIVE_OPS_MS) {
+        state.archived.add(opsArchiveKey(row.executionId));
+        changed = true;
+      }
+    }
+    if (changed) saveArchived(state.archived);
   }
 
   function filteredRooms() {
-    return state.rooms.filter((room) => {
-      const isArchived = state.archived.has(room.id);
-      if (state.filter === 'ARCHIVED') return isArchived;
-      if (isArchived) return false;
-      if (state.filter === 'UNREAD') return (room.unreadCount ?? 0) > 0;
-      if (state.filter === 'GROUPS') return room.isGroup;
-      return true;
-    });
+    const q = normalizeSearch(state.search);
+    const nonArchivedRooms = state.rooms.filter((room) => !isRoomArchived(state.archived, room.id));
+    const pendingRooms = sortByLastMessageDesc(
+      nonArchivedRooms.filter((room) => (room.unreadCount ?? 0) > 0),
+      (room) => new Date(room.lastMessageAt || 0).getTime(),
+    );
+    const groupedRooms = sortByLastMessageDesc(
+      nonArchivedRooms.filter((room) => room.isGroup),
+      (room) => new Date(room.lastMessageAt || 0).getTime(),
+    );
+    const archivedRooms = sortByLastMessageDesc(
+      state.rooms.filter((room) => isRoomArchived(state.archived, room.id)),
+      (room) => new Date(room.lastMessageAt || 0).getTime(),
+    );
+    let rows = [];
+    if (state.filter === 'ARCHIVED') rows = archivedRooms;
+    else if (state.filter === 'GROUPS') rows = groupedRooms;
+    else if (state.filter === 'PENDING') rows = pendingRooms;
+    if (!q) return rows;
+    return rows.filter((room) =>
+      [room.name, room.lastMessage, room.lastSender].some((part) =>
+        String(part || '').trim().toLowerCase().includes(q),
+      ),
+    );
   }
 
   function renderFilters() {
     if (!filtersEl) return;
-    const rooms = state.rooms;
-    const unreadN = rooms.filter((r) => !state.archived.has(r.id) && (r.unreadCount ?? 0) > 0).length;
-    const archN = state.archived.size;
+    const pendingCorp = state.rooms.filter((r) => !isRoomArchived(state.archived, r.id) && (r.unreadCount ?? 0) > 0).length;
+    const pendingOps = state.opsThreads.filter((t) => !isOpsArchived(state.archived, t.executionId) && state.pendingOpsIds.has(String(t.executionId || '').trim())).length;
+    const opsN = state.opsThreads.filter((t) => !isOpsArchived(state.archived, t.executionId)).length;
+    const groupsN = state.rooms.filter((r) => !isRoomArchived(state.archived, r.id) && r.isGroup).length;
+    const archN = state.rooms.filter((r) => isRoomArchived(state.archived, r.id)).length + state.opsThreads.filter((t) => isOpsArchived(state.archived, t.executionId)).length;
     filtersEl.innerHTML = FILTERS.map((f) => {
       let badge = 0;
-      if (f.id === 'UNREAD') badge = unreadN;
+      if (f.id === 'PENDING') badge = pendingCorp + pendingOps;
+      if (f.id === 'OPS') badge = opsN;
+      if (f.id === 'GROUPS') badge = groupsN;
       if (f.id === 'ARCHIVED') badge = archN;
       const active = state.filter === f.id ? 'is-active' : '';
       const b =
@@ -248,12 +348,62 @@ export function initAdminChatPage() {
     });
   }
 
+  function filteredPendingContacts() {
+    const q = normalizeSearch(state.search);
+    if (!q) return state.pending;
+    return state.pending.filter((p) =>
+      [p?.user?.name, p?.user?.email, p?.requesterId].some((part) =>
+        String(part || '').trim().toLowerCase().includes(q),
+      ),
+    );
+  }
+
+  function visibleOpsThreads() {
+    const activeOps = [...state.opsThreads.filter((row) => !isOpsArchived(state.archived, row.executionId))].sort((a, b) => {
+      const aResolved = COMPLETED_OP_STATUSES.has(String(a.executionStatus || '').toUpperCase()) ? 1 : 0;
+      const bResolved = COMPLETED_OP_STATUSES.has(String(b.executionStatus || '').toUpperCase()) ? 1 : 0;
+      if (aResolved !== bResolved) return aResolved - bResolved;
+      return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
+    });
+    const pendingOps = sortByLastMessageDesc(
+      activeOps.filter((row) => state.pendingOpsIds.has(String(row.executionId || '').trim())),
+      (row) => new Date(row.lastMessageAt || 0).getTime(),
+    );
+    const archivedOps = sortByLastMessageDesc(
+      state.opsThreads.filter((row) => isOpsArchived(state.archived, row.executionId)),
+      (row) => new Date(row.lastMessageAt || 0).getTime(),
+    );
+    let rows = [];
+    if (state.filter === 'PENDING') rows = pendingOps;
+    else if (state.filter === 'OPS') rows = activeOps;
+    else if (state.filter === 'ARCHIVED') rows = archivedOps;
+    const q = normalizeSearch(state.search);
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [taskOsLabel(row), row.lastPreview, row.title, row.executionId].some((part) =>
+        String(part || '').trim().toLowerCase().includes(q),
+      ),
+    );
+  }
+
+  function opsStateMeta(row) {
+    const isPending = state.pendingOpsIds.has(String(row.executionId || '').trim());
+    const isResolved = COMPLETED_OP_STATUSES.has(String(row.executionStatus || '').toUpperCase());
+    if (state.filter === 'ARCHIVED') return { label: 'Arquivada', cls: 'is-archived' };
+    if (isResolved) return { label: 'Resolvida', cls: 'is-resolved' };
+    if (isPending) return { label: 'Aguardando você', cls: 'is-pending' };
+    if (String(row.lastSenderKind || '').toUpperCase() === 'TECH') return { label: 'Aguardando retorno', cls: 'is-waiting' };
+    return { label: 'Em andamento', cls: '' };
+  }
+
   function renderRoomList() {
     if (!listScroll) return;
     const frag = document.createDocumentFragment();
     const wrap = document.createElement('div');
 
-    const totalUnread = state.rooms.filter((r) => !state.archived.has(r.id)).reduce((s, r) => s + (r.unreadCount ?? 0), 0);
+    const totalUnread =
+      state.rooms.filter((r) => !isRoomArchived(state.archived, r.id) && (r.unreadCount ?? 0) > 0).length +
+      state.opsThreads.filter((t) => !isOpsArchived(state.archived, t.executionId) && state.pendingOpsIds.has(String(t.executionId || '').trim())).length;
     if (totalUnreadEl) {
       if (totalUnread > 0) {
         totalUnreadEl.style.display = 'inline-block';
@@ -264,10 +414,18 @@ export function initAdminChatPage() {
     }
 
     let html = '';
+    const opsRows = visibleOpsThreads();
+    const pendingContacts = filteredPendingContacts();
 
-    if (state.filter === 'ALL' && state.opsThreads.length) {
-      html += `<div style="padding:8px 14px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Mensagens da operação (gestor)</div>`;
-      for (const row of state.opsThreads) {
+    if (opsRows.length) {
+      html += `<div class="admin-chat-section-title">${
+        state.filter === 'PENDING'
+          ? 'Pendências operacionais'
+          : state.filter === 'ARCHIVED'
+            ? 'Operacionais arquivadas'
+            : 'Conversas operacionais'
+      }</div>`;
+      for (const row of opsRows) {
         const label = esc(taskOsLabel(row));
         const preview = esc(String(row.lastPreview || '').trim() || '—');
         const who =
@@ -277,21 +435,25 @@ export function initAdminChatPage() {
               ? 'Técnico: '
               : '';
         const ts = row.lastMessageAt ? new Date(row.lastMessageAt).getTime() : 0;
+        const stateMeta = opsStateMeta(row);
         html += `<div class="admin-chat-room-row" data-ops-id="${esc(row.executionId)}">
           <div class="admin-chat-av" style="background:#1d4ed8"><ion-icon name="briefcase-outline" style="color:#fff;font-size:20px"></ion-icon></div>
           <div class="admin-chat-room-meta">
             <div class="admin-chat-room-top">
-              <span class="admin-chat-room-name">${label}</span>
-              <span class="admin-chat-room-time">${esc(timeAgo(ts))}</span>
+              <span class="admin-chat-room-name" style="${stateMeta.cls === 'is-pending' ? 'font-weight:900;color:var(--text)' : ''}">${label}</span>
+              <span class="admin-chat-room-time" style="${stateMeta.cls === 'is-pending' ? 'color:var(--accent);font-weight:800' : ''}">${esc(timeAgo(ts))}</span>
             </div>
-            <div class="admin-chat-room-prev">${who}${preview}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+              <span class="admin-chat-room-prev" style="${stateMeta.cls === 'is-pending' ? 'font-weight:700;color:var(--text)' : ''}">${who}${preview}</span>
+              <span class="admin-chat-state-pill ${stateMeta.cls}">${esc(stateMeta.label)}</span>
+            </div>
           </div>
         </div>`;
       }
     }
 
-    if (state.filter === 'ALL' && state.pending.length) {
-      for (const p of state.pending) {
+    if (state.filter === 'PENDING' && pendingContacts.length) {
+      for (const p of pendingContacts) {
         const u = p.user || {};
         const name = esc(u.name || p.requesterId || '');
         html += `<div class="admin-chat-pending">
@@ -312,10 +474,12 @@ export function initAdminChatPage() {
         ${
           state.filter === 'ARCHIVED'
             ? 'Nenhuma conversa arquivada.'
-            : state.filter === 'UNREAD'
-              ? 'Nenhuma mensagem não lida.'
+            : state.filter === 'PENDING'
+              ? (state.search ? 'Nenhuma pendência encontrada para a busca.' : 'Nenhuma pendência no chat.')
+              : state.filter === 'OPS'
+                ? (state.search ? 'Nenhuma conversa operacional encontrada para a busca.' : 'Nenhuma conversa operacional.')
               : state.filter === 'GROUPS'
-                ? 'Nenhum grupo ainda.'
+                ? (state.search ? 'Nenhum grupo encontrado para a busca.' : 'Nenhum grupo ainda.')
                 : 'Sem conversas. Use «Nova» para convidar ou criar um grupo.'
         }
       </div>`;
@@ -345,7 +509,7 @@ export function initAdminChatPage() {
           unread > 0
             ? `<span class="admin-chat-unread-pill">${unread > 99 ? '99+' : unread}</span>`
             : '';
-        const arch = state.archived.has(item.id);
+        const arch = isRoomArchived(state.archived, item.id);
         html += `<div class="admin-chat-room-row ${arch ? 'is-arch-hint' : ''}" data-room-id="${esc(item.id)}"
           data-room-name="${esc(item.name || 'Chat')}"
           data-room-color="${avColor}"
@@ -392,8 +556,8 @@ export function initAdminChatPage() {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.getAttribute('data-archive-toggle') || '';
-        if (state.archived.has(id)) state.archived.delete(id);
-        else state.archived.add(id);
+        if (isRoomArchived(state.archived, id)) removeRoomArchiveEntry(state.archived, id);
+        else state.archived.add(roomArchiveKey(id));
         saveArchived(state.archived);
         renderFilters();
         renderRoomList();
@@ -647,7 +811,7 @@ export function initAdminChatPage() {
     state.pendingImageFile = null;
     if (fileEl) fileEl.value = '';
     threadTitle.textContent = meta.name || 'Chat';
-    groupSettingsBtn.hidden = !meta.isGroup;
+    groupSettingsBtn.hidden = !meta.isGroup || !canManageGroups;
     setLayoutOpen(true);
     msgsEl.innerHTML = '<div style="color:var(--text3);font-weight:600">Carregando…</div>';
     await apiFetchJson(`/chat/rooms/${encodeURIComponent(id)}/read`, { method: 'PUT', body: '{}' });
@@ -817,7 +981,7 @@ export function initAdminChatPage() {
   });
 
   function openModal() {
-    state.modalTab = isManager ? 'GROUP' : 'ADD';
+    state.modalTab = canManageGroups ? 'GROUP' : 'ADD';
     state.groupSelected = [];
     state.contactSearch = '';
     document.getElementById('admin-chat-group-name').value = '';
@@ -840,18 +1004,18 @@ export function initAdminChatPage() {
   btnNew.addEventListener('click', openModal);
 
   function syncModalTabs() {
-    if (!isManager) state.modalTab = 'ADD';
+    if (!canManageGroups) state.modalTab = 'ADD';
     const tabs = modal.querySelectorAll('.admin-chat-modal-tabs [data-tab]');
     tabs.forEach((t) => {
       const tab = t.getAttribute('data-tab') || '';
-      if (!isManager && tab === 'GROUP') {
+      if (!canManageGroups && tab === 'GROUP') {
         t.hidden = true;
       } else {
         t.hidden = false;
       }
       t.classList.toggle('is-active', t.getAttribute('data-tab') === state.modalTab);
     });
-    document.getElementById('admin-chat-modal-panel-group').hidden = state.modalTab !== 'GROUP' || !isManager;
+    document.getElementById('admin-chat-modal-panel-group').hidden = state.modalTab !== 'GROUP' || !canManageGroups;
     document.getElementById('admin-chat-modal-panel-add').hidden = state.modalTab !== 'ADD';
     if (state.modalTab === 'ADD') renderTenantUsers();
   }
@@ -866,6 +1030,11 @@ export function initAdminChatPage() {
   userSearchEl?.addEventListener('input', () => {
     state.contactSearch = userSearchEl.value || '';
     renderTenantUsers();
+  });
+
+  searchEl?.addEventListener('input', () => {
+    state.search = searchEl.value || '';
+    renderRoomList();
   });
 
   function renderModalMembers() {
@@ -898,8 +1067,8 @@ export function initAdminChatPage() {
   }
 
   document.getElementById('admin-chat-create-group').addEventListener('click', async () => {
-    if (!isManager) {
-      toast('Somente gestores podem criar grupos.');
+    if (!canManageGroups) {
+      toast('Seu perfil não pode criar grupos.');
       return;
     }
     const name = document.getElementById('admin-chat-group-name').value.trim();
@@ -952,6 +1121,7 @@ export function initAdminChatPage() {
   });
 
   groupSettingsBtn.addEventListener('click', () => {
+    if (!canManageGroups) return;
     if (!state.corpRoomId || !state.corpMeta?.isGroup) return;
     const room = state.rooms.find((r) => r.id === state.corpRoomId);
     const members = (room && room.members) || [];
@@ -988,6 +1158,7 @@ export function initAdminChatPage() {
   });
 
   saveMembersBtn.addEventListener('click', async () => {
+    if (!canManageGroups) return;
     if (!state.corpRoomId) return;
     const { res, data } = await apiFetchJson(`/chat/rooms/${encodeURIComponent(state.corpRoomId)}/members`, {
       method: 'PUT',

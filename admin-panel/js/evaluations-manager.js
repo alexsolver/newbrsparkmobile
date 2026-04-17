@@ -2,11 +2,16 @@
  * Painel Qualidade — Avaliações: KPIs, disputas, instâncias, templates, ranking.
  */
 import { initPage } from './sidebar.js';
-import { CONFIG } from './config.js';
+import { CONFIG, getPanelCapabilities } from './config.js';
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { evT, applyEvaluationsStaticI18n } from './evaluations-i18n.js';
 
 const Q_TYPES = ['RATING', 'NPS', 'BOOLEAN', 'TEXT', 'MULTIPLE_CHOICE'];
+const panelCaps = new Set(getPanelCapabilities());
+const canCrossTenantEvaluations =
+  panelCaps.has('tenant.access.any') || panelCaps.has('platform.dashboard.read');
+const canManageEvaluationTemplates =
+  panelCaps.has('tenant.operations.write.self') || panelCaps.has('tenant.operations.write.any');
 
 function esc(s) {
   return String(s ?? '')
@@ -125,6 +130,7 @@ function showTab(name) {
   document.querySelectorAll('.eval-tab-panel').forEach((p) => {
     p.classList.toggle('is-visible', p.dataset.panel === name);
   });
+  paintEvaluationsContextBar();
 }
 
 function withSurveyLang(url) {
@@ -222,6 +228,10 @@ async function loadTenantsIntoFilter() {
   const tenantSel = document.getElementById('filter-tenant');
   const tplTenant = document.getElementById('tpl-tenant');
   if (!tenantSel) return;
+  if (!canCrossTenantEvaluations) {
+    tenantSel.closest('.filter-field')?.setAttribute('style', 'display:none');
+    return;
+  }
   const res = await CONFIG.get('/tenants?limit=500');
   const list = res?.data || res || [];
   tenantSel.querySelectorAll('option:not(:first-child)').forEach((o) => o.remove());
@@ -255,6 +265,13 @@ async function loadAnalytics() {
   set('st-avg', a.averageTotalScore != null ? String(a.averageTotalScore) : null);
   set('st-crit', a.counts?.critical);
   set('st-rate', a.responseRatePercent != null ? String(a.responseRatePercent) : null);
+  paintEvaluationsContextBar({
+    total: a.counts?.total,
+    pending: a.counts?.pending,
+    average: a.averageTotalScore,
+    critical: a.counts?.critical,
+    responseRate: a.responseRatePercent,
+  });
 
   const tb = document.getElementById('tbody-ranking');
   if (tb && Array.isArray(a.technicianRanking)) {
@@ -270,6 +287,51 @@ async function loadAnalytics() {
         .join('');
     }
   }
+}
+
+function paintEvaluationsContextBar(metrics = null) {
+  const bar = document.getElementById('ev-context-bar');
+  if (!bar) return;
+  const tenantLabel = document.getElementById('filter-tenant')?.selectedOptions?.[0]?.textContent || 'Todos os tenants';
+  const activeTab =
+    document.querySelector('.eval-tab.eval-tab-active')?.textContent?.trim() || 'Resumo';
+  const total = metrics?.total ?? document.getElementById('st-total')?.textContent ?? '—';
+  const pending = metrics?.pending ?? document.getElementById('st-pend')?.textContent ?? '—';
+  const average = metrics?.average ?? document.getElementById('st-avg')?.textContent ?? '—';
+  const critical = metrics?.critical ?? document.getElementById('st-crit')?.textContent ?? '—';
+  const rate = metrics?.responseRate ?? document.getElementById('st-rate')?.textContent ?? '—';
+
+  bar.innerHTML = `
+    <div class="eval-context-card">
+      <div class="eval-context-card__eyebrow">Escopo atual</div>
+      <div class="eval-context-card__title">${esc(tenantLabel)}</div>
+      <div class="eval-context-card__meta">Aba ativa: <strong>${esc(activeTab)}</strong>. Use esta visão para alternar entre qualidade, revisão, instâncias e templates.</div>
+    </div>
+    <div class="eval-context-card">
+      <div class="eval-context-card__eyebrow">Leitura rápida</div>
+      <div class="eval-context-card__chips">
+        <span class="eval-context-chip">${esc(String(total))} instâncias</span>
+        <span class="eval-context-chip">${esc(String(pending))} pendentes</span>
+        <span class="eval-context-chip">${esc(String(critical))} críticas</span>
+        <span class="eval-context-chip">Média ${esc(String(average))}</span>
+        <span class="eval-context-chip">Resposta ${esc(String(rate))}%</span>
+      </div>
+    </div>
+    <div class="eval-context-card">
+      <div class="eval-context-card__eyebrow">Foco operacional</div>
+      <div class="eval-context-card__title">${esc(activeTab)}</div>
+      <div class="eval-context-card__meta">${
+        activeTab === 'Disputas'
+          ? 'Resolva conflitos com contexto e auditoria.'
+          : activeTab === 'Instâncias'
+            ? 'Acompanhe disparos, links e respostas.'
+            : activeTab === 'Templates'
+              ? 'Mantenha regras e questionários ativos.'
+              : activeTab === 'Ranking técnicos'
+                ? 'Observe desempenho consolidado do período.'
+                : 'Acompanhe a saúde geral da jornada de avaliação.'
+      }</div>
+    </div>`;
 }
 
 async function loadDisputes() {
@@ -290,16 +352,28 @@ async function loadDisputes() {
       const tech = esc(x.technician?.email || '');
       const os = esc(x.instance?.execution?.osNumber || '—');
       const score = x.instance?.score?.totalScore;
-      const sc = score != null ? ` <small style="color:var(--text3)">${esc(evT('ev_note_prefix', { score }))}</small>` : '';
+      const sc = score != null ? esc(evT('ev_note_prefix', { score })) : '';
       const full = esc(x.justification || '');
       return `<tr data-dispute-id="${esc(x.id)}" data-instance-id="${esc(x.instanceId)}">
-        <td>${tech}</td><td>${os}${sc}</td>
-        <td style="max-width:400px"><details><summary style="cursor:pointer;color:var(--accent)">${esc(evT('ev_justify_view'))}</summary><div style="margin-top:8px;white-space:pre-wrap;font-size:12px;color:var(--text2)">${full}</div></details></td>
-        <td style="text-align:right;white-space:nowrap">
-          <button type="button" class="btn btn-sm btn-chat-trans" style="margin-right:6px">${esc(evT('ev_btn_chat'))}</button>
-          <button type="button" class="btn btn-sm btn-primary btn-disp" data-a="MAINTAIN_EVAL">${esc(evT('ev_btn_maintain'))}</button>
+        <td>
+          <div class="list-cell-stack">
+            <span class="list-cell-title">${tech || '—'}</span>
+            <span class="list-cell-sub">OS ${os}${sc ? ` · ${sc}` : ''}</span>
+          </div>
+        </td>
+        <td>
+          <details>
+            <summary style="cursor:pointer;color:var(--accent)">${esc(evT('ev_justify_view'))}</summary>
+            <div style="margin-top:8px;white-space:pre-wrap">${full}</div>
+          </details>
+        </td>
+        <td class="table-actions"><button type="button" class="btn btn-sm btn-chat-trans">${esc(evT('ev_btn_chat'))}</button></td>
+        <td class="text-right table-actions">
+          ${canManageEvaluationTemplates
+            ? `<button type="button" class="btn btn-sm btn-primary btn-disp" data-a="MAINTAIN_EVAL">${esc(evT('ev_btn_maintain'))}</button>
           <button type="button" class="btn btn-sm btn-disp" data-a="ADJUSTED">${esc(evT('ev_btn_adjust'))}</button>
-          <button type="button" class="btn btn-sm btn-disp" style="color:var(--red)" data-a="INVALIDATED">${esc(evT('ev_btn_invalidate'))}</button>
+          <button type="button" class="btn btn-sm btn-disp" style="color:var(--red)" data-a="INVALIDATED">${esc(evT('ev_btn_invalidate'))}</button>`
+            : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td></tr>`;
     })
     .join('');
@@ -323,6 +397,7 @@ async function loadDisputes() {
 }
 
 function openDisputeModal(disputeId, action) {
+  if (!canManageEvaluationTemplates) return;
   document.getElementById('dispute-modal-id').value = disputeId;
   document.getElementById('dispute-modal-action').value = action;
   const adj = document.getElementById('dispute-adjust-wrap');
@@ -342,6 +417,7 @@ function openDisputeModal(disputeId, action) {
 }
 
 async function submitDisputeModal() {
+  if (!canManageEvaluationTemplates) return;
   const id = document.getElementById('dispute-modal-id').value;
   const action = document.getElementById('dispute-modal-action').value;
   const note = document.getElementById('dispute-modal-note').value.trim();
@@ -398,14 +474,27 @@ async function loadInstances() {
           </div>`
         : '<span style="color:var(--text3)">—</span>';
       const regen =
-        x.status === 'PENDING'
+        x.status === 'PENDING' && canManageEvaluationTemplates
           ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">${esc(evT('ev_btn_regen'))}</button>`
           : '—';
-      return `<tr data-instance-id="${esc(x.id)}"><td>${esc(x.status)}</td><td>${esc(x.templateName)}</td><td>${esc(x.technicianEmail)}</td><td>${esc(x.osNumber || '—')}</td><td style="min-width:260px;max-width:420px">${urlCell}</td><td style="text-align:right;white-space:nowrap">${regen} <button type="button" class="btn btn-sm btn-inst-chat" style="margin-left:6px">${esc(evT('ev_btn_chat'))}</button></td></tr>`;
+      return `<tr data-instance-id="${esc(x.id)}">
+        <td>
+          <div class="list-cell-stack">
+            <span class="list-cell-title">${esc(x.templateName)}</span>
+            <span class="list-cell-sub">${esc(x.technicianEmail)} · OS ${esc(x.osNumber || '—')}</span>
+          </div>
+        </td>
+        <td><span class="badge badge-gray">${esc(x.status)}</span></td>
+        <td class="table-subtle">${href ? 'Disponível' : 'Indisponível'}</td>
+        <td>${urlCell}</td>
+        <td class="table-actions">${regen}</td>
+        <td class="text-right table-actions"><button type="button" class="btn btn-sm btn-inst-chat">${esc(evT('ev_btn_chat'))}</button></td>
+      </tr>`;
     })
     .join('');
   tb.querySelectorAll('button[data-regen]').forEach((btn) => {
     btn.onclick = async () => {
+      if (!canManageEvaluationTemplates) return;
       await CONFIG.post('/admin/evaluations/instances/' + btn.getAttribute('data-regen') + '/regenerate-token', {});
       loadInstances();
     };
@@ -426,13 +515,20 @@ async function loadTemplatesTable() {
     .map(
       (t) =>
         `<tr>
-      <td>${esc(t.name)}</td>
+      <td>
+        <div class="list-cell-stack">
+          <span class="list-cell-title">${esc(t.name)}</span>
+          <span class="list-cell-sub">${esc(t.tenant?.name || t.tenantId || '—')}</span>
+        </div>
+      </td>
       <td>${esc(t.type)}</td>
-      <td>${esc(t.tenant?.name || t.tenantId)}</td>
-      <td>${esc(t._count?.questions)}</td>
-      <td>${esc(t._count?.instances)}</td>
-      <td style="text-align:right;white-space:nowrap">
-        <button type="button" class="btn btn-sm btn-primary btn-edit-tpl" data-id="${esc(t.id)}">${esc(evT('ev_btn_edit'))}</button>
+      <td class="table-num">${esc(t._count?.questions)}</td>
+      <td class="table-num">${esc(t._count?.instances)}</td>
+      <td><span class="badge ${t.active ? 'badge-green' : 'badge-gray'}">${t.active ? 'Ativo' : 'Inativo'}</span></td>
+      <td class="text-right table-actions">
+        ${canManageEvaluationTemplates
+          ? `<button type="button" class="btn btn-sm btn-primary btn-edit-tpl" data-id="${esc(t.id)}">${esc(evT('ev_btn_edit'))}</button>`
+          : `<span style="color:var(--text3);font-size:12px">—</span>`}
       </td>
     </tr>`
     )
@@ -443,6 +539,7 @@ async function loadTemplatesTable() {
 }
 
 async function openTemplateModal(id) {
+  if (!canManageEvaluationTemplates) return;
   document.getElementById('tpl-questions').innerHTML = '';
   const tenantSel = document.getElementById('tpl-tenant');
   const title = document.getElementById('tpl-modal-title');
@@ -486,6 +583,7 @@ async function openTemplateModal(id) {
 }
 
 async function saveTemplateModal() {
+  if (!canManageEvaluationTemplates) return;
   const editId = document.getElementById('tpl-edit-id').value.trim();
   const name = document.getElementById('tpl-name').value.trim();
   const type = document.getElementById('tpl-type').value;
@@ -553,7 +651,11 @@ export async function bootEvaluationsPage() {
   document.getElementById('instance-status-filter')?.addEventListener('change', loadInstances);
 
   document.getElementById('btn-new-template')?.addEventListener('click', () => openTemplateModal(null));
-  document.getElementById('tpl-add-question')?.addEventListener('click', () => addQuestionRow({ type: 'RATING' }));
+  document.getElementById('btn-new-template')?.toggleAttribute('hidden', !canManageEvaluationTemplates);
+  document.getElementById('tpl-add-question')?.addEventListener('click', () => {
+    if (!canManageEvaluationTemplates) return;
+    addQuestionRow({ type: 'RATING' });
+  });
   document.getElementById('tpl-modal-save')?.addEventListener('click', saveTemplateModal);
   document.getElementById('tpl-modal-cancel')?.addEventListener('click', () => closeModal('tpl-modal-overlay'));
   document.getElementById('tpl-modal-overlay')?.addEventListener('click', (e) => {

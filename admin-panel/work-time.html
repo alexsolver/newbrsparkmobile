@@ -235,13 +235,18 @@
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { applyWorkTimePageChrome, mpT } from './js/menu-pages-i18n.js';
-  import { CONFIG, ensureAdminApiDetected, clearAdminSessionFully } from './js/config.js';
+  import { CONFIG, ensureAdminApiDetected, clearAdminSessionFully, getPanelCapabilities } from './js/config.js';
 
   await ensureAdminApiDetected();
   await initPage();
   applyWorkTimePageChrome();
 
-  const role = (sessionStorage.getItem('brspark_admin_role') || '').trim();
+  const panelCaps = new Set(getPanelCapabilities());
+  const canCrossTenantWorkTime = panelCaps.has('platform.system.write') || panelCaps.has('platform.tenants.write');
+  const canEditWorkTime =
+    panelCaps.has('tenant.write.self') ||
+    panelCaps.has('tenant.operations.write.self') ||
+    canCrossTenantWorkTime;
 
   function panelTenantId() {
     try {
@@ -349,7 +354,7 @@
   }
 
   async function loadPunches(page) {
-    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     const statusEl = document.getElementById('wt-report-status');
     const tbody = document.getElementById('wt-report-tbody');
     const pag = document.getElementById('wt-report-pagination');
@@ -429,7 +434,7 @@
   }
 
   async function exportPunchesCsv() {
-    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) {
       alert(mpT('wt_alert_pick_tenant'));
       return;
@@ -469,7 +474,7 @@
   async function resolveTenantForUi() {
     const bar = document.getElementById('wt-tenant-bar');
     const saasBox = document.getElementById('wt-saas-tenant');
-    if (role === 'SAAS_ADMIN' && !activeTenantId) {
+    if (canCrossTenantWorkTime && !activeTenantId) {
       bar.style.display = 'flex';
       saasBox.style.display = 'block';
       const res = await CONFIG.get('/tenants?limit=500');
@@ -488,7 +493,7 @@
       return null;
     }
     bar.style.display = 'none';
-    if (role === 'SAAS_ADMIN' && activeTenantId) {
+    if (canCrossTenantWorkTime && activeTenantId) {
       saasBox.style.display = 'block';
       const res = await CONFIG.get('/tenants?limit=500');
       const sel = document.getElementById('wt-tenant-select');
@@ -506,7 +511,7 @@
     } else {
       saasBox.style.display = 'none';
     }
-    if (!activeTenantId && role !== 'SAAS_ADMIN') {
+    if (!activeTenantId && !canCrossTenantWorkTime) {
       bar.style.display = 'flex';
       bar.textContent = 'Não foi possível determinar o tenant da sessão. Volte a entrar no painel em modo tenant.';
       return null;
@@ -527,7 +532,7 @@
   }
 
   async function loadSettings() {
-    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) return;
     const s = await CONFIG.get('/work-time/settings?tenantId=' + encodeURIComponent(tid));
     if (s?.error) {
@@ -540,7 +545,8 @@
   }
 
   document.getElementById('wt-btn-save').onclick = async () => {
-    const tid = role === 'SAAS_ADMIN' ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    if (!canEditWorkTime) return;
+    const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) {
       alert(mpT('wt_alert_pick_tenant'));
       return;
@@ -570,10 +576,11 @@
   document.getElementById('wt-report-csv').onclick = () => void exportPunchesCsv();
   document.getElementById('wt-report-prev').onclick = () => void loadPunches(reportPage - 1);
   document.getElementById('wt-report-next').onclick = () => void loadPunches(reportPage + 1);
+  document.getElementById('wt-btn-save').hidden = !canEditWorkTime;
 
   const tid = await resolveTenantForUi();
   if (tid) await loadSettings();
-  else if (role === 'SAAS_ADMIN') {
+  else if (canCrossTenantWorkTime) {
     /* aguarda seleção */
   } else {
     await loadSettings();

@@ -8,8 +8,17 @@ const {
 const {
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
   MAX_VISION_SIMNAO_QUESTIONS,
-  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
+
+/** Alinhado a `fb_prop_vision_default_structured_prompt` (Visão de IA — análise / Gemini). */
+const DEFAULT_VISION_ANALYSIS_PROMPT =
+  'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+  'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+  'Explique de forma breve, citando elementos objetivos observados na mídia.';
+
+/** Alinhado a `fb_prop_vision_default_detection_prompt` (Visão de IA — detecção / YOLO). */
+const DEFAULT_VISION_DETECTION_PROMPT =
+  'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?';
 
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
@@ -88,12 +97,17 @@ function defaultFieldShell(type, label) {
     allowTechnicianComment: false,
     allowMediaDescription: false,
     ...(t === 'section_break' ? { sectionFillMode: 'list' } : {}),
-    ...(t === 'vision_checklist' || t === 'vision_ai_analysis'
+    ...(t === 'vision_checklist'
       ? {
-          visionStructuredPrompt: 'A evidência visual confirma o item verificado?',
-          visionQuestions: [
-            { id: 'q1', text: 'A evidência visual confirma o item verificado?' },
-          ],
+          visionStructuredPrompt: DEFAULT_VISION_DETECTION_PROMPT,
+          visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_DETECTION_PROMPT }],
+          visionCaptureMode: 'photo_and_video',
+        }
+      : {}),
+    ...(t === 'vision_ai_analysis'
+      ? {
+          visionStructuredPrompt: DEFAULT_VISION_ANALYSIS_PROMPT,
+          visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_ANALYSIS_PROMPT }],
           visionCaptureMode: 'photo_and_video',
         }
       : {}),
@@ -117,6 +131,7 @@ function defaultFieldShell(type, label) {
           lookupSource: 'preset',
           lookupPreset: 'equipamentos_demo',
           lookupInlineJson: '',
+          lookupApiPath: '/api/checklists/lookup-options/equipamentos_demo',
         }
       : {}),
     ...(t === 'repeatable_matrix'
@@ -206,25 +221,22 @@ function normalizeSchemaItem(raw, usedIds) {
 
     if (type === 'vision_checklist') {
       const items = parseVisionQuestionItems();
-      if (items.length >= 2) {
-        base.visionStructuredPrompt = '';
-        base.visionQuestions = items.map((q, i) => ({
-          id: q.id || `q${i + 1}`,
-          text: q.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
-        }));
-      } else {
-        let structured =
-          raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
-        if (!structured && items.length === 1) {
-          structured = items[0].text;
-        }
-        if (!structured) {
-          structured = 'A evidência visual confirma o item verificado?';
-        }
-        structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-        base.visionStructuredPrompt = structured;
-        base.visionQuestions = [{ id: 'q1', text: structured }];
+      let structured = raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
+      if (!structured && items.length === 1) {
+        structured = items[0].text;
       }
+      if (!structured && items.length >= 2) {
+        structured = items
+          .map((x) => x.text)
+          .join('\n\n')
+          .trim();
+      }
+      if (!structured) {
+        structured = DEFAULT_VISION_DETECTION_PROMPT;
+      }
+      structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      base.visionStructuredPrompt = structured;
+      base.visionQuestions = [{ id: 'q1', text: structured }];
     } else {
       let structured =
         raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
@@ -236,7 +248,7 @@ function normalizeSchemaItem(raw, usedIds) {
             .join('\n\n');
         }
       }
-      if (!structured) structured = 'A evidência visual confirma o item verificado?';
+      if (!structured) structured = DEFAULT_VISION_ANALYSIS_PROMPT;
       structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
       base.visionStructuredPrompt = structured;
       base.visionQuestions = [{ id: 'q1', text: structured }];
@@ -288,9 +300,13 @@ function normalizeSchemaItem(raw, usedIds) {
   }
   if (type === 'lookup_select') {
     const src = raw.lookupSource ?? raw.lookup_source;
-    if (src === 'inline_json' || src === 'preset') base.lookupSource = String(src);
+    if (src === 'inline_json' || src === 'preset' || src === 'api') base.lookupSource = String(src);
     if (raw.lookupPreset != null) base.lookupPreset = String(raw.lookupPreset).trim().slice(0, 80);
     if (raw.lookupInlineJson != null) base.lookupInlineJson = String(raw.lookupInlineJson).slice(0, 120000);
+    if (raw.lookupApiPath != null) {
+      const p = String(raw.lookupApiPath).trim().slice(0, 240);
+      base.lookupApiPath = p ? (p.startsWith('/') ? p : `/${p}`) : '';
+    }
   }
   if (type === 'repeatable_matrix') {
     const mc = raw.matrixColumns ?? raw.matrix_columns;

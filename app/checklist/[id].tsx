@@ -431,12 +431,19 @@ function formatTransitEvidenceLines(
 
 function getSectionTimingKeys(sectionId: string) {
   return {
+    /** Marcador de progresso: primeira entrada na etapa (não é cronômetro). */
     start: `__section_start_${sectionId}`,
+    /** Marcador de progresso: etapa concluída (botão avançar/finalizar). */
     end: `__section_end_${sectionId}`,
+    /** Cronômetro: início do segmento atualmente aberto nesta etapa. */
+    activeStart: `__section_active_start_${sectionId}`,
+    /** Cronômetro: acumulado de segundos já fechados nesta etapa. */
+    activeSeconds: `__section_active_seconds_${sectionId}`,
   };
 }
 
 const PAUSE_HISTORY_KEY = '__pause_history';
+const REVISION_TIMER_RESET_TOKEN_KEY = '__revision_timer_reset_token';
 
 function metaRevisionVisitContext(m: unknown): boolean {
   if (!m || typeof m !== 'object') return false;
@@ -445,6 +452,13 @@ function metaRevisionVisitContext(m: unknown): boolean {
   if (tk(r.reopenForRevisionPending) || tk(r.revisionVisitActive)) return true;
   const rc = Number(r.reopenCount);
   return Number.isFinite(rc) && rc > 0;
+}
+
+function buildRevisionTimerResetToken(taskId: unknown, lastSubmittedRevisionLike: unknown): string {
+  const tid = String(taskId ?? '').trim() || 'no_task';
+  const last = Number(lastSubmittedRevisionLike);
+  const nextRevision = Number.isFinite(last) && last >= 0 ? Math.floor(last) + 1 : 1;
+  return `${tid}::rev_${nextRevision}`;
 }
 
 /** Estados terminais na API / sync (alinhar com `SERVER_COMPLETED_STATUSES` na tela inicial). */
@@ -543,6 +557,7 @@ function stripFormProductivityTimerFields(res: Record<string, any>, schemaData: 
     '__form_fill_duration_sec',
     '__form_active_seconds_final',
     PAUSE_HISTORY_KEY,
+    REVISION_TIMER_RESET_TOKEN_KEY,
   ]);
   for (const k of fixed) delete res[k];
   if (Array.isArray(schemaData)) {
@@ -641,26 +656,32 @@ function overlapSeconds(
 
 /** Duração da etapa em segundos; null se ainda não houve início registrado. */
 function getSectionElapsedSeconds(responses: Record<string, any>, sectionId: string, nowMs: number): number | null {
-  const { start, end } = getSectionTimingKeys(sectionId);
-  const s = responses[start];
-  if (!s) return null;
-  const startMs = new Date(s).getTime();
-  if (Number.isNaN(startMs)) return null;
-  const e = responses[end];
-  const endMs = e ? new Date(e).getTime() : nowMs;
-  if (Number.isNaN(endMs)) return null;
-  let sec = Math.max(0, Math.floor((endMs - startMs) / 1000));
-  for (const ev of parsePauseHistory(responses)) {
-    const w = pauseEventWindowMs(ev);
-    if (w) sec -= overlapSeconds(startMs, endMs, w.start, w.end);
-  }
-  const since = responses.__form_paused_since;
-  if (since) {
-    const pt = new Date(since).getTime();
-    if (!Number.isNaN(pt)) {
-      sec -= overlapSeconds(startMs, endMs, pt, nowMs);
+  const { start, activeStart, activeSeconds } = getSectionTimingKeys(sectionId);
+  const startedMarker = responses[start];
+  const hasStarted = (typeof startedMarker === 'string' && startedMarker.trim() !== '') || !!startedMarker;
+  const base = Number(responses[activeSeconds]);
+  let sec = Number.isFinite(base) && base > 0 ? Math.floor(base) : 0;
+
+  const segStartRaw = responses[activeStart];
+  if (segStartRaw) {
+    const startMs = new Date(segStartRaw).getTime();
+    if (!Number.isNaN(startMs)) {
+      let seg = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+      for (const ev of parsePauseHistory(responses)) {
+        const w = pauseEventWindowMs(ev);
+        if (w) seg -= overlapSeconds(startMs, nowMs, w.start, w.end);
+      }
+      const since = responses.__form_paused_since;
+      if (since) {
+        const pt = new Date(since).getTime();
+        if (!Number.isNaN(pt)) {
+          seg -= overlapSeconds(startMs, nowMs, pt, nowMs);
+        }
+      }
+      sec += Math.max(0, seg);
     }
   }
+  if (!hasStarted && sec <= 0) return null;
   return Math.max(0, sec);
 }
 
@@ -766,14 +787,19 @@ function getVisionQuestionsFromField(field: any): { id: string; text: string }[]
     ];
   }
 
-  /** Detecção (YOLO): até 10 perguntas sim/não distintas quando há 2+ linhas persistidas. */
-  if (items.length >= 2) {
-    return items.slice(0, MAX_VISION_SIMNAO_QUESTIONS).map((it, idx) => ({
-      id: sanitizeVisionQuestionId(it.id, idx),
-      text: it.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
-    }));
-  }
-  if (items.length === 1) {
+  /** Detecção (YOLO): sempre um único critério `q1` (várias linhas legadas são fundidas). */
+  if (ft === 'vision_checklist') {
+    if (structured) {
+      return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
+    }
+    if (!items.length) return [];
+    if (items.length >= 2) {
+      const joined = items
+        .map((it) => it.text)
+        .join('\n\n')
+        .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      return joined ? [{ id: 'q1', text: joined }] : [];
+    }
     return [
       {
         id: sanitizeVisionQuestionId(items[0].id, 0),
@@ -781,6 +807,7 @@ function getVisionQuestionsFromField(field: any): { id: string; text: string }[]
       },
     ];
   }
+
   if (structured) {
     return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
   }
@@ -1066,6 +1093,10 @@ function sectionAllowsRepeat(sectionField: any) {
 
 function sectionRepeatStorageKey(sectionId: string) {
   return `__section_repeat_${sectionId}`;
+}
+
+function sectionRepeatCompletedStorageKey(sectionId: string) {
+  return `__section_repeat_completed_${sectionId}`;
 }
 
 function sectionRepeatMinRows(sectionField: any): number {
@@ -2530,6 +2561,36 @@ function resolvePageInnerMode(
   return globalFill === 'wizard' ? 'wizard' : 'list';
 }
 
+function renderSchemaIcon(spec: { icon?: string; iconLibrary?: string; iconColor?: string }, size = 22) {
+  const name = String(spec?.icon || '').trim() as any;
+  if (!name) return null;
+  const lib = String(spec?.iconLibrary || 'Ionicons').trim();
+  const color = String(spec?.iconColor || '#64748b').trim() || '#64748b';
+  switch (lib) {
+    case 'AntDesign':
+      return <AntDesign name={name} size={size} color={color} />;
+    case 'Entypo':
+      return <Entypo name={name} size={size} color={color} />;
+    case 'Feather':
+      return <Feather name={name} size={size} color={color} />;
+    case 'FontAwesome':
+      return <FontAwesome name={name} size={size} color={color} />;
+    case 'FontAwesome5':
+      return <FontAwesome5 name={name} size={size} color={color} />;
+    case 'Foundation':
+      return <Foundation name={name} size={size} color={color} />;
+    case 'MaterialIcons':
+      return <MaterialIcons name={name} size={size} color={color} />;
+    case 'MaterialCommunityIcons':
+      return <MaterialCommunityIcons name={name} size={size} color={color} />;
+    case 'Octicons':
+      return <Octicons name={name} size={size} color={color} />;
+    case 'Ionicons':
+    default:
+      return <Ionicons name={name} size={size} color={color} />;
+  }
+}
+
 /**
  * Modo global no app: se todas as seções estão em "inherit", usa settings.appFillMode (legado).
  * Caso contrário: scroll único quando todas são lista; híbrido se alguma seção for assistente.
@@ -2672,6 +2733,10 @@ export default function ChecklistEngine() {
   const [hybridInnerWizardIndex, setHybridInnerWizardIndex] = useState(0);
   /** Menu de etapas (settings.appSectionStart === 'hub') antes de entrar numa seção */
   const [hubPicking, setHubPicking] = useState(false);
+  /** Hub: expandir/recolher rodapé de instâncias por seção repetível. */
+  const [hubRepeatCardsExpanded, setHubRepeatCardsExpanded] = useState<Record<string, boolean>>({});
+  /** Hub: instância selecionada por seção repetível ao entrar na etapa. */
+  const [hubSelectedRepeatRowBySection, setHubSelectedRepeatRowBySection] = useState<Record<string, number>>({});
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [isReadOnly, setIsReadOnly] = useState(false);
 
@@ -2786,6 +2851,8 @@ export default function ChecklistEngine() {
   const nextSubmissionRevisionRef = useRef(1);
   /** Pausa de sessão ou pausa imposta pelo servidor — não contar tempo em foco. */
   const timersFrozenRef = useRef(false);
+  /** Etapa com segmento de cronômetro aberto (no hub/menu deve ficar null). */
+  const activeSectionTimingIdRef = useRef<string | null>(null);
 
   const [serverPausedExecution, setServerPausedExecution] = useState(false);
   const [pauseReasonModalVisible, setPauseReasonModalVisible] = useState(false);
@@ -2808,6 +2875,47 @@ export default function ChecklistEngine() {
   }, [loading, isReadOnly]);
 
   const draftKeyForForm = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${typeof id === 'string' ? id : Array.isArray(id) ? id[0] : String(id || '')}`;
+
+  const flushActiveSectionSegmentToDraft = useCallback(() => {
+    const sectionId = activeSectionTimingIdRef.current;
+    if (!sectionId) return;
+    const current = responsesRefForFacial.current;
+    if (!current || typeof current !== 'object') return;
+    const keys = getSectionTimingKeys(sectionId);
+    const segStartRaw = current[keys.activeStart];
+    if (!segStartRaw) {
+      activeSectionTimingIdRef.current = null;
+      return;
+    }
+    const nowMs = Date.now();
+    const segStartMs = Date.parse(String(segStartRaw));
+    let next = current as Record<string, any>;
+    if (!Number.isFinite(segStartMs) || nowMs <= segStartMs) {
+      next = { ...next, [keys.activeStart]: null };
+    } else {
+      let segSec = Math.max(0, Math.floor((nowMs - segStartMs) / 1000));
+      for (const ev of parsePauseHistory(next)) {
+        const w = pauseEventWindowMs(ev);
+        if (w) segSec -= overlapSeconds(segStartMs, nowMs, w.start, w.end);
+      }
+      const since = next.__form_paused_since;
+      if (since) {
+        const pt = Date.parse(String(since));
+        if (Number.isFinite(pt)) segSec -= overlapSeconds(segStartMs, nowMs, pt, nowMs);
+      }
+      const currentBase = Number(next[keys.activeSeconds]);
+      const base = Number.isFinite(currentBase) && currentBase > 0 ? Math.floor(currentBase) : 0;
+      next = {
+        ...next,
+        [keys.activeSeconds]: Math.max(0, base + Math.max(0, segSec)),
+        [keys.activeStart]: null,
+      };
+    }
+    activeSectionTimingIdRef.current = null;
+    responsesRefForFacial.current = next;
+    responsesForPauseExitRef.current = next;
+    void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+  }, [draftKeyForForm]);
 
   const flushForegroundSegmentToResponses = useCallback(() => {
     const now = Date.now();
@@ -2850,6 +2958,13 @@ export default function ChecklistEngine() {
     const sub = AppState.addEventListener('change', handle);
     return () => sub.remove();
   }, [loading, isReadOnly, draftKeyForForm]);
+
+  useEffect(
+    () => () => {
+      flushActiveSectionSegmentToDraft();
+    },
+    [flushActiveSectionSegmentToDraft]
+  );
 
   useEffect(() => {
     const frozen = !!(serverPausedExecution || responses.__form_paused_since);
@@ -4181,12 +4296,18 @@ export default function ChecklistEngine() {
       // Deslocamento (transit_start/end) mantém-se: após «Finalizar deslocamento» não pode ser refeito nem apagado aqui.
       // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" para apagar transit em execuções ainda ativas.
       if (taskId && !readOnlyMode && reopenRevisionPending) {
-        stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
-        stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
-        void routeTracker.stop().catch(() => {});
-        try {
-          await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
-        } catch {}
+        const resetToken = buildRevisionTimerResetToken(taskId, lastSubmittedRevForNext);
+        const alreadyResetForThisCycle =
+          String(initialRes?.[REVISION_TIMER_RESET_TOKEN_KEY] || '').trim() === resetToken;
+        if (!alreadyResetForThisCycle) {
+          stripFormProductivityTimerFields(initialRes, tmpl.schemaData);
+          stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
+          initialRes[REVISION_TIMER_RESET_TOKEN_KEY] = resetToken;
+          void routeTracker.stop().catch(() => {});
+          try {
+            await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
+          } catch {}
+        }
       }
 
       // Injetar Default Values (AutoFill) para campos vazios
@@ -6260,12 +6381,18 @@ export default function ChecklistEngine() {
     isVisible: boolean;
     sectionFillMode?: string;
     openingSectionId?: string;
+    sectionIcon?: string;
+    sectionIconLibrary?: string;
+    sectionIconColor?: string;
   }[] = [];
   let _curFields: any[] = [];
   let _globalIndex = 1;
   let _currentSectionTitle = 'Página 1';
   let _currentSectionId = 'page_1';
   let _currentSectionVisible = true;
+  let _currentSectionIcon = '';
+  let _currentSectionIconLibrary = 'Ionicons';
+  let _currentSectionIconColor = '#7c3aed';
   let _openingSectionBreak: any = null;
 
   schema.forEach((f: any) => {
@@ -6279,6 +6406,9 @@ export default function ChecklistEngine() {
           isVisible: _currentSectionVisible,
           sectionFillMode: _openingSectionBreak?.sectionFillMode,
           openingSectionId: _openingSectionBreak?.id || '__preamble__',
+          sectionIcon: _currentSectionIcon,
+          sectionIconLibrary: _currentSectionIconLibrary,
+          sectionIconColor: _currentSectionIconColor,
         });
       }
       _curFields = [];
@@ -6286,6 +6416,9 @@ export default function ChecklistEngine() {
       _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
+      _currentSectionIcon = String(f.icon || '').trim();
+      _currentSectionIconLibrary = String(f.iconLibrary || 'Ionicons').trim() || 'Ionicons';
+      _currentSectionIconColor = String(f.iconColor || '#7c3aed').trim() || '#7c3aed';
     } else if (schT !== 'technician_finance') {
       if (schT === 'leitura') {
         _curFields.push({ ...f, _globalIdx: undefined });
@@ -6302,6 +6435,9 @@ export default function ChecklistEngine() {
       isVisible: _currentSectionVisible,
       sectionFillMode: _openingSectionBreak?.sectionFillMode,
       openingSectionId: _openingSectionBreak?.id || '__preamble__',
+      sectionIcon: _currentSectionIcon,
+      sectionIconLibrary: _currentSectionIconLibrary,
+      sectionIconColor: _currentSectionIconColor,
     });
   }
 
@@ -6332,6 +6468,9 @@ export default function ChecklistEngine() {
           isVisible: true,
           sectionFillMode: undefined,
           openingSectionId: undefined,
+          sectionIcon: '',
+          sectionIconLibrary: 'Ionicons',
+          sectionIconColor: '#64748b',
         },
       ];
     }
@@ -6445,6 +6584,26 @@ export default function ChecklistEngine() {
     return chunks;
   }, [effectiveFillMode, template?.schemaData, ruleTick, useSectionHub, isReadOnly]);
 
+  /**
+   * Visita de revisão: diferenciar progresso desta sessão vs dados herdados da execução anterior.
+   * Fonte: metadata da OS (`revisionVisitActive` / `reopenForRevisionPending` / `reopenCount`).
+   */
+  const isRevisionVisitUi = useMemo(
+    () => metaRevisionVisitContext(currentTask?.metadata),
+    [currentTask?.metadata]
+  );
+
+  const sectionTimingFlagsForPage = (pageIdx: number) => {
+    const p = pages[pageIdx];
+    if (!p?.id) return { started: false, ended: false };
+    const keys = getSectionTimingKeys(p.id);
+    const sv = responses?.[keys.start];
+    const ev = responses?.[keys.end];
+    const started = (typeof sv === 'string' && sv.trim() !== '') || (!!sv && sv !== 0);
+    const ended = (typeof ev === 'string' && ev.trim() !== '') || (!!ev && ev !== 0);
+    return { started, ended };
+  };
+
   const schemaPageFieldsComplete = (pageIdx: number) => {
     const p = pages[pageIdx];
     if (!p) return false;
@@ -6514,6 +6673,9 @@ export default function ChecklistEngine() {
   };
 
   const hubSectionSatisfied = (pageIdx: number) => {
+    if (isRevisionVisitUi) {
+      return sectionTimingFlagsForPage(pageIdx).ended;
+    }
     if (effectiveFillMode === 'wizard') {
       const oid = pages[pageIdx]?.openingSectionId || '__preamble__';
       return wizardOpeningSectionComplete(oid);
@@ -6529,13 +6691,26 @@ export default function ChecklistEngine() {
     return true;
   };
 
-  const openHubSection = (pageIdx: number) => {
+  const hubSectionStarted = (pageIdx: number) => {
+    const f = sectionTimingFlagsForPage(pageIdx);
+    if (isRevisionVisitUi) return f.started;
+    return f.started || f.ended;
+  };
+
+  const openHubSection = (pageIdx: number, opts?: { repeatRowIndex?: number }) => {
     if (!hubSectionUnlocked(pageIdx)) {
       Alert.alert(
         'Ordem das etapas',
         'Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.'
       );
       return;
+    }
+    const repeatField = hubRepeatSectionField(pageIdx);
+    if (repeatField && opts?.repeatRowIndex != null && Number.isFinite(Number(opts.repeatRowIndex))) {
+      const rows = getRepeatRows(responses, repeatField.id);
+      const maxIdx = Math.max(0, rows.length - 1);
+      const nextIdx = Math.max(0, Math.min(Number(opts.repeatRowIndex), maxIdx));
+      setHubSelectedRepeatRowBySection((prev) => ({ ...prev, [String(repeatField.id)]: nextIdx }));
     }
     setCurrentPage(pageIdx);
     setHybridInnerWizardIndex(0);
@@ -6547,41 +6722,210 @@ export default function ChecklistEngine() {
     setHubPicking(false);
   };
 
-  // Focus Section Tracking
-  useEffect(() => {
-    if (effectiveFillMode === 'wizard') return;
-    if (useSectionHub && hubPicking) return;
-    const currentSectionData = displayPages[currentPage];
+  const hubRepeatSectionField = (pageIdx: number) => {
+    const openingId = pages[pageIdx]?.openingSectionId || '__preamble__';
     if (
-      !currentSectionData ||
-      !currentSectionData.id ||
-      currentSectionData.id === '__full__' ||
-      isReadOnly ||
-      Object.keys(responses).length === 0
+      !openingId ||
+      openingId === '__preamble__' ||
+      openingId === '__full__' ||
+      openingId === '__wizard__'
     ) {
+      return null;
+    }
+    const sb = (template?.schemaData || []).find(
+      (x: any) => x.id === openingId && x.type === 'section_break'
+    );
+    return sb && sectionAllowsRepeat(sb) ? sb : null;
+  };
+
+  const hubRepeatRowStats = (pageIdx: number) => {
+    const sb = hubRepeatSectionField(pageIdx);
+    if (!sb) {
+      return {
+        enabled: false,
+        sectionId: '',
+        minRows: 0,
+        maxRows: null as number | null,
+        rawRows: [] as Record<string, any>[],
+        visibleRows: [] as Record<string, any>[],
+        completedRows: 0,
+        startedRows: 0,
+      };
+    }
+    const minRows = sectionRepeatMinRows(sb);
+    const maxRows = sectionRepeatMaxRows(sb);
+    const rawRows = getRepeatRows(responses, sb.id);
+    const visibleLen = Math.max(rawRows.length, minRows, 1);
+    const visibleRows = Array.from({ length: visibleLen }, (_, i) => rawRows[i] || {});
+    const doneKey = sectionRepeatCompletedStorageKey(sb.id);
+    const doneFlags = Array.isArray((responses as any)?.[doneKey]) ? ((responses as any)[doneKey] as unknown[]) : [];
+    const visibleFields = (pages[pageIdx]?.fields || []).filter((f: any) => isFieldVisible(f));
+    const completedRows = visibleRows.reduce((acc, _row, idx) => {
+      return acc + (doneFlags[idx] === true ? 1 : 0);
+    }, 0);
+    const startedRows = visibleRows.reduce((acc, row) => {
+      const started = visibleFields.some((f: any) => isFieldAnswerFilled(f, row?.[f.id]));
+      return acc + (started ? 1 : 0);
+    }, 0);
+    return {
+      enabled: true,
+      sectionId: String(sb.id),
+      minRows,
+      maxRows,
+      rawRows,
+      visibleRows,
+      doneFlags,
+      completedRows,
+      startedRows,
+    };
+  };
+
+  const repeatRowIsCompletedForSectionFields = (sectionFields: any[], row: Record<string, any>) => {
+    const requiredFields = (sectionFields || []).filter(
+      (f: any) => isFieldVisible(f) && fieldMustAnswerForProgress(f)
+    );
+    if (requiredFields.length === 0) return true;
+    return requiredFields.every((f: any) => isFieldAnswerFilled(f, row?.[f.id]));
+  };
+
+  const ensureCanAppendRepeatInstance = (
+    sectionLabel: string,
+    sectionId: string,
+    rows: Record<string, any>[]
+  ) => {
+    if (!Array.isArray(rows) || rows.length === 0) return true;
+    const k = sectionRepeatCompletedStorageKey(sectionId);
+    const doneFlags = Array.isArray((responses as any)?.[k]) ? ((responses as any)[k] as unknown[]) : [];
+    if (doneFlags[rows.length - 1] === true) return true;
+    Alert.alert(
+      'Instância anterior pendente',
+      `Conclua a instância anterior em «${sectionLabel || 'Seção'}» pelo botão "Concluir" antes de adicionar uma nova.`
+    );
+    return false;
+  };
+
+  const addHubRepeatInstance = (pageIdx: number) => {
+    if (!hubSectionUnlocked(pageIdx)) {
+      Alert.alert(
+        'Ordem das etapas',
+        'Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.'
+      );
       return;
     }
-    const startKey = `__section_start_${currentSectionData.id}`;
-    if (!responses[startKey]) {
-      setResponses((prev: any) => {
-        if (prev[startKey]) return prev;
-        const newRes = { ...prev, [startKey]: new Date().toISOString() };
-        const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-        AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
-        return newRes;
-      });
+    const rep = hubRepeatRowStats(pageIdx);
+    if (!rep.enabled) {
+      openHubSection(pageIdx);
+      return;
     }
-  }, [
-    effectiveFillMode,
-    currentPage,
-    isReadOnly,
-    displayPages,
-    responses,
-    taskId,
-    id,
-    useSectionHub,
-    hubPicking,
-  ]);
+    if (rep.maxRows != null && rep.rawRows.length >= rep.maxRows) {
+      Alert.alert('Limite de instâncias', `Máximo de ${rep.maxRows} instância(s) nesta seção.`);
+      return;
+    }
+    const sectionLabel = String(pages[pageIdx]?.pageTitle || 'Seção');
+    if (!ensureCanAppendRepeatInstance(sectionLabel, rep.sectionId, rep.rawRows)) return;
+    const rkey = sectionRepeatStorageKey(rep.sectionId);
+    setResponses((prev: any) => {
+      const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+      rows.push({});
+      const next = { ...prev, [rkey]: rows };
+      void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+      return next;
+    });
+    setHubSelectedRepeatRowBySection((prev) => ({
+      ...prev,
+      [String(rep.sectionId)]: Math.max(0, rep.rawRows.length),
+    }));
+    setCurrentPage(pageIdx);
+    setHybridInnerWizardIndex(0);
+    if (effectiveFillMode === 'wizard') {
+      const oid = pages[pageIdx]?.openingSectionId || '__preamble__';
+      const ix = wizardSteps.findIndex((s) => s.sectionOpeningId === oid);
+      setWizardIndex(ix >= 0 ? ix : 0);
+    }
+    setHubPicking(false);
+  };
+
+  // Focus Section Tracking + cronômetro exclusivo por etapa (sem contagem simultânea)
+  useEffect(() => {
+    const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.parse(nowIso);
+
+    const nextActiveSectionId = (() => {
+      if (isReadOnly) return null;
+      if (effectiveFillMode === 'wizard') return null;
+      if (useSectionHub && hubPicking) return null;
+      const currentSectionData = displayPages[currentPage];
+      if (!currentSectionData || !currentSectionData.id || currentSectionData.id === '__full__') return null;
+      return String(currentSectionData.id);
+    })();
+
+    const prevActiveSectionId = activeSectionTimingIdRef.current;
+    if (prevActiveSectionId === nextActiveSectionId) return;
+    activeSectionTimingIdRef.current = nextActiveSectionId;
+
+    setResponses((prev: any) => {
+      let next = prev;
+      let changed = false;
+
+      const closeActiveSegment = (sectionId: string) => {
+        const keys = getSectionTimingKeys(sectionId);
+        const segStartRaw = next?.[keys.activeStart];
+        if (!segStartRaw) return;
+        const segStartMs = Date.parse(String(segStartRaw));
+        if (!Number.isFinite(segStartMs) || !Number.isFinite(nowMs) || nowMs <= segStartMs) {
+          if (next?.[keys.activeStart] != null) {
+            next = { ...next, [keys.activeStart]: null };
+            changed = true;
+          }
+          return;
+        }
+        let segSec = Math.max(0, Math.floor((nowMs - segStartMs) / 1000));
+        for (const ev of parsePauseHistory(next)) {
+          const w = pauseEventWindowMs(ev);
+          if (w) segSec -= overlapSeconds(segStartMs, nowMs, w.start, w.end);
+        }
+        const since = next?.__form_paused_since;
+        if (since) {
+          const pt = Date.parse(String(since));
+          if (Number.isFinite(pt)) segSec -= overlapSeconds(segStartMs, nowMs, pt, nowMs);
+        }
+        const currentBase = Number(next?.[keys.activeSeconds]);
+        const base = Number.isFinite(currentBase) && currentBase > 0 ? Math.floor(currentBase) : 0;
+        next = {
+          ...next,
+          [keys.activeSeconds]: Math.max(0, base + Math.max(0, segSec)),
+          [keys.activeStart]: null,
+        };
+        changed = true;
+      };
+
+      if (prevActiveSectionId && prevActiveSectionId !== nextActiveSectionId) {
+        closeActiveSegment(prevActiveSectionId);
+      }
+
+      if (nextActiveSectionId) {
+        const keys = getSectionTimingKeys(nextActiveSectionId);
+        const hasStartMarker =
+          (typeof next?.[keys.start] === 'string' && String(next[keys.start]).trim() !== '') || !!next?.[keys.start];
+        const hasActiveSegment =
+          (typeof next?.[keys.activeStart] === 'string' && String(next[keys.activeStart]).trim() !== '') ||
+          !!next?.[keys.activeStart];
+        if (!hasStartMarker || !hasActiveSegment) {
+          next = {
+            ...next,
+            ...(hasStartMarker ? null : { [keys.start]: nowIso }),
+            ...(hasActiveSegment ? null : { [keys.activeStart]: nowIso }),
+          };
+          changed = true;
+        }
+      }
+
+      if (!changed) return prev;
+      void AsyncStorage.setItem(draftKey, JSON.stringify(next));
+      return next;
+    });
+  }, [effectiveFillMode, useSectionHub, hubPicking, displayPages, currentPage, isReadOnly, taskId, id]);
 
   /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
   const liveRouteCoordsForMap = useMemo(
@@ -6605,39 +6949,75 @@ export default function ChecklistEngine() {
     return null;
   }, [responses, resolvedTaskId, isReadOnly]);
 
-  const handleNextPage = () => {
-     const currentPageData = displayPages[currentPage];
-     let isValid = true;
-     for (const f of currentPageData.fields) {
-         if (!isFieldVisible(f)) continue;
-         if (fieldMustAnswerForProgress(f)) {
-             const ans = responses[f.id];
-             if (!isFieldAnswerFilled(f, ans)) {
-                 isValid = false;
-                 Alert.alert(
-                   'Atenção',
-                   f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                     ? `Valide a localização em «${f.label}» (dentro da área) antes de avançar.`
-                     : `O campo '${f.label}' é obrigatório.`,
-                 );
-                 break;
-             }
-         }
-     }
+  const validateCurrentPageBeforeSectionExit = (pageData: any, actionLabel: string) => {
+    if (!pageData || !Array.isArray(pageData.fields)) return false;
+    for (const f of pageData.fields) {
+      if (!isFieldVisible(f)) continue;
+      if (!fieldMustAnswerForProgress(f)) continue;
+      const ans = responses[f.id];
+      if (!isFieldAnswerFilled(f, ans)) {
+        Alert.alert(
+          'Atenção',
+          f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
+            ? `Valide a localização em «${f.label}» (dentro da área) antes de ${actionLabel}.`
+            : `O campo '${f.label}' é obrigatório.`,
+        );
+        return false;
+      }
+    }
+    return true;
+  };
 
-     if (isValid && currentPage < displayPages.length - 1) {
-         if (currentPageData && currentPageData.id && currentPageData.id !== '__full__' && !isReadOnly) {
-            const endKey = `__section_end_${currentPageData.id}`;
-            const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
-            setResponses((prev: any) => {
-               const newRes = { ...prev, [endKey]: new Date().toISOString() };
-               void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
-               return newRes;
-            });
-         }
-         setCurrentPage(p => p + 1);
-         setHybridInnerWizardIndex(0);
-     }
+  const closeCurrentSectionAsCompleted = (pageData: any) => {
+    if (!pageData || !pageData.id || pageData.id === '__full__' || isReadOnly) return;
+    const endKey = `__section_end_${pageData.id}`;
+    const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+    setResponses((prev: any) => {
+      let newRes = { ...prev, [endKey]: new Date().toISOString() } as Record<string, any>;
+      const openingId = String(pageData?.openingSectionId || '').trim();
+      const repeatSection =
+        openingId &&
+        openingId !== '__preamble__' &&
+        openingId !== '__full__' &&
+        openingId !== '__wizard__'
+          ? (template?.schemaData || []).find(
+              (x: any) => x.id === openingId && x.type === 'section_break' && sectionAllowsRepeat(x)
+            )
+          : null;
+      if (repeatSection?.id) {
+        const sid = String(repeatSection.id);
+        const rows = getRepeatRows(newRes, sid);
+        if (rows.length > 0) {
+          const selectedRaw = hubSelectedRepeatRowBySection[sid];
+          const selected = Number.isFinite(Number(selectedRaw)) ? Number(selectedRaw) : rows.length - 1;
+          const rowIdx = Math.max(0, Math.min(selected, rows.length - 1));
+          const doneKey = sectionRepeatCompletedStorageKey(sid);
+          const done = Array.isArray(newRes[doneKey]) ? [...newRes[doneKey]] : [];
+          while (done.length < rows.length) done.push(false);
+          done[rowIdx] = true;
+          newRes = { ...newRes, [doneKey]: done };
+        }
+      }
+      void AsyncStorage.setItem(draftKey, JSON.stringify(newRes));
+      return newRes;
+    });
+  };
+
+  const handleCompleteSectionToHub = () => {
+    const currentPageData = displayPages[currentPage];
+    if (!validateCurrentPageBeforeSectionExit(currentPageData, 'concluir')) return;
+    closeCurrentSectionAsCompleted(currentPageData);
+    setHybridInnerWizardIndex(0);
+    setHubPicking(true);
+  };
+
+  const handleNextPage = () => {
+    const currentPageData = displayPages[currentPage];
+    if (!validateCurrentPageBeforeSectionExit(currentPageData, 'avançar')) return;
+    if (currentPage >= displayPages.length - 1) return;
+    closeCurrentSectionAsCompleted(currentPageData);
+    setCurrentPage((p) => p + 1);
+    setHybridInnerWizardIndex(0);
   };
 
   const handleWizardNext = () => {
@@ -6730,6 +7110,15 @@ export default function ChecklistEngine() {
   const handleHybridPagePrev = () => {
     const page = displayPages[currentPage];
     const inner = page ? resolvePageInnerMode(page, 'hybrid') : 'list';
+    if (useSectionHub && !hubPicking) {
+      if (inner === 'wizard' && hybridInnerWizardIndex > 0) {
+        setHybridInnerWizardIndex((i) => i - 1);
+        return;
+      }
+      setHybridInnerWizardIndex(0);
+      setHubPicking(true);
+      return;
+    }
     if (inner === 'wizard' && hybridInnerWizardIndex > 0) {
       setHybridInnerWizardIndex((i) => i - 1);
       return;
@@ -6854,6 +7243,11 @@ export default function ChecklistEngine() {
     currentPageData.id !== '__wizard__'
       ? getSectionElapsedSeconds(responses, currentPageData.id, nowClock)
       : null;
+  const showSectionTimerInFooter =
+    !(useSectionHub && hubPicking) &&
+    !!currentPageData.id &&
+    currentPageData.id !== '__full__' &&
+    currentPageData.id !== '__wizard__';
 
   void ruleTick;
 
@@ -6866,6 +7260,18 @@ export default function ChecklistEngine() {
 
   const displayHeaderTitle =
     useSectionHub && hubPicking ? template?.title || 'Checklist' : headerPageTitle;
+  const displayHeaderSectionIcon =
+    !(
+      useSectionHub &&
+      hubPicking
+    ) &&
+    String((currentPageData as any)?.sectionIcon || '').trim()
+      ? {
+          icon: String((currentPageData as any)?.sectionIcon || '').trim(),
+          iconLibrary: String((currentPageData as any)?.sectionIconLibrary || 'Ionicons').trim() || 'Ionicons',
+          iconColor: String((currentPageData as any)?.sectionIconColor || '#ffffff').trim() || '#ffffff',
+        }
+      : null;
 
   const sessionPauseActive =
     Boolean(responses.__form_paused_since) && !!resolvedTaskId && !isReadOnly;
@@ -6887,6 +7293,15 @@ export default function ChecklistEngine() {
     effectiveFillMode !== 'wizard' &&
     !!openingSectionBreakField &&
     sectionAllowsRepeat(openingSectionBreakField);
+
+  const currentRepeatRawRows =
+    paginatedSectionRepeatEnabled && openingSectionBreakField
+      ? getRepeatRows(responses, openingSectionBreakField.id)
+      : [];
+  const currentRepeatMinRows = openingSectionBreakField ? sectionRepeatMinRows(openingSectionBreakField) : 0;
+  const currentRepeatVisibleLen = paginatedSectionRepeatEnabled
+    ? Math.max(currentRepeatRawRows.length, currentRepeatMinRows, 1)
+    : 0;
 
   const wizardStepSectionRepeat =
     effectiveFillMode === 'wizard' ? wizardSteps[wizardIndex]?.sectionRepeat : undefined;
@@ -6978,9 +7393,27 @@ export default function ChecklistEngine() {
           ) : null}
         </View>
         <View style={{ flex: 1, marginHorizontal: 8 }}>
-          <Text style={styles.headerTitle} numberOfLines={2}>
-            {displayHeaderTitle}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {displayHeaderSectionIcon ? (
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 13,
+                  backgroundColor: 'rgba(255,255,255,0.16)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.35)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {renderSchemaIcon(displayHeaderSectionIcon, 15)}
+              </View>
+            ) : null}
+            <Text style={[styles.headerTitle, { flexShrink: 1 }]} numberOfLines={2}>
+              {displayHeaderTitle}
+            </Text>
+          </View>
           {taskId ? (
             <Text
               style={{
@@ -7142,7 +7575,7 @@ export default function ChecklistEngine() {
           }
         }
 
-        const keepScreenAwake = activeStartField?.transitKeepScreenAwake === true;
+        const keepScreenAwake = activeStartField?.transitKeepScreenAwake !== false;
         const routeForCard = reimbursementMode ? [] : routeCoords;
 
         return <LiveRouteMapCard 
@@ -7185,6 +7618,32 @@ export default function ChecklistEngine() {
       effectiveFillMode === 'wizard' &&
       wizardSteps.length > 0 ? (
         <View style={styles.progressBarWrapper}>
+          {basePageData?.sectionIcon ? (
+            <View
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                backgroundColor: '#f8fafc',
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {renderSchemaIcon(
+                {
+                  icon: basePageData.sectionIcon,
+                  iconLibrary: basePageData.sectionIconLibrary,
+                  iconColor: basePageData.sectionIconColor,
+                },
+                15
+              )}
+            </View>
+          ) : null}
           <View
             style={[
               styles.progressBarFill,
@@ -7273,38 +7732,80 @@ export default function ChecklistEngine() {
             {pages.map((pg, idx) => {
               const done = hubSectionSatisfied(idx);
               const unlocked = hubSectionUnlocked(idx);
+              const timing = sectionTimingFlagsForPage(idx);
+              const repeatStats = hubRepeatRowStats(idx);
+              const isRepeatSection = repeatStats.enabled;
+              const repeatCardKey = repeatStats.sectionId || String(pg.id || idx);
+              const repeatVisibleFields = (pg.fields || []).filter((f: any) => isFieldVisible(f));
+              const createdRows = repeatStats.rawRows
+                .map((row: any, ri: number) => {
+                  const started = repeatVisibleFields.some((f: any) => isFieldAnswerFilled(f, row?.[f.id]));
+                  const doneRow = repeatStats.doneFlags?.[ri] === true;
+                  return { rowIndex: ri, started, done: doneRow, row };
+                });
+              const repeatMenuExpanded = !!hubRepeatCardsExpanded[repeatCardKey];
+              const visualDone = timing.ended;
+              const visualStarted = timing.started && !timing.ended;
+              const cardBg = visualDone
+                ? '#dcfce7'
+                : visualStarted
+                  ? '#fef9c3'
+                  : unlocked
+                    ? '#ffffff'
+                    : '#f8fafc';
+              const cardBorder = visualDone ? '#86efac' : visualStarted ? '#facc15' : unlocked ? '#e2e8f0' : '#cbd5e1';
+              const iconBg = visualDone ? '#bbf7d0' : visualStarted ? '#fde68a' : '#f1f5f9';
               return (
-                <TouchableOpacity
+                <View
                   key={String(pg.id || idx)}
-                  activeOpacity={0.85}
-                  onPress={() => openHubSection(idx)}
                   style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
+                    gap: 10,
                     padding: 16,
                     borderRadius: 12,
                     borderWidth: 2,
-                    borderColor: done ? '#86efac' : unlocked ? '#e2e8f0' : '#cbd5e1',
-                    backgroundColor: unlocked ? '#fff' : '#f8fafc',
+                    borderColor: cardBorder,
+                    backgroundColor: cardBg,
                   }}
                 >
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => openHubSection(idx)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
                   <View
                     style={{
                       width: 40,
                       height: 40,
                       borderRadius: 10,
-                      backgroundColor: done ? '#dcfce7' : '#f1f5f9',
+                      backgroundColor: iconBg,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    {done ? (
-                      <Ionicons name="checkmark-circle" size={26} color="#16a34a" />
-                    ) : appHubSectionOrder === 'sequential' && !unlocked ? (
+                    {appHubSectionOrder === 'sequential' && !unlocked ? (
                       <Ionicons name="lock-closed-outline" size={22} color="#94a3b8" />
+                    ) : pg.sectionIcon ? (
+                      renderSchemaIcon(
+                        {
+                          icon: pg.sectionIcon,
+                          iconLibrary: pg.sectionIconLibrary,
+                          iconColor: pg.sectionIconColor,
+                        },
+                        20
+                      )
                     ) : (
-                      <Text style={{ fontWeight: '800', color: '#64748b' }}>{idx + 1}</Text>
+                      renderSchemaIcon(
+                        {
+                          icon: isRepeatSection ? 'layers-outline' : 'albums-outline',
+                          iconLibrary: 'Ionicons',
+                          iconColor: visualDone ? '#16a34a' : '#64748b',
+                        },
+                        20
+                      )
                     )}
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -7312,12 +7813,145 @@ export default function ChecklistEngine() {
                       {pg.pageTitle || `Etapa ${idx + 1}`}
                     </Text>
                     <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                      {(pg.fields || []).filter((x: any) => isFieldVisible(x)).length}{' '}
-                      campo(s) visível(eis)
+                      {isRepeatSection
+                        ? `${repeatStats.rawRows.length} instância(s) criada(s)`
+                        : `${(pg.fields || []).filter((x: any) => isFieldVisible(x)).length} campo(s) visível(eis)`}
                     </Text>
+                    {isRepeatSection ? (
+                      <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                        {repeatStats.maxRows == null
+                          ? `Mínimo ${repeatStats.minRows} · sem limite máximo`
+                          : `Mínimo ${repeatStats.minRows} · máximo ${repeatStats.maxRows}`}
+                      </Text>
+                    ) : null}
                   </View>
                   <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  {isRepeatSection && !isReadOnly ? (
+                    <View
+                      style={{
+                        marginTop: 2,
+                        borderTopWidth: 1,
+                        borderTopColor: '#e2e8f0',
+                        paddingTop: 8,
+                        gap: 8,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <TouchableOpacity
+                          onPress={() =>
+                            setHubRepeatCardsExpanded((prev) => ({
+                              ...prev,
+                              [repeatCardKey]: !prev[repeatCardKey],
+                            }))
+                          }
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                        >
+                          <Text style={{ color: '#475569', fontSize: 12, fontWeight: '800' }}>
+                            {createdRows.length}
+                          </Text>
+                          <Ionicons
+                            name={repeatMenuExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color="#64748b"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => addHubRepeatInstance(idx)}
+                          disabled={
+                            !unlocked ||
+                            (repeatStats.maxRows != null && repeatStats.rawRows.length >= repeatStats.maxRows)
+                          }
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 17,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 1,
+                            borderColor: unlocked ? '#fdba74' : '#e2e8f0',
+                            backgroundColor: unlocked ? '#fff7ed' : '#f8fafc',
+                            opacity:
+                              !unlocked ||
+                              (repeatStats.maxRows != null && repeatStats.rawRows.length >= repeatStats.maxRows)
+                                ? 0.55
+                                : 1,
+                          }}
+                        >
+                          <Ionicons name="add" size={20} color={unlocked ? '#ea580c' : '#94a3b8'} />
+                        </TouchableOpacity>
+                      </View>
+                      {repeatMenuExpanded ? (
+                        createdRows.length > 0 ? (
+                          <View style={{ gap: 8 }}>
+                            {createdRows.map((row) => {
+                              const childBg = row.done ? '#dcfce7' : row.started ? '#fef9c3' : '#ffffff';
+                              const childBorder = row.done ? '#86efac' : row.started ? '#facc15' : '#e2e8f0';
+                              return (
+                              <TouchableOpacity
+                                key={`filled_${repeatCardKey}_${row.rowIndex}`}
+                                onPress={() => openHubSection(idx, { repeatRowIndex: row.rowIndex })}
+                                style={{
+                                  marginLeft: 14,
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 12,
+                                  padding: 12,
+                                  borderRadius: 10,
+                                  borderWidth: 1,
+                                  borderColor: childBorder,
+                                  backgroundColor: childBg,
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 9,
+                                    backgroundColor: '#f8fafc',
+                                    borderWidth: 1,
+                                    borderColor: '#e2e8f0',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  {pg.sectionIcon ? (
+                                    renderSchemaIcon(
+                                      {
+                                        icon: pg.sectionIcon,
+                                        iconLibrary: pg.sectionIconLibrary,
+                                        iconColor: pg.sectionIconColor,
+                                      },
+                                      16
+                                    )
+                                  ) : (
+                                    <Ionicons name="layers-outline" size={16} color="#64748b" />
+                                  )}
+                                </View>
+                                <Text
+                                  style={{
+                                    flex: 1,
+                                    fontSize: 14,
+                                    fontWeight: '800',
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  {pg.pageTitle || `Etapa ${idx + 1}`}
+                                </Text>
+                                <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+                              </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        ) : (
+                          <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700' }}>
+                            Nenhuma instância criada ainda.
+                          </Text>
+                        )
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
               );
             })}
           </View>
@@ -7333,24 +7967,7 @@ export default function ChecklistEngine() {
           if (!isFieldVisible(field)) return null;
 
           const renderFieldIcon = (f: any) => {
-            const lib = f.iconLibrary || 'Ionicons';
-            const name = f.icon as any;
-            const color = f.iconColor || "#0F172A";
-            const size = 24;
-            switch(lib) {
-               case 'AntDesign': return <AntDesign name={name} size={size} color={color} />;
-               case 'Entypo': return <Entypo name={name} size={size} color={color} />;
-               case 'Feather': return <Feather name={name} size={size} color={color} />;
-               case 'FontAwesome': return <FontAwesome name={name} size={size} color={color} />;
-               case 'FontAwesome5': return <FontAwesome5 name={name} size={size} color={color} />;
-               case 'Foundation': return <Foundation name={name} size={size} color={color} />;
-               case 'MaterialIcons': return <MaterialIcons name={name} size={size} color={color} />;
-               case 'MaterialCommunityIcons': return <MaterialCommunityIcons name={name} size={size} color={color} />;
-               case 'Octicons': return <Octicons name={name} size={size} color={color} />;
-               case 'Ionicons':
-               default:
-                  return <Ionicons name={name} size={size} color={color} />;
-            }
+            return renderSchemaIcon(f, 24);
           };
 
           return (
@@ -9612,11 +10229,18 @@ export default function ChecklistEngine() {
 
           if (paginatedSectionRepeatEnabled && openingSectionBreakField) {
             const sb = openingSectionBreakField;
-            const minR = sectionRepeatMinRows(sb);
+            const minR = currentRepeatMinRows;
             const maxR = sectionRepeatMaxRows(sb);
-            const rs = getRepeatRows(responses, sb.id);
-            const n = Math.max(rs.length, minR, 1);
-            const idxs = Array.from({ length: n }, (_, i) => i);
+            const rs = currentRepeatRawRows;
+            const n = currentRepeatVisibleLen;
+            const selectedIdxRaw = hubSelectedRepeatRowBySection[String(sb.id)];
+            const selectedIdx = Number.isFinite(Number(selectedIdxRaw))
+              ? Math.max(0, Math.min(Number(selectedIdxRaw), Math.max(0, n - 1)))
+              : 0;
+            const idxs =
+              useSectionHub && !hubPicking
+                ? [selectedIdx]
+                : Array.from({ length: n }, (_, i) => i);
             return (
               <>
                 {emptyNote(currentFieldsToRender)}
@@ -9647,10 +10271,13 @@ export default function ChecklistEngine() {
                         <TouchableOpacity
                           onPress={() => {
                             const rkey = sectionRepeatStorageKey(sb.id);
+                            const doneKey = sectionRepeatCompletedStorageKey(sb.id);
                             setResponses((prev: any) => {
                               const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
+                              const done = Array.isArray(prev[doneKey]) ? [...prev[doneKey]] : [];
                               rows.splice(ri, 1);
-                              const nr = { ...prev, [rkey]: rows };
+                              if (done.length > ri) done.splice(ri, 1);
+                              const nr = { ...prev, [rkey]: rows, [doneKey]: done };
                               void AsyncStorage.setItem(draftKLocal, JSON.stringify(nr));
                               return nr;
                             });
@@ -9663,9 +10290,10 @@ export default function ChecklistEngine() {
                     {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
                   </View>
                 ))}
-                {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                   <TouchableOpacity
                     onPress={() => {
+                      if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
                       const rkey = sectionRepeatStorageKey(sb.id);
                       setResponses((prev: any) => {
                         const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
@@ -9721,9 +10349,10 @@ export default function ChecklistEngine() {
                             {renderFieldList(chunk.fields, { sectionId: sb.id, rowIndex: ri })}
                           </View>
                         ))}
-                        {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                        {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                           <TouchableOpacity
                             onPress={() => {
+                              if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
                               const rkey = sectionRepeatStorageKey(sb.id);
                               setResponses((prev: any) => {
                                 const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
@@ -9778,9 +10407,10 @@ export default function ChecklistEngine() {
                     {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
                   </View>
                 ))}
-                {!isReadOnly && (maxR == null || rs.length < maxR) ? (
+                {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                   <TouchableOpacity
                     onPress={() => {
+                      if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
                       const rkey = sectionRepeatStorageKey(sb.id);
                       setResponses((prev: any) => {
                         const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
@@ -9827,9 +10457,7 @@ export default function ChecklistEngine() {
               <Text style={styles.timeBadgeLabel}>Foco</Text>
               <Text style={styles.timeBadgeValue}>{formatDurationClock(activeDisp)}</Text>
             </View>
-            {currentPageData.id &&
-            currentPageData.id !== '__full__' &&
-            currentPageData.id !== '__wizard__' ? (
+            {showSectionTimerInFooter ? (
               <View style={styles.timeBadge}>
                 <Text style={styles.timeBadgeLabel}>Etapa</Text>
                 <Text style={styles.timeBadgeValue}>
@@ -9852,9 +10480,7 @@ export default function ChecklistEngine() {
                 {formatDurationClock(Number(responses.__form_active_seconds_final) || 0)}
               </Text>
             </View>
-            {currentPageData.id &&
-            currentPageData.id !== '__full__' &&
-            currentPageData.id !== '__wizard__' ? (
+            {showSectionTimerInFooter ? (
               <View style={styles.timeBadge}>
                 <Text style={styles.timeBadgeLabel}>Etapa</Text>
                 <Text style={styles.timeBadgeValue}>
@@ -9912,7 +10538,7 @@ export default function ChecklistEngine() {
             </>
           ) : effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard' ? (
             <>
-              {currentPage > 0 || hybridInnerWizardIndex > 0 ? (
+              {currentPage > 0 || hybridInnerWizardIndex > 0 || (useSectionHub && !hubPicking) ? (
                 <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
                   <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
                 </TouchableOpacity>
@@ -9924,8 +10550,11 @@ export default function ChecklistEngine() {
                   <Text style={styles.navBtnText}>{"Próximo >"}</Text>
                 </TouchableOpacity>
               ) : currentPage < displayPages.length - 1 ? (
-                <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>
-                  <Text style={styles.navBtnText}>{"Avançar >"}</Text>
+                <TouchableOpacity
+                  style={styles.navBtnNext}
+                  onPress={useSectionHub ? handleCompleteSectionToHub : handleNextPage}
+                >
+                  <Text style={styles.navBtnText}>{useSectionHub ? 'Concluir' : 'Avançar >'}</Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
@@ -9959,7 +10588,7 @@ export default function ChecklistEngine() {
             </>
           ) : (
             <>
-              {currentPage > 0 ? (
+              {currentPage > 0 || (useSectionHub && !hubPicking) ? (
                 <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
                   <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
                 </TouchableOpacity>
@@ -9968,8 +10597,11 @@ export default function ChecklistEngine() {
               )}
 
               {currentPage < displayPages.length - 1 ? (
-                <TouchableOpacity style={styles.navBtnNext} onPress={handleNextPage}>
-                  <Text style={styles.navBtnText}>{"Avançar >"}</Text>
+                <TouchableOpacity
+                  style={styles.navBtnNext}
+                  onPress={useSectionHub ? handleCompleteSectionToHub : handleNextPage}
+                >
+                  <Text style={styles.navBtnText}>{useSectionHub ? 'Concluir' : 'Avançar >'}</Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>

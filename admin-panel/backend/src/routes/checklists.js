@@ -13,6 +13,7 @@ const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionF
 const {
     normalizeTemplateTitle,
     findActiveDuplicateInFolder,
+    ensureUniqueActiveTitleInFolder,
 } = require('../lib/templateTitleUnique');
 const { computeExecutionBusinessMetrics } = require('../lib/executionBusinessMetrics');
 const { resolveFieldTaskAssigneeEmail } = require('../lib/technicianEligibility');
@@ -27,6 +28,54 @@ const { consumeQuota, assertChecklistTemplateCapacity } = require('../lib/planQu
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
+
+/** Mensagem legível quando a BD não tem tabelas esperadas pelo schema (migrações em falta). */
+function friendlyChecklistTemplateSaveError(err) {
+    if (!err) return 'Erro ao gravar o modelo.';
+    const code = String(err.code || '');
+    const msg = String(err.message || '');
+    if (code === 'P2021' || /does not exist in the current database/i.test(msg)) {
+        return (
+            'A base de dados está desatualizada (falta uma ou mais tabelas do BrSpark). ' +
+            'No servidor, na pasta admin-panel/backend, execute: npx prisma migrate deploy  e reinicie a API.'
+        );
+    }
+    return msg || 'Erro ao gravar o modelo.';
+}
+
+function buildChecklistTemplateVersionSnapshot(row, extra) {
+    if (!row || typeof row !== 'object') return null;
+    const out = {
+        templateId: String(row.id),
+        version: Number(row.version || 1),
+        title: String(row.title || '').trim(),
+        description: row.description != null ? String(row.description) : null,
+        settings: row.settings && typeof row.settings === 'object' ? row.settings : {},
+        schemaData: Array.isArray(row.schemaData) ? row.schemaData : [],
+        metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+        folderId: row.folderId == null ? null : String(row.folderId),
+        isActive: row.isActive !== false,
+        changeNote: extra && extra.changeNote ? String(extra.changeNote).slice(0, 240) : null,
+        createdBy: extra && extra.createdBy ? String(extra.createdBy).slice(0, 240) : null,
+    };
+    return out;
+}
+
+async function createChecklistTemplateVersion(tx, row, extra) {
+    const snapshot = buildChecklistTemplateVersionSnapshot(row, extra);
+    if (!snapshot || !snapshot.title) return null;
+    const delegate = tx && tx.checklistTemplateVersion;
+    if (!delegate || typeof delegate.create !== 'function') {
+        const err = new Error(
+            'Cliente Prisma desatualizado (falta o modelo ChecklistTemplateVersion). ' +
+                'Na pasta admin-panel/backend execute: npx prisma generate  e reinicie o backend. ' +
+                'Se a base ainda não tiver a tabela, execute também: npx prisma migrate deploy',
+        );
+        err.code = 'PRISMA_CLIENT_STALE';
+        throw err;
+    }
+    return delegate.create({ data: snapshot });
+}
 
 /**
  * Pausa de deslocamento (link público) só deve mudar com POST /api/tracking/pause|resume.
@@ -268,8 +317,10 @@ router.get('/lookup-options/:preset', authUser, (req, res) => {
 // GET /api/checklists/templates (Mobile puxa os modelos)
 router.get('/templates', async (req, res) => {
     try {
+        const includeArchived =
+            req.query && (req.query.includeArchived === '1' || req.query.includeArchived === 'true');
         const templates = await prisma.checklistTemplate.findMany({
-            where: { isActive: true },
+            where: includeArchived ? {} : { isActive: true },
             orderBy: { updatedAt: 'desc' }
         });
         res.json(templates);
@@ -294,11 +345,33 @@ router.get('/templates/:id', async (req, res) => {
     }
 });
 
+router.get('/templates/:id/history', adminAuthThenPanel, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const template = await prisma.checklistTemplate.findUnique({
+            where: { id },
+            select: { id: true, title: true, version: true, isActive: true, updatedAt: true },
+        });
+        if (!template) return res.status(404).json({ error: 'Template não encontrado.' });
+        const versions = await prisma.checklistTemplateVersion.findMany({
+            where: { templateId: id },
+            orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+        });
+        res.json({
+            template,
+            versions,
+        });
+    } catch (err) {
+        console.error('GET /api/checklists/templates/:id/history error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // POST /api/checklists/templates (Admin Panel salva um schema)
 router.post('/templates', async (req, res) => {
     try {
         const { id, title, description, metadata } = req.body;
-        let { settings, schemaData, folderId } = req.body;
+        let { settings, schemaData, folderId, changeNote } = req.body;
         if (typeof schemaData === 'string') {
             try {
                 schemaData = JSON.parse(schemaData);
@@ -361,11 +434,19 @@ router.post('/templates', async (req, res) => {
                     settings,
                     schemaData,
                     metadata,
+                    version: Number(existing.version || 1) + 1,
                 };
                 if (folderIdNorm !== undefined) updateData.folderId = folderIdNorm;
-                const updated = await prisma.checklistTemplate.update({
-                    where: { id },
-                    data: updateData,
+                const updated = await prisma.$transaction(async (tx) => {
+                    const saved = await tx.checklistTemplate.update({
+                        where: { id },
+                        data: updateData,
+                    });
+                    await createChecklistTemplateVersion(tx, saved, {
+                        changeNote: changeNote || 'Nova versão salva no Form Builder',
+                        createdBy: req.admin && req.admin.email ? req.admin.email : null,
+                    });
+                    return saved;
                 });
                 scheduleChecklistTemplateEmbeddingSync(updated.id);
                 return res.json(updated);
@@ -403,36 +484,135 @@ router.post('/templates', async (req, res) => {
             }
         }
 
-        const created = await prisma.checklistTemplate.create({
-            data: {
-                id: id && typeof id === 'string' ? id : undefined,
-                title: normTitleCr,
-                description,
-                settings: settings || {},
-                schemaData,
-                metadata: metadata || {},
-                folderId: createFolderId,
-                ...(tenantIdForTpl ? { tenantId: tenantIdForTpl } : {}),
-            },
+        const created = await prisma.$transaction(async (tx) => {
+            const row = await tx.checklistTemplate.create({
+                data: {
+                    id: id && typeof id === 'string' ? id : undefined,
+                    title: normTitleCr,
+                    description,
+                    settings: settings || {},
+                    schemaData,
+                    metadata: metadata || {},
+                    folderId: createFolderId,
+                    ...(tenantIdForTpl ? { tenantId: tenantIdForTpl } : {}),
+                },
+            });
+            await createChecklistTemplateVersion(tx, row, {
+                changeNote: changeNote || 'Versão inicial do formulário',
+                createdBy: req.admin && req.admin.email ? req.admin.email : null,
+            });
+            return row;
         });
         scheduleChecklistTemplateEmbeddingSync(created.id);
         res.json(created);
     } catch (err) {
         console.error("POST /api/checklists/templates error:", err);
+        res.status(500).json({ error: friendlyChecklistTemplateSaveError(err) });
+    }
+});
+
+router.post('/templates/:id/restore/:versionId', adminAuthThenPanel, async (req, res) => {
+    try {
+        const { id, versionId } = req.params;
+        const template = await prisma.checklistTemplate.findUnique({ where: { id } });
+        if (!template) return res.status(404).json({ error: 'Template não encontrado.' });
+        const snapshot = await prisma.checklistTemplateVersion.findFirst({
+            where: { id: versionId, templateId: id },
+        });
+        if (!snapshot) return res.status(404).json({ error: 'Versão não encontrada.' });
+        const desiredFolder = snapshot.folderId == null ? null : String(snapshot.folderId);
+        const safeTitle = await ensureUniqueActiveTitleInFolder(prisma, {
+            folderId: desiredFolder,
+            desiredTitle: snapshot.title,
+            excludeId: id,
+        });
+        const restored = await prisma.$transaction(async (tx) => {
+            const saved = await tx.checklistTemplate.update({
+                where: { id },
+                data: {
+                    title: safeTitle || snapshot.title,
+                    description: snapshot.description,
+                    settings: snapshot.settings,
+                    schemaData: snapshot.schemaData,
+                    metadata: snapshot.metadata,
+                    folderId: desiredFolder,
+                    isActive: true,
+                    version: Number(template.version || 1) + 1,
+                },
+            });
+            await createChecklistTemplateVersion(tx, saved, {
+                changeNote:
+                    'Restaurado a partir da versão #' +
+                    String(snapshot.version) +
+                    (safeTitle && safeTitle !== snapshot.title ? ' (título ajustado para evitar conflito)' : ''),
+                createdBy: req.admin && req.admin.email ? req.admin.email : null,
+            });
+            return saved;
+        });
+        scheduleChecklistTemplateEmbeddingSync(restored.id);
+        res.json(restored);
+    } catch (err) {
+        console.error('POST /api/checklists/templates/:id/restore/:versionId error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/templates/:id/unarchive', adminAuthThenPanel, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tpl = await prisma.checklistTemplate.findUnique({ where: { id } });
+        if (!tpl) return res.status(404).json({ error: 'Template não encontrado.' });
+        const safeTitle = await ensureUniqueActiveTitleInFolder(prisma, {
+            folderId: tpl.folderId == null ? null : String(tpl.folderId),
+            desiredTitle: tpl.title,
+            excludeId: id,
+        });
+        const restored = await prisma.$transaction(async (tx) => {
+            const saved = await tx.checklistTemplate.update({
+                where: { id },
+                data: {
+                    isActive: true,
+                    title: safeTitle || tpl.title,
+                    version: Number(tpl.version || 1) + 1,
+                },
+            });
+            await createChecklistTemplateVersion(tx, saved, {
+                changeNote:
+                    'Formulário restaurado do arquivo' +
+                    (safeTitle && safeTitle !== tpl.title ? ' (título ajustado para evitar conflito)' : ''),
+                createdBy: req.admin && req.admin.email ? req.admin.email : null,
+            });
+            return saved;
+        });
+        scheduleChecklistTemplateEmbeddingSync(restored.id);
+        res.json(restored);
+    } catch (err) {
+        console.error('POST /api/checklists/templates/:id/unarchive error:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // DELETE /api/checklists/templates/:id (Admin Panel deleta logicamente um schema)
-router.delete('/templates/:id', async (req, res) => {
+router.delete('/templates/:id', adminAuthThenPanel, async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await prisma.checklistTemplate.update({
+        const current = await prisma.checklistTemplate.findUnique({
             where: { id },
-            data: { isActive: false }
+        });
+        if (!current) return res.status(404).json({ error: 'Template não encontrado.' });
+        const deleted = await prisma.$transaction(async (tx) => {
+            const saved = await tx.checklistTemplate.update({
+                where: { id },
+                data: { isActive: false }
+            });
+            await createChecklistTemplateVersion(tx, saved, {
+                changeNote: 'Formulário arquivado',
+                createdBy: req.admin && req.admin.email ? req.admin.email : null,
+            });
+            return saved;
         });
         prisma.checklistTemplateEmbedding.deleteMany({ where: { templateId: id } }).catch(() => {});
-        res.json({ success: true, id: deleted.id });
+        res.json({ success: true, id: deleted.id, archived: true });
     } catch (err) {
         console.error("DELETE /api/checklists/templates error:", err);
         res.status(500).json({ error: err.message });

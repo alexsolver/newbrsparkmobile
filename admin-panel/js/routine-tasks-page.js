@@ -1,12 +1,14 @@
 /**
  * Painel — RT (tarefas de rotina): associações modelo ↔ prestadores (exceto cliente).
  */
-import { initPage, getStoredPanelRole } from './sidebar.js';
-import { CONFIG } from './config.js';
+import { initPage } from './sidebar.js';
+import { CONFIG, getPanelCapabilities } from './config.js';
 import { t as userT } from './user-pages-i18n.js';
 import { rtT, applyRoutineTasksStaticI18n } from './routine-tasks-i18n.js';
 
-const role = getStoredPanelRole();
+const panelCaps = new Set(getPanelCapabilities());
+const canCrossTenantRoutine =
+  panelCaps.has('tenant.access.any') || panelCaps.has('platform.dashboard.read');
 let activeTenantId = null;
 /** @type {{ id: string, title?: string, tenantId?: string|null }[]} */
 let cachedTemplates = [];
@@ -90,7 +92,7 @@ function assignmentApiQuery() {
 }
 
 function canQuery() {
-  if (role === 'SAAS_ADMIN') return !!activeTenantId;
+  if (canCrossTenantRoutine) return !!activeTenantId;
   return true;
 }
 
@@ -200,7 +202,7 @@ async function ensureTenantForApi() {
   const saasBox = document.getElementById('rt-saas-tenant');
   const filterWrap = document.getElementById('rt-tenant-filter-wrap');
 
-  if (role === 'SAAS_ADMIN' && !activeTenantId) {
+  if (canCrossTenantRoutine && !activeTenantId) {
     if (bar) bar.style.display = 'flex';
     if (saasBox) saasBox.style.display = 'block';
     if (!cachedPanelTenants.length) {
@@ -214,7 +216,7 @@ async function ensureTenantForApi() {
 
   if (bar) bar.style.display = 'none';
 
-  if (role === 'SAAS_ADMIN' && activeTenantId) {
+  if (canCrossTenantRoutine && activeTenantId) {
     if (saasBox) saasBox.style.display = 'block';
     if (!cachedPanelTenants.length) {
       const res = await CONFIG.get('/tenants?limit=500');
@@ -226,7 +228,7 @@ async function ensureTenantForApi() {
     saasBox.style.display = 'none';
   }
 
-  if (bar && role !== 'SAAS_ADMIN') bar.style.display = 'none';
+  if (bar && !canCrossTenantRoutine) bar.style.display = 'none';
   return true;
 }
 

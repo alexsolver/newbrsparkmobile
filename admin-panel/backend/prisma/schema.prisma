@@ -91,6 +91,7 @@ model Tenant {
   evaluationActionPlans EvaluationActionPlan[]
   evaluationDisputes    EvaluationDispute[]
   technicianRegistrationApplications TechnicianRegistrationApplication[]
+  providerAffiliations  ProviderTenantAffiliation[]
   workTimeSettings      WorkTimeSettings?
   workTimePunches       WorkTimePunch[]
   routineTaskAssignments RoutineTaskAssignment[]
@@ -217,6 +218,70 @@ model TechnicianRegistrationEvent {
   createdAt       DateTime @default(now())
 
   @@index([applicationId, createdAt])
+}
+
+/// Identidade global do prestador (independente de tenant).
+model ProviderIdentity {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  globalStatus  String   @default("PENDING") // PENDING, VERIFIED, REJECTED, SUSPENDED
+  kycStatus     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  kycReviewedAt DateTime?
+  kycReviewNote String?
+  score         Float    @default(5.0)
+  cft           String?
+  specialty     String?
+  skillsJson    Json?
+  profileJson   Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  affiliations  ProviderTenantAffiliation[]
+  applications  ProviderOnboardingApplication[]
+}
+
+/// Vínculo do prestador global com cada tenant (convite/parceria/operação).
+model ProviderTenantAffiliation {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  providerIdentityId     String
+  providerIdentity       ProviderIdentity @relation(fields: [providerIdentityId], references: [id], onDelete: Cascade)
+  status                 String   @default("INVITED") // INVITED, REQUESTED, ACTIVE, INACTIVE, SUSPENDED, REJECTED
+  invitationToken        String?  @unique
+  invitedByUserId        String?
+  requestedAt            DateTime?
+  invitedAt              DateTime?
+  activatedAt            DateTime?
+  suspendedAt            DateTime?
+  note                   String?
+  tenantScheduleJson     Json?
+  tenantServiceLocationIds Json?
+  tenantDocsJson         Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([tenantId, providerIdentityId])
+  @@index([tenantId, status])
+  @@index([providerIdentityId, status])
+}
+
+/// Candidatura de onboarding/KYC global (sem tenant obrigatório).
+model ProviderOnboardingApplication {
+  id                 String   @id @default(cuid())
+  providerIdentityId String
+  providerIdentity   ProviderIdentity @relation(fields: [providerIdentityId], references: [id], onDelete: Cascade)
+  status             String   @default("DRAFT") // DRAFT, SUBMITTED, NEEDS_REVISION, APPROVED, REJECTED
+  inviteToken        String?  @unique
+  responsesJson      Json     @default("{}")
+  revisionNote       String?
+  submittedAt        DateTime?
+  resolvedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([providerIdentityId, status])
 }
 
 // ─────────────────────────────────────────────────────────
@@ -376,6 +441,7 @@ model User {
   auditLogs  AuditLog[]
   pushTokens PushToken[]
   technicianProfile TechnicianProfile?
+  providerIdentity  ProviderIdentity?
   /// Preenchido se o usuário foi criado por uma candidatura de prestador aprovada.
   techRegistrationCreatedFrom TechnicianRegistrationApplication? @relation("TechRegCreatedUser")
   technicianRegistrationCandidacies TechnicianRegistrationApplication[] @relation("TechRegCandidateUser")
@@ -416,6 +482,9 @@ model TechnicianProfile {
   skillsJson       Json?
   /// IDs de Location (tenant) onde o prestador atende — multi-location
   serviceLocationIds Json?
+  /// Cobertura geográfica operacional do prestador no app/painel.
+  /// Formato atual: { homeBase: { latitude, longitude, address?, city?, state?, postalCode?, countryCode? }, radiusKm, notes? }
+  serviceCoverageGeoJson Json?
   /// Documentos profissionais (certificações, ASO, etc.) com locationIds[] por linha
   professionalDocuments Json?
   createdAt DateTime @default(now())
@@ -873,9 +942,30 @@ model ChecklistTemplate {
   updatedAt   DateTime @updatedAt
 
   embedding ChecklistTemplateEmbedding?
+  versions  ChecklistTemplateVersion[]
 
   executions  ChecklistExecution[]
   routineTaskAssignments RoutineTaskAssignment[]
+}
+
+model ChecklistTemplateVersion {
+  id          String            @id @default(cuid())
+  templateId  String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     Int
+  title       String
+  description String?
+  settings    Json
+  schemaData  Json
+  metadata    Json?
+  folderId    String?
+  isActive    Boolean           @default(true)
+  changeNote  String?
+  createdAt   DateTime          @default(now())
+  createdBy   String?
+
+  @@index([templateId, createdAt])
+  @@index([templateId, version])
 }
 
 /// Vetor de embedding (OpenAI etc.) para RAG semântico da biblioteca de modelos no Copiloto.

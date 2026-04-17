@@ -1,5 +1,7 @@
 'use strict';
 
+const { hasCapability, isPlatformAdmin, normalizeRole } = require('../lib/authorization');
+
 /** Papéis com acesso total às rotas do painel (montadas com adminAuth). */
 const FULL_PANEL_ACCESS_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN']);
 
@@ -13,11 +15,13 @@ const MANAGER_ALLOWED_PREFIXES = [
   '/api/stock-critical',
   '/api/tenants',
   '/api/users',
+  '/api/locations',
   '/api/work-time',
   '/api/technician-registration',
   '/api/plans',
   '/api/subscriptions',
   '/api/checklists',
+  '/api/docs',
   '/api/operations',
   '/api/admin/routine-tasks',
   '/api/reports',
@@ -42,10 +46,12 @@ function pathAllowedForManager(originalUrl) {
  */
 function enforcePanelPermissions(req, res, next) {
   const a = req.admin;
+  const authz = req.authorization;
   if (!a) return next();
   if (!a.panelUser) return next();
-  const role = a.role;
-  if (FULL_PANEL_ACCESS_ROLES.has(role)) return next();
+  if (isPlatformAdmin(authz)) return next();
+  const role = normalizeRole(a.role);
+  if (FULL_PANEL_ACCESS_ROLES.has(role) && hasCapability(authz, 'tenant.access.self')) return next();
   if (role === 'MANAGER') {
     if (pathAllowedForManager(req.originalUrl)) return next();
     return res.status(403).json({

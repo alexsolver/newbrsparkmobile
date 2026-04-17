@@ -27,6 +27,7 @@ const M = {
     nav_sec_sys: 'Sistema',
     nav_dashboard: 'Dashboard',
     nav_tenants: 'Tenants',
+    nav_my_org: 'Minha organização',
     nav_users: 'Usuários',
     nav_tech_signup: 'Cadastro prestador',
     nav_forms_builder: 'Forms Builder',
@@ -435,9 +436,8 @@ const M = {
     ue_schAddSlotBtn: '+ Turno neste dia',
     ue_scheduleIntro_html:
       'Use <strong>+ Turno neste dia</strong> para vários blocos no mesmo dia (ex.: manhã numa base, tarde em outra). Cada dia pode ter turnos com <strong>regiões diferentes</strong>. Em cada turno, «Regiões» vazio significa que o turno não fixa base (continua limitado pelo universo <a href="#sec-regioes">Regiões atendidas</a> abaixo).',
-    ue_secRegions: 'Regiões / bases atendidas',
-    ue_regionsIntro: 'Seleção múltipla das Locations do tenant onde o técnico pode operar (Ctrl/Cmd + clique).',
-    ue_regionsFilterPh: 'Filtrar bases…',
+    ue_secRegions: 'Área de atendimento',
+    ue_regionsIntro: 'Defina o centro geográfico da operação e o raio máximo em quilômetros para despacho do técnico.',
     ue_auditDesc: 'Eventos recentes ligados a este usuário.',
     ue_auditThWhen: 'Data',
     ue_auditThAction: 'Ação',
@@ -554,6 +554,7 @@ const M = {
     nav_sec_sys: 'System',
     nav_dashboard: 'Dashboard',
     nav_tenants: 'Tenants',
+    nav_my_org: 'My organization',
     nav_users: 'Users',
     nav_tech_signup: 'Technician signup',
     nav_forms_builder: 'Forms Builder',
@@ -961,9 +962,8 @@ const M = {
     ue_schAddSlotBtn: '+ Shift on this day',
     ue_scheduleIntro_html:
       'Use <strong>+ Shift on this day</strong> for multiple blocks on the same day (e.g. morning at one site, afternoon at another). Each day can have shifts with <strong>different regions</strong>. Empty “Regions” on a shift means the shift does not pin a site (still limited by <a href="#sec-regioes">Service areas</a> below).',
-    ue_secRegions: 'Service areas / sites',
-    ue_regionsIntro: 'Multi-select tenant Locations where the technician can operate (Ctrl/Cmd + click).',
-    ue_regionsFilterPh: 'Filter sites…',
+    ue_secRegions: 'Service area',
+    ue_regionsIntro: 'Set the operating center point and the maximum radius in kilometers for technician dispatch.',
     ue_auditDesc: 'Recent events linked to this user.',
     ue_auditThWhen: 'When',
     ue_auditThAction: 'Action',
@@ -1581,8 +1581,6 @@ export function applyUserEditStaticPageI18n() {
   setH('ue-schedule-intro', 'ue_scheduleIntro_html');
   setT('ue-sec-regions-title', 'ue_secRegions');
   setH('ue-regions-intro', 'ue_regionsIntro');
-  const rf = document.getElementById('t-service-locs-filter');
-  if (rf) rf.placeholder = t('ue_regionsFilterPh');
   setT('sec-audit-desc', 'ue_auditDesc');
   const ath = document.querySelector('#sec-audit thead tr');
   if (ath) {

@@ -21,6 +21,7 @@ import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
 import { NotificationService } from '../services/notifications';
+import { userHasCapability } from '../services/auth';
 import { useTranslation } from 'react-i18next';
 import { MODE_SEGMENT_COLORS } from '../theme/colors';
 import { fontSize, fontWeight, radius } from '../theme/layout';
@@ -144,6 +145,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const { width: windowWidth } = useWindowDimensions();
   const { mode, setMode, guardRef } = useAppContext();
   const { user, userRole } = useAuth();
+  const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
   const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
   const gpsIssue = useGpsAuraIssue();
@@ -181,6 +183,8 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
+  const isProviderOsSearch =
+    segments[0] === 'provider-os-search' || pathname === '/provider-os-search';
   const firstPathSegment = String(pathname || '')
     .replace(/^\/+/, '')
     .split('/')[0]
@@ -196,7 +200,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   // O Header global (injetado no _layout.tsx) não recebe `title`.
   // Devemos escondê-lo completamente se não estivermos nas abas principais, no perfil ou no detalhe do ativo.
-  if (!title && !isTabs && !isProfile && !isAssetDetail) {
+  if (!title && !isTabs && !isProfile && !isAssetDetail && !isProviderOsSearch) {
     return null;
   }
 
@@ -204,7 +208,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const showBensInBadge = mode !== 'PROVIDER';
   const badgeSegmentCount =
-    (userRole === 'CLIENT' ? 1 : 0) + (showBensInBadge ? 1 : 0) + (userRole === 'TECHNICIAN' ? 1 : 0);
+    (userRole === 'CLIENT' ? 1 : 0) + (showBensInBadge ? 1 : 0) + (canUseProviderMode ? 1 : 0);
 
   const segmentHitSlop = { top: 10, bottom: 10, left: 4, right: 4 } as const;
   const segBase = {
@@ -317,7 +321,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
         </TouchableOpacity>
       )}
 
-      {userRole === 'TECHNICIAN' && (
+      {canUseProviderMode && (
         <TouchableOpacity
           hitSlop={segmentHitSlop}
           onPress={() => {

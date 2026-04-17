@@ -10,6 +10,16 @@
     .pw-wrap { position: relative; }
     .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text3); cursor: pointer; font-size: 16px; transition: color var(--transition); }
     .pw-toggle:hover { color: var(--text); }
+    .login-link-row { display: flex; justify-content: flex-end; margin: -4px 0 12px; }
+    .login-link-btn { border: none; background: none; color: var(--accent); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0; }
+    .login-link-btn:hover { color: var(--accent-strong, var(--accent)); text-decoration: underline; }
+    .reset-modal[hidden] { display: none; }
+    .reset-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(15, 23, 42, 0.55); }
+    .reset-card { width: min(100%, 420px); background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 22px; box-shadow: var(--shadow-lg); }
+    .reset-title { margin: 0 0 8px; font-size: 20px; color: var(--text); }
+    .reset-subtitle { margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: var(--text3); }
+    .reset-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+    .reset-secondary { background: var(--bg2); color: var(--text2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; font-weight: 700; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -49,6 +59,9 @@
             <button type="button" class="pw-toggle" id="pw-toggle" title="Mostrar senha"><ion-icon name="eye-outline" style="vertical-align:-2px"></ion-icon></button>
           </div>
         </div>
+        <div class="login-link-row">
+          <button type="button" class="login-link-btn" id="forgot-password-btn">Esqueceu a senha?</button>
+        </div>
         <button type="submit" class="login-btn" id="login-btn">Entrar</button>
       </form>
 
@@ -61,6 +74,31 @@
     </div>
   </div>
 
+  <div class="reset-modal" id="reset-modal" hidden>
+    <div class="reset-card">
+      <h3 class="reset-title">Recuperar senha</h3>
+      <p class="reset-subtitle">Informe a organização e o e-mail para receber o link de redefinição de senha.</p>
+
+      <div class="login-error" id="reset-error"></div>
+
+      <form id="reset-form">
+        <div class="form-group">
+          <label class="form-label" for="reset-tenant-slug">Organização <span class="login-label-hint">(slug)</span></label>
+          <input class="form-control" type="text" id="reset-tenant-slug" placeholder="ex.: brspark" autocomplete="organization" autocapitalize="none" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reset-email">E-mail</label>
+          <input class="form-control" type="email" id="reset-email" placeholder="seu-email@empresa.com" autocomplete="email" required />
+        </div>
+
+        <div class="reset-actions">
+          <button type="button" class="reset-secondary" id="reset-cancel-btn">Cancelar</button>
+          <button type="submit" class="login-btn" id="reset-submit-btn" style="width:auto;min-width:154px">Enviar link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
   <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
   <script type="module">
@@ -69,6 +107,7 @@
       ensureAdminApiDetected,
       restoreAdminSessionBundleIfNeeded,
       persistAdminSessionBundleFromSessionStorage,
+      applyPanelSessionBootstrap,
     } from './js/config.js';
     import { defaultLandingPageForRole } from './js/sidebar.js';
 
@@ -87,6 +126,14 @@
     const pwInput = document.getElementById('password');
     const loginBtn = document.getElementById('login-btn');
     const slugInput = document.getElementById('tenant-slug');
+    const forgotPasswordBtn = document.getElementById('forgot-password-btn');
+    const resetModal = document.getElementById('reset-modal');
+    const resetForm = document.getElementById('reset-form');
+    const resetErrorEl = document.getElementById('reset-error');
+    const resetSubmitBtn = document.getElementById('reset-submit-btn');
+    const resetCancelBtn = document.getElementById('reset-cancel-btn');
+    const resetSlugInput = document.getElementById('reset-tenant-slug');
+    const resetEmailInput = document.getElementById('reset-email');
 
     pwToggle.addEventListener('click', () => {
       const isPass = pwInput.type === 'password';
@@ -100,6 +147,62 @@
       sessionStorage.removeItem('brspark_admin_name');
       sessionStorage.removeItem('brspark_admin_role');
     }
+
+    function openResetModal() {
+      resetErrorEl.classList.remove('show');
+      resetErrorEl.textContent = '';
+      resetSlugInput.value = slugInput.value.trim();
+      resetEmailInput.value = document.getElementById('email').value.trim();
+      resetModal.hidden = false;
+      setTimeout(() => resetEmailInput.focus(), 0);
+    }
+
+    function closeResetModal() {
+      resetModal.hidden = true;
+      resetErrorEl.classList.remove('show');
+      resetErrorEl.textContent = '';
+      resetSubmitBtn.innerHTML = 'Enviar link';
+      resetSubmitBtn.disabled = false;
+    }
+
+    forgotPasswordBtn.addEventListener('click', openResetModal);
+    resetCancelBtn.addEventListener('click', closeResetModal);
+    resetModal.addEventListener('click', (event) => {
+      if (event.target === resetModal) closeResetModal();
+    });
+
+    resetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resetErrorEl.classList.remove('show');
+      resetSubmitBtn.innerHTML = 'Enviando…';
+      resetSubmitBtn.disabled = true;
+
+      try {
+        const tenantSlug = resetSlugInput.value.trim();
+        const email = resetEmailInput.value.trim().toLowerCase();
+        if (!tenantSlug) throw new Error('Informe a organização (slug).');
+        if (!email) throw new Error('Informe o e-mail.');
+
+        const res = await fetch(`${CONFIG.API_BASE}/password-reset/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantSlug, email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Não foi possível enviar o link agora.');
+
+        closeResetModal();
+        window.alert(
+          data.message ||
+            'Se existir uma conta com esse e-mail, você receberá um link para redefinir a senha em instantes.'
+        );
+      } catch (err) {
+        resetErrorEl.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ${err.message}`;
+        resetErrorEl.classList.add('show');
+        resetSubmitBtn.innerHTML = 'Enviar link';
+        resetSubmitBtn.disabled = false;
+      }
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -129,6 +232,7 @@
         sessionStorage.setItem('brspark_panel_mode', 'tenant');
         sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(data.tenant));
         sessionStorage.setItem('brspark_admin_role', data.user.role || '');
+        applyPanelSessionBootstrap(data);
 
         persistAdminSessionBundleFromSessionStorage();
 

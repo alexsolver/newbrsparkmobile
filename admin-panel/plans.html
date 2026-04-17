@@ -245,7 +245,7 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG } from './js/config.js';
+  import { CONFIG, getPanelCapabilities } from './js/config.js';
   import { applyPlansPageI18n, mpT } from './js/menu-pages-i18n.js';
   import {
     writePlanFeaturesToDom,
@@ -255,6 +255,12 @@
 
   await initPage();
   applyPlansPageI18n();
+  const panelCaps = new Set(getPanelCapabilities());
+  const canManagePlans =
+    panelCaps.has('platform.tenants.write') || panelCaps.has('platform.system.write');
+  document.getElementById('pln-link-subs').hidden = !canManagePlans;
+  document.getElementById('pln-link-billing').hidden = !canManagePlans;
+  document.getElementById('pln-btn-new').hidden = !canManagePlans;
 
   let allPlans = [];
 
@@ -293,8 +299,10 @@
         <td>${fmt(p.quotaFieldTasksMonthly)}</td>
         <td>${p.isActive === false ? `<span class="badge badge-gray">${mpT('pln_badge_no')}</span>` : `<span class="badge badge-green">${mpT('pln_badge_yes')}</span>`}</td>
         <td style="text-align:right;white-space:nowrap">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">${mpT('pln_btn_edit')}</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">${mpT('pln_btn_dup')}</button>
+          ${canManagePlans
+            ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">${mpT('pln_btn_edit')}</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">${mpT('pln_btn_dup')}</button>`
+            : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`,
       )
@@ -302,6 +310,7 @@
   }
 
   window.openEditPlan = (id) => {
+    if (!canManagePlans) return;
     const p = allPlans.find((x) => x.id === id);
     if (!p) return;
     document.getElementById('plan-id').value = p.id;
@@ -327,6 +336,7 @@
   };
 
   window.openNewPlanModal = () => {
+    if (!canManagePlans) return;
     document.getElementById('plan-id').value = '';
     document.getElementById('pln-modal-title').textContent = mpT('pln_modal_new');
     document.getElementById('plan-is-active').checked = true;
@@ -349,6 +359,7 @@
   };
 
   window.duplicatePlan = async (id) => {
+    if (!canManagePlans) return;
     const p = allPlans.find((x) => x.id === id);
     if (!p) return;
     if (!confirm(mpT('pln_confirm_dup', { name: p.name }))) return;
@@ -385,6 +396,7 @@
   };
 
   document.getElementById('save-plan-btn').addEventListener('click', async () => {
+    if (!canManagePlans) return;
     const id = document.getElementById('plan-id').value;
     let features = {};
     try {

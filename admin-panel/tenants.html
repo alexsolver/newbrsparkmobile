@@ -19,7 +19,7 @@
       <header class="page-hero fade-in">
         <h1 class="page-hero-title" id="ten-hero-title">Gestão de tenants</h1>
         <p class="page-hero-sub" id="ten-hero-sub">
-          Contas da plataforma, planos e status. Filtre por nome, plano ou situação; os cartões refletem o resultado atual da lista (até 200 registros).
+          Contas da plataforma, planos e status. Filtre por nome, plano ou situação; o resumo reflete o resultado atual da lista (até 200 registros).
         </p>
       </header>
 
@@ -60,6 +60,8 @@
           </div>
         </div>
 
+        <div id="tenants-context-bar" class="users-context-bar" aria-label="Resumo da listagem de tenants"></div>
+
         <div class="data-table-head">
           <h2 class="data-table-title" id="ten-table-title">Lista de tenants</h2>
           <span class="badge badge-accent" id="count-badge">—</span>
@@ -90,12 +92,12 @@
 </div>
 
 <div class="modal-overlay" id="tenant-branding-modal">
-  <div class="modal" style="max-width:760px">
+  <div class="modal tenant-branding-modal">
     <div class="modal-header">
       <span class="modal-title">Branding do app móvel</span>
       <button type="button" class="modal-close" onclick="closeModal('tenant-branding-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
-    <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
+    <div class="modal-body tenant-branding-modal__body">
       <input type="hidden" id="tenant-branding-id" />
       <div id="tenant-branding-plan-hint" style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.4;"></div>
       <div class="form-group">
@@ -104,73 +106,113 @@
           <span>Ativar identidade visual personalizada no app</span>
         </label>
       </div>
-      <div class="grid-2">
-        <div class="form-group">
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Nome exibido do app</label>
           <input class="form-control" id="tenant-branding-app-name" placeholder="Ex.: Acme Field" />
         </div>
-        <div class="form-group">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Slogan</label>
           <input class="form-control" id="tenant-branding-tagline" placeholder="Ex.: Precisão no campo" />
         </div>
       </div>
-      <div class="grid-2">
-        <div class="form-group">
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Logo claro (URL)</label>
           <input class="form-control" id="tenant-branding-logo-light" placeholder="https://..." />
-          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-            <input type="file" id="tenant-branding-logo-light-file" accept="image/*" />
+          <div class="tenant-branding-modal__upload-row">
+            <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-logo-light-file" accept="image/*" />
             <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-logo-light-upload">Upload</button>
           </div>
         </div>
-        <div class="form-group">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Logo escuro (URL)</label>
           <input class="form-control" id="tenant-branding-logo-dark" placeholder="https://..." />
-          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-            <input type="file" id="tenant-branding-logo-dark-file" accept="image/*" />
+          <div class="tenant-branding-modal__upload-row">
+            <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-logo-dark-file" accept="image/*" />
             <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-logo-dark-upload">Upload</button>
           </div>
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group tenant-branding-modal__field">
         <label class="form-label">Imagem de topo/login (URL)</label>
         <input class="form-control" id="tenant-branding-login-bg" placeholder="https://..." />
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-          <input type="file" id="tenant-branding-login-bg-file" accept="image/*" />
+        <div class="tenant-branding-modal__upload-row">
+          <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-login-bg-file" accept="image/*" />
           <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-login-bg-upload">Upload</button>
         </div>
       </div>
-      <div class="grid-2">
-        <div class="form-group">
+      <div class="form-group tenant-branding-modal__field" id="tenant-branding-live-activity-box" style="display:none;">
+        <label class="form-label">Ícone global da Live Activity (iOS)</label>
+        <select class="form-control" id="tenant-branding-live-activity-badge">
+          <option value="brspark-badge">Quadrado azul (padrão)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.45;">
+          Configuração global do app compartilhado BrSpark. Esse ícone vale para as Live Activities do iOS e usa assets embarcados no build.
+        </div>
+      </div>
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Cor primária</label>
-          <input class="form-control" id="tenant-branding-primary" placeholder="#0F766E" />
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-primary" placeholder="#0F766E" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-primary-picker" value="#0F766E" aria-label="Selecionar cor primária" />
+          </div>
         </div>
-        <div class="form-group">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Cor de destaque</label>
-          <input class="form-control" id="tenant-branding-accent" placeholder="#14B8A6" />
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-accent" placeholder="#14B8A6" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-accent-picker" value="#14B8A6" aria-label="Selecionar cor de destaque" />
+          </div>
         </div>
       </div>
-      <div class="grid-2">
-        <div class="form-group">
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Cor secundária</label>
-          <input class="form-control" id="tenant-branding-secondary" placeholder="#334155" />
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-secondary" placeholder="#334155" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-secondary-picker" value="#334155" aria-label="Selecionar cor secundária" />
+          </div>
         </div>
-        <div class="form-group">
+        <div class="form-group tenant-branding-modal__field">
           <label class="form-label">Cor de superfície</label>
-          <input class="form-control" id="tenant-branding-surface" placeholder="#F8FAFC" />
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-surface" placeholder="#F8FAFC" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-surface-picker" value="#F8FAFC" aria-label="Selecionar cor de superfície" />
+          </div>
         </div>
       </div>
-      <div style="margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:12px;background:rgba(0,0,0,.015);">
-        <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">Prévia rápida</div>
+      <div class="tenant-branding-modal__preview-shell">
+        <div class="tenant-branding-modal__preview-head">
+          <div style="font-size:12px;font-weight:800;color:var(--text);">Prévia do app</div>
+          <div style="font-size:10px;color:var(--text3);font-weight:700;">Login + header + CTA</div>
+        </div>
+        <div id="tenant-branding-validation" style="display:none;font-size:11px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;"></div>
         <div id="tenant-branding-preview" style="border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;">
-          <div id="tenant-branding-preview-top" style="padding:18px;background:#F8FAFC;">
-            <div style="font-size:18px;font-weight:900;color:#0F172A;" id="tenant-branding-preview-name">BrSpark</div>
-            <div style="font-size:12px;color:#64748B;margin-top:4px;" id="tenant-branding-preview-tagline">Precisou, resolveu.</div>
+          <div id="tenant-branding-preview-login" style="padding:18px;background:#F8FAFC;min-height:120px;display:flex;flex-direction:column;justify-content:flex-end;">
+            <div id="tenant-branding-preview-logo-pill" style="display:inline-flex;align-items:center;gap:8px;width:max-content;max-width:100%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.82);border:1px solid rgba(15,23,42,.08);">
+              <div id="tenant-branding-preview-logo-dot" style="width:12px;height:12px;border-radius:999px;background:#EA580C;flex-shrink:0;"></div>
+              <div style="min-width:0;">
+                <div style="font-size:16px;font-weight:900;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="tenant-branding-preview-name">BrSpark</div>
+                <div style="font-size:11px;color:#64748B;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="tenant-branding-preview-tagline">Precisou, resolveu.</div>
+              </div>
+            </div>
           </div>
           <div style="padding:16px;">
+            <div id="tenant-branding-preview-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <div style="font-size:10px;font-weight:900;color:#EA580C;text-transform:uppercase;letter-spacing:.5px;" id="tenant-branding-preview-eyebrow">BrSpark</div>
+                <div style="font-size:14px;font-weight:900;color:#0F172A;margin-top:2px;">Dashboard</div>
+              </div>
+              <div style="width:32px;height:32px;border-radius:999px;background:#F1F5F9;border:1px solid #E2E8F0;"></div>
+            </div>
             <div id="tenant-branding-preview-card" style="padding:14px;border-radius:14px;background:#FFF7ED;border:1px solid #FDBA74;">
               <div style="font-size:13px;font-weight:800;color:#EA580C;">Botão / destaque</div>
               <div style="font-size:11px;color:#475569;margin-top:6px;">As cores abaixo simulam login, header e CTAs do app.</div>
+              <button type="button" id="tenant-branding-preview-button" style="margin-top:12px;border:none;border-radius:12px;padding:10px 12px;background:#EA580C;color:#fff;font-size:12px;font-weight:900;cursor:default;">
+                Ação principal
+              </button>
             </div>
           </div>
         </div>
@@ -221,11 +263,18 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG }   from './js/config.js';
+  import { CONFIG, getPanelCapabilities }   from './js/config.js';
   import { applyTenantsPageI18n, tenantsStatusLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
 
   await initPage();
   applyTenantsPageI18n();
+  const panelCaps = new Set(getPanelCapabilities());
+  const canCreateTenant = panelCaps.has('platform.tenants.write');
+  const canChangeTenantStatus = panelCaps.has('platform.tenants.write');
+  const canEditTenantBranding =
+    panelCaps.has('tenant.branding.write.self') || panelCaps.has('tenant.branding.write.any');
+  const newTenantBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
+  if (newTenantBtn) newTenantBtn.hidden = !canCreateTenant;
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
   const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
@@ -281,6 +330,46 @@
     }
   }
 
+  function paintTenantsContextBar(tenants, total) {
+    const bar = document.getElementById('tenants-context-bar');
+    if (!bar) return;
+    const q = document.getElementById('search-input').value.trim();
+    const plan = document.getElementById('filter-plan').value;
+    const status = document.getElementById('filter-status').value;
+    const activeFilters = [];
+    if (q) activeFilters.push(`Busca: ${q}`);
+    if (plan) activeFilters.push(`Plano: ${plan}`);
+    if (status) activeFilters.push(`Status: ${tenantsStatusLabel(status) || status}`);
+
+    const active = tenants.filter((t) => t.status === 'ACTIVE').length;
+    const trial = tenants.filter((t) => t.status === 'TRIAL').length;
+    const suspended = tenants.filter((t) => t.status === 'SUSPENDED').length;
+    const enterprise = tenants.filter((t) => String(t.subscription?.plan?.name || '') === 'Enterprise').length;
+
+    bar.innerHTML = `
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Escopo atual</div>
+        <div class="users-context-card__title">${activeFilters.length ? 'Visão filtrada da base' : 'Visão geral dos tenants'}</div>
+        <div class="users-context-card__meta">${activeFilters.length ? activeFilters.join(' · ') : 'Sem filtros específicos. A listagem mostra até 200 tenants conforme os parâmetros padrão da página.'}</div>
+      </div>
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Leitura rápida</div>
+        <div class="users-context-card__chips">
+          <span class="users-context-chip">${tenants.length} na página</span>
+          <span class="users-context-chip">${total} no total</span>
+          <span class="users-context-chip">${active} ativos</span>
+          <span class="users-context-chip">${trial} trial</span>
+          <span class="users-context-chip">${suspended} suspensos</span>
+          <span class="users-context-chip">${enterprise} enterprise</span>
+        </div>
+      </div>
+      <div class="users-context-card">
+        <div class="users-context-card__eyebrow">Foco operacional</div>
+        <div class="users-context-card__title">Planos, status e capacidade</div>
+        <div class="users-context-card__meta">Use esta visão para identificar tenants com maior valor, risco operacional ou necessidade de ativação/suspensão.</div>
+      </div>`;
+  }
+
   applyTenantsUrlFilters();
 
   async function loadTenants() {
@@ -316,6 +405,7 @@
 
     document.getElementById('count-badge').textContent =
       total === 1 ? mpT('ten_count_one') : mpT('ten_count_many', { n: total });
+    paintTenantsContextBar(tenants, total);
 
     const tbody = document.getElementById('tenants-tbody');
     if (!tenants.length) {
@@ -336,25 +426,43 @@
       const users   = t._count?.users ?? 0;
       const assets  = t._count?.assets ?? 0;
       const localeHtml = t.locale
-        ? `${flags[t.locale.countryCode] || '🌐'} ${escHtml(t.locale.name)}`
-        : `<span style="color:var(--text3)">${mpT('ten_undefined_region')}</span>`;
+        ? `<div class="list-cell-stack">
+            <span class="list-cell-title">${flags[t.locale.countryCode] || '🌐'} ${escHtml(t.locale.name)}</span>
+            <span class="list-cell-sub">${escHtml(t.locale.countryCode || '')}</span>
+          </div>`
+        : `<div class="list-cell-stack">
+            <span class="list-cell-title">${mpT('ten_undefined_region')}</span>
+          </div>`;
       const created = new Date(t.createdAt).toLocaleDateString(mpIntlLocale());
       const isActive = t.status === 'ACTIVE' || t.status === 'TRIAL';
       const idAttr = escHtml(t.id);
+      const actions = [];
+      if (canEditTenantBranding) {
+        actions.push(`<button type="button" class="btn btn-ghost btn-sm" data-branding-id="${idAttr}" onclick="openBrandingModal('${idAttr}')">Branding</button>`);
+      }
+      if (canChangeTenantStatus) {
+        actions.push(
+          isActive
+            ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">${mpT('ten_row_suspend')}</button>`
+            : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">${mpT('ten_row_activate')}</button>`
+        );
+      }
       return `<tr>
         <td class="mono" style="font-size:10px;color:var(--text3)">${escHtml(t.slug)}</td>
         <td>${localeHtml}</td>
-        <td class="bold">${escHtml(t.name)}</td>
+        <td>
+          <div class="list-cell-stack">
+            <span class="list-cell-title">${escHtml(t.name)}</span>
+            <span class="list-cell-sub">${escHtml(t.slug)}</span>
+          </div>
+        </td>
         <td><span class="badge ${planMap[planName] || 'badge-gray'}">${escHtml(planName)}</span></td>
-        <td>${users}</td>
-        <td>${assets.toLocaleString(mpIntlLocale())}</td>
+        <td class="table-num">${users}</td>
+        <td class="table-num">${assets.toLocaleString(mpIntlLocale())}</td>
         <td><span class="badge ${statusMap[t.status] || 'badge-gray'}">${escHtml(tenantsStatusLabel(t.status) || t.status)}</span></td>
-        <td style="color:var(--text3);font-size:11px">${created}</td>
-        <td class="text-right">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openBrandingModal('${idAttr}')">Branding</button>
-          ${isActive
-            ? `<button type="button" class="btn btn-danger btn-sm" onclick="toggleStatus('${idAttr}','SUSPENDED')">${mpT('ten_row_suspend')}</button>`
-            : `<button type="button" class="btn btn-success btn-sm" onclick="toggleStatus('${idAttr}','ACTIVE')">${mpT('ten_row_activate')}</button>`}
+        <td class="table-subtle" style="white-space:nowrap">${created}</td>
+        <td class="text-right table-actions">
+          ${actions.join(' ') || `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`;
     }).join('');
@@ -362,6 +470,7 @@
   }
 
   window.toggleStatus = async (id, status) => {
+    if (!canChangeTenantStatus) return;
     await CONFIG.patch(`/tenants/${id}/status`, { status });
     loadTenants();
   };
@@ -374,14 +483,103 @@
     const surface = document.getElementById('tenant-branding-surface').value.trim() || '#FFF7ED';
     document.getElementById('tenant-branding-preview-name').textContent = name;
     document.getElementById('tenant-branding-preview-tagline').textContent = tagline;
-    document.getElementById('tenant-branding-preview-top').style.background = surface;
+    document.getElementById('tenant-branding-preview-eyebrow').textContent = name;
+    document.getElementById('tenant-branding-preview-login').style.background = surface;
     document.getElementById('tenant-branding-preview-card').style.background = `${accent}14`;
     document.getElementById('tenant-branding-preview-card').style.borderColor = `${accent}66`;
     document.getElementById('tenant-branding-preview-card').style.color = primary;
+    document.getElementById('tenant-branding-preview-button').style.background = primary;
+    document.getElementById('tenant-branding-preview-logo-dot').style.background = accent;
+  }
+
+  function isHexColor(value) {
+    return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(value || '').trim());
+  }
+
+  function normalizeHexForColorPicker(value, fallback = '#F97316') {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase();
+    if (/^#[0-9a-fA-F]{8}$/.test(raw)) return raw.slice(0, 7).toUpperCase();
+    return fallback;
+  }
+
+  function syncBrandingColorPicker(textInputId, pickerId, fallback) {
+    const textInput = document.getElementById(textInputId);
+    const picker = document.getElementById(pickerId);
+    if (!textInput || !picker) return;
+    picker.value = normalizeHexForColorPicker(textInput.value, fallback);
+  }
+
+  function syncAllBrandingColorPickers() {
+    syncBrandingColorPicker('tenant-branding-primary', 'tenant-branding-primary-picker', '#0F766E');
+    syncBrandingColorPicker('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
+    syncBrandingColorPicker('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
+    syncBrandingColorPicker('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+  }
+
+  function validateBrandingForm() {
+    const enabled = document.getElementById('tenant-branding-enabled').checked;
+    const logoLight = document.getElementById('tenant-branding-logo-light').value.trim();
+    const logoDark = document.getElementById('tenant-branding-logo-dark').value.trim();
+    const primary = document.getElementById('tenant-branding-primary').value.trim();
+    const accent = document.getElementById('tenant-branding-accent').value.trim();
+    const issues = [];
+    if (!enabled) return issues;
+    if (!logoLight && !logoDark) issues.push('Informe ao menos um logo para branding ativo.');
+    if (primary && !isHexColor(primary)) issues.push('Cor primária inválida. Use formato #RRGGBB.');
+    if (accent && !isHexColor(accent)) issues.push('Cor de destaque inválida. Use formato #RRGGBB.');
+    return issues;
+  }
+
+  function renderBrandingValidation() {
+    const box = document.getElementById('tenant-branding-validation');
+    const issues = validateBrandingForm();
+    if (!issues.length) {
+      box.style.display = 'none';
+      box.textContent = '';
+      return true;
+    }
+    box.style.display = 'block';
+    box.textContent = issues.join(' ');
+    return false;
+  }
+
+  function bindBrandingColorPair(textInputId, pickerId, fallback) {
+    const textInput = document.getElementById(textInputId);
+    const picker = document.getElementById(pickerId);
+    if (!textInput || !picker) return;
+
+    textInput.addEventListener('input', () => {
+      picker.value = normalizeHexForColorPicker(textInput.value, fallback);
+    });
+
+    picker.addEventListener('input', () => {
+      textInput.value = String(picker.value || fallback).toUpperCase();
+      setBrandingPreview();
+      renderBrandingValidation();
+    });
   }
 
   ['tenant-branding-app-name','tenant-branding-tagline','tenant-branding-primary','tenant-branding-accent','tenant-branding-surface']
     .forEach((id) => document.getElementById(id).addEventListener('input', setBrandingPreview));
+  [
+    'tenant-branding-app-name',
+    'tenant-branding-tagline',
+    'tenant-branding-logo-light',
+    'tenant-branding-logo-dark',
+    'tenant-branding-login-bg',
+    'tenant-branding-primary',
+    'tenant-branding-accent',
+    'tenant-branding-secondary',
+    'tenant-branding-surface',
+  ].forEach((id) => document.getElementById(id).addEventListener('input', renderBrandingValidation));
+  document.getElementById('tenant-branding-enabled').addEventListener('change', renderBrandingValidation);
+  bindBrandingColorPair('tenant-branding-primary', 'tenant-branding-primary-picker', '#0F766E');
+  bindBrandingColorPair('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
+  bindBrandingColorPair('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
+  bindBrandingColorPair('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+  syncAllBrandingColorPickers();
 
   async function fileToBase64(file) {
     return new Promise((resolve, reject) => {
@@ -425,36 +623,58 @@
   document.getElementById('tenant-branding-login-bg-upload').onclick = () => uploadBrandingAsset('login-bg');
 
   window.openBrandingModal = async (tenantId) => {
-    const row = cachedTenants.find((t) => t.id === tenantId);
-    const data = await CONFIG.get(`/tenants/${tenantId}/branding`);
-    if (!data || data.error) {
-      alert(data?.error || 'Não foi possível carregar o branding do tenant.');
-      return;
+    try {
+      const row = cachedTenants.find((t) => t.id === tenantId);
+      const data = await CONFIG.get(`/tenants/${tenantId}/branding`);
+      if (!data || data.error) {
+        alert(data?.error || 'Não foi possível carregar o branding do tenant.');
+        return;
+      }
+      const perms = data.permissions || {};
+      const branding = data.branding || {};
+      const isGlobalAppTenant = !!data?.tenant?.isGlobalAppTenant;
+      const liveActivityBox = document.getElementById('tenant-branding-live-activity-box');
+      liveActivityBox.style.display = isGlobalAppTenant ? 'block' : 'none';
+      document.getElementById('tenant-branding-id').value = tenantId;
+      document.getElementById('tenant-branding-plan-hint').innerHTML =
+        `Tenant: <strong>${escHtml(row?.name || data?.tenant?.name || tenantId)}</strong><br>` +
+        `Plano: <strong>${escHtml(data?.tenant?.planName || 'Sem plano')}</strong><br>` +
+        `${perms.enabled ? 'Este plano permite branding runtime no app.' : 'Este plano não permite branding. Ajuste o plano antes de publicar.'}` +
+        (isGlobalAppTenant ? '<br><strong>Tenant global do app:</strong> aqui você também define o ícone global da Live Activity.' : '');
+      document.getElementById('tenant-branding-enabled').checked = !!branding.enabled;
+      document.getElementById('tenant-branding-app-name').value = branding.appDisplayName || '';
+      document.getElementById('tenant-branding-tagline').value = branding.tagline || '';
+      document.getElementById('tenant-branding-logo-light').value = branding.logoLightUrl || '';
+      document.getElementById('tenant-branding-logo-dark').value = branding.logoDarkUrl || '';
+      document.getElementById('tenant-branding-login-bg').value = branding.loginBackgroundUrl || '';
+      document.getElementById('tenant-branding-live-activity-badge').value = branding.liveActivityBadgeKey || 'brspark-badge';
+      document.getElementById('tenant-branding-primary').value = branding.primaryColor || '';
+      document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
+      document.getElementById('tenant-branding-secondary').value = branding.secondaryColor || '';
+      document.getElementById('tenant-branding-surface').value = branding.surfaceColor || '';
+      syncAllBrandingColorPickers();
+      setBrandingPreview();
+      renderBrandingValidation();
+      openModal('tenant-branding-modal');
+    } catch (err) {
+      console.error('[tenant-branding-modal]', err);
+      alert(err?.message || 'Falha inesperada ao abrir o branding do tenant.');
     }
-    const perms = data.permissions || {};
-    const branding = data.branding || {};
-    document.getElementById('tenant-branding-id').value = tenantId;
-    document.getElementById('tenant-branding-plan-hint').innerHTML =
-      `Tenant: <strong>${escHtml(row?.name || data?.tenant?.name || tenantId)}</strong><br>` +
-      `Plano: <strong>${escHtml(data?.tenant?.planName || 'Sem plano')}</strong><br>` +
-      `${perms.enabled ? 'Este plano permite branding runtime no app.' : 'Este plano não permite branding. Ajuste o plano antes de publicar.'}`;
-    document.getElementById('tenant-branding-enabled').checked = !!branding.enabled;
-    document.getElementById('tenant-branding-app-name').value = branding.appDisplayName || '';
-    document.getElementById('tenant-branding-tagline').value = branding.tagline || '';
-    document.getElementById('tenant-branding-logo-light').value = branding.logoLightUrl || '';
-    document.getElementById('tenant-branding-logo-dark').value = branding.logoDarkUrl || '';
-    document.getElementById('tenant-branding-login-bg').value = branding.loginBackgroundUrl || '';
-    document.getElementById('tenant-branding-primary').value = branding.primaryColor || '';
-    document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
-    document.getElementById('tenant-branding-secondary').value = branding.secondaryColor || '';
-    document.getElementById('tenant-branding-surface').value = branding.surfaceColor || '';
-    setBrandingPreview();
-    openModal('tenant-branding-modal');
   };
 
+  document.getElementById('tenants-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-branding-id]');
+    if (!btn) return;
+    const tenantId = btn.getAttribute('data-branding-id');
+    if (!tenantId) return;
+    void window.openBrandingModal(tenantId);
+  });
+
   document.getElementById('save-tenant-branding-btn').onclick = async () => {
+    if (!canEditTenantBranding) return;
     const id = document.getElementById('tenant-branding-id').value;
     if (!id) return;
+    if (!renderBrandingValidation()) return;
     const body = {
       branding: {
         enabled: document.getElementById('tenant-branding-enabled').checked,
@@ -463,6 +683,7 @@
         logoLightUrl: document.getElementById('tenant-branding-logo-light').value.trim(),
         logoDarkUrl: document.getElementById('tenant-branding-logo-dark').value.trim(),
         loginBackgroundUrl: document.getElementById('tenant-branding-login-bg').value.trim(),
+        liveActivityBadgeKey: document.getElementById('tenant-branding-live-activity-badge').value,
         primaryColor: document.getElementById('tenant-branding-primary').value.trim(),
         accentColor: document.getElementById('tenant-branding-accent').value.trim(),
         secondaryColor: document.getElementById('tenant-branding-secondary').value.trim(),
@@ -479,6 +700,7 @@
   };
 
   document.getElementById('save-tenant-btn').onclick = async () => {
+    if (!canCreateTenant) return;
     const body = {
       name:        document.getElementById('new-name').value.trim(),
       email:       document.getElementById('new-email').value.trim(),

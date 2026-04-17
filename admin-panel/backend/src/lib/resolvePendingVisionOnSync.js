@@ -8,11 +8,7 @@ const {
 } = require('./visionChecklistAnalyze');
 const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('./visionStudioAnalyze');
 const { consumeQuota } = require('./planQuotaService');
-const {
-  MAX_VISION_SIMNAO_QUESTIONS,
-  MAX_VISION_STRUCTURED_PROMPT_CHARS,
-  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
-} = require('../constants/visionSimNaoQuestions');
+const { MAX_VISION_STRUCTURED_PROMPT_CHARS } = require('../constants/visionSimNaoQuestions');
 
 function sectionRepeatStorageKey(sectionId) {
   return `__section_repeat_${sectionId}`;
@@ -146,13 +142,19 @@ function getVisionQuestionsFromField(field) {
     ];
   }
 
-  if (items.length >= 2) {
-    return items.slice(0, MAX_VISION_SIMNAO_QUESTIONS).map((it, idx) => ({
-      id: sanitizeVisionQuestionId(it.id, idx),
-      text: it.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
-    }));
-  }
-  if (items.length === 1) {
+  /** Detecção (YOLO): sempre um único critério `q1` (modelos antigos com várias linhas são fundidos). */
+  if (ft === 'vision_checklist') {
+    if (structured) {
+      return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
+    }
+    if (!items.length) return [];
+    if (items.length >= 2) {
+      const joined = items
+        .map((it) => it.text)
+        .join('\n\n')
+        .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      return joined ? [{ id: 'q1', text: joined }] : [];
+    }
     return [
       {
         id: sanitizeVisionQuestionId(items[0].id, 0),
@@ -160,6 +162,7 @@ function getVisionQuestionsFromField(field) {
       },
     ];
   }
+
   if (structured) {
     return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
   }

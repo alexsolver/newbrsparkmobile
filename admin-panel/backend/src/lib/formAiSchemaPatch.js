@@ -3,7 +3,6 @@
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
-  MAX_VISION_MULTI_SIMNAO_TEXT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
 const { normalizeSchemaItem } = require('./formAiNormalize');
 
@@ -74,9 +73,7 @@ function applySchemaPatch(schemaData, patch) {
     if (p.multiple === true || p.multiple === false) cur.multiple = p.multiple;
     if (p.sectionFillMode != null) cur.sectionFillMode = String(p.sectionFillMode).trim();
     if (p.geofenceRadius != null) cur.geofenceRadius = String(p.geofenceRadius).trim();
-    if (p.dependsOnId != null) cur.dependsOnId = String(p.dependsOnId).trim();
-    if (p.dependsOnOperator != null) cur.dependsOnOperator = String(p.dependsOnOperator).trim();
-    if (p.dependsOnValue != null) cur.dependsOnValue = String(p.dependsOnValue);
+    /* dependsOn* não é aplicado via copiloto — visibilidade só por regras SHOW/HIDE (logicSuggestions). */
     if (p.requireOnlineValidation === true || p.requireOnlineValidation === false) {
       cur.requireOnlineValidation = p.requireOnlineValidation;
     }
@@ -131,17 +128,20 @@ function applySchemaPatch(schemaData, patch) {
             cur.visionQuestions = [{ id: 'q1', text: merged }];
             cur.visionStructuredPrompt = merged;
           }
-        } else if (rawItems.length >= 2) {
-          cur.visionQuestions = rawItems.map((q, i) => ({
-            id: q.id || `q${i + 1}`,
-            text: q.text.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
-          }));
-          cur.visionStructuredPrompt = '';
         } else {
-          const text = rawItems[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-          cur.visionQuestions = [{ id: rawItems[0].id || 'q1', text }];
-          if (p.visionStructuredPrompt == null && text) {
-            cur.visionStructuredPrompt = text;
+          if (rawItems.length === 1) {
+            const text = rawItems[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+            cur.visionQuestions = [{ id: rawItems[0].id || 'q1', text }];
+            if (p.visionStructuredPrompt == null && text) {
+              cur.visionStructuredPrompt = text;
+            }
+          } else {
+            const merged = rawItems
+              .map((q) => q.text)
+              .join('\n\n')
+              .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+            cur.visionQuestions = [{ id: 'q1', text: merged }];
+            cur.visionStructuredPrompt = merged;
           }
         }
       }
@@ -179,10 +179,14 @@ function applySchemaPatch(schemaData, patch) {
     if (cur.type === 'lookup_select') {
       if (p.lookupSource != null) {
         const s = String(p.lookupSource).trim();
-        if (s === 'preset' || s === 'inline_json') cur.lookupSource = s;
+        if (s === 'preset' || s === 'inline_json' || s === 'api') cur.lookupSource = s;
       }
       if (p.lookupPreset != null) cur.lookupPreset = String(p.lookupPreset).trim().slice(0, 80);
       if (p.lookupInlineJson != null) cur.lookupInlineJson = String(p.lookupInlineJson).slice(0, 120000);
+      if (p.lookupApiPath != null) {
+        const rawPath = String(p.lookupApiPath).trim().slice(0, 240);
+        cur.lookupApiPath = rawPath ? (rawPath.startsWith('/') ? rawPath : `/${rawPath}`) : '';
+      }
     }
     if (cur.type === 'repeatable_matrix') {
       if (p.matrixColumns != null && Array.isArray(p.matrixColumns)) {

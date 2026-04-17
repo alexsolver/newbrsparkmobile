@@ -178,6 +178,15 @@ export interface User {
   avatarUrl?: string;
   /** file:// após cache local (offline) */
   avatarLocalUri?: string;
+  addressJson?: {
+    line1?: string | null;
+    line2?: string | null;
+    district?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    countryCode?: string | null;
+  } | null;
   tenant?: {
     id: string;
     name: string;
@@ -203,9 +212,28 @@ export interface User {
     score: number;
     cft?: string;
     specialty?: string;
+    serviceCoverageGeoJson?: {
+      homeBase?: {
+        latitude: number;
+        longitude: number;
+        address?: string | null;
+        city?: string | null;
+        state?: string | null;
+        postalCode?: string | null;
+        countryCode?: string | null;
+      } | null;
+      radiusKm?: number | null;
+      notes?: string | null;
+      updatedAt?: string | null;
+    } | null;
   };
   /** Documentos pessoais (painel) — ex.: identificador para exibição em ponto. */
   personalDocuments?: Array<{ identifier?: string; docType?: string; label?: string }>;
+  appContext?: {
+    scope: string;
+    contextTenantId?: string | null;
+    capabilities?: string[];
+  };
 }
 
 /** Prestador habilitado a receber OS (backend exige `TechnicianProfile.status === ACTIVE`). */
@@ -222,6 +250,16 @@ export function isFieldTaskEligibleRole(role: string | null | undefined): boolea
 /** Modo «campo / prestador» no app: perfil técnico ativo ou conta interna não-cliente. */
 export function canUseFieldWorkAppRole(user: User | null | undefined): boolean {
   return isTechnicianProfileActive(user) || isFieldTaskEligibleRole(user?.role);
+}
+
+export function userHasCapability(user: User | null | undefined, capability: string): boolean {
+  const caps = Array.isArray(user?.appContext?.capabilities) ? user.appContext.capabilities : [];
+  return caps.includes(String(capability || '').trim());
+}
+
+/** Verdade efetiva do backend para entrar no modo prestador dentro do app. */
+export function canUseProviderMode(user: User | null | undefined): boolean {
+  return userHasCapability(user, 'mobile.mode.provider');
 }
 
 /** Erro especial lançado quando o backend exige 2FA */
@@ -555,6 +593,12 @@ export class AuthService {
     email?: string;
     avatarUrl?: string | null;
     preferredChatLocale?: string | null;
+    addressJson?: User['addressJson'];
+    technicianCoverageGeoJson?: User['technicianProfile'] extends infer T
+      ? T extends { serviceCoverageGeoJson?: infer C }
+        ? C
+        : never
+      : never;
   }): Promise<User | null> {
     const u = await AuthService.getUser();
     if (!u) return null;
@@ -565,6 +609,10 @@ export class AuthService {
     if (partial.preferredChatLocale !== undefined) {
       body.preferredChatLocale =
         partial.preferredChatLocale === '' ? null : partial.preferredChatLocale;
+    }
+    if (partial.addressJson !== undefined) body.addressJson = partial.addressJson;
+    if (partial.technicianCoverageGeoJson !== undefined) {
+      body.technicianCoverageGeoJson = partial.technicianCoverageGeoJson;
     }
     if (Object.keys(body).length === 0) return u;
     const res = await apiFetch('/api/me', {
@@ -697,6 +745,30 @@ export class AuthService {
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Erro ao alterar senha.');
+    }
+
+    return { success: true, message: data.message };
+  }
+
+  /** Solicita link público de redefinição por e-mail. */
+  static async requestPasswordReset(
+    email: string,
+    tenantSlug?: string | null,
+  ): Promise<{ success: boolean; message?: string }> {
+    const res = await fetch(`${API_BASE}/api/password-reset/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: String(email || '').trim().toLowerCase(),
+        ...(tenantSlug && String(tenantSlug).trim()
+          ? { tenantSlug: String(tenantSlug).trim().toLowerCase() }
+          : {}),
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Não foi possível iniciar a recuperação de senha.');
     }
 
     return { success: true, message: data.message };

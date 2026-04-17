@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('../db');
+const { resolveScopedTenantId } = require('./authorization');
 
 const WORK_TIME_FLAG_KEY = 'work_time';
 
@@ -79,14 +80,7 @@ async function ensureWorkTimeSettings(tenantId) {
  * @returns {string|null}
  */
 function resolveAdminTargetTenantId(req, queryTenantId) {
-  const a = req.admin;
-  if (!a) return null;
-  const q = String(queryTenantId || '').trim();
-  if (a.panelUser) {
-    if (a.role === 'SAAS_ADMIN') return q || null;
-    return a.tenantId || null;
-  }
-  return q || null;
+  return resolveScopedTenantId(req.authorization, String(queryTenantId || '').trim() || null);
 }
 
 /**

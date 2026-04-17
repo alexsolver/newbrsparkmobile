@@ -306,8 +306,11 @@ router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
     if (e.code === 'NO_OPENAI_KEY') {
       return res.status(503).json({ error: e.message, code: 'NO_OPENAI_KEY' });
     }
+    if (e.code === 'OPENAI_BAD_RESPONSE' || e.code === 'OPENAI_JSON_INVALID') {
+      return res.status(502).json({ error: e.message, code: e.code });
+    }
     console.error('[checklists/ai] session/chat:', e);
-    res.status(502).json({ error: e.message || 'Falha no copiloto IA.' });
+    res.status(502).json({ error: e.message || 'Falha no copiloto IA.', code: e.code || 'COPILOT_CHAT_FAILED' });
   }
 });
 

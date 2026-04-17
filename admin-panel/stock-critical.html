@@ -108,15 +108,15 @@
   </div>
 </div>
 <script type="module">
-  import { initPage, getStoredPanelRole } from './js/sidebar.js';
-  import { CONFIG } from './js/config.js';
+  import { initPage } from './js/sidebar.js';
+  import { CONFIG, getPanelCapabilities } from './js/config.js';
   import { applyStockCriticalPageI18n, scT, scFmtNum } from './js/stock-critical-i18n.js';
 
   await initPage();
   applyStockCriticalPageI18n();
 
-  const role = getStoredPanelRole();
-  const isTenantScoped = role === 'TENANT_ADMIN';
+  const panelCaps = new Set(getPanelCapabilities());
+  const isTenantScoped = !panelCaps.has('tenant.access.any');
 
   let page = 1;
   let totalPages = 1;

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { userHasCapability, type User } from '../services/auth';
 
 export type AppMode = 'SERVICES' | 'ASSETS' | 'PROVIDER';
 
@@ -32,18 +33,47 @@ const AppContext = createContext<AppCtx>({
 
 import { useAuth } from '../hooks/useAuth';
 
+function shouldForceProviderMode(userRole: 'CLIENT' | 'TECHNICIAN', user: User | null | undefined): boolean {
+  return userRole === 'TECHNICIAN' && userHasCapability(user, 'mobile.mode.provider');
+}
+
+function resolveDefaultMode(userRole: 'CLIENT' | 'TECHNICIAN', user: User | null | undefined): AppMode {
+  if (shouldForceProviderMode(userRole, user)) {
+    return 'PROVIDER';
+  }
+  return 'SERVICES';
+}
+
+function normalizeMode(
+  nextMode: AppMode,
+  userRole: 'CLIENT' | 'TECHNICIAN',
+  user: User | null | undefined
+): AppMode {
+  if (shouldForceProviderMode(userRole, user)) {
+    return 'PROVIDER';
+  }
+  return nextMode === 'PROVIDER' ? 'SERVICES' : nextMode;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const { userRole } = useAuth();
-  const [mode, setMode] = useState<AppMode>('SERVICES');
+  const { userRole, user } = useAuth();
+  const [modeState, setModeState] = useState<AppMode>(() => resolveDefaultMode(userRole, user));
   const guardRef = useRef<GuardRef>({ isDirty: false, onSave: null, labels: DEFAULT_LABELS });
+  const mode = normalizeMode(modeState, userRole, user);
+  const setMode = React.useCallback(
+    (nextMode: AppMode) => {
+      setModeState(normalizeMode(nextMode, userRole, user));
+    },
+    [userRole, user]
+  );
 
   React.useEffect(() => {
-    if (userRole === 'TECHNICIAN') {
-      setMode('PROVIDER');
-    } else {
-      setMode('SERVICES');
-    }
-  }, [userRole]);
+    const next = resolveDefaultMode(userRole, user);
+    setModeState((prev) => {
+      const normalizedPrev = normalizeMode(prev, userRole, user);
+      return normalizedPrev === next ? prev : next;
+    });
+  }, [userRole, user]);
 
   return (
     <AppContext.Provider value={{ mode, setMode, guardRef }}>

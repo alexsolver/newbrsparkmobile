@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import DatePickerButton from '../src/components/DatePickerButton';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useAuth } from '../src/hooks/useAuth';
+import { userHasCapability } from '../src/services/auth';
 import {
   loadProviderOsSearchRows,
   type ProviderOsSearchRow,
@@ -107,11 +107,12 @@ function resolveChecklistRouteParams(item: ProviderOsSearchRow): { formId: strin
   return { formId: formId || null, taskId: item.id };
 }
 
-export default function ProviderOsSearchScreen() {
+export function ProviderOsSearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user, userRole } = useAuth();
+  const canOpenProviderOsSearch = userHasCapability(user, 'mobile.provider.osSearch');
 
   const [rows, setRows] = useState<ProviderOsSearchRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,12 +158,12 @@ export default function ProviderOsSearchScreen() {
   }, [email]);
 
   React.useEffect(() => {
-    if (userRole !== 'TECHNICIAN') {
+    if (userRole !== 'TECHNICIAN' || !canOpenProviderOsSearch) {
       router.replace('/(tabs)' as any);
       return;
     }
     reload();
-  }, [userRole, reload, router]);
+  }, [userRole, canOpenProviderOsSearch, reload, router]);
 
   const haystackPrepared = useMemo(() => {
     return rows.map((r) => ({
@@ -213,23 +214,6 @@ export default function ProviderOsSearchScreen() {
 
   const ListHeader = (
     <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-      <LinearGradient
-        colors={[`${C.accent}18`, `${C.accent}05`, C.background]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          borderRadius: 20,
-          padding: 18,
-          marginBottom: 16,
-          borderWidth: 1,
-          borderColor: C.divider,
-        }}
-      >
-        <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20, fontWeight: '600' }}>
-          {t('providerOsSearch.hero')}
-        </Text>
-      </LinearGradient>
-
       <View
         style={{
           flexDirection: 'row',
@@ -423,12 +407,12 @@ export default function ProviderOsSearchScreen() {
     );
   };
 
-  if (userRole !== 'TECHNICIAN') {
+  if (userRole !== 'TECHNICIAN' || !canOpenProviderOsSearch) {
     return null;
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.background }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.background }} edges={['left', 'right']}>
       <View
         style={{
           flexDirection: 'row',
@@ -464,7 +448,7 @@ export default function ProviderOsSearchScreen() {
           renderItem={renderItem}
           ListHeaderComponent={ListHeader}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
           ListEmptyComponent={
             <View style={{ paddingHorizontal: 32, paddingTop: 24, alignItems: 'center' }}>
               <View
@@ -492,4 +476,8 @@ export default function ProviderOsSearchScreen() {
       )}
     </SafeAreaView>
   );
+}
+
+export default function ProviderOsSearchRedirect() {
+  return <Redirect href="/provider-os-search-tab" />;
 }

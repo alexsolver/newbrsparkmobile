@@ -132,6 +132,136 @@ function adminJsonHeaders() {
   return h;
 }
 
+function checklistVersionBadgeHtml(form) {
+  const version = Number(form && form.version ? form.version : 1);
+  const archived = !!(form && form.isActive === false);
+  return (
+    '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:' +
+    (archived ? '#9a3412' : '#475569') +
+    ';background:' +
+    (archived ? '#ffedd5' : '#f8fafc') +
+    ';border:1px solid ' +
+    (archived ? '#fdba74' : '#e2e8f0') +
+    ';border-radius:999px;padding:4px 8px;">' +
+    (archived ? 'Arquivado' : 'v' + String(version)) +
+    '</span>'
+  );
+}
+
+function updateCurrentTemplateVersionBadge() {
+  const host = document.getElementById('fb-current-template-version');
+  if (!host) return;
+  if (!currentFormId) {
+    host.style.display = 'none';
+    host.innerHTML = '';
+    return;
+  }
+  host.style.display = 'inline-flex';
+  host.innerHTML = checklistVersionBadgeHtml({ version: currentFormVersion, isActive: currentFormIsActive });
+}
+
+async function fetchChecklistVersionHistory(id) {
+  const res = await fetch(`${brsparkApiBase()}/checklists/templates/${encodeURIComponent(id)}/history`, {
+    headers: adminJsonHeaders(),
+  });
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (_) {}
+  if (!res.ok) throw new Error((data && data.error) || raw || 'Falha ao carregar histórico.');
+  return data;
+}
+
+window.closeChecklistVersionHistory = function() {
+  const modal = document.getElementById('template-history-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.restoreChecklistVersion = async function(templateId, versionId) {
+  if (!templateId || !versionId) return;
+  if (!confirm('Restaurar esta versão e criar uma nova revisão do formulário atual?')) return;
+  try {
+    const res = await fetch(
+      `${brsparkApiBase()}/checklists/templates/${encodeURIComponent(templateId)}/restore/${encodeURIComponent(versionId)}`,
+      { method: 'POST', headers: adminJsonHeaders() }
+    );
+    const raw = await res.text();
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (_) {}
+    if (!res.ok) throw new Error((data && data.error) || raw || 'Falha ao restaurar versão.');
+    await window.loadSavedFormsList();
+    window.loadChecklist(templateId);
+    window.closeChecklistVersionHistory();
+    fbAlert('fb_alert_restore_version_ok', null, 'Versão restaurada com sucesso. Uma nova revisão foi criada.');
+  } catch (e) {
+    fbAlert('fb_alert_restore_version_fail', { detail: String(e.message || e) }, 'Não foi possível restaurar a versão: ' + (e.message || e));
+  }
+};
+
+window.openChecklistVersionHistory = async function(id) {
+  const targetId = id || currentFormId;
+  if (!targetId) {
+    fbAlert('fb_alert_select_form_first', null, 'Abra um formulário salvo antes de consultar o histórico.');
+    return;
+  }
+  try {
+    const payload = await fetchChecklistVersionHistory(targetId);
+    const modal = document.getElementById('template-history-modal');
+    const body = document.getElementById('template-history-list');
+    const titleEl = document.getElementById('template-history-title');
+    if (!modal || !body || !titleEl) return;
+    const tpl = payload.template || {};
+    const versions = Array.isArray(payload.versions) ? payload.versions : [];
+    titleEl.textContent = 'Histórico de versões - ' + String(tpl.title || currentFormTitle || 'Formulário');
+    body.innerHTML = versions.length
+      ? versions.map(function(v) {
+          const createdAt = v.createdAt ? new Date(v.createdAt).toLocaleString('pt-BR') : 'sem data';
+          const who = v.createdBy ? ' · ' + escapeHtml(String(v.createdBy)) : '';
+          const note = v.changeNote ? escapeHtml(String(v.changeNote)) : 'Snapshot sem observação.';
+          return `
+            <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;display:flex;gap:12px;justify-content:space-between;align-items:flex-start;">
+              <div style="min-width:0;flex:1;">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
+                  ${checklistVersionBadgeHtml({ version: v.version, isActive: v.isActive })}
+                  <strong style="color:#0f172a;">${escapeHtml(String(v.title || 'Sem título'))}</strong>
+                </div>
+                <div style="font-size:12px;color:#64748b;line-height:1.45;">${note}</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:6px;">${escapeHtml(createdAt)}${who}</div>
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" onclick="void window.restoreChecklistVersion('${escapeHtmlAttr(targetId)}','${escapeHtmlAttr(v.id)}')">Restaurar</button>
+            </div>
+          `;
+        }).join('')
+      : '<p style="color:#64748b;font-size:13px;">Ainda não há versões registradas.</p>';
+    modal.style.display = 'flex';
+  } catch (e) {
+    fbAlert('fb_alert_history_load_fail', { detail: String(e.message || e) }, 'Não foi possível carregar o histórico: ' + (e.message || e));
+  }
+};
+
+window.unarchiveChecklist = async function(id) {
+  if (!id) return;
+  try {
+    const res = await fetch(`${brsparkApiBase()}/checklists/templates/${encodeURIComponent(id)}/unarchive`, {
+      method: 'POST',
+      headers: adminJsonHeaders(),
+    });
+    const raw = await res.text();
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (_) {}
+    if (!res.ok) throw new Error((data && data.error) || raw || 'Falha ao restaurar formulário arquivado.');
+    await window.loadSavedFormsList();
+    fbAlert('fb_alert_unarchive_ok', null, 'Formulário restaurado do arquivo.');
+  } catch (e) {
+    fbAlert('fb_alert_unarchive_fail', { detail: String(e.message || e) }, 'Não foi possível restaurar o formulário: ' + (e.message || e));
+  }
+};
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -647,6 +777,8 @@ window.__fbHasSelectedFieldForProps = function () {
 };
 let currentFormId = null;
 let currentFormTitle = '';
+let currentFormVersion = 1;
+let currentFormIsActive = true;
 
 /** Título ainda não personalizado (valor inicial / mudança de idioma). */
 function isGenericDefaultFormTitle(raw) {
@@ -682,6 +814,7 @@ let currentFormFolderId = null;
 let builderBrowseFolderId = null;
 /** Lista plana de pastas (GET /template-folders) */
 let builderFolders = [];
+let lastSemanticAudit = [];
 
 let iconPickerCallback = null;
 let currentIconLib = 'Ionicons';
@@ -1620,44 +1753,6 @@ function scheduleRebuildFieldsOrderFromCanvas() {
 }
 
 /**
- * Índice global no array `fields` onde inserir o novo campo vindo da palette.
- * IMPORTANTE: nunca use `return` dentro de `forEach` pensando que sai da função — só saía do callback.
- */
-function computeToolboxInsertIndex(targetBody, droppedEl, sortableEvt) {
-    if (!ensureBuilderCanvasEl()) return 0;
-    let prefix = 0;
-    const groups = elCanvas.querySelectorAll('.canvas-section-group');
-    for (let gi = 0; gi < groups.length; gi++) {
-        const b = groups[gi].querySelector(':scope > .canvas-section-body');
-        if (!b) continue;
-        if (b !== targetBody) {
-            for (let j = 0; j < b.children.length; j++) {
-                const node = b.children[j];
-                if (node.classList && node.classList.contains('canvas-item') && node.dataset && node.dataset.id) {
-                    prefix++;
-                }
-            }
-            continue;
-        }
-        const children = Array.from(b.children);
-        let splitIdx = droppedEl ? children.indexOf(droppedEl) : -1;
-        if (splitIdx < 0 && sortableEvt && typeof sortableEvt.newIndex === 'number') {
-            splitIdx = sortableEvt.newIndex;
-        }
-        if (splitIdx < 0) splitIdx = 0;
-        let local = 0;
-        for (let i = 0; i < splitIdx && i < children.length; i++) {
-            const node = children[i];
-            if (node.classList && node.classList.contains('canvas-item') && node.dataset && node.dataset.id) {
-                local++;
-            }
-        }
-        return prefix + local;
-    }
-    return prefix;
-}
-
-/**
  * Ordem linear entre **cartões** do canvas (só `.canvas-item`), ignorando `section_break` no array `fields`.
  * Não é índice do array `fields` — use `mapCanvasOrdinalToFieldsSpliceIndex` antes de `splice`.
  */
@@ -1705,6 +1800,70 @@ function mapCanvasOrdinalToFieldsSpliceIndex(canvasOrdinal) {
     if (n === 0) return fields.length;
     if (ord >= n) return idxs[n - 1] + 1;
     return idxs[ord];
+}
+
+/** Corpo da secção no canvas mesmo quando `e.target` está dentro de Shadow DOM (ex.: ícone na toolbox). */
+function resolvePaletteDropSectionBodyFromEvent(e) {
+    if (!e) return null;
+    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    for (let i = 0; i < path.length; i++) {
+        const el = path[i];
+        if (el && el.nodeType === 1 && el.classList && el.classList.contains('canvas-section-body')) {
+            return el;
+        }
+    }
+    const t = e.target;
+    return t && typeof t.closest === 'function' ? t.closest('.canvas-section-body') : null;
+}
+
+/**
+ * Índice em `fields` para inserir campo vindo da toolbox (drag HTML5).
+ * Secções sem cartões precisam de inserção logo após o `section_break` — só contar cartões globais colocava o novo campo na secção anterior.
+ */
+function computePaletteDropInsertFieldsIndex(targetBody, clientY) {
+    if (!targetBody || !Array.isArray(fields) || !fields.length) return 0;
+    const wrap = typeof targetBody.closest === 'function' ? targetBody.closest('.canvas-section-group') : null;
+    let cy;
+    if (typeof clientY === 'number' && Number.isFinite(clientY)) {
+        cy = clientY;
+    } else {
+        try {
+            const r = targetBody.getBoundingClientRect();
+            cy = r.top + Math.max(8, r.height / 2);
+        } catch {
+            cy = 0;
+        }
+    }
+
+    if (!wrap || wrap.dataset.groupId === '__preamble__') {
+        const localIx = computeDropLocalIndexFromPointer(targetBody, cy);
+        const canvasOrd = computeGlobalFieldInsertIndex(targetBody, localIx);
+        return mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
+    }
+
+    const groupId = wrap.dataset.groupId;
+    const secIdx = fields.findIndex((f) => f && f.id === groupId && f.type === 'section_break');
+    if (secIdx < 0) {
+        const localIx = computeDropLocalIndexFromPointer(targetBody, cy);
+        const canvasOrd = computeGlobalFieldInsertIndex(targetBody, localIx);
+        return mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
+    }
+
+    const bodyItems = targetBody.querySelectorAll(':scope > .canvas-item');
+    const n = bodyItems.length;
+    if (n === 0) {
+        return secIdx + 1;
+    }
+    let localIx = computeDropLocalIndexFromPointer(targetBody, cy);
+    localIx = Math.max(0, Math.min(localIx, n));
+    if (localIx >= n) {
+        const lastFid = bodyItems[n - 1].dataset && bodyItems[n - 1].dataset.id;
+        const li = lastFid ? fields.findIndex((f) => f && f.id === lastFid) : -1;
+        return li >= 0 ? li + 1 : secIdx + 1;
+    }
+    const fid = bodyItems[localIx].dataset && bodyItems[localIx].dataset.id;
+    const bi = fid ? fields.findIndex((f) => f && f.id === fid) : -1;
+    return bi >= 0 ? bi : secIdx + 1;
 }
 
 /** Posição de inserção local (0…n) a partir da coordenada Y do rato. */
@@ -1822,7 +1981,7 @@ function installNativePaletteDropOnCanvas() {
     elCanvas.addEventListener(
         'dragover',
         (e) => {
-            const body = e.target.closest && e.target.closest('.canvas-section-body');
+            const body = resolvePaletteDropSectionBodyFromEvent(e);
             if (!body) return;
             const types = e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
             const ok =
@@ -1850,7 +2009,7 @@ function installNativePaletteDropOnCanvas() {
     elCanvas.addEventListener(
         'drop',
         (e) => {
-            const body = e.target.closest && e.target.closest('.canvas-section-body');
+            const body = resolvePaletteDropSectionBodyFromEvent(e);
             if (!body) return;
             let type = '';
             let rawText = '';
@@ -1882,9 +2041,7 @@ function installNativePaletteDropOnCanvas() {
             if (!rawText) rawText = type;
             e.preventDefault();
             e.stopPropagation();
-            const localIx = computeDropLocalIndexFromPointer(body, e.clientY);
-            const canvasOrd = computeGlobalFieldInsertIndex(body, localIx);
-            const insertAt = mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
+            const insertAt = computePaletteDropInsertFieldsIndex(body, e.clientY);
             if (type === 'transit_end') {
                 const nStart = countTransitStartsBeforeGlobalIndex(fields, insertAt);
                 if (nStart === 0) {
@@ -1931,9 +2088,14 @@ function absorbStrayPaletteItemsIntoFields() {
     const b = node.parentElement;
     if (!b || !b.classList.contains('canvas-section-body')) return false;
     const rawText = node.textContent.trim();
-    const evtStub = { newIndex: Array.prototype.indexOf.call(b.children, node) };
-    const canvasOrd = computeToolboxInsertIndex(b, node, evtStub);
-    const insertAt = mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
+    let cy = 0;
+    try {
+        const r = node.getBoundingClientRect();
+        cy = r.top + r.height / 2;
+    } catch {
+        cy = 0;
+    }
+    const insertAt = computePaletteDropInsertFieldsIndex(b, cy);
     const newField = createNewFieldFromToolboxType(t, rawText);
     fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
     fixTransitDisplacementViolations(fields);
@@ -1984,16 +2146,50 @@ function createNewFieldFromToolboxType(type, rawText) {
               requireOnlineValidation: false,
             }
           : {}),
-        ...(type === 'vision_checklist' || type === 'vision_ai_analysis'
+        ...(type === 'vision_checklist'
             ? {
-              visionStructuredPrompt: 'A evidência visual confirma o item verificado?',
-              visionQuestions: [{ id: 'q1', text: 'A evidência visual confirma o item verificado?' }],
-              visionCaptureMode: 'photo_and_video',
-              requireOnlineValidation: false,
-            }
-          : {}),
+                  visionStructuredPrompt: fbStr(
+                      'fb_prop_vision_default_detection_prompt',
+                      null,
+                      'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
+                  ),
+                  visionQuestions: [
+                      {
+                          id: 'q1',
+                          text: fbStr(
+                              'fb_prop_vision_default_detection_prompt',
+                              null,
+                              'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
+                          ),
+                      },
+                  ],
+                  visionCaptureMode: 'photo_and_video',
+                  requireOnlineValidation: false,
+              }
+            : {}),
         ...(type === 'vision_ai_analysis'
             ? {
+                  visionStructuredPrompt: fbStr(
+                      'fb_prop_vision_default_structured_prompt',
+                      null,
+                      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+                          'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+                          'Explique de forma breve, citando elementos objetivos observados na mídia.',
+                  ),
+                  visionQuestions: [
+                      {
+                          id: 'q1',
+                          text: fbStr(
+                              'fb_prop_vision_default_structured_prompt',
+                              null,
+                              'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+                                  'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+                                  'Explique de forma breve, citando elementos objetivos observados na mídia.',
+                          ),
+                      },
+                  ],
+                  visionCaptureMode: 'photo_and_video',
+                  requireOnlineValidation: false,
                   visionAnalysisGrid: '1x1',
                   visionRating0To10Enabled: false,
                   visionShowAiResponseInForm: true,
@@ -2013,6 +2209,7 @@ function createNewFieldFromToolboxType(type, rawText) {
                   lookupSource: 'preset',
                   lookupPreset: 'equipamentos_demo',
                   lookupInlineJson: '',
+                  lookupApiPath: '/api/checklists/lookup-options/equipamentos_demo',
               }
             : {}),
         ...(type === 'repeatable_matrix'
@@ -2033,7 +2230,7 @@ function createNewFieldFromToolboxType(type, rawText) {
               }
             : {}),
         ...(type === 'transit_start'
-            ? { transitKeepScreenAwake: false, transitPurpose: 'service' }
+            ? { transitKeepScreenAwake: true, transitPurpose: 'service' }
             : {}),
     };
 }
@@ -2376,6 +2573,8 @@ function renderCanvas() {
     ensureBuilderToolboxEl();
     bindToolboxNativeDragSources();
     installNativePaletteDropOnCanvas();
+    applyBuilderToolboxModeUi();
+    renderGuidedBuilderPanel();
 
     destroyCanvasGroupsSortable();
     destroyCanvasBodySortables();
@@ -2866,12 +3065,12 @@ function updateField(key, val, opts) {
     }
 }
 
-/** Texto do textarea «Visão de IA — detecção»: várias linhas (até 10) ou prompt único legado. */
+/** Texto do textarea «Visão de IA — detecção»: um único prompt (modelos antigos com várias entradas são fundidos). */
 function getVisionChecklistPromptEditorText(f) {
     const defaultVisionPrompt = fbStr(
-        'fb_prop_vision_default_structured_prompt',
+        'fb_prop_vision_default_detection_prompt',
         null,
-        'A evidência visual confirma o item verificado?',
+        'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
     );
     const arr = Array.isArray(f?.visionQuestions) ? f.visionQuestions : [];
     const lines = [];
@@ -2885,7 +3084,9 @@ function getVisionChecklistPromptEditorText(f) {
                 : '';
         if (text) lines.push(text);
     }
-    if (lines.length >= 2) return lines.slice(0, MAX_VISION_SIMNAO_QUESTIONS).join('\n');
+    if (lines.length >= 2) {
+        return lines.join('\n\n').slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+    }
     if (lines.length === 1) return lines[0];
     const sp = String(f?.visionStructuredPrompt || '').trim();
     if (sp) return sp;
@@ -2921,19 +3122,6 @@ function renderProperties() {
         if (typeof window.closeFieldPropertiesModal === 'function') window.closeFieldPropertiesModal();
         return;
     }
-    
-    // Bloquear circular dependency
-    let depOptions =
-        '<option value="">' +
-        escapeHtmlLogic(fbStr('fb_prop_depends_none_option', null, '(Nenhuma condição — sempre visível)')) +
-        '</option>';
-    fields.forEach((other) => {
-        if (other.id !== f.id) {
-            const sel = f.dependsOnId === other.id ? 'selected' : '';
-            const idSuf = escapeHtmlLogic(fbStr('fb_prop_depends_id_suffix', { id: other.id }, ' (ID: ' + other.id + ')'));
-            depOptions += `<option value="${other.id}" ${sel}>${escapeHtmlLogic(other.label)}${idSuf}</option>`;
-        }
-    });
 
     const reqChecked = f.required ? 'checked' : '';
 
@@ -3031,7 +3219,7 @@ function renderProperties() {
             </div>
         </div>`;
     } else if (f.type === 'transit_start') {
-        const keepAwake = f.transitKeepScreenAwake === true;
+        const keepAwake = f.transitKeepScreenAwake !== false;
         const reimb = f.transitPurpose === 'reimbursement';
         const trHelp = fbStr(
             'fb_prop_transit_keep_awake_help_html',
@@ -3076,16 +3264,25 @@ function renderProperties() {
             null,
             'O motor de reconhecimento (FaceMatch, automático ou AWS) é definido por <b>plano</b> em <b>Planos e assinaturas</b> → botão «Biometria / API» em cada cartão de plano. Padrão: FaceMatch.',
         );
-        const facOnline = fbStr(
-            'fb_prop_facial_online_note_html',
+        const faceOnlineHint = fbStr(
+            'fb_prop_online_validation_face',
             null,
-            '<b>Validação online obrigatória</b> (caixa abaixo, comum a outros campos): <b>desmarcada</b> = pode capturar sem rede; a app tenta validar no servidor quando há internet e ao reabrir a OS. <b>Marcada</b> = exige rede na captura e validação imediata.',
+            'No reconhecimento facial: <b>desmarcado</b> permite capturar offline e envia a biometria ao servidor quando houver rede. <b>Marcado</b> exige internet e match imediato.',
+        );
+        const onlineValTitle = escapeHtmlLogic(
+            fbStr('fb_prop_online_validation_title', null, 'Exigir validação apenas online?'),
         );
          extraProps = `
         <div class="prop-group" style="background:#fff1f2; border:1px solid #e11d48; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#9f1239; margin-bottom:4px">🧑‍💻 ${escapeHtmlLogic(fbStr('fb_prop_facial_title', null, 'Biometria e IA obrigatórias'))}</div>
             <div style="font-size:10px; color:#9f1239; line-height:1.2; margin-bottom:12px;">${escapeHtmlLogic(fbStr('fb_prop_facial_intro', null, 'A foto tirada será comparada com a foto de perfil do técnico usando o motor de IA selecionado nas integrações do sistema.'))}</div>
-            
+            <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:14px; background:#fffbeb; border:1px solid #fde047; padding:12px; border-radius:8px;">
+                <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2);flex-shrink:0;margin-top:2px" />
+                <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
+                    <label for="prop-online" style="font-size:12px; font-weight:800; color:#a16207; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> ${onlineValTitle}</label>
+                    <div style="font-size:10px; color:#a16207; margin-top:4px; line-height:1.35;">${faceOnlineHint}</div>
+                </div>
+            </div>
             <div style="font-size:9px; color:#64748b; line-height:1.35; margin-bottom:10px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
               ${facEngine}
             </div>
@@ -3104,9 +3301,6 @@ function renderProperties() {
             <div style="font-size:9px; color:#64748b; line-height:1.35; margin-top:8px; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
                 📷 ${escapeHtmlLogic(fbStr('fb_prop_facial_camera_note', null, 'A captura facial na app usa sempre a câmera do sistema (alta resolução).'))}
             </div>
-            <div style="font-size:9px; color:#9f1239; line-height:1.35; margin-top:12px; padding:8px; background:#fff7ed; border-radius:6px; border:1px solid #fed7aa;">
-                ${facOnline}
-            </div>
         </div>`;
     } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
         const isVisionAnalysis = f.type === 'vision_ai_analysis';
@@ -3124,7 +3318,9 @@ function renderProperties() {
                   return fbStr(
                       'fb_prop_vision_default_structured_prompt',
                       null,
-                      'A evidência visual confirma o item verificado?',
+                      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+                          'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+                          'Explique de forma breve, citando elementos objetivos observados na mídia.',
                   );
               })()
             : getVisionChecklistPromptEditorText(f);
@@ -3238,9 +3434,14 @@ function renderProperties() {
                 fbStr('fb_vision_prompt_ex_btn_title', null, 'Modelos de prompt para serviços de campo (Visão de IA — análise)'),
             )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
           </div>`
-            : `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(
-                  fbStr('fb_prop_vision_detection_prompt_lbl', null, 'Perguntas (sim/não)'),
-              )}</label>`;
+            : `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(
+                fbStr('fb_prop_vision_detection_prompt_lbl', null, 'Prompt (sim/não)'),
+            )}</label>
+            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:#bae6fd;color:#0369a1;" onclick="window.openVisionDetectionPromptExamplesModal()" title="${escapeHtmlAttr(
+                fbStr('fb_vision_detection_ex_btn_title', null, 'Exemplos de perguntas para objetos e contagem (Visão de IA — detecção)'),
+            )}"><ion-icon name="list-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
+          </div>`;
         const visionPromptBlurHandler = isVisionAnalysis
             ? 'window.updateVisionStructuredPrompt(this.value)'
             : 'window.updateVisionDetectionQuestions(this.value)';
@@ -3260,17 +3461,12 @@ function renderProperties() {
             : fbStr(
                   'fb_prop_vision_detection_prompt_hint',
                   {
-                      maxPer:
-                          typeof window.fbFormatInt === 'function'
-                              ? window.fbFormatInt(MAX_VISION_MULTI_SIMNAO_TEXT_CHARS)
-                              : String(MAX_VISION_MULTI_SIMNAO_TEXT_CHARS),
-                      maxLines: String(MAX_VISION_SIMNAO_QUESTIONS),
                       maxSingle:
                           typeof window.fbFormatInt === 'function'
                               ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
                               : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
                   },
-                  'Uma <b>linha</b> por pergunta (sim/não), até 10 linhas. Com várias linhas, cada texto tem até 500 caracteres; com uma única linha, até 12.000. A API devolve JSON com <code>answers</code> e <code>questionId</code> (<code>q1</code>…<code>q10</code>).',
+                  'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres). A API devolve JSON com <code>answers</code> (sempre <code>q1</code>) e valor <code>yes</code>, <code>no</code> ou <code>unknown</code> quando o critério é sim/não.',
               );
         extraProps = `
         <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
@@ -3346,15 +3542,17 @@ function renderProperties() {
             <input class="prop-input" type="number" min="1" max="24" value="${escapeHtmlLogic(sw)}" onchange="window.handleFieldUpdate('annotationStrokeWidth', parseInt(this.value,10)||4)" />
         </div>`;
     } else if (f.type === 'lookup_select') {
-        const src = f.lookupSource === 'inline_json' ? 'inline_json' : 'preset';
+        const src = f.lookupSource === 'inline_json' ? 'inline_json' : f.lookupSource === 'api' ? 'api' : 'preset';
         const preset = escapeHtmlLogic(String(f.lookupPreset || 'equipamentos_demo'));
         const inlineEsc = escapeHtmlLogic(String(f.lookupInlineJson || ''));
+        const apiPathEsc = escapeHtmlLogic(String(f.lookupApiPath || '/api/checklists/lookup-options/equipamentos_demo'));
         extraProps = `
         <div class="prop-group" style="background:#eff6ff; border:1px solid #93c5fd; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#1e40af; margin-bottom:6px"><ion-icon name="cloud-download-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_lookup_title', null, 'Lista dinâmica'))}</div>
             <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_source_lbl', null, 'Origem'))}</label>
             <select class="prop-input" onchange="window.handleFieldUpdate('lookupSource', this.value); if(typeof renderProperties==='function')renderProperties();" style="font-size:12px; margin-bottom:10px;">
                 <option value="preset" ${src === 'preset' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_preset', null, 'Preset no servidor (GET com sessão)'))}</option>
+                <option value="api" ${src === 'api' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_api', null, 'Endpoint da API (GET com sessão)'))}</option>
                 <option value="inline_json" ${src === 'inline_json' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_inline', null, 'JSON no modelo (sem rede)'))}</option>
             </select>
             <div style="display:${src === 'preset' ? 'block' : 'none'}">
@@ -3364,6 +3562,11 @@ function renderProperties() {
                     <option value="tecnicos_demo" ${preset === 'tecnicos_demo' ? 'selected' : ''}>tecnicos_demo</option>
                     <option value="prioridades_demo" ${preset === 'prioridades_demo' ? 'selected' : ''}>prioridades_demo</option>
                 </select>
+            </div>
+            <div style="display:${src === 'api' ? 'block' : 'none'}; margin-top:8px;">
+                <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_api_path_lbl', null, 'Caminho da API'))}</label>
+                <input class="prop-input" placeholder="/api/minha-rota/opcoes" value="${apiPathEsc}" onblur="window.handleFieldUpdate('lookupApiPath', this.value)" />
+                <div style="font-size:10px; color:#1e40af; margin-top:6px; line-height:1.35;">${escapeHtmlLogic(fbStr('fb_prop_lookup_api_path_help', null, 'Use caminho relativo da API do backend (ex.: /api/checklists/lookup-options/equipamentos_demo). Resposta esperada: { options:[{value,label}] } ou array direto.'))}</div>
             </div>
             <div style="display:${src === 'inline_json' ? 'block' : 'none'}; margin-top:8px;">
                 <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_json_lbl', null, 'JSON (array de pares value / label)'))}</label>
@@ -3375,17 +3578,40 @@ function renderProperties() {
         const colsEsc = escapeHtmlLogic(colsJson);
         const minR = escapeHtmlLogic(String(f.matrixMinRows != null && f.matrixMinRows !== '' ? f.matrixMinRows : '0'));
         const maxR = escapeHtmlLogic(String(f.matrixMaxRows != null && f.matrixMaxRows !== '' ? f.matrixMaxRows : '20'));
-        const matrixIntro = fbStr(
-            'fb_prop_matrix_intro_html',
-            null,
-            'Colunas (até 8): <code>id</code>, <code>label</code>, <code>cellType</code> = <code>text</code> | <code>number</code> | <code>yes_no</code>. O app guarda um array JSON de linhas.',
+        const matrixIntro = escapeHtmlLogic(
+            fbStr(
+                'fb_prop_matrix_intro_html',
+                null,
+                'Defina até 8 colunas com nome e tipo. No app o técnico preenche várias linhas numa tabela; os dados guardam-se em JSON.',
+            ),
         );
+        const matrixRowsUi = buildMatrixColumnsEditorRowsHtml(f);
+        const mcLen = Array.isArray(f.matrixColumns) ? f.matrixColumns.length : 0;
+        const addDisabled = mcLen >= 8 ? 'disabled' : '';
+        const addLbl = escapeHtmlLogic(fbStr('fb_prop_matrix_add_col', null, 'Adicionar coluna'));
+        const colsUiLbl = escapeHtmlLogic(fbStr('fb_prop_matrix_cols_ui_lbl', null, 'Colunas da tabela'));
+        const jsonAdv = escapeHtmlLogic(fbStr('fb_prop_matrix_json_adv', null, 'Avançado — editar JSON'));
+        const jsonAdvHint = escapeHtmlLogic(
+            fbStr(
+                'fb_prop_matrix_json_adv_hint',
+                null,
+                'Ao sair deste campo, o JSON substitui a grelha acima. Use só se souber o formato.',
+            ),
+        );
+        const jsonLbl = escapeHtmlLogic(fbStr('fb_prop_matrix_cols_lbl', null, 'Colunas (JSON)'));
         extraProps = `
         <div class="prop-group" style="background:#ecfdf5; border:1px solid #6ee7b7; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:6px"><ion-icon name="grid-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_matrix_title', null, 'Matriz repetível'))}</div>
             <div style="font-size:10px; color:#065f46; line-height:1.35; margin-bottom:10px;">${matrixIntro}</div>
-            <label class="prop-label" style="color:#0f766e; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_matrix_cols_lbl', null, 'Colunas (JSON)'))}</label>
-            <textarea class="prop-input" style="height:140px;font-family:monospace;font-size:11px;" onblur="window.applyRepeatableMatrixColumnsJson(this.value)">${colsEsc}</textarea>
+            <label class="prop-label" style="color:#0f766e; font-size:10px;">${colsUiLbl}</label>
+            <div id="prop-matrix-cols-ui" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">${matrixRowsUi}</div>
+            <button type="button" class="btn btn-outline btn-sm" style="font-size:12px;margin-bottom:10px;" onclick="window.addRepeatableMatrixColumnRow()" ${addDisabled}>${addLbl}</button>
+            <details style="margin:10px 0 4px;">
+                <summary style="cursor:pointer; font-size:11px; font-weight:700; color:#047857;">${jsonAdv}</summary>
+                <div style="font-size:10px; color:#065f46; line-height:1.35; margin:8px 0;">${jsonAdvHint}</div>
+                <label class="prop-label" style="color:#0f766e; font-size:10px;">${jsonLbl}</label>
+                <textarea id="prop-matrix-cols-json" class="prop-input" style="height:120px;font-family:monospace;font-size:11px;" onblur="window.applyRepeatableMatrixColumnsJson(this.value)">${colsEsc}</textarea>
+            </details>
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
                 <div style="flex:1; min-width:100px;">
                     <label class="prop-label" style="font-size:10px; color:#047857;">${escapeHtmlLogic(fbStr('fb_prop_matrix_min_rows', null, 'Mín. linhas'))}</label>
@@ -3705,7 +3931,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
+        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'vision_checklist', 'vision_ai_analysis', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
@@ -3753,7 +3979,9 @@ window.updateVisionStructuredPrompt = function (text) {
     const fallback = fbStr(
         'fb_prop_vision_default_structured_prompt',
         null,
-        'A evidência visual confirma o item verificado?',
+        'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
+            'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
+            'Explique de forma breve, citando elementos objetivos observados na mídia.',
     );
     const finalText = s || fallback;
     f.visionStructuredPrompt = finalText;
@@ -3767,81 +3995,66 @@ window.updateVisionDetectionQuestions = function (text) {
     const f = fields.find((x) => x.id === selectedFieldId);
     if (!f || f.type !== 'vision_checklist') return;
     const raw = String(text || '');
-    const lines = raw
-        .split(/\n/)
-        .map((ln) => String(ln || '').replace(/\r/g, '').trim())
-        .filter((ln) => ln.length > 0);
     const fallback = fbStr(
-        'fb_prop_vision_default_structured_prompt',
+        'fb_prop_vision_default_detection_prompt',
         null,
-        'A evidência visual confirma o item verificado?',
+        'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
     );
-
-    if (lines.length <= 1) {
-        const finalText = (lines[0] || raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-        f.visionStructuredPrompt = finalText;
-        f.visionQuestions = [{ id: 'q1', text: finalText }];
-    } else {
-        const taken = lines
-            .slice(0, MAX_VISION_SIMNAO_QUESTIONS)
-            .map((ln) => ln.slice(0, MAX_VISION_MULTI_SIMNAO_TEXT_CHARS).trim())
-            .filter((ln) => ln.length > 0);
-        if (taken.length <= 1) {
-            const finalText = (taken[0] || raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-            f.visionStructuredPrompt = finalText;
-            f.visionQuestions = [{ id: 'q1', text: finalText }];
-        } else {
-            f.visionStructuredPrompt = '';
-            f.visionQuestions = taken.map((t, i) => ({ id: `q${i + 1}`, text: t }));
-        }
-    }
+    const finalText = (raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+    f.visionStructuredPrompt = finalText;
+    f.visionQuestions = [{ id: 'q1', text: finalText }];
     renderCanvas();
     if (window.fieldPropertiesModalOpen) renderProperties();
 };
 
-function closeVisionAiPromptExamplesModal() {
-    const el = document.getElementById('vision-ai-prompt-examples-modal');
+function closeVisionPromptExamplesModalById(modalId) {
+    const el = document.getElementById(modalId);
     if (!el) return;
     const fn = el._visionExEsc;
     if (typeof fn === 'function') document.removeEventListener('keydown', fn);
     el.remove();
 }
 
-/** Modal com modelos de prompt (só «Visão de IA — análise»). */
-window.openVisionAiStructuredPromptExamplesModal = function () {
+function openVisionPromptExamplesModal(opts) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
-    if (!f || f.type !== 'vision_ai_analysis') return;
-    closeVisionAiPromptExamplesModal();
+    if (!f || f.type !== opts.fieldType) return;
+    closeVisionPromptExamplesModalById(opts.modalId);
+
+    const closeModal = function () {
+        closeVisionPromptExamplesModalById(opts.modalId);
+    };
+
+    const cat = typeof opts.catalogGetter === 'function' ? opts.catalogGetter() : null;
+    if (!cat || !Array.isArray(cat.items) || !cat.items.length) {
+        fbAlert(opts.catalogMissingKey, null, opts.catalogMissingFallback);
+        return;
+    }
 
     const overlay = document.createElement('div');
-    overlay.id = 'vision-ai-prompt-examples-modal';
+    overlay.id = opts.modalId;
     overlay.style.cssText =
         'display:flex;position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:100001;justify-content:center;align-items:center;padding:max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));box-sizing:border-box;backdrop-filter:blur(4px)';
 
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', 'vision-ai-prompt-ex-h');
+    dialog.setAttribute('aria-labelledby', `${opts.modalId}-h`);
     dialog.style.cssText =
         'width:min(760px,100%);max-height:min(90vh,920px);background:var(--color-surface, #fff);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);display:flex;flex-direction:column;overflow:hidden;border:1px solid #e2e8f0';
 
     const head = document.createElement('div');
     head.style.cssText =
-        'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #e2e8f0;background:linear-gradient(135deg, #fef2f2 0%, #fff 100%)';
+        `display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #e2e8f0;background:${opts.headerBg}`;
 
     const headText = document.createElement('div');
     const h2 = document.createElement('div');
-    h2.id = 'vision-ai-prompt-ex-h';
-    h2.style.cssText = 'font-size:16px;font-weight:800;color:#7f1d1d;letter-spacing:-0.02em;line-height:1.25';
-    h2.textContent = fbStr('fb_vision_prompt_ex_modal_title', null, 'Exemplos de prompt estruturado');
+    h2.id = `${opts.modalId}-h`;
+    h2.style.cssText = `font-size:16px;font-weight:800;color:${opts.headerTitleColor};letter-spacing:-0.02em;line-height:1.25`;
+    h2.textContent = fbStr(opts.titleKey, null, opts.titleFallback);
     const intro = document.createElement('div');
     intro.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;line-height:1.45';
-    intro.innerHTML = fbStr(
-        'fb_vision_prompt_ex_modal_intro',
-        null,
-        'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Ative «Classificação 0–10» nas propriedades se quiser que a API preencha <code>rating0To10</code> coerente com a rubrica.',
-    );
+    intro.innerHTML = fbStr(opts.introKey, null, opts.introFallback);
     headText.appendChild(h2);
     headText.appendChild(intro);
 
@@ -3850,33 +4063,20 @@ window.openVisionAiStructuredPromptExamplesModal = function () {
     closeBtn.className = 'btn btn-ghost btn-sm';
     closeBtn.style.cssText = 'flex-shrink:0;font-weight:700;color:#64748b';
     closeBtn.textContent = fbStr('fb_vision_prompt_ex_close', null, 'Fechar');
-    closeBtn.onclick = closeVisionAiPromptExamplesModal;
+    closeBtn.onclick = closeModal;
 
     head.appendChild(headText);
     head.appendChild(closeBtn);
-
-    const cat =
-        typeof window.getVisionAiExampleCatalog === 'function'
-            ? window.getVisionAiExampleCatalog()
-            : null;
-    if (!cat || !Array.isArray(cat.items) || !cat.items.length) {
-        fbAlert(
-            'fb_vision_prompt_ex_catalog_missing',
-            null,
-            'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder.',
-        );
-        return;
-    }
 
     const toolbar = document.createElement('div');
     toolbar.style.cssText =
         'padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc';
     const areaLab = document.createElement('label');
-    areaLab.setAttribute('for', 'vision-ai-ex-area-select');
+    areaLab.setAttribute('for', `${opts.modalId}-area-select`);
     areaLab.style.cssText = 'font-size:11px;font-weight:800;color:#334155;white-space:nowrap';
     areaLab.textContent = fbStr('fb_vision_prompt_ex_area_lbl', null, 'Área / setor');
     const sel = document.createElement('select');
-    sel.id = 'vision-ai-ex-area-select';
+    sel.id = `${opts.modalId}-area-select`;
     sel.className = 'prop-input';
     sel.style.cssText = 'max-width:min(320px,100%);font-size:12px;flex:1;min-width:160px';
     const optAll = document.createElement('option');
@@ -3897,7 +4097,7 @@ window.openVisionAiStructuredPromptExamplesModal = function () {
     scroll.style.cssText = 'flex:1;overflow-y:auto;padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px';
 
     const emptyMsg = document.createElement('div');
-    emptyMsg.id = 'vision-ai-ex-empty';
+    emptyMsg.id = `${opts.modalId}-empty`;
     emptyMsg.style.cssText =
         'display:none;padding:14px;border-radius:10px;border:1px dashed #cbd5e1;background:#fff;font-size:12px;color:#64748b;text-align:center';
     emptyMsg.textContent = fbStr('fb_vision_prompt_ex_empty_filter', null, 'Nenhum modelo nesta área. Escolha «Todas as áreas» ou outro setor.');
@@ -3941,8 +4141,8 @@ window.openVisionAiStructuredPromptExamplesModal = function () {
         applyBtn.textContent = applyLbl;
         const bodySnap = ex.body;
         applyBtn.onclick = function () {
-            window.updateVisionStructuredPrompt(bodySnap);
-            closeVisionAiPromptExamplesModal();
+            opts.applyPrompt(bodySnap);
+            closeModal();
         };
 
         titleRow.appendChild(t);
@@ -3965,16 +4165,69 @@ window.openVisionAiStructuredPromptExamplesModal = function () {
     overlay.appendChild(dialog);
 
     overlay.addEventListener('click', function (e) {
-        if (e.target === overlay) closeVisionAiPromptExamplesModal();
+        if (e.target === overlay) closeModal();
     });
 
     const onEsc = function (ev) {
-        if (ev.key === 'Escape') closeVisionAiPromptExamplesModal();
+        if (ev.key === 'Escape') closeModal();
     };
     overlay._visionExEsc = onEsc;
     document.addEventListener('keydown', onEsc);
 
     document.body.appendChild(overlay);
+}
+
+function closeVisionAiPromptExamplesModal() {
+    closeVisionPromptExamplesModalById('vision-ai-prompt-examples-modal');
+}
+
+function closeVisionDetectionPromptExamplesModal() {
+    closeVisionPromptExamplesModalById('vision-detection-prompt-examples-modal');
+}
+
+/** Modal com modelos de prompt (só «Visão de IA — análise»). */
+window.openVisionAiStructuredPromptExamplesModal = function () {
+    openVisionPromptExamplesModal({
+        fieldType: 'vision_ai_analysis',
+        modalId: 'vision-ai-prompt-examples-modal',
+        titleKey: 'fb_vision_prompt_ex_modal_title',
+        titleFallback: 'Exemplos de prompt estruturado',
+        introKey: 'fb_vision_prompt_ex_modal_intro',
+        introFallback:
+            'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Ative «Classificação 0–10» nas propriedades se quiser que a API preencha <code>rating0To10</code> coerente com a rubrica.',
+        catalogGetter:
+            typeof window.getVisionAiExampleCatalog === 'function' ? window.getVisionAiExampleCatalog : null,
+        catalogMissingKey: 'fb_vision_prompt_ex_catalog_missing',
+        catalogMissingFallback: 'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder.',
+        headerBg: 'linear-gradient(135deg, #fef2f2 0%, #fff 100%)',
+        headerTitleColor: '#7f1d1d',
+        applyPrompt: function (body) {
+            window.updateVisionStructuredPrompt(body);
+        },
+    });
+};
+
+window.openVisionDetectionPromptExamplesModal = function () {
+    openVisionPromptExamplesModal({
+        fieldType: 'vision_checklist',
+        modalId: 'vision-detection-prompt-examples-modal',
+        titleKey: 'fb_vision_detection_ex_modal_title',
+        titleFallback: 'Exemplos de perguntas para detecção',
+        introKey: 'fb_vision_detection_ex_modal_intro',
+        introFallback:
+            'Escolha um exemplo e adapte os objetos, sinônimos e exclusões ao seu modelo YOLO. Prefira uma linha por pergunta e, para contagem, explicite o que deve ser ignorado.',
+        catalogGetter:
+            typeof window.getVisionDetectionExampleCatalog === 'function'
+                ? window.getVisionDetectionExampleCatalog
+                : null,
+        catalogMissingKey: 'fb_vision_detection_ex_catalog_missing',
+        catalogMissingFallback: 'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder.',
+        headerBg: 'linear-gradient(135deg, #eff6ff 0%, #fff 100%)',
+        headerTitleColor: '#0c4a6e',
+        applyPrompt: function (body) {
+            window.updateVisionDetectionQuestions(body);
+        },
+    });
 };
 
 /** @deprecated — mantido por compatibilidade com HTML antigo em cache */
@@ -4019,6 +4272,125 @@ window.applyRepeatableMatrixColumnsJson = function (text) {
         return;
     }
     f.matrixColumns = next;
+    renderCanvas();
+    renderProperties();
+};
+
+function buildMatrixColumnsEditorRowsHtml(f) {
+    let mc = Array.isArray(f.matrixColumns) ? f.matrixColumns.slice(0, 8) : [];
+    if (!mc.length) {
+        mc = [{ id: 'c1', label: '', cellType: 'text' }];
+    }
+    const optText = escapeHtmlLogic(fbStr('fb_prop_matrix_type_text', null, 'Texto'));
+    const optNum = escapeHtmlLogic(fbStr('fb_prop_matrix_type_number', null, 'Número'));
+    const optYn = escapeHtmlLogic(fbStr('fb_prop_matrix_type_yesno', null, 'Sim / Não'));
+    const remTitle = escapeHtmlAttr(fbStr('fb_prop_matrix_remove_col', null, 'Remover coluna'));
+    const ph = escapeHtmlAttr(fbStr('fb_prop_matrix_col_label_ph', null, 'Nome da coluna no app'));
+    return mc
+        .map((col, idx) => {
+            const cid = String(col.id || `c${idx + 1}`)
+                .replace(/[^\w-]/g, '_')
+                .slice(0, 48);
+            const lab = String(col.label || '').slice(0, 120);
+            let ct = String(col.cellType || 'text').toLowerCase();
+            if (ct !== 'number' && ct !== 'yes_no') ct = 'text';
+            return `<div class="prop-matrix-col-row" data-col-id="${escapeHtmlAttr(cid)}" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid #a7f3d0;border-radius:8px;padding:8px;">
+                <input type="text" class="prop-input prop-matrix-col-label" style="flex:1;min-width:140px;font-size:12px;" placeholder="${ph}" value="${escapeHtmlAttr(lab)}" oninput="window.syncRepeatableMatrixColumnsFromUi()" />
+                <select class="prop-input prop-matrix-col-type" style="width:min(170px,100%);font-size:12px;" onchange="window.syncRepeatableMatrixColumnsFromUi()">
+                    <option value="text"${ct === 'text' ? ' selected' : ''}>${optText}</option>
+                    <option value="number"${ct === 'number' ? ' selected' : ''}>${optNum}</option>
+                    <option value="yes_no"${ct === 'yes_no' ? ' selected' : ''}>${optYn}</option>
+                </select>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="window.removeRepeatableMatrixColumnRow(event)" title="${remTitle}" style="padding:6px 8px;line-height:1;"><ion-icon name="trash-outline"></ion-icon></button>
+            </div>`;
+        })
+        .join('');
+}
+
+window.syncRepeatableMatrixColumnsFromUi = function () {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'repeatable_matrix') return;
+    const host = document.getElementById('prop-matrix-cols-ui');
+    if (!host) return;
+    const next = [];
+    const seenIds = new Set();
+    host.querySelectorAll(':scope > .prop-matrix-col-row').forEach((row, idx) => {
+        if (idx >= 8) return;
+        const labelInp = row.querySelector('.prop-matrix-col-label');
+        const typeSel = row.querySelector('.prop-matrix-col-type');
+        let lid = String(row.getAttribute('data-col-id') || '')
+            .trim()
+            .replace(/[^\w-]/g, '_')
+            .slice(0, 48);
+        if (!lid) lid = 'c' + (next.length + 1);
+        let base = lid;
+        let suf = 2;
+        while (seenIds.has(lid)) {
+            lid = (base + '_' + suf).slice(0, 48);
+            suf++;
+        }
+        seenIds.add(lid);
+        let label = labelInp ? String(labelInp.value || '').trim().slice(0, 120) : '';
+        if (!label) {
+            label = fbStr(
+                'fb_prop_matrix_col_empty_fallback',
+                { n: String(next.length + 1) },
+                'Coluna ' + (next.length + 1),
+            );
+        }
+        const ctRaw = typeSel ? String(typeSel.value || 'text').toLowerCase() : 'text';
+        const cellType = ctRaw === 'number' || ctRaw === 'yes_no' ? ctRaw : 'text';
+        next.push({ id: lid, label, cellType });
+        row.setAttribute('data-col-id', lid);
+    });
+    if (!next.length) return;
+    f.matrixColumns = next;
+    const ta = document.getElementById('prop-matrix-cols-json');
+    if (ta) ta.value = JSON.stringify(next, null, 2);
+    renderCanvas();
+};
+
+window.removeRepeatableMatrixColumnRow = function (ev) {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'repeatable_matrix') return;
+    const btn = ev && ev.currentTarget ? ev.currentTarget : null;
+    if (!btn || !btn.closest) return;
+    const row = btn.closest('.prop-matrix-col-row');
+    const host = document.getElementById('prop-matrix-cols-ui');
+    if (!row || !host) return;
+    const idx = Array.prototype.indexOf.call(host.children, row);
+    if (idx < 0) return;
+    const mc = Array.isArray(f.matrixColumns) ? f.matrixColumns.slice() : [];
+    mc.splice(idx, 1);
+    if (!mc.length) {
+        mc.push({
+            id: 'c1',
+            label: fbStr('fb_prop_matrix_col_empty_fallback', { n: '1' }, 'Coluna 1'),
+            cellType: 'text',
+        });
+    }
+    f.matrixColumns = mc;
+    renderCanvas();
+    renderProperties();
+};
+
+window.addRepeatableMatrixColumnRow = function () {
+    if (!selectedFieldId) return;
+    const f = fields.find((x) => x.id === selectedFieldId);
+    if (!f || f.type !== 'repeatable_matrix') return;
+    const mc = Array.isArray(f.matrixColumns) ? f.matrixColumns.slice() : [];
+    if (mc.length >= 8) return;
+    const used = new Set(mc.map((c) => String(c.id || '').trim()));
+    let n = mc.length + 1;
+    let nid = 'c' + n;
+    while (used.has(nid)) {
+        n++;
+        nid = 'c' + n;
+    }
+    mc.push({ id: nid, label: '', cellType: 'text' });
+    f.matrixColumns = mc;
     renderCanvas();
     renderProperties();
 };
@@ -4485,6 +4857,220 @@ function buildChecklistTemplateMetadata() {
     return meta;
 }
 
+function countOperationalFieldsInList(list) {
+    if (!Array.isArray(list)) return 0;
+    return list.filter(function (f) {
+        return f && f.type && String(f.type) !== 'section_break';
+    }).length;
+}
+
+function normalizeFieldLabelKey(raw) {
+    return String(raw || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function applyBuilderToolboxModeUi() {
+    const host = ensureBuilderToolboxEl();
+    if (!host) return;
+    host.querySelectorAll('.toolbox-item[data-type]').forEach(function (el) {
+        el.removeAttribute('data-hidden-by-mode');
+    });
+};
+
+window.brsparkCopilotSendQuickAction = async function (text) {
+    const prompt = String(text || '').trim();
+    if (!prompt) return;
+    const inp = document.getElementById('ai-copilot-input');
+    if (inp) inp.value = '';
+    await brsparkCopilotPostChatRound(prompt);
+};
+
+function buildFormSemanticAudit() {
+    const issues = [];
+    const titleInput = document.getElementById('tpl-title');
+    const descInput = document.getElementById('tpl-desc');
+    const operational = (fields || []).filter(function (f) {
+        return f && f.type && String(f.type) !== 'section_break';
+    });
+    const sections = (fields || []).filter(function (f) {
+        return f && String(f.type) === 'section_break';
+    });
+    const title = normalizeTemplateTitleBuilder(titleInput ? titleInput.value : currentFormTitle);
+    const desc = String(descInput ? descInput.value : currentFormDesc || '').trim();
+    const contextBlob = [title, desc, collectCopilotFormContext().objective || ''].join(' ').toLowerCase();
+    if (!title) {
+        issues.push({
+            severity: 'error',
+            title: 'Defina um título claro',
+            detail: 'O formulário ainda está sem título. Isso dificulta encontrar o modelo e reduz a qualidade das sugestões da IA.',
+        });
+    }
+    if (operational.length === 0) {
+        issues.push({
+            severity: 'error',
+            title: 'O formulário ainda não tem perguntas',
+            detail: 'Crie pelo menos um campo operacional ou use o copiloto para gerar um primeiro rascunho.',
+        });
+    }
+    if (sections.length < 2 && operational.length >= 8) {
+        issues.push({
+            severity: 'warning',
+            title: 'Considere dividir em mais seções',
+            detail: 'Há muitas perguntas em uma estrutura pouco segmentada. Seções claras ajudam um usuário leigo a preencher no celular.',
+        });
+    }
+    const duplicateLabels = new Map();
+    operational.forEach(function (f) {
+        const key = normalizeFieldLabelKey(f.label);
+        if (!key) return;
+        duplicateLabels.set(key, (duplicateLabels.get(key) || 0) + 1);
+    });
+    const duplicateNames = Array.from(duplicateLabels.entries())
+        .filter(function (entry) {
+            return entry[1] > 1;
+        })
+        .map(function (entry) {
+            return entry[0];
+        });
+    if (duplicateNames.length) {
+        issues.push({
+            severity: 'warning',
+            title: 'Há perguntas com rótulo repetido',
+            detail: 'Perguntas muito parecidas confundem o técnico. Revise rótulos duplicados ou quase iguais.',
+        });
+    }
+    const requiredCount = operational.filter(function (f) {
+        return !!f.required;
+    }).length;
+    if (operational.length >= 4 && requiredCount / operational.length >= 0.7) {
+        issues.push({
+            severity: 'warning',
+            title: 'Muitos campos estão obrigatórios',
+            detail: 'Para uso em campo, costuma funcionar melhor deixar apenas o essencial como obrigatório.',
+        });
+    }
+    const unlabeledDescriptions = operational.filter(function (f) {
+        return !String(f.description || '').trim();
+    }).length;
+    if (operational.length >= 6 && unlabeledDescriptions >= Math.max(3, Math.round(operational.length * 0.45))) {
+        issues.push({
+            severity: 'warning',
+            title: 'Faltam descrições orientando o preenchimento',
+            detail: 'Descrições curtas ajudam usuários leigos a entender o que responder no celular sem treinamento prévio.',
+        });
+    }
+    const choiceWithoutOptions = operational.some(function (f) {
+        const type = String(f.type || '');
+        return (
+            (type === 'dropdown' || type === 'multiselect' || type === 'opinion_scale') &&
+            !String(f.options || f.likertLabels || '').trim()
+        );
+    });
+    if (choiceWithoutOptions) {
+        issues.push({
+            severity: 'error',
+            title: 'Existem listas sem opções definidas',
+            detail: 'Campos de escolha precisam de opções concretas para evitar dúvidas e erros no app.',
+        });
+    }
+    const hasEvidence = operational.some(function (f) {
+        return ['photo', 'photo_stamped', 'file_upload', 'signature', 'image_annotation'].includes(String(f.type || ''));
+    });
+    if (
+        !hasEvidence &&
+        /(vistoria|inspe|auditoria|campo|manuten|seguran|qualidade|checklist|clin)/.test(contextBlob)
+    ) {
+        issues.push({
+            severity: 'warning',
+            title: 'Pode faltar evidência para o processo',
+            detail: 'Para esse tipo de fluxo, normalmente vale incluir foto, anexo, assinatura ou localização em pontos críticos.',
+        });
+    }
+    if (!String(currentFormIcon || '').trim()) {
+        issues.push({
+            severity: 'warning',
+            title: 'Defina um ícone do modelo',
+            detail: 'O ícone ajuda o usuário a reconhecer rapidamente o formulário na lista do painel e do app.',
+        });
+    }
+    if (!desc) {
+        issues.push({
+            severity: 'warning',
+            title: 'Adicione uma descrição pública',
+            detail: 'Uma descrição objetiva deixa claro o propósito do formulário para quem for reutilizá-lo.',
+        });
+    }
+    if (issues.length === 0) {
+        issues.push({
+            severity: 'ok',
+            title: 'Estrutura consistente',
+            detail: 'Nenhum risco relevante encontrado na checagem rápida. Ainda assim, vale abrir a pré-visualização no app antes de publicar.',
+        });
+    }
+    return issues;
+}
+
+function renderBuilderAuditPanel() {
+    const list = document.getElementById('fb-form-audit-list');
+    if (!list) return;
+    lastSemanticAudit = buildFormSemanticAudit();
+    list.innerHTML = '';
+    lastSemanticAudit.forEach(function (item) {
+        const row = document.createElement('div');
+        row.className = 'fb-form-audit-item';
+        row.setAttribute('data-severity', item.severity || 'warning');
+        const title = document.createElement('strong');
+        title.textContent = item.title || 'Observação';
+        const detail = document.createElement('span');
+        detail.textContent = item.detail || '';
+        row.appendChild(title);
+        row.appendChild(detail);
+        list.appendChild(row);
+    });
+}
+
+function renderGuidedBuilderPanel() {
+    /* reservado — criação guiada no modal foi removida; canvas abre direto em branco */
+}
+
+window.brsparkRunFormSemanticAudit = function (showAlert) {
+    renderBuilderAuditPanel();
+    if (showAlert) window.openFormSemanticAuditModal();
+    if (!showAlert) return lastSemanticAudit;
+    const relevant = (lastSemanticAudit || []).filter(function (item) {
+        return item && item.severity !== 'ok';
+    });
+    if (!relevant.length) {
+        alert('QA do formulário: nenhum alerta importante encontrado.');
+        return lastSemanticAudit;
+    }
+    alert(
+        'QA do formulário:\n\n' +
+            relevant
+                .slice(0, 6)
+                .map(function (item, idx) {
+                    return String(idx + 1) + '. ' + item.title + ' — ' + item.detail;
+                })
+                .join('\n')
+    );
+    return lastSemanticAudit;
+};
+
+window.openFormSemanticAuditModal = function () {
+    renderBuilderAuditPanel();
+    const modal = document.getElementById('fb-form-audit-modal');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.closeFormSemanticAuditModal = function () {
+    const modal = document.getElementById('fb-form-audit-modal');
+    if (modal) modal.style.display = 'none';
+};
+
 window.saveChecklist = async function() {
     const btn = document.getElementById('fb-save-schema-btn');
     if (!btn) {
@@ -4541,6 +5127,25 @@ window.saveChecklist = async function() {
             return;
         }
 
+        const semanticAudit = buildFormSemanticAudit().filter(function (item) {
+            return item && item.severity === 'error';
+        });
+        if (semanticAudit.length) {
+            renderBuilderAuditPanel();
+            alert(
+                'Antes de salvar, corrija estes pontos:\n\n' +
+                    semanticAudit
+                        .map(function (item, idx) {
+                            return String(idx + 1) + '. ' + item.title + ' — ' + item.detail;
+                        })
+                        .join('\n')
+            );
+            setSync('idle');
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            return;
+        }
+
         const lightVal = validateChecklistLightBeforeSave();
         if (lightVal && lightVal.length) {
             alert(lightVal.join('\n'));
@@ -4589,6 +5194,8 @@ window.saveChecklist = async function() {
             metadata: buildChecklistTemplateMetadata(),
             schema: schemaSnapshot,
             folderId: currentFormFolderId ?? null,
+            version: Number(currentFormVersion || 1),
+            isActive: currentFormIsActive !== false,
             updatedAt: new Date().toISOString()
         };
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
@@ -4641,8 +5248,13 @@ window.saveChecklist = async function() {
                             metadata: saved.metadata || {},
                             schema: mergedSch.length ? mergedSch : schemaSnapshot,
                             folderId: saved.folderId ?? currentFormFolderId ?? null,
+                            version: Number(saved.version || 1),
+                            isActive: saved.isActive !== false,
                             updatedAt: saved.updatedAt || new Date().toISOString(),
                         };
+                        currentFormVersion = Number(saved.version || currentFormVersion || 1);
+                        currentFormIsActive = saved.isActive !== false;
+                        updateCurrentTemplateVersionBadge();
                         localStorage.setItem('brspark_checklists_db', JSON.stringify(dbLocal));
                         if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(dbLocal);
                     }
@@ -5313,9 +5925,11 @@ window.deleteChecklist = function(id) {
             console.warn('Erro ao deletar na API.', e);
         }
         
-        // Always remove locally regardless of API response
         const db = parseLocalChecklistsDb();
-        delete db[id];
+        if (db[id]) {
+            db[id].isActive = false;
+            db[id].updatedAt = new Date().toISOString();
+        }
         localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
 
         if(currentFormId === id) window.createNewChecklist();
@@ -5334,7 +5948,7 @@ window.loadSavedFormsList = async function () {
     const prev = parseLocalChecklistsDb();
     await refreshTemplateFolders();
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/templates`);
+        const res = await fetch(`${brsparkApiBase()}/checklists/templates?includeArchived=1`);
         if (res.ok) {
             const apiForms = await res.json();
             const db = { ...prev };
@@ -5352,6 +5966,8 @@ window.loadSavedFormsList = async function () {
                     schema: ensureSchemaInstructionFlags(schema),
                     metadata: form.metadata,
                     folderId: form.folderId ?? null,
+                    version: Number(form.version || 1),
+                    isActive: form.isActive !== false,
                     updatedAt: form.updatedAt,
                 };
             });
@@ -5416,6 +6032,7 @@ window.renderFormsGridFromLocal = function (db) {
 
     sortedForms.forEach((form) => {
         const count = (form.schema || []).length;
+        const archived = form.isActive === false;
         const iconHtml = form.metadata?.icon
             ? typeof window.renderWebIcon === 'function'
                 ? window.renderWebIcon(
@@ -5442,9 +6059,16 @@ window.renderFormsGridFromLocal = function (db) {
                     </div>
                     <div style="flex:1; min-width:0;">
                        <h4 style="margin:0; font-size:15px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">${ftitle}</h4>
-                       <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;">${count} campos</p>
+                       <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span>${count} campos</span>${checklistVersionBadgeHtml(form)}</p>
                     </div>
                  </div>
+                 <button type="button"
+                    onclick="event.stopPropagation(); void window.openChecklistVersionHistory('${fid}')"
+                    style="background:#eff6ff; border:none; border-left:1px solid #dbeafe; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#2563eb; font-size:20px; flex-shrink:0; transition:background 0.15s;"
+                    onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'"
+                    title="Ver histórico de versões">
+                    <ion-icon name="time-outline"></ion-icon>
+                 </button>
                  <button type="button"
                     onclick="event.stopPropagation(); window.duplicateChecklist('${fid}')"
                     style="background:#f0fdf4; border:none; border-left:1px solid #dcfce3; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#22c55e; font-size:20px; flex-shrink:0; transition:background 0.15s;"
@@ -5453,11 +6077,11 @@ window.renderFormsGridFromLocal = function (db) {
                     <ion-icon name="copy-outline"></ion-icon>
                  </button>
                  <button type="button"
-                    onclick="event.stopPropagation(); window.deleteChecklist('${fid}')"
+                    onclick="event.stopPropagation(); ${archived ? `void window.unarchiveChecklist('${fid}')` : `window.deleteChecklist('${fid}')`}"
                     style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0; transition:background 0.15s;"
                     onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff0f0'"
-                    title="Excluir formulário">
-                    <ion-icon name="trash-outline"></ion-icon>
+                    title="${archived ? 'Restaurar formulário arquivado' : 'Arquivar formulário'}">
+                    <ion-icon name="${archived ? 'refresh-outline' : 'archive-outline'}"></ion-icon>
                  </button>
                </div>
                <div style="padding:8px 12px 12px 12px; border-top:1px solid #f1f5f9; display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b;">
@@ -5498,6 +6122,8 @@ window.loadChecklist = function(id) {
     if(form) {
         currentFormId = form.id;
         currentFormTitle = form.title;
+        currentFormVersion = Number(form.version || 1);
+        currentFormIsActive = form.isActive !== false;
         currentFormDesc = form.description || '';
         currentFormIcon = form.metadata?.icon || '';
         currentFormIconLibrary =
@@ -5526,11 +6152,14 @@ window.loadChecklist = function(id) {
         // Fix: Restore inputs correctly
         document.getElementById('tpl-title').value = currentFormTitle;
         document.getElementById('tpl-desc').value = currentFormDesc;
+        updateCurrentTemplateVersionBadge();
         syncBuilderTaskIconDom();
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(form.schema || [])));
         ensureCanvasSchemaHasSection();
         fixTransitDisplacementViolations(fields);
         selectedFieldId = null;
+        renderGuidedBuilderPanel();
+        renderBuilderAuditPanel();
         renderCanvas();
         renderProperties();
         if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
@@ -5541,19 +6170,13 @@ window.createNewChecklist = function (fromBrowseFolder) {
     if (!fromBrowseFolder) {
         window.__newFormFolderId = undefined;
     }
-    const modal = document.getElementById('new-checklist-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-        document.getElementById('new-form-name-input').value = fbStr('mdl_new_form_title', null, 'Novo formulário');
-        setTimeout(() => document.getElementById('new-form-name-input').focus(), 100);
-    }
+    window.confirmCreateNewChecklist();
 };
 
 window.confirmCreateNewChecklist = function () {
-    const title =
-        document.getElementById('new-form-name-input').value.trim() ||
-        fbStr('mdl_new_form_title', null, 'Novo formulário');
-    document.getElementById('new-checklist-modal').style.display = 'none';
+    const title = fbStr('mdl_new_form_title', null, 'Novo formulário');
+    const modal = document.getElementById('new-checklist-modal');
+    if (modal) modal.style.display = 'none';
 
     if (window.__newFormFolderId !== undefined) {
         currentFormFolderId = window.__newFormFolderId;
@@ -5565,6 +6188,8 @@ window.confirmCreateNewChecklist = function () {
     flushQuillToBoundField();
     currentFormId = null;
     currentFormTitle = title;
+    currentFormVersion = 1;
+    currentFormIsActive = true;
     fields = [createDefaultSectionField([])];
     selectedFieldId = null;
     globalFormSettings = {
@@ -5587,6 +6212,9 @@ window.confirmCreateNewChecklist = function () {
     const tlNew = document.getElementById('tpl-icon-library');
     if (tlNew) tlNew.value = 'Ionicons';
     syncBuilderTaskIconDom();
+    updateCurrentTemplateVersionBadge();
+    renderGuidedBuilderPanel();
+    renderBuilderAuditPanel();
 
     renderCanvas();
     renderProperties();
@@ -5829,8 +6457,13 @@ function renderMobilePreview() {
         }
         
         if(f.type === 'lookup_select') {
-            const src = f.lookupSource === 'inline_json' ? 'inline_json' : 'preset';
-            inputMock = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px;font-size:13px;color:#1e40af;"><b>Lista dinâmica</b> — ${src === 'preset' ? 'preset «' + escapeHtmlLogic(String(f.lookupPreset||'equipamentos_demo')) + '»' : 'opções em JSON no modelo'}.</div>`;
+            const src = f.lookupSource === 'inline_json' ? 'inline_json' : f.lookupSource === 'api' ? 'api' : 'preset';
+            const srcTxt = src === 'preset'
+                ? 'preset «' + escapeHtmlLogic(String(f.lookupPreset||'equipamentos_demo')) + '»'
+                : src === 'api'
+                    ? 'endpoint «' + escapeHtmlLogic(String(f.lookupApiPath||'/api/checklists/lookup-options/equipamentos_demo')) + '»'
+                    : 'opções em JSON no modelo';
+            inputMock = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px;font-size:13px;color:#1e40af;"><b>Lista dinâmica</b> — ${srcTxt}.</div>`;
         }
         if(f.type === 'repeatable_matrix') inputMock = `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:10px;padding:12px;font-size:12px;color:#166534;"><b>Matriz</b> — linhas editáveis no app (até ${escapeHtmlLogic(String(f.matrixMaxRows||'?'))}).</div>`;
         if(f.type === 'opinion_scale') {
@@ -6201,9 +6834,17 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
                   '<strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, «Entre dois números» e «Fora do intervalo» comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.',
               )}</div>`
             : '';
+    const visionDetectionHint =
+        fld && fld.type === 'vision_checklist' && !isFormClock && !isSection
+            ? `<div style="font-size:10px;color:#0c4a6e;line-height:1.45;margin-bottom:10px;padding:9px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">${logicStr(
+                  'fb_logic_vision_detection_hint_html',
+                  '<strong>Visão de IA — detecção:</strong> com análise concluída, <code>==</code>, <code>!=</code>, «contém», «um de», <b>É verdadeiro</b> (resposta <code>yes</code>) e <b>É falso</b> (resposta <code>no</code>) usam o valor de <code>answers[0]</code> (normalizado para <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está preenchido</b> se só precisar de detecção concluída.',
+              )}</div>`
+            : '';
 
     const opSelect = `
             ${visionRatingHint}
+            ${visionDetectionHint}
             <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
                 ${opList
                     .map(([val, i18nKey]) => {
@@ -7080,7 +7721,11 @@ function renderCopilotMessages() {
         meta.textContent = m.role === 'user' ? 'Você' : 'Copiloto';
         const div = document.createElement('div');
         div.className = 'ai-copilot-bubble ' + (m.role === 'user' ? 'user' : 'assistant');
-        div.textContent = String(m.content || '');
+        if (m.role === 'assistant') {
+            div.innerHTML = renderCopilotRichText(String(m.content || ''));
+        } else {
+            div.textContent = String(m.content || '');
+        }
         row.appendChild(meta);
         row.appendChild(div);
         root.appendChild(row);
@@ -7093,6 +7738,62 @@ function renderCopilotMessages() {
             /* ignore */
         }
     }
+}
+
+function renderCopilotRichText(raw) {
+    const text = String(raw || '').replace(/\r/g, '').trim();
+    if (!text) return '<p>(sem texto)</p>';
+    const lines = text.split('\n');
+    const out = [];
+    let listMode = null;
+    let listBuffer = [];
+    const flushList = function () {
+        if (!listMode || !listBuffer.length) return;
+        out.push(
+            '<' +
+                listMode +
+                '>' +
+                listBuffer
+                    .map(function (item) {
+                        return '<li>' + escapeHtmlLogic(item) + '</li>';
+                    })
+                    .join('') +
+                '</' +
+                listMode +
+                '>'
+        );
+        listMode = null;
+        listBuffer = [];
+    };
+    lines.forEach(function (line) {
+        const trimmed = String(line || '').trim();
+        if (!trimmed) {
+            flushList();
+            return;
+        }
+        const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
+        const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+        if (bulletMatch) {
+            if (listMode !== 'ul') {
+                flushList();
+                listMode = 'ul';
+            }
+            listBuffer.push(bulletMatch[1]);
+            return;
+        }
+        if (orderedMatch) {
+            if (listMode !== 'ol') {
+                flushList();
+                listMode = 'ol';
+            }
+            listBuffer.push(orderedMatch[1]);
+            return;
+        }
+        flushList();
+        out.push('<p>' + escapeHtmlLogic(trimmed).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>');
+    });
+    flushList();
+    return out.join('');
 }
 
 function brsparkCopilotCountOperationalFields() {
@@ -7135,6 +7836,83 @@ async function brsparkCopilotMaybeAutoDiscoveryInterview() {
     } catch (e) {
         console.warn('[checklists-builder] auto discovery:', e && e.message ? e.message : e);
     }
+}
+
+function buildCopilotInsightCards(data) {
+    if (!data || typeof data !== 'object') return [];
+    const cards = [];
+    const schemaData = Array.isArray(data.schemaData) ? data.schemaData : [];
+    if (schemaData.length) {
+        const sectionCount = schemaData.filter(function (f) {
+            return f && String(f.type || '') === 'section_break';
+        }).length;
+        const fieldCount = schemaData.length - sectionCount;
+        cards.push({
+            title: 'O que a IA montou',
+            lines: [
+                fieldCount > 0
+                    ? 'Estrutura proposta com ' + fieldCount + ' campo(s) em ' + Math.max(sectionCount, 1) + ' etapa(s).'
+                    : 'A IA analisou o pedido, mas ainda não propôs campos novos.',
+            ],
+        });
+    }
+    if (Array.isArray(data.warnings) && data.warnings.length) {
+        cards.push({
+            title: 'Riscos ou lacunas',
+            lines: data.warnings.slice(0, 4),
+        });
+    }
+    if (Array.isArray(data.clarifyOptions) && data.clarifyOptions.length) {
+        cards.push({
+            title: 'O que ainda precisa decidir',
+            lines: data.clarifyOptions.slice(0, 3).map(function (item) {
+                return item && item.question ? item.question : '';
+            }).filter(Boolean),
+        });
+    } else {
+        cards.push({
+            title: 'Próximo passo sugerido',
+            lines: [
+                schemaData.length
+                    ? 'Revise o canvas, ajuste os campos principais e rode o QA do formulário antes de salvar.'
+                    : 'Use uma ação rápida ou descreva o processo com mais detalhes para gerar o primeiro rascunho.',
+            ],
+        });
+    }
+    return cards;
+}
+
+function renderCopilotInsights(data) {
+    const host = document.getElementById('ai-copilot-insights');
+    if (!host) return;
+    const cards = buildCopilotInsightCards(data);
+    host.innerHTML = '';
+    if (!cards.length) {
+        host.hidden = true;
+        return;
+    }
+    cards.forEach(function (card) {
+        const box = document.createElement('div');
+        box.className = 'ai-copilot-insight-card';
+        const title = document.createElement('h5');
+        title.textContent = card.title || 'Resumo';
+        box.appendChild(title);
+        if ((card.lines || []).length > 1) {
+            const list = document.createElement('ul');
+            card.lines.forEach(function (line) {
+                const li = document.createElement('li');
+                li.textContent = line;
+                list.appendChild(li);
+            });
+            box.appendChild(list);
+        } else {
+            const p = document.createElement('p');
+            p.textContent = (card.lines && card.lines[0]) || '';
+            box.appendChild(p);
+        }
+        host.appendChild(box);
+    });
+    host.hidden = false;
 }
 
 /** Sincroniza rótulos ARIA e texto do botão do menu lateral do copiloto. */
@@ -7190,6 +7968,9 @@ window.toggleAiCopilotPanel = function () {
             brsparkCopilotApplySavedPanelPosition();
         });
         brsparkCopilotSyncSideMenuUi();
+        applyBuilderToolboxModeUi();
+        renderGuidedBuilderPanel();
+        renderBuilderAuditPanel();
         renderCopilotMessages();
         updateCopilotExcelUi();
         refreshCopilotThinkingDom();
@@ -7245,6 +8026,10 @@ window.brsparkCopilotClear = function () {
     if (ch) ch.style.display = 'none';
     const ragFoot = document.getElementById('copilot-rag-footnote');
     if (ragFoot) ragFoot.textContent = '';
+    const telemetry = document.getElementById('copilot-telemetry-footnote');
+    if (telemetry) telemetry.textContent = '';
+    renderCopilotInsights(null);
+    renderGuidedBuilderPanel();
 };
 
 window.brsparkCopilotClearSpreadsheet = function () {
@@ -7685,6 +8470,88 @@ function brsparkCopilotAppendPreviewTypeSelect(typCell, currentType) {
     typCell.appendChild(sel);
 }
 
+function brsparkCopilotExtractPreviewAiSeed(field) {
+    if (!field || typeof field !== 'object') return '';
+    var directKeys = ['previewAiNote', 'copilotAiNote', 'aiNote', 'ai_note'];
+    for (var i = 0; i < directKeys.length; i++) {
+        var raw = field[directKeys[i]];
+        if (raw != null && String(raw).trim()) {
+            return String(raw).trim().slice(0, 1200);
+        }
+    }
+    var type = String(field.type || '').trim();
+    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
+        var structured = String(field.visionStructuredPrompt || '').trim();
+        if (structured) return structured.slice(0, 1200);
+        if (Array.isArray(field.visionQuestions)) {
+            var joined = field.visionQuestions
+                .map(function (q) {
+                    return String((q && q.text) || '').trim();
+                })
+                .filter(Boolean)
+                .join('\n');
+            if (joined) return joined.slice(0, 1200);
+        }
+    }
+    return '';
+}
+
+function brsparkCopilotBuildInterviewPreviewContext() {
+    var parts = [];
+    var ctx = collectCopilotFormContext();
+    if (ctx && ctx.objective) parts.push('Objetivo: ' + String(ctx.objective).trim());
+    if (ctx && ctx.sector) parts.push('Setor/cenário: ' + String(ctx.sector).trim());
+    if (ctx && ctx.audience) parts.push('Quem preenche: ' + String(ctx.audience).trim());
+    var msgs = Array.isArray(window.__brsparkCopilotMessages) ? window.__brsparkCopilotMessages : [];
+    var userLines = [];
+    msgs.forEach(function (msg) {
+        if (!msg || msg.role !== 'user' || msg.hiddenFromUi) return;
+        var txt = String(msg.content || '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!txt) return;
+        if (/^Ainda \*\*não\*\* apliquei esta proposta no canvas\./.test(txt)) return;
+        userLines.push(txt);
+    });
+    if (userLines.length) {
+        var compact = userLines.join(' | ');
+        if (compact.length > 700) compact = compact.slice(0, 700) + '...';
+        parts.push('Entrevista: ' + compact);
+    }
+    return parts.join(' | ').trim();
+}
+
+function brsparkCopilotBuildDefaultPreviewAiNote(row) {
+    if (!row || String(row.type || '').trim() === 'section_break') return '';
+    var interview = brsparkCopilotBuildInterviewPreviewContext();
+    var label = String(row.label || '').trim();
+    var description = String(row.description || '').trim();
+    var type = String(row.type || '').trim();
+    var blob = normalizeFieldLabelKey([label, description, interview].join(' '));
+    var parts = [];
+    if (interview) {
+        parts.push('Considere o contexto da entrevista: ' + interview + '.');
+    }
+    if (label) {
+        parts.push('Ao revisar o campo "' + label + '", mantenha aderência a esse cenário.');
+    }
+    if (description) {
+        parts.push('Leve em conta também a descrição proposta: "' + description.slice(0, 220) + '".');
+    }
+    if (type === 'vision_ai_analysis') {
+        if (blob.indexOf('epi') >= 0 || blob.indexOf('equipamento de protecao') >= 0) {
+            parts.push('Deixe explícito que a IA deve avaliar presença, uso correto e condição visual dos EPIs esperados.');
+        } else {
+            parts.push('Detalhe o que a IA deve observar na imagem e quais evidências caracterizam conformidade ou não conformidade.');
+        }
+    } else if (type === 'vision_checklist') {
+        parts.push('Transforme a intenção da entrevista em critérios visuais objetivos e verificáveis pela câmera.');
+    } else if (type === 'photo' || type === 'photo_stamped' || type === 'image_annotation') {
+        parts.push('Se este campo pedir evidência visual, alinhe a captura aos itens e sinais citados na entrevista.');
+    }
+    return parts.join(' ').trim().slice(0, 1200);
+}
+
 function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
     var prevIds = new Set();
     (prevFields || []).forEach(function (f) {
@@ -7700,6 +8567,7 @@ function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
             type: f.type != null ? String(f.type) : '',
             description: f.description != null ? String(f.description) : '',
             required: !!(f.required === true || f.required === 'true'),
+            aiNote: brsparkCopilotExtractPreviewAiSeed(f),
         });
     });
     return rows;
@@ -7810,6 +8678,7 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
         aiTa.className = 'copilot-prev-ai-note';
         aiTa.rows = 2;
         aiTa.placeholder = 'Instruções para a IA sobre este campo (opcional)';
+        aiTa.value = r.aiNote || brsparkCopilotBuildDefaultPreviewAiNote(r);
         aiCell.appendChild(aiTa);
         var reqCell = document.createElement('td');
         if (isSec) {
@@ -8078,20 +8947,6 @@ function brsparkCopilotApplyChatResponse(data) {
         brsparkCopilotEnsureTaskBrandingFromResponse(data);
     }
 
-    window.__brsparkCopilotMessages.push({ role: 'assistant', content: data.replyText || '(sem texto)' });
-    window.__brsparkCopilotLast = data;
-    renderCopilotMessages();
-    const ch = document.getElementById('ai-copilot-clarify-hint');
-    if (ch) ch.style.display = hasClarify ? 'block' : 'none';
-    if (hasClarify) {
-        brsparkCopilotSetSideMenuOpen(true);
-    }
-
-    const hasPatch =
-        !hasClarify &&
-        data.schemaPatch &&
-        data.schemaPatch.operations &&
-        data.schemaPatch.operations.length > 0;
     let schemaChanged = false;
     if (!hasClarify && Array.isArray(data.schemaData)) {
         try {
@@ -8150,6 +9005,42 @@ function brsparkCopilotApplyChatResponse(data) {
         window.__brsparkCopilotLogicLast = Array.isArray(data.logicSuggestions) ? data.logicSuggestions : [];
     }
     const hasLog = !hasClarify && !useSchemaPreview && window.__brsparkCopilotLogicLast.length > 0;
+
+    let assistantContent = String(data.replyText || '').trim();
+    if (!assistantContent) {
+        assistantContent = fbStr('fb_copilot_empty_reply', null, '(sem texto)');
+    }
+    if (!hasClarify) {
+        if (useSchemaPreview) {
+            assistantContent =
+                assistantContent +
+                '\n\n—\n' +
+                fbStr(
+                    'mdl_copilot_feedback_preview',
+                    null,
+                    '**Estado do painel:** abriu-se a **tabela de revisão** com os campos sugeridos. Confirme com **«Aplicar no canvas»** quando estiver pronto, ou ajuste as linhas antes.',
+                );
+        } else if (changed || hasLog) {
+            assistantContent =
+                assistantContent +
+                '\n\n—\n' +
+                fbStr(
+                    'mdl_copilot_feedback_applied',
+                    null,
+                    '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, definições do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
+                );
+        }
+    }
+
+    window.__brsparkCopilotMessages.push({ role: 'assistant', content: assistantContent });
+    window.__brsparkCopilotLast = data;
+    renderCopilotInsights(data);
+    renderCopilotMessages();
+    const ch = document.getElementById('ai-copilot-clarify-hint');
+    if (ch) ch.style.display = hasClarify ? 'block' : 'none';
+    if (hasClarify) {
+        brsparkCopilotSetSideMenuOpen(true);
+    }
 
     if (!hasClarify && useSchemaPreview) {
         brsparkCopilotOpenSchemaPreviewModal(data);
@@ -8215,6 +9106,22 @@ function brsparkCopilotApplyChatResponse(data) {
         }
         foot.textContent = parts.join(' ');
     }
+    const telemetry = document.getElementById('copilot-telemetry-footnote');
+    if (telemetry) {
+        const telemetryParts = [];
+        if (data.meta && data.meta.timings) {
+            const t = data.meta.timings;
+            if (typeof t.totalMs === 'number') telemetryParts.push('Tempo total: ' + t.totalMs + ' ms');
+            if (typeof t.llmMs === 'number') telemetryParts.push('LLM: ' + t.llmMs + ' ms');
+            if (typeof t.ragLibraryMs === 'number') telemetryParts.push('Biblioteca: ' + t.ragLibraryMs + ' ms');
+        }
+        if (data.meta && Array.isArray(data.meta.retries) && data.meta.retries.length) {
+            telemetryParts.push('Retries: ' + data.meta.retries.join(', '));
+        }
+        telemetry.textContent = telemetryParts.join(' · ');
+    }
+    renderGuidedBuilderPanel();
+    renderBuilderAuditPanel();
 }
 
 /**

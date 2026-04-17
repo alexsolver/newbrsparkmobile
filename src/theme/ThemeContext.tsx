@@ -4,6 +4,8 @@ import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE } from '../services/auth';
 
+const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
+
 type TenantBranding = {
   enabled?: boolean;
   appDisplayName?: string;
@@ -96,6 +98,7 @@ function resolveBrandingUrl(url: string | null | undefined): string | null {
 
 function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(false);
+  const [brandingCache, setBrandingCache] = useState<TenantBranding | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -106,12 +109,45 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    AsyncStorage.getItem(BRANDING_CACHE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          setBrandingCache(JSON.parse(raw));
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const toggleDarkMode = async (val: boolean) => {
     setDark(val);
     await AsyncStorage.setItem('@pref_dark_mode', JSON.stringify(val));
   };
 
-  const branding = user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+  const liveBranding = user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+  const branding =
+    liveBranding && Number(liveBranding.brandingVersion || 0) >= Number(brandingCache?.brandingVersion || 0)
+      ? liveBranding
+      : brandingCache?.enabled
+        ? brandingCache
+        : liveBranding;
+
+  useEffect(() => {
+    if (liveBranding?.enabled === false || (!liveBranding && user?.tenant)) {
+      setBrandingCache(null);
+      AsyncStorage.removeItem(BRANDING_CACHE_KEY).catch(() => {});
+      return;
+    }
+    if (!liveBranding?.enabled) return;
+    const nextRaw = JSON.stringify(liveBranding);
+    const prevRaw = JSON.stringify(brandingCache || null);
+    if (nextRaw === prevRaw) return;
+    setBrandingCache(liveBranding);
+    AsyncStorage.setItem(BRANDING_CACHE_KEY, nextRaw).catch(() => {});
+  }, [liveBranding, brandingCache]);
   const palette = useMemo(
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),
     [dark, branding],

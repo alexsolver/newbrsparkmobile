@@ -7,17 +7,9 @@ const { classifyTotal } = require('../lib/evaluationConstants');
 const { buildInsights } = require('../lib/evaluationInsights');
 const { pushToUserById } = require('../lib/evaluationPush');
 const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
+const { canManageTenantAppData } = require('../lib/authorization');
 
 const router = express.Router();
-
-function isManagerRole(role) {
-  return (
-    role === 'MANAGER' ||
-    role === 'TENANT_ADMIN' ||
-    role === 'SAAS_ADMIN' ||
-    role === 'ADMIN'
-  );
-}
 
 async function writeAudit(tenantId, userId, action, resource, metadata) {
   await prisma.auditLog.create({
@@ -177,7 +169,7 @@ router.get('/me/instances', authUser, async (req, res) => {
 router.get('/instances/:id', authUser, async (req, res) => {
   try {
     const { id } = req.params;
-    const isManager = isManagerRole(req.user.role);
+    const isManager = canManageTenantAppData(req.user);
     const inst = await prisma.evaluationInstance.findFirst({
       where: {
         id,
@@ -444,7 +436,7 @@ router.patch('/action-plans/:planId', authUser, async (req, res) => {
  */
 router.patch('/disputes/:disputeId', authUser, async (req, res) => {
   try {
-    if (!isManagerRole(req.user.role)) {
+    if (!canManageTenantAppData(req.user)) {
       return res.status(403).json({ error: 'Apenas gestores podem resolver revisões.' });
     }
 

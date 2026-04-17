@@ -4,7 +4,14 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
 const { adminAuthThenPanel } = require('../middleware/auth');
-const { auditActor } = require('../lib/auditActor');
+const { auditActor, auditContextMetadata } = require('../lib/auditActor');
+const {
+  buildPanelSessionBootstrap,
+  buildAdminAuthorization,
+  assertTenantAccess,
+  hasCapability,
+  normalizeRole,
+} = require('../lib/authorization');
 
 const PANEL_TENANT_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN', 'MANAGER']);
 
@@ -38,10 +45,31 @@ router.post('/login', async (req, res) => {
         action: 'LOGIN',
         resource: 'Admin Console',
         category: 'AUTH',
+        metadata: auditContextMetadata(
+          { authorization: buildAdminAuthorization({ panelUser: false, id: admin.id }) },
+          { targetTenantId: null }
+        ),
       },
     });
 
-    res.json({ token, admin: { id: admin.id, email: admin.email, name: admin.name }, mode: 'global' });
+    const adminPayload = {
+      panelUser: false,
+      id: admin.id,
+      userId: null,
+      tenantId: null,
+      email: admin.email,
+      name: admin.name,
+      role: null,
+      tenantSlug: null,
+      tenantName: null,
+    };
+    const session = buildPanelSessionBootstrap(adminPayload);
+    res.json({
+      token,
+      admin: { id: admin.id, email: admin.email, name: admin.name },
+      mode: 'global',
+      ...session,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno.' });
@@ -97,6 +125,17 @@ async function postTenantLogin(req, res) {
       { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
     );
 
+    const panelAdmin = {
+      panelUser: true,
+      id: null,
+      userId: user.id,
+      tenantId: user.tenantId,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+    };
     await prisma.auditLog.create({
       data: {
         adminId: null,
@@ -105,14 +144,19 @@ async function postTenantLogin(req, res) {
         action: 'PANEL_TENANT_LOGIN',
         resource: user.email,
         category: 'AUTH',
+        metadata: auditContextMetadata(
+          { authorization: buildAdminAuthorization(panelAdmin) },
+          { targetTenantId: user.tenantId, targetUserId: user.id }
+        ),
       },
     });
-
+    const session = buildPanelSessionBootstrap(panelAdmin);
     res.json({
       token,
       mode: 'tenant',
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
       tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
+      ...session,
     });
   } catch (err) {
     console.error('[auth/tenant-login]', err);
@@ -132,10 +176,11 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
     const actor = req.admin;
     if (!actor) return res.status(401).json({ error: 'Sessão inválida.' });
 
-    if (actor.panelUser && actor.role === 'MANAGER') {
+    const actorRole = normalizeRole(actor.role);
+    if (actor.panelUser && actorRole === 'MANAGER') {
       return res.status(403).json({ error: 'O perfil Gestor não pode iniciar sessão como outro utilizador.' });
     }
-    if (actor.panelUser && actor.role !== 'SAAS_ADMIN' && actor.role !== 'TENANT_ADMIN') {
+    if (actor.panelUser && !hasCapability(req.authorization, 'platform.users.impersonate') && !req.authorization?.canImpersonate) {
       return res.status(403).json({ error: 'Sem permissão para impersonar.' });
     }
 
@@ -153,10 +198,8 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
       return res.status(403).json({ error: 'Este utilizador não tem acesso ao painel (papel incompatível).' });
     }
 
-    if (actor.panelUser && actor.role === 'TENANT_ADMIN') {
-      if (!actor.tenantId || target.tenantId !== actor.tenantId) {
-        return res.status(403).json({ error: 'Só é possível impersonar utilizadores do seu tenant.' });
-      }
+    if (actor.panelUser && !assertTenantAccess(req.authorization, target.tenantId)) {
+      return res.status(403).json({ error: 'Só é possível impersonar utilizadores do seu tenant.' });
     }
 
     const token = jwt.sign(
@@ -187,22 +230,35 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
           action: 'PANEL_IMPERSONATE',
           resource: target.email,
           category: 'ADMIN',
-          metadata: {
+          metadata: auditContextMetadata(req, {
             targetUserId: target.id,
             targetRole: target.role,
+            targetTenantId: target.tenantId,
             impersonatorUserId: actor.panelUser ? actor.userId : null,
             impersonatorEmail: actor.email || null,
             impersonatorLegacyAdminId: actor.panelUser ? null : actor.id || null,
-          },
+          }),
         },
       })
       .catch(() => {});
 
+    const session = buildPanelSessionBootstrap({
+      panelUser: true,
+      id: null,
+      userId: target.id,
+      tenantId: target.tenantId,
+      email: target.email,
+      name: target.name,
+      role: target.role,
+      tenantSlug: target.tenant.slug,
+      tenantName: target.tenant.name,
+    });
     res.json({
       token,
       mode: 'tenant',
       user: { id: target.id, email: target.email, name: target.name, role: target.role },
       tenant: { id: target.tenant.id, slug: target.tenant.slug, name: target.tenant.name },
+      ...session,
     });
   } catch (err) {
     console.error('[auth/impersonate-panel]', err);
@@ -214,19 +270,21 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
 router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
   try {
     if (req.admin.panelUser) {
+      const session = buildPanelSessionBootstrap(req.admin);
       return res.json({
         mode: 'tenant',
         user: {
           id: req.admin.userId,
           email: req.admin.email,
           name: req.admin.name,
-          role: req.admin.role,
+          role: session.authz.roleKey,
         },
         tenant: {
-          id: req.admin.tenantId,
-          slug: req.admin.tenantSlug,
-          name: req.admin.tenantName,
+          id: session.context?.tenantId || null,
+          slug: session.context?.tenantSlug || null,
+          name: session.context?.tenantName || null,
         },
+        ...session,
       });
     }
     const admin = await prisma.admin.findUnique({
@@ -234,7 +292,19 @@ router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
       select: { id: true, email: true, name: true, createdAt: true },
     });
     if (!admin) return res.status(404).json({ error: 'Administrador não encontrado.' });
-    res.json({ mode: 'global', admin });
+    const session = buildPanelSessionBootstrap({
+      panelUser: false,
+      id: admin.id,
+      userId: null,
+      tenantId: null,
+      email: admin.email,
+      name: admin.name,
+      role: null,
+      tenantSlug: null,
+      tenantName: null,
+      authz: buildAdminAuthorization(req.admin),
+    });
+    res.json({ mode: 'global', admin, ...session });
   } catch (err) {
     console.error('[auth/me]', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });

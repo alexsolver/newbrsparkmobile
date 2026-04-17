@@ -2,19 +2,22 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs').promises;
 const prisma = require('../db');
-const { auditActor } = require('../lib/auditActor');
+const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const {
   materializeApprovedApplication,
+  mirrorApprovedLegacyRegistrationToProviderNetwork,
   normalizeFacePhotos,
   MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
 } = require('../lib/technicianRegistrationMaterialize');
 const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
+const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
+const { sendExpoPushToMany } = require('../services/expoPush');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 const {
   draftPatchTouchesLockedIdentity,
@@ -27,10 +30,18 @@ const {
 } = require('../lib/techRegIdDocumentOpenAi');
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
+const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
 
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_DOC_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const TECH_REG_RECENT_SESSION_MAX_AGE_SECONDS = Number(process.env.TECH_REG_RECENT_SESSION_MAX_AGE_SECONDS || 12 * 3600);
+const TECH_REG_SUBMIT_OTP_TTL_SECONDS = Number(process.env.TECH_REG_SUBMIT_OTP_TTL_SECONDS || 10 * 60);
+const TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS = Number(process.env.TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS || 5);
+const TECH_REG_SUBMIT_OTP_PURPOSE = 'TECH_REG_SUBMIT_OTP';
+
+/** Desafio OTP efêmero em memória por instância (cid -> payload). */
+const techRegSubmitOtpChallenges = new Map();
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -58,10 +69,7 @@ function mergeJsonResponses(existing, patch) {
 }
 
 function assertPanelTenantAccess(req, applicationTenantId) {
-  const a = req.admin;
-  if (!a?.panelUser) return true;
-  if (!a.tenantId) return true;
-  return applicationTenantId === a.tenantId;
+  return assertTenantAccess(req.authorization, applicationTenantId);
 }
 
 function escapeHtml(s) {
@@ -70,6 +78,427 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function renderTemplateVars(raw, vars) {
+  let out = String(raw || '');
+  const safeVars = vars && typeof vars === 'object' ? vars : {};
+  for (const [k, v] of Object.entries(safeVars)) {
+    out = out.replaceAll(`{{${k}}}`, String(v ?? ''));
+  }
+  return out;
+}
+
+function emailBodyToSimpleHtml(text) {
+  const safe = escapeHtml(String(text || ''));
+  const lines = safe.split(/\n{2,}/).map((blk) => blk.replace(/\n/g, '<br>'));
+  return lines.map((blk) => `<p>${blk}</p>`).join('');
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function cleanupExpiredTechRegOtpChallenges() {
+  const now = nowMs();
+  for (const [cid, row] of techRegSubmitOtpChallenges.entries()) {
+    if (!row || row.expiresAtMs <= now || row.used === true) {
+      techRegSubmitOtpChallenges.delete(cid);
+    }
+  }
+}
+
+function make6DigitOtp() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function hashTechRegOtp({ code, challengeId, userId }) {
+  return crypto
+    .createHash('sha256')
+    .update(`${String(code)}|${String(challengeId)}|${String(userId)}|${String(process.env.JWT_SECRET || '')}`)
+    .digest('hex');
+}
+
+async function issueTechRegSubmitOtpChallenge({ app, reqUser }) {
+  cleanupExpiredTechRegOtpChallenges();
+  const challengeId = crypto.randomUUID();
+  const otpCode = make6DigitOtp();
+  const expiresAtMs = nowMs() + TECH_REG_SUBMIT_OTP_TTL_SECONDS * 1000;
+  const otpHash = hashTechRegOtp({ code: otpCode, challengeId, userId: reqUser.id });
+
+  techRegSubmitOtpChallenges.set(challengeId, {
+    appId: app.id,
+    tenantId: app.tenantId,
+    userId: reqUser.id,
+    invitedEmail: String(app.invitedEmail || '').trim().toLowerCase(),
+    otpHash,
+    attempts: 0,
+    expiresAtMs,
+    used: false,
+  });
+
+  const challengeToken = jwt.sign(
+    {
+      purpose: TECH_REG_SUBMIT_OTP_PURPOSE,
+      cid: challengeId,
+      appId: app.id,
+      userId: reqUser.id,
+      invitedEmail: String(app.invitedEmail || '').trim().toLowerCase(),
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: TECH_REG_SUBMIT_OTP_TTL_SECONDS }
+  );
+
+  const email = String(app.invitedEmail || '').trim().toLowerCase();
+  const text =
+    `Seu código de confirmação do cadastro de prestador é: ${otpCode}\n\n` +
+    `Validade: ${Math.ceil(TECH_REG_SUBMIT_OTP_TTL_SECONDS / 60)} minuto(s).\n` +
+    'Se você não solicitou este código, ignore este e-mail.';
+  const html =
+    `<p>Seu código de confirmação do cadastro de prestador é:</p>` +
+    `<p style="font-size:24px;font-weight:800;letter-spacing:4px">${escapeHtml(otpCode)}</p>` +
+    `<p>Validade: <strong>${Math.ceil(TECH_REG_SUBMIT_OTP_TTL_SECONDS / 60)} minuto(s)</strong>.</p>` +
+    '<p>Se você não solicitou este código, ignore este e-mail.</p>';
+
+  await sendTransactionalEmailWithFallback({
+    to: email,
+    subject: 'BrSpark — código de confirmação do cadastro',
+    text,
+    html,
+  }).catch((e) => {
+    console.warn('[tech-reg otp] envio e-mail:', e?.message || e);
+  });
+
+  return { challengeToken };
+}
+
+function verifyTechRegSubmitOtpChallenge({ app, reqUser, challengeToken, otpCode }) {
+  cleanupExpiredTechRegOtpChallenges();
+  const tokenStr = String(challengeToken || '').trim();
+  const code = String(otpCode || '').trim();
+  if (!tokenStr || !code) {
+    return { ok: false, code: 'OTP_REQUIRED', error: 'Informe o código de confirmação.' };
+  }
+  let payload;
+  try {
+    payload = jwt.verify(tokenStr, process.env.JWT_SECRET);
+  } catch {
+    return { ok: false, code: 'OTP_EXPIRED', error: 'Código expirado. Solicite um novo envio.' };
+  }
+  if (
+    payload?.purpose !== TECH_REG_SUBMIT_OTP_PURPOSE ||
+    String(payload?.appId || '') !== String(app.id) ||
+    String(payload?.userId || '') !== String(reqUser.id)
+  ) {
+    return { ok: false, code: 'OTP_INVALID', error: 'Desafio de confirmação inválido.' };
+  }
+  const challengeId = String(payload?.cid || '').trim();
+  if (!challengeId) {
+    return { ok: false, code: 'OTP_INVALID', error: 'Desafio de confirmação inválido.' };
+  }
+  const row = techRegSubmitOtpChallenges.get(challengeId);
+  if (!row || row.used === true || row.expiresAtMs <= nowMs()) {
+    techRegSubmitOtpChallenges.delete(challengeId);
+    return { ok: false, code: 'OTP_EXPIRED', error: 'Código expirado. Solicite um novo envio.' };
+  }
+  if (
+    String(row.appId || '') !== String(app.id) ||
+    String(row.userId || '') !== String(reqUser.id) ||
+    String(row.invitedEmail || '') !== String(app.invitedEmail || '').trim().toLowerCase()
+  ) {
+    techRegSubmitOtpChallenges.delete(challengeId);
+    return { ok: false, code: 'OTP_INVALID', error: 'Desafio de confirmação inválido.' };
+  }
+  if (row.attempts >= TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS) {
+    techRegSubmitOtpChallenges.delete(challengeId);
+    return { ok: false, code: 'OTP_EXPIRED', error: 'Muitas tentativas. Solicite um novo código.' };
+  }
+  const expected = hashTechRegOtp({ code, challengeId, userId: reqUser.id });
+  if (expected !== row.otpHash) {
+    row.attempts += 1;
+    techRegSubmitOtpChallenges.set(challengeId, row);
+    return { ok: false, code: 'OTP_INVALID', error: 'Código inválido. Verifique e tente novamente.' };
+  }
+  techRegSubmitOtpChallenges.delete(challengeId);
+  return { ok: true };
+}
+
+async function logTemplateNotification({ templateId, recipient, channel, status, metadata }) {
+  if (!templateId) return;
+  await prisma.notificationLog
+    .create({
+      data: {
+        templateId,
+        recipient: String(recipient || '').trim(),
+        channel,
+        status,
+        metadata: metadata && typeof metadata === 'object' ? metadata : null,
+      },
+    })
+    .catch(() => {});
+}
+
+function techRegStatusCopy(status, ctx) {
+  const tenantName = String(ctx?.tenantName || '').trim();
+  const revisionNote = String(ctx?.revisionNote || '').trim();
+  const reason = String(ctx?.reason || '').trim();
+  if (status === 'SUBMITTED') {
+    return {
+      pushTitle: 'Cadastro enviado',
+      pushBody: tenantName
+        ? `Recebemos sua candidatura para ${tenantName}.`
+        : 'Recebemos sua candidatura de prestador.',
+      emailSubject: `BrSpark — candidatura de prestador recebida${tenantName ? ` (${tenantName})` : ''}`,
+      emailText:
+        `Olá,\n\nRecebemos sua candidatura de prestador${tenantName ? ` para ${tenantName}` : ''}. ` +
+        'Nossa equipe fará a análise e você será avisado quando houver atualização de status.\n',
+      emailHtml:
+        `<p>Olá,</p><p>Recebemos sua <strong>candidatura de prestador</strong>${tenantName ? ` para <strong>${escapeHtml(tenantName)}</strong>` : ''}. ` +
+        'Nossa equipe fará a análise e você será avisado quando houver atualização de status.</p>',
+    };
+  }
+  if (status === 'NEEDS_REVISION') {
+    return {
+      pushTitle: 'Ajustes no cadastro',
+      pushBody: revisionNote
+        ? `Ajustes solicitados: ${revisionNote.slice(0, 120)}${revisionNote.length > 120 ? '…' : ''}`
+        : 'A equipe solicitou ajustes na sua candidatura.',
+      emailSubject: 'BrSpark — ajustes solicitados no cadastro de prestador',
+      emailText:
+        `Olá,\n\nA equipe solicitou ajustes na sua candidatura de prestador${tenantName ? ` (${tenantName})` : ''}.\n\n` +
+        `${revisionNote ? `Mensagem da revisão:\n${revisionNote}\n\n` : ''}` +
+        'Abra o app BrSpark para corrigir e reenviar.\n',
+      emailHtml:
+        `<p>Olá,</p><p>A equipe solicitou <strong>ajustes</strong> na sua candidatura de prestador${tenantName ? ` (${escapeHtml(tenantName)})` : ''}.</p>` +
+        (revisionNote
+          ? `<p><strong>Mensagem da revisão:</strong><br>${escapeHtml(revisionNote)}</p>`
+          : '') +
+        '<p>Abra o app BrSpark para corrigir e reenviar.</p>',
+    };
+  }
+  if (status === 'APPROVED') {
+    return {
+      pushTitle: 'Cadastro aprovado',
+      pushBody: 'Seu cadastro de prestador foi aprovado. O modo Prestador já está disponível no app.',
+      emailSubject: 'BrSpark — cadastro de prestador aprovado',
+      emailText:
+        `Olá,\n\nSeu cadastro de prestador foi aprovado${tenantName ? ` para ${tenantName}` : ''}.\n` +
+        'Você já pode usar o modo Prestador no app BrSpark.\n',
+      emailHtml:
+        `<p>Olá,</p><p>Seu cadastro de prestador foi <strong>aprovado</strong>${tenantName ? ` para <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
+        '<p>Você já pode usar o modo Prestador no app BrSpark.</p>',
+    };
+  }
+  if (status === 'REJECTED') {
+    return {
+      pushTitle: 'Cadastro não aprovado',
+      pushBody: reason
+        ? `Motivo: ${reason.slice(0, 120)}${reason.length > 120 ? '…' : ''}`
+        : 'Sua candidatura de prestador foi encerrada sem aprovação.',
+      emailSubject: 'BrSpark — cadastro de prestador não aprovado',
+      emailText:
+        `Olá,\n\nSua candidatura de prestador${tenantName ? ` (${tenantName})` : ''} foi encerrada sem aprovação.\n` +
+        `${reason ? `\nMotivo informado:\n${reason}\n` : ''}`,
+      emailHtml:
+        `<p>Olá,</p><p>Sua candidatura de prestador${tenantName ? ` (${escapeHtml(tenantName)})` : ''} foi encerrada sem aprovação.</p>` +
+        (reason ? `<p><strong>Motivo informado:</strong><br>${escapeHtml(reason)}</p>` : ''),
+    };
+  }
+  return null;
+}
+
+function templateKeysForTechRegStatus(status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'SUBMITTED') {
+    return [
+      'tech_reg_submitted_candidate_push',
+      'tech_reg_submitted_candidate_email',
+      'tech_reg_submitted_reviewer_push',
+    ];
+  }
+  if (s === 'NEEDS_REVISION') {
+    return ['tech_reg_needs_revision_candidate_push', 'tech_reg_needs_revision_candidate_email'];
+  }
+  if (s === 'APPROVED') {
+    return ['tech_reg_approved_candidate_push', 'tech_reg_approved_candidate_email'];
+  }
+  if (s === 'REJECTED') {
+    return ['tech_reg_rejected_candidate_push', 'tech_reg_rejected_candidate_email'];
+  }
+  return [];
+}
+
+function resolveTemplateText(templatesByKey, key, vars, fallback) {
+  const tpl = templatesByKey[key];
+  if (!tpl || tpl.isActive === false) return { ...fallback, templateId: null };
+  const subject = renderTemplateVars(tpl.subject || fallback.subject || '', vars);
+  const body = renderTemplateVars(tpl.body || fallback.body || '', vars);
+  return {
+    subject: subject || fallback.subject || '',
+    body: body || fallback.body || '',
+    templateId: tpl.id || null,
+  };
+}
+
+function hasRecentAppSessionForTechRegSubmit(reqUser) {
+  if (!reqUser || reqUser.panel === true) return false;
+  const iatSec = Number(reqUser.iat || 0);
+  if (!Number.isFinite(iatSec) || iatSec <= 0) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const age = nowSec - iatSec;
+  return age >= 0 && age <= TECH_REG_RECENT_SESSION_MAX_AGE_SECONDS;
+}
+
+async function notifyTechRegistrationStatus(opts) {
+  try {
+    const tenantId = String(opts?.tenantId || '').trim();
+    const invitedEmail = String(opts?.invitedEmail || '').trim().toLowerCase();
+    const status = String(opts?.status || '').trim().toUpperCase();
+    if (!tenantId || !invitedEmail || !status) return;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    const tenantName = String(tenant?.name || '').trim();
+    const revisionNote = String(opts?.revisionNote || '').trim();
+    const reason = String(opts?.reason || '').trim();
+    const copy = techRegStatusCopy(status, {
+      tenantName: tenant?.name || '',
+      revisionNote,
+      reason,
+    });
+    if (!copy) return;
+    const vars = {
+      tenantName,
+      invitedEmail,
+      revisionNote,
+      reason,
+      status,
+    };
+    const keys = templateKeysForTechRegStatus(status);
+    const templateRows = keys.length
+      ? await prisma.notificationTemplate.findMany({
+          where: { key: { in: keys }, isActive: true },
+        })
+      : [];
+    const templatesByKey = Object.fromEntries(templateRows.map((r) => [String(r.key), r]));
+
+    const candidateUsers = await prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        email: { equals: invitedEmail, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    const candidateUserIds = Array.from(
+      new Set(
+        candidateUsers
+          .map((u) => String(u.id || '').trim())
+          .filter(Boolean)
+          .concat(opts?.candidateUserId ? [String(opts.candidateUserId).trim()] : []),
+      ),
+    );
+
+    if (candidateUserIds.length) {
+      const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: candidateUserIds } } });
+      if (pushTokens.length) {
+        const pushTpl = resolveTemplateText(
+          templatesByKey,
+          `tech_reg_${status.toLowerCase()}_candidate_push`,
+          vars,
+          { subject: copy.pushTitle, body: copy.pushBody },
+        );
+        const pushRes = await sendExpoPushToMany(pushTokens, {
+          title: pushTpl.subject || copy.pushTitle,
+          body: pushTpl.body || copy.pushBody,
+          data: { type: 'technician_registration_status', status },
+        });
+        await logTemplateNotification({
+          templateId: pushTpl.templateId,
+          recipient: invitedEmail,
+          channel: 'PUSH',
+          status: pushRes?.ok === false ? 'FAILED' : 'SENT',
+          metadata: { status, sent: pushRes?.sent ?? 0, errors: pushRes?.errors ?? 0 },
+        });
+      }
+    }
+
+    const emailTpl = resolveTemplateText(
+      templatesByKey,
+      `tech_reg_${status.toLowerCase()}_candidate_email`,
+      vars,
+      { subject: copy.emailSubject, body: copy.emailText },
+    );
+    const emailText = emailTpl.body || copy.emailText;
+    const emailHtml = emailTpl.templateId ? emailBodyToSimpleHtml(emailText) : copy.emailHtml;
+    const emailOut = await sendTransactionalEmailWithFallback({
+      to: invitedEmail,
+      subject: emailTpl.subject || copy.emailSubject,
+      text: emailText,
+      html: emailHtml,
+    }).catch((e) => {
+      console.warn('[tech-reg notify] e-mail candidato:', e?.message || e);
+      return { send: { ok: false, error: e?.message || String(e) }, provider: 'none' };
+    });
+    await logTemplateNotification({
+      templateId: emailTpl.templateId,
+      recipient: invitedEmail,
+      channel: 'EMAIL',
+      status: emailOut?.send?.ok ? 'SENT' : 'FAILED',
+      metadata: {
+        status,
+        provider: emailOut?.provider || 'none',
+        skipped: !!emailOut?.send?.skipped,
+        error: emailOut?.send?.error || null,
+      },
+    });
+
+    if (status === 'SUBMITTED') {
+      const reviewers = await prisma.user.findMany({
+        where: {
+          tenantId,
+          isActive: true,
+          role: { in: ['MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'] },
+        },
+        select: { id: true },
+      });
+      const reviewerIds = reviewers.map((u) => u.id).filter((id) => !candidateUserIds.includes(id));
+      if (reviewerIds.length) {
+        const reviewTokens = await prisma.pushToken.findMany({ where: { userId: { in: reviewerIds } } });
+        if (reviewTokens.length) {
+          const reviewerTpl = resolveTemplateText(
+            templatesByKey,
+            'tech_reg_submitted_reviewer_push',
+            vars,
+            {
+              subject: 'Nova candidatura de prestador',
+              body: tenant?.name
+                ? `${invitedEmail} enviou candidatura (${tenant.name}).`
+                : `${invitedEmail} enviou candidatura.`,
+            },
+          );
+          const reviewerPushRes = await sendExpoPushToMany(reviewTokens, {
+            title: reviewerTpl.subject || 'Nova candidatura de prestador',
+            body:
+              reviewerTpl.body ||
+              (tenant?.name ? `${invitedEmail} enviou candidatura (${tenant.name}).` : `${invitedEmail} enviou candidatura.`),
+            data: { type: 'technician_registration_submitted', status },
+          });
+          await logTemplateNotification({
+            templateId: reviewerTpl.templateId,
+            recipient: `tenant:${tenantId}:reviewers`,
+            channel: 'PUSH',
+            status: reviewerPushRes?.ok === false ? 'FAILED' : 'SENT',
+            metadata: { status, sent: reviewerPushRes?.sent ?? 0, errors: reviewerPushRes?.errors ?? 0 },
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[tech-reg notify] falha:', e?.message || e);
+  }
 }
 
 /** Passo 1 com gate IA (foto de perfil separada das fotos FaceMatch). */
@@ -415,16 +844,36 @@ publicRouter.post(
       const errMsg = validateSubmitPayload(app, req.body);
       if (errMsg) return res.status(400).json({ error: errMsg });
 
-      const pwd = String(req.body.password || '');
-      if (!pwd) {
-        return res.status(400).json({ error: 'Informe a senha da sua conta BrSpark para confirmar o envio.' });
-      }
       const identity = await prisma.user.findUnique({
         where: { id: req.user.id },
         select: { password: true },
       });
-      if (!identity?.password || !(await bcrypt.compare(pwd, identity.password))) {
-        return res.status(400).json({ error: 'Senha incorreta. Use a mesma senha com que inicia sessão no app.' });
+      if (!identity?.password) {
+        return res.status(400).json({ error: 'Conta sem credencial de senha válida.' });
+      }
+      if (!hasRecentAppSessionForTechRegSubmit(req.user)) {
+        const otpCheck = verifyTechRegSubmitOtpChallenge({
+          app,
+          reqUser: req.user,
+          challengeToken: req.body?.otpChallengeToken,
+          otpCode: req.body?.otpCode,
+        });
+        if (!otpCheck.ok) {
+          if (otpCheck.code === 'OTP_REQUIRED') {
+            const issued = await issueTechRegSubmitOtpChallenge({ app, reqUser: req.user });
+            return res.status(400).json({
+              error: 'Enviamos um código de confirmação para seu e-mail. Informe o código para concluir o envio.',
+              code: 'RECENT_LOGIN_OTP_REQUIRED',
+              challengeToken: issued.challengeToken,
+              otpDigits: 6,
+              expiresInSec: TECH_REG_SUBMIT_OTP_TTL_SECONDS,
+            });
+          }
+          return res.status(400).json({
+            error: otpCheck.error,
+            code: otpCheck.code,
+          });
+        }
       }
 
       const merged = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body.responses || {});
@@ -433,6 +882,9 @@ publicRouter.post(
         merged.technician.workScheduleJson = defaultEmptySchedule();
       }
       if (!Array.isArray(merged.technician.serviceLocationIds)) merged.technician.serviceLocationIds = [];
+      merged.technician.serviceCoverageGeoJson = normalizeServiceCoverageGeo(
+        merged.technician.serviceCoverageGeoJson
+      );
       if (!Array.isArray(merged.personalDocuments)) merged.personalDocuments = [];
       if (!Array.isArray(merged.technician.professionalDocuments)) merged.technician.professionalDocuments = [];
 
@@ -453,6 +905,12 @@ publicRouter.post(
           message: null,
           actorEmail: merged.email || app.invitedEmail,
         },
+      });
+      await notifyTechRegistrationStatus({
+        tenantId: app.tenantId,
+        invitedEmail: merged.email || app.invitedEmail,
+        candidateUserId: req.user.id,
+        status: 'SUBMITTED',
       });
       res.json({ ok: true, status: updated.status });
     } catch (err) {
@@ -1136,9 +1594,7 @@ async function listOrphanPendingTechnicianProfiles(tenantFilter, qSearch) {
 adminRouter.get('/', async (req, res) => {
   try {
     const { status, tenantId: qTenant, includeOrphans, q: qRaw } = req.query;
-    const a = req.admin;
-    let tenantFilter = qTenant || null;
-    if (a?.panelUser && a.tenantId) tenantFilter = a.tenantId;
+    const tenantFilter = resolveScopedTenantId(req.authorization, qTenant || null);
 
     const statusStr = status ? String(status) : '';
     const qSearch = qRaw != null ? String(qRaw).trim().slice(0, 200) : '';
@@ -1210,8 +1666,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
     const { email, tenantId: bodyTenant } = req.body;
     if (!email || !String(email).trim()) return res.status(400).json({ error: 'E-mail é obrigatório.' });
     const a = req.admin;
-    let tenantId = bodyTenant || null;
-    if (a?.panelUser && a.tenantId) tenantId = a.tenantId;
+    const tenantId = resolveScopedTenantId(req.authorization, bodyTenant || null);
     if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório (ou inicie sessão no contexto do tenant).' });
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -1278,7 +1733,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
           action: 'TECH_REGISTRATION_INVITE',
           resource: em,
           category: 'ADMIN',
-          metadata: { applicationId: app.id },
+          metadata: auditContextMetadata(req, { applicationId: app.id, targetTenantId: tenantId }),
         },
       })
       .catch(() => {});
@@ -1386,6 +1841,13 @@ adminRouter.post('/:id/request-revision', express.json(), async (req, res) => {
         actorEmail: a?.email || null,
       },
     });
+    await notifyTechRegistrationStatus({
+      tenantId: app.tenantId,
+      invitedEmail: app.invitedEmail,
+      candidateUserId: app.candidateUserId,
+      status: 'NEEDS_REVISION',
+      revisionNote: message,
+    });
     res.json({ ok: true, status: 'NEEDS_REVISION' });
   } catch (err) {
     console.error('POST tech-reg revision', err);
@@ -1400,11 +1862,27 @@ adminRouter.post('/:id/approve', async (req, res) => {
     if (!assertPanelTenantAccess(req, app.tenantId)) return res.status(403).json({ error: 'Sem permissão.' });
 
     const user = await materializeApprovedApplication(prisma, app.id);
+    await mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, {
+      tenantId: app.tenantId,
+      userId: user.id,
+      technician:
+        app.responsesJson && typeof app.responsesJson === 'object'
+          ? app.responsesJson.technician
+          : null,
+    }).catch((e) => {
+      console.warn('[provider-first] mirror legacy approval failed:', e?.message || e);
+    });
     try {
       await syncComprefaceGalleryAfterUserChange(prisma, user.id, req, 'tech_reg_approve');
     } catch (e) {
       console.warn('[tech-reg] FaceMatch após aprovação', e);
     }
+    await notifyTechRegistrationStatus({
+      tenantId: app.tenantId,
+      invitedEmail: app.invitedEmail,
+      candidateUserId: app.candidateUserId || user.id,
+      status: 'APPROVED',
+    });
 
     await prisma.auditLog
       .create({
@@ -1414,7 +1892,12 @@ adminRouter.post('/:id/approve', async (req, res) => {
           action: 'TECH_REGISTRATION_APPROVED',
           resource: user.email,
           category: 'ADMIN',
-          metadata: { applicationId: app.id, userId: user.id },
+          metadata: auditContextMetadata(req, {
+            applicationId: app.id,
+            userId: user.id,
+            targetTenantId: app.tenantId,
+            targetUserId: user.id,
+          }),
         },
       })
       .catch(() => {});
@@ -1458,6 +1941,13 @@ adminRouter.post('/:id/reject', express.json(), async (req, res) => {
         message: reason,
         actorEmail: a?.email || null,
       },
+    });
+    await notifyTechRegistrationStatus({
+      tenantId: app.tenantId,
+      invitedEmail: app.invitedEmail,
+      candidateUserId: app.candidateUserId,
+      status: 'REJECTED',
+      reason,
     });
     res.json({ ok: true });
   } catch (err) {

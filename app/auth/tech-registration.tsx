@@ -360,7 +360,19 @@ type Loc = {
   address?: string | null;
 };
 
-const SERVICE_AREA_RADIUS_METERS = 12000;
+type ServiceCoverageGeo = {
+  homeBase: {
+    latitude: number;
+    longitude: number;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    countryCode?: string | null;
+  } | null;
+  radiusKm: number | null;
+  notes?: string | null;
+} | null;
 
 function formatBrCepInput(raw: string): string {
   const d = raw.replace(/\D/g, '').slice(0, 8);
@@ -463,6 +475,9 @@ export default function TechRegistrationScreen() {
   const [proDocs, setProDocs] = useState<DocRow[]>([]);
   const [schedule, setSchedule] = useState(defaultSchedule);
   const [serviceLocIds, setServiceLocIds] = useState<string[]>([]);
+  const [serviceCoverageRadiusKm, setServiceCoverageRadiusKm] = useState('50');
+  const [serviceCoverageNotes, setServiceCoverageNotes] = useState('');
+  const [coverageCenter, setCoverageCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [facePhotos, setFacePhotos] = useState<{ id: string; url: string }[]>([]);
   const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
   const [primaryValidating, setPrimaryValidating] = useState(false);
@@ -484,7 +499,9 @@ export default function TechRegistrationScreen() {
     longitudeDelta: number;
   } | null>(null);
 
-  const [password, setPassword] = useState('');
+  const [securityModalVisible, setSecurityModalVisible] = useState(false);
+  const [submitOtpCode, setSubmitOtpCode] = useState('');
+  const [submitOtpChallengeToken, setSubmitOtpChallengeToken] = useState<string | null>(null);
 
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const identityLockNavRef = useRef(false);
@@ -597,6 +614,25 @@ export default function TechRegistrationScreen() {
         setSchedule(merged);
       } else setSchedule(defaultSchedule());
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
+      const serviceCoverage = tech.serviceCoverageGeoJson && typeof tech.serviceCoverageGeoJson === 'object'
+        ? (tech.serviceCoverageGeoJson as ServiceCoverageGeo)
+        : null;
+      setCoverageCenter(
+        serviceCoverage?.homeBase &&
+          Number.isFinite(serviceCoverage.homeBase.latitude) &&
+          Number.isFinite(serviceCoverage.homeBase.longitude)
+          ? {
+              latitude: Number(serviceCoverage.homeBase.latitude),
+              longitude: Number(serviceCoverage.homeBase.longitude),
+            }
+          : null
+      );
+      setServiceCoverageRadiusKm(
+        serviceCoverage?.radiusKm != null && Number.isFinite(Number(serviceCoverage.radiusKm))
+          ? String(serviceCoverage.radiusKm)
+          : '50'
+      );
+      setServiceCoverageNotes(serviceCoverage?.notes ? String(serviceCoverage.notes) : '');
       const capRaw = (r as any).techRegPrimaryProfileCapture;
       const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
       const faceRowsRaw = faces
@@ -665,11 +701,33 @@ export default function TechRegistrationScreen() {
     }, [load])
   );
 
+  const coverageRadiusMeters = useMemo(() => {
+    const km = Number(serviceCoverageRadiusKm);
+    if (!Number.isFinite(km) || km <= 0) return 0;
+    return km * 1000;
+  }, [serviceCoverageRadiusKm]);
+
   const buildResponsesJson = useCallback(() => {
     const skillsJson = skillsText
       .split(/[,;\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const coverageGeoJson =
+      coverageCenter && coverageRadiusMeters > 0
+        ? {
+            homeBase: {
+              latitude: coverageCenter.latitude,
+              longitude: coverageCenter.longitude,
+              address: line1.trim() || null,
+              city: city.trim() || null,
+              state: stateUf.trim() || null,
+              postalCode: postal.trim() || null,
+              countryCode: country.trim() || 'BR',
+            },
+            radiusKm: Number(serviceCoverageRadiusKm) || 0,
+            notes: serviceCoverageNotes.trim() || null,
+          }
+        : null;
     return {
       name: name.trim(),
       email: email.trim().toLowerCase(),
@@ -703,6 +761,7 @@ export default function TechRegistrationScreen() {
         score: Number(score) || 5,
         skillsJson,
         workScheduleJson: schedule,
+        serviceCoverageGeoJson: coverageGeoJson,
         serviceLocationIds: serviceLocIds,
         professionalDocuments: proDocs.map((d) => ({
           id: d.id,
@@ -753,6 +812,10 @@ export default function TechRegistrationScreen() {
     score,
     skillsText,
     schedule,
+    coverageCenter,
+    coverageRadiusMeters,
+    serviceCoverageNotes,
+    serviceCoverageRadiusKm,
     serviceLocIds,
   ]);
 
@@ -770,22 +833,6 @@ export default function TechRegistrationScreen() {
       primaryProfileCapture?.validationEngine,
       avatarUrl,
     ],
-  );
-
-  const locsWithCoords = useMemo(
-    () =>
-      locations.filter(
-        (l) =>
-          l.latitude != null &&
-          l.longitude != null &&
-          Number.isFinite(l.latitude) &&
-          Number.isFinite(l.longitude),
-      ),
-    [locations],
-  );
-  const locsWithoutCoords = useMemo(
-    () => locations.filter((l) => !locsWithCoords.some((x) => x.id === l.id)),
-    [locations, locsWithCoords],
   );
 
   /** Documento principal do passo 3 — espelha `personalDocuments[0]` sem duplicar em «Docs. pessoais». */
@@ -1342,8 +1389,8 @@ export default function TechRegistrationScreen() {
     }
   };
 
-  const toggleServiceLoc = (id: string) => {
-    setServiceLocIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const setCoverageCenterFromCoords = (latitude: number, longitude: number) => {
+    setCoverageCenter({ latitude, longitude });
     saveDraftSoon();
   };
 
@@ -1386,10 +1433,6 @@ export default function TechRegistrationScreen() {
   };
 
   const openRegionsMap = async () => {
-    if (!locations.length) {
-      Alert.alert('Regiões', 'Não há bases cadastradas para a sua organização.');
-      return;
-    }
     setMapOpenLoading(true);
     try {
       const countryLabel =
@@ -1417,18 +1460,9 @@ export default function TechRegistrationScreen() {
           /* continuar */
         }
       }
-      if (!centeredOnAddress) {
-        const withCoord = locations.find(
-          (l) =>
-            l.latitude != null &&
-            l.longitude != null &&
-            Number.isFinite(l.latitude) &&
-            Number.isFinite(l.longitude),
-        );
-        if (withCoord) {
-          lat = withCoord.latitude as number;
-          lng = withCoord.longitude as number;
-        }
+      if (!centeredOnAddress && coverageCenter) {
+        lat = coverageCenter.latitude;
+        lng = coverageCenter.longitude;
       }
       const delta = 0.42;
       setMapInitialRegion({
@@ -1437,6 +1471,9 @@ export default function TechRegistrationScreen() {
         latitudeDelta: delta,
         longitudeDelta: delta,
       });
+      if (!coverageCenter) {
+        setCoverageCenter({ latitude: lat, longitude: lng });
+      }
       setRegionMapVisible(true);
     } finally {
       setMapOpenLoading(false);
@@ -1558,15 +1595,41 @@ export default function TechRegistrationScreen() {
           borderColor: C.border,
         },
         infoCalloutText: { fontSize: 12, color: C.textSecondary, lineHeight: 18 },
+        progressCard: {
+          marginTop: 12,
+          padding: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.cardWhite,
+        },
+        progressBarTrack: {
+          height: 8,
+          borderRadius: 999,
+          backgroundColor: C.surfaceLow,
+          overflow: 'hidden',
+          marginTop: 8,
+        },
+        progressBarFill: {
+          height: 8,
+          borderRadius: 999,
+          backgroundColor: C.accent,
+        },
+        progressLine: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: 8,
+        },
+        progressList: { marginTop: 8, gap: 6 },
+        progressItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
       }),
     [C]
   );
 
-  const submit = async () => {
-    if (password.length < 6) {
-      Alert.alert('Senha', 'Informe a senha da sua conta BrSpark (mínimo 6 caracteres) para confirmar o envio.');
-      return;
-    }
+  const submit = async (opts?: { otpCodeOverride?: string; otpChallengeTokenOverride?: string }) => {
+    const otpCode = String(opts?.otpCodeOverride || '').trim();
+    const otpChallengeToken = String(opts?.otpChallengeTokenOverride || '').trim();
     if (!name.trim()) {
       Alert.alert('Validação', 'Informe o nome.');
       return;
@@ -1595,13 +1658,30 @@ export default function TechRegistrationScreen() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${jwt}`,
         },
-        body: JSON.stringify({
-          password,
-          responsesJson: buildResponsesJson(),
-        }),
+        body: JSON.stringify(
+          otpCode && otpChallengeToken
+            ? { otpCode, otpChallengeToken, responsesJson: buildResponsesJson() }
+            : { responsesJson: buildResponsesJson() }
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
+        if (data.code === 'RECENT_LOGIN_OTP_REQUIRED') {
+          if (data.challengeToken) setSubmitOtpChallengeToken(String(data.challengeToken));
+          setSubmitOtpCode('');
+          setSecurityModalVisible(true);
+          return;
+        }
+        if (data.code === 'OTP_INVALID') {
+          Alert.alert('Código inválido', 'O código informado não confere. Revise e tente novamente.');
+          return;
+        }
+        if (data.code === 'OTP_EXPIRED') {
+          setSubmitOtpCode('');
+          setSubmitOtpChallengeToken(null);
+          Alert.alert('Código expirado', 'Solicite um novo código para concluir o envio.');
+          return;
+        }
         if (data.code === 'TECH_IDENTITY_LOCKED') {
           const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
           Alert.alert(title, message);
@@ -1622,6 +1702,9 @@ export default function TechRegistrationScreen() {
               : router.replace('/auth/login' as any),
         },
       ]);
+      setSecurityModalVisible(false);
+      setSubmitOtpCode('');
+      setSubmitOtpChallengeToken(null);
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Falha de rede.');
     } finally {
@@ -1747,6 +1830,28 @@ export default function TechRegistrationScreen() {
   const primaryStepDone = readOnly || !!primaryProfileCapture?.validatedAt;
   const useSplitBiometricStep =
     !readOnly && isAiProfileGateEngine(primaryProfileCapture?.validationEngine);
+  const needsIdDocumentStep = isAiProfileGateEngine(primaryProfileCapture?.validationEngine);
+  const hasIdDocumentDone = !needsIdDocumentStep || !!techRegIdDocument?.faceVerifiedAt;
+  const hasPersonalDataDone = !!name.trim() && !!phone.trim();
+  const hasAddressDone = !!line1.trim() && !!city.trim() && !!stateUf.trim();
+  const hasScheduleDone = Object.values(schedule).some(
+    (day) => Array.isArray(day) && day.some((slot) => !!slot?.enabled && !!slot?.start && !!slot?.end),
+  );
+  const hasRegionsDone = !!coverageCenter && coverageRadiusMeters > 0;
+  const hasOpsDone = hasScheduleDone && hasRegionsDone;
+  const hasSecurityDone = true;
+  const progressItems = [
+    { label: 'Foto de perfil', done: primaryStepDone },
+    { label: 'Biometria facial', done: enrollmentPhotosForUi.length >= MIN_FACE_ENROLLMENT_PHOTOS },
+    { label: 'Documento com foto', done: hasIdDocumentDone },
+    { label: 'Dados pessoais', done: hasPersonalDataDone },
+    { label: 'Endereço base', done: hasAddressDone },
+    { label: 'Disponibilidade e regiões', done: hasOpsDone },
+    { label: 'Confirmação de segurança', done: hasSecurityDone },
+  ];
+  const progressDoneCount = progressItems.filter((it) => it.done).length;
+  const progressPercent = Math.round((progressDoneCount / progressItems.length) * 100);
+  const pendingProgressItems = progressItems.filter((it) => !it.done);
 
   if (!primaryStepDone) {
     return (
@@ -1758,6 +1863,18 @@ export default function TechRegistrationScreen() {
           </TouchableOpacity>
           <Text style={styles.title}>Passo 1 — Foto de perfil</Text>
           <Text style={styles.sub}>Etapa obrigatória antes da biometria adicional e do formulário.</Text>
+          <View style={styles.progressCard}>
+            <Text style={{ fontSize: 12, color: C.textSecondary }}>
+              Progresso geral: {progressDoneCount}/{progressItems.length} etapas
+            </Text>
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <View style={styles.progressLine}>
+              <Text style={{ fontSize: 12, color: C.textSecondary }}>Cadastro em andamento</Text>
+              <Text style={{ fontSize: 12, color: C.slate, fontWeight: '800' }}>{progressPercent}%</Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -1808,6 +1925,18 @@ export default function TechRegistrationScreen() {
             Envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos do mesmo rosto da foto de perfil (passo 1). Cada imagem é
             validada no servidor em relação à foto de perfil antes de ser guardada.
           </Text>
+          <View style={styles.progressCard}>
+            <Text style={{ fontSize: 12, color: C.textSecondary }}>
+              Progresso geral: {progressDoneCount}/{progressItems.length} etapas
+            </Text>
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <View style={styles.progressLine}>
+              <Text style={{ fontSize: 12, color: C.textSecondary }}>Cadastro em andamento</Text>
+              <Text style={{ fontSize: 12, color: C.slate, fontWeight: '800' }}>{progressPercent}%</Text>
+            </View>
+          </View>
         </View>
         <View style={styles.section}>
           <Text style={styles.secTitle}>Fotos para o reconhecimento facial</Text>
@@ -1878,6 +2007,18 @@ export default function TechRegistrationScreen() {
             Envie uma imagem de um documento oficial com a sua fotografia. O sistema compara o rosto no documento com a
             foto de perfil do passo 1 e, em seguida, lê os dados para preencher o formulário (OpenAI no servidor).
           </Text>
+          <View style={styles.progressCard}>
+            <Text style={{ fontSize: 12, color: C.textSecondary }}>
+              Progresso geral: {progressDoneCount}/{progressItems.length} etapas
+            </Text>
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <View style={styles.progressLine}>
+              <Text style={{ fontSize: 12, color: C.textSecondary }}>Cadastro em andamento</Text>
+              <Text style={{ fontSize: 12, color: C.slate, fontWeight: '800' }}>{progressPercent}%</Text>
+            </View>
+          </View>
         </View>
         <View style={styles.section}>
           <Text style={styles.secTitle}>Foto ou imagem do documento</Text>
@@ -1946,6 +2087,30 @@ export default function TechRegistrationScreen() {
             <Text style={[styles.warnText, { color: '#1e40af' }]}>Enviado — aguarde a análise. Não é possível editar agora.</Text>
           </View>
         ) : null}
+        <View style={styles.progressCard}>
+          <Text style={{ fontSize: 12, color: C.textSecondary }}>
+            Progresso geral: {progressDoneCount}/{progressItems.length} etapas concluídas
+          </Text>
+          <View style={styles.progressBarTrack}>
+            <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+          </View>
+          <View style={styles.progressLine}>
+            <Text style={{ fontSize: 12, color: C.textSecondary }}>
+              {pendingProgressItems.length === 0 ? 'Pronto para envio' : `${pendingProgressItems.length} pendência(s) antes do envio`}
+            </Text>
+            <Text style={{ fontSize: 12, color: C.slate, fontWeight: '800' }}>{progressPercent}%</Text>
+          </View>
+          {!readOnly && pendingProgressItems.length > 0 ? (
+            <View style={styles.progressList}>
+              {pendingProgressItems.map((it) => (
+                <View key={it.label} style={styles.progressItem}>
+                  <Ionicons name="ellipse-outline" size={14} color={C.textSecondary} />
+                  <Text style={{ fontSize: 12, color: C.textSecondary }}>{it.label}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -2591,9 +2756,24 @@ export default function TechRegistrationScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.secTitle}>Regiões atendidas</Text>
+        <Text style={styles.secTitle}>Área de atendimento</Text>
         <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8, lineHeight: 18 }}>
-          Escolha as bases da organização em que pode atuar. Pode usar o mapa (centrado no endereço acima) ou os botões.
+          Defina o ponto central da sua operação e o raio máximo em quilômetros para receber ordens de serviço.
+        </Text>
+        <Text style={styles.label}>Raio de atendimento (km)</Text>
+        <TextInput
+          style={styles.input}
+          value={serviceCoverageRadiusKm}
+          editable={!readOnly}
+          onChangeText={(v) => {
+            setServiceCoverageRadiusKm(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+            saveDraftSoon();
+          }}
+          placeholder="50"
+          keyboardType="decimal-pad"
+        />
+        <Text style={styles.fieldHint}>
+          Exemplo: se você mora em Campinas e atende até 50 km, informe `50` e marque sua base no mapa.
         </Text>
         {!readOnly ? (
           <TouchableOpacity
@@ -2606,50 +2786,41 @@ export default function TechRegistrationScreen() {
             ) : (
               <Ionicons name="map-outline" size={22} color={C.accent} />
             )}
-            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 15 }}>Abrir mapa das regiões</Text>
+            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 15 }}>Definir no mapa</Text>
           </TouchableOpacity>
         ) : null}
-        <Text style={[styles.fieldHint, { marginTop: 10 }]}>Toque num nome para marcar ou desmarcar.</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {locations.map((loc) => {
-            const on = serviceLocIds.includes(loc.id);
-            return (
-              <TouchableOpacity
-                key={loc.id}
-                disabled={readOnly}
-                onPress={() => toggleServiceLoc(loc.id)}
-                style={[
-                  styles.chip,
-                  { borderColor: on ? C.accent : C.border, backgroundColor: on ? `${C.accent}18` : C.cardWhite },
-                ]}
-              >
-                <Text style={{ fontSize: 12, fontWeight: '700', color: C.slate }}>{loc.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
+        <Text style={[styles.fieldHint, { marginTop: 10 }]}>
+          Toque no mapa para ajustar o centro da sua área. O endereço acima é usado como referência inicial.
+        </Text>
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 12, color: C.slate, fontWeight: '700' }}>
+            Centro atual:{' '}
+            {coverageCenter
+              ? `${coverageCenter.latitude.toFixed(5)}, ${coverageCenter.longitude.toFixed(5)}`
+              : 'não definido'}
+          </Text>
+          <Text style={{ fontSize: 12, color: C.textSecondary }}>
+            {coverageRadiusMeters > 0
+              ? `Raio atual: ${Number(serviceCoverageRadiusKm || 0)} km`
+              : 'Informe um raio acima de zero para concluir esta etapa.'}
+          </Text>
         </View>
+        <Text style={[styles.label, { marginTop: 12 }]}>Observações internas da cobertura</Text>
+        <TextInput
+          style={[styles.input, { minHeight: 74, textAlignVertical: 'top' }]}
+          value={serviceCoverageNotes}
+          editable={!readOnly}
+          onChangeText={(v) => {
+            setServiceCoverageNotes(v);
+            saveDraftSoon();
+          }}
+          placeholder="Ex.: atende Campinas, Valinhos, Vinhedo e Paulínia."
+          multiline
+        />
       </View>
 
       {!readOnly ? (
-        <View style={styles.section}>
-          <Text style={styles.secTitle}>Confirmação de segurança</Text>
-          <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 10, lineHeight: 18 }}>
-            Para submeter, confirme a senha da sua conta BrSpark (a mesma que usa no login).
-          </Text>
-          <Text style={styles.label}>Senha da conta *</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="Mínimo 6 caracteres"
-            autoCapitalize="none"
-          />
-        </View>
-      ) : null}
-
-      {!readOnly ? (
-        <TouchableOpacity style={styles.btn} onPress={submit} disabled={saving}>
+        <TouchableOpacity style={styles.btn} onPress={() => void submit()} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Submeter candidatura</Text>}
         </TouchableOpacity>
       ) : null}
@@ -2658,56 +2829,148 @@ export default function TechRegistrationScreen() {
     <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
       <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
         <View style={styles.mapModalHeader}>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa — regiões</Text>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa — área de atendimento</Text>
           <TouchableOpacity onPress={() => setRegionMapVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={{ color: C.accent, fontWeight: '800', fontSize: 16 }}>Fechar</Text>
           </TouchableOpacity>
         </View>
         <Text style={{ fontSize: 12, color: C.textSecondary, paddingHorizontal: 16, marginBottom: 8, lineHeight: 18 }}>
-          O mapa centra no endereço que você informou (se o sistema conseguir localizar). Cada círculo é uma base aproximada:
-          toque no marcador para incluir ou remover a base.
+          O mapa centra no endereço informado acima. Toque no ponto desejado para marcar sua base operacional e visualizar o raio de atendimento.
         </Text>
         {mapInitialRegion ? (
-          <MapView style={{ flex: 1 }} initialRegion={mapInitialRegion} showsUserLocation={false}>
-            {locsWithCoords.map((loc) => {
-              const sel = serviceLocIds.includes(loc.id);
-              return (
-                <React.Fragment key={loc.id}>
-                  <Circle
-                    center={{ latitude: loc.latitude as number, longitude: loc.longitude as number }}
-                    radius={SERVICE_AREA_RADIUS_METERS}
-                    strokeColor={sel ? C.accent : '#64748b'}
-                    fillColor={sel ? `${C.accent}40` : '#94a3b828'}
-                    strokeWidth={2}
-                  />
-                  <Marker
-                    coordinate={{ latitude: loc.latitude as number, longitude: loc.longitude as number }}
-                    title={loc.name}
-                    description={sel ? 'Selecionada — toque para remover' : 'Toque para selecionar'}
-                    tracksViewChanges={false}
-                    onPress={() => {
-                      toggleServiceLoc(loc.id);
-                    }}
-                  />
-                </React.Fragment>
-              );
-            })}
+          <MapView
+            style={{ flex: 1 }}
+            initialRegion={mapInitialRegion}
+            showsUserLocation={false}
+            onPress={(e) => {
+              if (readOnly) return;
+              setCoverageCenterFromCoords(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude);
+            }}
+          >
+            {coverageCenter ? (
+              <>
+                <Circle
+                  center={coverageCenter}
+                  radius={coverageRadiusMeters || 1}
+                  strokeColor={C.accent}
+                  fillColor={`${C.accent}28`}
+                  strokeWidth={2}
+                />
+                <Marker
+                  coordinate={coverageCenter}
+                  title="Base operacional"
+                  description="Toque noutro ponto do mapa para reposicionar."
+                  tracksViewChanges={false}
+                />
+              </>
+            ) : null}
           </MapView>
         ) : (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ color: C.textSecondary }}>Carregando mapa…</Text>
           </View>
         )}
-        {locsWithoutCoords.length > 0 ? (
-          <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.surfaceLow }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: C.slate, marginBottom: 6 }}>
-              Bases sem coordenadas no mapa — use os botões de texto:
-            </Text>
-            <Text style={{ fontSize: 12, color: C.textSecondary }}>
-              {locsWithoutCoords.map((l) => l.name).join(' · ')}
-            </Text>
+      </View>
+    </Modal>
+
+    <Modal
+      visible={securityModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (saving) return;
+        setSecurityModalVisible(false);
+      }}
+    >
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(2,6,23,0.45)',
+          padding: 24,
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: C.border,
+            backgroundColor: C.cardWhite,
+            padding: 16,
+          }}
+        >
+          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate }}>Confirmação de segurança</Text>
+          <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20, marginTop: 8 }}>
+            Para concluir o envio, informe o código de 6 dígitos enviado ao seu e-mail de cadastro.
+          </Text>
+          <TextInput
+            style={[styles.input, { marginTop: 12, marginBottom: 0 }]}
+            value={submitOtpCode}
+            onChangeText={(v) => setSubmitOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
+            placeholder="000000"
+            keyboardType="number-pad"
+            autoCapitalize="none"
+          />
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+            <TouchableOpacity
+              onPress={() => {
+                if (saving) return;
+                setSecurityModalVisible(false);
+                setSubmitOtpCode('');
+                setSubmitOtpChallengeToken(null);
+              }}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: C.border,
+              }}
+            >
+              <Text style={{ color: C.slate, fontWeight: '700' }}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                if (saving) return;
+                setSubmitOtpCode('');
+                setSubmitOtpChallengeToken(null);
+                void submit();
+              }}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: C.accent,
+              }}
+            >
+              <Text style={{ color: C.accent, fontWeight: '700' }}>Reenviar código</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                if (saving || !submitOtpCode.trim() || !submitOtpChallengeToken) return;
+                void submit({
+                  otpCodeOverride: submitOtpCode,
+                  otpChallengeTokenOverride: submitOtpChallengeToken,
+                });
+              }}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                backgroundColor: C.accent,
+                opacity: submitOtpCode.trim().length === 6 && submitOtpChallengeToken ? 1 : 0.6,
+              }}
+              disabled={!submitOtpChallengeToken || submitOtpCode.trim().length < 6 || saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '800' }}>Confirmar e enviar</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        ) : null}
+        </View>
       </View>
     </Modal>
     </>

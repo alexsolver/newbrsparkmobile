@@ -18,6 +18,7 @@ export const USER_PAGES_ES_MERGE = {
   nav_sec_sys: "System",
   nav_dashboard: "Dashboard",
   nav_tenants: "Inquilinos",
+  nav_my_org: "Mi organización",
   nav_users: "Usuarios",
   nav_tech_signup: "Técnico signup",
   nav_forms_builder: "Forms Builder",

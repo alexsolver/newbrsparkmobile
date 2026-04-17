@@ -5,6 +5,7 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
 const crypto  = require('crypto');
+const path = require('path');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
@@ -12,6 +13,9 @@ const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = requi
 const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
 const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
 const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
+const { buildAppAuthorization } = require('../lib/authorization');
+const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -25,6 +29,28 @@ function buildSafeTenantForApp(tenant) {
     name: tenant.name,
     status: tenant.status,
     branding: branding.effective,
+  };
+}
+
+function buildSafeAppUserPayload(user) {
+  const authz = buildAppAuthorization(user);
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatarUrl: user.avatarUrl,
+    preferredChatLocale: user.preferredChatLocale ?? null,
+    employeeMatricula: user.employeeMatricula ?? null,
+    addressJson: user.addressJson ?? null,
+    tenantId: user.tenantId,
+    tenant: buildSafeTenantForApp(user.tenant),
+    technicianProfile: user.technicianProfile,
+    appContext: {
+      scope: authz.scope,
+      contextTenantId: authz.contextTenantId,
+      capabilities: authz.capabilities,
+    },
   };
 }
 
@@ -87,18 +113,7 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
 
   return {
     token,
-    user: {
-      id: fresh.id,
-      name: fresh.name,
-      email: fresh.email,
-      role: fresh.role,
-      avatarUrl: fresh.avatarUrl,
-      preferredChatLocale: fresh.preferredChatLocale ?? null,
-      employeeMatricula: fresh.employeeMatricula ?? null,
-      tenantId: fresh.tenantId,
-      tenant: buildSafeTenantForApp(fresh.tenant),
-      technicianProfile: fresh.technicianProfile,
-    },
+    user: buildSafeAppUserPayload(fresh),
   };
 }
 
@@ -123,6 +138,57 @@ async function resolveAppDefaultTenantId() {
     where: { slug: { equals: slugRaw, mode: 'insensitive' } },
   });
   return t ? t.id : null;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function passwordResetTokenVersionFromHash(passwordHash) {
+  return crypto.createHash('sha256').update(String(passwordHash || '')).digest('hex').slice(0, 16);
+}
+
+function resolvePublicPanelBaseUrl(req) {
+  const envBase = String(
+    process.env.PUBLIC_PANEL_URL ||
+      process.env.ADMIN_PANEL_PUBLIC_URL ||
+      process.env.ADMIN_PANEL_PUBLIC_BASE_URL ||
+      '',
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  if (envBase) return envBase;
+  const host = String(req?.get?.('host') || '').trim();
+  if (!host) return null;
+  return `${req.protocol || 'http'}://${host}`.replace(/\/+$/, '');
+}
+
+function buildPublicPasswordResetLink(req, token) {
+  const base = resolvePublicPanelBaseUrl(req);
+  if (!base) return null;
+  return `${base}/api/password-reset?token=${encodeURIComponent(token)}`;
+}
+
+function issuePasswordResetToken(user) {
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET não configurado no servidor.');
+  }
+  return jwt.sign(
+    {
+      purpose: 'PASSWORD_RESET',
+      userId: user.id,
+      tenantId: user.tenantId,
+      version: passwordResetTokenVersionFromHash(user.password),
+    },
+    jwtSecret,
+    { expiresIn: process.env.PASSWORD_RESET_EXPIRES_IN || '30m' },
+  );
 }
 
 // ─── POST /api/register ─────────────────────────────────────────────────────
@@ -489,6 +555,241 @@ router.post('/login/oauth', async (req, res) => {
   }
 });
 
+// Público — POST /api/password-reset/request
+// Solicita envio do link de redefinição por e-mail.
+router.post('/password-reset/request', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '')
+      .trim()
+      .toLowerCase();
+    const tenantSlug = String(req.body?.tenantSlug || '')
+      .trim()
+      .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ error: 'E-mail é obrigatório.' });
+    }
+
+    let users = [];
+    if (tenantSlug) {
+      const tenant = await prisma.tenant.findFirst({
+        where: { slug: { equals: tenantSlug, mode: 'insensitive' } },
+        select: { id: true, name: true, status: true },
+      });
+      if (tenant && tenant.status !== 'SUSPENDED' && tenant.status !== 'CANCELLED') {
+        const user = await prisma.user.findFirst({
+          where: { email, tenantId: tenant.id, isActive: true },
+          include: { tenant: true },
+        });
+        if (user) users = [user];
+      }
+    } else {
+      users = await prisma.user.findMany({
+        where: {
+          email,
+          isActive: true,
+          tenant: { is: { status: { notIn: ['SUSPENDED', 'CANCELLED'] } } },
+        },
+        include: { tenant: true },
+        orderBy: { createdAt: 'asc' },
+        take: 5,
+      });
+    }
+
+    if (!users.length) {
+      return res.json({
+        ok: true,
+        message:
+          'Se existir uma conta com esse e-mail, você receberá um link para redefinir a senha em instantes.',
+      });
+    }
+
+    const results = await Promise.all(
+      users.map(async (user) => {
+        const resetToken = issuePasswordResetToken(user);
+        const resetLink = buildPublicPasswordResetLink(req, resetToken);
+        if (!resetLink) {
+          return {
+            ok: false,
+            skipped: true,
+            error: 'Não foi possível gerar o link público de redefinição.',
+          };
+        }
+
+        const tenantName = String(user.tenant?.name || 'BrSpark').trim();
+        const subject =
+          users.length > 1
+            ? `BrSpark: redefina sua senha (${tenantName})`
+            : 'BrSpark: redefina sua senha';
+
+        const text =
+          `Olá, ${user.name || 'usuário'}!\n\n` +
+          `Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em ${tenantName}` : ''}.\n\n` +
+          `Use este link para criar uma nova senha:\n${resetLink}\n\n` +
+          `Este link expira em ${process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos'}.\n` +
+          `Se você não pediu a redefinição, pode ignorar este e-mail.\n`;
+
+        const html =
+          `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">` +
+          `<h2 style="margin:0 0 12px">Redefinição de senha</h2>` +
+          `<p>Olá, <strong>${escapeHtml(user.name || 'usuário')}</strong>.</p>` +
+          `<p>Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
+          `<p style="margin:24px 0">` +
+          `<a href="${escapeHtml(resetLink)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Criar nova senha</a>` +
+          `</p>` +
+          `<p>Se preferir, copie e cole este link no navegador:</p>` +
+          `<p><a href="${escapeHtml(resetLink)}">${escapeHtml(resetLink)}</a></p>` +
+          `<p>Este link expira em ${escapeHtml(process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos')}.</p>` +
+          `<p>Se você não pediu a redefinição, pode ignorar este e-mail.</p>` +
+          `</div>`;
+
+        const { send, provider } = await sendTransactionalEmailWithFallback({
+          to: { email: user.email, name: user.name || undefined },
+          subject,
+          text,
+          html,
+        });
+
+        if (send.ok) {
+          await prisma.auditLog
+            .create({
+              data: {
+                tenantId: user.tenantId,
+                userId: user.id,
+                action: 'USER_PASSWORD_RESET_REQUESTED',
+                resource: user.email,
+                category: 'AUTH',
+              },
+            })
+            .catch(() => {});
+        }
+
+        return { ok: !!send.ok, provider, skipped: !!send.skipped, error: send.error || null };
+      }),
+    );
+
+    if (!results.some((result) => result.ok)) {
+      const unavailable = results.every((result) => result.skipped);
+      return res.status(unavailable ? 503 : 502).json({
+        error: unavailable
+          ? 'A recuperação de senha está indisponível no momento. Tente novamente mais tarde.'
+          : 'Não foi possível enviar o e-mail de redefinição agora. Tente novamente em instantes.',
+      });
+    }
+
+    res.json({
+      ok: true,
+      message:
+        'Se existir uma conta com esse e-mail, você receberá um link para redefinir a senha em instantes.',
+    });
+  } catch (err) {
+    console.error('[password-reset/request]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
+// Público — GET /api/password-reset?token=...
+// Entrega a página HTML de redefinição mesmo em deploys que só expõem /api/*.
+router.get('/password-reset', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../../../reset-password.html'));
+});
+
+// Público — POST /api/password-reset/confirm
+// Confirma a redefinição usando token temporário recebido por e-mail.
+router.post('/password-reset/confirm', async (req, res) => {
+  try {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token de redefinição é obrigatório.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    }
+
+    const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+    if (!jwtSecret) {
+      return res.status(500).json({ error: 'JWT_SECRET não configurado no servidor.' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, jwtSecret);
+    } catch (err) {
+      const expired = err && err.name === 'TokenExpiredError';
+      return res.status(400).json({
+        error: expired
+          ? 'O link de redefinição expirou. Solicite um novo e-mail.'
+          : 'Link de redefinição inválido.',
+      });
+    }
+
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      payload.purpose !== 'PASSWORD_RESET' ||
+      !payload.userId
+    ) {
+      return res.status(400).json({ error: 'Link de redefinição inválido.' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: String(payload.userId) },
+      include: { tenant: true },
+    });
+    if (!user) {
+      return res.status(400).json({ error: 'Link de redefinição inválido.' });
+    }
+    if (payload.version !== passwordResetTokenVersionFromHash(user.password)) {
+      return res.status(400).json({ error: 'Este link de redefinição já foi usado ou ficou inválido.' });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Conta desativada. Entre em contato com o suporte.' });
+    }
+    if (user.tenant?.status === 'SUSPENDED' || user.tenant?.status === 'CANCELLED') {
+      return res.status(403).json({ error: 'Esta conta está suspensa ou cancelada.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hash,
+        currentSessionId: null,
+        currentDeviceId: null,
+      },
+    });
+
+    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+    if (tokens.length > 0) {
+      sendExpoPushToMany(tokens, {
+        data: { type: 'FORCE_LOGOUT', reason: 'PASSWORD_RESET' },
+      }).catch((err) => console.error('[password_reset_kickout]', err));
+    }
+
+    await prisma.auditLog
+      .create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          action: 'USER_PASSWORD_RESET_COMPLETED',
+          resource: user.email,
+          category: 'AUTH',
+        },
+      })
+      .catch(() => {});
+
+    res.json({
+      ok: true,
+      message: 'Senha redefinida com sucesso. Faça login novamente com a nova senha.',
+    });
+  } catch (err) {
+    console.error('[password-reset/confirm]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
 // ─── GET /api/me ─────────────────────────────────────────────────────────────
 // Autenticado — retorna perfil do usuário logado (para o app)
 const authUser = require('../middleware/authUser');
@@ -636,9 +937,7 @@ router.get('/me', authUser, async (req, res) => {
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    const { password: _, ...safe } = user;
-    if (safe.tenant) safe.tenant = buildSafeTenantForApp(safe.tenant);
-    res.json(safe);
+    res.json(buildSafeAppUserPayload(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -646,7 +945,7 @@ router.get('/me', authUser, async (req, res) => {
 // Autenticado — atualiza perfil do usuário logado
 router.put('/me', authUser, async (req, res) => {
   try {
-    const { name, email, avatarUrl, preferredChatLocale } = req.body;
+    const { name, email, avatarUrl, preferredChatLocale, addressJson, technicianCoverageGeoJson } = req.body;
 
     if (avatarUrl !== undefined && (await isTechnicianIdentityLockedForUserId(req.user.id))) {
       return res.status(403).json(TECH_IDENTITY_LOCKED_BODY);
@@ -667,18 +966,57 @@ router.put('/me', authUser, async (req, res) => {
       }
     }
 
-    const updated = await prisma.user.update({
-      where: { id: req.user.id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(avatarUrl !== undefined && { avatarUrl }),
-        ...(localeUpdate !== undefined && { preferredChatLocale: localeUpdate }),
-      },
+    let normalizedCoverage = undefined;
+    if (technicianCoverageGeoJson !== undefined) {
+      normalizedCoverage = normalizeServiceCoverageGeo(technicianCoverageGeoJson);
+      if (technicianCoverageGeoJson !== null && !normalizedCoverage) {
+        return res.status(400).json({
+          error: 'Área de atendimento inválida. Informe coordenadas válidas e um raio entre 1 e 500 km.',
+        });
+      }
+    }
+
+    const profile = await prisma.technicianProfile.findUnique({
+      where: { userId: req.user.id },
+      select: { id: true },
+    });
+    if (technicianCoverageGeoJson !== undefined && !profile) {
+      return res.status(400).json({
+        error: 'Só contas com perfil técnico podem salvar área de atendimento.',
+      });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const nextUser = await tx.user.update({
+        where: { id: req.user.id },
+        data: {
+          ...(name && { name }),
+          ...(email && { email }),
+          ...(avatarUrl !== undefined && { avatarUrl }),
+          ...(localeUpdate !== undefined && { preferredChatLocale: localeUpdate }),
+          ...(addressJson !== undefined && { addressJson }),
+        },
+      });
+      if (profile && technicianCoverageGeoJson !== undefined) {
+        await tx.technicianProfile.update({
+          where: { userId: req.user.id },
+          data: {
+            serviceCoverageGeoJson: normalizedCoverage,
+          },
+        });
+      }
+      return nextUser;
     });
 
+    const fresh = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        tenant: { include: { subscription: { include: { plan: true } } } },
+        technicianProfile: true,
+      },
+    });
     const { password: _, ...safe } = updated;
-    res.json(safe);
+    res.json(fresh ? buildSafeAppUserPayload(fresh) : safe);
   } catch (err) { 
     res.status(500).json({ error: err.message }); 
   }

@@ -104,7 +104,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final. Opcional no builder: transitKeepScreenAwake (boolean); transitPurpose "reimbursement" para segundo par só com trilha GPS (sem ETA, sem link ao cliente, sem chat) — típico para km de reembolso.',
+      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final. transitKeepScreenAwake: por omissão true (manter a tela acesa); só false desliga. transitPurpose "reimbursement" para segundo par só com trilha GPS (sem ETA, sem link ao cliente, sem chat) — típico para km de reembolso.',
   },
   {
     type: 'transit_end',

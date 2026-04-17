@@ -14,6 +14,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import {
   API_BASE,
+  AuthService,
   TwoFactorRequired,
   MultipleAccountsError,
   type LoginTenantOption,
@@ -89,6 +90,16 @@ function createLoginStyles(C: ColorPalette) {
       flex: 1, fontSize: 15, color: C.primary, fontWeight: '600',
       paddingVertical: 12,
     },
+    forgotLinkRow: {
+      alignItems: 'flex-end',
+      marginTop: -8,
+      marginBottom: 8,
+    },
+    forgotLinkText: {
+      fontSize: 13,
+      color: C.accent,
+      fontWeight: '700',
+    },
 
     consentRow: {
       flexDirection: 'row', alignItems: 'flex-start', gap: 12,
@@ -152,6 +163,62 @@ function createLoginStyles(C: ColorPalette) {
     docCloseBtn: { padding: 6, borderRadius: 20, backgroundColor: C.divider },
     docContent: { fontSize: 13, color: C.textSecondary, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
     footerLinkTouch: { padding: 4 },
+    sheetBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    sheetCard: {
+      backgroundColor: C.cardWhite,
+      borderRadius: 20,
+      padding: 22,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    sheetTitle: {
+      fontSize: 18,
+      fontWeight: '900',
+      color: C.primary,
+      marginBottom: 8,
+    },
+    sheetText: {
+      fontSize: 13,
+      lineHeight: 20,
+      color: C.textSecondary,
+      marginBottom: 16,
+    },
+    sheetActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 12,
+      marginTop: 8,
+    },
+    sheetSecondaryBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: C.divider,
+    },
+    sheetSecondaryBtnText: {
+      color: C.textSecondary,
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    sheetPrimaryBtn: {
+      minWidth: 152,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: C.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sheetPrimaryBtnText: {
+      color: C.cardWhite,
+      fontWeight: '800',
+      fontSize: 14,
+    },
 
     // Country / language (register) — uma linha compacta + modal
     countryRow: { marginBottom: 4, marginTop: 2 },
@@ -249,6 +316,9 @@ export default function LoginScreen() {
   // Compliance doc viewer
   const [docModal, setDocModal] = useState<{ title: string; content: string } | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+  const [passwordResetVisible, setPasswordResetVisible] = useState(false);
+  const [passwordResetEmail, setPasswordResetEmail] = useState('');
+  const [passwordResetSending, setPasswordResetSending] = useState(false);
 
   // Legal basis from policy (LGPD, GDPR, etc.)
   const [legalBasis, setLegalBasis] = useState('LGPD');
@@ -360,6 +430,34 @@ export default function LoginScreen() {
       Linking.openURL('https://www.brspark.com/term');
     } finally {
       setDocLoading(false);
+    }
+  };
+
+  const openPasswordResetModal = () => {
+    setPasswordResetEmail(String(email || '').trim().toLowerCase());
+    setPasswordResetVisible(true);
+  };
+
+  const handlePasswordResetRequest = async () => {
+    const normalizedEmail = String(passwordResetEmail || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      return Alert.alert('', t('auth.resetPasswordEmailRequired'));
+    }
+    setPasswordResetSending(true);
+    try {
+      const out = await AuthService.requestPasswordReset(normalizedEmail);
+      setPasswordResetVisible(false);
+      Alert.alert(
+        t('auth.resetPasswordTitle'),
+        out.message || t('auth.resetPasswordRequestSent'),
+      );
+    } catch (e: any) {
+      Alert.alert(
+        t('auth.resetPasswordTitle'),
+        e?.message || t('auth.resetPasswordRequestError'),
+      );
+    } finally {
+      setPasswordResetSending(false);
     }
   };
 
@@ -496,6 +594,53 @@ export default function LoginScreen() {
             <Text style={styles.docContent}>{docModal?.content}</Text>
           </ScrollView>
         </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={passwordResetVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => !passwordResetSending && setPasswordResetVisible(false)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheetCard}>
+            <Text style={styles.sheetTitle}>{t('auth.resetPasswordTitle')}</Text>
+            <Text style={styles.sheetText}>{t('auth.resetPasswordDescription')}</Text>
+
+            <Field
+              label={t('auth.email').toUpperCase() + ' *'}
+              value={passwordResetEmail}
+              onChangeText={setPasswordResetEmail}
+              placeholder={t('auth.emailPlaceholder')}
+              icon="mail-outline"
+              keyboardType="email-address"
+              C={C}
+              formStyles={styles}
+            />
+
+            <View style={styles.sheetActions}>
+              <TouchableOpacity
+                style={styles.sheetSecondaryBtn}
+                onPress={() => setPasswordResetVisible(false)}
+                disabled={passwordResetSending}
+              >
+                <Text style={styles.sheetSecondaryBtnText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sheetPrimaryBtn, passwordResetSending && { opacity: 0.7 }]}
+                onPress={handlePasswordResetRequest}
+                disabled={passwordResetSending}
+              >
+                {passwordResetSending ? (
+                  <ActivityIndicator color={C.cardWhite} />
+                ) : (
+                  <Text style={styles.sheetPrimaryBtnText}>{t('auth.sendResetLink')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* ─── Várias organizações (mesmo e-mail) ───────────────────────────── */}
@@ -687,6 +832,16 @@ export default function LoginScreen() {
               C={C}
               formStyles={styles}
             />
+
+            {mode === 'LOGIN' && (
+              <TouchableOpacity
+                style={styles.forgotLinkRow}
+                onPress={openPasswordResetModal}
+                disabled={loading}
+              >
+                <Text style={styles.forgotLinkText}>{t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
+            )}
 
 
 

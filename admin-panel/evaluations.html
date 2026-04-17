@@ -6,10 +6,17 @@
   <title>BrSpark Admin — Qualidade &amp; Avaliações</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
-    .eval-tab-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:12px; }
-    .eval-tab { padding:8px 16px; border-radius:var(--radius-sm); font-weight:600; font-size:13px; color:var(--text3); background:transparent; }
-    .eval-tab:hover { color:var(--text2); background:var(--surface2); }
-    .eval-tab-active { color:var(--accent) !important; background:var(--accent-dim) !important; }
+    .eval-context-bar { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 0 16px; }
+    .eval-context-card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; }
+    .eval-context-card__eyebrow { font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--text3); margin-bottom:6px; }
+    .eval-context-card__title { font-size:15px; font-weight:800; color:var(--text); line-height:1.35; }
+    .eval-context-card__meta { font-size:12px; color:var(--text3); line-height:1.45; margin-top:6px; }
+    .eval-context-card__chips { display:flex; flex-wrap:wrap; gap:6px; }
+    .eval-context-chip { font-size:11px; font-weight:700; line-height:1.3; padding:5px 8px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text2); }
+    .eval-tab-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:linear-gradient(180deg,var(--surface) 0%,var(--surface2) 100%); }
+    .eval-tab { padding:8px 16px; border-radius:999px; font-weight:700; font-size:13px; color:var(--text3); background:var(--surface); border:1px solid transparent; }
+    .eval-tab:hover { color:var(--text2); background:var(--surface2); border-color:var(--border2); }
+    .eval-tab-active { color:var(--accent) !important; background:var(--accent-dim) !important; border-color:rgba(59,130,246,.2) !important; }
     .eval-tab-panel { display:none; }
     .eval-tab-panel.is-visible { display:block; }
     .eval-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,0.5); z-index:300; display:none; align-items:flex-start; justify-content:center; padding:32px 16px; overflow-y:auto; }
@@ -20,6 +27,7 @@
     .q-row-grid { display:grid; grid-template-columns: 1fr 118px 72px auto 40px; gap:8px; align-items:center; }
     .q-row-grid .q-cat { grid-column: 1 / -1; }
     @media (max-width:700px) {
+      .eval-context-bar { grid-template-columns:1fr; }
       .q-row-grid { grid-template-columns: 1fr 1fr; }
       .q-row-grid .q-cat { grid-column: 1 / -1; }
     }
@@ -67,6 +75,8 @@
         </div>
       </div>
 
+      <div id="ev-context-bar" class="eval-context-bar" aria-label="Resumo operacional das avaliações"></div>
+
       <div class="eval-tab-bar">
         <button type="button" class="eval-tab eval-tab-active" id="ev-tab-resumo" data-tab="resumo">Resumo</button>
         <button type="button" class="eval-tab" id="ev-tab-disputas" data-tab="disputas">Disputas</button>
@@ -100,9 +110,9 @@
         </div>
         <div class="panel">
           <div class="panel-header"><span class="panel-title" id="ev-disputes-panel-title">Revisões / disputas</span></div>
-          <p class="hint-sm" id="ev-disputes-hint" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.</p>
+          <p class="hint-sm" id="ev-disputes-hint" style="margin:0 0 12px">Use <strong>Ver conversa</strong> para listar mensagens do chat técnico-cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registrado na auditoria.</p>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th id="ev-th-dispute-tech">Técnico</th><th id="ev-th-dispute-os">OS / nota</th><th id="ev-th-dispute-just">Justificativa</th><th id="ev-th-dispute-actions" class="text-right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th id="ev-th-dispute-tech">Técnico / OS</th><th id="ev-th-dispute-just">Justificativa</th><th id="ev-th-dispute-chat">Conversa</th><th id="ev-th-dispute-actions" class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-disputes"><tr><td colspan="4" id="ev-loading-disputes" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>
@@ -125,7 +135,7 @@
           <div class="panel-header"><span class="panel-title" id="ev-inst-panel-title">Instâncias recentes</span></div>
           <p class="hint-sm" id="ev-inst-hint" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th id="ev-th-inst-status">Estado</th><th id="ev-th-inst-template">Template</th><th id="ev-th-inst-tech">Técnico</th><th id="ev-th-inst-os">OS</th><th id="ev-th-inst-url">URL do formulário web</th><th id="ev-th-inst-actions" class="text-right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th id="ev-th-inst-template">Template / técnico</th><th id="ev-th-inst-status">Estado</th><th id="ev-th-inst-token">Token</th><th id="ev-th-inst-url">URL do formulário web</th><th id="ev-th-inst-regen">Regerar</th><th id="ev-th-inst-actions" class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-inst"><tr><td colspan="6" id="ev-loading-inst" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
           <div id="eval-survey-preview" class="eval-survey-preview" hidden>
@@ -146,7 +156,7 @@
         <div class="panel">
           <div class="panel-header"><span class="panel-title" id="ev-tpl-panel-title">Templates de avaliação</span></div>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th id="ev-th-tpl-name">Nome</th><th id="ev-th-tpl-type">Tipo</th><th id="ev-th-tpl-tenant">Tenant</th><th id="ev-th-tpl-q">Perguntas</th><th id="ev-th-tpl-inst">Instâncias</th><th id="ev-th-tpl-actions" class="text-right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th id="ev-th-tpl-name">Template / tenant</th><th id="ev-th-tpl-type">Tipo</th><th id="ev-th-tpl-q">Perguntas</th><th id="ev-th-tpl-inst">Instâncias</th><th id="ev-th-tpl-status">Status</th><th id="ev-th-tpl-actions" class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-tpl"><tr><td colspan="6" id="ev-loading-tpl" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
         </div>

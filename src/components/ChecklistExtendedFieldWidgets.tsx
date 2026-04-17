@@ -18,6 +18,7 @@ type LookupSelectProps = {
     lookupSource?: string;
     lookupPreset?: string;
     lookupInlineJson?: string;
+    lookupApiPath?: string;
   };
   value: unknown;
   onChange: (next: string) => void;
@@ -25,6 +26,37 @@ type LookupSelectProps = {
   /** Quando verdadeiro e origem = preset, bloqueia o carregamento sem rede. */
   strictOnline?: boolean;
 };
+
+function normalizeLookupSource(raw: unknown): 'preset' | 'inline_json' | 'api' {
+  const s = String(raw || '').trim();
+  if (s === 'inline_json') return 'inline_json';
+  if (s === 'api') return 'api';
+  return 'preset';
+}
+
+function normalizeLookupApiPath(raw: unknown): string {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (s.startsWith('/')) return s;
+  return `/${s}`;
+}
+
+function parseLookupResponseOptions(payload: unknown): { value: string; label: string }[] {
+  const list = Array.isArray((payload as { options?: unknown } | null)?.options)
+    ? ((payload as { options: unknown[] }).options)
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  return list
+    .map((row: unknown) => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as Record<string, unknown>;
+      const v = String(r.value ?? r.id ?? '').trim();
+      const lab = String(r.label ?? r.text ?? r.name ?? r.value ?? r.id ?? '').trim();
+      return v ? { value: v, label: lab || v } : null;
+    })
+    .filter(Boolean) as { value: string; label: string }[];
+}
 
 function parseLookupInlineOptions(raw: string): { value: string; label: string }[] {
   const s = String(raw || '').trim();
@@ -48,9 +80,10 @@ function parseLookupInlineOptions(raw: string): { value: string; label: string }
 
 /** Lista dinâmica: preset via API ou opções em JSON no modelo. */
 export function ChecklistLookupSelectField({ field, value, onChange, readOnly, strictOnline }: LookupSelectProps) {
-  const source = String(field?.lookupSource || 'preset').trim() === 'inline_json' ? 'inline_json' : 'preset';
+  const source = normalizeLookupSource(field?.lookupSource);
   const preset = String(field?.lookupPreset || 'equipamentos_demo').trim() || 'equipamentos_demo';
   const inlineRaw = String(field?.lookupInlineJson || '');
+  const apiPath = normalizeLookupApiPath(field?.lookupApiPath);
 
   const inlineOpts = useMemo(() => parseLookupInlineOptions(inlineRaw), [inlineRaw]);
 
@@ -59,7 +92,7 @@ export function ChecklistLookupSelectField({ field, value, onChange, readOnly, s
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (source !== 'preset') {
+    if (source === 'inline_json') {
       setRemote([]);
       setErr(null);
       return;
@@ -69,33 +102,36 @@ export function ChecklistLookupSelectField({ field, value, onChange, readOnly, s
       setLoading(true);
       setErr(null);
       try {
-        if (strictOnline && source === 'preset') {
+        if (strictOnline && (source === 'preset' || source === 'api')) {
           const st = await Network.getNetworkStateAsync();
           if (!st.isConnected) {
             setRemote([]);
-            setErr('Este campo exige internet para carregar o preset de opções.');
+            setErr('Este campo exige internet para carregar as opções.');
             return;
           }
         }
-        const res = await apiFetch(`/api/checklists/lookup-options/${encodeURIComponent(preset)}`);
+        const endpoint =
+          source === 'api'
+            ? apiPath
+            : `/api/checklists/lookup-options/${encodeURIComponent(preset)}`;
+        if (!endpoint) {
+          setRemote([]);
+          setErr('Defina «lookupApiPath» no modelo para carregar a lista via API.');
+          return;
+        }
+        const res = await apiFetch(endpoint);
         await handleUnauthorizedMaybeSessionInvalidated(res);
-        const j = await res.json().catch(() => ({}));
+        const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const msg = typeof j?.error === 'string' ? j.error : `Erro HTTP ${res.status}`;
+          const msg =
+            typeof (payload as { error?: unknown })?.error === 'string'
+              ? String((payload as { error?: unknown }).error)
+              : `Erro HTTP ${res.status}`;
           if (!cancelled) setErr(msg);
           if (!cancelled) setRemote([]);
           return;
         }
-        const list = Array.isArray(j?.options) ? j.options : [];
-        const opts = list
-          .map((row: unknown) => {
-            if (!row || typeof row !== 'object') return null;
-            const r = row as Record<string, unknown>;
-            const v = String(r.value ?? '').trim();
-            const lab = String(r.label ?? r.value ?? '').trim();
-            return v ? { value: v, label: lab || v } : null;
-          })
-          .filter(Boolean) as { value: string; label: string }[];
+        const opts = parseLookupResponseOptions(payload);
         if (!cancelled) setRemote(opts);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -109,9 +145,9 @@ export function ChecklistLookupSelectField({ field, value, onChange, readOnly, s
     return () => {
       cancelled = true;
     };
-  }, [source, preset, strictOnline]);
+  }, [source, preset, strictOnline, apiPath]);
 
-  const options = source === 'preset' ? remote : inlineOpts;
+  const options = source === 'inline_json' ? inlineOpts : remote;
   const current = String(value ?? '').trim();
 
   const pick = useCallback(
@@ -127,7 +163,7 @@ export function ChecklistLookupSelectField({ field, value, onChange, readOnly, s
       {err ? (
         <Text style={{ color: '#b91c1c', fontSize: 13, marginBottom: 8, lineHeight: 18 }}>{err}</Text>
       ) : null}
-      {loading && source === 'preset' ? (
+      {loading && source !== 'inline_json' ? (
         <View style={{ paddingVertical: 12, alignItems: 'center' }}>
           <ActivityIndicator color="#2563eb" />
           <Text style={{ marginTop: 8, color: '#64748b', fontSize: 12 }}>Carregando opções…</Text>
@@ -139,7 +175,9 @@ export function ChecklistLookupSelectField({ field, value, onChange, readOnly, s
             <Text style={{ color: '#94a3b8', fontSize: 14 }}>
               {source === 'inline_json'
                 ? 'Defina um array JSON em «lookupInlineJson» no painel (ex.: [{"value":"a","label":"Opção A"}]).'
-                : 'Nenhuma opção devolvida pelo servidor.'}
+                : source === 'api'
+                  ? 'Nenhuma opção devolvida pelo endpoint configurado.'
+                  : 'Nenhuma opção devolvida pelo servidor.'}
             </Text>
           ) : (
             options.map((o) => {

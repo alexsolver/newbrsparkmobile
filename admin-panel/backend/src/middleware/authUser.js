@@ -1,6 +1,7 @@
 'use strict';
 const jwt = require('jsonwebtoken');
 const prisma = require('../db');
+const { buildAppAuthorization } = require('../lib/authorization');
 
 // Middleware para usuários do app (não admin)
 module.exports = async function authUser(req, res, next) {
@@ -43,6 +44,7 @@ module.exports = async function authUser(req, res, next) {
         sessionId: user.currentSessionId,
         panel: true,
       };
+      req.userAuthorization = buildAppAuthorization(req.user);
       return next();
     }
 
@@ -72,6 +74,7 @@ module.exports = async function authUser(req, res, next) {
 
     // tenantId/role vêm sempre da BD — o JWT pode ficar desatualizado (ex.: usuário mudou de tenant sem novo login).
     req.user = { ...payload, tenantId: user.tenantId, role: user.role };
+    req.userAuthorization = buildAppAuthorization(req.user);
     next();
   } catch(err) {
     res.status(401).json({ error: 'Token inválido ou expirado.' });

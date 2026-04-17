@@ -13,6 +13,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { AgendaService } from '../../src/services/agendaService';
+import { userHasCapability } from '../../src/services/auth';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 
@@ -54,6 +55,7 @@ export default function OrdersScreen() {
   const statusMap = useMemo(() => buildStatusMap(C), [C]);
   const router = useRouter();
   const { user, userRole } = useAuth();
+  const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
   const { t } = useTranslation();
   const [filter, setFilter] = useState('all');
   const [realTasks, setRealTasks] = useState<any[]>([]);
@@ -66,7 +68,7 @@ export default function OrdersScreen() {
           const [events, executedRaw] = await Promise.all([
             AgendaService.getUnifiedAgenda(
               user.email,
-              userRole === 'TECHNICIAN' ? 'PROVIDER' : 'CLIENT',
+              canUseProviderMode ? 'PROVIDER' : 'CLIENT',
             ),
             AsyncStorage.getItem('@brspark_executed_tasks'),
           ]);
@@ -100,7 +102,7 @@ export default function OrdersScreen() {
         } catch(e) {}
       }
       fetchTasks();
-    }, [user, userRole])
+    }, [user, userRole, canUseProviderMode])
   );
 
   const orders = React.useMemo(() => realTasks, [realTasks]);

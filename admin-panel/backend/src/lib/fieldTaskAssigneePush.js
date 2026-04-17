@@ -1,6 +1,7 @@
 'use strict';
 
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { resolveGlobalLiveActivityBadgeKey, resolveTenantAppDisplayName } = require('./mobileTenantBranding');
 
 /**
  * Push ao técnico (mesmo payload que despacho de OS: categorias/botões no app).
@@ -29,6 +30,12 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
   const assigneeTid = opts.assigneeTenantId || null;
 
   const label = opts.logLabel || 'fieldTaskPush';
+  const appDisplayName = await resolveTenantAppDisplayName(
+    prisma,
+    assigneeTid || templateTid || null,
+    'BrSpark'
+  );
+  const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
 
   let userIds = [];
   if (assigneeTid) {
@@ -90,14 +97,19 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
     'Deslize para baixo — Aceitar, Recusar ou OK.';
 
   const pushRes = await sendExpoPushToMany(pushTokens, {
-    title: String(opts.pushTitle || 'Nova atividade').slice(0, 120),
+    title: String(opts.pushTitle || `Nova atividade · ${appDisplayName}`).slice(0, 120),
     body: String(opts.pushBody || 'Nova atividade na sua lista.').slice(0, 180),
     subtitle: subtitle.slice(0, 120),
     /** iOS 15+ (Expo): explícito; «time-sensitive» exige capability no App ID. */
     interruptionLevel: 'active',
     categoryId: 'BRSPARK_TECH_ACTIVITY',
     channelId: 'brspark-tecnico',
-    data: { taskId: executionId, type: 'os_dispatched' },
+    data: {
+      taskId: executionId,
+      type: 'os_dispatched',
+      appDisplayName,
+      liveActivityBadgeKey,
+    },
   });
   if (pushRes && pushRes.ok === false) {
     console.error(`[${label}] Expo push falhou:`, pushRes);

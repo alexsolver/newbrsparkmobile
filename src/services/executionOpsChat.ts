@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
 import type { ChatMessage } from './chat';
+import { emitChatUnreadChanged } from '../lib/chatUnreadEvents';
 
 /** ID virtual da “sala” no cache local — evita colisão com IDs de salas do chat corporativo. */
 export function getOpsChatCacheRoomId(executionId: string): string {
@@ -48,6 +49,7 @@ export async function persistOpsChatReadAck(executionId: string, rows: Execution
       if (Number.isFinite(t) && t > maxMs) maxMs = t;
     }
     await AsyncStorage.setItem(getOpsChatAckStorageKey(executionId), String(maxMs));
+    emitChatUnreadChanged();
   } catch {
     /* ignore */
   }
@@ -114,6 +116,7 @@ export type OpsChatThreadSummary = {
   executionId: string;
   osNumber: string | null;
   routineTaskNumber: string | null;
+  executionStatus?: string | null;
   title: string | null;
   lastMessageAt: string | null;
   lastPreview: string;
@@ -122,20 +125,24 @@ export type OpsChatThreadSummary = {
 
 /** Lista FTs/RTs do técnico com pelo menos uma mensagem no chat operacional (JWT app). */
 /**
- * Conta mensagens do **gestor** mais recentes que o ack local (`persistOpsChatReadAck`), em todas as FTs com fio.
- * Usado no badge do separador «Conversas» (menu inferior).
+ * Lista threads operacionais que ainda exigem atenção do técnico:
+ * há pelo menos uma mensagem do gestor mais recente que o ack local.
  */
-export async function countGestorUnreadAcrossOpsThreads(): Promise<number> {
-  let threads: OpsChatThreadSummary[];
-  try {
-    threads = await fetchMyOpsChatThreads();
-  } catch {
-    return 0;
+export async function listPendingGestorOpsThreadIds(
+  preloadedThreads?: OpsChatThreadSummary[],
+): Promise<string[]> {
+  let threads = Array.isArray(preloadedThreads) ? preloadedThreads : null;
+  if (!threads) {
+    try {
+      threads = await fetchMyOpsChatThreads();
+    } catch {
+      return [];
+    }
   }
-  if (!threads.length) return 0;
+  if (!threads.length) return [];
   /** Limite de FTs a consultar por ciclo — evita rajada de pedidos quando há muitos fios. */
   const capped = threads.slice(0, 32);
-  let total = 0;
+  const pendingIds = new Set<string>();
   for (const t of capped) {
     const exId = String(t.executionId || '').trim();
     if (!exId) continue;
@@ -148,13 +155,25 @@ export async function countGestorUnreadAcrossOpsThreads(): Promise<number> {
       for (const m of msgs) {
         if (String(m.senderKind || '').toUpperCase() !== 'GESTOR') continue;
         const ts = new Date(m.createdAt).getTime();
-        if (Number.isFinite(ts) && ts > ack) total += 1;
+        if (Number.isFinite(ts) && ts > ack) {
+          pendingIds.add(exId);
+          break;
+        }
       }
     } catch {
       /* ignore por FT */
     }
   }
-  return total;
+  return [...pendingIds];
+}
+
+/**
+ * Conta threads operacionais com mensagem pendente do gestor.
+ * Usado no badge do separador «Conversas» (menu inferior).
+ */
+export async function countGestorUnreadAcrossOpsThreads(): Promise<number> {
+  const ids = await listPendingGestorOpsThreadIds();
+  return ids.length;
 }
 
 export async function fetchMyOpsChatThreads(): Promise<OpsChatThreadSummary[]> {

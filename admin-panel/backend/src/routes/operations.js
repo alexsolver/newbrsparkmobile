@@ -4,6 +4,7 @@ const prisma  = require('../db');
 const { auditActor } = require('../lib/auditActor');
 const { adminAuthThenPanel, rejectOsAuth } = require('../middleware/auth');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { resolveGlobalLiveActivityBadgeKey, resolveTenantAppDisplayName } = require('../lib/mobileTenantBranding');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const {
@@ -17,6 +18,7 @@ const {
   parseTranslationsJson,
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
+const { assertTenantAccess, isPlatformAdmin, resolveScopedTenantId } = require('../lib/authorization');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -28,11 +30,7 @@ const OPS_GPS_STALE_SEC = Math.min(
  * SAAS_ADMIN: sem filtro. Admin legado (`!panelUser`): sem filtro.
  */
 function panelOperationsTenantPrismaFilter(req) {
-  const a = req.admin;
-  if (!a || !a.panelUser) return null;
-  const role = String(a.role || '').trim().toUpperCase();
-  if (role === 'SAAS_ADMIN') return null;
-  const tid = a.tenantId != null && String(a.tenantId).trim() !== '' ? String(a.tenantId).trim() : null;
+  const tid = resolveScopedTenantId(req.authorization);
   if (!tid) return null;
   return { template: { tenantId: tid } };
 }
@@ -47,11 +45,7 @@ function mergeExecutionWhere(baseWhere, req) {
 
 /** `tenantId` do painel quando a listagem deve restringir utilizadores (avatares) ao mesmo tenant. */
 function panelTenantIdForUserScope(req) {
-  const a = req.admin;
-  if (!a || !a.panelUser) return null;
-  if (String(a.role || '').trim().toUpperCase() === 'SAAS_ADMIN') return null;
-  const tid = a.tenantId != null && String(a.tenantId).trim() !== '' ? String(a.tenantId).trim() : null;
-  return tid;
+  return resolveScopedTenantId(req.authorization);
 }
 
 /**
@@ -85,11 +79,7 @@ async function findChecklistExecutionForAppUser(prismaClient, executionId, email
   });
   if (globalOrNoTpl) return globalOrNoTpl;
 
-  /** Último recurso: só dono — evita 404 quando o tenant do JWT não coincide com o do template (dados legados / edge). */
-  return prismaClient.checklistExecution.findFirst({
-    where: ownerClause,
-    ...opt,
-  });
+  return null;
 }
 
 // ─── POST /api/operations/tasks/:id/reject (app móvel Live Activity / painel) ──
@@ -300,6 +290,7 @@ router.get('/my-ops-chat-threads', rejectOsAuth, async (req, res) => {
       id: true,
       osNumber: true,
       routineTaskNumber: true,
+      status: true,
       opsChatMessages: {
         orderBy: { createdAt: 'desc' },
         take: 1,
@@ -319,6 +310,7 @@ router.get('/my-ops-chat-threads', rejectOsAuth, async (req, res) => {
           executionId: ex.id,
           osNumber: ex.osNumber ?? null,
           routineTaskNumber: ex.routineTaskNumber ?? null,
+          executionStatus: ex.status ?? null,
           title: null,
           lastMessageAt: last?.createdAt ? last.createdAt.toISOString() : null,
           lastPreview: last?.body != null ? String(last.body).slice(0, 200) : '',
@@ -823,6 +815,12 @@ router.delete('/tasks/:id', async (req, res) => {
     const { id } = req.params;
     const ex = await prisma.checklistExecution.findFirst({
       where: mergeExecutionWhere({ id }, req),
+      select: {
+        id: true,
+        status: true,
+        ownerEmail: true,
+        template: { select: { tenantId: true } },
+      },
     });
     if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
 
@@ -837,7 +835,15 @@ router.delete('/tasks/:id', async (req, res) => {
         action:   'OS_CANCELLED',
         resource: 'ChecklistExecution',
         category: 'DATA',
-        metadata: { executionId: id, ownerEmail: ex.ownerEmail, previousStatus: ex.status },
+        metadata: {
+          actorScope: req.authorization?.scope || null,
+          actorRole: req.authorization?.roleKey || null,
+          contextTenantId: req.authorization?.contextTenantId || null,
+          targetTenantId: ex.template?.tenantId || null,
+          executionId: id,
+          ownerEmail: ex.ownerEmail,
+          previousStatus: ex.status,
+        },
       }
     }).catch(() => {}); // non-fatal
 
@@ -1006,18 +1012,24 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
             typeof mergedMeta.title === 'string' && mergedMeta.title.trim()
               ? mergedMeta.title.trim()
               : 'Ordem de serviço';
+          const appDisplayName = await resolveTenantAppDisplayName(
+            prisma,
+            execution.templateTenantId || execution.template?.tenantId || null,
+            'BrSpark'
+          );
+          const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
           const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
-          const bodyLine = `A administração pediu uma nova revisão: ${taskTitle}`;
+          const bodyLine = `A administração do ${appDisplayName} pediu uma nova revisão: ${taskTitle}`;
           const body =
             (osNum ? `${osNum} · ${bodyLine}` : bodyLine).slice(0, 200);
           /** Mesma categoria que o despacho de FT — botões Aceitar / Recusar / OK no iOS (expandir notificação). */
           const pushRes = await sendExpoPushToMany(pushTokens, {
-            title: 'Nova revisão pedida',
+            title: `Nova revisão · ${appDisplayName}`.slice(0, 120),
             body,
             subtitle: 'Deslize para baixo — Aceitar, Recusar ou OK.',
             interruptionLevel: 'active',
             categoryId: 'BRSPARK_TECH_ACTIVITY',
-            data: { taskId: id, type: 'os_reopened_revision' },
+            data: { taskId: id, type: 'os_reopened_revision', appDisplayName, liveActivityBadgeKey },
           });
           if (pushRes && pushRes.ok === false) {
             console.error('[operations/reopen-for-revision] Expo push falhou:', pushRes);

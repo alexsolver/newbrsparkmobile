@@ -39,6 +39,7 @@ const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
 const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
 const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
+const docsAssistantRoutes = require('./routes/docsAssistant');
 const checklistsVisionRoutes = require('./routes/checklistsVision');
 const checklistsVoiceNoteRoutes = require('./routes/checklistsVoiceNote');
 const cockpitRoutes       = require('./routes/cockpit');
@@ -58,6 +59,10 @@ const {
   publicRouter: technicianRegistrationPublicRouter,
   adminRouter: technicianRegistrationAdminRouter,
 } = require('./routes/technicianRegistration');
+const {
+  publicRouter: providersPublicRouter,
+  adminRouter: providersAdminRouter,
+} = require('./routes/providers');
 const routineTasksAdminRoutes = require('./routes/routineTasksAdmin');
 const {
   fetchProvidersFromCms,
@@ -113,6 +118,7 @@ app.post('/api/tenant-login', authRoutes.postTenantLogin); // alias (evita 404 s
 // Antes de app.use('/api', account): paths específicos — evita 404 «Route not found» quando o router /api não repassa subpaths em alguns deploys.
 app.use('/api/ai-technician-profile-photo', aiTechnicianProfilePhotoRoutes);
 app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
+app.use('/api/providers', providersPublicRouter);
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
 app.use('/api/maps/google', googleMapsRoutes); // app JWT: POST route-metrics, GET quota-preview
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
@@ -122,6 +128,7 @@ app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartil
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
+app.use('/api/docs', docsAssistantRoutes); // painel: assistente técnico da API Docs
 app.use('/api/routine-tasks', require('./routes/routineTasks')); // app: tarefas de rotina (RT)
 app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formulário sem login
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
@@ -606,6 +613,7 @@ app.use(
 );
 app.use('/api/osrm',               osrmProxyRoutes);   // sem adminAuth — mesmo alcance que /api/config
 app.use('/api/technician-registration', adminAuthThenPanel, technicianRegistrationAdminRouter);
+app.use('/api/providers', adminAuthThenPanel, providersAdminRouter);
 
 // ── Painel estático e uploads (depois das rotas /api para não sombrear a API) ──
 app.use(express.static(path.join(__dirname, '../../')));

@@ -9,6 +9,7 @@ import {
   applySessionInvalidatedFromServer,
   isTechnicianProfileActive,
   canUseFieldWorkAppRole,
+  canUseProviderMode,
 } from '../services/auth';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    if (userRole === 'TECHNICIAN' && !canUseFieldWorkAppRole(user)) {
+    if (userRole === 'TECHNICIAN' && !canUseProviderMode(user)) {
       _setUserRole('CLIENT');
       AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const st = String(user.technicianProfile?.status || '').toUpperCase() || '';
     const prev = prevTechnicianStatusRef.current;
-    if (prev !== null && prev !== 'ACTIVE' && st === 'ACTIVE' && userRole === 'CLIENT') {
+    if (prev !== null && prev !== 'ACTIVE' && st === 'ACTIVE' && userRole === 'CLIENT' && canUseProviderMode(user)) {
       _setUserRole('TECHNICIAN');
       AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch(() => {});
       dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
@@ -162,10 +163,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let role: 'CLIENT' | 'TECHNICIAN' =
           rawSaved === 'TECHNICIAN' || rawSaved === 'CLIENT' ? rawSaved : 'CLIENT';
 
-        const wasActive = localUser ? isTechnicianProfileActive(localUser) : false;
-        const nowActive = effective ? isTechnicianProfileActive(effective) : false;
+        const wasActive = localUser ? canUseProviderMode(localUser) : false;
+        const nowActive = effective ? canUseProviderMode(effective) : false;
 
-        if (role === 'TECHNICIAN' && !nowActive && !canUseFieldWorkAppRole(effective)) {
+        if (role === 'TECHNICIAN' && !nowActive) {
           role = 'CLIENT';
           await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
         }
@@ -231,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.login(email, password, tenantId);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -247,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.loginWithOAuth(params);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -258,7 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseFieldWorkAppRole(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -287,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setUserRole = async (role: 'CLIENT' | 'TECHNICIAN') => {
-    if (role === 'TECHNICIAN' && user && !canUseFieldWorkAppRole(user)) {
+    if (role === 'TECHNICIAN' && user && !canUseProviderMode(user)) {
       return;
     }
     _setUserRole(role);

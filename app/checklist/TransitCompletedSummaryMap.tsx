@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent, Dimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 
 const MAP_HEIGHT = 200;
 const MAX_POINTS = 500;
@@ -55,6 +56,29 @@ function projectPathToSvg(
   return { d, sx: toX(sln), sy: toY(sla), ex: toX(eln), ey: toY(ela) };
 }
 
+function regionFromPath(path: number[][]): Region {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for (const [la, ln] of path) {
+    minLat = Math.min(minLat, la);
+    maxLat = Math.max(maxLat, la);
+    minLng = Math.min(minLng, ln);
+    maxLng = Math.max(maxLng, ln);
+  }
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  const latDelta = Math.max((maxLat - minLat) * 1.35, 0.0012);
+  const lngDelta = Math.max((maxLng - minLng) * 1.35, 0.0012);
+  return {
+    latitude: centerLat,
+    longitude: centerLng,
+    latitudeDelta: latDelta,
+    longitudeDelta: lngDelta,
+  };
+}
+
 function formatDurationBr(totalSec: number): string {
   const s = Math.max(0, Math.floor(totalSec));
   const h = Math.floor(s / 3600);
@@ -83,12 +107,20 @@ export function TransitCompletedSummaryMap({
   durationLabel,
   distanceLabel,
 }: Props) {
+  const mapRef = useRef<MapView | null>(null);
   const [canvasW, setCanvasW] = useState(() => Math.max(280, Dimensions.get('window').width - 72));
+  const [mapReady, setMapReady] = useState(false);
 
   const path = useMemo(() => {
     const d = dedupeConsecutiveLatLng(pathLatLng);
     return thinPathForMap(d, MAX_POINTS);
   }, [pathLatLng]);
+
+  const initialRegion = useMemo(() => regionFromPath(path), [path]);
+  const mapCoords = useMemo(
+    () => path.map(([latitude, longitude]) => ({ latitude, longitude })),
+    [path]
+  );
 
   const onCanvasLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -100,6 +132,18 @@ export function TransitCompletedSummaryMap({
     [path, canvasW]
   );
 
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || mapCoords.length < 2) return;
+    try {
+      mapRef.current.fitToCoordinates(mapCoords, {
+        edgePadding: { top: 36, right: 36, bottom: 36, left: 36 },
+        animated: false,
+      });
+    } catch {
+      /* fallback SVG cobre falhas de render */
+    }
+  }, [mapReady, mapCoords]);
+
   if (path.length < 2) return null;
 
   const showMetrics = !!(durationLabel && durationLabel.trim()) || !!(distanceLabel && distanceLabel.trim());
@@ -107,7 +151,7 @@ export function TransitCompletedSummaryMap({
   return (
     <View style={styles.outer}>
       <Text style={styles.sectionTitle}>Percurso registado</Text>
-      <Text style={styles.sectionHint}>Vista do traço GPS no formulário (não é o mapa de ruas).</Text>
+      <Text style={styles.sectionHint}>Traço GPS capturado durante o deslocamento sobre mapa de ruas.</Text>
       {showMetrics ? (
         <View style={styles.metricsRow}>
           {durationLabel ? (
@@ -125,25 +169,57 @@ export function TransitCompletedSummaryMap({
         </View>
       ) : null}
       <View style={styles.mapShell} collapsable={false} onLayout={onCanvasLayout}>
-        {svgModel ? (
-          <Svg width={canvasW} height={MAP_HEIGHT} viewBox={`0 0 ${canvasW} ${MAP_HEIGHT}`}>
-            <Path
-              d={svgModel.d}
-              fill="none"
-              stroke="#0284c7"
-              strokeWidth={3.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="10 7"
-            />
-            <Circle cx={svgModel.sx} cy={svgModel.sy} r={7} fill="#16a34a" stroke="#fff" strokeWidth={2} />
-            <Circle cx={svgModel.ex} cy={svgModel.ey} r={7} fill="#dc2626" stroke="#fff" strokeWidth={2} />
-          </Svg>
-        ) : (
+        <MapView
+          ref={mapRef}
+          style={{ width: canvasW, height: MAP_HEIGHT }}
+          initialRegion={initialRegion}
+          mapType="standard"
+          rotateEnabled={false}
+          pitchEnabled={false}
+          toolbarEnabled={false}
+          zoomControlEnabled={false}
+          moveOnMarkerPress={false}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          onMapReady={() => setMapReady(true)}
+        >
+          <Polyline
+            coordinates={mapCoords}
+            strokeColor="#0284c7"
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
+          />
+          <Marker coordinate={mapCoords[0]} title="Início" pinColor="#16a34a" tracksViewChanges={false} />
+          <Marker
+            coordinate={mapCoords[mapCoords.length - 1]}
+            title="Fim"
+            pinColor="#dc2626"
+            tracksViewChanges={false}
+          />
+        </MapView>
+        {!mapReady && svgModel ? (
+          <View style={styles.mapOverlayFallback} pointerEvents="none">
+            <Svg width={canvasW} height={MAP_HEIGHT} viewBox={`0 0 ${canvasW} ${MAP_HEIGHT}`}>
+              <Path
+                d={svgModel.d}
+                fill="none"
+                stroke="#0284c7"
+                strokeWidth={3.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="10 7"
+              />
+              <Circle cx={svgModel.sx} cy={svgModel.sy} r={7} fill="#16a34a" stroke="#fff" strokeWidth={2} />
+              <Circle cx={svgModel.ex} cy={svgModel.ey} r={7} fill="#dc2626" stroke="#fff" strokeWidth={2} />
+            </Svg>
+          </View>
+        ) : null}
+        {!mapReady && !svgModel ? (
           <View style={[styles.mapFallback, { width: canvasW, height: MAP_HEIGHT }]}>
             <Text style={styles.fallbackText}>Não foi possível desenhar o traço neste ecrã.</Text>
           </View>
-        )}
+        ) : null}
         <View style={styles.legendRow} pointerEvents="none">
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#16a34a' }]} />
@@ -229,9 +305,17 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   mapFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'rgba(226,232,240,0.9)',
+  },
+  mapOverlayFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   fallbackText: {
     fontSize: 12,

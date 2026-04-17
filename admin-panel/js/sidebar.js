@@ -4,7 +4,10 @@
 
 import {
   CONFIG,
+  applyPanelSessionBootstrap,
   ensureAdminApiDetected,
+  getPanelContext,
+  refreshPanelSessionBootstrap,
   restoreAdminSessionBundleIfNeeded,
   persistAdminSessionBundleFromSessionStorage,
   clearAdminSessionFully,
@@ -122,24 +125,45 @@ export const NAV_ITEMS = [
 ];
 
 /** Papéis com menu completo no painel. */
-export const FULL_PANEL_MENU_ROLES = new Set(['SAAS_ADMIN', 'TENANT_ADMIN']);
+export const FULL_PANEL_MENU_ROLES = new Set(['SAAS_ADMIN']);
 
 /**
- * Páginas visíveis ao perfil Gestor (MANAGER) — grupos menu Gestão + Operações.
- * (Sem Dashboard, Plataforma, Multi-Location, Sistema, etc.)
+ * Páginas visíveis ao perfil Admin do tenant — visão completa do próprio tenant,
+ * sem áreas globais de plataforma/sistema.
  */
-export const MANAGER_PANEL_PAGES = new Set([
+export const TENANT_ADMIN_PANEL_PAGES = new Set([
   'tenants.html',
   'users.html',
   'user-edit.html',
-  'subscriptions.html',
-  'plans.html',
+  'technician-applications.html',
   'checklists.html',
   'operations.html',
   'routine-tasks.html',
   'reports.html',
   'evaluations.html',
   'cockpit.html',
+  'locations.html',
+  'subscriptions.html',
+  'notifications.html',
+  'chat.html',
+  'work-time.html',
+]);
+
+/**
+ * Páginas visíveis ao perfil Gestor (MANAGER) — grupos menu Gestão + Operações.
+ * (Sem Dashboard, Plataforma, Multi-Location, Sistema, etc.)
+ */
+export const MANAGER_PANEL_PAGES = new Set([
+  'users.html',
+  'user-edit.html',
+  'checklists.html',
+  'operations.html',
+  'routine-tasks.html',
+  'reports.html',
+  'evaluations.html',
+  'cockpit.html',
+  'locations.html',
+  'notifications.html',
   'chat.html',
   'technician-applications.html',
   'work-time.html',
@@ -152,6 +176,7 @@ export function getStoredPanelRole() {
 export function navItemsForRole(role) {
   const r = String(role || '').trim();
   if (!r || FULL_PANEL_MENU_ROLES.has(r)) return NAV_ITEMS;
+  if (r === 'TENANT_ADMIN') return NAV_ITEMS.filter((item) => TENANT_ADMIN_PANEL_PAGES.has(item.page));
   if (r === 'MANAGER') return NAV_ITEMS.filter((item) => MANAGER_PANEL_PAGES.has(item.page));
   return NAV_ITEMS;
 }
@@ -162,12 +187,24 @@ export function isPanelPageAllowed(role, pathOrFile) {
   const normalized = file.endsWith('.html') ? file : `${file}.html`;
   const r = String(role || '').trim();
   if (!r || FULL_PANEL_MENU_ROLES.has(r)) return true;
+  if (r === 'TENANT_ADMIN') return TENANT_ADMIN_PANEL_PAGES.has(normalized);
   if (r === 'MANAGER') return MANAGER_PANEL_PAGES.has(normalized);
   return true;
 }
 
 export function defaultLandingPageForRole(role) {
-  return String(role || '').trim() === 'MANAGER' ? 'tenants.html' : 'dashboard.html';
+  const r = String(role || '').trim();
+  if (r === 'TENANT_ADMIN') return 'tenants.html';
+  if (r === 'MANAGER') return 'operations.html';
+  return 'dashboard.html';
+}
+
+function navLabelForRole(item, role) {
+  const r = String(role || '').trim();
+  if (r === 'TENANT_ADMIN' && item.page === 'tenants.html') {
+    return t('nav_my_org');
+  }
+  return t(item.labelKey);
 }
 
 /** Termina sessão do painel (usado na sidebar e na barra superior). */
@@ -180,7 +217,7 @@ async function fetchPanelChatTopbarBadgeCount() {
   try {
     const rooms = await CONFIG.get('/chat/rooms');
     if (!Array.isArray(rooms)) return 0;
-    const corp = rooms.reduce((acc, r) => acc + (Number(r.unreadCount) || 0), 0);
+    const corp = rooms.filter((r) => (Number(r.unreadCount) || 0) > 0).length;
     let ops = 0;
     try {
       const res = await fetch(`${CONFIG.API_BASE}/operations/my-ops-chat-threads`, {
@@ -189,7 +226,7 @@ async function fetchPanelChatTopbarBadgeCount() {
       if (res.ok) {
         const j = await res.json();
         const threads = Array.isArray(j.threads) ? j.threads : [];
-        ops = threads.filter((t) => String(t.lastSenderKind || '').toUpperCase() === 'TECH').length;
+        ops = threads.filter((t) => String(t.lastSenderKind || '').toUpperCase() === 'GESTOR').length;
       }
     } catch {
       /* ignore */
@@ -312,7 +349,8 @@ function injectGlobalTopbarActions() {
 export function renderSidebar(alertCount = 3) {
   const page = window.location.pathname.split('/').pop().replace('.html','') || 'dashboard';
   const currentPage = page.endsWith('.html') ? page : page + '.html';
-  const panelMode = sessionStorage.getItem('brspark_panel_mode') || 'global';
+  const ctx = getPanelContext();
+  const panelMode = sessionStorage.getItem('brspark_panel_mode') || (ctx?.scope === 'platform' ? 'global' : 'tenant');
   let tenantLine = '';
   try {
     const raw = sessionStorage.getItem('brspark_panel_tenant');
@@ -322,6 +360,9 @@ export function renderSidebar(alertCount = 3) {
     }
   } catch {
     /* ignore */
+  }
+  if (!tenantLine && ctx?.label) {
+    tenantLine = `<div class="sidebar-tenant-chip">${String(ctx.label)}</div>`;
   }
   const role = getStoredPanelRole();
   const items = navItemsForRole(role);
@@ -341,7 +382,7 @@ export function renderSidebar(alertCount = 3) {
       (pageKey === 'technician-applications' && item.page === 'technician-applications.html')
         ? 'active'
         : '';
-    const lab = t(item.labelKey);
+    const lab = navLabelForRole(item, role);
     const badge = item.page === 'audit.html' ? `<span class="nav-badge">${alertCount}</span>` : '';
     return `${sectionHtml}
       <a href="${item.page}" class="nav-item ${active}" data-page="${item.page}" title="${lab.replace(/"/g, '&quot;')}">
@@ -373,6 +414,45 @@ export function renderSidebar(alertCount = 3) {
     </aside>`;
 }
 
+/** Fecha camadas presas (ex.: modal com classe, diálogo nativo) que roubam cliques em páginas sem modal. */
+function dismissStrayAdminUiLayers() {
+  try {
+    document.querySelectorAll('dialog[open]').forEach((dlg) => {
+      try {
+        if (typeof dlg.close === 'function') dlg.close();
+      } catch {
+        /* ignore */
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+  try {
+    document.querySelectorAll('.modal-overlay.open').forEach((el) => el.classList.remove('open'));
+  } catch {
+    /* ignore */
+  }
+  try {
+    document.querySelectorAll('.eval-modal-overlay.is-open').forEach((el) => {
+      el.classList.remove('is-open');
+      el.setAttribute('aria-hidden', 'true');
+    });
+  } catch {
+    /* ignore */
+  }
+  try {
+    const path = typeof window !== 'undefined' && window.location?.pathname ? String(window.location.pathname) : '';
+    const onChatPage = /(^|\/)chat\.html$/i.test(path);
+    if (!onChatPage) {
+      document.querySelectorAll('.admin-chat-modal-overlay').forEach((el) => {
+        if (!el.hasAttribute('hidden')) el.setAttribute('hidden', '');
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function initPage() {
   await ensureAdminApiDetected();
   seedAdminSessionFromOpenerIfNeeded();
@@ -382,6 +462,8 @@ export async function initPage() {
     window.location.href = 'index.html';
     return;
   }
+
+  await refreshPanelSessionBootstrap().catch(() => {});
 
   const pathFile = window.location.pathname.split('/').pop() || 'dashboard.html';
   const currentHtml = pathFile.includes('.') ? pathFile : `${pathFile}.html`;
@@ -414,6 +496,7 @@ export async function initPage() {
   if (!document.querySelector('body > aside.sidebar')) {
     document.body.insertAdjacentHTML('afterbegin', renderSidebar());
   }
+  dismissStrayAdminUiLayers();
   if (isSidebarCollapsed() && window.matchMedia('(min-width: 769px)').matches) {
     document.body.classList.add('sidebar-collapsed');
   }
@@ -447,6 +530,7 @@ export async function initPage() {
       else sessionStorage.removeItem('brspark_panel_mode');
       if (b.panelTenant) sessionStorage.setItem('brspark_panel_tenant', b.panelTenant);
       else sessionStorage.removeItem('brspark_panel_tenant');
+      applyPanelSessionBootstrap(b);
       sessionStorage.removeItem('brspark_impersonation_backup');
       persistAdminSessionBundleFromSessionStorage();
       window.location.href = defaultLandingPageForRole(b.role || '');
@@ -478,6 +562,17 @@ export async function initPage() {
     injectGlobalTopbarActions();
   } catch (e) {
     console.warn('[admin] injectGlobalTopbarActions:', e);
+  }
+
+  if (!window.__brsparkTopbarDetailsOutsideBound) {
+    window.__brsparkTopbarDetailsOutsideBound = true;
+    document.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      document.querySelectorAll('details.topbar-user-details[open]').forEach((det) => {
+        if (!det.contains(t)) det.removeAttribute('open');
+      });
+    });
   }
 
   try {

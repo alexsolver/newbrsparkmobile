@@ -52,10 +52,11 @@ import { StockItem } from '../../src/types/stock';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlingGestureHandler, Directions, State } from 'react-native-gesture-handler';
 import { tabBarOuterHeight } from '../../src/components/FloatingRadialMenu';
 import { TaskMetadataGlyph } from '../../src/components/TaskMetadataGlyph';
 import { useAppContext } from '../../src/context/AppContext';
-import { API_BASE, apiFetch } from '../../src/services/auth';
+import { API_BASE, apiFetch, userHasCapability } from '../../src/services/auth';
 import { getOsrmBaseUrl } from '../../src/services/osrmConfig';
 import { fetchTravelDurationsFromOrigin, fetchStitchedDrivingRouteLatLng } from '../../src/services/osrmClient';
 import { useManualSync } from '../../src/hooks/useManualSync';
@@ -69,7 +70,7 @@ import {
   purgeExpiredCompletedExecutionCaches,
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from '../../src/services/syncService';
-import { patchCloudTaskById } from '../../src/lib/cloudTasksBuckets';
+import { loadAllCloudTasksForExecutionLookup, patchCloudTaskById } from '../../src/lib/cloudTasksBuckets';
 import { taskRowIsRoutineTask } from '../../src/lib/routineTaskQueueUi';
 import {
   appendUniqueStringToStoredArray,
@@ -86,6 +87,11 @@ import {
   effectiveProviderTaskStatus,
   taskMetadataIndicatesRevisionVisit,
 } from '../../src/utils/providerTaskStatus';
+import {
+  decideProviderTaskInclusion,
+  isProviderChecklistExecutionEvent,
+  shouldRequireKnownExecutionGate,
+} from '../../src/utils/providerTaskEventFilter';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../src/components/LocationZoneTypeBadge';
 import MapView, { Marker, Callout, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -112,6 +118,7 @@ const OSRM_MAX_DESTINATIONS = 90;
 const OSRM_MAX_WAYPOINTS_FOR_GEOMETRY = 28;
 /** Igual a `LiveRouteMapCard`: voltar a pedir geometria até o GPS/OSRM responder. */
 const OSRM_ROUTE_MAP_RETRY_MS = 12000;
+const PROVIDER_TAB_ORDER = ['PENDING', 'IN_PROGRESS', 'COMPLETED'] as const;
 
 /** Abas Pendentes/Iniciadas: virtualização. Concluídas: janela + «Carregar mais». */
 const PROVIDER_OS_COMPLETED_PAGE = 50;
@@ -1943,19 +1950,8 @@ function ProviderAwaitAcceptMinutesChip(props: { task: any; C: ColorPalette; com
       renderBelow={
         compact
           ? undefined
-          : (minutes) => (
+          : () => (
               <>
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '800',
-                    color: '#8B4513',
-                    marginTop: 8,
-                    textAlign: 'center',
-                  }}
-                >
-                  {t('home.providerOsAwaitAcceptMinutes', { count: minutes })}
-                </Text>
                 <Text style={{ fontSize: 10, fontWeight: '600', color: C.slate, marginTop: 5, textAlign: 'center' }}>
                   {t('home.providerOsAwaitAcceptMinutesSub')}
                 </Text>
@@ -2018,7 +2014,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { colors: C, dark: themeDark, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createDashboardStyles(C), [C]);
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const { isOnline } = useConnectivity(8000);
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -2049,6 +2045,10 @@ export default function DashboardScreen() {
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const { mode, setMode } = useAppContext();
+  const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
+  const providerModeOnly = canUseProviderMode && String(userRole || '').toUpperCase() === 'TECHNICIAN';
+  const hasProviderProfileFallback =
+    String(user?.role || '').toUpperCase() === 'PROVIDER' || String(userRole || '').toUpperCase() === 'TECHNICIAN';
   const [svcFilter, setSvcFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [sortMode, setSortMode] = useState<'DEFAULT' | 'RATING' | 'AGENDA' | 'VERIFIED' | 'PRICE' | 'DISTANCE'>('DEFAULT');
@@ -2087,6 +2087,8 @@ export default function DashboardScreen() {
   const [savedAltSortOld, setSavedAltSortOld] = useState<ProviderLongPressSheetMode>('OLDEST');
   const [providerRouteSheetOpen, setProviderRouteSheetOpen] = useState(false);
   const [isProviderMenuExpanded, setIsProviderMenuExpanded] = useState(true);
+  const providerSwipeLeftRef = useRef<any>(null);
+  const providerSwipeRightRef = useRef<any>(null);
   // Which list section is currently in drag-reorder mode ('MY' | 'SHARED' | null)
   const [reorderingList, setReorderingList] = useState<'MY' | 'SHARED' | null>(null);
 
@@ -2207,6 +2209,33 @@ export default function DashboardScreen() {
   useEffect(() => {
     setProviderCompletedListCap(PROVIDER_OS_COMPLETED_INITIAL);
   }, [providerTab, providerTasks]);
+
+  const selectProviderTab = useCallback((nextTab: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED') => {
+    setProviderTab(nextTab);
+    if (nextTab !== 'PENDING' && (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE')) {
+      setProviderSortMode('NEWEST');
+    }
+  }, [providerSortMode]);
+
+  const stepProviderTab = useCallback((direction: 'left' | 'right') => {
+    const currentIndex = PROVIDER_TAB_ORDER.indexOf(providerTab);
+    if (currentIndex < 0) return;
+    const nextIndex = direction === 'left' ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex < 0 || nextIndex >= PROVIDER_TAB_ORDER.length) return;
+    selectProviderTab(PROVIDER_TAB_ORDER[nextIndex]);
+  }, [providerTab, selectProviderTab]);
+
+  const onProviderSwipeLeft = useCallback(({ nativeEvent }: any) => {
+    if (nativeEvent.state === State.ACTIVE) {
+      stepProviderTab('left');
+    }
+  }, [stepProviderTab]);
+
+  const onProviderSwipeRight = useCallback(({ nativeEvent }: any) => {
+    if (nativeEvent.state === State.ACTIVE) {
+      stepProviderTab('right');
+    }
+  }, [stepProviderTab]);
 
   const providerOsListSorted = useMemo(() => {
     const filtered = providerTasks.filter((t) => {
@@ -2566,6 +2595,8 @@ export default function DashboardScreen() {
 
   /** Evita corridas: vários loadData (focus + poller a cada 20s) não podem sobrescrever `inprogressIds` com leituras antigas do AsyncStorage. */
   const loadDataChainRef = useRef(Promise.resolve());
+  /** Evita empilhar refreshes pós-pull quando a rede está lenta. */
+  const deferredProviderReloadRef = useRef(false);
   /** `false` = último check de rede foi offline; usado para disparar sync em rajada ao voltar online. */
   const reconnectOnlineRef = useRef<boolean | null>(null);
   /** Última vez que o diretório de empresas veio da rede com sucesso (força bust após TTL). */
@@ -2573,6 +2604,9 @@ export default function DashboardScreen() {
 
   const loadData = (triggerSync = false) => {
     const run = async () => {
+    if (authLoading) {
+      return;
+    }
     // Bens: apenas para usuários autenticados
     if (user) {
       const email = user.email || '';
@@ -2591,17 +2625,48 @@ export default function DashboardScreen() {
       try {
          const { AgendaService } = require('../../src/services/agendaService');
 
-         // Sincroniza OS da nuvem; o race só limita o “primeiro tick” — sempre esperamos o pull terminar
-         // antes de ler a agenda, senão o AsyncStorage pode ainda ter cache antigo (sem osNumber / FT).
-         const pullPromise = pullTasks(email).catch((err: unknown) =>
-           console.warn('[loadData] pullTasks falhou (offline?):', err)
-         );
-         await Promise.race([pullPromise, new Promise((r) => setTimeout(r, 3000))]);
-         await pullPromise;
+         // Não bloquear a primeira pintura da lista aguardando pull remoto:
+         // renderiza snapshot local primeiro e, se o pull terminar depois, dispara refresh.
+         let pullSettled = false;
+         const pullPromise = pullTasks(email)
+           .then(() => {
+             pullSettled = true;
+           })
+           .catch((err: unknown) => {
+             pullSettled = true;
+             console.warn('[loadData] pullTasks falhou (offline?):', err);
+           });
+         await Promise.race([pullPromise, new Promise((r) => setTimeout(r, 1200))]);
+         if (!pullSettled && !deferredProviderReloadRef.current) {
+           deferredProviderReloadRef.current = true;
+           void pullPromise.then(() => {
+             // Atualização assíncrona após pull concluído; mantém UX responsiva na abertura.
+             deferredProviderReloadRef.current = false;
+             void loadData(false);
+           }).catch(() => {
+             deferredProviderReloadRef.current = false;
+           });
+         }
          await purgeExpiredCompletedExecutionCaches();
+         // Escopo de agenda não pode depender do modo visual (mode), para evitar
+         // oscilação CLIENT/PROVIDER durante bootstrap do app/contexto.
+         const providerScopeEnabled = canUseProviderMode || hasProviderProfileFallback;
          const events = await AgendaService.getUnifiedAgenda(
            email,
-           userRole === 'TECHNICIAN' ? 'PROVIDER' : 'CLIENT',
+           providerScopeEnabled ? 'PROVIDER' : 'CLIENT',
+         );
+         let cloudExecRows: any[] = [];
+         let cloudExecLookupOk = true;
+         try {
+           cloudExecRows = await loadAllCloudTasksForExecutionLookup();
+         } catch {
+           cloudExecLookupOk = false;
+           cloudExecRows = [];
+         }
+         const cloudExecIds = new Set(
+           (Array.isArray(cloudExecRows) ? cloudExecRows : [])
+             .map((r: any) => String(r?.id || '').trim())
+             .filter(Boolean)
          );
          
          const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
@@ -2696,20 +2761,84 @@ export default function DashboardScreen() {
              }
          }
          
-         const pt_filtered = combinedEvents.filter((e: any) => {
-             if (e.source !== 'CHECKLIST' && e.category !== 'TASK') return false;
-             if (rejectedTasks.includes(String(e.id))) return false;
-             if (taskRowIsRoutineTask(e)) return false;
-             return true;
-         }).filter((e: any) => {
-             const isPurged = executedTasksRaw.find((raw:any) => (typeof raw === 'string' ? raw : raw.id) === String(e.id)) 
-                              && !executedMap[String(e.id)];
-             return !isPurged;
+         const ACTIVE_PROVIDER_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
+         const requireKnownExecution = shouldRequireKnownExecutionGate({
+           cloudLookupOk: cloudExecLookupOk,
+           knownExecutionIdsSize: cloudExecIds.size,
          });
+         const rejectedIdSet = new Set(rejectedTasks.map((id) => String(id)));
+         const strictRejectCounters: Record<string, number> = {};
+         const ptFilteredStrict = combinedEvents.filter((e: any) => {
+           const decision = decideProviderTaskInclusion({
+             event: e,
+             knownExecutionIds: cloudExecIds,
+             executedMap,
+             rejectedIds: rejectedIdSet,
+             isRoutineTask: taskRowIsRoutineTask,
+             activeStatuses: ACTIVE_PROVIDER_STATUSES,
+             executedRawList: executedTasksRaw,
+             requireKnownExecution,
+           });
+           if (decision.ok) return true;
+           strictRejectCounters[decision.reason] = (strictRejectCounters[decision.reason] || 0) + 1;
+           return false;
+         });
+         let pt_filtered = ptFilteredStrict;
+         let relaxedFallbackApplied = false;
+         let relaxedRejectCounters: Record<string, number> = {};
+         if (requireKnownExecution) {
+           const strictActiveCount = ptFilteredStrict.filter((row: any) =>
+             ACTIVE_PROVIDER_STATUSES.has(String(row?.status || '').toUpperCase())
+           ).length;
+           if (strictActiveCount === 0) {
+             const relaxedCandidates = combinedEvents.filter((row: any) =>
+               isProviderChecklistExecutionEvent(row) &&
+               !taskRowIsRoutineTask(row) &&
+               !rejectedIdSet.has(String(row?.id || ''))
+             );
+             const relaxedActiveCandidateCount = relaxedCandidates.filter((row: any) =>
+               ACTIVE_PROVIDER_STATUSES.has(String(row?.status || '').toUpperCase())
+             ).length;
+             if (relaxedActiveCandidateCount > 0) {
+               relaxedRejectCounters = {};
+               pt_filtered = combinedEvents.filter((e: any) => {
+                 const decision = decideProviderTaskInclusion({
+                   event: e,
+                   knownExecutionIds: cloudExecIds,
+                   executedMap,
+                   rejectedIds: rejectedIdSet,
+                   isRoutineTask: taskRowIsRoutineTask,
+                   activeStatuses: ACTIVE_PROVIDER_STATUSES,
+                   executedRawList: executedTasksRaw,
+                   requireKnownExecution: false,
+                 });
+                 if (decision.ok) return true;
+                 relaxedRejectCounters[decision.reason] = (relaxedRejectCounters[decision.reason] || 0) + 1;
+                 return false;
+               });
+               relaxedFallbackApplied = true;
+             }
+           }
+         }
 
          const pendingSyncIds = await getTaskIdsWithPendingLocalSyncOverlay();
 
-         console.log('AGENDA EVENTS LOADED:', events.length, 'INJECTED:', combinedEvents.length - events.length, 'FILTERED:', pt_filtered.length);
+         console.log(
+           'AGENDA EVENTS LOADED:',
+           events.length,
+           'INJECTED:',
+           combinedEvents.length - events.length,
+           'FILTERED:',
+           pt_filtered.length,
+           'STRICT_KNOWN_EXEC:',
+           requireKnownExecution,
+           'RELAXED_FALLBACK:',
+           relaxedFallbackApplied,
+           'STRICT_REJECTS:',
+           JSON.stringify(strictRejectCounters),
+           'RELAXED_REJECTS:',
+           JSON.stringify(relaxedRejectCounters),
+         );
          const completedSetForMap = new Set(Object.keys(executedMap));
          const inprogSetForMap = new Set(inprogressMerged);
          const mapped = pt_filtered.map((t: any) => {
@@ -2842,6 +2971,7 @@ export default function DashboardScreen() {
         setPendingShares([]);
       }
     } else {
+      if (authLoading) return;
       setAssets([]);
       setAllAssets([]);
       setStockItems([]);
@@ -2917,11 +3047,11 @@ export default function DashboardScreen() {
     const found = providerTasks.find((t: any) => String(t.id) === String(tid));
     if (found) {
       takePendingOpenExecutionFromPush();
-      setProviderTab('PENDING');
+      selectProviderTab('PENDING');
       setSelectedTask(found);
       setTaskModalVisible(true);
     }
-  }, [providerTasks, mode, userRole]);
+  }, [providerTasks, mode, userRole, selectProviderTab]);
 
   useFocusEffect(
     useCallback(() => {
@@ -2944,18 +3074,22 @@ export default function DashboardScreen() {
   // Primeira montagem: sincroniza se banco estiver vazio
   const hasMountedRef = useRef(false);
   useFocusEffect(useCallback(() => {
+    if (authLoading) return;
+    if (!user) return;
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
       loadData(true); // primeira visita: força sync
     } else {
       loadData(false); // voltas subsequentes: só lê cache local
     }
-  }, [user]));
+  }, [user?.email, authLoading]));
 
   // Sync scroll to global mode changes (from Header)
   React.useEffect(() => {
     let page = 0;
-    if (userRole === 'TECHNICIAN') {
+    if (providerModeOnly) {
+      page = 0;
+    } else if (canUseProviderMode) {
       page = mode === 'PROVIDER' ? 1 : 0;
     } else {
       page = mode === 'ASSETS' ? 1 : 0;
@@ -2965,7 +3099,7 @@ export default function DashboardScreen() {
     // Release lock after animation
     const timer = setTimeout(() => { isInternalScroll.current = false; }, 500);
     return () => clearTimeout(timer);
-  }, [mode, pagerWidth, userRole]);
+  }, [mode, pagerWidth, canUseProviderMode, providerModeOnly]);
 
   // Rajada de sync ao recuperar rede (complementa o poller de 20 s e reduz sensação de "app preso").
   useEffect(() => {
@@ -3049,10 +3183,14 @@ export default function DashboardScreen() {
 
   const onPageScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (isInternalScroll.current) return;
+    if (providerModeOnly) {
+      if (mode !== 'PROVIDER') setMode('PROVIDER');
+      return;
+    }
     const page = Math.round(e.nativeEvent.contentOffset.x / pagerWidth);
     
     let newMode = mode;
-    if (userRole === 'TECHNICIAN') {
+    if (canUseProviderMode) {
       newMode = page === 0 ? 'ASSETS' : 'PROVIDER';
     } else {
       newMode = page === 0 ? 'SERVICES' : 'ASSETS';
@@ -3788,8 +3926,8 @@ export default function DashboardScreen() {
     return null;
   }, [C.textLight, providerOsFlatData.length, providerOsListSorted.length, providerTab, t]);
 
-  /** No modo prestador (técnico), a página de bens fica à esquerda no pager — desativa o swipe para não aceder a bens por gesto. */
-  const technicianProviderPagerLocked = userRole === 'TECHNICIAN' && mode === 'PROVIDER';
+  /** No modo prestador técnico, o pager fica travado e a página de bens nem chega a ser montada. */
+  const technicianProviderPagerLocked = providerModeOnly || (canUseProviderMode && mode === 'PROVIDER');
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
@@ -4044,6 +4182,7 @@ export default function DashboardScreen() {
         )}
 
         {/* ═══════ PAGE 2: Dashboard de Ativos ═══════ */}
+        {!providerModeOnly && (
         <ScrollView
           style={{ width: pagerWidth }}
           contentContainerStyle={{ paddingBottom: catalogScrollBottomPad }}
@@ -4129,9 +4268,10 @@ export default function DashboardScreen() {
           </ScrollView>
           {portfolioViewMode === 'MAP' ? renderMapContent() : renderAssetContent()}
         </ScrollView>
+        )}
 
         {/* ═══════ PAGE 3: Dashboard do Prestador ═══════ */}
-        {userRole === 'TECHNICIAN' && (
+        {canUseProviderMode && (
         <View style={{ width: pagerWidth, flex: 1, backgroundColor: C.background }}>
           {/* Cabeçalho das abas (fixo no topo desta página) */}
           <View
@@ -4199,12 +4339,7 @@ export default function DashboardScreen() {
                     accessibilityState={{ selected: isActive }}
                     accessibilityLabel={`${tab.label}, ${stageCount}`}
                     android_ripple={{ color: themeDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.08)', foreground: true }}
-                    onPress={() => {
-                      setProviderTab(tab.id as any);
-                      if (tab.id !== 'PENDING' && (providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE')) {
-                        setProviderSortMode('NEWEST');
-                      }
-                    }}
+                    onPress={() => selectProviderTab(tab.id)}
                     style={({ pressed }) => [
                       {
                         flex: 1,
@@ -4300,39 +4435,51 @@ export default function DashboardScreen() {
           </View>
 
           {/* Provider Content Placeholder / List */}
-          {providerOsListSorted.length === 0 ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: 40 }}>
-            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: C.status.warning.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-              <Ionicons name="construct" size={40} color={MODE_SEGMENT_COLORS.PROVIDER} />
-            </View>
-            <Text style={{ fontSize: 24, fontWeight: '900', color: C.slate, textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
-              {providerTab === 'PENDING' ? 'Nenhuma Ordem Pendente' : providerTab === 'IN_PROGRESS' ? 'Nenhuma Ordem Iniciada' : 'Nenhuma Concluída'}
-            </Text>
-            <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', lineHeight: 22 }}>
-              A lista de serviços aparecerá aqui logo que houver despachos do painel central.
-            </Text>
-          </View>
-          ) : (
-            <FlatList
-              style={{ flex: 1 }}
-              data={providerOsFlatData}
-              keyExtractor={(row) => String(row.id)}
-              extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}-${providerCardVariant}-${providerCardHighContrast ? 1 : 0}`}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              initialNumToRender={7}
-              windowSize={9}
-              maxToRenderPerBatch={12}
-              removeClippedSubviews={false}
-              contentContainerStyle={{
-                flexGrow: 1,
-                paddingTop: 4,
-                paddingBottom: catalogScrollBottomPad,
-              }}
-              ListHeaderComponent={providerOsSortChipsHeader}
-              ListFooterComponent={providerOsCompletedListFooter}
-              renderItem={({ item: order, index }) => {
+          <FlingGestureHandler
+            ref={providerSwipeLeftRef}
+            direction={Directions.LEFT}
+            onHandlerStateChange={onProviderSwipeLeft}
+          >
+            <View style={{ flex: 1 }}>
+              <FlingGestureHandler
+                ref={providerSwipeRightRef}
+                direction={Directions.RIGHT}
+                onHandlerStateChange={onProviderSwipeRight}
+              >
+                <View style={{ flex: 1 }}>
+                  {providerOsListSorted.length === 0 ? (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: 40 }}>
+                    <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: C.status.warning.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+                      <Ionicons name="construct" size={40} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                    </View>
+                    <Text style={{ fontSize: 24, fontWeight: '900', color: C.slate, textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
+                      {providerTab === 'PENDING' ? 'Nenhuma Ordem Pendente' : providerTab === 'IN_PROGRESS' ? 'Nenhuma Ordem Iniciada' : 'Nenhuma Concluída'}
+                    </Text>
+                    <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', lineHeight: 22 }}>
+                      A lista de serviços aparecerá aqui logo que houver despachos do painel central.
+                    </Text>
+                  </View>
+                  ) : (
+                    <FlatList
+                      style={{ flex: 1 }}
+                      data={providerOsFlatData}
+                      keyExtractor={(row) => String(row.id)}
+                      extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}-${providerCardVariant}-${providerCardHighContrast ? 1 : 0}`}
+                      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      initialNumToRender={7}
+                      windowSize={9}
+                      maxToRenderPerBatch={12}
+                      removeClippedSubviews={false}
+                      contentContainerStyle={{
+                        flexGrow: 1,
+                        paddingTop: 4,
+                        paddingBottom: catalogScrollBottomPad,
+                      }}
+                      ListHeaderComponent={providerOsSortChipsHeader}
+                      ListFooterComponent={providerOsCompletedListFooter}
+                      renderItem={({ item: order, index }) => {
                 const listAccent = providerTaskListAccentColor(order, completedIds, inprogressIds, acceptedIds, C);
                 const listEff = effectiveProviderTaskStatus(order, completedIds, inprogressIds, acceptedIds);
                 const cardVencIso = providerTaskVencimentoIso(order);
@@ -4858,9 +5005,13 @@ export default function DashboardScreen() {
                 )}
                 </Animated.View>
               );
-              }}
-            />
-          )}
+                      }}
+                    />
+                  )}
+                </View>
+              </FlingGestureHandler>
+            </View>
+          </FlingGestureHandler>
         </View>
         )}
       </ScrollView>
