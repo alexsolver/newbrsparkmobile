@@ -13,8 +13,12 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/services/auth';
+import { ScreenSubheader } from '../../src/components/ScreenSubheader';
+import { TechnicianEvaluationsDashboard } from '../../src/components/TechnicianEvaluationsDashboard';
+import { EvaluationBadge } from '../../src/components/EvaluationBadge';
+import { instanceStatusTone, scoreBandTone } from '../../src/utils/evaluationDisplay';
+import { trInstanceStatus, trScoreBand } from '../../src/utils/evaluationLabelsI18n';
 
 type Summary = {
   averageTotal: number | null;
@@ -37,11 +41,11 @@ type InstanceRow = {
 export default function ProductivityIndexScreen() {
   const { t } = useTranslation();
   const { colors: C } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [items, setItems] = useState<InstanceRow[]>([]);
   const [sort, setSort] = useState<'critical' | 'neutral' | 'positive'>('critical');
+  const [tab, setTab] = useState<'panel' | 'list'>('panel');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,19 +80,16 @@ export default function ProductivityIndexScreen() {
     load();
   }, [sort]);
 
-  const trendIcon =
-    summary?.trend === 'up' ? 'trending-up' : summary?.trend === 'down' ? 'trending-down' : 'remove';
-
   return (
     <View style={[styles.root, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.topBar, { borderBottomColor: C.divider, paddingTop: 8 + insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
-          <Ionicons name="chevron-back" size={26} color={C.accent} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: C.slate }]}>{t('productivity.title')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenSubheader
+        title={t('productivity.title')}
+        subtitle={t('productivity.screenSubtitle')}
+        onBack={() => router.back()}
+        onRightPress={() => void load()}
+        rightLoading={loading}
+      />
 
       {loading && !summary ? (
         <View style={styles.center}>
@@ -96,103 +97,142 @@ export default function ProductivityIndexScreen() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 40 }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.accent} />}
         >
-          {error ? (
-            <Text style={{ color: C.destructive, marginBottom: 12 }}>{error}</Text>
-          ) : null}
-
-          <View style={[styles.card, { backgroundColor: C.cardWhite, borderColor: C.divider }]}>
-            <Text style={[styles.cardTitle, { color: C.textSecondary }]}>{t('productivity.average')}</Text>
-            <View style={styles.rowCenter}>
-              <Text style={[styles.bigNum, { color: C.slate }]}>
-                {summary?.averageTotal != null ? summary.averageTotal.toFixed(1) : '—'}
-              </Text>
-              {summary?.averageTotal != null ? (
-                <Ionicons
-                  name={trendIcon as any}
-                  size={28}
-                  color={summary.trend === 'up' ? '#16a34a' : summary.trend === 'down' ? C.destructive : C.textLight}
-                  style={{ marginLeft: 8 }}
-                />
-              ) : null}
-            </View>
-            <Text style={[styles.muted, { color: C.textLight }]}>
-              {t('productivity.respondedCount', { count: summary?.respondedCount ?? 0 })}
-            </Text>
-          </View>
-
-          {(summary?.criticalPendingAckCount ?? 0) > 0 ? (
-            <View style={[styles.alertBanner, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
-              <Ionicons name="warning" size={20} color={C.destructive} />
-              <Text style={[styles.alertText, { color: '#991b1b' }]}>
-                {t('productivity.criticalAckBanner', { count: summary!.criticalPendingAckCount })}
-              </Text>
-            </View>
-          ) : null}
-
-          <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('productivity.categories')}</Text>
-          <View style={[styles.card, { backgroundColor: C.cardWhite, borderColor: C.divider }]}>
-            {['qualidade', 'prazo', 'atendimento'].map((k) => (
-              <View key={k} style={styles.catRow}>
-                <Text style={{ color: C.slate, fontWeight: '700' }}>{t(`productivity.cat.${k}`)}</Text>
-                <Text style={{ color: C.accent, fontWeight: '800' }}>
-                  {summary?.categoryAverages?.[k] != null ? `${summary.categoryAverages[k]}` : '—'}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.sortRow}>
-            {(['critical', 'neutral', 'positive'] as const).map((k) => (
+          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <View style={[styles.tabBar, { borderColor: C.divider, backgroundColor: C.cardWhite }]}>
               <TouchableOpacity
-                key={k}
-                onPress={() => setSort(k)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === 'panel' }}
+                onPress={() => setTab('panel')}
                 style={[
-                  styles.sortChip,
-                  { borderColor: sort === k ? C.accent : C.divider, backgroundColor: sort === k ? `${C.accent}18` : C.cardWhite },
+                  styles.tabBtn,
+                  tab === 'panel' && { borderBottomColor: C.accent, backgroundColor: `${C.accent}14` },
                 ]}
               >
-                <Text style={{ color: sort === k ? C.accent : C.textSecondary, fontWeight: '800', fontSize: 12 }}>
-                  {t(`productivity.sort.${k}`)}
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    fontSize: 14,
+                    color: tab === 'panel' ? C.accent : C.textSecondary,
+                  }}
+                >
+                  {t('productivity.tabPanel')}
                 </Text>
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === 'list' }}
+                onPress={() => setTab('list')}
+                style={[
+                  styles.tabBtn,
+                  tab === 'list' && { borderBottomColor: C.accent, backgroundColor: `${C.accent}14` },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    fontSize: 14,
+                    color: tab === 'list' ? C.accent : C.textSecondary,
+                  }}
+                >
+                  {t('productivity.tabList')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('productivity.listTitle')}</Text>
-          {items.length === 0 ? (
-            <Text style={{ color: C.textLight }}>{t('productivity.emptyList')}</Text>
+          {error ? (
+            <Text style={{ color: C.destructive, marginBottom: 12, paddingHorizontal: 16 }}>{error}</Text>
+          ) : null}
+
+          {tab === 'panel' ? (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              {summary ? (
+                <TechnicianEvaluationsDashboard colors={C} summary={summary} items={items} />
+              ) : null}
+            </View>
           ) : (
-            items.map((it) => (
-              <TouchableOpacity
-                key={it.id}
-                onPress={() => router.push(`/productivity/${it.id}` as any)}
-                style={[styles.listItem, { backgroundColor: C.cardWhite, borderColor: C.divider }]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: C.slate, fontWeight: '800' }} numberOfLines={1}>
-                    {it.template?.name || '—'}
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              {(summary?.criticalPendingAckCount ?? 0) > 0 ? (
+                <View style={[styles.alertBanner, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                  <Ionicons name="warning" size={20} color={C.destructive} />
+                  <Text style={[styles.alertText, { color: '#991b1b' }]}>
+                    {t('productivity.criticalAckBanner', { count: summary?.criticalPendingAckCount ?? 0 })}
                   </Text>
-                  <Text style={{ color: C.textLight, fontSize: 12, marginTop: 4 }}>
-                    {it.osNumber ? `${it.osNumber} · ` : ''}
-                    {new Date(it.createdAt).toLocaleString()}
-                  </Text>
-                  <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 2 }}>{it.status}</Text>
                 </View>
-                {it.score ? (
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ color: C.accent, fontWeight: '900', fontSize: 18 }}>
-                      {Math.round(it.score.totalScore)}
+              ) : null}
+
+              <View style={styles.sortRow}>
+                {(['critical', 'neutral', 'positive'] as const).map((k) => (
+                  <TouchableOpacity
+                    key={k}
+                    onPress={() => setSort(k)}
+                    style={[
+                      styles.sortChip,
+                      {
+                        borderColor: sort === k ? C.accent : C.divider,
+                        backgroundColor: sort === k ? `${C.accent}18` : C.cardWhite,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: sort === k ? C.accent : C.textSecondary, fontWeight: '800', fontSize: 12 }}>
+                      {t(`productivity.sort.${k}`)}
                     </Text>
-                    <Text style={{ fontSize: 10, color: C.textLight }}>{it.score.classification}</Text>
-                  </View>
-                ) : (
-                  <Ionicons name="time-outline" size={22} color={C.textLight} />
-                )}
-              </TouchableOpacity>
-            ))
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>{t('productivity.listTitle')}</Text>
+              {items.length === 0 ? (
+                <Text style={{ color: C.textLight }}>{t('productivity.emptyList')}</Text>
+              ) : (
+                items.map((it) => (
+                  <TouchableOpacity
+                    key={it.id}
+                    onPress={() => router.push(`/productivity/${it.id}` as any)}
+                    style={[styles.listItem, { backgroundColor: C.cardWhite, borderColor: C.divider }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.slate, fontWeight: '800' }} numberOfLines={1}>
+                        {it.template?.name || '—'}
+                      </Text>
+                      <Text style={{ color: C.textLight, fontSize: 12, marginTop: 4 }}>
+                        {it.osNumber ? `OS ${it.osNumber} · ` : ''}
+                        {new Date(it.createdAt).toLocaleString()}
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                        <EvaluationBadge
+                          label={trInstanceStatus(t, it.status)}
+                          tone={instanceStatusTone(it.status)}
+                          size="sm"
+                        />
+                        {it.score ? (
+                          <EvaluationBadge
+                            label={trScoreBand(t, it.score.classification)}
+                            tone={scoreBandTone(it.score.classification)}
+                            size="sm"
+                          />
+                        ) : null}
+                      </View>
+                    </View>
+                    {it.score ? (
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color: C.accent, fontWeight: '900', fontSize: 22 }}>
+                          {Math.round(it.score.totalScore)}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: C.textLight, fontWeight: '600' }}>
+                          {t('productivity.scoreLevel')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Ionicons name="time-outline" size={22} color={C.textLight} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
           )}
         </ScrollView>
       )}
@@ -202,28 +242,21 @@ export default function ProductivityIndexScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 18, fontWeight: '900' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: {
-    borderRadius: 16,
-    padding: 16,
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 12,
+    overflow: 'hidden',
   },
-  cardTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
-  rowCenter: { flexDirection: 'row', alignItems: 'center' },
-  bigNum: { fontSize: 36, fontWeight: '900' },
-  muted: { marginTop: 8, fontSize: 13 },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
   alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,11 +268,6 @@ const styles = StyleSheet.create({
   },
   alertText: { flex: 1, fontWeight: '700', fontSize: 13 },
   sectionLabel: { fontWeight: '800', marginBottom: 8, marginTop: 4 },
-  catRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
   sortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   sortChip: {
     paddingHorizontal: 12,

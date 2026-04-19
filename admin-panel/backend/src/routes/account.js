@@ -16,6 +16,8 @@ const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
 const { buildAppAuthorization } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { startChallenge, verifyChallenge } = require('../lib/otpLoginService');
+const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -255,6 +257,13 @@ router.post('/register', async (req, res) => {
         return u;
       });
       user = result;
+      if (user) {
+        deliverBrsparkLaravelEvent({
+          type: EVENT_TYPES.USER_CREATED,
+          idempotencyKey: `user-${user.id}-register`,
+          payload: { userId: user.id, tenantId: user.tenantId, email: user.email, source: 'password' },
+        }).catch((e) => console.warn('[register] sync webhook', e));
+      }
     } else {
       const existing = await prisma.tenant.findUnique({ where: { email: emailNorm } });
       if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
@@ -1153,6 +1162,54 @@ router.post('/me/technician', authUser, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Público — POST /api/otp-auth/start — inicia desafio OTP (SMS, WhatsApp ou e-mail)
+router.post('/otp-auth/start', express.json(), async (req, res) => {
+  try {
+    const out = await startChallenge(prisma, {
+      identifier: req.body?.identifier,
+      channelPref: req.body?.channel,
+      purpose: req.body?.purpose,
+      nameIfRegister: req.body?.name,
+    });
+    if (!out.ok) {
+      return res.status(out.status || 400).json({ error: out.error });
+    }
+    return res.json({
+      challengeId: out.challengeId,
+      channel: out.channel,
+      expiresInSec: out.expiresInSec,
+      devCode: out.devCode,
+    });
+  } catch (err) {
+    console.error('[POST /otp-auth/start]', err);
+    return res.status(500).json({ error: err?.message || 'Erro interno' });
+  }
+});
+
+// Público — POST /api/otp-auth/verify
+router.post('/otp-auth/verify', express.json(), async (req, res) => {
+  try {
+    const out = await verifyChallenge(
+      prisma,
+      { assertTechnicianSeatForNewUser, resolveAppDefaultTenantId, issueAppJwtAfterLogin },
+      {
+        challengeId: req.body?.challengeId,
+        code: req.body?.code,
+        deviceId: req.body?.deviceId,
+        registerName: req.body?.name,
+      }
+    );
+    if (!out.ok) {
+      const body = { error: out.error, code: out.code, attemptsLeft: out.attemptsLeft };
+      return res.status(out.status || 400).json(body);
+    }
+    return res.json({ token: out.token, user: out.user });
+  } catch (err) {
+    console.error('[POST /otp-auth/verify]', err);
+    return res.status(500).json({ error: err?.message || 'Erro interno' });
   }
 });
 

@@ -525,9 +525,9 @@ function stripProductivityFromResponses(raw) {
   return out;
 }
 
-function stripResponsesForRevision(raw, templateSchemaData) {
+function stripResponsesForRevision(raw, template) {
   const out = stripProductivityFromResponses(raw);
-  stripRevisionSessionEvidenceInPlace(out, templateSchemaData);
+  stripRevisionSessionEvidenceInPlace(out, template);
   return out;
 }
 

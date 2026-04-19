@@ -2,6 +2,15 @@
 
 const { mergePresetConfig, isFieldVisible } = require('./reportPresetDefaults');
 
+function isFormCompleteButtonField(f) {
+  if (!f || typeof f !== 'object') return false;
+  const t = String(f.type || f.fieldType || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  return t === 'form_complete_button';
+}
+
 function hasResponseValue(v) {
   if (v === undefined || v === null) return false;
   if (v === '') return false;
@@ -23,6 +32,7 @@ function buildFilteredExportPayload(task, mergedConfig) {
   const formFieldEntries = [];
   for (const f of fields) {
     if (!f || !f.id) continue;
+    if (isFormCompleteButtonField(f)) continue;
     if (!isFieldVisible(mergedConfig, f.id, f.type)) continue;
     const val = responses[f.id];
     if (hideEmpty && !hasResponseValue(val)) continue;
@@ -37,6 +47,7 @@ function buildFilteredExportPayload(task, mergedConfig) {
   const photos = [];
   for (const f of fields) {
     if (!f || !f.id) continue;
+    if (isFormCompleteButtonField(f)) continue;
     const t = f.type;
     if (t !== 'photo' && t !== 'photo_stamped' && t !== 'facial_recognition') continue;
     if (!isFieldVisible(mergedConfig, f.id, f.type)) continue;

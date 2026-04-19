@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { findCloudTaskById } from '../lib/cloudTasksBuckets';
+import { taskEffectiveChecklistTemplateId } from '../lib/routineTaskQueueUi';
 import { updateStoredJsonArray } from '../lib/asyncStorageAtomic';
-import { fetchChecklistTemplateSchema } from './checklistTemplateSchema';
+import {
+  fetchChecklistTemplateSchema,
+  isTechnicianFinanceSchemaField,
+  technicianFinanceFieldMode,
+} from './checklistTemplateSchema';
 import type { TechnicianFinanceKind } from '../types/technicianFinance';
 
 /** Rateio em centavos para a soma bater exactamente com o total. */
@@ -20,8 +25,22 @@ export function splitCurrencyBrl(total: number, parts: number): number[] {
 
 type FinanceTarget = { kind: 'direct'; fieldId: string } | { kind: 'repeat'; sectionId: string; fieldId: string };
 
-/** Primeiro campo `technician_finance` na ordem do schema (raiz → seções). */
-export function firstTechnicianFinanceTarget(schema: any[]): FinanceTarget | null {
+function financeFieldMatchesKind(f: any, financeKind?: TechnicianFinanceKind): boolean {
+  if (!isTechnicianFinanceSchemaField(f)) return false;
+  if (financeKind == null) return true;
+  const mode = technicianFinanceFieldMode(f);
+  if (mode === 'expense') return financeKind === 'expense';
+  return financeKind === 'revenue';
+}
+
+/**
+ * Primeiro campo financeiro do técnico no schema (raiz → seções).
+ * Com `financeKind`, escolhe o campo cujo tipo corresponde (despesa ou receita).
+ */
+export function firstTechnicianFinanceTarget(
+  schema: any[],
+  financeKind?: TechnicianFinanceKind
+): FinanceTarget | null {
   if (!Array.isArray(schema)) return null;
   let curRepeat = false;
   let curSid = '';
@@ -33,12 +52,34 @@ export function firstTechnicianFinanceTarget(schema: any[]): FinanceTarget | nul
       continue;
     }
     if (f.type === 'hidden' || !f.id) continue;
-    if (f.type !== 'technician_finance') continue;
+    if (!financeFieldMatchesKind(f, financeKind)) continue;
     const fid = String(f.id);
     if (!curRepeat) return { kind: 'direct', fieldId: fid };
     if (curSid) return { kind: 'repeat', sectionId: curSid, fieldId: fid };
   }
   return null;
+}
+
+/** Todos os alvos «financeiro técnico» no schema (ordem de leitura). */
+function eachTechnicianFinanceTargets(schema: any[]): FinanceTarget[] {
+  const out: FinanceTarget[] = [];
+  if (!Array.isArray(schema)) return out;
+  let curRepeat = false;
+  let curSid = '';
+  for (const f of schema) {
+    if (!f || typeof f !== 'object') continue;
+    if (f.type === 'section_break') {
+      curRepeat = !!f.multiple;
+      curSid = f.id != null ? String(f.id) : '';
+      continue;
+    }
+    if (f.type === 'hidden' || !f.id) continue;
+    if (!isTechnicianFinanceSchemaField(f)) continue;
+    const fid = String(f.id);
+    if (!curRepeat) out.push({ kind: 'direct', fieldId: fid });
+    else if (curSid) out.push({ kind: 'repeat', sectionId: curSid, fieldId: fid });
+  }
+  return out;
 }
 
 function mergeFinanceJson(
@@ -87,8 +128,8 @@ async function cloudTaskRefId(taskId: string): Promise<string | null> {
   try {
     const t = await findCloudTaskById(String(taskId));
     if (!t) return null;
-    const ref = t?.refId != null ? String(t.refId).trim() : '';
-    return ref && ref !== 'null' ? ref : null;
+    const ref = taskEffectiveChecklistTemplateId(t);
+    return ref || null;
   } catch {
     return null;
   }
@@ -235,7 +276,7 @@ export async function injectManualFinanceLineIntoTaskDraft(args: {
   if (!refId) return;
   const schema = await fetchChecklistTemplateSchema(refId);
   if (!schema) return;
-  const target = firstTechnicianFinanceTarget(schema);
+  const target = firstTechnicianFinanceTarget(schema, kind);
   if (!target) return;
 
   const responses = await loadMergedResponses(taskId);
@@ -249,10 +290,12 @@ export async function removeManualFinanceLineFromTaskDraft(taskId: string, entry
   if (!refId) return;
   const schema = await fetchChecklistTemplateSchema(refId);
   if (!schema) return;
-  const target = firstTechnicianFinanceTarget(schema);
-  if (!target) return;
+  const targets = eachTechnicianFinanceTargets(schema);
+  if (!targets.length) return;
 
   const responses = await loadMergedResponses(taskId);
-  applyRemoveLineToResponses(responses, target, entryId);
+  for (const target of targets) {
+    applyRemoveLineToResponses(responses, target, entryId);
+  }
   await persistTaskResponses(taskId, responses);
 }

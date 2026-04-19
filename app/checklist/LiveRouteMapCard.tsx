@@ -1457,7 +1457,7 @@ export default function LiveRouteMapCard({
   };
   
   const openDestInMaps = (lat?: number | null, lng?: number | null) => {
-    if (!lat || !lng) return;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const options: any[] = [
       { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
       { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`) }

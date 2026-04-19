@@ -247,6 +247,14 @@ export function isFieldTaskEligibleRole(role: string | null | undefined): boolea
   return r === 'PROVIDER' || r === 'MANAGER' || r === 'TENANT_ADMIN' || r === 'SAAS_ADMIN';
 }
 
+/**
+ * Conta de consumidor B2C: papel `USER` sem `technicianProfile`.
+ * Não deve herdar afinações de prestador (capability `mobile.mode.provider` por engano, etc.).
+ */
+export function isB2CConsumerUser(user: User | null | undefined): boolean {
+  return String(user?.role || '').toUpperCase() === 'USER' && !user?.technicianProfile;
+}
+
 /** Modo «campo / prestador» no app: perfil técnico ativo ou conta interna não-cliente. */
 export function canUseFieldWorkAppRole(user: User | null | undefined): boolean {
   return isTechnicianProfileActive(user) || isFieldTaskEligibleRole(user?.role);
@@ -535,6 +543,64 @@ export class AuthService {
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
     await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
     return data.user as User;
+  }
+
+  static async startOtpAuth(params: {
+    identifier: string;
+    channel?: 'sms' | 'whatsapp';
+    purpose?: 'login' | 'register';
+    name?: string;
+  }): Promise<{ challengeId: string; channel: string; expiresInSec: number; devCode?: string }> {
+    const res = await fetch(`${API_BASE}/api/otp-auth/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        identifier: params.identifier.trim(),
+        channel: params.channel,
+        purpose: params.purpose || 'login',
+        name: params.name,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error((data as { error?: string }).error || 'Não foi possível enviar o código.');
+    }
+    return {
+      challengeId: String((data as { challengeId: string }).challengeId),
+      channel: String((data as { channel: string }).channel),
+      expiresInSec: Number((data as { expiresInSec: number }).expiresInSec) || 600,
+      devCode: (data as { devCode?: string }).devCode,
+    };
+  }
+
+  static async verifyOtpAndLogin(params: {
+    challengeId: string;
+    code: string;
+    name?: string;
+  }): Promise<User> {
+    const deviceId = await getDeviceId();
+    const res = await fetch(`${API_BASE}/api/otp-auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeId: params.challengeId,
+        code: params.code.trim(),
+        name: params.name,
+        deviceId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        (data as { error?: string }).error || (data as { code?: string }).code || 'Código inválido.',
+      );
+    }
+    const d = data as { token: string; user: User };
+    await AuthService.wipeLocalDataBeforeNewSession(d.user);
+    await AsyncStorage.setItem(TOKEN_KEY, d.token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
+    await AuthService.tryAutoRestoreOfflineBackup(d.user);
+    return d.user;
   }
 
   /** Registro — POST /api/register (cria Tenant + User automaticamente) */
@@ -887,18 +953,50 @@ const DEFAULT_API_FETCH_TIMEOUT_MS = 18_000;
 
 export type ApiFetchOptions = RequestInit & { timeoutMs?: number };
 
+function createAbortError(): Error {
+  const err = new Error('The operation was aborted.');
+  err.name = 'AbortError';
+  return err;
+}
+
+function mergeFetchHeaders(
+  baseHeaders: Record<string, string>,
+  customHeaders: HeadersInit | undefined,
+): Headers {
+  const out = new Headers(baseHeaders);
+  if (!customHeaders) return out;
+
+  if (customHeaders instanceof Headers) {
+    customHeaders.forEach((value, key) => out.set(key, value));
+    return out;
+  }
+
+  if (Array.isArray(customHeaders)) {
+    for (const [key, value] of customHeaders) out.set(key, value);
+    return out;
+  }
+
+  for (const [key, value] of Object.entries(customHeaders)) {
+    if (value == null) continue;
+    out.set(key, String(value));
+  }
+  return out;
+}
+
 /** Fetch autenticado — adiciona JWT automaticamente e aborta após `timeoutMs` (AbortError sem rede). */
 export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { timeoutMs = DEFAULT_API_FETCH_TIMEOUT_MS, signal: userSignal, ...rest } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let onUserAbort: (() => void) | null = null;
 
   if (userSignal) {
     if (userSignal.aborted) {
       clearTimeout(timer);
-      throw new DOMException('The operation was aborted.', 'AbortError');
+      throw createAbortError();
     }
-    userSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    onUserAbort = () => controller.abort();
+    userSignal.addEventListener('abort', onUserAbort, { once: true });
   }
 
   try {
@@ -915,10 +1013,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
     const res = await fetch(`${API_BASE}${path}`, {
       ...rest,
       signal: controller.signal,
-      headers: {
-        ...baseHeaders,
-        ...rest.headers,
-      },
+      headers: mergeFetchHeaders(baseHeaders, rest.headers),
     });
     if (res.status === 401) {
       console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
@@ -933,6 +1028,9 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
     }
     return res;
   } finally {
+    if (userSignal && onUserAbort) {
+      userSignal.removeEventListener('abort', onUserAbort);
+    }
     clearTimeout(timer);
   }
 }

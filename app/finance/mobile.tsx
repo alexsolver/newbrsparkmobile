@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,18 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
+  Alert,
 } from 'react-native';
+import PagerView from 'react-native-pager-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { Header } from '../../src/components/Header';
+import { ScreenSubheader } from '../../src/components/ScreenSubheader';
+import { TechnicianFinanceDashboard } from '../../src/components/TechnicianFinanceDashboard';
 import {
   TechnicianFinanceService,
   isManualSplitRateioEditableInMemory,
@@ -34,8 +39,6 @@ import {
   type TechnicianExpenseCategoryRow,
 } from '../../src/utils/technicianExpenseCategoryCatalog';
 
-type FilterKey = 'all' | 'expense' | 'revenue';
-
 function formatBrl(n: number) {
   return (Number(n) || 0).toLocaleString('pt-BR', {
     style: 'currency',
@@ -49,6 +52,16 @@ function formatWhen(iso: string) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
     return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
+}
+
+function formatDateShort(iso: string) {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('pt-BR', { dateStyle: 'short' });
   } catch {
     return iso;
   }
@@ -257,12 +270,14 @@ function buildFinanceListRows(entries: TechnicianFinanceEntry[], ownerEmail?: st
 }
 
 export default function TechnicianFinanceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
+  const pagerRef = useRef<PagerView>(null);
   const [items, setItems] = useState<TechnicianFinanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>('all');
+  const [financePage, setFinancePage] = useState(0);
   const [taskById, setTaskById] = useState<Map<string, CloudTaskFinanceInfo>>(() => new Map());
   const [cloudTasksRaw, setCloudTasksRaw] = useState<any[]>([]);
   const [expenseCatCatalog, setExpenseCatCatalog] = useState<TechnicianExpenseCategoryRow[]>(() =>
@@ -270,6 +285,7 @@ export default function TechnicianFinanceScreen() {
   );
   /** Detalhes do rateio por grupo (cartão principal compacto; rateio em menu retrátil). */
   const [splitRateioOpen, setSplitRateioOpen] = useState<Record<string, boolean>>({});
+  const [confirmingRevId, setConfirmingRevId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -310,10 +326,35 @@ export default function TechnicianFinanceScreen() {
     }, [load, loadTaskMap])
   );
 
-  const listRows = useMemo(() => {
-    const base = filter === 'all' ? items : items.filter((x) => x.kind === filter);
-    return buildFinanceListRows(base, user?.email);
-  }, [items, filter, user?.email]);
+  const confirmRevenueReceived = useCallback(
+    async (id: string) => {
+      try {
+        setConfirmingRevId(id);
+        await TechnicianFinanceService.markRevenueAsReceived(id, user?.email || undefined);
+        await load();
+      } catch (e: any) {
+        Alert.alert('Erro', e?.message || 'Não foi possível confirmar o recebimento.');
+      } finally {
+        setConfirmingRevId(null);
+      }
+    },
+    [load, user?.email]
+  );
+
+  const listRowsExpense = useMemo(
+    () => buildFinanceListRows(items.filter((x) => x.kind === 'expense'), user?.email),
+    [items, user?.email],
+  );
+  const listRowsRevenue = useMemo(
+    () => buildFinanceListRows(items.filter((x) => x.kind === 'revenue'), user?.email),
+    [items, user?.email],
+  );
+
+  const goFinancePage = useCallback((index: number) => {
+    const i = Math.max(0, Math.min(2, index));
+    setFinancePage(i);
+    pagerRef.current?.setPage(i);
+  }, []);
 
   const totals = useMemo(() => {
     let exp = 0;
@@ -474,6 +515,49 @@ export default function TechnicianFinanceScreen() {
             <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
           )}
         </View>
+        {item.kind === 'revenue' ? (
+          <View style={styles.revenueStatusBlock}>
+            {item.source === 'checklist' && !item.receiptRealizedAt ? (
+              <>
+                <View style={[styles.revStatusBadge, { backgroundColor: '#fef3c7', borderColor: '#fcd34d' }]}>
+                  <Ionicons name="time-outline" size={16} color="#92400e" />
+                  <Text style={[styles.revStatusBadgeTxt, { color: '#92400e' }]} numberOfLines={2}>
+                    {t('technicianMobile.financeRevenueStatusBooked')}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.revConfirmBtn}
+                  onPress={() => confirmRevenueReceived(item.id)}
+                  disabled={confirmingRevId === item.id}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('technicianMobile.financeRevenueConfirm')}
+                >
+                  {confirmingRevId === item.id ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="cash-outline" size={18} color="#fff" />
+                      <Text style={styles.revConfirmBtnTxt}>{t('technicianMobile.financeRevenueConfirm')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={[styles.revStatusBadge, { backgroundColor: '#ecfdf5', borderColor: '#86efac' }]}>
+                <Ionicons name="checkmark-circle" size={16} color="#047857" />
+                <Text style={[styles.revStatusBadgeTxt, { color: '#065f46' }]} numberOfLines={3}>
+                  {t('technicianMobile.financeRevenueStatusRealized')}
+                  {item.receiptRealizedAt
+                    ? ` · ${formatDateShort(item.receiptRealizedAt)}`
+                    : item.source === 'manual'
+                      ? ` · ${formatDateShort(item.createdAt)}`
+                      : ''}
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : null}
         <ExpenseCategoryRow
           catalog={expenseCatCatalog}
           categoryKey={item.kind === 'expense' ? item.categoryKey : null}
@@ -521,8 +605,12 @@ export default function TechnicianFinanceScreen() {
             <Text style={styles.metaOs}> · Checklist</Text>
           ) : null}
         </View>
-        {item.source === 'checklist' ? (
+        {item.source === 'checklist' && item.kind !== 'revenue' ? (
           <Text style={styles.editHintMuted}>Altere no formulário da OS.</Text>
+        ) : item.source === 'checklist' && item.kind === 'revenue' ? (
+          <Text style={styles.editHintMuted}>
+            {t('technicianMobile.financeRevenueChecklistHint')}
+          </Text>
         ) : item.source === 'manual' && item.kind === 'expense' && hasOs && singleUnlocked ? (
           <View style={styles.editHintRow}>
             <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
@@ -568,62 +656,122 @@ export default function TechnicianFinanceScreen() {
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Financeiro" leftIcon="arrow-back" onLeftPress={() => router.back()} />
-
-      <View style={styles.summary}>
-        <View style={styles.sumCol}>
-          <Text style={styles.sumLbl}>Despesas</Text>
-          <Text style={[styles.sumVal, { color: '#b91c1c' }]}>{formatBrl(totals.exp)}</Text>
-        </View>
-        <View style={styles.sumCol}>
-          <Text style={styles.sumLbl}>Receitas</Text>
-          <Text style={[styles.sumVal, { color: '#047857' }]}>{formatBrl(totals.rev)}</Text>
-        </View>
-        <View style={styles.sumCol}>
-          <Text style={styles.sumLbl}>Saldo</Text>
-          <Text style={[styles.sumVal, { color: totals.net >= 0 ? '#047857' : '#b91c1c' }]}>
-            {formatBrl(totals.net)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.chips}>
-        {(['all', 'expense', 'revenue'] as FilterKey[]).map((k) => (
-          <TouchableOpacity
-            key={k}
-            style={[styles.chip, filter === k && styles.chipOn]}
-            onPress={() => setFilter(k)}
-          >
-            <Text style={[styles.chipTxt, filter === k && styles.chipTxtOn]}>
-              {k === 'all' ? 'Tudo' : k === 'expense' ? 'Despesas' : 'Receitas'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.disclaimer}>
-        Separado dos bens e do financeiro de ativos. Sincroniza com a sua conta ao atualizar.
-      </Text>
+      <ScreenSubheader
+        title="Financeiro"
+        subtitle={t('technicianMobile.financeScreenSubtitle')}
+        onBack={() => router.back()}
+        onRightPress={() => onRefresh()}
+        rightLoading={refreshing}
+      />
 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color="#0f766e" />
         </View>
       ) : (
-        <FlatList
-          data={listRows}
-          keyExtractor={(row) => (row.kind === 'single' ? row.entry.id : `split-${row.groupId}`)}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh()} />}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="wallet-outline" size={40} color="#94a3b8" />
-              <Text style={styles.emptyTxt}>Nenhum lançamento</Text>
-              <Text style={styles.emptySub}>Use + para registar ou preencha o campo no formulário da OS.</Text>
+        <>
+          <View style={[styles.tabBar, { borderColor: C.border, backgroundColor: C.cardWhite }]}>
+            {(
+              [
+                { i: 0, label: t('technicianMobile.financeTabDashboard') },
+                { i: 1, label: t('technicianMobile.financeTabExpenses') },
+                { i: 2, label: t('technicianMobile.financeTabRevenue') },
+              ] as const
+            ).map(({ i, label }) => {
+              const on = financePage === i;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={[
+                    styles.tabCell,
+                    on && { borderBottomColor: C.accent, backgroundColor: `${C.accent}12` },
+                  ]}
+                  onPress={() => goFinancePage(i)}
+                  activeOpacity={0.85}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.tabLabel, { color: on ? C.accent : C.textSecondary }]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <PagerView
+            ref={pagerRef}
+            style={styles.pager}
+            initialPage={0}
+            onPageSelected={(e) => setFinancePage(e.nativeEvent.position)}
+          >
+            <View key="dash" style={styles.page} collapsable={false}>
+              <ScrollView
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh()} />}
+                contentContainerStyle={styles.tabScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={[styles.summary, { backgroundColor: C.surfaceLow, borderColor: C.border }]}>
+                  <View style={styles.sumCol}>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Despesas</Text>
+                    <Text style={[styles.sumVal, { color: '#b91c1c' }]}>{formatBrl(totals.exp)}</Text>
+                  </View>
+                  <View style={styles.sumCol}>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Receitas</Text>
+                    <Text style={[styles.sumVal, { color: '#047857' }]}>{formatBrl(totals.rev)}</Text>
+                  </View>
+                  <View style={styles.sumCol}>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Saldo</Text>
+                    <Text style={[styles.sumVal, { color: totals.net >= 0 ? '#047857' : '#b91c1c' }]}>
+                      {formatBrl(totals.net)}
+                    </Text>
+                  </View>
+                </View>
+                <TechnicianFinanceDashboard items={items} expenseCatCatalog={expenseCatCatalog} />
+                <Text style={[styles.disclaimer, { color: C.textLight }]}>
+                  Separado dos bens e do financeiro de ativos. Sincroniza com a sua conta ao atualizar.
+                </Text>
+              </ScrollView>
             </View>
-          }
-          renderItem={renderRow}
-        />
+
+            <View key="exp" style={styles.page} collapsable={false}>
+              <FlatList
+                data={listRowsExpense}
+                keyExtractor={(row) => (row.kind === 'single' ? row.entry.id : `split-${row.groupId}`)}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh()} />}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={
+                  <View style={styles.empty}>
+                    <Ionicons name="trending-down-outline" size={40} color="#94a3b8" />
+                    <Text style={styles.emptyTxt}>{t('technicianMobile.financeEmptyExpensesTitle')}</Text>
+                    <Text style={styles.emptySub}>{t('technicianMobile.financeEmptyExpensesBody')}</Text>
+                  </View>
+                }
+                renderItem={renderRow}
+              />
+            </View>
+
+            <View key="rev" style={styles.page} collapsable={false}>
+              <FlatList
+                data={listRowsRevenue}
+                keyExtractor={(row) => (row.kind === 'single' ? row.entry.id : `split-${row.groupId}`)}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh()} />}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={
+                  <View style={styles.empty}>
+                    <Ionicons name="trending-up-outline" size={40} color="#94a3b8" />
+                    <Text style={styles.emptyTxt}>{t('technicianMobile.financeEmptyRevenueTitle')}</Text>
+                    <Text style={styles.emptySub}>{t('technicianMobile.financeEmptyRevenueBody')}</Text>
+                  </View>
+                }
+                renderItem={renderRow}
+              />
+            </View>
+          </PagerView>
+        </>
       )}
 
       <TouchableOpacity style={styles.fab} onPress={() => router.push('/finance/mobile/new' as any)} activeOpacity={0.9}>
@@ -635,36 +783,40 @@ export default function TechnicianFinanceScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  summary: {
+  tabBar: {
     flexDirection: 'row',
     marginHorizontal: 16,
     marginTop: 8,
-    padding: 12,
-    backgroundColor: '#f8fafc',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  tabCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabLabel: { fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  pager: { flex: 1 },
+  page: { flex: 1 },
+  tabScrollContent: { padding: 16, paddingBottom: 100 },
+  summary: {
+    flexDirection: 'row',
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
     gap: 8,
   },
   sumCol: { flex: 1, minWidth: 0 },
   sumLbl: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase' },
   sumVal: { fontSize: 14, fontWeight: '900', marginTop: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginTop: 12 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  chipOn: { backgroundColor: '#ccfbf1', borderColor: '#99f6e4' },
-  chipTxt: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  chipTxtOn: { color: '#0f766e' },
   disclaimer: {
     fontSize: 11,
-    color: '#94a3b8',
-    paddingHorizontal: 16,
     marginTop: 10,
     lineHeight: 16,
   },
@@ -681,6 +833,30 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeTxt: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
+  revenueStatusBlock: { marginTop: 10, gap: 10 },
+  revStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignSelf: 'stretch',
+  },
+  revStatusBadgeTxt: { flex: 1, fontSize: 12, fontWeight: '700', lineHeight: 16 },
+  revConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#047857',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignSelf: 'stretch',
+  },
+  revConfirmBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   totalBlock: { alignItems: 'flex-end' },
   totalLbl: {
     fontSize: 10,

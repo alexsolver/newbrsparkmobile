@@ -30,17 +30,38 @@ export function normalizeTraversedPathForReport(raw) {
   return out.length ? out : null;
 }
 
+function collectTransitCandidateValuesForReport(responses) {
+  const out = [];
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return out;
+  for (const [k, val] of Object.entries(responses)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(val)) {
+      for (let r = 0; r < val.length; r++) {
+        const row = val[r];
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const rv of Object.values(row)) {
+          if (rv != null && rv !== '') out.push(rv);
+        }
+      }
+      continue;
+    }
+    if (k.startsWith('__')) continue;
+    if (val != null && val !== '') out.push(val);
+  }
+  return out;
+}
+
 export function extractTransitEndpointsForReport(responses) {
   let startGPS = null;
   let endGPS = null;
   if (!responses || typeof responses !== 'object' || Array.isArray(responses)) {
     return { startGPS, endGPS };
   }
-  for (const val of Object.values(responses)) {
+  const candidates = collectTransitCandidateValuesForReport(responses);
+  for (const val of candidates) {
     if (val == null) continue;
-    const vStr = typeof val === 'string' ? val : JSON.stringify(val);
     try {
-      const j = typeof val === 'object' ? val : JSON.parse(val);
+      const j =
+        typeof val === 'object' && val !== null && !Array.isArray(val) ? val : JSON.parse(val);
       const act = String(j.action || '').toUpperCase();
       if (act === 'SAIDA') {
         const lat = j.coordinates?.lat ?? j.lat;

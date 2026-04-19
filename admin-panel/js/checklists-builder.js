@@ -160,6 +160,20 @@ function updateCurrentTemplateVersionBadge() {
   host.innerHTML = checklistVersionBadgeHtml({ version: currentFormVersion, isActive: currentFormIsActive });
 }
 
+function syncFbFormActiveToggleUi() {
+  const el = document.getElementById('fb-form-active');
+  if (!el) return;
+  el.checked = currentFormIsActive !== false;
+}
+
+window.onFbFormActiveToggle = function (checked) {
+  currentFormIsActive = !!checked;
+  updateCurrentTemplateVersionBadge();
+  if (typeof window.scheduleBuilderDirtyRecompute === 'function') {
+    window.scheduleBuilderDirtyRecompute();
+  }
+};
+
 async function fetchChecklistVersionHistory(id) {
   const res = await fetch(`${brsparkApiBase()}/checklists/templates/${encodeURIComponent(id)}/history`, {
     headers: adminJsonHeaders(),
@@ -1256,6 +1270,7 @@ function getBuilderPersistFingerprint(opts) {
     const desc = document.getElementById('tpl-desc');
     const ic = document.getElementById('tpl-icon');
     const icl = document.getElementById('tpl-icon-library');
+    const act = document.getElementById('fb-form-active');
     return JSON.stringify({
         folderId: currentFormFolderId == null ? null : String(currentFormFolderId),
         formId: currentFormId == null ? null : String(currentFormId),
@@ -1263,6 +1278,7 @@ function getBuilderPersistFingerprint(opts) {
         desc: desc ? String(desc.value || '') : '',
         icon: ic ? String(ic.value || '') : '',
         iconLib: icl ? String(icl.value || '') : 'Ionicons',
+        isActive: act ? !!act.checked : currentFormIsActive !== false,
         settings: settingsCopy,
         schema: fieldsCopy,
     });
@@ -1522,10 +1538,12 @@ const iconMap = {
     'barcode_scan': '<ion-icon name="barcode-outline"></ion-icon>',
     'materials_consumption': '<ion-icon name="cube-outline"></ion-icon>',
     'materials_receipt': '<ion-icon name="arrow-down-circle-outline"></ion-icon>',
-    'technician_finance': '<ion-icon name="cash-outline"></ion-icon>',
+    'technician_finance_expense': '<ion-icon name="trending-down-outline"></ion-icon>',
+    'technician_finance_revenue': '<ion-icon name="trending-up-outline"></ion-icon>',
     'signature': '<ion-icon name="create-outline"></ion-icon>',
     'signature_summary': '<ion-icon name="reader-outline"></ion-icon>',
     'leitura': '<ion-icon name="book-outline"></ion-icon>',
+    'form_complete_button': '<ion-icon name="checkmark-done-outline"></ion-icon>',
     'voice_note': '<ion-icon name="mic-outline"></ion-icon>',
     'image_annotation': '<ion-icon name="brush-outline"></ion-icon>',
     'lookup_select': '<ion-icon name="cloud-download-outline"></ion-icon>',
@@ -1555,8 +1573,12 @@ function buildCanvasSectionGroups(fieldList) {
         preamble.push(fieldList[i]);
         i++;
     }
+    const hasSectionBreaks = fieldList.some((f) => f && f.type === 'section_break');
     if (preamble.length > 0) {
         groups.push({ id: '__preamble__', kind: 'preamble', items: preamble });
+    } else if (hasSectionBreaks) {
+        /** Sem isto não existe bloco no canvas para campos antes da 1.ª etapa. */
+        groups.push({ id: '__preamble__', kind: 'preamble', items: [] });
     }
     while (i < fieldList.length) {
         const sec = fieldList[i];
@@ -1836,6 +1858,12 @@ function computePaletteDropInsertFieldsIndex(targetBody, clientY) {
     }
 
     if (!wrap || wrap.dataset.groupId === '__preamble__') {
+        if (wrap && wrap.dataset.groupId === '__preamble__') {
+            const pmCount = targetBody.querySelectorAll(':scope > .canvas-item').length;
+            if (pmCount === 0 && fields.some((f) => f && f.type === 'section_break')) {
+                return 0;
+            }
+        }
         const localIx = computeDropLocalIndexFromPointer(targetBody, cy);
         const canvasOrd = computeGlobalFieldInsertIndex(targetBody, localIx);
         return mapCanvasOrdinalToFieldsSpliceIndex(canvasOrd);
@@ -2112,6 +2140,9 @@ function canvasHasStrayPaletteNodes() {
 function defaultLabelForNewToolboxField(type, rawText) {
     if (type === 'vision_checklist') return 'Visão de IA Detecção';
     if (type === 'vision_ai_analysis') return 'Visão de IA Análise';
+    if (type === 'technician_finance_expense') return 'Despesas do técnico';
+    if (type === 'technician_finance_revenue') return 'Receitas do técnico';
+    if (type === 'form_complete_button') return 'Concluir';
     return rawText;
 }
 
@@ -2172,9 +2203,20 @@ function createNewFieldFromToolboxType(type, rawText) {
                   visionStructuredPrompt: fbStr(
                       'fb_prop_vision_default_structured_prompt',
                       null,
-                      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-                          'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-                          'Explique de forma breve, citando elementos objetivos observados na mídia.',
+                      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                          'Tarefa:\n' +
+                          '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                          '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                          'Campo value (obrigatório):\n' +
+                          '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                          '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                          'Rubrica orientativa:\n' +
+                          '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                          '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                          '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                          '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                          '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                          'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                   ),
                   visionQuestions: [
                       {
@@ -2182,21 +2224,33 @@ function createNewFieldFromToolboxType(type, rawText) {
                           text: fbStr(
                               'fb_prop_vision_default_structured_prompt',
                               null,
-                              'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-                                  'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-                                  'Explique de forma breve, citando elementos objetivos observados na mídia.',
+                              'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                                  'Tarefa:\n' +
+                                  '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                                  '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                                  'Campo value (obrigatório):\n' +
+                                  '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                                  '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                                  'Rubrica orientativa:\n' +
+                                  '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                                  '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                                  '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                                  '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                                  '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                                  'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                           ),
                       },
                   ],
                   visionCaptureMode: 'photo_and_video',
                   requireOnlineValidation: false,
                   visionAnalysisGrid: '1x1',
-                  visionRating0To10Enabled: false,
+                  visionRating0To10Enabled: true,
                   visionShowAiResponseInForm: true,
               }
             : {}),
         ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
         ...(type === 'leitura' ? { contentHtml: '', required: false } : {}),
+        ...(type === 'form_complete_button' ? { required: false } : {}),
         ...(type === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
         ...(type === 'image_annotation'
             ? {
@@ -2256,8 +2310,9 @@ function createDefaultSectionField(fieldArr) {
 }
 
 /**
- * Garante que não existem campos "órfãos" antes da primeira seção e que o schema começa sempre por um section_break.
- * Corrige também arrastos que colocam o cartão da seção na posição errada.
+ * Garante pelo menos uma etapa (`section_break`) quando o formulário só tem campos soltos,
+ * e recompõe a ordem linear após arrastos.
+ * Os campos antes do primeiro `section_break` ficam na «Área Externa» (préâmbulo), como no app.
  */
 function normalizeFieldsRequireSections(fieldArr) {
     if (!fieldArr || fieldArr.length === 0) return;
@@ -2268,7 +2323,8 @@ function normalizeFieldsRequireSections(fieldArr) {
     const leading = fieldArr.slice(0, i);
     const rest = fieldArr.slice(i);
     if (rest.length === 0) {
-        fieldArr.splice(0, fieldArr.length, createDefaultSectionField(leading), ...leading);
+        /** Só existem campos no préâmbulo: mantêm-se à frente; depois cria-se uma etapa vazia (nome padrão). */
+        fieldArr.splice(0, fieldArr.length, ...leading, createDefaultSectionField(leading));
         return;
     }
     const segments = [];
@@ -2291,15 +2347,15 @@ function normalizeFieldsRequireSections(fieldArr) {
         fieldArr.splice(
             0,
             fieldArr.length,
-            createDefaultSectionField(leading.concat(rest)),
             ...leading,
+            createDefaultSectionField(leading.concat(rest)),
             ...rest
         );
         return;
     }
     const rebuilt = [];
     if (leading.length > 0) {
-        rebuilt.push(createDefaultSectionField(rebuilt), ...leading);
+        rebuilt.push(...leading);
     }
     segments.forEach((seg) => {
         rebuilt.push(seg.section, ...seg.items);
@@ -2428,7 +2484,8 @@ function buildCanvasFieldElement(f) {
         'transit_end',
         'materials_consumption',
         'materials_receipt',
-        'technician_finance',
+        'technician_finance_expense',
+        'technician_finance_revenue',
         'signature',
         'signature_summary',
         'vision_checklist',
@@ -2644,7 +2701,7 @@ function renderCanvas() {
         if (isPreamble) {
             titleEl.innerHTML =
                 '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:var(--color-text-light);"></ion-icon> ' +
-                escapeHtml(fbStr('fb_canvas_preamble_title', null, 'Antes da primeira seção'));
+                escapeHtml(fbStr('fb_canvas_preamble_title', null, 'Área Externa'));
             badge.textContent =
                 answerableCount === 1
                     ? fbStr('fb_canvas_fields_one', { n: String(answerableCount) }, answerableCount + ' campo')
@@ -2791,6 +2848,9 @@ function renderCanvas() {
             const el = buildCanvasFieldElement(f);
             if (el) body.appendChild(el);
         });
+        if (!body.querySelector(':scope > .canvas-item')) {
+            body.classList.add('canvas-section-body--empty-hint');
+        }
 
         wrap.appendChild(head);
         wrap.appendChild(body);
@@ -3130,7 +3190,7 @@ function renderProperties() {
     extraProps += `
     `;
 
-    if (f.type === 'technician_finance') {
+    if (['technician_finance_expense', 'technician_finance_revenue'].includes(f.type)) {
         const tfTitle = escapeHtmlLogic(fbStr('fb_prop_tech_finance_title', null, 'PDF e compartilhamento com o cliente'));
         const tfHelp = fbStr(
             'fb_prop_tech_finance_help_html',
@@ -3318,9 +3378,20 @@ function renderProperties() {
                   return fbStr(
                       'fb_prop_vision_default_structured_prompt',
                       null,
-                      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-                          'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-                          'Explique de forma breve, citando elementos objetivos observados na mídia.',
+                      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                          'Tarefa:\n' +
+                          '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                          '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                          'Campo value (obrigatório):\n' +
+                          '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                          '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                          'Rubrica orientativa:\n' +
+                          '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                          '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                          '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                          '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                          '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                          'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                   );
               })()
             : getVisionChecklistPromptEditorText(f);
@@ -3491,7 +3562,15 @@ function renderProperties() {
             )}</div>
             ${gridPickHtml}
             ${visionPromptLabelRow}
-            <textarea class="prop-input" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="${visionPromptBlurHandler}">${escapeHtmlLogic(
+            <textarea class="prop-input" placeholder="${escapeHtmlAttr(
+                isVisionAnalysis
+                    ? fbStr(
+                          'fb_prop_vision_prompt_placeholder',
+                          null,
+                          'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\nTarefa:\n1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\nCampo value (obrigatório):\n- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\nRubrica orientativa:\n- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n- 5–6: aceitável com ressalvas; melhorias necessárias.\n- 7–8: bom estado geral; apenas falhas leves.\n- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\nNo rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
+                      )
+                    : '',
+            )}" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="${visionPromptBlurHandler}">${escapeHtmlLogic(
                 promptDisplay,
             )}</textarea>
             <div style="font-size:9px; color:#64748b; margin-top:6px;">${visionPromptHintBlock}</div>
@@ -3838,7 +3917,7 @@ function renderProperties() {
         `
         }
         
-        ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
+        ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'form_complete_button' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance_expense' && f.type !== 'technician_finance_revenue' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
         <div class="prop-group">
             <label class="prop-label">${escapeHtmlLogic(
                 fbStr('fb_prop_default_value_lbl', null, 'Auto-preenchimento / valor padrão (opcional)')
@@ -3856,7 +3935,13 @@ function renderProperties() {
                       null,
                       'Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).'
                   )}</div>`
-                : `<div class="prop-group" style="display:flex; align-items:center; gap:8px;">
+                : f.type === 'form_complete_button'
+                  ? `<div class="prop-group" style="font-size:12px;color:#0f766e;line-height:1.45;padding:10px;background:#ecfdf5;border-radius:8px;border:1px solid #a7f3d0;">${fbStr(
+                        'fb_prop_form_complete_btn_note',
+                        null,
+                        'No app, este bloco mostra um <strong>botão</strong> que faz o mesmo que o botão principal do rodapé (avançar, voltar ao menu de etapas ou <strong>concluir a OS</strong>). O texto do botão é o <strong>rótulo</strong> acima; se estiver vazio, o app usa o texto padrão do rodapé. Pode colocar o campo no preâmbulo ou dentro de qualquer etapa.'
+                    )}</div>`
+                  : `<div class="prop-group" style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="prop-req" ${reqChecked} onchange="window.handleFieldUpdate('required', this.checked)" />
             <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">${escapeHtmlLogic(
                 fbStr('fb_prop_required_q', null, 'Resposta obrigatória?')
@@ -3865,7 +3950,7 @@ function renderProperties() {
         }
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'leitura', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance_expense', 'technician_finance_revenue', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'leitura', 'form_complete_button', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
@@ -3913,7 +3998,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${f.type !== 'section_break' && f.type !== 'hidden' && f.type !== 'leitura' ? `
+        ${f.type !== 'section_break' && f.type !== 'hidden' && f.type !== 'leitura' && f.type !== 'form_complete_button' ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:4px; background:#f0f9ff; border:1px solid #bae6fd; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} onchange="window.handleFieldUpdate('allowTechnicianComment', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
@@ -3965,7 +4050,7 @@ window.renderProperties = renderProperties;
 window.handleFieldUpdate = function(key, val) {
     if (selectedFieldId && key === 'required') {
         const sf = fields.find((x) => x.id === selectedFieldId);
-        if (sf && sf.type === 'leitura') return;
+        if (sf && (sf.type === 'leitura' || sf.type === 'form_complete_button')) return;
     }
     updateField(key, val);
 };
@@ -3979,9 +4064,20 @@ window.updateVisionStructuredPrompt = function (text) {
     const fallback = fbStr(
         'fb_prop_vision_default_structured_prompt',
         null,
-        'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-            'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-            'Explique de forma breve, citando elementos objetivos observados na mídia.',
+        'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+            'Tarefa:\n' +
+            '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+            '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+            'Campo value (obrigatório):\n' +
+            '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+            '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+            'Rubrica orientativa:\n' +
+            '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+            '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+            '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+            '- 7–8: bom estado geral; apenas falhas leves.\n' +
+            '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+            'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
     );
     const finalText = s || fallback;
     f.visionStructuredPrompt = finalText;
@@ -4407,6 +4503,7 @@ function getFieldsEligibleForSignatureSummary(excludeFieldId) {
             o.type !== 'vision_checklist' &&
             o.type !== 'vision_ai_analysis' &&
             o.type !== 'leitura' &&
+            o.type !== 'form_complete_button' &&
             o.type !== 'voice_note',
     );
 }
@@ -4889,6 +4986,96 @@ window.brsparkCopilotSendQuickAction = async function (text) {
     await brsparkCopilotPostChatRound(prompt);
 };
 
+function buildAuditCopilotPrompt(item) {
+    if (!item || item.severity === 'ok') return '';
+    var title = String(item.title || '').trim();
+    var detail = String(item.detail || '').trim();
+    var base =
+        'O QA do formulário encontrou este ponto:\n' +
+        '- Título: ' +
+        title +
+        '\n' +
+        '- Detalhe: ' +
+        detail +
+        '\n\n' +
+        'Analise o formulário atual no canvas e proponha a melhor correção possível dentro do BrSpark. Se der para corrigir agora com segurança, devolva schemaPatch/settingsPatch/logicSuggestions para aplicar a melhoria. No replyText, explique em pt-BR o que você vai ajustar.';
+    var titleKey = normalizeFieldLabelKey(title);
+    if (titleKey.indexOf('rotulo repetido') >= 0) {
+        return (
+            base +
+            '\n\nPriorize renomear, diferenciar ou consolidar perguntas duplicadas/quase iguais para evitar confusão no app.'
+        );
+    }
+    if (titleKey.indexOf('descricoes orientando') >= 0) {
+        return (
+            base +
+            '\n\nPriorize enriquecer descrições curtas dos campos atuais, com linguagem simples para uso no celular.'
+        );
+    }
+    if (titleKey.indexOf('icone do modelo') >= 0) {
+        return (
+            base +
+            '\n\nPriorize sugerir um ícone coerente com o objetivo do formulário. Se fizer sentido, ajuste também título e descrição pública.'
+        );
+    }
+    if (titleKey.indexOf('listas sem opcoes') >= 0) {
+        return (
+            base +
+            '\n\nPriorize preencher opções concretas nos campos de escolha que estiverem vazios.'
+        );
+    }
+    if (titleKey.indexOf('muitos campos estao obrigatorios') >= 0) {
+        return (
+            base +
+            '\n\nPriorize reduzir obrigatoriedades excessivas e manter obrigatório apenas o essencial.'
+        );
+    }
+    if (titleKey.indexOf('mais secoes') >= 0) {
+        return (
+            base +
+            '\n\nPriorize reorganizar o formulário em etapas claras, sem perder conteúdo importante.'
+        );
+    }
+    if (titleKey.indexOf('evidencia para o processo') >= 0) {
+        return (
+            base +
+            '\n\nPriorize sugerir evidências práticas como foto, assinatura, localização ou anexo nos pontos críticos do fluxo.'
+        );
+    }
+    if (titleKey.indexOf('descricao publica') >= 0) {
+        return (
+            base +
+            '\n\nPriorize criar uma descrição pública objetiva e útil para o catálogo.'
+        );
+    }
+    if (titleKey.indexOf('titulo claro') >= 0) {
+        return (
+            base +
+            '\n\nPriorize definir um título mais claro, específico e profissional para o modelo.'
+        );
+    }
+    if (titleKey.indexOf('nao tem perguntas') >= 0) {
+        return (
+            base +
+            '\n\nPriorize montar um primeiro rascunho útil no canvas, com seções e campos coerentes com o contexto atual.'
+        );
+    }
+    return base;
+}
+
+window.brsparkAuditAskCopilotFix = async function (index) {
+    var items = Array.isArray(lastSemanticAudit) ? lastSemanticAudit : [];
+    var item = items[index];
+    if (!item || item.severity === 'ok') return;
+    var prompt = buildAuditCopilotPrompt(item);
+    if (!prompt) return;
+    var panel = document.getElementById('ai-copilot-panel');
+    if (panel && !panel.classList.contains('is-open')) {
+        window.toggleAiCopilotPanel();
+    }
+    await window.brsparkCopilotSendQuickAction(prompt);
+};
+
 function buildFormSemanticAudit() {
     const issues = [];
     const titleInput = document.getElementById('tpl-title');
@@ -5019,7 +5206,7 @@ function renderBuilderAuditPanel() {
     if (!list) return;
     lastSemanticAudit = buildFormSemanticAudit();
     list.innerHTML = '';
-    lastSemanticAudit.forEach(function (item) {
+    lastSemanticAudit.forEach(function (item, idx) {
         const row = document.createElement('div');
         row.className = 'fb-form-audit-item';
         row.setAttribute('data-severity', item.severity || 'warning');
@@ -5027,8 +5214,28 @@ function renderBuilderAuditPanel() {
         title.textContent = item.title || 'Observação';
         const detail = document.createElement('span');
         detail.textContent = item.detail || '';
+        const actions = document.createElement('div');
+        actions.style.marginTop = '10px';
+        actions.style.display = 'flex';
+        actions.style.justifyContent = 'flex-end';
+        if (item.severity !== 'ok') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-outline btn-sm';
+            btn.textContent = fbStr('fb_audit_fix_ai', null, 'Sugerir correção com IA');
+            btn.title = fbStr(
+                'fb_audit_fix_ai_title',
+                null,
+                'Pedir ao copiloto para sugerir e, se possível, aplicar a correção deste apontamento'
+            );
+            btn.onclick = function () {
+                void window.brsparkAuditAskCopilotFix(idx);
+            };
+            actions.appendChild(btn);
+        }
         row.appendChild(title);
         row.appendChild(detail);
+        row.appendChild(actions);
         list.appendChild(row);
     });
 }
@@ -5103,6 +5310,8 @@ window.saveChecklist = async function() {
 
     currentFormTitle = document.getElementById('tpl-title').value;
     currentFormDesc = document.getElementById('tpl-desc').value;
+    const faEl = document.getElementById('fb-form-active');
+    if (faEl) currentFormIsActive = !!faEl.checked;
     currentFormIcon = document.getElementById('tpl-icon').value;
     const tplLibEl = document.getElementById('tpl-icon-library');
     if (tplLibEl && String(tplLibEl.value || '').trim()) {
@@ -5220,7 +5429,8 @@ window.saveChecklist = async function() {
                 metadata: buildChecklistTemplateMetadata(),
                 settings: globalFormSettings,
                 schemaData: schemaSnapshot,
-                folderId: currentFormFolderId ?? null
+                folderId: currentFormFolderId ?? null,
+                isActive: currentFormIsActive !== false,
             };
             const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
                 method: 'POST',
@@ -5255,6 +5465,7 @@ window.saveChecklist = async function() {
                         currentFormVersion = Number(saved.version || currentFormVersion || 1);
                         currentFormIsActive = saved.isActive !== false;
                         updateCurrentTemplateVersionBadge();
+                        syncFbFormActiveToggleUi();
                         localStorage.setItem('brspark_checklists_db', JSON.stringify(dbLocal));
                         if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(dbLocal);
                     }
@@ -5493,6 +5704,38 @@ async function refreshTemplateFolders() {
     }
 }
 
+const FORMS_SIDEBAR_EXPANDED_LS = 'brspark_forms_sidebar_expanded_v1';
+
+function readSidebarExpandedSet() {
+    try {
+        const raw = sessionStorage.getItem(FORMS_SIDEBAR_EXPANDED_LS);
+        if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr) && arr.length) return new Set(arr);
+        }
+    } catch (_) {}
+    return new Set(['__root']);
+}
+
+function writeSidebarExpandedSet(set) {
+    try {
+        sessionStorage.setItem(FORMS_SIDEBAR_EXPANDED_LS, JSON.stringify([...set]));
+    } catch (_) {}
+}
+
+/**
+ * Ao navegar para uma pasta, expande na árvore lateral os antecessores e a própria pasta
+ * (e a raiz), para os formulários ficarem visíveis debaixo do nó correspondente.
+ */
+window.ensureFormsSidebarExpandedPath = function () {
+    const expanded = readSidebarExpandedSet();
+    if (builderBrowseFolderId != null && builderBrowseFolderId !== '') {
+        expanded.add('__root');
+        folderPathChain(builderBrowseFolderId).forEach((f) => expanded.add(f.id));
+    }
+    writeSidebarExpandedSet(expanded);
+};
+
 function folderPathChain(folderId) {
     const byId = new Map(builderFolders.map((f) => [f.id, f]));
     const chain = [];
@@ -5513,49 +5756,355 @@ function renderFolderTreeSidebar() {
     if (!container) return;
     container.innerHTML = '';
 
-    const mkBtn = (label, isActive, onClick) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        b.style.cssText =
-            'width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;border-radius:8px;border:1px solid #e2e8f0;background:' +
-            (isActive ? '#e0f2fe' : '#fff') +
-            ';cursor:pointer;font-size:13px;color:#0f172a;';
-        b.onmouseover = () => {
-            if (!isActive) b.style.background = '#f8fafc';
-        };
-        b.onmouseout = () => {
-            b.style.background = isActive ? '#e0f2fe' : '#fff';
-        };
-        b.onclick = onClick;
-        return b;
-    };
-
-    container.appendChild(
-        mkBtn('📂 Início (raiz)', builderBrowseFolderId === null, () => {
-            builderBrowseFolderId = null;
-            window.renderFormsGridFromLocal(window._formsDbCache || {});
-        })
-    );
+    const db = window._formsDbCache || {};
+    const expanded = readSidebarExpandedSet();
 
     const childrenOf = (parentKey) =>
         builderFolders
             .filter((f) => (f.parentId || null) === parentKey)
-            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name).localeCompare(String(b.name)));
+            .sort(
+                (a, b) =>
+                    (a.sortOrder || 0) - (b.sortOrder || 0) ||
+                    String(a.name).localeCompare(String(b.name))
+            );
 
-    const walk = (parentKey, depth) => {
-        for (const f of childrenOf(parentKey)) {
-            const indent = '\u00A0\u00A0'.repeat(depth);
-            container.appendChild(
-                mkBtn(`${indent}📁 ${f.name}`, builderBrowseFolderId === f.id, () => {
-                    builderBrowseFolderId = f.id;
-                    window.renderFormsGridFromLocal(window._formsDbCache || {});
+    const formsInFolder = (folderKey) =>
+        Object.values(db)
+            .filter((form) => (form.folderId || null) === folderKey)
+            .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+    const countFormsDirect = (folderId) =>
+        Object.values(db).filter((form) => (form.folderId || null) === folderId).length;
+
+    const branchHasContent = (folderKey) =>
+        childrenOf(folderKey).length > 0 || formsInFolder(folderKey).length > 0;
+
+    const attachFolderDropHandlers = (row, isActive, targetFolderId) => {
+        row.setAttribute('data-folder-drop-target', targetFolderId == null ? 'root' : String(targetFolderId));
+        row.ondragover = function (e) {
+            e.preventDefault();
+            row.style.borderColor = 'var(--accent)';
+            row.style.background = 'rgba(59,130,246,0.14)';
+            row.style.transform = 'translateX(2px)';
+        };
+        row.ondragleave = function () {
+            row.style.borderColor = isActive ? 'var(--accent)' : 'var(--color-border)';
+            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
+            row.style.transform = 'translateX(0)';
+        };
+        row.ondrop = function (e) {
+            e.preventDefault();
+            row.style.borderColor = isActive ? 'var(--accent)' : 'var(--color-border)';
+            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
+            row.style.transform = 'translateX(0)';
+            const draggedId =
+                (e.dataTransfer && e.dataTransfer.getData('text/plain')) ||
+                (window.__formsDragTemplateId ? String(window.__formsDragTemplateId) : '');
+            if (draggedId) void window.moveChecklistToFolder(draggedId, targetFolderId);
+            window.__formsDragTemplateId = null;
+        };
+    };
+
+    const mkExpandToggle = (expandKey, isExpanded, hasKids) => {
+        const wrap = document.createElement('span');
+        wrap.style.cssText =
+            'width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;';
+        if (!hasKids) {
+            wrap.innerHTML = '<span style="display:inline-block;width:10px"></span>';
+            return wrap;
+        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+        btn.setAttribute('aria-label', isExpanded ? 'Recolher' : 'Expandir');
+        btn.title = isExpanded ? 'Recolher' : 'Expandir';
+        btn.textContent = isExpanded ? '▾' : '▸';
+        btn.style.cssText =
+            'border:none;background:transparent;padding:0;margin:0;width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--color-text-light);line-height:1;display:flex;align-items:center;justify-content:center;';
+        btn.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const s = readSidebarExpandedSet();
+            if (isExpanded) s.delete(expandKey);
+            else s.add(expandKey);
+            writeSidebarExpandedSet(s);
+            renderFolderTreeSidebar();
+        };
+        wrap.appendChild(btn);
+        return wrap;
+    };
+
+    const mkFolderRow = (folder, depth, isRoot) => {
+        const isActive = isRoot ? builderBrowseFolderId === null : builderBrowseFolderId === folder.id;
+        const targetFolderId = isRoot ? null : folder.id;
+        const expandKey = isRoot ? '__root' : folder.id;
+        const isExpanded = expanded.has(expandKey);
+        const hasKids = isRoot ? branchHasContent(null) : branchHasContent(folder.id);
+
+        const row = document.createElement('div');
+        row.className = 'fb-sidebar-folder-row';
+        row.setAttribute('data-title', isRoot ? 'início raiz favoritos' : String(folder.name || ''));
+        row.style.cssText =
+            'display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;margin-bottom:4px;border-radius:10px;border:1px solid ' +
+            (isActive ? 'var(--accent)' : 'var(--color-border)') +
+            ';background:' +
+            (isActive ? 'rgba(59,130,246,0.10)' : 'white') +
+            ';cursor:pointer;font-size:13px;color:var(--color-text);margin-left:' +
+            String(depth * 12) +
+            'px;transition:background 0.18s,border-color 0.18s,transform 0.18s;';
+        attachFolderDropHandlers(row, isActive, targetFolderId);
+        row.onclick = function (e) {
+            if (e.target && e.target.closest && e.target.closest('button[aria-expanded]')) return;
+            builderBrowseFolderId = targetFolderId;
+            window.renderFormsGridFromLocal(window._formsDbCache || {});
+        };
+        row.onmouseover = function () {
+            if (!isActive) row.style.background = 'var(--color-bg)';
+        };
+        row.onmouseout = function () {
+            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
+        };
+
+        row.appendChild(mkExpandToggle(expandKey, isExpanded, hasKids));
+
+        const icon = document.createElement('span');
+        icon.textContent = isRoot ? '⌂' : '📁';
+        icon.style.cssText = 'font-size:15px;flex-shrink:0;width:22px;text-align:center;';
+        row.appendChild(icon);
+
+        const labelWrap = document.createElement('span');
+        labelWrap.style.cssText = 'flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;';
+        const homeLbl = document.createElement('span');
+        homeLbl.textContent = isRoot ? 'Favoritos' : '';
+        if (isRoot) {
+            homeLbl.style.cssText = 'font-size:11px;font-weight:800;color:var(--color-text-light);flex-shrink:0;';
+            labelWrap.appendChild(homeLbl);
+        }
+        const label = document.createElement('span');
+        label.textContent = isRoot ? 'Início (raiz)' : folder.name;
+        label.style.cssText = 'flex:1;min-width:0;font-weight:' + (isActive ? '800' : '600') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        labelWrap.appendChild(label);
+        row.appendChild(labelWrap);
+
+        if (!isRoot) {
+            const count = countFormsDirect(folder.id);
+            const badge = document.createElement('span');
+            badge.textContent = String(count);
+            badge.style.cssText =
+                'font-size:11px;font-weight:700;color:var(--color-text-light);background:var(--color-bg);border-radius:999px;padding:3px 7px;flex-shrink:0;';
+            row.appendChild(badge);
+
+            const act = document.createElement('span');
+            act.style.cssText = 'display:inline-flex;gap:2px;flex-shrink:0;margin-left:auto;';
+            const mkFolderAct = function (title, iconName, onClick) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.title = title;
+                b.setAttribute('aria-label', title);
+                b.innerHTML = '<ion-icon name="' + iconName + '" style="font-size:17px"></ion-icon>';
+                b.style.cssText =
+                    'border:none;background:var(--color-bg);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text);padding:0;';
+                b.onclick = function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClick();
+                };
+                return b;
+            };
+            act.appendChild(
+                mkFolderAct('Renomear pasta', 'create-outline', function () {
+                    window.promptRenameTemplateFolder(folder.id);
                 })
             );
-            walk(f.id, depth + 1);
+            act.appendChild(
+                mkFolderAct('Excluir pasta', 'trash-outline', function () {
+                    window.promptDeleteTemplateFolder(folder.id);
+                })
+            );
+            row.appendChild(act);
+        }
+        return row;
+    };
+
+    const appendFormRow = (form, depth) => {
+        const fid = String(form.id || '');
+        const archived = form.isActive === false;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'fb-sidebar-form-row';
+        wrap.setAttribute('data-title', form.title || '');
+        wrap.draggable = true;
+        wrap.ondragstart = function (e) {
+            window.__formsDragTemplateId = fid;
+            try {
+                e.dataTransfer.setData('text/plain', fid);
+                e.dataTransfer.effectAllowed = 'move';
+            } catch (_) {}
+        };
+
+        const marginLeft = String(depth * 12);
+        wrap.style.cssText =
+            'display:flex;flex-direction:column;gap:6px;padding:8px 8px;margin-bottom:8px;border-radius:10px;border:1px solid var(--color-border);background:white;margin-left:' +
+            marginLeft +
+            'px;font-size:12px;color:var(--color-text);transition:box-shadow 0.15s,border-color 0.15s;';
+        if (archived) wrap.style.opacity = '0.9';
+
+        wrap.onmouseover = function () {
+            wrap.style.boxShadow = '0 2px 8px rgba(15,23,42,0.08)';
+            wrap.style.borderColor = '#cbd5e1';
+        };
+        wrap.onmouseout = function () {
+            wrap.style.boxShadow = 'none';
+            wrap.style.borderColor = 'var(--color-border)';
+        };
+
+        const mainRow = document.createElement('div');
+        mainRow.style.cssText =
+            'display:flex;align-items:flex-start;gap:8px;width:100%;min-width:0;';
+
+        const iconBox = document.createElement('div');
+        iconBox.style.cssText =
+            'width:32px;height:32px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#64748b;overflow:hidden;';
+        if (form.metadata?.icon && typeof window.renderWebIcon === 'function') {
+            iconBox.innerHTML = window.renderWebIcon(
+                form.metadata.iconLibrary || 'Ionicons',
+                form.metadata.icon,
+                '#64748b',
+                20,
+                true
+            );
+        } else if (form.metadata?.icon) {
+            iconBox.innerHTML =
+                '<ion-icon name="' + escapeHtmlAttr(String(form.metadata.icon)) + '"></ion-icon>';
+        } else {
+            iconBox.textContent = '📋';
+        }
+
+        const mid = document.createElement('div');
+        mid.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;';
+
+        const titleClick = document.createElement('span');
+        titleClick.textContent = form.title || 'Sem título';
+        titleClick.style.cssText =
+            'cursor:pointer;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        titleClick.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.selectFormFromModal(fid);
+        };
+
+        const metaRow = document.createElement('div');
+        metaRow.style.cssText =
+            'display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;';
+        const nFields = Array.isArray(form.schema) ? form.schema.length : 0;
+        const fieldsSpan = document.createElement('span');
+        fieldsSpan.textContent = nFields === 1 ? '1 campo' : String(nFields) + ' campos';
+        fieldsSpan.style.cssText =
+            'font-size:10px;font-weight:700;color:var(--color-text-light);flex-shrink:0;';
+        const badgeWrap = document.createElement('span');
+        badgeWrap.innerHTML = checklistVersionBadgeHtml(form);
+        badgeWrap.style.flexShrink = '0';
+        metaRow.appendChild(fieldsSpan);
+        metaRow.appendChild(badgeWrap);
+
+        mid.appendChild(titleClick);
+        mid.appendChild(metaRow);
+
+        const btnBase =
+            'border:none;background:var(--color-bg);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text-light);padding:0;flex-shrink:0;';
+        const actions = document.createElement('div');
+        actions.style.cssText =
+            'display:flex;flex-direction:row;flex-wrap:wrap;gap:2px;flex-shrink:0;align-items:flex-start;justify-content:flex-end;max-width:104px;';
+
+        const bh = document.createElement('button');
+        bh.type = 'button';
+        bh.title = 'Ver histórico de versões';
+        bh.innerHTML = '<ion-icon name="time-outline" style="font-size:18px"></ion-icon>';
+        bh.style.cssText = btnBase;
+        bh.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            void window.openChecklistVersionHistory(fid);
+        };
+
+        const bd = document.createElement('button');
+        bd.type = 'button';
+        bd.title = 'Duplicar formulário';
+        bd.innerHTML = '<ion-icon name="copy-outline" style="font-size:18px"></ion-icon>';
+        bd.style.cssText = btnBase;
+        bd.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.duplicateChecklist(fid);
+        };
+
+        const ba = document.createElement('button');
+        ba.type = 'button';
+        ba.title = archived ? 'Restaurar formulário arquivado' : 'Arquivar formulário';
+        ba.innerHTML =
+            '<ion-icon name="' + (archived ? 'refresh-outline' : 'archive-outline') + '" style="font-size:18px"></ion-icon>';
+        ba.style.cssText = btnBase;
+        ba.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (archived) void window.unarchiveChecklist(fid);
+            else window.deleteChecklist(fid);
+        };
+
+        actions.appendChild(bh);
+        actions.appendChild(bd);
+        actions.appendChild(ba);
+
+        mainRow.appendChild(iconBox);
+        mainRow.appendChild(mid);
+        mainRow.appendChild(actions);
+
+        const toolRow = document.createElement('div');
+        toolRow.style.cssText =
+            'display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding-top:6px;border-top:1px solid #f1f5f9;';
+        const lbl = document.createElement('span');
+        lbl.textContent = 'Mover para';
+        lbl.style.cssText =
+            'font-size:11px;font-weight:700;color:var(--color-text-light);white-space:nowrap;flex-shrink:0;';
+        const sel = document.createElement('select');
+        sel.className = 'prop-input';
+        sel.id = 'sidebar-move-' + fid.replace(/[^a-zA-Z0-9_-]/g, '_');
+        sel.innerHTML = buildMoveFolderOptionsHtml(form.folderId || null);
+        sel.style.cssText = 'flex:1;min-width:0;font-size:11px;padding:5px 8px;margin:0;';
+        sel.onclick = function (e) {
+            e.stopPropagation();
+        };
+        sel.onchange = function () {
+            void window.onMoveFormFolderChange(fid, sel);
+        };
+        toolRow.appendChild(lbl);
+        toolRow.appendChild(sel);
+
+        wrap.appendChild(mainRow);
+        wrap.appendChild(toolRow);
+        container.appendChild(wrap);
+    };
+
+    const appendFolderBranch = (folder, depth) => {
+        container.appendChild(mkFolderRow(folder, depth, false));
+        if (!expanded.has(folder.id)) return;
+        for (const sub of childrenOf(folder.id)) {
+            appendFolderBranch(sub, depth + 1);
+        }
+        for (const f of formsInFolder(folder.id)) {
+            appendFormRow(f, depth + 1);
         }
     };
-    walk(null, 0);
+
+    container.appendChild(mkFolderRow(null, 0, true));
+    if (expanded.has('__root')) {
+        for (const sub of childrenOf(null)) {
+            appendFolderBranch(sub, 0);
+        }
+        for (const f of formsInFolder(null)) {
+            appendFormRow(f, 0);
+        }
+    }
 }
 
 function renderFolderBreadcrumb() {
@@ -5721,8 +6270,13 @@ window.promptDeleteTemplateFolder = async function (folderId) {
     }
 };
 
+window.closeFormsBrowser = function () {
+    const modal = document.getElementById('forms-list-modal');
+    if (modal) modal.style.display = 'none';
+};
+
 window.createNewChecklistInBrowseFolder = function () {
-    document.getElementById('forms-list-modal').style.display = 'none';
+    window.closeFormsBrowser();
     window.__newFormFolderId = builderBrowseFolderId;
     window.createNewChecklist(true);
 };
@@ -5756,9 +6310,8 @@ function buildMoveFolderOptionsHtml(currentFolderId) {
     return html;
 }
 
-window.onMoveFormFolderChange = async function (formId, selectEl) {
-    const v = selectEl.value;
-    const folderId = v === '' ? null : v;
+window.moveChecklistToFolder = async function (formId, folderId, selectEl) {
+    const targetFolderId = folderId === '' || folderId === undefined ? null : folderId;
     let prevSelectVal = '';
     try {
         const dbPrev = parseLocalChecklistsDb();
@@ -5771,7 +6324,7 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
             {
                 method: 'PATCH',
                 headers: adminJsonHeaders(),
-                body: JSON.stringify({ folderId }),
+                body: JSON.stringify({ folderId: targetFolderId }),
             }
         );
         const raw = await res.text();
@@ -5786,12 +6339,12 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
                 { detail: prefix + String(msg) },
                 prefix + msg
             );
-            selectEl.value = prevSelectVal;
+            if (selectEl) selectEl.value = prevSelectVal;
             return;
         }
         const db = parseLocalChecklistsDb();
         if (db[formId]) {
-            db[formId].folderId = folderId;
+            db[formId].folderId = targetFolderId;
             localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
         }
         window._formsDbCache = db;
@@ -5800,6 +6353,11 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
         fbAlert('fb_alert_folder_move_net', null, 'Erro de rede ao mover formulário.');
         console.warn(e);
     }
+};
+
+window.onMoveFormFolderChange = async function (formId, selectEl) {
+    const v = selectEl.value;
+    await window.moveChecklistToFolder(formId, v === '' ? null : v, selectEl);
 };
 
 window.openFormsModal = function () {
@@ -5811,7 +6369,9 @@ window.openFormsModal = function () {
 window.filterFormsList = function () {
     const inp = document.getElementById('form-search');
     const q = (inp && inp.value ? inp.value : '').toLowerCase();
-    const cards = document.querySelectorAll('#forms-grid .form-card-item, #forms-grid .folder-browser-item');
+    const cards = document.querySelectorAll(
+        '#forms-folder-tree .fb-sidebar-form-row, #forms-folder-tree .fb-sidebar-folder-row'
+    );
     cards.forEach((card) => {
         const title = (card.getAttribute('data-title') || '').toLowerCase();
         if (title.includes(q)) {
@@ -5832,6 +6392,7 @@ window.duplicateChecklist = async function(id) {
     newForm.id = 'chk_' + Date.now().toString(36) + Math.random().toString(36).substring(2,5);
     newForm.title = newForm.title + ' (Cópia)';
     newForm.updatedAt = new Date().toISOString();
+    newForm.isActive = true;
     if (newForm.folderId === undefined) newForm.folderId = form.folderId ?? null;
     
     // Save to local DB first
@@ -5847,7 +6408,8 @@ window.duplicateChecklist = async function(id) {
             metadata: newForm.metadata,
             settings: newForm.settings,
             schemaData: newForm.schema,
-            folderId: newForm.folderId ?? null
+            folderId: newForm.folderId ?? null,
+            isActive: true,
         };
         const token = sessionStorage.getItem('brspark_admin_token') || '';
         const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
@@ -5940,7 +6502,7 @@ window.deleteChecklist = function(id) {
 };
 
 window.selectFormFromModal = function(id) {
-    document.getElementById('forms-list-modal').style.display = 'none';
+    window.closeFormsBrowser();
     window.loadChecklist(id);
 };
 
@@ -5982,131 +6544,15 @@ window.loadSavedFormsList = async function () {
 };
 
 window.renderFormsGridFromLocal = function (db) {
+    const tree = document.getElementById('forms-folder-tree');
     const grid = document.getElementById('forms-grid');
-    if (!grid) return;
+    if (!tree) return;
 
     window._formsDbCache = db || {};
+    if (grid) grid.innerHTML = '';
+    if (window.ensureFormsSidebarExpandedPath) window.ensureFormsSidebarExpandedPath();
     renderFolderTreeSidebar();
     renderFolderBreadcrumb();
-
-    const browseKey = builderBrowseFolderId || null;
-    const subfolders = builderFolders
-        .filter((f) => (f.parentId || null) === browseKey)
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name).localeCompare(String(b.name)));
-
-    const sortedForms = Object.values(db)
-        .filter((form) => (form.folderId || null) === browseKey)
-        .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-
-    grid.innerHTML = '';
-
-    subfolders.forEach((folder) => {
-        const fid = escapeHtmlAttr(folder.id);
-        const fname = escapeHtml(folder.name);
-        grid.innerHTML += `
-            <div class="folder-browser-item" data-title="${escapeHtmlAttr(folder.name)}" style="min-width:0;max-width:100%;display:flex; align-items:stretch; gap:0; border-radius:12px; overflow:hidden; border:1px solid #c4b5fd; background:linear-gradient(135deg,#faf5ff 0%,#fff 100%); transition:border-color 0.2s;"
-                 onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#c4b5fd'">
-               <div onclick="window.enterBrowseFolder('${fid}')"
-                    style="flex:1; min-width:0; padding:16px; cursor:pointer; display:flex; align-items:center; gap:12px; border:none; background:transparent;">
-                  <div style="width:48px; height:48px; border-radius:12px; background:#ede9fe; display:flex; justify-content:center; align-items:center; font-size:26px; flex-shrink:0">📁</div>
-                  <div style="flex:1; min-width:0;">
-                     <h4 style="margin:0; font-size:15px; color:#4c1d95; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">${fname}</h4>
-                     <p style="margin:4px 0 0 0; font-size:12px; color:#7c3aed; font-weight:600;">Pasta</p>
-                  </div>
-               </div>
-               <button type="button"
-                  onclick="event.stopPropagation(); window.promptRenameTemplateFolder('${fid}')"
-                  style="background:#f5f3ff; border:none; border-left:1px solid #ddd6fe; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6d28d9; font-size:18px; flex-shrink:0;"
-                  title="Renomear pasta">
-                  <ion-icon name="create-outline"></ion-icon>
-               </button>
-               <button type="button"
-                  onclick="event.stopPropagation(); window.promptDeleteTemplateFolder('${fid}')"
-                  style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0;"
-                  title="Excluir pasta">
-                  <ion-icon name="trash-outline"></ion-icon>
-               </button>
-            </div>
-        `;
-    });
-
-    sortedForms.forEach((form) => {
-        const count = (form.schema || []).length;
-        const archived = form.isActive === false;
-        const iconHtml = form.metadata?.icon
-            ? typeof window.renderWebIcon === 'function'
-                ? window.renderWebIcon(
-                      form.metadata.iconLibrary || 'Ionicons',
-                      form.metadata.icon,
-                      '#64748b',
-                      26,
-                      true
-                  )
-                : `<ion-icon name="${escapeHtmlAttr(form.metadata.icon)}"></ion-icon>`
-            : '📋';
-        const fid = escapeHtmlAttr(form.id);
-        const ftitle = escapeHtml(form.title);
-        const moveSelectId = 'move-folder-' + form.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const moveOpts = buildMoveFolderOptionsHtml(form.folderId || null);
-        grid.innerHTML += `
-            <div class="form-card-item" data-title="${escapeHtmlAttr(form.title)}" style="min-width:0;max-width:100%;display:flex; flex-direction:column; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; transition:border-color 0.2s;"
-                 onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#e2e8f0'">
-               <div style="display:flex; align-items:stretch; flex:1; min-width:0;">
-                 <div onclick="window.selectFormFromModal('${fid}')"
-                      style="flex:1; min-width:0; padding:12px 12px 12px 14px; cursor:pointer; display:flex; align-items:center; gap:12px; border:none; background:transparent;">
-                    <div style="width:48px; height:48px; border-radius:12px; background:#f1f5f9; display:flex; justify-content:center; align-items:center; font-size:24px; color:#64748b; flex-shrink:0">
-                       ${iconHtml}
-                    </div>
-                    <div style="flex:1; min-width:0;">
-                       <h4 style="margin:0; font-size:15px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">${ftitle}</h4>
-                       <p style="margin:4px 0 0 0; font-size:12px; color:#94a3b8; font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span>${count} campos</span>${checklistVersionBadgeHtml(form)}</p>
-                    </div>
-                 </div>
-                 <button type="button"
-                    onclick="event.stopPropagation(); void window.openChecklistVersionHistory('${fid}')"
-                    style="background:#eff6ff; border:none; border-left:1px solid #dbeafe; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#2563eb; font-size:20px; flex-shrink:0; transition:background 0.15s;"
-                    onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'"
-                    title="Ver histórico de versões">
-                    <ion-icon name="time-outline"></ion-icon>
-                 </button>
-                 <button type="button"
-                    onclick="event.stopPropagation(); window.duplicateChecklist('${fid}')"
-                    style="background:#f0fdf4; border:none; border-left:1px solid #dcfce3; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#22c55e; font-size:20px; flex-shrink:0; transition:background 0.15s;"
-                    onmouseover="this.style.background='#dcfce3'" onmouseout="this.style.background='#f0fdf4'"
-                    title="Duplicar formulário">
-                    <ion-icon name="copy-outline"></ion-icon>
-                 </button>
-                 <button type="button"
-                    onclick="event.stopPropagation(); ${archived ? `void window.unarchiveChecklist('${fid}')` : `window.deleteChecklist('${fid}')`}"
-                    style="background:#fff0f0; border:none; border-left:1px solid #fee2e2; width:48px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:20px; flex-shrink:0; transition:background 0.15s;"
-                    onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff0f0'"
-                    title="${archived ? 'Restaurar formulário arquivado' : 'Arquivar formulário'}">
-                    <ion-icon name="${archived ? 'refresh-outline' : 'archive-outline'}"></ion-icon>
-                 </button>
-               </div>
-               <div style="padding:8px 12px 12px 12px; border-top:1px solid #f1f5f9; display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b;">
-                 <span style="white-space:nowrap;">Mover para</span>
-                 <select id="${moveSelectId}" class="prop-input" style="flex:1; font-size:12px; padding:6px 8px; margin:0;"
-                    onclick="event.stopPropagation();"
-                    onchange="window.onMoveFormFolderChange('${fid}', this)">
-                   ${moveOpts}
-                 </select>
-               </div>
-            </div>
-        `;
-    });
-
-    if (subfolders.length === 0 && sortedForms.length === 0) {
-        const emptyMsg = fbStr(
-            'fb_alert_forms_empty',
-            null,
-            'Nenhuma pasta nem formulário neste nível. Use «Nova pasta» ou «Novo formulário aqui».'
-        );
-        grid.innerHTML =
-            '<p style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:32px;font-size:14px;">' +
-            escapeHtml(emptyMsg) +
-            '</p>';
-    }
 
     if (window.filterFormsList) window.filterFormsList();
 };
@@ -6152,6 +6598,7 @@ window.loadChecklist = function(id) {
         // Fix: Restore inputs correctly
         document.getElementById('tpl-title').value = currentFormTitle;
         document.getElementById('tpl-desc').value = currentFormDesc;
+        syncFbFormActiveToggleUi();
         updateCurrentTemplateVersionBadge();
         syncBuilderTaskIconDom();
         fields = ensureSchemaInstructionFlags(JSON.parse(JSON.stringify(form.schema || [])));
@@ -6212,6 +6659,7 @@ window.confirmCreateNewChecklist = function () {
     const tlNew = document.getElementById('tpl-icon-library');
     if (tlNew) tlNew.value = 'Ionicons';
     syncBuilderTaskIconDom();
+    syncFbFormActiveToggleUi();
     updateCurrentTemplateVersionBadge();
     renderGuidedBuilderPanel();
     renderBuilderAuditPanel();
@@ -6374,9 +6822,9 @@ function renderMobilePreview() {
     
     previewFields.forEach((f, idx) => {
         const fi = fields
-            .filter((x) => x.type !== 'section_break' && x.type !== 'leitura')
+            .filter((x) => x.type !== 'section_break' && x.type !== 'leitura' && x.type !== 'form_complete_button')
             .findIndex((x) => x.id === f.id);
-        const num = f.type === 'leitura' ? null : fi >= 0 ? fi + 1 : idx + 1;
+        const num = f.type === 'leitura' || f.type === 'form_complete_button' ? null : fi >= 0 ? fi + 1 : idx + 1;
         let relatedRules = globalFormSettings.rules ? globalFormSettings.rules.filter(r => r.actions && r.actions.some(a => a.targetId === f.id)) : [];
         let isCond = relatedRules.length > 0;
         let wrapperStyle = `background:#ffffff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:10px;`;
@@ -6389,11 +6837,11 @@ function renderMobilePreview() {
             ? `<div style="width:44px;height:44px;flex-shrink:0;border-radius:10px;background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;margin-right:12px;margin-top:2px;">${iconHtml}</div>`
             : '';
         const labelText =
-            hasCustomIcon || f.type === 'leitura'
+            hasCustomIcon || f.type === 'leitura' || f.type === 'form_complete_button'
                 ? String(f.label || '')
                 : `${num}. ${String(f.label || '')}`;
         const labelHtml = `<div style="font-size:15px;font-weight:800;color:#0F172A;line-height:1.3;">${escapeHtmlLogic(labelText)}${
-            f.required && f.type !== 'leitura' ? '<span style="color:#EF4444"> *</span>' : ''
+            f.required && f.type !== 'leitura' && f.type !== 'form_complete_button' ? '<span style="color:#EF4444"> *</span>' : ''
         }</div>`;
         let condBadge = isCond ? `<div style="font-size:10px; background:#f3e8ff; color:#7e22ce; font-weight:700; padding:4px 8px; border-radius:6px; align-self:flex-start;"><ion-icon name="color-wand-outline"></ion-icon> Ativado por ${relatedRules.length} Regra(s)</div>` : '';
         const helpPlain = (f.description || '').replace(/<[^>]+>/g, '').trim();
@@ -6420,6 +6868,10 @@ function renderMobilePreview() {
         if(f.type === 'rating') inputMock = `<div style="display:flex; gap:8px; font-size:26px; color:#cbd5e1; justify-content:center"><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star"></ion-icon><ion-icon name="star-outline"></ion-icon><ion-icon name="star-outline"></ion-icon></div>`;
         if(f.type === 'calculated') inputMock = `<div style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px; font-size:14px; color:#7c3aed; font-family:monospace; text-align:right">R$ 0,00 [Cálculo Auto]</div>`;
         if(f.type === 'hidden') inputMock = `<div style="background:#f1f5f9; border:1px dashed #94a3b8; border-radius:8px; padding:12px; font-size:12px; color:#64748b; text-align:center;"><ion-icon name="eye-off"></ion-icon> Este campo ficará invisível no Celular</div>`;
+        if (f.type === 'form_complete_button') {
+            const bt = String(f.label || '').trim() || 'Concluir';
+            inputMock = `<button type="button" disabled style="width:100%;box-sizing:border-box;border:none;border-radius:14px;padding:14px 16px;background:linear-gradient(135deg,#059669,#047857);color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:default;"><ion-icon name="checkmark-done" style="font-size:22px;color:#fff"></ion-icon>${escapeHtmlLogic(bt)}</button><div style="font-size:10px;color:#64748b;margin-top:6px;line-height:1.35;text-align:center;">Mesma ação do botão fixo no rodapé do app (avançar / hub / concluir OS).</div>`;
+        }
         if (f.type === 'leitura') {
             const raw = String(f.contentHtml || '')
                 .replace(/<[^>]+>/g, ' ')
@@ -6474,7 +6926,8 @@ function renderMobilePreview() {
         if(f.type === 'barcode_scan') inputMock = `<div style="background:#f0f9ff; border:2px solid #38bdf8; border-radius:10px; padding:16px; display:flex; align-items:center; justify-content:center; gap:8px; color:#0284c7; font-weight:800; font-size:14px;"><ion-icon name="barcode" style="font-size:24px; color:#0284c7"></ion-icon> ESCANEAR CÓDIGO</div>`;
         if(f.type === 'materials_consumption') inputMock = `<div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px; font-size:13px; color:#0369a1;"><ion-icon name="cube" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Consumo de materiais</b> — estoque técnico do app (independente de bens); baixa ao concluir.</div>`;
         if(f.type === 'materials_receipt') inputMock = `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; font-size:13px; color:#15803d;"><ion-icon name="arrow-down-circle" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Entrada de materiais</b> — estoque técnico; aumenta o saldo ao concluir.</div>`;
-        if(f.type === 'technician_finance') inputMock = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px; font-size:13px; color:#0f766e;"><ion-icon name="cash" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Custos do técnico</b> — despesas/receitas ligadas ao atendimento; livro separado dos bens.</div>`;
+        if(f.type === 'technician_finance_expense') inputMock = `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:14px; font-size:13px; color:#991b1b;"><ion-icon name="trending-down" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Despesas do técnico</b> — apenas saídas ligadas ao atendimento.</div>`;
+        if(f.type === 'technician_finance_revenue') inputMock = `<div style="background:#ecfdf5; border:1px solid #bbf7d0; border-radius:10px; padding:14px; font-size:13px; color:#166534;"><ion-icon name="trending-up" style="vertical-align:-3px; margin-right:6px"></ion-icon><b>Receitas do técnico</b> — apenas entradas ligadas ao atendimento.</div>`;
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
         if(f.type === 'signature_summary') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><div style="background:#ecfeff;border:1px solid #67e8f9;border-radius:10px;padding:12px;font-size:11px;color:#155e75;line-height:1.45"><b>Resumo</b> — valores só leitura dos campos marcados no painel; depois <b>assinatura</b> no final do bloco.</div><div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:72px; display:flex; align-items:flex-end; padding:10px; color:#94a3b8; font-size:11px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Zona de assinatura</div></div>`;
         
@@ -8369,6 +8822,7 @@ function brsparkCopilotDeepClone(obj) {
 var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['section_break', 'Etapa (section_break)'],
     ['leitura', 'Leitura (só texto)'],
+    ['form_complete_button', 'Botão concluir (FT / OS)'],
     ['voice_note', 'Nota de voz'],
     ['text', 'Texto'],
     ['number', 'Número'],
@@ -8386,7 +8840,8 @@ var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['signature_summary', 'Resumo + assinatura'],
     ['materials_consumption', 'Consumo de materiais'],
     ['materials_receipt', 'Recebimento de materiais'],
-    ['technician_finance', 'Financeiro técnico'],
+    ['technician_finance_expense', 'Despesas do técnico'],
+    ['technician_finance_revenue', 'Receitas do técnico'],
     ['location_pick', 'Local no mapa'],
     ['hidden', 'Oculto'],
     ['photo_stamped', 'Foto carimbo GPS'],

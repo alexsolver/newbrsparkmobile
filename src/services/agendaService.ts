@@ -68,6 +68,7 @@ async function notifyAgendaOverlapIfNeeded(overlapIds: string[]) {
       title: i18n.t('agenda.overlapNotificationTitle'),
       body: i18n.t('agenda.overlapNotificationBody'),
       category: 'alert',
+      personaScope: 'client',
     });
   } catch {
     /* ignore */
@@ -166,7 +167,16 @@ export const AgendaService = {
     
     // Re-fetch all so we see all expirations in the future
     const rawPoliciesRaw = await AsyncStorage.getItem(AuthService.getUserKey('insurance_policies', ownerEmail));
-    const allPolicies = rawPoliciesRaw ? JSON.parse(rawPoliciesRaw) : [];
+    let allPolicies: any[] = [];
+    if (rawPoliciesRaw) {
+      try {
+        const parsed = JSON.parse(rawPoliciesRaw);
+        allPolicies = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.warn('[AgendaService] cache de seguros inválido, ignorando payload local:', e);
+        allPolicies = [];
+      }
+    }
     
     const insuranceEvents: AgendaEvent[] = allPolicies
       .filter((p: any) => p.status !== 'CANCELLED' && p.endDate)

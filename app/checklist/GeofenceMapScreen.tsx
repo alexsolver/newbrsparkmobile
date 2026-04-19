@@ -92,8 +92,16 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       setStatus('inside'); setStatusMsg('Sem restrição geográfica nesta OS.'); return;
     }
     if (zoneType === 'radius') {
-      const dest = { lat: task.locationLat!, lng: task.locationLng! };
-      const radius = task.locationRadius || 200;
+      const destLat = Number(task.locationLat);
+      const destLng = Number(task.locationLng);
+      const radiusRaw = Number(task.locationRadius);
+      if (!Number.isFinite(destLat) || !Number.isFinite(destLng)) {
+        setStatus('unknown');
+        setStatusMsg('Coordenadas da área indisponíveis para validação.');
+        return;
+      }
+      const radius = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : 200;
+      const dest = { lat: destLat, lng: destLng };
       const dist = Math.round(haversine(lat, lng, dest.lat, dest.lng));
       setDistance(dist);
       if (dist <= radius) {
@@ -149,8 +157,11 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         const points = polygon.length > 0
           ? [...polygon.map(c => ({ latitude: c[0], longitude: c[1] })), { latitude: lat, longitude: lng }]
           : [{ latitude: lat, longitude: lng }];
-        if (task.locationLat && task.locationLng)
-          points.push({ latitude: task.locationLat, longitude: task.locationLng });
+        const zoneLat = Number(task.locationLat);
+        const zoneLng = Number(task.locationLng);
+        if (Number.isFinite(zoneLat) && Number.isFinite(zoneLng)) {
+          points.push({ latitude: zoneLat, longitude: zoneLng });
+        }
         mapRef.current.fitToCoordinates(points, { edgePadding: { top: 80, right: 40, bottom: 200, left: 40 }, animated: true });
       }, 500);
     })();
@@ -178,19 +189,21 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
   };
 
   const openDestInMaps = (targetLat?: number | null, targetLng?: number | null) => {
-    if (!targetLat || !targetLng) return;
+    const lat = Number(targetLat);
+    const lng = Number(targetLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     
     const options: any[] = [
-      { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${targetLat},${targetLng}&navigate=yes`) },
-      { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}`) }
+      { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
+      { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`) }
     ];
     
     if (Platform.OS === 'ios') {
-      options.push({ text: 'Apple Maps', onPress: () => Linking.openURL(`maps://?daddr=${targetLat},${targetLng}`) });
+      options.push({ text: 'Apple Maps', onPress: () => Linking.openURL(`maps://?daddr=${lat},${lng}`) });
       options.push({ text: 'Cancelar', style: 'cancel' });
       Alert.alert('Navegar para OS', 'Escolha seu aplicativo favorito:', options);
     } else {
-      Linking.openURL(`geo:0,0?q=${targetLat},${targetLng}(Local da OS)`);
+      Linking.openURL(`geo:0,0?q=${lat},${lng}(Local da OS)`);
     }
   };
 
@@ -223,10 +236,15 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
           : '#dc2626'
         : '#6b7280';
 
+  const taskLat = Number(task.locationLat);
+  const taskLng = Number(task.locationLng);
+  const initialLat = Number.isFinite(taskLat) ? taskLat : (myPos?.lat ?? -23.55);
+  const initialLng = Number.isFinite(taskLng) ? taskLng : (myPos?.lng ?? -46.63);
+
   // Map region defaults
   const initialRegion = {
-    latitude:  task.locationLat  || myPos?.lat  || -23.55,
-    longitude: task.locationLng  || myPos?.lng  || -46.63,
+    latitude: initialLat,
+    longitude: initialLng,
     latitudeDelta: 0.01, longitudeDelta: 0.01,
   };
 
@@ -255,17 +273,17 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
           </Marker>
         )}
         {/* Radius zone */}
-        {zoneType === 'radius' && task.locationLat && task.locationLng && (
+        {zoneType === 'radius' && Number.isFinite(Number(task.locationLat)) && Number.isFinite(Number(task.locationLng)) && (
           <>
             <Circle
-              center={{ latitude: task.locationLat, longitude: task.locationLng }}
+              center={{ latitude: Number(task.locationLat), longitude: Number(task.locationLng) }}
               radius={task.locationRadius || 200}
               fillColor="rgba(59,130,246,0.12)"
               strokeColor="#3b82f6"
               strokeWidth={2}
             />
             <Marker
-              coordinate={{ latitude: task.locationLat, longitude: task.locationLng }}
+              coordinate={{ latitude: Number(task.locationLat), longitude: Number(task.locationLng) }}
               title={task.title || 'Local da OS'}
               pinColor="#3b82f6"
             />

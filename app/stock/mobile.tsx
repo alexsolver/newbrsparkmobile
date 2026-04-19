@@ -14,8 +14,9 @@ import * as Network from 'expo-network';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { Header } from '../../src/components/Header';
+import { ScreenSubheader } from '../../src/components/ScreenSubheader';
 import { TechnicianStockService } from '../../src/services/technicianStockService';
 import {
   fetchTechStockMovementSearch,
@@ -87,6 +88,7 @@ function formatWhen(iso: string) {
 }
 
 export default function TechnicianStockScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -338,7 +340,13 @@ export default function TechnicianStockScreen() {
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Estoque técnico" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <ScreenSubheader
+        title="Estoque técnico"
+        subtitle={t('technicianMobile.stockScreenSubtitle')}
+        onBack={() => router.back()}
+        onRightPress={() => onRefresh(true)}
+        rightLoading={refreshing}
+      />
 
       <View style={[styles.tabs, { borderColor: C.border }]}>
         <TouchableOpacity

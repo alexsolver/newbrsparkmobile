@@ -94,6 +94,12 @@ function rowToEntry(row: any): TechnicianFinanceEntry {
         : row.splitGroupId != null && String(row.splitGroupId).trim() !== ''
           ? String(row.splitGroupId).trim()
           : undefined,
+    receiptRealizedAt:
+      row.receipt_realized_at != null && String(row.receipt_realized_at).trim() !== ''
+        ? String(row.receipt_realized_at).trim()
+        : row.receiptRealizedAt != null && String(row.receiptRealizedAt).trim() !== ''
+          ? String(row.receiptRealizedAt).trim()
+          : null,
   };
 }
 
@@ -191,8 +197,26 @@ export const TechnicianFinanceService = {
           entry.splitGroupId != null && String(entry.splitGroupId).trim() !== ''
             ? String(entry.splitGroupId).trim()
             : null,
+        receipt_realized_at:
+          entry.receiptRealizedAt != null && String(entry.receiptRealizedAt).trim() !== ''
+            ? String(entry.receiptRealizedAt).trim()
+            : null,
         owner_email: ownerEmail || null,
       },
+      ownerEmail
+    );
+  },
+
+  /** Receita do checklist: marca como efetivamente recebida (controla «lançada» → «realizada»). */
+  markRevenueAsReceived: async (id: string, ownerEmail?: string): Promise<void> => {
+    const raw = getTechFinanceRowById(id);
+    if (!raw) throw new Error('Lançamento não encontrado.');
+    const entry = rowToEntry(raw);
+    if (entry.kind !== 'revenue') throw new Error('Apenas receitas podem ser confirmadas.');
+    if (entry.source !== 'checklist') return;
+    if (entry.receiptRealizedAt) return;
+    await TechnicianFinanceService.saveEntry(
+      { ...entry, receiptRealizedAt: new Date().toISOString() },
       ownerEmail
     );
   },
@@ -400,6 +424,7 @@ export const TechnicianFinanceService = {
           attachments: i === 0 ? atts : undefined,
           splitGroupId,
           linkedTaskIds: linked,
+          receiptRealizedAt: partial.kind === 'revenue' ? new Date().toISOString() : null,
         };
         await TechnicianFinanceService.saveEntry(entry, ownerEmail);
         if (!firstSaved) firstSaved = entry;
@@ -430,6 +455,7 @@ export const TechnicianFinanceService = {
       createdAt: new Date().toISOString(),
       attachments:
         partial.attachments && partial.attachments.length > 0 ? partial.attachments : undefined,
+      receiptRealizedAt: partial.kind === 'revenue' ? new Date().toISOString() : null,
     };
     await TechnicianFinanceService.saveEntry(entry, ownerEmail);
     return entry;

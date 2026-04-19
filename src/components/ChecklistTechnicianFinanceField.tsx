@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, type ComponentProps } from 'react';
+import React, { useCallback, useMemo, useState, useRef, type ComponentProps } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   labelForTechnicianExpenseCategory,
   type TechnicianExpenseCategoryRow,
 } from '../utils/technicianExpenseCategoryCatalog';
+import { ValueInput, parseLocaleAmountString } from './ValueInput';
 
 type DraftLine = {
   entryId?: string;
@@ -24,10 +25,14 @@ type DraftLine = {
   categoryKey?: string;
 };
 
+type FinanceFieldMode = 'expense' | 'revenue';
+
 type Props = {
   value: string | undefined;
   onChange: (json: string) => void;
   readOnly: boolean;
+  /** Só despesas ou só receitas, conforme o tipo do campo no modelo. */
+  mode?: FinanceFieldMode;
 };
 
 function readMeta(prevRaw: string | undefined): { rev: number | null } {
@@ -53,7 +58,7 @@ function parseDraftLines(prevRaw: string | undefined): DraftLine[] {
       kind: x?.kind === 'revenue' ? 'revenue' : 'expense',
       amountStr:
         x?.amount !== undefined && x?.amount !== null && String(x.amount).trim() !== ''
-          ? String(x.amount).replace('.', ',')
+          ? String(x.amount)
           : '',
       description: x?.description != null ? String(x.description) : '',
       categoryKey:
@@ -66,10 +71,15 @@ function parseDraftLines(prevRaw: string | undefined): DraftLine[] {
   }
 }
 
+function parseAmountToNumber(amountStr: string): number {
+  const n = parseLocaleAmountString(String(amountStr || '').trim());
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
 function serialize(lines: DraftLine[], prevRaw: string | undefined): string {
   const { rev } = readMeta(prevRaw);
   const outLines = lines.map((l) => {
-    const amount = Math.max(0, Number(String(l.amountStr).replace(',', '.')) || 0);
+    const amount = Math.max(0, parseAmountToNumber(l.amountStr));
     const o: Record<string, unknown> = {
       kind: l.kind,
       amount,
@@ -86,7 +96,20 @@ function serialize(lines: DraftLine[], prevRaw: string | undefined): string {
   return JSON.stringify(base);
 }
 
-export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: Props) {
+function defaultKindForMode(mode: FinanceFieldMode): TechnicianFinanceKind {
+  if (mode === 'revenue') return 'revenue';
+  return 'expense';
+}
+
+export function ChecklistTechnicianFinanceField({
+  value,
+  onChange,
+  readOnly,
+  mode = 'expense',
+}: Props) {
+  const amountDraftByLineRef = useRef<Record<number, string>>({});
+  const amountEditingByLineRef = useRef<Record<number, boolean>>({});
+
   const [expenseCatalog, setExpenseCatalog] = useState<TechnicianExpenseCategoryRow[]>(() =>
     loadTechnicianExpenseCategoryCatalog()
   );
@@ -98,38 +121,56 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
   );
 
   const lines = useMemo(() => {
-    const d = parseDraftLines(value);
+    const d = parseDraftLines(value).map((l) => ({ ...l, kind: defaultKindForMode(mode) }));
+    const k0 = defaultKindForMode(mode);
     return d.length > 0
       ? d
       : readOnly
         ? []
-        : [{ kind: 'expense' as const, amountStr: '', description: '', categoryKey: undefined }];
-  }, [value, readOnly]);
+        : [{ kind: k0, amountStr: '', description: '', categoryKey: undefined }];
+  }, [value, readOnly, mode]);
+
+  const mergeAmountDraftsIntoLines = useCallback((next: DraftLine[]): DraftLine[] => {
+    return next.map((l, i) => {
+      if (!amountEditingByLineRef.current[i]) return l;
+      const draft = amountDraftByLineRef.current[i];
+      if (draft === undefined) return l;
+      if (draft.trim() === '') return { ...l, amountStr: '' };
+      const n = parseLocaleAmountString(draft);
+      return { ...l, amountStr: String(n) };
+    });
+  }, []);
 
   const push = useCallback(
     (next: DraftLine[]) => {
-      onChange(serialize(next, value));
+      const merged = mergeAmountDraftsIntoLines(next);
+      const norm = merged.map((l) => ({ ...l, kind: defaultKindForMode(mode) }));
+      onChange(serialize(norm, value));
     },
-    [onChange, value]
+    [onChange, value, mode, mergeAmountDraftsIntoLines]
   );
 
   const setLines = useCallback(
     (updater: (prev: DraftLine[]) => DraftLine[]) => {
       const prev = parseDraftLines(value);
+      const k0 = defaultKindForMode(mode);
       const base =
         prev.length > 0
           ? prev
-          : [{ kind: 'expense' as const, amountStr: '', description: '', categoryKey: undefined }];
+          : [{ kind: k0, amountStr: '', description: '', categoryKey: undefined }];
       push(updater(base));
     },
-    [push, value]
+    [push, value, mode]
   );
 
   const addLine = () => {
-    setLines((prev) => [...prev, { kind: 'expense', amountStr: '', description: '', categoryKey: undefined }]);
+    const k0 = defaultKindForMode(mode);
+    setLines((prev) => [...prev, { kind: k0, amountStr: '', description: '', categoryKey: undefined }]);
   };
 
   const removeLine = (idx: number) => {
+    amountDraftByLineRef.current = {};
+    amountEditingByLineRef.current = {};
     setLines((prev) => prev.filter((_, i) => i !== idx));
   };
 
@@ -140,20 +181,28 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
   const fmtBrl = (n: number) =>
     n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
 
+  const hintText =
+    mode === 'revenue'
+      ? 'Registre receitas associadas a este atendimento. Ficam no financeiro técnico (separado dos bens).'
+      : 'Registre despesas associadas a este atendimento. Ficam no financeiro técnico (separado dos bens).';
+
   if (readOnly) {
-    const display = parseDraftLines(value).filter((l) => Number(String(l.amountStr).replace(',', '.')) > 0);
+    const display = parseDraftLines(value)
+      .map((l) => ({ ...l, kind: defaultKindForMode(mode) }))
+      .filter((l) => parseAmountToNumber(l.amountStr) > 0);
     if (display.length === 0) {
+      const emptyMsg = mode === 'revenue' ? 'Nenhuma receita registrada' : 'Nenhuma despesa registrada';
       return (
         <View style={styles.emptyBox}>
           <Ionicons name="wallet-outline" size={32} color="#94a3b8" />
-          <Text style={styles.emptyText}>Nenhum custo ou receita registrado</Text>
+          <Text style={styles.emptyText}>{emptyMsg}</Text>
         </View>
       );
     }
     return (
       <View style={{ gap: 10 }}>
         {display.map((l, i) => {
-          const amt = Number(String(l.amountStr).replace(',', '.')) || 0;
+          const amt = parseAmountToNumber(l.amountStr);
           const catLbl =
             l.kind === 'expense'
               ? labelForTechnicianExpenseCategory(expenseCatalog, l.categoryKey)
@@ -190,25 +239,19 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
 
   return (
     <View>
-      <Text style={styles.hint}>
-        Registre valores associados a este atendimento. Eles ficam no seu financeiro técnico (separado dos bens).
-      </Text>
+      <Text style={styles.hint}>{hintText}</Text>
       <View style={{ gap: 12 }}>
         {lines.map((l, idx) => (
           <View key={idx} style={styles.editCard}>
-            <View style={styles.kindRow}>
-              <TouchableOpacity
-                style={[styles.kindBtn, l.kind === 'expense' && styles.kindBtnOnExp]}
-                onPress={() => updateLine(idx, { kind: 'expense' })}
+            <View style={styles.singleKindBar}>
+              <View
+                style={[
+                  styles.kindPillStatic,
+                  defaultKindForMode(mode) === 'revenue' ? styles.kindRev : styles.kindExp,
+                ]}
               >
-                <Text style={[styles.kindBtnTxt, l.kind === 'expense' && styles.kindBtnTxtOn]}>Despesa</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.kindBtn, l.kind === 'revenue' && styles.kindBtnOnRev]}
-                onPress={() => updateLine(idx, { kind: 'revenue' })}
-              >
-                <Text style={[styles.kindBtnTxt, l.kind === 'revenue' && styles.kindBtnTxtOn]}>Receita</Text>
-              </TouchableOpacity>
+                <Text style={styles.kindPillText}>{defaultKindForMode(mode) === 'revenue' ? 'Receita' : 'Despesa'}</Text>
+              </View>
               <View style={{ flex: 1 }} />
               {lines.length > 1 ? (
                 <TouchableOpacity onPress={() => removeLine(idx)} hitSlop={10}>
@@ -217,13 +260,19 @@ export function ChecklistTechnicianFinanceField({ value, onChange, readOnly }: P
               ) : null}
             </View>
             <Text style={styles.lbl}>Valor (R$)</Text>
-            <TextInput
+            <ValueInput
               style={styles.input}
-              keyboardType="decimal-pad"
               placeholder="0,00"
-              placeholderTextColor="#94a3b8"
+              currency
+              currencySymbol="R$"
               value={l.amountStr}
-              onChangeText={(t) => updateLine(idx, { amountStr: t })}
+              onChangeText={(canon) => updateLine(idx, { amountStr: canon })}
+              onDraftChange={(t) => {
+                amountDraftByLineRef.current[idx] = t;
+              }}
+              onEditingStateChange={(editing) => {
+                amountEditingByLineRef.current[idx] = editing;
+              }}
             />
             {l.kind === 'expense' ? (
               <>
@@ -346,19 +395,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  kindBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  kindBtnOnExp: { backgroundColor: '#fee2e2', borderColor: '#fecaca' },
-  kindBtnOnRev: { backgroundColor: '#d1fae5', borderColor: '#a7f3d0' },
-  kindBtnTxt: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  kindBtnTxtOn: { color: '#0f172a' },
+  singleKindBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  kindPillStatic: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   lbl: { fontSize: 11, fontWeight: '700', color: '#475569', marginBottom: 4 },
   input: {
     borderWidth: 1,

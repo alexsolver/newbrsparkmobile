@@ -23,14 +23,22 @@ function isTerminalStatus(st: string): boolean {
   return TERMINAL.has(st);
 }
 
-/** Chave do modelo no cache (alinhada ao sync: refId / metadata.refId / templateId). */
+/**
+ * ID do modelo de checklist na OS: `refId`, `metadata.refId`, `templateId` no topo ou em `metadata`.
+ * Vazio quando o payload não traz modelo (ex.: dados antigos).
+ */
+export function taskEffectiveChecklistTemplateId(t: any): string {
+  const m = t?.metadata && typeof t.metadata === 'object' ? (t.metadata as Record<string, unknown>) : null;
+  const refFromMeta = m?.refId != null ? String(m.refId).trim() : '';
+  const tplFromMeta = m?.templateId != null ? String(m.templateId).trim() : '';
+  const ref = String(t?.refId || refFromMeta || t?.templateId || tplFromMeta || '').trim();
+  if (!ref || ref === 'null' || ref === 'undefined') return '';
+  return ref;
+}
+
+/** Chave do modelo no cache (RT + FT): mesmo critério que `taskEffectiveChecklistTemplateId`. */
 export function routineTemplateKey(t: any): string {
-  const m = t?.metadata;
-  const refFromMeta =
-    m && typeof m === 'object' && (m as { refId?: unknown }).refId != null
-      ? String((m as { refId?: string }).refId).trim()
-      : '';
-  const ref = String(t?.refId || refFromMeta || t?.templateId || '').trim();
+  const ref = taskEffectiveChecklistTemplateId(t);
   return ref || `__no_tpl__:${String(t?.id || '')}`;
 }
 

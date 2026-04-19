@@ -40,12 +40,16 @@ router.get('/form', async (req, res) => {
       sortOrder: q.sortOrder,
     }));
 
+    const tpl = full.template;
     res.json({
       instanceId: full.id,
-      templateName: full.template?.name || 'Avaliação',
+      templateName: tpl?.name || 'Avaliação',
       osNumber: full.execution?.osNumber || null,
       expiresAt: full.publicTokenExpiresAt,
       questions,
+      surveyLogoUrl: tpl?.surveyLogoUrl || null,
+      surveyMessagePre: tpl?.surveyMessagePre || null,
+      surveyMessagePost: tpl?.surveyMessagePost || null,
     });
   } catch (err) {
     console.error('GET /evaluations/public/form', err);

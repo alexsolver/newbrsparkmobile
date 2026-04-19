@@ -80,7 +80,11 @@ export function mergePresetConfig(raw) {
  */
 export function isFieldVisible(config, fieldId, fieldType) {
   if (!fieldId) return true;
-  if (fieldType === 'technician_finance') {
+  if (
+    fieldType === 'technician_finance' ||
+    fieldType === 'technician_finance_expense' ||
+    fieldType === 'technician_finance_revenue'
+  ) {
     const f = config.fields && config.fields[fieldId];
     if (!f || typeof f !== 'object') return false;
     return !!f.visible;

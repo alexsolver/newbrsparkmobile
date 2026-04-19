@@ -28,6 +28,12 @@ const VideoPlayer = ({ uri, style }: { uri: string; style: any }) => {
 const { width: SW } = Dimensions.get('window');
 const CARD = (SW - 48) / 2;
 
+const getValidCoords = (latitude?: number, longitude?: number): [number, number] | null =>
+  Number.isFinite(latitude) && Number.isFinite(longitude) ? [latitude as number, longitude as number] : null;
+
+const formatCoords = (latitude: number, longitude: number, decimals: number) =>
+  `${latitude.toFixed(decimals)}, ${longitude.toFixed(decimals)}`;
+
 const TAG_KEYS = ['BEFORE', 'DURING', 'AFTER', 'DAMAGE', 'WARRANTY', 'OTHER'] as const;
 
 function createMediaModuleStyles(C: ColorPalette) {
@@ -111,10 +117,11 @@ const MediaCard = React.memo(function MediaCardInner({ item, t, onDelete, onPres
 }) {
   const { colors: palette } = useTheme();
   const stampLines: string[] = [];
+  const coords = getValidCoords(item.latitude, item.longitude);
   if (item.stampedDatetime) stampLines.push(new Date(item.createdAt).toLocaleString('pt-BR'));
   if (operatorName) stampLines.push(operatorName);
   if (item.stampedGeo && item.address) stampLines.push(`\u{1F4CD} ${item.address}`);
-  if (item.stampedGeo && item.latitude) stampLines.push(`${item.latitude.toFixed(4)}, ${item.longitude?.toFixed(4)}`);
+  if (item.stampedGeo && coords) stampLines.push(formatCoords(coords[0], coords[1], 4));
 
   return (
     <TouchableOpacity activeOpacity={0.88} onPress={() => onPress(item)}>
@@ -159,11 +166,11 @@ const MediaCard = React.memo(function MediaCardInner({ item, t, onDelete, onPres
           {!!item.description && (
             <Text style={MS.cardDesc} numberOfLines={2}>{item.description}</Text>
           )}
-          {item.stampedGeo && (
+          {item.stampedGeo && (item.address || coords) && (
             <View style={MS.metaRow}>
               <Ionicons name="location" size={9} color={palette.textSecondary} />
               <Text style={MS.metaTxt} numberOfLines={1}>
-                {item.address || `${item.latitude?.toFixed(3)}, ${item.longitude?.toFixed(3)}`}
+                {item.address || (coords ? formatCoords(coords[0], coords[1], 3) : '')}
               </Text>
             </View>
           )}
@@ -339,12 +346,15 @@ export function MediaModule({ assetId }: { assetId: string }) {
   // Stamp overlay helper
   const StampOverlay = ({ item }: { item: MediaItem }) => {
     if (!item.stampedGeo && !item.stampedDatetime) return null;
+    const coords = getValidCoords(item.latitude, item.longitude);
     return (
       <View style={S.viewerStamp} pointerEvents="none">
         {item.stampedDatetime && <Text style={S.viewerStampTxt}>🕐 {new Date(item.createdAt).toLocaleString('pt-BR')}</Text>}
         {user?.name && <Text style={S.viewerStampTxt}>{user.name}</Text>}
         {item.stampedGeo && item.address && <Text style={S.viewerStampTxt}>📍 {item.address}</Text>}
-        {item.stampedGeo && item.latitude && <Text style={[S.viewerStampTxt, { opacity: 0.8 }]}>{item.latitude.toFixed(6)}, {item.longitude?.toFixed(6)}</Text>}
+        {item.stampedGeo && coords && (
+          <Text style={[S.viewerStampTxt, { opacity: 0.8 }]}>{formatCoords(coords[0], coords[1], 6)}</Text>
+        )}
       </View>
     );
   };

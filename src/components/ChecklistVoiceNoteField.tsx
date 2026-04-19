@@ -402,7 +402,7 @@ export function ChecklistVoiceNoteField({
       return;
     }
     if (!uri) {
-      const msg = 'Gravação sem ficheiro.';
+      const msg = 'Gravação sem arquivo.';
       setErrMsg(msg);
       setPhase('error');
       emitState({ phase: 'error', error: msg });

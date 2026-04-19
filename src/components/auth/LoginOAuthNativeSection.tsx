@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   StyleSheet,
   Text,
@@ -16,6 +17,28 @@ import type { ColorPalette } from '../../theme/colors';
 
 WebBrowser.maybeCompleteAuthSession();
 
+/** Cores oficiais (aprox.) – Google, Meta/Facebook, Apple */
+const GOOGLE = {
+  bg: '#FFFFFF',
+  border: '#DADCE0',
+  text: '#1F1F1F',
+  icon: '#4285F4',
+};
+
+const META_FACEBOOK = {
+  /** Azul de marca (Facebook / Meta) */
+  bg: '#1877F2',
+  text: '#FFFFFF',
+  border: '#1877F2',
+};
+
+const APPLE = {
+  /** Sign in with Apple: botão escuro + texto/ícone claros (HIG) */
+  bg: '#000000',
+  text: '#FFFFFF',
+  border: '#000000',
+};
+
 export type NativeOAuthPending = {
   provider: 'google' | 'facebook' | 'apple';
   idToken?: string;
@@ -25,6 +48,7 @@ export type NativeOAuthPending = {
 function googleEnvReady(): boolean {
   const web = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
   if (!web) return false;
+  if (Platform.OS === 'web') return true;
   if (Platform.OS === 'ios') {
     return Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim());
   }
@@ -38,9 +62,9 @@ function facebookEnvReady(): boolean {
   return Boolean(process.env.EXPO_PUBLIC_FACEBOOK_APP_ID?.trim());
 }
 
-function GoogleSignInRow(props: {
+/** Só montar quando as env estiverem completas; senão o hook de OAuth falha. */
+function GoogleWithHookRow(props: {
   disabled: boolean;
-  C: ColorPalette;
   labelGoogle: string;
   onToken: (idToken: string) => Promise<void>;
   onNativeError?: (message: string) => void;
@@ -77,27 +101,50 @@ function GoogleSignInRow(props: {
 
   return (
     <TouchableOpacity
-      style={[styles.oauthBtn, { borderColor: props.C.border, backgroundColor: props.C.background }]}
+      style={[
+        styles.oauthBtn,
+        { borderColor: GOOGLE.border, backgroundColor: GOOGLE.bg },
+      ]}
       onPress={() => void onPress()}
       disabled={props.disabled || busy}
       activeOpacity={0.8}
     >
       {busy ? (
-        <ActivityIndicator color={props.C.primary} />
+        <ActivityIndicator color={GOOGLE.icon} />
       ) : (
         <>
-          <Ionicons name="logo-google" size={20} color={props.C.primary} style={styles.oauthIcon} />
-          <Text style={[styles.oauthBtnText, { color: props.C.primary }]}>{props.labelGoogle}</Text>
+          <Ionicons name="logo-google" size={20} color={GOOGLE.icon} style={styles.oauthIcon} />
+          <Text style={[styles.oauthBtnText, { color: GOOGLE.text }]}>{props.labelGoogle}</Text>
         </>
       )}
     </TouchableOpacity>
   );
 }
 
-function FacebookSignInRow(props: {
+function GoogleUnconfiguredButton(props: {
   disabled: boolean;
-  C: ColorPalette;
-  labelFacebook: string;
+  labelGoogle: string;
+  onNeedConfig: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.oauthBtn,
+        { borderColor: GOOGLE.border, backgroundColor: GOOGLE.bg, opacity: props.disabled ? 0.55 : 0.9 },
+      ]}
+      onPress={props.onNeedConfig}
+      disabled={props.disabled}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="logo-google" size={20} color={GOOGLE.icon} style={styles.oauthIcon} />
+      <Text style={[styles.oauthBtnText, { color: GOOGLE.text }]}>{props.labelGoogle}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function FacebookWithHookRow(props: {
+  disabled: boolean;
+  labelMeta: string;
   onAccessToken: (token: string) => Promise<void>;
   onNativeError?: (message: string) => void;
 }) {
@@ -125,26 +172,53 @@ function FacebookSignInRow(props: {
 
   return (
     <TouchableOpacity
-      style={[styles.oauthBtn, { borderColor: props.C.border, backgroundColor: props.C.background }]}
+      style={[
+        styles.oauthBtn,
+        { borderColor: META_FACEBOOK.border, backgroundColor: META_FACEBOOK.bg },
+      ]}
       onPress={() => void onPress()}
       disabled={props.disabled || busy}
       activeOpacity={0.8}
     >
       {busy ? (
-        <ActivityIndicator color={props.C.primary} />
+        <ActivityIndicator color={META_FACEBOOK.text} />
       ) : (
         <>
-          <Ionicons name="logo-facebook" size={20} color="#1877F2" style={styles.oauthIcon} />
-          <Text style={[styles.oauthBtnText, { color: props.C.primary }]}>{props.labelFacebook}</Text>
+          <Ionicons name="logo-facebook" size={20} color={META_FACEBOOK.text} style={styles.oauthIcon} />
+          <Text style={[styles.oauthBtnText, { color: META_FACEBOOK.text }]}>{props.labelMeta}</Text>
         </>
       )}
     </TouchableOpacity>
   );
 }
 
+function FacebookUnconfiguredButton(props: {
+  disabled: boolean;
+  labelMeta: string;
+  onNeedConfig: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.oauthBtn,
+        {
+          borderColor: META_FACEBOOK.border,
+          backgroundColor: META_FACEBOOK.bg,
+          opacity: props.disabled ? 0.55 : 0.9,
+        },
+      ]}
+      onPress={props.onNeedConfig}
+      disabled={props.disabled}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="logo-facebook" size={20} color={META_FACEBOOK.text} style={styles.oauthIcon} />
+      <Text style={[styles.oauthBtnText, { color: META_FACEBOOK.text }]}>{props.labelMeta}</Text>
+    </TouchableOpacity>
+  );
+}
+
 function AppleSignInRow(props: {
   disabled: boolean;
-  C: ColorPalette;
   labelApple: string;
   onIdentityToken: (idToken: string) => Promise<void>;
   onNativeError?: (message: string) => void;
@@ -193,17 +267,20 @@ function AppleSignInRow(props: {
 
   return (
     <TouchableOpacity
-      style={[styles.oauthBtn, { borderColor: props.C.border, backgroundColor: props.C.primary }]}
+      style={[
+        styles.oauthBtn,
+        { borderColor: APPLE.border, backgroundColor: APPLE.bg },
+      ]}
       onPress={() => void onPress()}
       disabled={props.disabled || busy}
       activeOpacity={0.8}
     >
       {busy ? (
-        <ActivityIndicator color={props.C.cardWhite} />
+        <ActivityIndicator color={APPLE.text} />
       ) : (
         <>
-          <Ionicons name="logo-apple" size={20} color={props.C.cardWhite} style={styles.oauthIcon} />
-          <Text style={[styles.oauthBtnText, { color: props.C.cardWhite }]}>{props.labelApple}</Text>
+          <Ionicons name="logo-apple" size={20} color={APPLE.text} style={styles.oauthIcon} />
+          <Text style={[styles.oauthBtnText, { color: APPLE.text }]}>{props.labelApple}</Text>
         </>
       )}
     </TouchableOpacity>
@@ -234,22 +311,26 @@ export type LoginOAuthNativeSectionProps = {
   disabled: boolean;
   labelDivider: string;
   labelGoogle: string;
-  labelFacebook: string;
+  labelMeta: string;
   labelApple: string;
+  /** Aviso quando faltam EXPO_PUBLIC_GOOGLE_* ou EXPO_PUBLIC_FACEBOOK_APP_ID */
+  unconfiguredOauthMessage: string;
   onOAuth: (pending: NativeOAuthPending) => Promise<void>;
   onNativeError?: (message: string) => void;
 };
 
 /**
- * Botões de login social (Google / Facebook via expo-auth-session; Apple nativa no iOS).
- * Só monta Google/Facebook quando as variáveis EXPO_PUBLIC_* estiverem definidas.
+ * Google / Meta (Facebook) e Apple, com a identidade visual aproximada de cada marca.
+ * Google e Meta mostram-se sempre; sem env o toque explica. Apple só iOS.
  */
 export function LoginOAuthNativeSection(props: LoginOAuthNativeSectionProps) {
-  const showGoogle = googleEnvReady();
-  const showFacebook = facebookEnvReady();
   const showApple = Platform.OS === 'ios';
+  const gReady = googleEnvReady();
+  const fReady = facebookEnvReady();
+  const platformOk =
+    Platform.OS === 'ios' || Platform.OS === 'android' || Platform.OS === 'web';
 
-  if (!showGoogle && !showFacebook && !showApple) {
+  if (!platformOk) {
     return null;
   }
 
@@ -260,9 +341,8 @@ export function LoginOAuthNativeSection(props: LoginOAuthNativeSectionProps) {
         <Text style={[styles.dividerText, { color: props.C.textLight }]}>{props.labelDivider}</Text>
         <View style={[styles.dividerLine, { backgroundColor: props.C.border }]} />
       </View>
-      {showGoogle ? (
-        <GoogleSignInRow
-          C={props.C}
+      {gReady ? (
+        <GoogleWithHookRow
           disabled={props.disabled}
           labelGoogle={props.labelGoogle}
           onNativeError={props.onNativeError}
@@ -270,21 +350,41 @@ export function LoginOAuthNativeSection(props: LoginOAuthNativeSectionProps) {
             await props.onOAuth({ provider: 'google', idToken });
           }}
         />
-      ) : null}
-      {showFacebook ? (
-        <FacebookSignInRow
-          C={props.C}
+      ) : (
+        <GoogleUnconfiguredButton
           disabled={props.disabled}
-          labelFacebook={props.labelFacebook}
+          labelGoogle={props.labelGoogle}
+          onNeedConfig={() =>
+            Alert.alert(
+              props.labelGoogle,
+              props.unconfiguredOauthMessage,
+            )
+          }
+        />
+      )}
+      {fReady ? (
+        <FacebookWithHookRow
+          disabled={props.disabled}
+          labelMeta={props.labelMeta}
           onNativeError={props.onNativeError}
           onAccessToken={async (accessToken) => {
             await props.onOAuth({ provider: 'facebook', accessToken });
           }}
         />
-      ) : null}
+      ) : (
+        <FacebookUnconfiguredButton
+          disabled={props.disabled}
+          labelMeta={props.labelMeta}
+          onNeedConfig={() =>
+            Alert.alert(
+              props.labelMeta,
+              props.unconfiguredOauthMessage,
+            )
+          }
+        />
+      )}
       {showApple ? (
         <AppleSignInRow
-          C={props.C}
           disabled={props.disabled}
           labelApple={props.labelApple}
           onNativeError={props.onNativeError}

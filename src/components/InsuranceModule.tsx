@@ -4,7 +4,7 @@ import {
   Alert, Image, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, DeviceEventEmitter
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ValueInput } from './ValueInput';
+import { ValueInput, parseLocaleAmountString } from './ValueInput';
 import { type ColorPalette } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { InsuranceService } from '../services/insuranceService';
@@ -477,7 +477,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                         style={S.input}
                         placeholder="0,00"
                         value={form.premiumValue ? String(form.premiumValue) : ''}
-                        onChangeText={v => setForm(f => ({ ...f, premiumValue: parseFloat(v) || 0 }))}
+                        onChangeText={v => setForm((f) => ({ ...f, premiumValue: parseLocaleAmountString(v) }))}
                         currency
                       />
                     </View>
@@ -487,7 +487,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                         style={S.input}
                         placeholder="0,00"
                         value={form.deductible ? String(form.deductible) : ''}
-                        onChangeText={v => setForm(f => ({ ...f, deductible: parseFloat(v) || 0 }))}
+                        onChangeText={v => setForm((f) => ({ ...f, deductible: parseLocaleAmountString(v) }))}
                         currency
                       />
                     </View>
@@ -498,7 +498,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                     style={S.input}
                     placeholder="0,00"
                     value={form.coverageAmount ? String(form.coverageAmount) : ''}
-                    onChangeText={v => setForm(f => ({ ...f, coverageAmount: parseFloat(v) || 0 }))}
+                    onChangeText={v => setForm((f) => ({ ...f, coverageAmount: parseLocaleAmountString(v) }))}
                     currency
                   />
 

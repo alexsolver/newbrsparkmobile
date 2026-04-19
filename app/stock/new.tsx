@@ -97,7 +97,7 @@ export default function NewStockScreen() {
       {assets.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
           <Ionicons name="cube-outline" size={64} color={C.border} />
-          <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>Nenhum Bem cadastrado</Text>
+          <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>Nenhum ativo cadastrado</Text>
           <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
             Para organizar seu estoque, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
           </Text>

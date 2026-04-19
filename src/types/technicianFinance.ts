@@ -33,4 +33,10 @@ export type TechnicianFinanceEntry = {
    * Mesmo valor em todas as linhas de um rateio manual (estável após sync; o `id` por linha pode mudar).
    */
   splitGroupId?: string | null;
+  /**
+   * Receitas: momento em que o valor foi efetivamente recebido (ISO).
+   * Ausente ou null = só lançada no módulo (ex.: aceite no checklist), ainda a controlar como recebimento.
+   * Registos manuais de receita são gravados já como recebidos (`createdAt`).
+   */
+  receiptRealizedAt?: string | null;
 };

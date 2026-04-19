@@ -17,11 +17,12 @@ import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
 import { getLocalAssets } from '../database';
 import { Asset } from '../types/asset';
 import { useAuth } from '../hooks/useAuth';
+import { usePersona } from '../context/PersonaContext';
+import { getPersonaTabHref } from '../navigation/personaRouting';
 import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { useConnectivity } from '../hooks/useConnectivity';
 import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
 import { NotificationService } from '../services/notifications';
-import { userHasCapability } from '../services/auth';
 import { useTranslation } from 'react-i18next';
 import { MODE_SEGMENT_COLORS } from '../theme/colors';
 import { fontSize, fontWeight, radius } from '../theme/layout';
@@ -130,6 +131,7 @@ const TAB_ROOT_PATHS = new Set([
   'media',
   'notifications',
   'orders',
+  'provider-os-search-tab',
   'scanner',
   'services',
   'stock',
@@ -143,20 +145,40 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const params = useLocalSearchParams();
   const { colors: C, appDisplayName, resolvedLogoUrl } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
-  const { mode, setMode, guardRef } = useAppContext();
-  const { user, userRole } = useAuth();
-  const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
+  const { guardRef } = useAppContext();
+  const { user } = useAuth();
+  const { activePersona } = usePersona();
+  /** Troca cliente ↔ prestador: Configurações; o cabeçalho só mostra o seletor (Serviços/Ativos) na persona cliente. */
   const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
   const gpsIssue = useGpsAuraIssue();
-  const [notifUnread, setNotifUnread] = useState(() => NotificationService.getUnreadCount());
+  /** Logo do tenant vem por URL; sem rede o RN pode deixar o `Image` vazio — voltamos ao PNG embutido. */
+  const [headerLogoRemoteFailed, setHeaderLogoRemoteFailed] = useState(false);
+  const [headerLogoRemoteLoaded, setHeaderLogoRemoteLoaded] = useState(false);
+  useEffect(() => {
+    setHeaderLogoRemoteFailed(false);
+    setHeaderLogoRemoteLoaded(false);
+  }, [resolvedLogoUrl]);
+  useEffect(() => {
+    if (isOnline === true) setHeaderLogoRemoteFailed(false);
+    if (isOnline !== true) setHeaderLogoRemoteLoaded(false);
+  }, [isOnline]);
+  const canShowRemoteLogo = !!resolvedLogoUrl && isOnline === true && !headerLogoRemoteFailed;
+
+  const [notifUnread, setNotifUnread] = useState(() =>
+    NotificationService.getUnreadCount(activePersona)
+  );
+
+  useEffect(() => {
+    setNotifUnread(NotificationService.getUnreadCount(activePersona));
+  }, [activePersona]);
 
   useEffect(() => {
     const unsub = NotificationService.subscribe(() => {
-      setNotifUnread(NotificationService.getUnreadCount());
+      setNotifUnread(NotificationService.getUnreadCount(activePersona));
     });
     return unsub;
-  }, []);
+  }, [activePersona]);
 
   // Pulse animation for the online dot
   const pulse = useRef(new Animated.Value(1)).current;
@@ -183,188 +205,155 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
 
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
+  const pStr = String(pathname || '');
   const isProviderOsSearch =
-    segments[0] === 'provider-os-search' || pathname === '/provider-os-search';
+    segments[0] === 'provider-os-search' ||
+    pathname === '/provider-os-search' ||
+    pStr.includes('provider-os-search-tab') ||
+    (segments as string[]).includes('provider-os-search-tab');
+  /** Mesmo modelo que Busca de OS: faixa global + `ScreenSubheader` na stack (não usar `Header` com título). */
+  const isStackWithGlobalAppBar =
+    (segments[0] === 'stock' && segments[1] === 'mobile') ||
+    segments[0] === 'finance' ||
+    segments[0] === 'productivity' ||
+    pathname.startsWith('/stock/mobile') ||
+    pathname.startsWith('/finance/') ||
+    pathname.startsWith('/productivity/');
   const firstPathSegment = String(pathname || '')
     .replace(/^\/+/, '')
     .split('/')[0]
     .trim()
     .toLowerCase();
+  const pathParts = String(pathname || '')
+    .replace(/^\/+/, '')
+    .split('/')
+    .map((p) => p.trim().toLowerCase())
+    .filter((p) => p.length > 0 && p !== '(tabs)' && p !== '(client)' && p !== '(provider)');
+  /**
+   * `TAB_ROOT_PATHS` só deve equivaler à “raiz” da aba quando o path não tem sub-rota stack
+   * (ex.: `/stock/mobile`, `/documents/new` trazem `Header` próprio — evitar cabeçalho duplicado).
+   */
+  const isShallowTabPathGuess =
+    TAB_ROOT_PATHS.has(firstPathSegment) && pathParts.length <= 1;
   /** Rotas em que o cabeçalho global aparece — `useSegments` por vezes omite o grupo `(tabs)` no arranque. */
   const isTabs =
+    segments[0] === '(client)' ||
+    segments[0] === '(provider)' ||
     segments[0] === '(tabs)' ||
+    pathname.startsWith('/(client)/') ||
+    pathname.startsWith('/(provider)/') ||
     pathname.startsWith('/(tabs)') ||
     pathname === '/' ||
     pathname === '/index' ||
-    TAB_ROOT_PATHS.has(firstPathSegment);
+    isShallowTabPathGuess;
+
+  /**
+   * Rótulo de modo (SERVIÇOS / BENS no cliente, PRESTADOR no prestador) — raiz de cada aba, não em stacks
+   * (ex. asset/123). O Início falha muito com: só `['(provider)','(tabs)']` em `segments` (falta `index` no 3.º
+   * segmento) — por isso há fallback por `pathname` + `pathParts` (já filtra (client)/(provider)/(tabs)).
+   */
+  const inClientOrProviderPath = pStr.includes('(client)') || pStr.includes('(provider)');
+  const isPersonaTabByPathname =
+    inClientOrProviderPath &&
+    pathParts.length <= 1 &&
+    (pathParts.length === 0 || (pathParts[0] && TAB_ROOT_PATHS.has(String(pathParts[0]))));
+  const segs = segments as string[];
+  const atClientOrProvider = segs[0] === '(client)' || segs[0] === '(provider)';
+  /** Aba "index" por vezes o Expo não inclui: sobra só `(client|provider)` + `(tabs)` */
+  const isPersonaDefaultTabsSlot =
+    atClientOrProvider && segs.length === 2 && segs[1] === '(tabs)';
+  const isPersonaTopTabPathBySegments =
+    atClientOrProvider &&
+    (segs.length <= 1 ||
+      isPersonaDefaultTabsSlot ||
+      (segs.length === 2 && !!segs[1] && segs[1] !== '(tabs)' && TAB_ROOT_PATHS.has(String(segs[1]))) ||
+      (segs.length === 3 && segs[1] === '(tabs)' && segs[2] && TAB_ROOT_PATHS.has(String(segs[2]))));
+  const showModeSegmentBadge =
+    isPersonaTopTabPathBySegments ||
+    isPersonaTabByPathname ||
+    isStackWithGlobalAppBar ||
+    (activePersona === 'provider' && isProviderOsSearch);
 
   // O Header global (injetado no _layout.tsx) não recebe `title`.
   // Devemos escondê-lo completamente se não estivermos nas abas principais, no perfil ou no detalhe do ativo.
-  if (!title && !isTabs && !isProfile && !isAssetDetail && !isProviderOsSearch) {
+  if (!title && !isTabs && !isProfile && !isAssetDetail && !isProviderOsSearch && !isStackWithGlobalAppBar) {
     return null;
   }
 
   const asset = isAssetDetail && params.id ? getLocalAssets().find(a => a.id === params.id) : null;
 
-  const showBensInBadge = mode !== 'PROVIDER';
-  const badgeSegmentCount =
-    (userRole === 'CLIENT' ? 1 : 0) + (showBensInBadge ? 1 : 0) + (canUseProviderMode ? 1 : 0);
-
-  const segmentHitSlop = { top: 10, bottom: 10, left: 4, right: 4 } as const;
-  const segBase = {
-    flex: 1,
-    minHeight: 32,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    borderRadius: radius.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  };
+  /** Largura máx. do rótulo de concha: logo, alertas e avatar. */
+  const headerSideReserve = 32 + 108 + 104;
+  const maxBadgeByScreen = Math.max(104, windowWidth - headerSideReserve);
 
   const segLabelStyle = {
     fontSize: 9,
     lineHeight: 12,
     letterSpacing: 0.1,
     textAlign: 'center' as const,
-    /** Não usar adjustsFontSizeToFit: com flex igual por segmento, "PRESTADOR" ficava microscópico vs "BENS". */
   };
 
-  /** Largura um pouco maior com 2 segmentos para "PRESTADOR" + "BENS" sem apertar o texto. */
-  const idealBadgeWidth = badgeSegmentCount <= 1 ? 122 : badgeSegmentCount === 2 ? 186 : 228;
-  /** Espaço entre logo (≈100) + margem, alertas + avatar à direita — evita sobrepor o logo com absolute center. */
-  const headerSideReserve = 32 + 108 + 104;
-  const maxBadgeByScreen = Math.max(104, windowWidth - headerSideReserve);
-  const badgeWidth = Math.min(idealBadgeWidth, maxBadgeByScreen);
-
-  const renderBadge = () => (
-    <View
-      style={{
-        flexDirection: 'row',
-        backgroundColor: C.surfaceLow,
-        borderRadius: radius.md,
-        paddingHorizontal: 3,
-        paddingVertical: 2,
-        width: badgeWidth,
-        maxWidth: '100%',
-        alignItems: 'center',
-      }}
-    >
-      {userRole === 'CLIENT' && (
-        <TouchableOpacity
-          hitSlop={segmentHitSlop}
-          onPress={() => {
-            setMode('SERVICES');
-            if (segments[0] !== '(tabs)') router.push('/(tabs)');
+  /** Rótulo estático (não muda concha: quem muda é Perfil) — mesmo aspeto para Cliente e Prestador. */
+  const renderPersonaModePill = (label: string, accent: string, accessibilityLabel: string) => {
+    const w = Math.min(122, maxBadgeByScreen);
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          backgroundColor: C.surfaceLow,
+          borderRadius: radius.md,
+          paddingHorizontal: 3,
+          paddingVertical: 2,
+          width: w,
+          maxWidth: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        accessible
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="text"
+      >
+        <View
+          style={{
+            flex: 0,
+            flexGrow: 0,
+            minWidth: 0,
+            minHeight: 32,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: radius.sm,
+            paddingHorizontal: 12,
+            paddingVertical: 1,
+            backgroundColor: C.cardWhite,
+            shadowColor: C.slate,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.06,
+            shadowRadius: 2,
+            elevation: 1,
           }}
-          activeOpacity={0.8}
-          style={[
-            segBase,
-            {
-              backgroundColor: mode === 'SERVICES' ? C.cardWhite : 'transparent',
-              shadowColor: mode === 'SERVICES' ? C.slate : 'transparent',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: mode === 'SERVICES' ? 0.06 : 0,
-              shadowRadius: 2,
-              elevation: mode === 'SERVICES' ? 1 : 0,
-            },
-          ]}
         >
           <Text
             numberOfLines={1}
             ellipsizeMode="clip"
             style={[
               segLabelStyle,
-              {
-                fontWeight: mode === 'SERVICES' ? fontWeight.black : fontWeight.bold,
-                color: mode === 'SERVICES' ? MODE_SEGMENT_COLORS.SERVICES : C.textLight,
-              },
+              { fontWeight: fontWeight.black, color: accent },
             ]}
           >
-            SERVIÇOS
+            {label}
           </Text>
-        </TouchableOpacity>
-      )}
+        </View>
+      </View>
+    );
+  };
 
-      {showBensInBadge && (
-        <TouchableOpacity
-          hitSlop={segmentHitSlop}
-          onPress={() => {
-            setMode('ASSETS');
-            if (segments[0] !== '(tabs)') router.push('/(tabs)');
-          }}
-          activeOpacity={0.8}
-          style={[
-            segBase,
-            {
-              backgroundColor: mode === 'ASSETS' ? C.cardWhite : 'transparent',
-              shadowColor: mode === 'ASSETS' ? C.slate : 'transparent',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: mode === 'ASSETS' ? 0.06 : 0,
-              shadowRadius: 2,
-              elevation: mode === 'ASSETS' ? 1 : 0,
-            },
-          ]}
-        >
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="clip"
-            style={[
-              segLabelStyle,
-              {
-                fontWeight: mode === 'ASSETS' ? fontWeight.black : fontWeight.bold,
-                color: mode === 'ASSETS' ? MODE_SEGMENT_COLORS.ASSETS : C.textLight,
-              },
-            ]}
-          >
-            BENS
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {canUseProviderMode && (
-        <TouchableOpacity
-          hitSlop={segmentHitSlop}
-          onPress={() => {
-            setMode('PROVIDER');
-            if (segments[0] !== '(tabs)') router.push('/(tabs)');
-          }}
-          activeOpacity={0.8}
-          style={[
-            segBase,
-            {
-              backgroundColor: mode === 'PROVIDER' ? C.cardWhite : 'transparent',
-              shadowColor: mode === 'PROVIDER' ? C.slate : 'transparent',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: mode === 'PROVIDER' ? 0.06 : 0,
-              shadowRadius: 2,
-              elevation: mode === 'PROVIDER' ? 1 : 0,
-            },
-          ]}
-        >
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="clip"
-            style={[
-              segLabelStyle,
-              {
-                fontWeight: mode === 'PROVIDER' ? fontWeight.black : fontWeight.bold,
-                color: mode === 'PROVIDER' ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight,
-              },
-            ]}
-          >
-            PRESTADOR
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+  const notifFocused = /(\(client\)|\(provider\))\/\(tabs\)\/notifications|\/(tabs)\/notifications/.test(
+    String(pathname || '')
   );
-
-  const notifFocused =
-    segments[0] === '(tabs)' && segments.length > 1 && segments[1] === 'notifications';
 
   const renderAlertsHeaderButton = () => (
     <TouchableOpacity
-      onPress={() => router.push('/(tabs)/notifications' as any)}
+      onPress={() => router.push(getPersonaTabHref(activePersona, 'notifications') as any)}
       accessibilityRole="button"
       accessibilityLabel={t('tabs.notifications')}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -420,12 +409,21 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           elevation: 30,
         }}
       >
-        <View style={{ height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
-          {/* Left: Back + Title */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View
+          style={{
+            height: 64,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            gap: 8,
+          }}
+        >
+          {/* Esquerda: ocupa o espaço restante; título com ellipsis para não empurrar sino/avatar */}
+          <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <TouchableOpacity
               onPress={onLeftPress || (() => checkGuardBeforeBack(guardRef, () => router.back()))}
               style={{
+                flexShrink: 0,
                 minWidth: 44,
                 minHeight: 44,
                 borderRadius: 22,
@@ -437,43 +435,67 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               <Ionicons name={(leftIcon as any) || 'arrow-back'} size={22} color={C.slate} />
             </TouchableOpacity>
 
-            {resolvedLogoUrl ? (
-              <Image
-                source={{ uri: resolvedLogoUrl }}
-                style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }}
-                resizeMode="contain"
-              />
-            ) : (
+            <View style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4, flexShrink: 0 }}>
               <Image
                 source={require('../../assets/logo.png')}
-                style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4 }}
+                style={{ width: 70, height: 22 }}
                 resizeMode="contain"
               />
-            )}
+              {canShowRemoteLogo ? (
+                <Image
+                  source={{ uri: resolvedLogoUrl! }}
+                  style={{ position: 'absolute', left: 0, top: 0, width: 70, height: 22, opacity: headerLogoRemoteLoaded ? 1 : 0 }}
+                  resizeMode="contain"
+                  onLoad={() => setHeaderLogoRemoteLoaded(true)}
+                  onError={() => setHeaderLogoRemoteFailed(true)}
+                />
+              ) : null}
+            </View>
 
             {title ? (
-              <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}>
-                {title}
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={{
+                    fontSize: fontSize.lg,
+                    fontWeight: fontWeight.black,
+                    color: C.slate,
+                    letterSpacing: -0.5,
+                  }}
+                >
+                  {title}
+                </Text>
+              </View>
             ) : isAssetDetail && asset ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Image
                   source={{ uri: asset.imageUrl || 'https://via.placeholder.com/150' }}
-                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.border }}
+                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.border, flexShrink: 0 }}
                 />
-                <Text style={{ fontSize: fontSize.sm, fontWeight: fontWeight.black, color: C.slate, maxWidth: 160 }} numberOfLines={1}>
+                <Text
+                  style={{ flex: 1, minWidth: 0, fontSize: fontSize.sm, fontWeight: fontWeight.black, color: C.slate }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   {asset.title}
                 </Text>
               </View>
             ) : isProfile ? (
-              <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}>
-                Configurações
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}
+                >
+                  Configurações
+                </Text>
+              </View>
             ) : null}
           </View>
 
-          {/* Right: alertas + avatar */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Direita: alertas + avatar (largura fixa, nunca comprimida) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {!isProfile ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 {renderAlertsHeaderButton()}
@@ -509,20 +531,23 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
         {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}
         <View style={{ flexShrink: 0, marginRight: 8 }}>
-          {resolvedLogoUrl ? (
-            <Image
-              source={{ uri: resolvedLogoUrl }}
-              style={{ width: 100, height: 32 }}
-              resizeMode="contain"
-            />
-          ) : (
+          <View style={{ width: 100, height: 32 }}>
             <Image
               source={require('../../assets/logo.png')}
               style={{ width: 100, height: 32 }}
               resizeMode="contain"
             />
-          )}
-          {!resolvedLogoUrl ? null : (
+            {canShowRemoteLogo ? (
+              <Image
+                source={{ uri: resolvedLogoUrl! }}
+                style={{ position: 'absolute', left: 0, top: 0, width: 100, height: 32, opacity: headerLogoRemoteLoaded ? 1 : 0 }}
+                resizeMode="contain"
+                onLoad={() => setHeaderLogoRemoteLoaded(true)}
+                onError={() => setHeaderLogoRemoteFailed(true)}
+              />
+            ) : null}
+          </View>
+          {!resolvedLogoUrl || !canShowRemoteLogo || !headerLogoRemoteLoaded ? null : (
             <Text
               numberOfLines={1}
               style={{ fontSize: 9, fontWeight: '800', color: C.textLight, marginTop: -2 }}
@@ -532,7 +557,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           )}
         </View>
 
-        {/* Centro: só o espaço entre logo e avatar (o seletor já não invade o logo) */}
+        {/* Centro: rótulo de concha (só na persona prestador) entre logo e avatar */}
         <View
           style={{
             flex: 1,
@@ -542,7 +567,9 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           }}
           pointerEvents="box-none"
         >
-          {(segments.length <= 1 || segments[1] === 'index') && renderBadge()}
+          {showModeSegmentBadge && activePersona === 'provider'
+            ? renderPersonaModePill('PRESTADOR', MODE_SEGMENT_COLORS.PROVIDER, 'Prestador')
+            : null}
         </View>
 
         {/* Direita: alertas + avatar */}

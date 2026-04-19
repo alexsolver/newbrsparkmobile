@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadFtCloudTasks, loadAllCloudTasksForExecutionLookup } from '../lib/cloudTasksBuckets';
+import { taskEffectiveChecklistTemplateId } from '../lib/routineTaskQueueUi';
 import { getTaskIdsWithPendingExecutionStatusOutbox } from '../services/syncService';
 import { fetchChecklistTemplateSchema, schemaArrayHasTechnicianFinance } from '../services/checklistTemplateSchema';
 import { taskOsLabel } from './taskOsLabel';
@@ -9,10 +10,14 @@ import {
   SERVER_COMPLETED_STATUSES,
 } from './providerTaskStatus';
 
+export type LinkableOsLinkKind = 'open' | 'completed';
+
 export type LinkableExpenseTask = {
   id: string;
   refId: string;
   displayLine: string;
+  /** Aberta no fluxo (pendente / em andamento / pausada) ou concluída há até 30 dias. */
+  linkKind: LinkableOsLinkKind;
 };
 
 export function isPendingOrInAttendance(status: string): boolean {
@@ -162,8 +167,8 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
     }
     const id = String(t.id);
     if (rejectedSet.has(id)) continue;
-    const refId = t.refId != null ? String(t.refId).trim() : '';
-    if (!refId || refId === 'null') continue;
+    const refId = taskEffectiveChecklistTemplateId(t);
+    if (!refId) continue;
     if (
       !isTaskEligibleForManualExpenseLink(
         t,
@@ -177,7 +182,7 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
     candidates.push(t);
   }
 
-  const refIds = [...new Set(candidates.map((t) => String(t.refId).trim()))];
+  const refIds = [...new Set(candidates.map((t) => taskEffectiveChecklistTemplateId(t)).filter(Boolean))];
   const refOk = new Set<string>();
   for (const rid of refIds) {
     const schema = await fetchChecklistTemplateSchema(rid);
@@ -186,8 +191,10 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
 
   const out: LinkableExpenseTask[] = [];
   for (const t of candidates) {
-    const rid = String(t.refId).trim();
-    if (!refOk.has(rid)) continue;
+    const rid = taskEffectiveChecklistTemplateId(t);
+    if (!rid || !refOk.has(rid)) continue;
+    const eff = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
+    const linkKind: LinkableOsLinkKind = isPendingOrInAttendance(eff) ? 'open' : 'completed';
     const label = taskOsLabel({
       osNumber: t.osNumber ?? t.os_number,
       id: String(t.id),
@@ -197,9 +204,13 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
       id: String(t.id),
       refId: rid,
       displayLine: `${label} — ${title}`.slice(0, 120),
+      linkKind,
     });
   }
-  out.sort((a, b) => a.displayLine.localeCompare(b.displayLine, 'pt-BR'));
+  out.sort((a, b) => {
+    if (a.linkKind !== b.linkKind) return a.linkKind === 'open' ? -1 : 1;
+    return a.displayLine.localeCompare(b.displayLine, 'pt-BR');
+  });
   return out;
 }
 

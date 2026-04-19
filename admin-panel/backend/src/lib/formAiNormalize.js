@@ -12,9 +12,20 @@ const {
 
 /** Alinhado a `fb_prop_vision_default_structured_prompt` (Visão de IA — análise / Gemini). */
 const DEFAULT_VISION_ANALYSIS_PROMPT =
-  'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-  'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-  'Explique de forma breve, citando elementos objetivos observados na mídia.';
+  'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+  'Tarefa:\n' +
+  '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+  '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+  'Campo value (obrigatório):\n' +
+  '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+  '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+  'Rubrica orientativa:\n' +
+  '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+  '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+  '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+  '- 7–8: bom estado geral; apenas falhas leves.\n' +
+  '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+  'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.';
 
 /** Alinhado a `fb_prop_vision_default_detection_prompt` (Visão de IA — detecção / YOLO). */
 const DEFAULT_VISION_DETECTION_PROMPT =
@@ -114,7 +125,7 @@ function defaultFieldShell(type, label) {
     ...(t === 'vision_ai_analysis'
       ? {
           visionAnalysisGrid: '1x1',
-          visionRating0To10Enabled: false,
+          visionRating0To10Enabled: true,
           visionShowAiResponseInForm: true,
         }
       : {}),

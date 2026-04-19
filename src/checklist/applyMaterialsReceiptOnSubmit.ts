@@ -1,5 +1,57 @@
 import { TechnicianStockService } from '../services/technicianStockService';
+import type { StockItem } from '../types/stock';
 import { linesToDesiredMap, parseMaterialsValue } from './applyMaterialsStockOnSubmit';
+import {
+  parseMaterialsReceiptValue,
+  type MaterialsReceiptLineV2,
+} from './materialsReceiptValue';
+
+function metaTechnicianStockId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const o = meta as Record<string, unknown>;
+  for (const k of ['technician_stock_item_id', 'itemId', 'stockItemId', 'tech_stock_id']) {
+    const v = o[k];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return null;
+}
+
+/**
+ * Associa linha da integração ao item local do estoque técnico (meta explícita ou SKU).
+ */
+export function resolveReceiptLineToStockItemId(l: MaterialsReceiptLineV2, items: StockItem[]): string | null {
+  const fromMeta = metaTechnicianStockId(l.meta);
+  if (fromMeta) {
+    const hit = items.find((i) => i.id === fromMeta);
+    if (hit) return hit.id;
+  }
+  const sku = String(l.sku || '').trim();
+  if (!sku) return null;
+  const low = sku.toLowerCase();
+  const bySku = items.find((i) => String(i.sku || '').trim().toLowerCase() === low);
+  return bySku ? bySku.id : null;
+}
+
+async function buildDesiredMapFromReceiptV2(
+  lines: MaterialsReceiptLineV2[],
+  ownerEmail: string
+): Promise<Record<string, number>> {
+  const allItems = await TechnicianStockService.getItems(ownerEmail);
+  const desired: Record<string, number> = {};
+  for (const l of lines) {
+    if (l.decision !== 'accepted' || l.qty <= 0) continue;
+    const itemId = resolveReceiptLineToStockItemId(l, allItems);
+    if (!itemId) {
+      const label = String(l.name || '').trim() || 'Item';
+      const sk = String(l.sku || '').trim() || '—';
+      throw new Error(
+        `Não foi possível associar "${label}" (SKU ${sk}) ao seu estoque técnico. Cadastre o produto com o mesmo SKU em "Meu estoque" ou solicite à central o vínculo (meta técnico na integração).`
+      );
+    }
+    desired[itemId] = (desired[itemId] || 0) + l.qty;
+  }
+  return desired;
+}
 
 function sectionAllowsRepeat(sectionField: any) {
   return sectionField?.type === 'section_break' && !!sectionField?.multiple;
@@ -66,6 +118,69 @@ export async function applyMaterialsReceiptForSubmission(args: {
     rowSuffix: string
   ) => {
     const raw = read();
+    const receipt = parseMaterialsReceiptValue(raw);
+
+    if (receipt.version === 2) {
+      if (receipt.stockAppliedRev != null && receipt.stockAppliedRev === R) return;
+
+      const desired = await buildDesiredMapFromReceiptV2(receipt.lines, ownerEmail);
+      const prev = receipt.lastApplied || {};
+      const ids = new Set([...Object.keys(desired), ...Object.keys(prev)]);
+
+      for (const itemId of ids) {
+        const d = desired[itemId] || 0;
+        const p = prev[itemId] || 0;
+        const delta = d - p;
+        if (delta === 0) continue;
+
+        const item = await ensureItemInMap(itemId);
+        if (!item) {
+          throw new Error(`Item de stock não encontrado (${itemId}). Sincronize o inventário.`);
+        }
+        if (delta < 0 && item.currentStock < -delta) {
+          throw new Error(`Saldo insuficiente para reverter entrada em "${item.name}" (SKU ${item.sku}).`);
+        }
+
+        const ftRaw = osNumber != null ? String(osNumber).trim() : '';
+        const ftSeg = ftRaw !== '' ? `:FT:${ftRaw.replace(/:/g, '-')}` : '';
+        const baseReason = `CHK:${templateId}:TASK:${taskId}:REV:${R}${ftSeg}:FLD:${field.id}${rowSuffix}`;
+
+        if (delta > 0) {
+          await TechnicianStockService.recordMovement(
+            {
+              itemId,
+              type: 'IN',
+              quantity: delta,
+              responsibleId: ownerEmail,
+              reason: `${baseReason}:RCPT`,
+            },
+            ownerEmail
+          );
+        } else {
+          await TechnicianStockService.recordMovement(
+            {
+              itemId,
+              type: 'OUT',
+              quantity: -delta,
+              responsibleId: ownerEmail,
+              reason: `${baseReason}:RCPT:ADJ`,
+            },
+            ownerEmail
+          );
+        }
+        await refreshItemInMap(itemId);
+      }
+
+      const next = JSON.stringify({
+        v: 2,
+        lines: receipt.lines,
+        stockAppliedRev: R,
+        lastApplied: desired,
+      });
+      write(next);
+      return;
+    }
+
     const parsed = parseMaterialsValue(raw);
     if (parsed.stockAppliedRev != null && parsed.stockAppliedRev === R) return;
 

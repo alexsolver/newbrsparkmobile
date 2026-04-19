@@ -14,8 +14,9 @@ import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ColorPalette, MEDIA_TAG_COLORS } from '../../../src/theme/colors';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../src/theme/ThemeContext';
-import { Header } from '../../../src/components/Header';
+import { ScreenSubheader } from '../../../src/components/ScreenSubheader';
 import { TechnicianStockService } from '../../../src/services/technicianStockService';
 import { BarcodeService } from '../../../src/services/barcodeService';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -25,6 +26,7 @@ import { StockItem } from '../../../src/types/stock';
  * Cadastro apenas no estoque do técnico (sem bem / local de ativo).
  */
 export default function NewTechnicianStockScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createTechnicianStockNewStyles(C), [C]);
@@ -101,7 +103,11 @@ export default function NewTechnicianStockScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Novo material (técnico)" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <ScreenSubheader
+        title="Novo material (técnico)"
+        subtitle={t('technicianMobile.stockNewScreenSubtitle')}
+        onBack={() => router.back()}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {isScanning ? (

@@ -17,6 +17,13 @@ const FIELD_SPECS = [
     descPt: 'Bloco só leitura (rich text) no app — contratos, avisos; sem resposta nem links.',
   },
   {
+    type: 'form_complete_button',
+    tier: 'core',
+    proposalsDefault: true,
+    descPt:
+      'Botão no corpo do formulário que executa a mesma ação do botão principal do rodapé (avançar etapa, voltar ao hub ou concluir OS). Útil no modo hub para o técnico não precisar procurar o rodapé.',
+  },
+  {
     type: 'voice_note',
     tier: 'core',
     proposalsDefault: true,
@@ -54,10 +61,16 @@ const FIELD_SPECS = [
     descPt: 'Entrada no estoque técnico (separado de bens); aumenta saldo ao submeter.',
   },
   {
-    type: 'technician_finance',
+    type: 'technician_finance_expense',
     tier: 'advanced',
     proposalsDefault: true,
-    descPt: 'Despesas/receitas do técnico por atendimento; módulo financeiro técnico (sem bens).',
+    descPt: 'Apenas despesas do técnico ligadas ao atendimento (campo dedicado, como consumo de materiais).',
+  },
+  {
+    type: 'technician_finance_revenue',
+    tier: 'advanced',
+    proposalsDefault: true,
+    descPt: 'Apenas receitas do técnico ligadas ao atendimento (campo dedicado).',
   },
   { type: 'location_pick', tier: 'core', proposalsDefault: true, descPt: 'GPS + mapa (alfinete).' },
   { type: 'hidden', tier: 'advanced', proposalsDefault: true, descPt: 'Campo oculto no celular.' },
@@ -297,7 +310,7 @@ function formatSchemaTypeDocBlock() {
  */
 function formatTransitDisplacementRulesForPrompt() {
   return `### Deslocamento (transit_start / transit_end)
-- **Regra fixa BrSpark:** com deslocamento ativo, **início** (\`transit_start\`) e **fim** (\`transit_end\`) ficam **sempre no início do formulário** para o técnico — o **primeiro bloco operacional** do preenchimento: (a) logo **após** o \`section_break\` que abre a **primeira etapa**, **antes** de fotos, assinaturas e restantes perguntas; ou (b), se existir zona «antes da primeira seção», ainda assim como **primeiros campos** dessa zona. **Nunca** os coloque no meio nem no rodapé do checklist.
+- **Regra fixa BrSpark:** com deslocamento ativo, **início** (\`transit_start\`) e **fim** (\`transit_end\`) ficam **sempre no início do formulário** para o técnico — o **primeiro bloco operacional** do preenchimento: (a) logo **após** o \`section_break\` que abre a **primeira etapa**, **antes** de fotos, assinaturas e restantes perguntas; ou (b), se existir **Área Externa** (campos antes do primeiro \`section_break\`), ainda assim como **primeiros campos** dessa zona. **Nunca** os coloque no meio nem no rodapé do checklist.
 - **Par obrigatório**: se houver \`transit_start\`, **tem de existir** \`transit_end\` no mesmo formulário. Não sugira nem crie só um dos dois.
 - **Ordem no array:** primeiro \`transit_start\`, depois \`transit_end\`; \`transit_end\` **nunca** antes do primeiro \`transit_start\`.
 - Em \`schemaPatch\` (ex.: \`add_field\` com \`afterId\`) ou \`schemaData\`, **garanta** essa posição no topo; não «empurre» o par para o fim com \`afterId\` em últimos campos.`;
@@ -325,7 +338,8 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   signature_summary: { icon: 'reader-outline', iconColor: '#0e7490' },
   materials_consumption: { icon: 'cube-outline', iconColor: '#ea580c' },
   materials_receipt: { icon: 'archive-outline', iconColor: '#16a34a' },
-  technician_finance: { icon: 'cash-outline', iconColor: '#15803d' },
+  technician_finance_expense: { icon: 'trending-down-outline', iconColor: '#b91c1c' },
+  technician_finance_revenue: { icon: 'trending-up-outline', iconColor: '#15803d' },
   location_pick: { icon: 'location-outline', iconColor: '#0ea5e9' },
   hidden: { icon: 'eye-off-outline', iconColor: '#94a3b8' },
   barcode_scan: { icon: 'barcode-outline', iconColor: '#475569' },
@@ -450,7 +464,8 @@ const ANALYZE_OPTION_SHORT_PT = {
   calculated: 'Calculado',
   materials_consumption: 'Materiais / consumo',
   materials_receipt: 'Materiais / entrada',
-  technician_finance: 'Custos do técnico',
+  technician_finance_expense: 'Despesas do técnico',
+  technician_finance_revenue: 'Receitas do técnico',
   image_annotation: 'Foto com anotações',
   lookup_select: 'Lista dinâmica',
   repeatable_matrix: 'Matriz repetível',

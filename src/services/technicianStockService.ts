@@ -94,6 +94,7 @@ export const TechnicianStockService = {
         title: `Estoque técnico: ${item.name}`,
         body: `Saldo baixo: ${item.currentStock} ${item.unit}. SKU: ${item.sku}.`,
         category: 'alert',
+        personaScope: 'provider',
       });
     }
 

@@ -135,7 +135,8 @@ router.post('/push', async (req, res) => {
           case 'CREATE_ASSET':
           case 'UPDATE_ASSET': {
             let safeType = p.type || 'OTHER';
-            if (safeType === 'VEHICLE') safeType = 'TERRESTRIAL'; // Intercept corrupt mobile sync queue
+            if (safeType === 'VEHICLE') safeType = 'MOBILITY';
+            if (safeType === 'TERRESTRIAL') safeType = 'MOBILITY';
 
             await prisma.asset.upsert({
               where: { id: p.id },
@@ -324,6 +325,26 @@ function toYmd(d) {
   return x.toISOString().split('T')[0];
 }
 
+/** Ícone do formulário (`ChecklistTemplate.metadata`) para o cartão da OS no app. */
+function parseChecklistTemplateMetadataIcon(templateRow) {
+  if (!templateRow) return { icon: '', iconLibrary: '' };
+  const raw = templateRow.metadata;
+  let o = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    o = raw;
+  } else if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      if (p && typeof p === 'object' && !Array.isArray(p)) o = p;
+    } catch {
+      o = {};
+    }
+  }
+  const icon = o.icon != null ? String(o.icon).trim() : '';
+  const iconLibrary = o.iconLibrary != null ? String(o.iconLibrary).trim() : '';
+  return { icon, iconLibrary };
+}
+
 function mapChecklistExecutionToSyncTask(ex) {
   let meta = ex.metadata || {};
   if (typeof meta === 'string') {
@@ -332,6 +353,15 @@ function mapChecklistExecutionToSyncTask(ex) {
     } catch (e) {
       meta = {};
     }
+  }
+
+  const { icon: templateIcon, iconLibrary: templateIconLibrary } = parseChecklistTemplateMetadataIcon(
+    ex.template
+  );
+  const metaOut = { ...meta };
+  if (templateIcon) {
+    metaOut.icon = templateIcon;
+    metaOut.iconLibrary = templateIconLibrary || 'Ionicons';
   }
 
   const refId = meta.refId || ex.templateId || null;
@@ -410,18 +440,18 @@ function mapChecklistExecutionToSyncTask(ex) {
     endDate,
     isAllDay,
     source: isRt ? 'ROUTINE_TASK' : 'CHECKLIST',
-    metadata: meta,
+    metadata: metaOut,
     title,
     templateTitle,
     description,
     status: ex.status,
-    locationLat: ex.locationLat || null,
-    locationLng: ex.locationLng || null,
-    locationRadius: ex.locationRadius || null,
+    locationLat: ex.locationLat ?? null,
+    locationLng: ex.locationLng ?? null,
+    locationRadius: ex.locationRadius ?? null,
     locationAddress: ex.locationAddress || null,
     locationZoneType: ex.locationZoneType || null,
     locationPolygon: ex.locationPolygon || null,
-    etaMinutes: ex.etaMinutes || null,
+    etaMinutes: ex.etaMinutes ?? null,
     scheduledStartAt,
     agendaStartAt,
     agendaEndAt,
@@ -542,4 +572,3 @@ router.get('/tasks', async (req, res) => {
 router.get('/tech-stock/movements/search', techStockMovementsSearchHandler);
 
 module.exports = router;
-

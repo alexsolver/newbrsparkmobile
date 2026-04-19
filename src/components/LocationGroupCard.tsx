@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { AssetLocation } from '../types/asset';
+import { getAssetRootVisual } from '../assetKind';
 
 type GroupItem = {
   id: string;
@@ -24,14 +25,6 @@ interface Props {
   onDeleteLocation?: () => void;
   onUnlinkItem?: (item: GroupItem) => void; // optional: show unlink button per item
 }
-
-const TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string }> = {
-  TERRESTRIAL: { icon: 'car-outline',      color: '#904D00', bg: '#FFF7ED' },
-  REAL_ESTATE: { icon: 'business-outline', color: '#FF8C00', bg: '#FFF8F1' },
-  AQUATIC:     { icon: 'boat-outline',     color: '#006B5C', bg: '#E0F2F1' },
-  SPECIAL:     { icon: 'star-outline',     color: '#70797C', bg: '#F3F4F5' },
-  OTHER:       { icon: 'cube-outline',     color: '#565E61', bg: '#F3F4F5' },
-};
 
 export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLocation, onUnlinkItem }: Props) {
   const { colors: C } = useTheme();
@@ -99,7 +92,7 @@ export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLoca
             </View>
           ) : (
             group.items.map(item => {
-              const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.OTHER;
+              const cfg = getAssetRootVisual(item.type);
               const photos = item.details?.photos?.length ? item.details.photos : (item.imageUrl ? [item.imageUrl] : []);
               return (
                 <View key={item.id} style={{ width: 84, alignItems: 'center', gap: 6, position: 'relative' }}>
@@ -111,7 +104,7 @@ export function LocationGroupCard({ group, onItemPress, onAddChild, onDeleteLoca
                     <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: cfg.bg, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
                       {photos.length > 0
                         ? <Image source={{ uri: photos[0] }} style={{ width: 64, height: 64 }} />
-                        : <Ionicons name={cfg.icon} size={28} color={cfg.color} />
+                        : <Ionicons name={cfg.icon as any} size={28} color={cfg.color} />
                       }
                     </View>
                     <Text style={{ fontSize: 9, fontWeight: '800', color: '#191C1D', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.2 }} numberOfLines={2}>

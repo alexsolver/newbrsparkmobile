@@ -86,6 +86,7 @@ model Tenant {
   collectionPolicies   CollectionPolicy[]
   complianceDocs       ComplianceDoc[]       @relation("TenantComplianceDocs")
   materialsReceiptInputs MaterialsReceiptInput[]
+  technicianRevenueInputs TechnicianRevenueInput[]
   evaluationTemplates   EvaluationTemplate[]
   evaluationInstances   EvaluationInstance[]
   evaluationActionPlans EvaluationActionPlan[]
@@ -226,9 +227,11 @@ model ProviderIdentity {
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   globalStatus  String   @default("PENDING") // PENDING, VERIFIED, REJECTED, SUSPENDED
-  kycStatus     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  kycStatus     String   @default("PENDING") // PENDING, APPROVED, REJECTED, PROCESSING, FAILED
   kycReviewedAt DateTime?
   kycReviewNote String?
+  kycProvider   String?  @map("kyc_provider")
+  kycExternalId String?  @map("kyc_external_id")
   score         Float    @default(5.0)
   cft           String?
   specialty     String?
@@ -448,6 +451,7 @@ model User {
   currentSessionId String?
   currentDeviceId  String?
   materialsReceiptInputs MaterialsReceiptInput[] @relation("MaterialsReceiptConductor")
+  technicianRevenueInputs TechnicianRevenueInput[] @relation("TechnicianRevenueConductor")
   evaluationInstancesAsTechnician EvaluationInstance[] @relation("EvaluationInstanceTechnician")
   evaluationAcknowledgements      EvaluationAcknowledgement[]
   evaluationInternalNotes         EvaluationInternalNote[]
@@ -463,9 +467,38 @@ model User {
   workTimeBrazilRegime    WorkTimeBrazilRegime? @map("work_time_brazil_regime")
   /// Notas visíveis só no painel admin (suporte / operações)
   adminInternalNotes String? @map("admin_internal_notes") @db.Text
+  /// Termos de plataforma (Fase 4) — data e rótulo de versão
+  termsAcceptedAt    DateTime? @map("terms_accepted_at")
+  termsVersion       String?   @map("terms_version")
+  /// OTP por telefone (Fase 1)
+  phoneVerifiedAt    DateTime? @map("phone_verified_at")
+  /// URL do contrato/termo assinado (ZapSign etc.)
+  platformContractUrl String? @map("platform_contract_url")
 
   @@unique([email, tenantId])
   @@unique([tenantId, employeeMatricula])
+}
+
+/// Sessão de OTP (login / registo com telefone ou e-mail) — códigos são guardados com hash
+model OtpLoginChallenge {
+  id            String   @id @default(cuid())
+  channel       String   // SMS | WHATSAPP | EMAIL
+  target        String
+  /// bcrypt hash do código
+  codeHash      String
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(5)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  consumedAt    DateTime?
+  userId        String?
+  /// Propósito: login | register | tech_identify
+  purpose       String   @default("login")
+  /// Metadados (deviceId, locale, ipHash)
+  metadataJson  Json?
+
+  @@index([target, purpose, createdAt])
+  @@index([expiresAt])
 }
 
 model TechnicianProfile {
@@ -525,8 +558,12 @@ model Asset {
 
 enum AssetType {
   REAL_ESTATE
-  TERRESTRIAL
+  TERRESTRIAL // legado — migrar para MOBILITY / MACHINERY
+  MOBILITY
+  MACHINERY
   AQUATIC
+  IT
+  COLLECTIONS
   SPECIAL
   OTHER
 }
@@ -838,6 +875,22 @@ model ServiceProvider {
   updatedAt DateTime @updatedAt
 }
 // ─────────────────────────────────────────────────────────
+// Feed iCal (ocupação) por ativo — URL pública com token para Airbnb importar
+// ─────────────────────────────────────────────────────────
+model AssetOccupancyCalendarFeed {
+  id         String   @id @default(cuid())
+  ownerEmail String
+  assetId    String
+  token      String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([ownerEmail, assetId])
+  @@index([ownerEmail])
+  @@index([assetId])
+}
+
+// ─────────────────────────────────────────────────────────
 // DADOS DE MÓDULOS DO APP MOBILE (sync offline-first)
 // Armazena JSON de cada módulo por ownerEmail, sem schema fixo.
 // ─────────────────────────────────────────────────────────
@@ -1036,6 +1089,25 @@ model MaterialsReceiptInput {
 
   @@index([tenantId, conductorId])
   @@map("materials_receipt_inputs")
+}
+
+/// Pré-carga de receitas do técnico (integração ERP/CRM → campo só leitura no app).
+model TechnicianRevenueInput {
+  id          String   @id @default(cuid())
+  conductorId String   @map("conductor_id")
+  tenantId    String   @map("tenant_id")
+  descricao   String
+  valor       Decimal  @map("valor") @db.Decimal(14, 4)
+  ftsOrigem   Json?    @map("fts_origem") @db.JsonB
+  meta        Json?    @map("meta") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conductor User   @relation("TechnicianRevenueConductor", fields: [conductorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conductorId])
+  @@map("technician_revenue_inputs")
 }
 
 model ChecklistExecution {
@@ -1403,6 +1475,12 @@ model EvaluationTemplate {
   type         EvaluationTemplateType
   active       Boolean                @default(true)
   triggerRules Json?
+  /// URL pública do logo na pesquisa ao cliente (evaluation-survey.html)
+  surveyLogoUrl     String?
+  /// Texto exibido antes das perguntas (HTML escapado na página pública)
+  surveyMessagePre  String? @db.Text
+  /// Mensagem de agradecimento após envio (substitui o texto padrão se preenchido)
+  surveyMessagePost String? @db.Text
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
 

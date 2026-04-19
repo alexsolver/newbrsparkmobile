@@ -31,6 +31,10 @@ const stockCriticalRoutes   = require('./routes/stockCritical');
 const i18nRoutes          = require('./routes/i18n');
 const storageRoutes       = require('./routes/storage');
 const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile (custos, seguros, vault…)
+const {
+  router: assetOccupancyCalendarRouter,
+  publicAssetOccupancyIcs,
+} = require('./routes/assetOccupancyCalendar');
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
@@ -120,6 +124,10 @@ app.use('/api/ai-technician-profile-photo', aiTechnicianProfilePhotoRoutes);
 app.use('/api/technician-registration/public', technicianRegistrationPublicRouter);
 app.use('/api/providers', providersPublicRouter);
 app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api/login | GET /api/me
+/** iCal ocupação por ativo — GET público (Airbnb importa por URL); POST com JWT gera token */
+app.get('/api/public/asset-occupancy.ics', publicAssetOccupancyIcs);
+app.use('/api/asset-occupancy-calendar', assetOccupancyCalendarRouter);
+app.use('/api/technician-onboarding', require('./routes/technicianOnboarding'));
 app.use('/api/maps/google', googleMapsRoutes); // app JWT: POST route-metrics, GET quota-preview
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
@@ -134,6 +142,7 @@ app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formul�
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
 app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punches (JWT usuário)
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
+app.use('/api/technician-revenue-inputs', require('./routes/technicianRevenueInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js
 app.use('/api/checklists', checklistsAiRoutes);
 app.use('/api/checklists', checklistsVisionRoutes);

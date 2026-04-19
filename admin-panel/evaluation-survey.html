@@ -93,10 +93,36 @@
     }
     .nps button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .nps button.on { background: var(--color-status-warning-bg); border-color: var(--accent); color: var(--accent); }
+    .survey-preview-banner {
+      background: var(--color-status-warning-bg, #FFEDD5);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .survey-brand { margin-bottom: 8px; }
+    .survey-logo-wrap { text-align: center; margin-bottom: 14px; }
+    .survey-logo-wrap img { max-height: 72px; max-width: 100%; object-fit: contain; }
+    .survey-pre {
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-bottom: 18px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <div id="survey-preview-banner" class="survey-preview-banner" style="display:none"></div>
+    <div id="survey-brand" class="survey-brand" style="display:none">
+      <div id="survey-logo-wrap" class="survey-logo-wrap" style="display:none"></div>
+      <div id="survey-pre" class="survey-pre" style="display:none"></div>
+    </div>
     <h1 id="title">Avaliação de serviço</h1>
     <p class="sub" id="sub">Carregando…</p>
     <div id="form-root"></div>

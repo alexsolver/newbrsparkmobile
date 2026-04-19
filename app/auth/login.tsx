@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
+import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
   API_BASE,
   AuthService,
@@ -41,8 +42,8 @@ function createLoginStyles(C: ColorPalette) {
     container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
     heroBg: {
       marginHorizontal: -28,
-      marginBottom: 20,
-      minHeight: 150,
+      marginBottom: 10,
+      minHeight: 130,
       justifyContent: 'flex-end',
       backgroundColor: C.surfaceLow,
       borderBottomLeftRadius: 26,
@@ -51,13 +52,13 @@ function createLoginStyles(C: ColorPalette) {
     },
     heroOverlay: {
       paddingHorizontal: 28,
-      paddingTop: 18,
-      paddingBottom: 22,
+      paddingTop: 14,
+      paddingBottom: 14,
       backgroundColor: 'rgba(15,23,42,0.35)',
     },
 
-    logoBlock: { alignItems: 'center', paddingTop: 40, paddingBottom: 36 },
-    logoImage: { width: 220, height: 80, marginBottom: 8 },
+    logoBlock: { alignItems: 'center', paddingTop: 20, paddingBottom: 8 },
+    logoImage: { width: 220, height: 80, marginBottom: 6 },
     logoSub: {
       fontSize: 12, color: C.textSecondary, fontWeight: '600',
       letterSpacing: 0.5,
@@ -285,7 +286,7 @@ export default function LoginScreen() {
       : undefined;
   const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
-  const { colors: C, appDisplayName, appTagline, resolvedLogoUrl, loginBackgroundUrl } = useTheme();
+  const { colors: C, appTagline, resolvedLogoUrl, loginBackgroundUrl } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
   const [mode, setMode] = useState<Mode>('LOGIN');
@@ -760,7 +761,6 @@ export default function LoginScreen() {
                   />
                 )}
                 <Text style={[styles.logoSub, { color: '#fff' }]}>{appTagline}</Text>
-                <Text style={[styles.logoSub, { marginTop: 6, fontSize: 13, color: '#fff' }]}>{appDisplayName}</Text>
               </View>
             </ImageBackground>
           ) : (
@@ -775,7 +775,6 @@ export default function LoginScreen() {
                 />
               )}
               <Text style={styles.logoSub}>{appTagline}</Text>
-              <Text style={[styles.logoSub, { marginTop: 6, fontSize: 13, color: C.primary }]}>{appDisplayName}</Text>
             </View>
           )}
 
@@ -794,6 +793,13 @@ export default function LoginScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('/auth/welcome' as any)}
+            style={{ marginBottom: 16, alignItems: 'center' }}
+          >
+            <Text style={styles.forgotLinkText}>{t('auth.otpEntryCta')}</Text>
+          </TouchableOpacity>
 
           {/* Form */}
           <View style={styles.form}>
@@ -930,8 +936,9 @@ export default function LoginScreen() {
                 disabled={loading}
                 labelDivider={t('auth.oauthOrContinue')}
                 labelGoogle={t('auth.oauthGoogle')}
-                labelFacebook={t('auth.oauthFacebook')}
+                labelMeta={t('auth.oauthMeta')}
                 labelApple={t('auth.oauthApple')}
+                unconfiguredOauthMessage={t('auth.oauthNotConfigured')}
                 onOAuth={(pending) => runNativeOAuthLogin(pending)}
                 onNativeError={(msg) =>
                   Alert.alert(t('auth.errorLogin'), msg || t('auth.errorConnection'))
@@ -939,7 +946,7 @@ export default function LoginScreen() {
               />
             ) : null}
 
-            <TouchableOpacity onPress={async () => { await logout(); router.replace('/(tabs)' as any); }} style={styles.guestLink}>
+            <TouchableOpacity onPress={async () => { await logout(); router.replace(getPersonaHomeHref('client') as any); }} style={styles.guestLink}>
               <Text style={styles.guestLinkText}>{t('auth.exploreGuest')}</Text>
             </TouchableOpacity>
           </View>

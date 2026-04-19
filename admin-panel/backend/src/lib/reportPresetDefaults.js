@@ -90,11 +90,15 @@ function mergePresetConfig(raw) {
 /**
  * @param {object} config
  * @param {string} fieldId
- * @param {string} [fieldType] — `technician_finance` fica oculto no PDF por padrão (só aparece se explicitamente visível no preset).
+ * @param {string} [fieldType] — campos financeiros do técnico ficam ocultos no PDF por padrão (só com visibilidade explícita no preset).
  */
 function isFieldVisible(config, fieldId, fieldType) {
   if (!fieldId) return true;
-  if (fieldType === 'technician_finance') {
+  if (
+    fieldType === 'technician_finance' ||
+    fieldType === 'technician_finance_expense' ||
+    fieldType === 'technician_finance_revenue'
+  ) {
     const f = config.fields && config.fields[fieldId];
     if (!f || typeof f !== 'object') return false;
     return !!f.visible;

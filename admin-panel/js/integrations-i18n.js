@@ -17,6 +17,9 @@ const M = {
     integ_sec_email: 'E-mail e notificações',
     integ_sec_catalog: 'Catálogos e APIs externas',
     integ_sec_storage: 'Storage e cloud',
+    integ_sec_payments: 'Pagamentos',
+    integ_sec_identity: 'Identidade (KYC)',
+    integ_didit_cat: 'KYC (didit.me)',
     integ_sec_maps: 'Mapas e roteamento',
     integ_sec_bio: 'Biometria e reconhecimento facial',
     integ_status_disconnected: 'Desconectado',
@@ -60,6 +63,11 @@ const M = {
     integ_type_PUSH: 'Push',
     integ_type_MAPS: 'Mapas',
     integ_type_VISION: 'Visão IA',
+    integ_type_PAYMENT: 'Pagamentos',
+    integ_alert_stripe_secret: 'Informe a chave secreta Stripe (sk_test_… ou sk_live_…).',
+    integ_toast_stripe_saved: 'Integração Stripe salva.',
+    integ_alert_didit_key: 'Informe a API key do Didit (cópia em API & Webhooks do consola).',
+    integ_toast_didit_saved: 'Integração Didit salva.',
   },
   'en-US': {
     integ_pageTitle: 'BrSpark Admin — Integrations',
@@ -73,6 +81,9 @@ const M = {
     integ_sec_email: 'E-mail and notifications',
     integ_sec_catalog: 'Catalogs and external APIs',
     integ_sec_storage: 'Storage and cloud',
+    integ_sec_payments: 'Payments',
+    integ_sec_identity: 'Identity (KYC)',
+    integ_didit_cat: 'KYC (didit.me)',
     integ_sec_maps: 'Maps and routing',
     integ_sec_bio: 'Biometrics and facial recognition',
     integ_status_disconnected: 'Disconnected',
@@ -116,6 +127,11 @@ const M = {
     integ_type_PUSH: 'Push',
     integ_type_MAPS: 'Maps',
     integ_type_VISION: 'Computer vision',
+    integ_type_PAYMENT: 'Payments',
+    integ_alert_stripe_secret: 'Enter the Stripe secret key (sk_test_… or sk_live_…).',
+    integ_toast_stripe_saved: 'Stripe integration saved.',
+    integ_alert_didit_key: 'Enter your Didit API key (from the console, API & Webhooks).',
+    integ_toast_didit_saved: 'Didit integration saved.',
   },
 };
 
@@ -158,11 +174,14 @@ export function applyIntegrationsPageI18n() {
     ['integ-sec-ai', 'integ_sec_ai'],
     ['integ-sec-email', 'integ_sec_email'],
     ['integ-sec-catalog', 'integ_sec_catalog'],
+    ['integ-sec-payments', 'integ_sec_payments'],
+    ['integ-sec-identity', 'integ_sec_identity'],
     ['integ-sec-storage', 'integ_sec_storage'],
     ['integ-sec-maps', 'integ_sec_maps'],
     ['integ-sec-bio', 'integ_sec_bio'],
   ];
   for (const [id, k] of sec) setText(id, k);
+  setText('didit-cat-label', 'integ_didit_cat');
 }
 
 /** Rótulo «○ Desconectado» / «○ Público» (sem prefixo, só o texto após ○). */

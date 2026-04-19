@@ -74,6 +74,7 @@ export const StockService = {
          title: `ESTOQUE CRÍTICO: ${item.name}`,
          body: `Limite atingido: ${item.currentStock} ${item.unit}. SKU: ${item.sku}.`,
          category: 'alert',
+         personaScope: 'client',
          assetId: item.locationId
        });
     }

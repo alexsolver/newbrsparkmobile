@@ -136,7 +136,10 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         : liveBranding;
 
   useEffect(() => {
-    if (liveBranding?.enabled === false || (!liveBranding && user?.tenant)) {
+    const tb = user?.tenant?.branding;
+    /** Só limpar cache quando o servidor diz explicitamente que o branding está desligado.
+     *  Nunca apagar só porque `branding` veio ausente na resposta (rede parcial / /me sem aninhar tenant). */
+    if (tb && tb.enabled === false) {
       setBrandingCache(null);
       AsyncStorage.removeItem(BRANDING_CACHE_KEY).catch(() => {});
       return;
@@ -147,7 +150,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     if (nextRaw === prevRaw) return;
     setBrandingCache(liveBranding);
     AsyncStorage.setItem(BRANDING_CACHE_KEY, nextRaw).catch(() => {});
-  }, [liveBranding, brandingCache]);
+  }, [liveBranding, brandingCache, user?.tenant?.branding]);
   const palette = useMemo(
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),
     [dark, branding],

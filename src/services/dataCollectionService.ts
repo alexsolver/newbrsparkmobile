@@ -177,7 +177,9 @@ class DataCollectionService {
 
       // se n passou loc no opts e for evento importante (ex: TRANSIT_START), força coleta no ato
       let burstTs: string | undefined;
-      if (!lat && !lng && (eventType === 'TRANSIT_START' || eventType === 'GEOFENCE_ENTER' || eventType === 'OS_START' || eventType === 'CHECKIN')) {
+      const hasLat = Number.isFinite(lat);
+      const hasLng = Number.isFinite(lng);
+      if ((!hasLat || !hasLng) && (eventType === 'TRANSIT_START' || eventType === 'GEOFENCE_ENTER' || eventType === 'OS_START' || eventType === 'CHECKIN')) {
         const burst = await this.burstCapture();
         if (burst) {
           lat = burst.lat;
@@ -262,7 +264,11 @@ class DataCollectionService {
           (loc) => this._onLocation(loc, 'HEARTBEAT')
         );
         // Start geofencing if we have a destination
-        if (lat && lng) await this._startGeofence(lat, lng);
+        const latNum = Number(lat);
+        const lngNum = Number(lng);
+        if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+          await this._startGeofence(latNum, lngNum);
+        }
         break;
 
       case 'DEPARTING':

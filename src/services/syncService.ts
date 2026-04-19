@@ -39,7 +39,7 @@ import {
   metadataIndicatesAdminRevisionCycle,
   shouldRemoveExecutedCacheForRemoteTask,
 } from './syncPolicy';
-import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
+import { taskRowIsRoutineTask, taskEffectiveChecklistTemplateId } from '../lib/routineTaskQueueUi';
 import {
   loadFtCloudTasks,
   loadRtCloudTasks,
@@ -51,6 +51,10 @@ import {
   updateStoredJsonArray,
   withAsyncStorageKeyLock,
 } from '../lib/asyncStorageAtomic';
+import {
+  compressLocalImageForChecklistSyncUpload,
+  isProbablyVideoExt,
+} from './checklistMediaUploadPrep';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
@@ -59,6 +63,9 @@ let isSyncing = false;
 const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
 const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
 const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
+const MEDIA_STUCK_ALERT_KEY = '@brspark_media_stuck_alert_v1';
+const MEDIA_STUCK_ATTEMPT_THRESHOLD = 3;
+const MEDIA_STUCK_ALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
 function normalizeStoredId(v: unknown): string {
   const s = String(v ?? '').trim();
@@ -76,6 +83,51 @@ function checklistOutboxTaskId(item: any): string {
 
 function checklistOutboxSubmissionId(item: any): string {
   return normalizeStoredId(item?.metadata?.submissionId || item?.submissionId);
+}
+
+function ensureOutboxPayloadMetadata(item: any): Record<string, unknown> {
+  if (!item || typeof item !== 'object') return {};
+  const current = item.metadata;
+  if (current && typeof current === 'object' && !Array.isArray(current)) {
+    return current as Record<string, unknown>;
+  }
+  const next: Record<string, unknown> = {};
+  (item as Record<string, unknown>).metadata = next;
+  return next;
+}
+
+function truncateErrMessage(raw: unknown, max = 220): string {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function registerChecklistMediaUploadError(
+  payload: any,
+  fieldRef: string,
+  err: any,
+): void {
+  if (!payload || typeof payload !== 'object') return;
+  const md = ensureOutboxPayloadMetadata(payload);
+  const codeRaw = String(err?.code || err?.name || '').trim();
+  const statusRaw = Number(err?.status);
+  const details = truncateErrMessage(err?.details || err?.responseText || err?.message || err);
+  const code = codeRaw ? codeRaw.toUpperCase() : 'UPLOAD_UNKNOWN';
+  md.__lastMediaUploadErrorCode = code;
+  md.__lastMediaUploadErrorStatus =
+    Number.isFinite(statusRaw) && statusRaw > 0 ? Math.floor(statusRaw) : null;
+  md.__lastMediaUploadErrorField = fieldRef;
+  md.__lastMediaUploadErrorMessage = details;
+  md.__lastMediaUploadErrorAt = new Date().toISOString();
+}
+
+/** Ao reenfileirar a partir de Conflitos de Sync — evita reentrar logo na quarentena por contador antigo. */
+function stripOutboxMediaStuckMetadata(payload: any): void {
+  if (!payload || typeof payload !== 'object') return;
+  const md = ensureOutboxPayloadMetadata(payload);
+  delete md.__mediaUploadAttempts;
+  delete md.__lastMediaUploadAttemptAt;
+  delete md.__pendingLocalMediaCount;
 }
 
 export function checklistOutboxIdentityKey(item: any): string {
@@ -117,6 +169,11 @@ export type ChecklistOutboxConflict = {
 
 function parseChecklistOutboxConflicts(raw: string | null): ChecklistOutboxConflict[] {
   if (!raw) return [];
+  const parseNullableFiniteNumber = (v: unknown): number | null => {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -128,22 +185,10 @@ function parseChecklistOutboxConflicts(raw: string | null): ChecklistOutboxConfl
         identity: String((row as any).identity || ''),
         reason: String((row as any).reason || 'unknown_conflict'),
         taskId: (row as any).taskId == null ? null : String((row as any).taskId),
-        submissionRevision:
-          Number.isFinite(Number((row as any).submissionRevision))
-            ? Number((row as any).submissionRevision)
-            : null,
-        serverLastSubmittedRevision:
-          Number.isFinite(Number((row as any).serverLastSubmittedRevision))
-            ? Number((row as any).serverLastSubmittedRevision)
-            : null,
-        serverExpectedNext:
-          Number.isFinite(Number((row as any).serverExpectedNext))
-            ? Number((row as any).serverExpectedNext)
-            : null,
-        statusCode:
-          Number.isFinite(Number((row as any).statusCode))
-            ? Number((row as any).statusCode)
-            : null,
+        submissionRevision: parseNullableFiniteNumber((row as any).submissionRevision),
+        serverLastSubmittedRevision: parseNullableFiniteNumber((row as any).serverLastSubmittedRevision),
+        serverExpectedNext: parseNullableFiniteNumber((row as any).serverExpectedNext),
+        statusCode: parseNullableFiniteNumber((row as any).statusCode),
         payload: (row as any).payload,
       }));
   } catch {
@@ -201,6 +246,7 @@ export async function requeueChecklistOutboxConflicts(
   const movedIds = new Set<string>();
   for (const c of conflicts) {
     if (!c || !c.payload || typeof c.payload !== 'object') continue;
+    stripOutboxMediaStuckMetadata(c.payload);
     const identity = checklistOutboxIdentityKey(c.payload);
     byIdentity.set(identity, c.payload);
     movedIds.add(c.id);
@@ -256,6 +302,22 @@ function parseChecklistSubmissionRevision(item: any): number | null {
   return n;
 }
 
+function parseChecklistSubmissionId(item: any): string {
+  return normalizeStoredId(item?.metadata?.submissionId ?? item?.submissionId);
+}
+
+function ensureChecklistSubmissionId(payload: any): string {
+  const current = parseChecklistSubmissionId(payload);
+  if (current) return current;
+  const sid = `sub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const md = ensureOutboxPayloadMetadata(payload);
+  md.submissionId = sid;
+  if (payload && typeof payload === 'object') {
+    (payload as Record<string, unknown>).submissionId = sid;
+  }
+  return sid;
+}
+
 async function quarantineChecklistOutboxConflict(
   payload: any,
   opts: {
@@ -294,7 +356,18 @@ async function quarantineChecklistOutboxConflict(
   await updateStoredJsonArray<any>(
     CHECKLIST_OUTBOX_CONFLICTS_KEY,
     (arr) => {
-      const next = [...arr, row];
+      const key = `${row.identity}::${row.reason}`;
+      const next = [...arr];
+      const idx = next.findIndex((it: any) => {
+        const idn = String(it?.identity || '');
+        const rsn = String(it?.reason || '');
+        return `${idn}::${rsn}` === key;
+      });
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], ...row, id: String(next[idx].id || row.id) };
+      } else {
+        next.push(row);
+      }
       return next.slice(-200);
     },
   );
@@ -307,6 +380,7 @@ async function preflightChecklistRevisionConflict(
   if (!taskId) return { action: 'proceed' };
   const submissionRevision = parseChecklistSubmissionRevision(payload);
   if (!submissionRevision) return { action: 'proceed' };
+  const submissionId = parseChecklistSubmissionId(payload);
 
   try {
     const res = await apiFetch(`/api/checklists/executions/${taskId}`);
@@ -318,6 +392,12 @@ async function preflightChecklistRevisionConflict(
     const expectedNext = lastSubmittedRevision + 1;
 
     if (submissionRevision !== expectedNext) {
+      if (submissionId) {
+        console.warn(
+          `[SYNC] Preflight revision mismatch ignorado para replay idempotente (task=${taskId}, local=${submissionRevision}, expected=${expectedNext}).`,
+        );
+        return { action: 'proceed' };
+      }
       await quarantineChecklistOutboxConflict(payload, {
         reason: 'preflight_revision_mismatch',
         taskId,
@@ -599,13 +679,15 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
 const SECTION_REPEAT_KEY_PREFIX = '__section_repeat_';
 
 /** URIs locais que precisam de upload antes do POST da execução (não enviar file:// / content:// ao servidor). */
-function isLocalMediaUri(val: unknown): val is string {
+function isLocalMediaUri(val: unknown): boolean {
   if (typeof val !== 'string' || !val.trim()) return false;
   const base = val.split('?')[0].trim().toLowerCase();
   if (base.startsWith('http://') || base.startsWith('https://')) return false;
   if (base.startsWith('file://')) return true;
+  if (base.startsWith('file:/')) return true;
   if (base.startsWith('content://')) return true;
   if (base.startsWith('ph://') || base.startsWith('assets-library://')) return true;
+  if (base.startsWith('/')) return true;
   return false;
 }
 
@@ -622,6 +704,12 @@ function guessExtFromUri(uri: string): string {
 async function ensureUploadableFileUri(uri: string): Promise<string> {
   const withoutQuery = uri.split('?')[0];
   if (withoutQuery.startsWith('file://')) return withoutQuery;
+  if (withoutQuery.startsWith('file:/')) {
+    return withoutQuery.startsWith('file:///')
+      ? withoutQuery
+      : `file://${withoutQuery.slice('file:'.length)}`;
+  }
+  if (withoutQuery.startsWith('/')) return `file://${withoutQuery}`;
   if (
     withoutQuery.startsWith('content://') ||
     withoutQuery.startsWith('ph://') ||
@@ -666,11 +754,38 @@ async function uploadOneLocalMediaField(
 ): Promise<string | null> {
   const emailSafe = (payload.ownerEmail || 'anon').replace(/[^a-zA-Z0-9]/g, '_');
   const readable = await ensureUploadableFileUri(localUriWithMaybeQuery);
-  const ext = guessExtFromUri(readable) || 'jpg';
+  const readableIsTempCopy = readable.includes('chk_sync_');
+
+  let ext0 = guessExtFromUri(readable) || 'jpg';
+  let uploadUri = readable;
+  if (!isProbablyVideoExt(ext0)) {
+    try {
+      uploadUri = await compressLocalImageForChecklistSyncUpload(readable);
+    } catch {
+      uploadUri = readable;
+    }
+  }
+
+  let ext = guessExtFromUri(uploadUri) || 'jpg';
+  if (ext === 'jpeg') ext = 'jpg';
   const remotePath = `checklists/${emailSafe}/${payload.taskId || payload.templateId}_${fieldKey}${indexSuffix}_${Date.now()}.${ext}`;
-  console.log(`[SYNC] Upload mídia checklist: ${readable.slice(0, 80)}… → ${remotePath}`);
-  const upRes = await uploadFile(readable, remotePath);
-  return upRes?.url || null;
+  console.log(`[SYNC] Upload mídia checklist: ${uploadUri.slice(0, 80)}… → ${remotePath}`);
+
+  try {
+    const upRes = await uploadFile(uploadUri, remotePath);
+    return upRes?.url || null;
+  } finally {
+    try {
+      if (uploadUri !== readable) {
+        await FileSystem.deleteAsync(uploadUri, { idempotent: true });
+      }
+      if (readableIsTempCopy) {
+        await FileSystem.deleteAsync(readable, { idempotent: true });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -696,6 +811,7 @@ async function maybeUploadNestedChecklistFieldMedia(
         console.log(`[SYNC] Campo ${fieldKey}.localUri → URL remota`);
       }
     } catch (e: any) {
+      registerChecklistMediaUploadError(payload, `${fieldKey}.localUri`, e);
       console.warn(`[SYNC] Falha upload ${fieldKey}.localUri:`, e?.message || e);
     }
   }
@@ -715,6 +831,7 @@ async function maybeUploadNestedChecklistFieldMedia(
             continue;
           }
         } catch (e: any) {
+          registerChecklistMediaUploadError(payload, `${fieldKey}.gridSlotUris[${i}]`, e);
           console.warn(`[SYNC] Falha upload ${fieldKey}.gridSlotUris[${i}]:`, e?.message || e);
         }
       }
@@ -743,6 +860,7 @@ async function maybeUploadNestedChecklistFieldMedia(
         console.log(`[SYNC] Campo ${fieldKey} (foto com anotações) → URL remota`);
       }
     } catch (e: any) {
+      registerChecklistMediaUploadError(payload, `${fieldKey}.imageUri`, e);
       console.warn(`[SYNC] Falha upload anotações ${fieldKey}:`, e?.message || e);
     }
   }
@@ -793,6 +911,7 @@ async function uploadLocalMediaInFlatResponseRecord(
           console.log(`[SYNC] Campo ${key} → URL remota`);
         }
       } catch (e: any) {
+        registerChecklistMediaUploadError(payload, key, e);
         console.warn(`[SYNC] Falha upload mídia campo ${key}:`, e?.message || e);
       }
       continue;
@@ -834,6 +953,7 @@ async function uploadLocalMediaInFlatResponseRecord(
               continue;
             }
           } catch (e: any) {
+            registerChecklistMediaUploadError(payload, `${key}[${i}]`, e);
             console.warn(`[SYNC] Falha upload mídia ${key}[${i}]:`, e?.message || e);
           }
         }
@@ -870,6 +990,205 @@ async function uploadLocalMediaInChecklistPayload(payload: any): Promise<void> {
       if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
       await uploadLocalMediaInFlatResponseRecord(row as Record<string, unknown>, payload);
     }
+  }
+}
+
+function responseValueHasPendingLocalMedia(value: unknown, depth = 0): boolean {
+  if (depth > 8) return false;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (isLocalMediaUri(trimmed)) return true;
+    if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length <= 2_000_000) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        return responseValueHasPendingLocalMedia(parsed, depth + 1);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (responseValueHasPendingLocalMedia(item, depth + 1)) return true;
+    }
+    return false;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      if (responseValueHasPendingLocalMedia(v, depth + 1)) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+function responseValuePendingLocalMediaCount(value: unknown, depth = 0): number {
+  if (depth > 8) return 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (isLocalMediaUri(trimmed)) return 1;
+    if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length <= 2_000_000) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        return responseValuePendingLocalMediaCount(parsed, depth + 1);
+      } catch {
+        return 0;
+      }
+    }
+    return 0;
+  }
+  if (Array.isArray(value)) {
+    let total = 0;
+    for (const item of value) total += responseValuePendingLocalMediaCount(item, depth + 1);
+    return total;
+  }
+  if (value && typeof value === 'object') {
+    let total = 0;
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      total += responseValuePendingLocalMediaCount(v, depth + 1);
+    }
+    return total;
+  }
+  return 0;
+}
+
+function checklistPayloadHasPendingLocalMedia(payload: any): boolean {
+  const responses = payload?.responses;
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return false;
+  return responseValueHasPendingLocalMedia(responses);
+}
+
+function checklistPayloadPendingLocalMediaCount(payload: any): number {
+  const responses = payload?.responses;
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return 0;
+  return responseValuePendingLocalMediaCount(responses);
+}
+
+function collectPendingLocalMediaUris(
+  value: unknown,
+  out: string[],
+  depth = 0,
+  limit = 5,
+): void {
+  if (out.length >= limit || depth > 8) return;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (isLocalMediaUri(trimmed)) {
+      out.push(trimmed);
+      return;
+    }
+    if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length <= 2_000_000) {
+      try {
+        collectPendingLocalMediaUris(JSON.parse(trimmed) as unknown, out, depth + 1, limit);
+      } catch {
+        /* ignore invalid json */
+      }
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const it of value) {
+      collectPendingLocalMediaUris(it, out, depth + 1, limit);
+      if (out.length >= limit) return;
+    }
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      collectPendingLocalMediaUris(v, out, depth + 1, limit);
+      if (out.length >= limit) return;
+    }
+  }
+}
+
+async function inferPendingLocalMediaHint(payload: any): Promise<string> {
+  const md =
+    payload?.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+      ? (payload.metadata as Record<string, unknown>)
+      : null;
+  const errCode = String(md?.__lastMediaUploadErrorCode || '').trim();
+  const errStatus = Number(md?.__lastMediaUploadErrorStatus);
+  const errField = String(md?.__lastMediaUploadErrorField || '').trim();
+  const errMsg = String(md?.__lastMediaUploadErrorMessage || '').trim();
+  if (errCode) {
+    const statusPart = Number.isFinite(errStatus) ? ` (HTTP ${Math.floor(errStatus)})` : '';
+    const fieldPart = errField ? ` em ${errField}` : '';
+    if (errCode === 'PAYLOAD_TOO_LARGE') {
+      return `Falha por arquivo grande${fieldPart}${statusPart}. Reduza/comprima a mídia e reenfileire.`;
+    }
+    return `Falha de upload ${errCode}${fieldPart}${statusPart}${errMsg ? `: ${truncateErrMessage(errMsg, 140)}` : ''}`;
+  }
+
+  const responses = payload?.responses;
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return '';
+  const uris: string[] = [];
+  collectPendingLocalMediaUris(responses, uris, 0, 3);
+  if (uris.length === 0) return 'Mídia local pendente sem URI identificável.';
+  const first = uris[0];
+  const firstNoQuery = first.split('?')[0].trim();
+  if (
+    firstNoQuery.startsWith('content://') ||
+    firstNoQuery.startsWith('ph://') ||
+    firstNoQuery.startsWith('assets-library://')
+  ) {
+    return `URI pendente (${firstNoQuery.slice(0, 48)}...) depende de leitura/cópia local antes do upload.`;
+  }
+  try {
+    const uploadable = await ensureUploadableFileUri(first);
+    const info = await FileSystem.getInfoAsync(uploadable);
+    if (!info?.exists) {
+      return `Arquivo local ausente (${firstNoQuery.slice(0, 64)}...) — provável limpeza de cache do sistema.`;
+    }
+    const sz = Number((info as any).size);
+    const sizeHint = Number.isFinite(sz) && sz > 0 ? ` (${Math.round(sz / 1024)} KB)` : '';
+    return `Arquivo local existe${sizeHint}, mas upload não concluiu. Verifique rede e backend de storage.`;
+  } catch (e: any) {
+    return `Falha ao validar arquivo local (${firstNoQuery.slice(0, 64)}...): ${String(e?.message || e)}`.slice(0, 220);
+  }
+}
+
+async function maybeNotifyStuckMediaUpload(
+  identity: string,
+  taskId: string | null,
+  attempts: number,
+  pendingCount: number,
+): Promise<void> {
+  if (!identity || attempts < MEDIA_STUCK_ATTEMPT_THRESHOLD) return;
+  const now = Date.now();
+  const slotKey = `${identity}|${taskId || 'unknown'}`;
+  let state: Record<string, number> = {};
+  try {
+    const raw = await AsyncStorage.getItem(MEDIA_STUCK_ALERT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        state = parsed as Record<string, number>;
+      }
+    }
+  } catch {
+    state = {};
+  }
+  const prev = Number(state[slotKey] || 0);
+  if (Number.isFinite(prev) && prev > 0 && now - prev < MEDIA_STUCK_ALERT_COOLDOWN_MS) return;
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Sincronização pendente de mídia',
+        body: `OS ${taskId || 'sem ID'} ainda tem ${pendingCount} arquivo(s) local(is) após ${attempts} tentativas. Abra Conflitos de Sync para revisar.`,
+        sound: 'default',
+      },
+      trigger: null,
+    });
+  } catch {
+    /* ignore notification errors */
+  }
+  state[slotKey] = now;
+  try {
+    await AsyncStorage.setItem(MEDIA_STUCK_ALERT_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore persistence errors */
   }
 }
 
@@ -1230,18 +1549,83 @@ async function pushChecklistOutbox() {
        }
      }
 
-     const syncedIdentityKeys = new Set<string>();
+     /** Remove da outbox principal: enviado, conflito ou quarentena (cópia fica em conflitos). */
+     const outboxRemovalKeys = new Set<string>();
+     let postSucceededCount = 0;
+     let outboxMetaMutated = false;
      for (const payload of outbox) {
          try {
+             const hadSubmissionId = !!parseChecklistSubmissionId(payload);
+             ensureChecklistSubmissionId(payload);
+             if (!hadSubmissionId) outboxMetaMutated = true;
+
              const preflight = await preflightChecklistRevisionConflict(payload);
              if (preflight.action === 'drop_as_conflict') {
-                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
+                 outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
                  const tid = checklistOutboxTaskId(payload);
                  if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
                  continue;
              }
 
              await uploadLocalMediaInChecklistPayload(payload);
+             if (checklistPayloadHasPendingLocalMedia(payload)) {
+                 const tid = checklistOutboxTaskId(payload);
+                 const identity = checklistOutboxIdentityKey(payload);
+                 const pendingCount = checklistPayloadPendingLocalMediaCount(payload);
+                 const md = ensureOutboxPayloadMetadata(payload);
+                 const prevAttempts = Number(md.__mediaUploadAttempts);
+                 const attempts =
+                   Number.isFinite(prevAttempts) && prevAttempts >= 0
+                     ? Math.floor(prevAttempts) + 1
+                     : 1;
+                 md.__mediaUploadAttempts = attempts;
+                 md.__lastMediaUploadAttemptAt = new Date().toISOString();
+                 md.__pendingLocalMediaCount = pendingCount;
+                 md.__lastMediaUploadHint = await inferPendingLocalMediaHint(payload);
+                 outboxMetaMutated = true;
+
+                 if (attempts >= MEDIA_STUCK_ATTEMPT_THRESHOLD) {
+                   await quarantineChecklistOutboxConflict(payload, {
+                     reason: 'media_upload_stuck',
+                     taskId: tid || undefined,
+                     submissionRevision: parseChecklistSubmissionRevision(payload),
+                   });
+                   await maybeNotifyStuckMediaUpload(identity, tid || null, attempts, pendingCount);
+                   outboxRemovalKeys.add(identity);
+                 }
+                 console.warn(
+                   `[SYNC] Upload de mídia incompleto para task=${tid || 'unknown'} (pendentes=${pendingCount}, tentativa=${attempts}); ${
+                     attempts >= MEDIA_STUCK_ATTEMPT_THRESHOLD
+                       ? 'movido para Conflitos de Sync — reenfileire quando a rede estiver estável.'
+                       : 'payload mantido na outbox para nova tentativa.'
+                   }`
+                 );
+                 continue;
+             }
+
+             const md = ensureOutboxPayloadMetadata(payload);
+             if (
+               md.__mediaUploadAttempts != null ||
+               md.__lastMediaUploadAttemptAt != null ||
+               md.__pendingLocalMediaCount != null ||
+               md.__lastMediaUploadHint != null ||
+               md.__lastMediaUploadErrorCode != null ||
+               md.__lastMediaUploadErrorStatus != null ||
+               md.__lastMediaUploadErrorField != null ||
+               md.__lastMediaUploadErrorMessage != null ||
+               md.__lastMediaUploadErrorAt != null
+             ) {
+                 delete md.__mediaUploadAttempts;
+                 delete md.__lastMediaUploadAttemptAt;
+                 delete md.__pendingLocalMediaCount;
+                 delete md.__lastMediaUploadHint;
+                 delete md.__lastMediaUploadErrorCode;
+                 delete md.__lastMediaUploadErrorStatus;
+                 delete md.__lastMediaUploadErrorField;
+                 delete md.__lastMediaUploadErrorMessage;
+                 delete md.__lastMediaUploadErrorAt;
+                 outboxMetaMutated = true;
+             }
 
              const res = await apiFetch('/api/checklists/executions', {
                  method: 'POST',
@@ -1250,7 +1634,8 @@ async function pushChecklistOutbox() {
              });
              
              if (res.ok || res.status === 409) { // 409 se já foi recebido antes
-                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
+                 outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
+                 postSucceededCount += 1;
                  // Delete the heavy local payload since it's now archived in the cloud
                  const tid = checklistOutboxTaskId(payload);
                  if (tid) {
@@ -1261,6 +1646,7 @@ async function pushChecklistOutbox() {
                  const localRev = parseChecklistSubmissionRevision(payload);
                  let serverLast: number | null = null;
                  let expectedNext: number | null = null;
+                 let shouldDropAsDelivered = false;
                  try {
                      const body = await res.clone().json();
                      if (body?.error === 'revision_mismatch') {
@@ -1268,9 +1654,36 @@ async function pushChecklistOutbox() {
                          const n2 = Number(body?.expectedNext);
                          serverLast = Number.isFinite(n1) ? n1 : null;
                          expectedNext = Number.isFinite(n2) ? n2 : null;
+                         if (
+                           serverLast != null &&
+                           localRev != null &&
+                           serverLast >= localRev &&
+                           tid
+                         ) {
+                           try {
+                             const exRes = await apiFetch(`/api/checklists/executions/${tid}`);
+                             if (exRes.ok) {
+                               const ex = await exRes.json();
+                               const st = String(ex?.status || '').toUpperCase();
+                               if (TERMINAL_EXEC_CACHE_STATUSES.has(st)) {
+                                 shouldDropAsDelivered = true;
+                               }
+                             }
+                           } catch {
+                             /* ignore */
+                           }
+                         }
                      }
                  } catch {
                      /* ignore */
+                 }
+                 if (shouldDropAsDelivered) {
+                     outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
+                     if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                     console.warn(
+                       `[SYNC] 422 revision_mismatch tratado como idempotente (task=${tid}). Servidor já terminal.`
+                     );
+                     continue;
                  }
                  await quarantineChecklistOutboxConflict(payload, {
                      reason: 'server_revision_mismatch',
@@ -1280,7 +1693,7 @@ async function pushChecklistOutbox() {
                      serverExpectedNext: expectedNext,
                      statusCode: 422,
                  });
-                 syncedIdentityKeys.add(checklistOutboxIdentityKey(payload));
+                 outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
                  if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
                  console.warn(
                    `[SYNC] Payload movido para conflitos (422 revision_mismatch) task=${tid || 'unknown'}.`
@@ -1288,22 +1701,40 @@ async function pushChecklistOutbox() {
              } else {
                  console.warn(`[SYNC] Outbox falhou: ${res.status}`);
              }
-         } catch (netErr) {
-             console.warn('[SYNC] Outbox rede falhou (offline)', netErr);
-             break; // Pare de tentar se a rede caiu
+         } catch (itemErr) {
+             console.warn('[SYNC] Outbox item falhou (segue para o próximo):', itemErr);
+             continue;
          }
      }
      
-     if (syncedIdentityKeys.size > 0) {
+     if (outboxMetaMutated) {
+         await updateStoredJsonArray<any>(
+           CHECKLIST_OUTBOX_KEY,
+           (current) => {
+             const byIdentity = new Map<string, any>();
+             for (const item of current) {
+               byIdentity.set(checklistOutboxIdentityKey(item), item);
+             }
+             for (const item of outbox) {
+               byIdentity.set(checklistOutboxIdentityKey(item), item);
+             }
+             return [...byIdentity.values()];
+           }
+         );
+     }
+
+     if (outboxRemovalKeys.size > 0) {
          const next = await updateStoredJsonArray<any>(
            CHECKLIST_OUTBOX_KEY,
            (current) =>
-             current.filter((item) => !syncedIdentityKeys.has(checklistOutboxIdentityKey(item))),
+             current.filter((item) => !outboxRemovalKeys.has(checklistOutboxIdentityKey(item))),
            { removeWhenEmpty: true }
          );
-         console.log(
-           `[SYNC] ✅ ${syncedIdentityKeys.size} tarefas sincronizadas (concluídas). Faltam: ${next.length}`
-         );
+         if (postSucceededCount > 0) {
+           console.log(
+             `[SYNC] ✅ ${postSucceededCount} tarefa(s) enviada(s) ao servidor. Itens restantes na outbox: ${next.length}`
+           );
+         }
      }
   } catch (e) {
      console.warn('[SYNC] Erro critico lendo outbox', e);
@@ -1693,6 +2124,118 @@ async function stripExecutionStatusOutboxForPendingServerTasks(remoteTasks: any[
   }
 }
 
+/**
+ * Verdade do servidor: OS terminal não pode manter overlay local de execução ativa.
+ * Remove resíduos de "em andamento" no aparelho para evitar cartão preso na aba Iniciadas.
+ */
+async function stripLocalExecutionStateForTerminalServerTasks(remoteTasks: any[]): Promise<void> {
+  const terminalIds = new Set<string>();
+  for (const t of remoteTasks) {
+    const st = String(t?.status || '').toUpperCase();
+    if (!TERMINAL_EXEC_CACHE_STATUSES.has(st)) continue;
+    if (t?.id != null) terminalIds.add(String(t.id));
+  }
+  if (terminalIds.size === 0) return;
+
+  try {
+    let removed = 0;
+    await updateStoredJsonArray<{ taskId?: string; body?: ExecutionStatusPatchBody }>(
+      EXECUTION_STATUS_OUTBOX_KEY,
+      (arr) => {
+        const next = arr.filter((item) => {
+          const tid = String(item?.taskId || '').trim();
+          return !tid || !terminalIds.has(tid);
+        });
+        removed = arr.length - next.length;
+        return next;
+      },
+      { removeWhenEmpty: true }
+    );
+    if (removed > 0) {
+      console.log(
+        `[pullTasks] Outbox de status limpo para ${removed} item(ns) de OS terminal no servidor`
+      );
+    }
+  } catch (e) {
+    console.warn('[pullTasks] stripLocalExecutionStateForTerminalServerTasks (outbox):', e);
+  }
+
+  try {
+    let removed = 0;
+    await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (arr) => {
+      const next = arr.filter((id) => !terminalIds.has(String(id)));
+      removed = arr.length - next.length;
+      return next;
+    });
+    if (removed > 0) {
+      console.log(
+        `[pullTasks] @brspark_inprogress_tasks: removidos ${removed} id(s) de OS terminal no servidor`
+      );
+    }
+  } catch (e) {
+    console.warn('[pullTasks] stripLocalExecutionStateForTerminalServerTasks (inprogress):', e);
+  }
+}
+
+/**
+ * Se o servidor já concluiu/sincronizou a OS, conflitos locais antigos (ex.: revision_mismatch)
+ * deixam de ser úteis e só mantêm a tela presa em "Conflitos de sincronização".
+ */
+async function clearChecklistQuarantineForTerminalServerTasks(remoteTasks: any[]): Promise<void> {
+  const terminalIds = new Set<string>();
+  for (const t of remoteTasks) {
+    const st = String(t?.status || '').toUpperCase();
+    if (!TERMINAL_EXEC_CACHE_STATUSES.has(st)) continue;
+    if (t?.id != null) terminalIds.add(String(t.id));
+  }
+  if (terminalIds.size === 0) return;
+
+  try {
+    let removed = 0;
+    await updateStoredJsonArray<any>(
+      CHECKLIST_OUTBOX_KEY,
+      (arr) => {
+        const next = arr.filter((item) => {
+          const tid = checklistOutboxTaskId(item);
+          return !tid || !terminalIds.has(tid);
+        });
+        removed = arr.length - next.length;
+        return next;
+      },
+      { removeWhenEmpty: true }
+    );
+    if (removed > 0) {
+      console.log(
+        `[pullTasks] Outbox de checklist: removidos ${removed} payload(s) de OS terminal no servidor`
+      );
+    }
+  } catch (e) {
+    console.warn('[pullTasks] clearChecklistQuarantineForTerminalServerTasks (outbox):', e);
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+    const conflicts = parseChecklistOutboxConflicts(raw);
+    if (!Array.isArray(conflicts) || conflicts.length === 0) return;
+    const remaining = conflicts.filter((c) => {
+      const tid = String(c?.taskId || '').trim();
+      return !tid || !terminalIds.has(tid);
+    });
+    const removed = conflicts.length - remaining.length;
+    if (removed <= 0) return;
+    if (remaining.length > 0) {
+      await AsyncStorage.setItem(CHECKLIST_OUTBOX_CONFLICTS_KEY, JSON.stringify(remaining));
+    } else {
+      await AsyncStorage.removeItem(CHECKLIST_OUTBOX_CONFLICTS_KEY);
+    }
+    console.log(
+      `[pullTasks] Conflitos em quarentena: removidos ${removed} item(ns) de OS terminal no servidor`
+    );
+  } catch (e) {
+    console.warn('[pullTasks] clearChecklistQuarantineForTerminalServerTasks (conflicts):', e);
+  }
+}
+
 /** Revisão reaberta pelo admin: tirar id de inprogress local para voltar a Pendentes até novo aceite/início. */
 async function stripInProgressLocalForRevisionPendingTasks(remoteTasks: any[]): Promise<void> {
   const ids = new Set<string>();
@@ -1884,6 +2427,19 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
     }
     if (!Array.isArray(arr) || arr.length === 0) return [];
 
+    let localTerminalIds = new Set<string>();
+    try {
+      const [ft, rt] = await Promise.all([loadFtCloudTasks(), loadRtCloudTasks()]);
+      localTerminalIds = new Set(
+        [...ft, ...rt]
+          .filter((t: any) => TERMINAL_EXEC_CACHE_STATUSES.has(String(t?.status || '').toUpperCase()))
+          .map((t: any) => String(t?.id || '').trim())
+          .filter(Boolean)
+      );
+    } catch {
+      localTerminalIds = new Set();
+    }
+
     const lastStatusByTask = new Map<string, string>();
     for (const item of arr) {
       if (!item?.taskId || !item.body) continue;
@@ -1893,6 +2449,7 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
     const ids: string[] = [];
     for (const [id, st] of lastStatusByTask) {
       if (pendingChecklistOutboxTaskIds.has(id)) continue;
+      if (localTerminalIds.has(id)) continue;
       if (st === 'IN_PROGRESS' || st === 'PAUSED') ids.push(id);
     }
     return ids;
@@ -2033,6 +2590,8 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
 
         await removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks);
         await stripExecutionStatusOutboxForPendingServerTasks(remoteTasks);
+        await stripLocalExecutionStateForTerminalServerTasks(remoteTasks);
+        await clearChecklistQuarantineForTerminalServerTasks(remoteTasks);
         await stripInProgressLocalForRevisionPendingTasks(remoteTasks);
 
         let ftExisting = await loadFtCloudTasks();
@@ -2103,8 +2662,8 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
 
         const refIdsForTemplates = new Set<string>();
         for (const t of [...processedFt, ...processedRt]) {
-          const rid = String((t as any)?.refId ?? '').trim();
-          if (rid && rid !== 'null' && rid !== 'undefined') refIdsForTemplates.add(rid);
+          const rid = taskEffectiveChecklistTemplateId(t);
+          if (rid) refIdsForTemplates.add(rid);
         }
         void import('./routineTaskService').then((m) =>
           Promise.allSettled(
@@ -2185,7 +2744,20 @@ export async function pushTelemetryBatch(): Promise<void> {
   try {
     const raw = await AsyncStorage.getItem(TELEMETRY_KEY);
     if (!raw) return;
-    const events = JSON.parse(raw);
+    let events: unknown;
+    try {
+      events = JSON.parse(raw);
+    } catch (parseErr) {
+      const backupKey = `${TELEMETRY_KEY}_invalid_${Date.now()}`;
+      try {
+        await AsyncStorage.setItem(backupKey, raw);
+        await AsyncStorage.removeItem(TELEMETRY_KEY);
+      } catch {
+        /* ignore */
+      }
+      console.warn('[SYNC] Telemetria com JSON inválido foi movida para backup:', parseErr);
+      return;
+    }
     if (!Array.isArray(events) || events.length === 0) return;
 
     const BATCH_SIZE = 100;

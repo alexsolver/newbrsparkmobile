@@ -181,7 +181,8 @@ export function initDatabase() {
       finance_value_unlocked INTEGER DEFAULT 0,
       split_group_id TEXT DEFAULT NULL,
       attachments_json TEXT DEFAULT NULL,
-      linked_task_ids_json TEXT DEFAULT NULL
+      linked_task_ids_json TEXT DEFAULT NULL,
+      receipt_realized_at TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS media_items (
@@ -300,6 +301,9 @@ export function initDatabase() {
   } catch (_) {}
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN category_key TEXT DEFAULT NULL;`);
+  } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN receipt_realized_at TEXT DEFAULT NULL;`);
   } catch (_) {}
   try {
     db.execSync(`ALTER TABLE service_categories ADD COLUMN color TEXT`);
@@ -1097,10 +1101,16 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
       : row.categoryKey != null && String(row.categoryKey).trim() !== ''
         ? String(row.categoryKey).trim()
         : null;
+  const receiptRealizedAt =
+    row.receipt_realized_at != null && String(row.receipt_realized_at).trim() !== ''
+      ? String(row.receipt_realized_at).trim()
+      : row.receiptRealizedAt != null && String(row.receiptRealizedAt).trim() !== ''
+        ? String(row.receiptRealizedAt).trim()
+        : null;
   const stmt = db.prepareSync(`
     INSERT INTO tech_finance_entries (
-      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, finance_value_unlocked, split_group_id, attachments_json, linked_task_ids_json, category_key
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, kind, amount, currency, description, taskId, templateId, fieldId, scopeSuffix, source, createdAt, owner_email, finance_value_unlocked, split_group_id, attachments_json, linked_task_ids_json, category_key, receipt_realized_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       kind = excluded.kind,
       amount = excluded.amount,
@@ -1117,7 +1127,8 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
       split_group_id = COALESCE(excluded.split_group_id, tech_finance_entries.split_group_id),
       attachments_json = excluded.attachments_json,
       linked_task_ids_json = COALESCE(excluded.linked_task_ids_json, tech_finance_entries.linked_task_ids_json),
-      category_key = COALESCE(excluded.category_key, tech_finance_entries.category_key)
+      category_key = COALESCE(excluded.category_key, tech_finance_entries.category_key),
+      receipt_realized_at = COALESCE(excluded.receipt_realized_at, tech_finance_entries.receipt_realized_at)
   `);
   const finUnl =
     row.finance_value_unlocked === 1 ||
@@ -1149,6 +1160,7 @@ export function saveTechFinanceEntryLocal(row: any, ownerEmail?: string) {
     attachmentsJson,
     linkedTaskIdsJson,
     categoryKey,
+    receiptRealizedAt,
   ]);
 }
 

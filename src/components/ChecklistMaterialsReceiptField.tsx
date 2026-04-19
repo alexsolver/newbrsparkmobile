@@ -1,18 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  parseMaterialsReceiptValue,
+  serializeMaterialsReceiptV2,
+  type MaterialsReceiptLineV2,
+  type ReceiptDecision,
+} from '../checklist/materialsReceiptValue';
+import {
+  fetchMaterialsReceiptInputs,
+  type MaterialsReceiptInputDto,
+} from '../services/materialsReceiptInputsApi';
+import { resolveReceiptLineToStockItemId } from '../checklist/applyMaterialsReceiptOnSubmit';
 import { TechnicianStockService } from '../services/technicianStockService';
-import { StockItem } from '../types/stock';
-import { parseMaterialsValue, type MaterialsLine } from '../checklist/applyMaterialsStockOnSubmit';
 
 type Props = {
   value: string | undefined;
@@ -21,219 +21,276 @@ type Props = {
   userEmail?: string;
 };
 
-function serialize(lines: MaterialsLine[], prevRaw: string | undefined): string {
-  const p = parseMaterialsValue(prevRaw);
-  return JSON.stringify({
-    v: 1,
-    lines,
-    stockAppliedRev: p.stockAppliedRev,
-    lastApplied: p.lastApplied && Object.keys(p.lastApplied).length ? p.lastApplied : undefined,
+function mergeApiWithSaved(
+  api: MaterialsReceiptInputDto[],
+  saved: ReturnType<typeof parseMaterialsReceiptValue>
+): MaterialsReceiptLineV2[] {
+  const map =
+    saved.version === 2
+      ? new Map(saved.lines.map((l) => [l.inputId, l]))
+      : new Map<string, MaterialsReceiptLineV2>();
+  return api.map((row) => {
+    const prev = map.get(row.id);
+    return {
+      inputId: row.id,
+      name: String(row.nome || '').trim() || '—',
+      sku: String(row.sku || '').trim(),
+      codigoInterno: String(row.codigo_interno || '').trim() || undefined,
+      qty: Math.max(0, Math.floor(Number(row.qtd) || 0)),
+      meta: row.meta as MaterialsReceiptLineV2['meta'],
+      decision: prev?.decision ?? 'pending',
+      rejectReason: prev?.rejectReason,
+    };
   });
 }
 
 export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, userEmail }: Props) {
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<StockItem[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [inputs, setInputs] = useState<MaterialsReceiptInputDto[]>([]);
+  const [stockItems, setStockItems] = useState<Awaited<ReturnType<typeof TechnicianStockService.getItems>>>([]);
+  const lastApiFingerprint = useRef<string>('');
 
-  const lines = useMemo(() => parseMaterialsValue(value).lines, [value]);
+  const saved = useMemo(() => parseMaterialsReceiptValue(value), [value]);
+  const legacyV1 = saved.version === 1 ? saved : null;
 
-  const loadItems = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
+    setApiError(null);
     try {
-      const list = await TechnicianStockService.getItems(userEmail);
-      setItems(list);
+      const [list, stock] = await Promise.all([
+        fetchMaterialsReceiptInputs(),
+        TechnicianStockService.getItems(userEmail),
+      ]);
+      setInputs(list);
+      setStockItems(stock);
+    } catch (e: any) {
+      setApiError(e?.message || 'Não foi possível carregar os materiais da integração.');
     } finally {
       setLoading(false);
     }
   }, [userEmail]);
 
   useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    load();
+  }, [load]);
+
+  /** Quando a lista vinda da API mudar, fundir com respostas já guardadas (preserva decisões). */
+  useEffect(() => {
+    if (readOnly) return;
+    if (!inputs.length) {
+      lastApiFingerprint.current = '';
+      return;
+    }
+    const fp = inputs.map((i) => i.id).join('|');
+    if (fp === lastApiFingerprint.current) return;
+    lastApiFingerprint.current = fp;
+    const merged = mergeApiWithSaved(inputs, parseMaterialsReceiptValue(value));
+    onChange(serializeMaterialsReceiptV2({ lines: merged, prevRaw: value }));
+  }, [inputs, readOnly, onChange, value]);
+
+  const linesV2 = useMemo(() => {
+    if (inputs.length === 0) return saved.version === 2 ? saved.lines : [];
+    return mergeApiWithSaved(inputs, saved);
+  }, [inputs, saved]);
 
   const setLines = useCallback(
-    (next: MaterialsLine[]) => {
-      onChange(serialize(next, value));
+    (next: MaterialsReceiptLineV2[]) => {
+      onChange(serializeMaterialsReceiptV2({ lines: next, prevRaw: value }));
     },
     [onChange, value]
   );
 
-  const updateQty = (itemId: string, qtyStr: string) => {
-    const q = Math.max(0, Math.floor(Number(qtyStr.replace(',', '.')) || 0));
-    const next = lines
-      .map((l) => (l.itemId === itemId ? { ...l, qty: q } : l))
-      .filter((l) => l.qty > 0);
-    setLines(next);
-  };
-
-  const bumpQty = (itemId: string, delta: number) => {
-    const line = lines.find((l) => l.itemId === itemId);
-    if (!line) return;
-    const nextVal = Math.max(0, Math.floor(line.qty + delta));
-    const next = lines
-      .map((l) => (l.itemId === itemId ? { ...l, qty: nextVal } : l))
-      .filter((l) => l.qty > 0);
-    setLines(next);
-  };
-
-  const removeLine = (itemId: string) => {
-    setLines(lines.filter((l) => l.itemId !== itemId));
-  };
-
-  const addItem = (it: StockItem) => {
-    if (lines.some((l) => l.itemId === it.id)) {
-      setPickerOpen(false);
-      return;
-    }
-    setLines([
-      ...lines,
-      {
-        itemId: it.id,
-        sku: it.sku,
-        name: it.name,
-        unit: it.unit,
-        qty: 1,
-      },
-    ]);
-    setPickerOpen(false);
-    setSearch('');
-  };
-
-  const filteredPick = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter(
-      (i) =>
-        i.name.toLowerCase().includes(s) ||
-        String(i.sku || '')
-          .toLowerCase()
-          .includes(s)
+  const setDecision = (inputId: string, decision: ReceiptDecision) => {
+    const next = linesV2.map((l) =>
+      l.inputId === inputId
+        ? {
+            ...l,
+            decision,
+            rejectReason: decision === 'rejected' ? l.rejectReason : undefined,
+          }
+        : l
     );
-  }, [items, search]);
+    setLines(next);
+  };
+
+  const setRejectReason = (inputId: string, text: string) => {
+    const next = linesV2.map((l) => (l.inputId === inputId ? { ...l, rejectReason: text } : l));
+    setLines(next);
+  };
+
+  const stockMatchHint = (l: MaterialsReceiptLineV2): string | null => {
+    const id = resolveReceiptLineToStockItemId(l, stockItems);
+    return id ? null : 'Sem correspondência no seu estoque pelo SKU — cadastre em Meu estoque ou ajuste a integração.';
+  };
 
   if (loading) {
     return (
       <View style={styles.loadingBox}>
         <ActivityIndicator color="#15803d" />
-        <Text style={styles.loadingText}>Carregando estoque técnico…</Text>
+        <Text style={styles.loadingText}>Carregando materiais (integração)…</Text>
+      </View>
+    );
+  }
+
+  if (legacyV1 && legacyV1.lines.length > 0 && inputs.length === 0) {
+    return (
+      <View style={styles.legacyWrap}>
+        <Text style={styles.legacyTitle}>Registro anterior (formato legado)</Text>
+        <Text style={styles.legacyHint}>
+          Este campo passou a ser alimentado só pela integração. As quantidades abaixo foram salvas antes desta
+          alteração.
+        </Text>
+        {legacyV1.lines.map((l) => (
+          <View key={l.itemId} style={styles.lineCard}>
+            <Text style={styles.lineName} numberOfLines={2}>
+              {l.name || 'Item'}
+            </Text>
+            <Text style={styles.lineSku}>
+              SKU {l.sku || '—'} × {l.qty} {l.unit || ''}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (apiError && inputs.length === 0) {
+    return (
+      <View style={styles.errorBox}>
+        <Ionicons name="cloud-offline-outline" size={28} color="#b45309" />
+        <Text style={styles.errorText}>{apiError}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={load} accessibilityRole="button">
+          <Text style={styles.retryBtnText}>Tentar novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (linesV2.length === 0) {
+    return (
+      <View style={styles.emptyBox}>
+        <Ionicons name="cube-outline" size={32} color="#94a3b8" />
+        <Text style={styles.emptyText}>Nenhum material para recebimento</Text>
+        <Text style={styles.emptySub}>
+          A lista é enviada pela central (ERP/CRM). Quando houver linhas, poderá aceitar ou recusar cada item.
+        </Text>
+        <TouchableOpacity style={styles.retryLink} onPress={load} hitSlop={12}>
+          <Text style={styles.retryLinkText}>Atualizar lista</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View>
-      {lines.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="arrow-down-circle-outline" size={32} color="#94a3b8" />
-          <Text style={styles.emptyText}>Nenhuma entrada registrada</Text>
-        </View>
-      ) : (
-        <View style={{ gap: 10 }}>
-          {lines.map((l) => {
-            const st = items.find((x) => x.id === l.itemId);
-            return (
-              <View key={l.itemId} style={styles.lineCard}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.lineName} numberOfLines={2}>
-                    {l.name || st?.name || 'Item'}
+      <Text style={styles.intro}>
+        Lista definida pela integração — não é possível alterar quantidades ou incluir itens manualmente. Aceite ou
+        recuse cada linha. Em caso de recusa, a justificativa é obrigatória.
+      </Text>
+
+      <View style={{ gap: 12 }}>
+        {linesV2.map((l) => {
+          const warn = l.decision === 'accepted' && l.qty > 0 ? stockMatchHint(l) : null;
+          return (
+            <View key={l.inputId} style={styles.lineCard}>
+              <Text style={styles.lineName} numberOfLines={3}>
+                {l.name}
+              </Text>
+              <Text style={styles.lineSku}>
+                SKU: {l.sku || '—'}
+                {l.codigoInterno ? ` · Cód.: ${l.codigoInterno}` : ''}
+              </Text>
+              <Text style={styles.qtyLabel}>Quantidade: {l.qty}</Text>
+              {warn ? <Text style={styles.warnText}>{warn}</Text> : null}
+
+              {readOnly ? (
+                <View style={styles.readDecision}>
+                  <Text style={styles.readDecisionText}>
+                    {l.decision === 'accepted'
+                      ? 'Aceito'
+                      : l.decision === 'rejected'
+                        ? 'Recusado'
+                        : 'Pendente'}
                   </Text>
-                  <Text style={styles.lineSku}>
-                    SKU {l.sku || st?.sku || '—'}
-                    {st != null ? ` · stock atual: ${st.currentStock} ${l.unit || st?.unit || ''}` : ''}
-                  </Text>
+                  {l.decision === 'rejected' && (l.rejectReason || '').trim() ? (
+                    <Text style={styles.readJustify}>{String(l.rejectReason).trim()}</Text>
+                  ) : null}
                 </View>
-                {!readOnly ? (
-                  <View style={styles.qtyRow}>
+              ) : (
+                <View style={{ width: '100%' }}>
+                  <View style={styles.actionsRow}>
                     <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => bumpQty(l.itemId, -1)}
+                      style={[
+                        styles.pill,
+                        l.decision === 'accepted' && styles.pillActiveAccept,
+                      ]}
+                      onPress={() => setDecision(l.inputId, 'accepted')}
                       accessibilityRole="button"
-                      accessibilityLabel="Diminuir quantidade"
-                      hitSlop={8}
+                      accessibilityLabel="Aceitar material"
                     >
-                      <Ionicons name="remove" size={22} color="#15803d" />
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={l.decision === 'accepted' ? '#fff' : '#15803d'}
+                      />
+                      <Text
+                        style={[styles.pillText, l.decision === 'accepted' && styles.pillTextOn]}
+                      >
+                        Aceitar
+                      </Text>
                     </TouchableOpacity>
-                    <TextInput
-                      style={styles.qtyInput}
-                      keyboardType="number-pad"
-                      value={String(l.qty)}
-                      onChangeText={(t) => updateQty(l.itemId, t)}
-                      accessibilityLabel="Quantidade"
-                    />
                     <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => bumpQty(l.itemId, 1)}
+                      style={[
+                        styles.pill,
+                        l.decision === 'rejected' && styles.pillActiveReject,
+                      ]}
+                      onPress={() => setDecision(l.inputId, 'rejected')}
                       accessibilityRole="button"
-                      accessibilityLabel="Aumentar quantidade"
-                      hitSlop={8}
+                      accessibilityLabel="Recusar material"
                     >
-                      <Ionicons name="add" size={22} color="#15803d" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => removeLine(l.itemId)} hitSlop={12}>
-                      <Ionicons name="trash-outline" size={22} color="#dc2626" />
+                      <Ionicons
+                        name="close-circle"
+                        size={18}
+                        color={l.decision === 'rejected' ? '#fff' : '#dc2626'}
+                      />
+                      <Text
+                        style={[styles.pillText, styles.pillTextReject, l.decision === 'rejected' && styles.pillTextOn]}
+                      >
+                        Recusar
+                      </Text>
                     </TouchableOpacity>
                   </View>
-                ) : (
-                  <Text style={styles.readQty}>×{l.qty}</Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+
+                  {l.decision === 'rejected' ? (
+                    <View style={{ marginTop: 10 }}>
+                      <Text style={styles.justifyLabel}>Justificativa (obrigatória)</Text>
+                      <TextInput
+                        style={styles.justifyInput}
+                        placeholder="Descreva o motivo da recusa…"
+                        placeholderTextColor="#94a3b8"
+                        multiline
+                        maxLength={2000}
+                        editable={!readOnly}
+                        value={l.rejectReason || ''}
+                        onChangeText={(t) => setRejectReason(l.inputId, t)}
+                        textAlignVertical="top"
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
 
       {!readOnly ? (
-        <TouchableOpacity style={styles.addBtn} onPress={() => setPickerOpen(true)} activeOpacity={0.85}>
-          <Ionicons name="add-circle-outline" size={22} color="#fff" />
-          <Text style={styles.addBtnText}>Adicionar material</Text>
+        <TouchableOpacity style={styles.refreshBtn} onPress={load} accessibilityRole="button">
+          <Ionicons name="refresh" size={18} color="#15803d" />
+          <Text style={styles.refreshBtnText}>Atualizar lista da integração</Text>
         </TouchableOpacity>
       ) : null}
-
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Entrada no estoque técnico</Text>
-            <Text style={styles.modalHint}>
-              Registre materiais recebidos; o saldo aumenta ao concluir o checklist. Itens cadastrados em "Meu estoque".
-            </Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Pesquisar nome ou SKU…"
-              value={search}
-              onChangeText={setSearch}
-              placeholderTextColor="#94a3b8"
-            />
-            <FlatList
-              data={filteredPick}
-              keyExtractor={(it) => it.id}
-              style={{ maxHeight: 320 }}
-              ListEmptyComponent={
-                <Text style={styles.emptyPick}>
-                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
-                </Text>
-              }
-              renderItem={({ item: it }) => (
-                <TouchableOpacity style={styles.pickRow} onPress={() => addItem(it)}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.pickName} numberOfLines={1}>
-                      {it.name}
-                    </Text>
-                    <Text style={styles.pickSku}>
-                      {it.sku} · {it.currentStock} {it.unit}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity style={styles.modalClose} onPress={() => setPickerOpen(false)}>
-              <Text style={styles.modalCloseText}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -248,6 +305,23 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   loadingText: { marginTop: 8, fontSize: 13, color: '#64748b' },
+  errorBox: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    gap: 10,
+  },
+  errorText: { fontSize: 13, color: '#92400e', textAlign: 'center', lineHeight: 18 },
+  retryBtn: {
+    backgroundColor: '#15803d',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  retryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   emptyBox: {
     padding: 24,
     alignItems: 'center',
@@ -257,88 +331,98 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: '#86efac',
   },
-  emptyText: { marginTop: 8, fontSize: 14, color: '#64748b', fontWeight: '600' },
-  lineCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  emptyText: { marginTop: 8, fontSize: 15, color: '#64748b', fontWeight: '700', textAlign: 'center' },
+  emptySub: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  retryLink: { marginTop: 12, padding: 8 },
+  retryLinkText: { fontSize: 14, fontWeight: '700', color: '#15803d' },
+  legacyWrap: {
     padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  legacyTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
+  legacyHint: { fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 17 },
+  intro: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  lineCard: {
+    padding: 14,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#bbf7d0',
     gap: 10,
   },
   lineName: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
-  lineSku: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepperBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#dcfce7',
-    borderWidth: 1,
-    borderColor: '#86efac',
-    alignItems: 'center',
-    justifyContent: 'center',
+  lineSku: { fontSize: 12, color: '#64748b', marginTop: 4 },
+  qtyLabel: { fontSize: 14, fontWeight: '600', color: '#15803d', marginTop: 6 },
+  warnText: { marginTop: 8, fontSize: 12, color: '#b45309', lineHeight: 16 },
+  actionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
   },
-  qtyInput: {
-    width: 48,
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#0f172a',
+    backgroundColor: '#f8fafc',
   },
-  readQty: { fontSize: 16, fontWeight: '800', color: '#15803d', minWidth: 40, textAlign: 'right' },
-  addBtn: {
-    marginTop: 12,
+  pillActiveAccept: { backgroundColor: '#15803d', borderColor: '#15803d' },
+  pillActiveReject: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  pillText: { fontSize: 14, fontWeight: '700', color: '#15803d' },
+  pillTextReject: { color: '#dc2626' },
+  pillTextOn: { color: '#fff' },
+  justifyLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
+  },
+  justifyInput: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    color: '#0f172a',
+    backgroundColor: '#fff7f7',
+  },
+  readDecision: { alignItems: 'flex-end' },
+  readDecisionText: { fontSize: 13, fontWeight: '800', color: '#15803d' },
+  readJustify: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'right',
+    maxWidth: 200,
+  },
+  refreshBtn: {
+    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#15803d',
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  addBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    maxHeight: '80%',
-  },
-  modalTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
-  modalHint: { fontSize: 12, color: '#64748b', marginBottom: 10, lineHeight: 17 },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
-    marginBottom: 10,
-    color: '#0f172a',
   },
-  emptyPick: { padding: 16, color: '#64748b', fontSize: 13, textAlign: 'center' },
-  pickRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
-  pickName: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
-  pickSku: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  modalClose: { marginTop: 12, alignItems: 'center', paddingVertical: 10 },
-  modalCloseText: { fontSize: 15, fontWeight: '700', color: '#15803d' },
+  refreshBtnText: { fontSize: 14, fontWeight: '700', color: '#15803d' },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,17 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
-import { Header } from '../../../src/components/Header';
+import { ScreenSubheader } from '../../../src/components/ScreenSubheader';
+import { ValueInput, parseLocaleAmountString } from '../../../src/components/ValueInput';
 import { TechnicianExpenseCategoryChips } from '../../../src/components/TechnicianExpenseCategoryChips';
 import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -49,6 +53,7 @@ function isProbablyImage(att: LocalAttachment) {
 }
 
 export default function NewTechnicianFinanceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -60,6 +65,18 @@ export default function NewTechnicianFinanceScreen() {
   const [linkableLoading, setLinkableLoading] = useState(false);
   const [selectedOsIds, setSelectedOsIds] = useState<string[]>([]);
   const [categoryKey, setCategoryKey] = useState<string | null>(null);
+  const [osHelpVisible, setOsHelpVisible] = useState(false);
+  const amountDraftRef = useRef('');
+  const amountEditingRef = useRef(false);
+
+  const openOs = useMemo(
+    () => linkableOs.filter((x) => x.linkKind === 'open'),
+    [linkableOs],
+  );
+  const completedOs = useMemo(
+    () => linkableOs.filter((x) => x.linkKind === 'completed'),
+    [linkableOs],
+  );
 
   useEffect(() => {
     if (kind === 'revenue') setSelectedOsIds([]);
@@ -169,7 +186,11 @@ export default function NewTechnicianFinanceScreen() {
   };
 
   const handleSave = async () => {
-    const amount = Math.max(0, Number(String(amountStr).replace(',', '.')) || 0);
+    const rawSrc =
+      amountEditingRef.current && amountDraftRef.current.trim() !== ''
+        ? amountDraftRef.current
+        : amountStr;
+    const amount = Math.max(0, parseLocaleAmountString(rawSrc));
     if (amount <= 0) {
       Alert.alert('Atenção', 'Indique um valor maior que zero.');
       return;
@@ -207,19 +228,51 @@ export default function NewTechnicianFinanceScreen() {
     ]);
   };
 
+  const renderOsRow = (row: LinkableExpenseTask) => {
+    const on = selectedOsIds.includes(row.id);
+    const completed = row.linkKind === 'completed';
+    return (
+      <TouchableOpacity
+        key={row.id}
+        style={[styles.osRow, completed && styles.osRowCompleted, on && styles.osRowOn]}
+        onPress={() => toggleOs(row.id)}
+        activeOpacity={0.85}
+      >
+        <Ionicons
+          name={on ? 'checkbox' : 'square-outline'}
+          size={22}
+          color={on ? '#0f766e' : '#94a3b8'}
+          style={{ marginRight: 10, marginTop: 2 }}
+        />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.osRowTxt} numberOfLines={2}>
+            {row.displayLine}
+          </Text>
+          <Text style={[styles.osRowBadge, completed ? styles.osRowBadgeDone : styles.osRowBadgeOpen]}>
+            {completed
+              ? t('technicianMobile.financeNewOsRowBadgeCompleted')
+              : t('technicianMobile.financeNewOsRowBadgeOpen')}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: C.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Novo lançamento" leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <ScreenSubheader
+        title="Novo lançamento"
+        subtitle={t('technicianMobile.financeNewSubtitle')}
+        onBack={() => router.back()}
+        onRightPress={() => void refreshLinkableOs()}
+        rightLoading={linkableLoading}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.hint}>
-          Este registro não está ligado a um bem nem ao módulo de custos do portfólio.
-        </Text>
-
         <Text style={styles.lbl}>Tipo</Text>
         <View style={styles.kindRow}>
           <TouchableOpacity
@@ -237,13 +290,19 @@ export default function NewTechnicianFinanceScreen() {
         </View>
 
         <Text style={styles.lbl}>Valor (R$)</Text>
-        <TextInput
+        <ValueInput
           style={styles.input}
-          keyboardType="decimal-pad"
           placeholder="0,00"
-          placeholderTextColor="#94a3b8"
+          currency
+          currencySymbol="R$"
           value={amountStr}
           onChangeText={setAmountStr}
+          onDraftChange={(t) => {
+            amountDraftRef.current = t;
+          }}
+          onEditingStateChange={(editing) => {
+            amountEditingRef.current = editing;
+          }}
         />
 
         {kind === 'expense' ? (
@@ -263,12 +322,18 @@ export default function NewTechnicianFinanceScreen() {
 
         {kind === 'expense' ? (
           <>
-            <Text style={styles.lbl}>Relacionar a OS (opcional)</Text>
-            <Text style={styles.osHint}>
-              Aparecem OS cujo modelo tem campo de despesas do técnico: em aberto no celular ou concluídas há até 30
-              dias (sincronize a lista). Várias OS dividem o valor em partes iguais; cada parte fica ligada à OS no
-              rascunho do formulário.
-            </Text>
+            <View style={styles.osLinkHeadRow}>
+              <Text style={styles.osLinkHeadLbl}>{t('technicianMobile.financeNewOsLinkTitle')}</Text>
+              <Pressable
+                onPress={() => setOsHelpVisible(true)}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={t('technicianMobile.financeNewOsHelpA11y')}
+                style={({ pressed }) => [{ opacity: pressed ? 0.65 : 1 }]}
+              >
+                <Ionicons name="help-circle-outline" size={24} color="#64748b" />
+              </Pressable>
+            </View>
             {linkableLoading ? (
               <View style={styles.osLoading}>
                 <ActivityIndicator color="#0f766e" />
@@ -277,29 +342,25 @@ export default function NewTechnicianFinanceScreen() {
             ) : linkableOs.length === 0 ? (
               <Text style={styles.osEmpty}>Nenhuma OS elegível neste momento.</Text>
             ) : (
-              <View style={styles.osList}>
-                {linkableOs.map((t) => {
-                  const on = selectedOsIds.includes(t.id);
-                  return (
-                    <TouchableOpacity
-                      key={t.id}
-                      style={[styles.osRow, on && styles.osRowOn]}
-                      onPress={() => toggleOs(t.id)}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons
-                        name={on ? 'checkbox' : 'square-outline'}
-                        size={22}
-                        color={on ? '#0f766e' : '#94a3b8'}
-                        style={{ marginRight: 10 }}
-                      />
-                      <Text style={styles.osRowTxt} numberOfLines={2}>
-                        {t.displayLine}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <ScrollView
+                style={styles.osListScroll}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+              >
+                {openOs.length > 0 ? (
+                  <View style={styles.osList}>
+                    <Text style={styles.osSubsectionLbl}>{t('technicianMobile.financeNewOsSectionOpen')}</Text>
+                    {openOs.map((t) => renderOsRow(t))}
+                  </View>
+                ) : null}
+                {completedOs.length > 0 ? (
+                  <View style={[styles.osList, openOs.length > 0 && styles.osListSpaced]}>
+                    <Text style={styles.osSubsectionLbl}>{t('technicianMobile.financeNewOsSectionCompleted')}</Text>
+                    {completedOs.map((t) => renderOsRow(t))}
+                  </View>
+                ) : null}
+              </ScrollView>
             )}
           </>
         ) : null}
@@ -346,6 +407,29 @@ export default function NewTechnicianFinanceScreen() {
           <Text style={styles.saveBtnTxt}>Guardar</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={osHelpVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOsHelpVisible(false)}
+      >
+        <View style={styles.helpModalBackdrop}>
+          <View style={[styles.helpModalCard, { backgroundColor: C.cardWhite }]}>
+            <Text style={[styles.helpModalTitle, { color: C.slate }]}>{t('technicianMobile.financeNewOsHelpTitle')}</Text>
+            <Text style={[styles.helpModalBody, { color: C.textSecondary }]}>
+              {t('technicianMobile.financeNewOsHelpBody')}
+            </Text>
+            <TouchableOpacity
+              style={[styles.helpModalClose, { backgroundColor: C.accent }]}
+              onPress={() => setOsHelpVisible(false)}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.helpModalCloseTxt}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -353,7 +437,6 @@ export default function NewTechnicianFinanceScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
-  hint: { fontSize: 13, color: '#64748b', lineHeight: 19, marginBottom: 20 },
   lbl: { fontSize: 12, fontWeight: '800', color: '#475569', marginBottom: 8 },
   kindRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   kindBtn: {
@@ -380,12 +463,23 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   inputMulti: { minHeight: 100, textAlignVertical: 'top' },
-  osHint: {
-    fontSize: 12,
-    color: '#94a3b8',
-    lineHeight: 17,
-    marginTop: -4,
-    marginBottom: 12,
+  osLinkHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  osLinkHeadLbl: { flex: 1, fontSize: 12, fontWeight: '800', color: '#475569' },
+  osListScroll: { maxHeight: 280, marginBottom: 18 },
+  osList: { gap: 8 },
+  osListSpaced: { marginTop: 14 },
+  osSubsectionLbl: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   osLoading: {
     flexDirection: 'row',
@@ -396,10 +490,9 @@ const styles = StyleSheet.create({
   },
   osLoadingTxt: { fontSize: 13, color: '#64748b' },
   osEmpty: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', marginBottom: 18 },
-  osList: { gap: 8, marginBottom: 18 },
   osRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -408,7 +501,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   osRowOn: { borderColor: '#99f6e4', backgroundColor: '#ecfdf5' },
-  osRowTxt: { flex: 1, fontSize: 14, fontWeight: '600', color: '#334155' },
+  /** OS concluídas (janela 30 dias): verde alinhado a estados positivos / receita no ecrã. */
+  osRowCompleted: { backgroundColor: '#ecfdf5', borderColor: '#6ee7b7' },
+  osRowTxt: { fontSize: 14, fontWeight: '600', color: '#334155' },
+  osRowBadge: { marginTop: 4, fontSize: 10, fontWeight: '800', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  osRowBadgeOpen: { color: '#0f766e', backgroundColor: '#d1fae5' },
+  osRowBadgeDone: { color: '#047857', backgroundColor: '#bbf7d0' },
+  helpModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  helpModalCard: { borderRadius: 16, padding: 20 },
+  helpModalTitle: { fontSize: 18, fontWeight: '900', marginBottom: 12 },
+  helpModalBody: { fontSize: 14, lineHeight: 22, marginBottom: 20 },
+  helpModalClose: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  helpModalCloseTxt: { fontSize: 15, fontWeight: '800', color: '#fff' },
   attachHint: { fontSize: 12, color: '#94a3b8', marginTop: -4, marginBottom: 10, lineHeight: 17 },
   addAttachBtn: {
     flexDirection: 'row',

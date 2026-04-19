@@ -241,7 +241,7 @@ export default function AssetShareScreen() {
               <View style={{ alignItems: 'center', padding: 40, backgroundColor: C.surfaceLow, borderRadius: 20, borderWidth: 1, borderColor: C.border }}>
                 <Ionicons name="people-outline" size={48} color={C.slate} style={{ marginBottom: 16, opacity: 0.5 }} />
                 <Text style={{ fontSize: 14, color: C.slate, fontWeight: '800', textAlign: 'center' }}>Ninguém tem acesso</Text>
-                <Text style={{ fontSize: 12, color: C.textSecondary, textAlign: 'center', marginTop: 8 }}>Convide membros para visualizar ou editar este bem.</Text>
+                <Text style={{ fontSize: 12, color: C.textSecondary, textAlign: 'center', marginTop: 8 }}>Convide membros para visualizar ou editar este ativo.</Text>
               </View>
             ) : (
               shares.map(s => (

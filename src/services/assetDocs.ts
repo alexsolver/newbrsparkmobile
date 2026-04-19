@@ -25,24 +25,30 @@ export interface AssetDocument {
 
 const KEY = (email: string) => AuthService.getUserKey('asset_docs', email);
 
-export const AssetDocService = {
-  getDocuments: async (assetId: string, ownerEmail?: string): Promise<AssetDocument[]> => {
-    if (!ownerEmail) return [];
+async function loadAllSafe(ownerEmail?: string): Promise<AssetDocument[]> {
+  if (!ownerEmail) return [];
+  try {
     const data = await AsyncStorage.getItem(KEY(ownerEmail));
     if (!data) return [];
-    const all: AssetDocument[] = JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? (parsed as AssetDocument[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const AssetDocService = {
+  getDocuments: async (assetId: string, ownerEmail?: string): Promise<AssetDocument[]> => {
+    const all = await loadAllSafe(ownerEmail);
     return all.filter(d => d.assetId === assetId);
   },
 
   getAllDocuments: async (ownerEmail?: string): Promise<AssetDocument[]> => {
-     if (!ownerEmail) return [];
-     const data = await AsyncStorage.getItem(KEY(ownerEmail));
-     return data ? JSON.parse(data) : [];
+     return loadAllSafe(ownerEmail);
   },
 
   saveDocument: async (doc: AssetDocument, ownerEmail: string) => {
-    const data = await AsyncStorage.getItem(KEY(ownerEmail));
-    const all: AssetDocument[] = data ? JSON.parse(data) : [];
+    const all = await loadAllSafe(ownerEmail);
     const idx = all.findIndex(d => d.id === doc.id);
     
     if (idx >= 0) all[idx] = doc;
@@ -57,8 +63,7 @@ export const AssetDocService = {
   },
 
   deleteDocument: async (id: string, ownerEmail: string) => {
-    const data = await AsyncStorage.getItem(KEY(ownerEmail));
-    const all: AssetDocument[] = data ? JSON.parse(data) : [];
+    const all = await loadAllSafe(ownerEmail);
     const filtered = all.filter(d => d.id !== id);
     await AsyncStorage.setItem(KEY(ownerEmail), JSON.stringify(filtered));
     await Notifications.cancelScheduledNotificationAsync(id);

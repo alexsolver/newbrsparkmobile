@@ -15,6 +15,7 @@ import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
 import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
+import { NotificationService } from '../services/notifications';
 
 interface AuthContextType {
   user: User | null;
@@ -30,6 +31,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   completeLoginWithOtp: (challengeToken: string, otp: string) => Promise<void>;
+  loginWithOtp: (p: { challengeId: string; code: string; name?: string }) => Promise<void>;
   userRole: 'CLIENT' | 'TECHNICIAN';
   setUserRole: (role: 'CLIENT' | 'TECHNICIAN') => Promise<void>;
   patchUser: (partial: Partial<User>) => Promise<void>;
@@ -60,6 +62,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     }
   }, [user, user?.technicianProfile?.status, user?.role, userRole]);
+
+  /**
+   * Mesma regra do PersonaContext: CLIENTE/TECHNICIAN → concha. Push e rotas lêem esta chave em alguns fluxos.
+   * (PersonaContext não lê o AsyncStorage; só auth → role.)
+   */
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      try {
+        if (!user) {
+          await AsyncStorage.setItem('@brspark_active_persona_v1', 'client');
+          return;
+        }
+        if (canUseProviderMode(user)) {
+          const shell: 'client' | 'provider' = userRole === 'TECHNICIAN' ? 'provider' : 'client';
+          await AsyncStorage.setItem('@brspark_active_persona_v1', shell);
+        } else {
+          await AsyncStorage.setItem('@brspark_active_persona_v1', 'client');
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [user, userRole, loading]);
 
   /** Prestador habilitado remotamente (painel): passar a TECHNICIAN + modo prestador no Header */
   useEffect(() => {
@@ -122,9 +148,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       _setUserRole('CLIENT');
     });
     const pushSub = Notifications.addNotificationReceivedListener((notification) => {
-      const t = notification.request?.content?.data?.type;
+      const data = notification.request?.content?.data as Record<string, unknown> | undefined;
+      const t = data?.type;
       if (t === 'FORCE_LOGOUT') {
         applySessionInvalidatedFromServer().catch(() => {});
+        return;
+      }
+      if (t === 'EVALUATION_CLIENT_SURVEY_INVITE') {
+        const surveyUrl = typeof data?.surveyUrl === 'string' ? data.surveyUrl.trim() : '';
+        const evaluationInstanceId =
+          typeof data?.evaluationInstanceId === 'string' ? data.evaluationInstanceId.trim() : '';
+        if (!surveyUrl || !evaluationInstanceId) return;
+        const content = notification.request.content;
+        NotificationService.addNotification({
+          title: String(content.title || 'Avaliação'),
+          body: String(content.body || 'Toque para responder à pesquisa.'),
+          category: 'evaluation',
+          personaScope: 'client',
+          evaluationInstanceId,
+          surveyUrl,
+          fixedId: `eval_survey_${evaluationInstanceId}`,
+          suppressLocalBanner: true,
+        });
       }
     });
     return () => {
@@ -266,6 +311,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-2fa failed:', err));
   };
 
+  const loginWithOtp = async (p: { challengeId: string; code: string; name?: string }) => {
+    const u = await AuthService.verifyOtpAndLogin({
+      challengeId: p.challengeId,
+      code: p.code,
+      name: p.name,
+    });
+    setUser(u);
+    runAvatarWarm(u);
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    _setUserRole(defaultRole);
+    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
+    ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-OTP app falhou:', err));
+  };
+
   const register = async (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => {
     const u = await AuthService.register(data);
     setUser(u);
@@ -309,6 +369,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         deleteAccount,
         completeLoginWithOtp,
+        loginWithOtp,
         userRole,
         setUserRole,
         patchUser,

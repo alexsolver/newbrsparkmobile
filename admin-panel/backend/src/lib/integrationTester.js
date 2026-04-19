@@ -89,6 +89,16 @@ async function testIntegration(integration) {
     if (name === 'Cloudflare R2') return testR2(integration);
   }
 
+  // ── Pagamentos (Stripe) ─────────────────────────────
+  if (type === 'PAYMENT' && name === 'Stripe') {
+    return testStripe(integration);
+  }
+
+  // ── Didit (KYC / didit.me) — GET sessão inexistente (404 = chave OK) ──
+  if (type === 'WEBHOOK' && name === 'Didit') {
+    return testDidit(integration);
+  }
+
   // ── Mapas / OSRM (nome "OSRM" mesmo se type na BD não for MAPS — evita "teste não implementado")
   if (isOsrmIntegration(integration)) {
     return testOsrm(integration);
@@ -614,6 +624,81 @@ async function testCosmos({ apiKey, baseUrl }) {
     if (r.status === 404) return { ok: true, message: 'Cosmos conectado ✓ (Produto de teste 404)' }; // Sometimes the test GTIN might be 404, but API works
     return { ok: false, message: `Integração retornou HTTP ${r.status}` };
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
+}
+
+// ── Stripe — GET /v1/balance (chave secreta) ───────
+async function testStripe({ apiKey }) {
+  const k = String(apiKey || '').trim();
+  if (!k) {
+    return { ok: false, message: 'Chave secreta Stripe (sk_…) não configurada.' };
+  }
+  if (!/^sk_(live|test)_/.test(k)) {
+    return { ok: false, message: 'A chave deve ser a secreta (começa com sk_test_ ou sk_live_).' };
+  }
+  try {
+    const r = await httpsGet('api.stripe.com', '/v1/balance', {
+      Authorization: `Bearer ${k}`,
+      'User-Agent': 'BrSpark/1.0 (integrations-test)',
+    });
+    if (r.status === 200) {
+      let o;
+      try { o = JSON.parse(r.body || '{}'); } catch { o = null; }
+      const li = o?.livemode === false ? ' (modo teste)' : o?.livemode === true ? ' (produção)' : '';
+      return { ok: true, message: `Stripe autenticado com sucesso${li}.` };
+    }
+    if (r.status === 401) {
+      return { ok: false, message: 'Chave inválida ou revogada (HTTP 401).' };
+    }
+    return { ok: false, message: `Stripe retornou HTTP ${r.status}` };
+  } catch (e) {
+    return { ok: false, message: `Erro de rede: ${e.message}` };
+  }
+}
+
+/**
+ * Prova: GET /v3/session/0000…/decision/ (sessão inexistente).
+ * 404/410 → chave aceite; 401/403 → chave inválida. Ver docs.didit.me.
+ */
+async function testDidit(integration) {
+  const key = String(integration?.apiKey || '').trim();
+  if (!key) {
+    return { ok: false, message: 'Chave de API Didit (x-api-key) não configurada.' };
+  }
+  const def = 'https://verification.didit.me';
+  const raw = (integration?.baseUrl && String(integration.baseUrl).trim()) || def;
+  let u;
+  try {
+    u = new URL(String(raw).replace(/\/+$/g, ''));
+  } catch {
+    return { ok: false, message: 'URL base do Didit inválida. Use a raiz, ex: https://verification.didit.me' };
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    return { ok: false, message: 'Use http:// ou https:// na base URL (Didit).' };
+  }
+  const path = '/v3/session/00000000-0000-0000-0000-000000000000/decision/';
+  const headers = {
+    'x-api-key': key,
+    Accept: 'application/json',
+    'User-Agent': 'BrSpark/1.0 (didit-ping)',
+  };
+  try {
+    const r = await httpsGet(u.hostname, path, headers);
+    if (r.status === 404) {
+      return { ok: true, message: 'Chave Didit autenticada (sessão de prova inexistente — 404, esperado).' };
+    }
+    if (r.status === 410) {
+      return { ok: true, message: 'Chave Didit autenticada (recurso indisponível, mas credenciais OK).' };
+    }
+    if (r.status === 200) {
+      return { ok: true, message: 'Didit respondeu 200: verifique se a API ainda exige o mesmo padrão de rota de teste.' };
+    }
+    if (r.status === 401 || r.status === 403) {
+      return { ok: false, message: 'Chave Didit rejeitada (401/403). Confirme a API key no consola (Application → API & Webhooks).' };
+    }
+    return { ok: false, message: `Didit retornou HTTP ${r.status} — confira a base URL e a chave.` };
+  } catch (e) {
+    return { ok: false, message: `Erro de rede: ${e.message}` };
+  }
 }
 
 // ── UPCItemDB ───────────────────────────────────────

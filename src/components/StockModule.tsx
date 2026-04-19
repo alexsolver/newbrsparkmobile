@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert, ScrollView, Image, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter } from 'react-native';
-import { ValueInput } from './ValueInput';
+import { ValueInput, parseLocaleAmountString } from './ValueInput';
 import { Ionicons } from '@expo/vector-icons';
 import { type ColorPalette } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
@@ -218,7 +218,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
 
   const handleMovement = async () => {
     if (!selectedItem) return;
-    const qVal = parseFloat(quantity.replace(',', '.'));
+    const qVal = parseLocaleAmountString(quantity);
     if (!quantity || isNaN(qVal)) return Alert.alert(t('common.attention'), t('stock.informQuantity') || 'Informe a quantidade.');
     if (moveType === 'TRANSFER' && !destAssetId) return Alert.alert(t('common.attention'), t('stock.informDestination') || 'Informe o destino.');
 
@@ -250,7 +250,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
           subLocation: subLocation,
           destinationAssetId: destAssetId,
           destinationSubLocation: destLocationId,
-          unitPrice: parseFloat(unitPrice.replace(',', '.')) || 0
+          unitPrice: parseLocaleAmountString(unitPrice) || 0
         });
       }
 
@@ -350,7 +350,7 @@ export function StockModule({ assetId }: { assetId?: string }) {
     <View style={S.container}>
       {toast && (
         <TouchableOpacity style={[S.toast, toast.type === 'error' ? S.toastE : S.toastS]} onPress={() => setToast(null)}>
-          <Ionicons name={toast.type === 'error' ? 'alert-circle' : 'checkmark-circle'} size={18} color="#fff" />
+          <Ionicons name={toast.type === 'error' ? 'alert-circle' : 'checkmark-circle'} size={24} color="#fff" />
           <Text style={S.toastT}>{toast.msg}</Text>
         </TouchableOpacity>
       )}
@@ -903,10 +903,10 @@ function createStockModuleStyles(C: ColorPalette) {
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   scannerFrame: { width: 220, height: 220, borderWidth: 2, borderColor: C.accent, borderRadius: 20, borderStyle: 'dashed' },
   
-  toast: { position: 'absolute', top: 20, left: 20, right: 20, backgroundColor: C.primary, padding: 16, borderRadius: 15, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 9999 },
+  toast: { position: 'absolute', top: 20, left: 16, right: 16, backgroundColor: C.primary, paddingVertical: 20, paddingHorizontal: 20, minHeight: 64, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 14, zIndex: 9999 },
   toastS: { backgroundColor: '#10B981' },
   toastE: { backgroundColor: C.warning.text },
-  toastT: { color: '#fff', fontSize: 13, fontWeight: '800', flex: 1 },
+  toastT: { color: '#fff', fontSize: 16, fontWeight: '800', flex: 1, lineHeight: 22 },
   
   finSummary: { backgroundColor: C.background, padding: 20, borderRadius: 24, marginHorizontal: 20, marginBottom: 20 },
   finItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

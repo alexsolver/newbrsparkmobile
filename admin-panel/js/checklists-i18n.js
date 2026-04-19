@@ -72,17 +72,19 @@ const M = {
     fb_tb_barcode_scan: 'Escanear etiqueta / ativo',
     fb_tb_materials_consumption: 'Materiais / consumo (estoque técnico)',
     fb_tb_materials_receipt: 'Materiais / entrada (estoque técnico)',
-    fb_tb_technician_finance: 'Custos do técnico (financeiro técnico)',
+    fb_tb_technician_finance_expense: 'Despesas do técnico',
+    fb_tb_technician_finance_revenue: 'Receitas do técnico',
     fb_tb_signature: 'Assinatura',
     fb_tb_signature_summary: 'Resumo para assinatura · Signature summary',
     fb_tb_leitura: 'Leitura',
+    fb_tb_form_complete_button: 'Botão concluir (FT / OS)',
     fb_tb_voice_note: 'Nota de voz',
     fb_tb_facial_recognition: 'Reconhecimento facial',
     fb_tb_vision_checklist: 'Visão de IA — detecção',
     fb_tb_vision_ai_analysis: 'Visão de IA — análise',
 
     fb_canvas_section_prefix: 'Seção ·',
-    fb_canvas_preamble_title: 'Antes da primeira seção',
+    fb_canvas_preamble_title: 'Área Externa',
     fb_canvas_fields_one: '{n} campo',
     fb_canvas_fields_many: '{n} campos',
     fb_canvas_questions_one: '{n} pergunta',
@@ -145,6 +147,8 @@ const M = {
     fb_prop_required_q: 'Resposta obrigatória?',
     fb_prop_leitura_block_note:
       'Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).',
+    fb_prop_form_complete_btn_note:
+      'No app, este bloco mostra um <strong>botão</strong> que faz o mesmo que o botão principal do rodapé (avançar, voltar ao menu de etapas ou <strong>concluir a OS</strong>). O texto do botão é o <strong>rótulo</strong> acima; se estiver vazio, o app usa o texto padrão do rodapé. Pode colocar o campo na <strong>Área Externa</strong> ou dentro de qualquer etapa.',
     fb_prop_repeat_field_title: 'Várias respostas (lista)',
     fb_prop_repeat_field_help:
       'O app grava um <b>array</b> na execução para este campo (texto, opções, fotos, assinaturas, etc.). Compatível com formulários antigos (valor único continua sendo string ou valor único).',
@@ -162,7 +166,7 @@ const M = {
     fb_prop_online_validation_vision:
       'Na visão IA: <b>desmarcado</b> permite capturar pela câmera sem rede e tentar análise quando houver rede. <b>Marcado</b> exige internet no envio ao servidor.',
     fb_prop_vision_ai_structured_prompt_hint:
-      'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de {max} caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
+      'Descreva critérios da sua operação, o que conta como boa ou má evidência e o que a IA deve observar na mídia. Limite aproximado de {max} caracteres. A API responde em JSON com <code>answers</code> (ex.: <code>q1</code>); o modelo padrão usa <code>value</code> como string de "0" a "10" ou <code>unknown</code>. Com a classificação 0–10 ativada acima, a raiz inclui também <code>rating0To10</code> (inteiro alinhado à mesma nota).',
     fb_prop_online_validation_voice:
       'Nota de voz: a transcrição (Whisper) é <b>sempre no servidor</b>. <b>Desmarcado</b> = pode gravar offline mas precisa de rede ao «Parar e transcrever». <b>Marcado</b> = exige internet no envio.',
     fb_prop_online_validation_lookup:
@@ -220,16 +224,42 @@ const M = {
     fb_prop_vision_title_detection_html:
       '<ion-icon name="videocam-outline"></ion-icon> Visão de IA — detecção',
     fb_prop_vision_body_analysis_html:
-      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
+      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta traz nota de 0 a 10 em <code>answers[0].value</code> (string), confiança e racional. Com «Classificação 0–10» ativada (recomendado), a raiz do JSON inclui também <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
       'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. Abaixo define-se <b>um único critério</b> por envio de mídia; a API devolve sim/não + confiança para esse critério.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (sim/não)',
     fb_prop_vision_detection_prompt_hint:
       'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres). A API devolve JSON com <code>answers</code> (sempre <code>q1</code>) e valor <code>yes</code>, <code>no</code> ou <code>unknown</code> quando o critério é sim/não.',
     fb_prop_vision_default_structured_prompt:
-      'Critério único (identificador q1). Com base exclusivamente na foto ou vídeo:\n' +
-      'A condição do equipamento ou do local visível é compatível com concluir positivamente esta etapa da OS (serviço ou instalação materialmente presente, estado razoável e sem evidência clara de não conformidade grave)?\n' +
-      'Explique de forma breve, citando elementos objetivos observados na mídia.',
+      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+      'Tarefa:\n' +
+      '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+      '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+      'Campo value (obrigatório):\n' +
+      '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+      '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+      'Rubrica orientativa:\n' +
+      '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+      '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+      '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+      '- 7–8: bom estado geral; apenas falhas leves.\n' +
+      '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+      'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
+    fb_prop_vision_prompt_placeholder:
+      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+      'Tarefa:\n' +
+      '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+      '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+      'Campo value (obrigatório):\n' +
+      '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+      '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+      'Rubrica orientativa:\n' +
+      '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+      '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+      '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+      '- 7–8: bom estado geral; apenas falhas leves.\n' +
+      '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+      'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
     fb_prop_vision_default_detection_prompt:
       'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
     fb_prop_vision_rating_chk_lbl: 'Classificação 0–10 (preenchida pela API após a análise)',
@@ -254,7 +284,7 @@ const M = {
     fb_vision_prompt_ex_btn_title: 'Modelos de prompt para serviços de campo (Visão de IA — análise)',
     fb_vision_prompt_ex_modal_title: 'Exemplos de prompt estruturado',
     fb_vision_prompt_ex_modal_intro:
-      'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Ative «Classificação 0–10» nas propriedades se quiser que a API preencha <code>rating0To10</code> coerente com a rubrica.',
+      'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Em campos novos, «Classificação 0–10» vem ativada por defeito para a API devolver <code>rating0To10</code> alinhado à nota em <code>value</code>; desative nas propriedades se não precisar.',
     fb_vision_prompt_ex_apply: 'Aplicar ao campo',
     fb_vision_prompt_ex_close: 'Fechar',
     fb_vision_prompt_ex_area_lbl: 'Área / setor',
@@ -328,9 +358,12 @@ const M = {
 
     fb_canvas_panel: 'Canvas do formulário',
     fb_canvas_loading:
-      'Carregando o canvas… Cada formulário começa com uma seção; arraste perguntas para dentro dela.',
+      'Carregando o canvas… Pode colocar campos na «Área Externa» ou dentro de cada etapa; arraste da barra lateral.',
     fb_label_form_title: 'Título do formulário',
     fb_placeholder_form_title: 'Ex.: Vistoria cautelar',
+    fb_label_form_active: 'Formulário ativo',
+    fb_hint_form_active:
+      'Desmarcado: o modelo fica inativo — não aparece no despacho de OS nem no GET público de modelos (no builder use a lista com «incluir arquivados»). Pode voltar a marcar e salvar para reativar.',
     fb_label_public_desc: 'Descrição pública',
     fb_placeholder_public_desc: 'O que os seus parceiros farão com este documento?',
     fb_tpl_icon_title: 'Ícone do formulário — clique para escolher',
@@ -387,8 +420,10 @@ const M = {
     mdl_cancel: 'Cancelar',
     mdl_new_form_create: 'Criar painel em branco',
     mdl_forms_title: 'Meus formulários',
-    mdl_forms_sub: 'Pastas e modelos — abra uma pasta ou escolha um formulário para editar.',
-    mdl_forms_search_ph: 'Filtrar por nome na pasta atual…',
+    mdl_forms_sub: 'Pastas e modelos na árvore — expanda, arraste ou use as ações em cada linha.',
+    mdl_forms_search_ph: 'Filtrar por nome (pastas e formulários)…',
+    mdl_forms_tree_tip:
+        'Dica: arraste um formulário para uma pasta na árvore ou use «Mover para» na linha do modelo.',
     mdl_forms_new_folder: '+ Nova pasta',
     mdl_forms_new_here: 'Novo formulário aqui',
     mdl_folder_title: 'Nova pasta',
@@ -607,6 +642,9 @@ const M = {
     fb_audit_title: 'QA do formulário',
     fb_audit_sub:
       'Checagem rápida antes de salvar para evitar formulário vago, técnico demais ou incompleto para o app.',
+    fb_audit_fix_ai: 'Sugerir correção com IA',
+    fb_audit_fix_ai_title:
+      'Pedir ao copiloto para sugerir e, se possível, aplicar a correção deste apontamento',
     mdl_delete_form_title: 'Arquivar formulário?',
     mdl_delete_form_body:
       'O formulário será arquivado e poderá ser restaurado depois pelo histórico/versões. Isso evita perda acidental.',
@@ -651,7 +689,8 @@ const M = {
     fb_alert_folder_move_net: 'Erro de rede ao mover formulário.',
     fb_alert_clone_net: 'Erro de rede ao clonar. A cópia local foi descartada.',
     fb_alert_clone_ok: "Formulário «{title}» clonado com sucesso.",
-    fb_alert_new_panel: 'Painel preparado para «{title}». Já existe uma primeira seção no canvas — arraste perguntas para dentro dela (ou adicione mais seções).',
+    fb_alert_new_panel:
+      'Painel preparado para «{title}». Já existe uma primeira etapa no canvas — arraste perguntas para a «Área Externa» ou para dentro de uma etapa (ou adicione mais seções).',
     fb_alert_select_field: 'Selecione um campo no canvas (clique num cartão).',
     fb_alert_clarify_options: 'Marque pelo menos uma opção em alguma pergunta, ou escreva na caixa de texto.',
     fb_alert_copilot_reprocess: 'Sem proposta carregada para reprocessar.',
@@ -735,17 +774,19 @@ const M = {
     fb_tb_barcode_scan: 'Scan label / asset',
     fb_tb_materials_consumption: 'Materials / consumption (tech stock)',
     fb_tb_materials_receipt: 'Materials / inbound (tech stock)',
-    fb_tb_technician_finance: 'Technician costs (tech finance)',
+    fb_tb_technician_finance_expense: 'Technician expenses',
+    fb_tb_technician_finance_revenue: 'Technician revenue',
     fb_tb_signature: 'Signature',
     fb_tb_signature_summary: 'Signature summary · Resumo para assinatura',
     fb_tb_leitura: 'Reading',
+    fb_tb_form_complete_button: 'Complete button (form / work order)',
     fb_tb_voice_note: 'Voice note',
     fb_tb_facial_recognition: 'Face recognition',
     fb_tb_vision_checklist: 'AI vision — detection',
     fb_tb_vision_ai_analysis: 'AI vision — analysis',
 
     fb_canvas_section_prefix: 'Section ·',
-    fb_canvas_preamble_title: 'Before the first section',
+    fb_canvas_preamble_title: 'External area',
     fb_canvas_fields_one: '{n} field',
     fb_canvas_fields_many: '{n} fields',
     fb_canvas_questions_one: '{n} question',
@@ -808,6 +849,8 @@ const M = {
     fb_prop_required_q: 'Required answer?',
     fb_prop_leitura_block_note:
       'This block <strong>does not collect an answer</strong> in the app — it is only for the technician to read (contracts, notices, etc.).',
+    fb_prop_form_complete_btn_note:
+      'In the app, this block shows a <strong>button</strong> that performs the same action as the main footer button (advance, return to the step menu, or <strong>complete the work order</strong>). The button text is the <strong>label</strong> above; if empty, the app uses the default footer label. You can place the field in the <strong>External area</strong> or inside any step.',
     fb_prop_repeat_field_title: 'Multiple answers (list)',
     fb_prop_repeat_field_help:
       'The app stores an <b>array</b> in the run for this field (text, options, photos, signatures, etc.). Compatible with older forms (a single value remains a string or single value).',
@@ -825,7 +868,7 @@ const M = {
     fb_prop_online_validation_vision:
       'AI vision: <b>unchecked</b> allows camera capture without network and tries analysis when online. <b>Checked</b> requires internet when sending to the server.',
     fb_prop_vision_ai_structured_prompt_hint:
-      'Describe criteria, the desired response format, and what the AI should verify in the media. Approximate limit: {max} characters. The API returns JSON with an <code>answers</code> array (each item includes the question id, e.g. <code>q1</code>). If you enable the 0–10 rating above, the root object also includes <code>rating0To10</code>.',
+      'Describe your operation’s criteria, what counts as good or poor evidence, and what the AI should look for in the media. Approximate limit: {max} characters. The API returns JSON with <code>answers</code> (e.g. <code>q1</code>); the default template uses <code>value</code> as a string from "0" to "10" or <code>unknown</code>. With the 0–10 rating enabled above, the root also includes <code>rating0To10</code> (integer aligned with the same score).',
     fb_prop_online_validation_voice:
       'Voice note: transcription (Whisper) is <b>always on the server</b>. <b>Unchecked</b> = can record offline but needs network on “Stop and transcribe”. <b>Checked</b> = requires internet on upload.',
     fb_prop_online_validation_lookup:
@@ -883,16 +926,42 @@ const M = {
     fb_prop_vision_title_detection_html:
       '<ion-icon name="videocam-outline"></ion-icon> AI vision — detection',
     fb_prop_vision_body_analysis_html:
-      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response returns yes/no + confidence (and rationale) for the set.',
+      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response includes a 0–10 score in <code>answers[0].value</code> (string), confidence, and rationale. With <b>0–10 rating</b> enabled (recommended), the JSON root also includes <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
       'In the app, the technician uses <b>camera only</b> — no gallery or file picker. BrSpark forwards to the URL under <b>Integrations → Vision AI - YOLO</b>. Below defines <b>one criterion</b> per media upload; the API returns yes/no + confidence for that criterion.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (yes/no)',
     fb_prop_vision_detection_prompt_hint:
       'A <b>single</b> criterion per media upload (up to <b>{maxSingle}</b> characters). The API returns JSON with <code>answers</code> (always <code>q1</code>) and <code>yes</code>, <code>no</code>, or <code>unknown</code> when the criterion is yes/no.',
     fb_prop_vision_default_structured_prompt:
-      'Single criterion (id q1). Based only on the photo or video:\n' +
-      'Is the visible equipment or site condition consistent with a positive outcome for this work-order step (work or installation materially present, reasonable state, no clearly severe nonconformity)?\n' +
-      'Briefly explain citing objective details from the media.',
+      'Context: visual inspection of a field-service step (single photo or video).\n\n' +
+      'Task:\n' +
+      '1) Assign an integer score from 0 to 10 for how well the visual evidence meets this work-order step’s criteria.\n' +
+      '2) Rely only on what is visible: expected item or service, apparent condition, organization, and severity of any visible non-conformities.\n\n' +
+      'Field value (required):\n' +
+      '- Send only the digits of an integer between 0 and 10, as a string (e.g. "7").\n' +
+      '- Or send exactly unknown if the media is insufficient, the target cannot be identified, or the decision would be ambiguous.\n\n' +
+      'Guidance rubric:\n' +
+      '- 0–2: unacceptable or irrelevant evidence; clear severe non-conformity.\n' +
+      '- 3–4: several visible issues or weak evidence quality.\n' +
+      '- 5–6: acceptable with caveats; improvements needed.\n' +
+      '- 7–8: generally good; only minor issues.\n' +
+      '- 9–10: excellent; step requirements clearly met.\n\n' +
+      'In rationale, in 2–4 short sentences, state what you saw and what drove the score most.',
+    fb_prop_vision_prompt_placeholder:
+      'Context: visual inspection of a field-service step (single photo or video).\n\n' +
+      'Task:\n' +
+      '1) Assign an integer score from 0 to 10 for how well the visual evidence meets this work-order step’s criteria.\n' +
+      '2) Rely only on what is visible: expected item or service, apparent condition, organization, and severity of any visible non-conformities.\n\n' +
+      'Field value (required):\n' +
+      '- Send only the digits of an integer between 0 and 10, as a string (e.g. "7").\n' +
+      '- Or send exactly unknown if the media is insufficient, the target cannot be identified, or the decision would be ambiguous.\n\n' +
+      'Guidance rubric:\n' +
+      '- 0–2: unacceptable or irrelevant evidence; clear severe non-conformity.\n' +
+      '- 3–4: several visible issues or weak evidence quality.\n' +
+      '- 5–6: acceptable with caveats; improvements needed.\n' +
+      '- 7–8: generally good; only minor issues.\n' +
+      '- 9–10: excellent; step requirements clearly met.\n\n' +
+      'In rationale, in 2–4 short sentences, state what you saw and what drove the score most.',
     fb_prop_vision_default_detection_prompt:
       'Single criterion (id q1): can you state unambiguously that the expected object or situation for this checklist step is present (or absent, when applicable) according to your YOLO model’s criterion?',
     fb_prop_vision_rating_chk_lbl: '0–10 rating (filled by the API after analysis)',
@@ -917,7 +986,7 @@ const M = {
     fb_vision_prompt_ex_btn_title: 'Ready-made prompts for field services (AI vision — analysis)',
     fb_vision_prompt_ex_modal_title: 'Structured prompt examples',
     fb_vision_prompt_ex_modal_intro:
-      'Pick a template to fill the field, then tune it for your checklist. Enable «0–10 rating» in properties if you want the API to return <code>rating0To10</code> aligned with the rubric.',
+      'Pick a template to fill the field, then tune it for your checklist. On new fields, «0–10 rating» is on by default so the API returns <code>rating0To10</code> aligned with the score in <code>value</code>; turn it off in properties if you do not need it.',
     fb_vision_prompt_ex_apply: 'Apply to field',
     fb_vision_prompt_ex_close: 'Close',
     fb_vision_prompt_ex_area_lbl: 'Area / sector',
@@ -991,9 +1060,12 @@ const M = {
 
     fb_canvas_panel: 'Form canvas',
     fb_canvas_loading:
-      'Loading canvas… Each form starts with one section; drag questions into it.',
+      'Loading canvas… Place fields in the “External area” or inside each step; drag from the sidebar.',
     fb_label_form_title: 'Form title',
     fb_placeholder_form_title: 'e.g. Condition survey',
+    fb_label_form_active: 'Form active',
+    fb_hint_form_active:
+      'Unchecked: template is inactive — hidden from OS dispatch and from the default templates list (use “include archived” in the builder). Check and save to reactivate.',
     fb_label_public_desc: 'Public description',
     fb_placeholder_public_desc: 'What will partners do with this document?',
     fb_tpl_icon_title: 'Form icon — click to choose',
@@ -1050,8 +1122,10 @@ const M = {
     mdl_cancel: 'Cancel',
     mdl_new_form_create: 'Create blank canvas',
     mdl_forms_title: 'My forms',
-    mdl_forms_sub: 'Folders and templates — open a folder or pick a form to edit.',
-    mdl_forms_search_ph: 'Filter by name in current folder…',
+    mdl_forms_sub: 'Folders and templates in the tree — expand, drag, or use the actions on each row.',
+    mdl_forms_search_ph: 'Filter by name (folders and forms)…',
+    mdl_forms_tree_tip:
+        'Tip: drag a form onto a folder in the tree, or use «Move to» on the form row.',
     mdl_forms_new_folder: '+ New folder',
     mdl_forms_new_here: 'New form here',
     mdl_folder_title: 'New folder',
@@ -1270,6 +1344,9 @@ const M = {
     fb_audit_title: 'Form QA',
     fb_audit_sub:
       'Quick review before saving to catch vague, overly technical, or incomplete forms.',
+    fb_audit_fix_ai: 'Suggest AI fix',
+    fb_audit_fix_ai_title:
+      'Ask the copilot to suggest and, when possible, apply a fix for this issue',
     mdl_delete_form_title: 'Archive form?',
     mdl_delete_form_body:
       'The form will be archived and can be restored later from history/versions. This helps avoid accidental loss.',
@@ -1314,7 +1391,8 @@ const M = {
     fb_alert_folder_move_net: 'Network error while moving form.',
     fb_alert_clone_net: 'Network error while cloning. Local copy was rolled back.',
     fb_alert_clone_ok: 'Form “{title}” cloned successfully.',
-    fb_alert_new_panel: 'Canvas ready for “{title}”. A first section already exists — drag questions into it (or add more sections).',
+    fb_alert_new_panel:
+      'Canvas ready for “{title}”. A first step already exists — drag questions into the “External area” or inside a step (or add more sections).',
     fb_alert_select_field: 'Select a field on the canvas (click a card).',
     fb_alert_clarify_options: 'Select at least one option in a question, or type in the text box.',
     fb_alert_copilot_reprocess: 'No loaded draft to reprocess.',
@@ -1341,7 +1419,7 @@ Object.assign(M['es-ES'], {
   fb_vision_prompt_ex_btn_title: 'Modelos de prompt para servicios de campo (visión IA — análisis)',
   fb_vision_prompt_ex_modal_title: 'Ejemplos de prompt estructurado',
   fb_vision_prompt_ex_modal_intro:
-    'Elija una plantilla para rellenar el campo y adáptela a su checklist. Active la «Clasificación 0–10» en propiedades si desea que la API devuelva <code>rating0To10</code> alineado con la rúbrica.',
+    'Elija una plantilla para rellenar el campo y adáptela a su checklist. En campos nuevos, la «Clasificación 0–10» viene activada por defecto para que la API devuelva <code>rating0To10</code> alineado con la nota en <code>value</code>; desactívela en propiedades si no la necesita.',
   fb_vision_prompt_ex_apply: 'Aplicar al campo',
   fb_vision_prompt_ex_close: 'Cerrar',
   fb_vision_prompt_ex_area_lbl: 'Área / sector',
@@ -1358,10 +1436,40 @@ Object.assign(M['es-ES'], {
   fb_prop_vision_detection_prompt_lbl: 'Prompt (sí/no)',
   fb_prop_vision_detection_prompt_hint:
     'Un <b>único</b> criterio por envío de medios (hasta <b>{maxSingle}</b> caracteres). La API devuelve JSON con <code>answers</code> (siempre <code>q1</code>) y valor <code>yes</code>, <code>no</code> o <code>unknown</code> cuando el criterio es sí/no.',
+  fb_prop_vision_body_analysis_html:
+    'En la app, el técnico usa <b>solo la cámara</b> — sin galería ni selector de archivos. El servidor BrSpark llama a la API <b>Gemini</b> con la integración <b>Google AI Studio</b> (clave y modelo en Integraciones). El texto de abajo es un <b>único prompt estructurado</b>; la respuesta incluye una nota de 0 a 10 en <code>answers[0].value</code> (cadena), confianza y racional. Con la «Clasificación 0–10» activada (recomendado), la raíz del JSON incluye también <code>rating0To10</code>.',
+  fb_prop_vision_ai_structured_prompt_hint:
+    'Describa criterios de su operación, qué cuenta como buena o mala evidencia y qué debe observar la IA en el medio. Límite aproximado: {max} caracteres. La API devuelve JSON con <code>answers</code> (p. ej. <code>q1</code>); la plantilla predeterminada usa <code>value</code> como cadena de "0" a "10" o <code>unknown</code>. Con la clasificación 0–10 activada arriba, la raíz incluye también <code>rating0To10</code> (entero alineado con la misma nota).',
   fb_prop_vision_default_structured_prompt:
-    'Criterio único (identificador q1). Solo con base en la foto o el video:\n' +
-    '¿La condición del equipo o del lugar visible es compatible con cerrar positivamente esta etapa de la OS (trabajo o instalación materialmente presente, estado razonable y sin evidencia clara de no conformidad grave)?\n' +
-    'Explique brevemente citando elementos objetivos observados en el medio.',
+    'Contexto: inspección visual de una etapa ejecutada en campo (foto o vídeo único).\n\n' +
+    'Tarea:\n' +
+    '1) Asigne un entero de 0 a 10 a la adherencia de la evidencia visual a los criterios de esta etapa de la OS.\n' +
+    '2) Basándose solo en lo visible: presencia del ítem o servicio esperado, estado aparente, organización y gravedad de posibles no conformidades.\n\n' +
+    'Campo value (obligatorio):\n' +
+    '- Envíe solo los dígitos de un entero entre 0 y 10, como cadena (p. ej. "7").\n' +
+    '- O envíe exactamente unknown si el medio es insuficiente, el objetivo no es identificable o hay ambigüedad relevante.\n\n' +
+    'Rúbrica orientativa:\n' +
+    '- 0–2: inaceptable o evidencia irrelevante; no conformidad grave o evidente.\n' +
+    '- 3–4: varios problemas visibles o calidad débil de la evidencia.\n' +
+    '- 5–6: aceptable con matices; mejoras necesarias.\n' +
+    '- 7–8: buen estado general; solo fallos leves.\n' +
+    '- 9–10: excelente; criterios de la etapa inequívocamente cumplidos.\n\n' +
+    'En rationale, en 2–4 frases breves en es-ES, diga qué observó y qué movió más la nota.',
+  fb_prop_vision_prompt_placeholder:
+    'Contexto: inspección visual de una etapa ejecutada en campo (foto o vídeo único).\n\n' +
+    'Tarea:\n' +
+    '1) Asigne un entero de 0 a 10 a la adherencia de la evidencia visual a los criterios de esta etapa de la OS.\n' +
+    '2) Basándose solo en lo visible: presencia del ítem o servicio esperado, estado aparente, organización y gravedad de posibles no conformidades.\n\n' +
+    'Campo value (obligatorio):\n' +
+    '- Envíe solo los dígitos de un entero entre 0 y 10, como cadena (p. ej. "7").\n' +
+    '- O envíe exactamente unknown si el medio es insuficiente, el objetivo no es identificable o hay ambigüedad relevante.\n\n' +
+    'Rúbrica orientativa:\n' +
+    '- 0–2: inaceptable o evidencia irrelevante; no conformidad grave o evidente.\n' +
+    '- 3–4: varios problemas visibles o calidad débil de la evidencia.\n' +
+    '- 5–6: aceptable con matices; mejoras necesarias.\n' +
+    '- 7–8: buen estado general; solo fallos leves.\n' +
+    '- 9–10: excelente; criterios de la etapa inequívocamente cumplidos.\n\n' +
+    'En rationale, en 2–4 frases breves en es-ES, diga qué observó y qué movió más la nota.',
   fb_prop_vision_default_detection_prompt:
     'Criterio único (identificador q1): ¿la imagen permite afirmar, sin ambigüedad relevante, que el objeto o situación esperados para este punto del checklist están presentes (o ausentes, cuando corresponda) según el criterio de su modelo YOLO?',
   fb_logic_vision_detection_hint_html:
@@ -1382,8 +1490,18 @@ Object.assign(M['es-ES'], {
   fb_app_hub_free: 'Libre',
   fb_app_hub_seq: 'Orden fijo',
   fb_app_hub_wrap_title: 'Activo cuando «Menú de pasos» está seleccionado',
+  fb_label_form_active: 'Formulario activo',
+  fb_hint_form_active:
+    'Desmarcado: el modelo queda inactivo — no aparece en el despacho de OS ni en el listado público de plantillas (en el builder use la lista con «incluir archivados»). Vuelva a marcar y guardar para reactivar.',
   fb_prop_vision_video_max_hint:
     'En la app, en los campos de visión IA (detección o análisis), cada vídeo dura como máximo 10 segundos; se rechazan clips más largos. En detección (YOLO), el envío al servidor usa una imagen extraída del primer instante del vídeo: el servicio externo sigue recibiendo solo imagen.',
+  fb_canvas_preamble_title: 'Área externa',
+  fb_canvas_loading:
+    'Cargando el canvas… Puede colocar campos en el «Área externa» o dentro de cada paso; arrastre desde la barra lateral.',
+  fb_alert_new_panel:
+    'Panel listo para «{title}». Ya existe un primer paso en el canvas — arrastre preguntas al «Área externa» o dentro de un paso (o añada más secciones).',
+  fb_prop_form_complete_btn_note:
+    'En la app, este bloque muestra un <strong>botón</strong> que hace lo mismo que el botón principal del pie (avanzar, volver al menú de pasos o <strong>cerrar la OS</strong>). El texto del botón es la <strong>etiqueta</strong> de arriba; si está vacío, la app usa el texto predeterminado del pie. Puede colocar el campo en el <strong>Área externa</strong> o dentro de cualquier paso.',
 });
 
 function interpolate(str, vars) {
@@ -1492,6 +1610,8 @@ export function applyChecklistsBuilderChromeI18n() {
   setText('fb-form-audit-sub', fbT('fb_audit_sub'));
 
   setText('fb-label-tpl-title', fbT('fb_label_form_title'));
+  setText('fb-label-form-active', fbT('fb_label_form_active'));
+  setText('fb-hint-form-active', fbT('fb_hint_form_active'));
   setInputPh('tpl-title', fbT('fb_placeholder_form_title'));
   try {
     if (typeof window.__fbApplyLocalizedDefaultFormTitle === 'function') {
@@ -1622,6 +1742,7 @@ export function applyChecklistsModalsI18n() {
   setText('mdl-forms-title', fbT('mdl_forms_title'));
   setText('mdl-forms-sub', fbT('mdl_forms_sub'));
   setInputPh('form-search', fbT('mdl_forms_search_ph'));
+  setText('forms-tree-tip', fbT('mdl_forms_tree_tip'));
   setText('btn-new-template-folder', fbT('mdl_forms_new_folder'));
   const btnHere = document.querySelector('[data-fb-forms-new-here]');
   if (btnHere) btnHere.textContent = fbT('mdl_forms_new_here');

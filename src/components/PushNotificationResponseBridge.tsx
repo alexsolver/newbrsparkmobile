@@ -13,6 +13,8 @@ import {
 import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent';
 import { apiFetch } from '../services/auth';
 import { enqueueExecutionStatusPatch } from '../services/syncService';
+import { BRSPARK_PERSONA_STORAGE_KEY } from '../context/PersonaContext';
+import { getPersonaHomeHref } from '../navigation/personaRouting';
 import {
   startTechTaskLiveActivity,
   stopTechTaskLiveActivityForTask,
@@ -70,7 +72,13 @@ async function handleNotificationResponse(
     const taskId = String(data.taskId || data.executionId || '').trim();
     if (!taskId) return;
     setPendingOpenExecutionFromPush(taskId);
-    router.replace('/(tabs)' as never);
+    try {
+      const raw = await AsyncStorage.getItem(BRSPARK_PERSONA_STORAGE_KEY);
+      const p = raw === 'provider' ? 'provider' : 'client';
+      router.replace(getPersonaHomeHref(p) as never);
+    } catch {
+      router.replace(getPersonaHomeHref('client') as never);
+    }
     return;
   }
 
@@ -83,6 +91,33 @@ async function handleNotificationResponse(
       pathname: '/chat/[id]',
       params: { id: taskId, ops: '1', name: 'Gestor · FT', color: '#1d4ed8' },
     } as never);
+    return;
+  }
+
+  /** Convite à pesquisa de satisfação (cliente) — abre o formulário web no browser. */
+  if (type === 'EVALUATION_CLIENT_SURVEY_INVITE') {
+    if (!isDefault) return;
+    const url = String(data.surveyUrl || '').trim();
+    if (!url) {
+      Alert.alert(
+        'Avaliação',
+        'O link da pesquisa não veio na notificação. Peça um novo convite ou use o e-mail.',
+      );
+      return;
+    }
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) {
+        Alert.alert(
+          'Avaliação',
+          'Não foi possível abrir este endereço. Se o link aponta para o computador de desenvolvimento (127.0.0.1), use um URL público no servidor (ADMIN_PANEL_PUBLIC_BASE_URL) ou abra o convite por e-mail.',
+        );
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Avaliação', 'Não foi possível abrir o link. Tente de novo ou use o convite por e-mail.');
+    }
     return;
   }
 
@@ -156,7 +191,13 @@ async function handleNotificationResponse(
       surfaceColor: branding?.surfaceColor,
     });
     setPendingOpenExecutionFromPush(taskId);
-    router.replace('/(tabs)' as never);
+    try {
+      const raw = await AsyncStorage.getItem(BRSPARK_PERSONA_STORAGE_KEY);
+      const p = raw === 'provider' ? 'provider' : 'client';
+      router.replace(getPersonaHomeHref(p) as never);
+    } catch {
+      router.replace(getPersonaHomeHref('provider') as never);
+    }
   }
 }
 

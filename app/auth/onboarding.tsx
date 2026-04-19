@@ -15,15 +15,17 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
-import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
+import { NotificationService } from '../../src/services/notifications';
+import { apiFetch, canUseProviderMode } from '../../src/services/auth';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
-import { canUseProviderMode } from '../../src/services/auth';
 import { getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
+import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 
 interface ConsentState {
   LOCATION_BACKGROUND: boolean;
@@ -32,8 +34,8 @@ interface ConsentState {
   DATA_RETENTION: boolean;
 }
 
-const SLIDES_TECH = ['WELCOME', 'LOCATION', 'DEVICE', 'RETENTION', 'CONFIRM'] as const;
-const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'RETENTION', 'CONFIRM'] as const;
+const SLIDES_TECH = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
+const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
 type SlideTech = typeof SLIDES_TECH[number];
 type SlideClient = typeof SLIDES_CLIENT[number];
 type Slide = SlideTech;
@@ -100,8 +102,9 @@ export default function OnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { user, userRole, loading: authLoading } = useAuth();
   const { colors: C, resolvedLogoUrl, appDisplayName, appTagline } = useTheme();
+  /** Alinha com PersonaContext: modo prestador = TECHNICIAN + capability (backend já limita elegibilidade). */
   const isTechnician = useMemo(
-    () => userRole === 'TECHNICIAN' && canUseProviderMode(user) && isTechnicianProfileActive(user),
+    () => userRole === 'TECHNICIAN' && canUseProviderMode(user),
     [user, userRole]
   );
 
@@ -114,6 +117,7 @@ export default function OnboardingScreen() {
   /** true se o país veio de @brspark_region (cadastro/perfil); false = só heurística do telefone. */
   const [regionFromStorage, setRegionFromStorage] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [notifStatus, setNotifStatus] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
@@ -249,15 +253,16 @@ export default function OnboardingScreen() {
       );
 
       await requestOsLocationPermissions(isTechnician, consents);
+      await NotificationService.registerForPushNotificationsAsync().catch(() => {});
       await dataCollectionService.onSessionOpen(ownerEmail, tenantId || undefined, isTechnician);
       await AsyncStorage.setItem('@brspark_onboarding_done', '1');
     } catch (e) {
       console.warn('[Onboarding] Erro ao salvar consentimentos:', e);
     } finally {
       setLoading(false);
-      router.replace('/(tabs)');
+      router.replace(getPersonaHomeHref(isTechnician ? 'provider' : 'client') as any);
     }
-  }, [consents, policy, isTechnician, consentEntriesForApi, legalLabel, t]);
+  }, [consents, policy, isTechnician, user, consentEntriesForApi, legalLabel, t]);
 
   const summaryRows: [keyof ConsentState, string, string][] = useMemo(() => {
     if (isTechnician) {
@@ -474,6 +479,42 @@ export default function OnboardingScreen() {
                 })}
               </Text>
             </View>
+          </View>
+        );
+
+      case 'NOTIFICATIONS':
+        return (
+          <View style={s.slideContent}>
+            <View style={s.slideHeader}>
+              <Ionicons name="notifications" size={36} color="#EA580C" />
+              <Text style={s.slideTitle}>{t('consentFlow.notifOnboardingTitle')}</Text>
+              <Text style={s.slideDesc}>{t('consentFlow.notifOnboardingDesc')}</Text>
+            </View>
+            <View style={s.infoCard}>
+              <Ionicons name="call-outline" size={18} color="#2563eb" />
+              <Text style={s.infoText}>{t('consentFlow.notifOnboardingHint')}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={async () => {
+                const r = await Notifications.requestPermissionsAsync();
+                setNotifStatus(r.status);
+                if (r.status === 'granted') {
+                  await NotificationService.registerForPushNotificationsAsync().catch(() => {});
+                }
+              }}
+              style={[
+                s.infoCard,
+                { marginTop: 12, backgroundColor: C.surfaceLow, borderWidth: 0, paddingVertical: 16, justifyContent: 'center' },
+              ]}
+            >
+              <Ionicons name="megaphone-outline" size={22} color={C.accent} />
+              <Text style={[s.infoText, { textAlign: 'center', fontWeight: '800' }]}>{t('consentFlow.notifOnboardingCta')}</Text>
+            </TouchableOpacity>
+            {notifStatus && (
+              <Text style={{ marginTop: 8, textAlign: 'center', color: C.textSecondary, fontSize: 12 }}>
+                {t('consentFlow.notifOnboardingResult', { status: notifStatus })}
+              </Text>
+            )}
           </View>
         );
 

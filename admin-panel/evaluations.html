@@ -40,6 +40,18 @@
     .eval-survey-preview-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
     .inst-url-input { width:100%; font-size:11px; padding:6px 8px; margin-bottom:8px; font-family:ui-monospace,monospace; word-break:break-all; }
     .chat-transcript-pre { white-space:pre-wrap; word-break:break-word; max-height:min(52vh,560px); overflow:auto; font-size:12px; line-height:1.45; font-family:ui-monospace,monospace; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 14px; margin:0; }
+    .eval-quick-guide { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 0 20px; }
+    .eval-quick-step { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; }
+    .eval-quick-step__n { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:999px; background:var(--accent-dim); color:var(--accent); font-size:12px; font-weight:800; margin-bottom:8px; }
+    .eval-quick-step__t { font-size:14px; font-weight:700; color:var(--text); line-height:1.35; margin-bottom:6px; }
+    .eval-quick-step__d { font-size:12px; color:var(--text3); line-height:1.45; }
+    @media (max-width:900px) { .eval-quick-guide { grid-template-columns:1fr; } }
+    .eval-notify-channels label { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; font-size:13px; color:var(--text2); cursor:pointer; }
+    .eval-notify-channels input { margin-top:3px; }
+    .eval-notify-channels .is-disabled { opacity:.55; cursor:not-allowed; }
+    .stat-grid--eval-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+    @media (max-width:1100px) { .stat-grid--eval-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:520px) { .stat-grid--eval-kpis { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -54,9 +66,9 @@
     </div>
     <div class="page-body">
       <header class="page-hero fade-in">
-        <h1 class="page-hero-title" id="mpc-hero-title">Avaliações e Minha Produtividade</h1>
+        <h1 class="page-hero-title" id="mpc-hero-title">Avaliações</h1>
         <p class="page-hero-sub" id="mpc-hero-sub">
-          Controle de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o registro mais recentemente atualizado prevalece).
+          Acompanhe o que os clientes responderam, resolva revisões e envie o link da pesquisa por e-mail ou notificação no telemóvel. O questionário é gerado automaticamente quando uma OS é sincronizada; o gestor só precisa convidar o cliente quando quiser.
         </p>
       </header>
 
@@ -77,6 +89,24 @@
 
       <div id="ev-context-bar" class="eval-context-bar" aria-label="Resumo operacional das avaliações"></div>
 
+      <div class="eval-quick-guide" id="ev-quick-guide" aria-label="Guia rápido">
+        <div class="eval-quick-step">
+          <div class="eval-quick-step__n">1</div>
+          <div class="eval-quick-step__t" id="ev-g1-title">Resumo</div>
+          <div class="eval-quick-step__d" id="ev-g1-desc">Veja quantas avaliações existem, quantas faltam responder e a média geral.</div>
+        </div>
+        <div class="eval-quick-step">
+          <div class="eval-quick-step__n">2</div>
+          <div class="eval-quick-step__t" id="ev-g2-title">Instâncias</div>
+          <div class="eval-quick-step__d" id="ev-g2-desc">Para cada OS pendente, envie o convite ao cliente por e-mail ou app. Também pode copiar o link.</div>
+        </div>
+        <div class="eval-quick-step">
+          <div class="eval-quick-step__n">3</div>
+          <div class="eval-quick-step__t" id="ev-g3-title">Disputas</div>
+          <div class="eval-quick-step__d" id="ev-g3-desc">Se o técnico pedir revisão, analise a conversa e decida: manter, ajustar nota ou invalidar.</div>
+        </div>
+      </div>
+
       <div class="eval-tab-bar">
         <button type="button" class="eval-tab eval-tab-active" id="ev-tab-resumo" data-tab="resumo">Resumo</button>
         <button type="button" class="eval-tab" id="ev-tab-disputas" data-tab="disputas">Disputas</button>
@@ -86,7 +116,7 @@
       </div>
 
       <div class="eval-tab-panel is-visible" data-panel="resumo">
-        <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+        <div class="stat-grid stat-grid--eval-kpis">
           <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-icon" style="background:var(--accent-dim);color:var(--accent)"><ion-icon name="clipboard-outline"></ion-icon></div><div class="stat-value" id="st-total">—</div><div class="stat-label" id="ev-st-lbl-total">Instâncias (90d)</div></div>
           <div class="stat-card" style="--accent-color:var(--amber)"><div class="stat-icon" style="background:var(--amber-dim);color:var(--amber)"><ion-icon name="time-outline"></ion-icon></div><div class="stat-value" id="st-pend">—</div><div class="stat-label" id="ev-st-lbl-pend">Pendentes</div></div>
           <div class="stat-card" style="--accent-color:var(--green)"><div class="stat-icon" style="background:var(--green-dim);color:var(--green)"><ion-icon name="checkmark-done-outline"></ion-icon></div><div class="stat-value" id="st-avg">—</div><div class="stat-label" id="ev-st-lbl-avg">Média 0–100</div></div>
@@ -135,7 +165,7 @@
           <div class="panel-header"><span class="panel-title" id="ev-inst-panel-title">Instâncias recentes</span></div>
           <p class="hint-sm" id="ev-inst-hint" style="margin:0 0 12px">Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.</p>
           <div class="table-wrap">
-            <table class="table-data"><thead><tr><th id="ev-th-inst-template">Template / técnico</th><th id="ev-th-inst-status">Estado</th><th id="ev-th-inst-token">Token</th><th id="ev-th-inst-url">URL do formulário web</th><th id="ev-th-inst-regen">Regerar</th><th id="ev-th-inst-actions" class="text-right">Ações</th></tr></thead>
+            <table class="table-data"><thead><tr><th id="ev-th-inst-template">Template / técnico</th><th id="ev-th-inst-client">Cliente (e-mail)</th><th id="ev-th-inst-status">Estado</th><th id="ev-th-inst-url">Link do formulário</th><th id="ev-th-inst-regen">Novo link</th><th id="ev-th-inst-actions" class="text-right">Ações</th></tr></thead>
             <tbody id="tbody-inst"><tr><td colspan="6" id="ev-loading-inst" style="text-align:center;padding:24px;color:var(--text3)">Carregando…</td></tr></tbody></table>
           </div>
           <div id="eval-survey-preview" class="eval-survey-preview" hidden>
@@ -209,6 +239,31 @@
       <p class="hint-sm" id="ev-tpl-trigger-hint">Gravado em <code>triggerRules.events</code> (ex.: <code>OS_SYNCED</code>). Apenas templates <strong>CLIENT</strong> ativos com este evento e com perguntas são elegíveis; usa-se o mais recentemente atualizado.</p>
     </div>
     <p class="hint-sm" id="tpl-instances-hint"></p>
+    <div class="form-row" style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
+      <label id="ev-tpl-survey-appearance-title" style="font-size:13px;font-weight:800;color:var(--text)">Aparência da pesquisa ao cliente</label>
+      <p class="hint-sm" id="ev-tpl-survey-appearance-hint" style="margin-bottom:10px">
+        URL de imagem (HTTPS) e textos exibidos no formulário público <code>evaluation-survey.html</code> antes e depois do envio.
+      </p>
+      <label for="tpl-survey-logo" id="ev-lbl-tpl-survey-logo">URL do logo (opcional)</label>
+      <input type="url" class="form-control" id="tpl-survey-logo" style="padding:8px 10px" placeholder="https://…" autocomplete="off" />
+      <div id="tpl-survey-logo-preview-wrap" style="margin:10px 0;display:none">
+        <img id="tpl-survey-logo-preview-img" alt="" style="max-height:56px;max-width:220px;object-fit:contain;border-radius:8px;border:1px solid var(--border);padding:6px;background:var(--surface2)" />
+      </div>
+      <label for="tpl-msg-pre" id="ev-lbl-tpl-msg-pre" style="margin-top:12px">Mensagem antes das perguntas</label>
+      <textarea class="form-control" id="tpl-msg-pre" rows="3" style="padding:8px 10px" placeholder="Ex.: Sua opinião é muito importante para nós."></textarea>
+      <label for="tpl-msg-post" id="ev-lbl-tpl-msg-post" style="margin-top:12px">Mensagem após o envio (agradecimento)</label>
+      <textarea class="form-control" id="tpl-msg-post" rows="3" style="padding:8px 10px" placeholder="Ex.: Obrigado por dedicar seu tempo."></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn btn-sm" id="btn-tpl-preview-survey">Pré-visualizar pesquisa</button>
+        <span class="hint-sm" id="ev-tpl-preview-survey-hint" style="margin:0">Disponível após salvar o template (edição).</span>
+      </div>
+      <div id="tpl-inline-preview-wrap" class="eval-survey-preview" hidden style="margin-top:14px">
+        <div class="eval-survey-preview-header" style="margin-bottom:8px">
+          <span class="panel-title" id="ev-tpl-inline-preview-title" style="margin:0;font-size:14px">Pré-visualização</span>
+        </div>
+        <iframe id="tpl-inline-preview-iframe" title="Pré-visualização da pesquisa ao cliente" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" style="width:100%;min-height:440px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></iframe>
+      </div>
+    </div>
     <div class="form-row">
       <label id="ev-tpl-questions-lbl">Perguntas</label>
       <div id="tpl-questions"></div>
@@ -233,6 +288,31 @@
     </div>
   </div>
 </div>
+
+<div id="notify-modal-overlay" class="eval-modal-overlay" aria-hidden="true">
+  <div class="eval-modal" role="dialog" aria-labelledby="notify-modal-title" style="max-width:520px">
+    <h2 id="notify-modal-title" style="margin-top:0">Enviar convite ao cliente</h2>
+    <p class="hint-sm" id="notify-modal-meta" style="margin:0 0 14px"></p>
+    <div class="form-row">
+      <label for="notify-email-override" id="ev-lbl-notify-email">E-mail do cliente</label>
+      <input type="email" class="form-control" id="notify-email-override" style="padding:8px 10px" autocomplete="email" placeholder="cliente@empresa.com" />
+      <p class="hint-sm" id="notify-email-hint" style="margin-top:6px;margin-bottom:0"></p>
+    </div>
+    <div class="form-row eval-notify-channels" id="notify-channels-wrap">
+      <span class="filter-field-label" style="display:block;margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text3)" id="ev-lbl-notify-channels">Canais</span>
+      <label><input type="checkbox" id="notify-ch-email" checked /> <span id="ev-notify-lbl-email">E-mail (recomendado)</span></label>
+      <label><input type="checkbox" id="notify-ch-push" /> <span id="ev-notify-lbl-push">Notificação no app do cliente</span></label>
+      <label class="is-disabled"><input type="checkbox" id="notify-ch-wa" disabled /> <span id="ev-notify-lbl-wa">WhatsApp (em breve)</span></label>
+      <label class="is-disabled"><input type="checkbox" id="notify-ch-sms" disabled /> <span id="ev-notify-lbl-sms">SMS (em breve)</span></label>
+    </div>
+    <p class="hint-sm" id="notify-modal-foot" style="margin:12px 0 0"></p>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn" id="notify-modal-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="notify-modal-send">Enviar</button>
+    </div>
+  </div>
+</div>
+<input type="hidden" id="notify-modal-instance-id" value="" />
 
 <div id="dispute-modal-overlay" class="eval-modal-overlay" aria-hidden="true">
   <div class="eval-modal" role="dialog" aria-labelledby="dispute-modal-title">

@@ -31,7 +31,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PanResponder } from 'react-native';
-import { type ColorPalette } from '../../src/theme/colors';
+import { type ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Foundation, MaterialIcons, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../../src/services/auth';
@@ -62,7 +62,11 @@ import {
   voiceNoteHasPendingTranscription,
   voiceNoteValueIsFilled,
 } from '../../src/components/ChecklistVoiceNoteField';
-import { ChecklistLocationPickField, isLocationPickAnswerValid } from '../../src/components/ChecklistLocationPickField';
+import {
+  ChecklistLocationPickField,
+  isLocationPickAnswerValid,
+  summarizeLocationPickValue,
+} from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
@@ -88,13 +92,24 @@ import {
 import { applyMaterialsStockForSubmission, parseMaterialsValue } from '../../src/checklist/applyMaterialsStockOnSubmit';
 import { applyMaterialsReceiptForSubmission } from '../../src/checklist/applyMaterialsReceiptOnSubmit';
 import {
+  materialsReceiptFieldIsComplete,
+  parseMaterialsReceiptValue,
+} from '../../src/checklist/materialsReceiptValue';
+import {
   applyTechnicianFinanceForSubmission,
   parseTechnicianFinanceValue,
 } from '../../src/checklist/applyTechnicianFinanceOnSubmit';
+import {
+  parseTechnicianRevenueIntegrationValue,
+  technicianRevenueFieldIsComplete,
+} from '../../src/checklist/technicianRevenueIntegrationValue';
 import { ChecklistMaterialsConsumptionField } from '../../src/components/ChecklistMaterialsConsumptionField';
 import { ChecklistMaterialsReceiptField } from '../../src/components/ChecklistMaterialsReceiptField';
+import { ChecklistTechnicianFinanceField } from '../../src/components/ChecklistTechnicianFinanceField';
+import { ChecklistTechnicianRevenueField } from '../../src/components/ChecklistTechnicianRevenueField';
 import { useAuth } from '../../src/hooks/useAuth';
 import { evaluateBusinessCondition } from '../../src/lib/businessRuleCondition';
+import { effectiveSchemaFieldType } from '../../src/services/checklistTemplateSchema';
 
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
 const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -485,64 +500,56 @@ function executionIsViewOnly(exec: unknown): boolean {
   return EXEC_VIEW_ONLY_STATUSES.has(st);
 }
 
+/** Só anular assinatura e início/fim de deslocamento; manter o resto do preenchimento. */
 const REVISION_SESSION_FIELD_TYPES = new Set([
   'signature',
   'signature_summary',
-  'geofence_check',
-  'facial_recognition',
-  'vision_checklist',
-  'vision_ai_analysis',
-  'image_annotation',
-  'lookup_select',
-  'repeatable_matrix',
-  'opinion_scale',
+  'transit_start',
+  'transit_end',
 ]);
-
-/**
- * Tipo canónico do campo no schema.
- * Importante: alguns fluxos legados / exportações podem guardar o tipo semântico em `fieldType`
- * enquanto `type` fica genérico (ex.: `text`) — nesse caso o 1.º `??` quebrava widgets como
- * `signature_summary` (cartão só com rótulo, sem controlo).
- */
-function effectiveSchemaFieldType(f: any): string {
-  const keys = ['type', 'fieldType', 'kind', 'component', 'controlType'] as const;
-  const normalized: string[] = [];
-  for (const k of keys) {
-    const raw = f?.[k];
-    if (raw == null || raw === '') continue;
-    const t = String(raw)
-      .trim()
-      .replace(/[\s-]+/g, '_')
-      .toLowerCase();
-    if (t) normalized.push(t);
-  }
-  const preferFirst = ['signature_summary', 'signature'] as const;
-  for (const p of preferFirst) {
-    if (normalized.includes(p)) return p;
-  }
-  /** `type` genérico (ex. `text`) + `fieldType` semântico — priorizar deslocamento. */
-  const transitPrefer = ['transit_end', 'transit_start'] as const;
-  for (const p of transitPrefer) {
-    if (normalized.includes(p)) return p;
-  }
-  return normalized[0] || '';
-}
 
 /** Campos de mídia + prompt estruturado (sim/não) analisados no servidor (YOLO ou Gemini). */
 function isVisionSimNaoMediaFieldType(t: string): boolean {
   return t === 'vision_checklist' || t === 'vision_ai_analysis';
 }
 
-/** Assinatura, geofence facial, etc. — não reaproveitar na nova sessão de revisão (deslocamento fica imutável após registo). */
+/** Assinatura e deslocamento: não reaproveitar após reabertura; demais respostas mantêm-se. */
 function stripRevisionSessionFieldResponses(res: Record<string, any>, schemaData: any[] | undefined): void {
+  if (!res || typeof res !== 'object') return;
   if (!Array.isArray(schemaData)) return;
+  const toStrip = new Set<string>();
   for (const f of schemaData) {
     if (!f?.id) continue;
-    if (REVISION_SESSION_FIELD_TYPES.has(effectiveSchemaFieldType(f))) {
-      delete res[f.id];
-      if (effectiveSchemaFieldType(f) === 'facial_recognition') {
-        delete res[`${f.id}__biometric`];
+    if (REVISION_SESSION_FIELD_TYPES.has(effectiveSchemaFieldType(f))) toStrip.add(String(f.id));
+  }
+  for (const fid of toStrip) {
+    if (res[fid] != null) delete res[fid];
+  }
+  for (const k of Object.keys(res)) {
+    if (!k.startsWith('__section_repeat_') || !Array.isArray((res as any)[k])) continue;
+    for (const row of (res as any)[k] as any[]) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+      for (const fid of toStrip) {
+        if (row[fid] != null) delete row[fid];
       }
+    }
+  }
+  function looksLikeSignatureValue(raw: unknown): boolean {
+    if (raw == null) return false;
+    return typeof raw === 'string' && raw.trim().startsWith('SIG_V1|');
+  }
+  for (const k of Object.keys(res)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray((res as any)[k])) {
+      for (const row of (res as any)[k] as any[]) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const ck of Object.keys(row)) {
+          const cell = (row as any)[ck];
+          if (looksLikeTransitDisplacementJson(cell) || looksLikeSignatureValue(cell)) delete (row as any)[ck];
+        }
+      }
+    } else if (!k.startsWith('__')) {
+      const v = (res as any)[k];
+      if (looksLikeTransitDisplacementJson(v) || looksLikeSignatureValue(v)) delete (res as any)[k];
     }
   }
 }
@@ -1069,7 +1076,8 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'transit_end',
   'materials_consumption',
   'materials_receipt',
-  'technician_finance',
+  'technician_finance_expense',
+  'technician_finance_revenue',
   'signature',
   'signature_summary',
   'vision_checklist',
@@ -1413,6 +1421,42 @@ function stripLeituraKeysFromResponsesCopy(
   return { out, changed };
 }
 
+function fileNameFromAttachmentUri(u: string): string {
+  const noq = u.split('?')[0];
+  const seg = noq.split('/').pop() || noq;
+  try {
+    return decodeURIComponent(seg);
+  } catch {
+    return seg;
+  }
+}
+
+/** Nomes + URLs curtas dos anexos (resumo para assinatura). */
+function formatFileUploadForSignatureSummary(raw: unknown): string {
+  const arr = normalizeResponseArray(raw)
+    .map((x) => String(x || '').trim())
+    .filter(Boolean);
+  if (!arr.length) return '—';
+  const blocks = arr.map((uri, i) => {
+    if (uri.startsWith('data:')) {
+      const m = /^data:([^;,]{1,80})/i.exec(uri);
+      const mime = m?.[1]?.trim() || 'dados';
+      return `Anexo inline (${mime})`;
+    }
+    const name = fileNameFromAttachmentUri(uri);
+    const shortUrl = uri.length > 120 ? `${uri.slice(0, 117)}…` : uri;
+    if (/^https?:\/\//i.test(uri)) {
+      return `${name}\n${shortUrl}`;
+    }
+    if (uri.startsWith('file://')) {
+      return `${name}\n(arquivo local — envie para sincronizar e ver o link no relatório)`;
+    }
+    return name || shortUrl;
+  });
+  if (blocks.length === 1) return blocks[0];
+  return blocks.map((b, i) => `${i + 1}. ${b}`).join('\n\n');
+}
+
 /** Texto só leitura para o resumo (evita HTML e URLs longas). */
 function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unknown): string {
   if (!fieldDef) {
@@ -1438,8 +1482,11 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     const parts = s.split(',').map((x) => x.trim()).filter(Boolean);
     return parts.length ? parts.join(', ') : '—';
   }
-  if (t === 'photo' || t === 'photo_stamped' || t === 'facial_recognition' || t === 'file_upload') {
-    return 'Mídia ou anexo registado (ver relatório completo)';
+  if (t === 'photo' || t === 'photo_stamped' || t === 'facial_recognition') {
+    return 'Mídia registada (ver relatório completo)';
+  }
+  if (t === 'file_upload') {
+    return formatFileUploadForSignatureSummary(raw);
   }
   if (t === 'image_annotation') {
     return isImageAnnotationAnswerFilled(raw) ? 'Foto com anotações registada' : '—';
@@ -1454,8 +1501,7 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     return s ? `${mode}: ${s}` : '—';
   }
   if (t === 'repeatable_matrix') {
-    const n = parseJsonMatrixRows(raw).length;
-    return n ? `${n} linha(s) na matriz` : '—';
+    return formatRepeatableMatrixForSignatureSummary(fieldDef, raw);
   }
   if (isVisionSimNaoMediaFieldType(t)) {
     const o = parseVisionChecklistStored(raw);
@@ -1486,30 +1532,105 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
   }
   if (t === 'signature' || t === 'signature_summary') {
     const s = String(raw);
-    if (s.startsWith('SIG_V1|')) return 'Assinatura registada';
-    return s.trim() ? 'Assinatura registada' : '—';
+    if (s.startsWith('SIG_V1|')) return 'Assinatura registrada';
+    return s.trim() ? 'Assinatura registrada' : '—';
   }
-  if (t === 'location_pick' || t === 'geofence_check') {
+  if (t === 'location_pick') {
+    return summarizeLocationPickValue(raw);
+  }
+  if (t === 'geofence_check') {
     try {
       const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (j && typeof j === 'object') {
         const addr = (j as any).address || (j as any).addr || (j as any).formattedAddress;
-        if (addr) return String(addr);
+        const inside = !!(j as any).insideZone || !!(j as any).geofence?.insideZone;
+        const bits: string[] = [];
+        if (addr) bits.push(String(addr));
+        bits.push(inside ? 'Validação: dentro da área' : 'Validação: fora da área');
+        return bits.join('\n');
       }
     } catch {
       /* ignore */
     }
-    return 'Registo de localização';
+    return 'Registro de validação de localização (GPS)';
   }
-  if (t === 'materials_consumption' || t === 'materials_receipt') {
+  if (t === 'materials_consumption') {
     const p = parseMaterialsValue(raw);
-    const n = p.lines.filter((l) => l.qty > 0).length;
-    return `${n} linha(s) de materiais`;
+    const lines = p.lines.filter((l) => l.qty > 0);
+    if (!lines.length) return '—';
+    return lines
+      .map((l) => {
+        const namePart = String(l.name || '').trim();
+        const skuPart = String(l.sku || '').trim();
+        const idPart = String(l.itemId || '').trim();
+        const display =
+          namePart || skuPart || (idPart ? `Item ${idPart}` : 'Item');
+        const skuSuffix = skuPart && skuPart !== namePart ? ` (${skuPart})` : '';
+        const unit = l.unit ? ` ${l.unit}` : '';
+        return `${display}${skuSuffix}: ${l.qty}${unit}`.trim();
+      })
+      .join('\n');
   }
-  if (t === 'technician_finance') {
+  if (t === 'materials_receipt') {
+    const pr = parseMaterialsReceiptValue(raw);
+    if (pr.version === 2) {
+      if (!pr.lines.length) return '—';
+      return pr.lines
+        .map((l) => {
+          const title = String(l.name || '').trim() || 'Item';
+          const sku = String(l.sku || '').trim() || '—';
+          const base = `${title} (SKU ${sku}): ${l.qty}`;
+          if (l.decision === 'accepted') return `${base} — Aceito`;
+          if (l.decision === 'rejected') {
+            const j = String(l.rejectReason || '').trim();
+            return j ? `${base} — Recusado: ${j}` : `${base} — Recusado`;
+          }
+          return `${base} — Pendente`;
+        })
+        .join('\n');
+    }
+    const lines = pr.lines.filter((l) => l.qty > 0);
+    if (!lines.length) return '—';
+    return lines
+      .map((l) => {
+        const namePart = String(l.name || '').trim();
+        const skuPart = String(l.sku || '').trim();
+        const idPart = String(l.itemId || '').trim();
+        const display =
+          namePart || skuPart || (idPart ? `Item ${idPart}` : 'Item');
+        const skuSuffix = skuPart && skuPart !== namePart ? ` (${skuPart})` : '';
+        const unit = l.unit ? ` ${l.unit}` : '';
+        return `${display}${skuSuffix}: ${l.qty}${unit}`.trim();
+      })
+      .join('\n');
+  }
+  if (t === 'technician_finance_revenue') {
+    const pr = parseTechnicianRevenueIntegrationValue(raw);
+    if (pr.version !== 2 || !pr.lines.length) return '—';
+    const cur = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    return pr.lines
+      .filter((l) => l.amount > 0)
+      .map((l) => {
+        const amt = cur.format(l.amount);
+        const desc = String(l.description || '').trim();
+        const fts = l.originFts.length ? ` · FTs: ${l.originFts.join(', ')}` : '';
+        const pending = l.decision === 'accepted' ? '' : ' — pendente';
+        return desc ? `Receita ${amt} — ${desc}${fts}${pending}` : `Receita ${amt}${fts}${pending}`;
+      })
+      .join('\n');
+  }
+  if (t === 'technician_finance_expense') {
     const p = parseTechnicianFinanceValue(raw);
-    const n = p.lines.filter((l) => l.amount > 0).length;
-    return `${n} lançamento(s) financeiros`;
+    const lines = p.lines.filter((l) => l.amount > 0);
+    if (!lines.length) return '—';
+    const cur = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    return lines
+      .map((l) => {
+        const amt = cur.format(l.amount);
+        const desc = String(l.description || '').trim();
+        return desc ? `Despesa ${amt} — ${desc}` : `Despesa ${amt}`;
+      })
+      .join('\n');
   }
   if (t === 'voice_note') {
     const p = parseVoiceNoteValue(raw);
@@ -1522,7 +1643,13 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     return '—';
   }
   if (t === 'transit_start' || t === 'transit_end') {
-    return 'Registo de deslocamento';
+    const ev = parseTransitFieldEvidence(raw);
+    if (!ev) {
+      const s = typeof raw === 'string' ? raw.trim() : '';
+      return s ? 'Deslocamento registrado (detalhe indisponível)' : '—';
+    }
+    const lines = formatTransitEvidenceLines(ev);
+    return lines.length ? lines.join('\n') : 'Deslocamento registrado';
   }
   if (t === 'barcode_scan') return String(raw).trim() || '—';
   if (t === 'calculated') return String(raw);
@@ -2331,6 +2458,61 @@ function matrixColumnIdsFromField(field: any): string[] {
     .slice(0, 8);
 }
 
+function matrixColumnsMetaForSignatureSummary(field: any): {
+  id: string;
+  label: string;
+  cellType: 'text' | 'number' | 'yes_no';
+}[] {
+  const mc = field?.matrixColumns;
+  if (!Array.isArray(mc) || !mc.length) {
+    return [
+      { id: 'c1', label: 'Item', cellType: 'text' },
+      { id: 'c2', label: 'Valor', cellType: 'number' },
+    ];
+  }
+  return mc
+    .map((c: any, i: number) => {
+      const id = String(c?.id || `c${i + 1}`).trim() || `c${i + 1}`;
+      const label = String(c?.label || id).trim() || id;
+      const ct = String(c?.cellType || 'text').toLowerCase();
+      const cellType: 'text' | 'number' | 'yes_no' =
+        ct === 'number' || ct === 'yes_no' ? (ct as 'number' | 'yes_no') : 'text';
+      return { id, label, cellType };
+    })
+    .slice(0, 8);
+}
+
+function formatRepeatableMatrixForSignatureSummary(fieldDef: any, raw: unknown): string {
+  const rows = parseJsonMatrixRows(raw);
+  if (!rows.length) return '—';
+  const cols = matrixColumnsMetaForSignatureSummary(fieldDef);
+  const out: string[] = [];
+  for (let ri = 0; ri < rows.length; ri++) {
+    const row = rows[ri];
+    const parts: string[] = [];
+    for (const c of cols) {
+      const v = row[c.id];
+      let cell: string;
+      if (c.cellType === 'yes_no') {
+        const on = v === true || String(v).toLowerCase() === 'sim' || String(v).toLowerCase() === 'true';
+        const off =
+          v === false ||
+          String(v).toLowerCase() === 'não' ||
+          String(v).toLowerCase() === 'nao' ||
+          String(v).toLowerCase() === 'false';
+        if (on) cell = 'Sim';
+        else if (off) cell = 'Não';
+        else cell = '';
+      } else {
+        cell = v != null ? String(v).trim() : '';
+      }
+      if (cell !== '') parts.push(`${c.label}: ${cell}`);
+    }
+    if (parts.length) out.push(`Linha ${ri + 1}: ${parts.join(' · ')}`);
+  }
+  return out.length ? out.join('\n') : '—';
+}
+
 function rowObjectHasAnyCell(row: Record<string, unknown>, colIds: string[]): boolean {
   for (const id of colIds) {
     const val = row[id];
@@ -2385,7 +2567,7 @@ function isOpinionScaleValueFilled(raw: unknown, field: any): boolean {
 /** Resposta suficiente para obrigatório / min / max (campos simples ou múltiplos). */
 function isFieldAnswerFilled(field: any, raw: any): boolean {
   const ft = effectiveSchemaFieldType(field);
-  if (ft === 'leitura') return true;
+  if (ft === 'leitura' || ft === 'form_complete_button') return true;
   if (ft === 'voice_note') {
     if (!field.required) return true;
     return voiceNoteValueIsFilled(raw);
@@ -2426,13 +2608,19 @@ function isFieldAnswerFilled(field: any, raw: any): boolean {
     if (ft === 'opinion_scale') return isOpinionScaleValueFilled(raw, field);
     if (ft === 'image_annotation') return isImageAnnotationAnswerFilled(raw);
     if (ft === 'repeatable_matrix') return isRepeatableMatrixAnswerFilled(raw, field);
-    if (ft === 'materials_consumption' || ft === 'materials_receipt') {
+    if (ft === 'materials_consumption') {
       const p = parseMaterialsValue(raw);
       const hasQty = p.lines.some((l) => l.qty > 0);
       if (field.required) return hasQty;
       return true;
     }
-    if (ft === 'technician_finance') {
+    if (ft === 'materials_receipt') {
+      return materialsReceiptFieldIsComplete(raw, !!field.required);
+    }
+    if (ft === 'technician_finance_revenue') {
+      return technicianRevenueFieldIsComplete(raw, !!field.required);
+    }
+    if (ft === 'technician_finance_expense') {
       const p = parseTechnicianFinanceValue(raw);
       const hasAmt = p.lines.some((l) => l.amount > 0);
       if (field.required) return hasAmt;
@@ -2591,6 +2779,22 @@ function renderSchemaIcon(spec: { icon?: string; iconLibrary?: string; iconColor
   }
 }
 
+/** Ícone à direita do rótulo no botão «concluir» do schema — respeita ícone do builder; senão usa checkmark-done. */
+function renderFormCompleteButtonGlyph(
+  field: { icon?: string; iconLibrary?: string; iconColor?: string },
+  size = 22,
+  onPrimaryBackground = true
+) {
+  if (String(field?.icon || '').trim()) {
+    const color = onPrimaryBackground ? '#FFFFFF' : String(field.iconColor || '#64748b').trim() || '#64748b';
+    return renderSchemaIcon(
+      { icon: field.icon, iconLibrary: field.iconLibrary, iconColor: color },
+      size
+    );
+  }
+  return <Ionicons name="checkmark-done" size={size} color={onPrimaryBackground ? '#FFF' : '#64748b'} />;
+}
+
 /**
  * Modo global no app: se todas as seções estão em "inherit", usa settings.appFillMode (legado).
  * Caso contrário: scroll único quando todas são lista; híbrido se alguma seção for assistente.
@@ -2699,6 +2903,45 @@ function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any 
   return { ...task, locationRadius: r, locationZoneType: 'radius' };
 }
 
+/**
+ * Revestido do quadrado 44px ao lado de cada atividade: fundo e borda alinhados à semântica
+ * (pend. / andam. / concl. / pausa) — a cor do ícone do builder passa a ser só no glifo (renderSchemaIcon), inalterada.
+ */
+function activityFieldIconBadgeByExecutionStatus(
+  p: {
+    isReadOnly: boolean;
+    taskStatus: string;
+    serverPaused: boolean;
+    formPaused: boolean;
+  },
+  P: ColorPalette
+): { backgroundColor: string; borderColor: string } {
+  if (p.isReadOnly) {
+    return { backgroundColor: P.status.success.bg, borderColor: P.status.success.border };
+  }
+  const s = (p.taskStatus || '').toUpperCase();
+  const isPaused = p.serverPaused || p.formPaused || s === 'PAUSED';
+  if (isPaused) {
+    return { backgroundColor: P.status.danger.bg, borderColor: P.status.danger.border };
+  }
+  if (
+    s === 'COMPLETED' ||
+    s === 'SYNCED' ||
+    s === 'CLOSED' ||
+    s === 'ARCHIVED' ||
+    s === 'CANCELLED' ||
+    s === 'CANCELED' ||
+    s === 'DONE'
+  ) {
+    return { backgroundColor: P.status.success.bg, borderColor: P.status.success.border };
+  }
+  if (s === 'IN_PROGRESS' || s === 'RECEIVED' || s === 'ACCEPTED' || s === 'DISPATCHED') {
+    return { backgroundColor: P.status.warning.bg, borderColor: P.status.warning.border };
+  }
+  // PENDENTE / vazio
+  return { backgroundColor: P.status.info.bg, borderColor: P.status.info.border };
+}
+
 export default function ChecklistEngine() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -2706,7 +2949,7 @@ export default function ChecklistEngine() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { colors: C } = useTheme();
+  const { colors: C, dark: themeDark } = useTheme();
   const styles = useMemo(() => createChecklistStyles(C), [C]);
 
   const [template, setTemplate] = useState<any>(null);
@@ -2971,6 +3214,21 @@ export default function ChecklistEngine() {
     timersFrozenRef.current = frozen;
     if (frozen) fgSegmentStartRef.current = null;
   }, [serverPausedExecution, responses.__form_paused_since]);
+
+  const formPausedForIcons = Boolean(responses?.__form_paused_since);
+  const activityFieldIconStatusBox = useMemo(
+    () =>
+      activityFieldIconBadgeByExecutionStatus(
+        {
+          isReadOnly: !!isReadOnly,
+          taskStatus: String(currentTask?.status ?? '').trim(),
+          serverPaused: !!serverPausedExecution,
+          formPaused: formPausedForIcons,
+        },
+        C
+      ),
+    [C, isReadOnly, currentTask?.status, serverPausedExecution, formPausedForIcons]
+  );
 
   useEffect(() => {
     currentTaskRef.current = currentTask;
@@ -3387,7 +3645,12 @@ export default function ChecklistEngine() {
           if (thisTask) taskLocation = thisTask;
         } catch (e) {}
 
-        if (!taskLocation || (!taskLocation.locationLat && !taskLocation.locationPolygon)) {
+        const hasTaskPolygon = !!taskLocation?.locationPolygon;
+        const taskDestLat = Number(taskLocation?.locationLat);
+        const taskDestLng = Number(taskLocation?.locationLng);
+        const hasTaskPoint = Number.isFinite(taskDestLat) && Number.isFinite(taskDestLng);
+
+        if (!taskLocation || (!hasTaskPoint && !hasTaskPolygon)) {
           // No location on task — just record GPS evidence, do NOT block
           const payload = { action: label, timestamp: new Date().toISOString(), coordinates: { lat, lng }, address, geofence: { validated: false, reason: 'NO_TASK_LOCATION' } };
           handleInput(fieldId, JSON.stringify(payload), scope);
@@ -3405,12 +3668,11 @@ export default function ChecklistEngine() {
             ? JSON.parse(taskLocation.locationPolygon)
             : taskLocation.locationPolygon;
           insideZone = pointInPolygon(lat, lng, polygon);
-        } else if (taskLocation.locationLat && taskLocation.locationLng) {
+        } else if (hasTaskPoint) {
           // Haversine para ponto + raio
-          const destLat = parseFloat(taskLocation.locationLat);
-          const destLng = parseFloat(taskLocation.locationLng);
-          const effectiveRadius = taskLocation.locationRadius || fieldRadius;
-          distanceMeters = Math.round(haversineDistance(lat, lng, destLat, destLng));
+          const effectiveRadiusRaw = Number(taskLocation.locationRadius);
+          const effectiveRadius = Number.isFinite(effectiveRadiusRaw) && effectiveRadiusRaw > 0 ? effectiveRadiusRaw : fieldRadius;
+          distanceMeters = Math.round(haversineDistance(lat, lng, taskDestLat, taskDestLng));
           requiredMeters = effectiveRadius;
           insideZone = distanceMeters <= effectiveRadius;
         }
@@ -4292,9 +4554,8 @@ export default function ChecklistEngine() {
         }
       }
 
-      // Nova visita de revisão explícita (metadata): zerar cronômetros e limpar assinatura/geofence dessa sessão.
-      // Deslocamento (transit_start/end) mantém-se: após «Finalizar deslocamento» não pode ser refeito nem apagado aqui.
-      // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" para apagar transit em execuções ainda ativas.
+      // Revisão (metadata): produtividade/timers limpos; assinaturas e deslocamento início/fim anulados; resto do formulário herda a última entrega.
+      // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" para apagar campos fora do strip de revisão.
       if (taskId && !readOnlyMode && reopenRevisionPending) {
         const resetToken = buildRevisionTimerResetToken(taskId, lastSubmittedRevForNext);
         const alreadyResetForThisCycle =
@@ -4326,7 +4587,8 @@ export default function ChecklistEngine() {
         'transit_start',
         'transit_end',
         'hidden',
-        'technician_finance',
+        'technician_finance_expense',
+        'technician_finance_revenue',
         'leitura',
         'voice_note',
         'image_annotation',
@@ -5820,21 +6082,28 @@ export default function ChecklistEngine() {
         sectionHeaders[curSecKey] = f;
         continue;
       }
-      if (f.type === 'hidden' || f.type === 'technician_finance' || !f.id) continue;
+      if (f.type === 'hidden' || !f.id) continue;
       if (!bySection[curSecKey]) bySection[curSecKey] = [];
       bySection[curSecKey].push(f);
     }
-    const validateFlatFields = (fields: any[]) => {
+    const sectionPhraseForSubmitAlert = (sectionLabel: string | null) =>
+      sectionLabel != null && String(sectionLabel).trim() !== ''
+        ? `na etapa «${String(sectionLabel).trim()}»`
+        : `na «Área Externa»`;
+
+    const validateFlatFields = (fields: any[], sectionLabel: string | null) => {
+      const secPh = sectionPhraseForSubmitAlert(sectionLabel);
       for (const f of fields) {
         if (!isFieldVisible(f)) continue;
         if (fieldMustAnswerForProgress(f)) {
           const ans = responses[f.id];
           if (!isFieldAnswerFilled(f, ans)) {
+            const fl = String(f.label || f.id || '').trim() || f.id;
             Alert.alert(
               'Atenção',
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                ? `Valide a localização em «${f.label || f.id}» (dentro da área) antes de concluir.`
-                : `O campo '${f.label || f.id}' é obrigatório antes de concluir.`,
+                ? `Valide a localização em «${fl}» (dentro da área) ${secPh} antes de concluir.`
+                : `O campo «${fl}» ${secPh} é obrigatório antes de concluir.`,
             );
             return false;
           }
@@ -5844,11 +6113,12 @@ export default function ChecklistEngine() {
     };
     for (const [secKey, fields] of Object.entries(bySection)) {
       if (secKey === '__root__') {
-        if (!validateFlatFields(fields)) return;
+        if (!validateFlatFields(fields, null)) return;
         continue;
       }
       const sh = sectionHeaders[secKey];
       const repeat = sh && sectionAllowsRepeat(sh);
+      const sectionTitleForMsg = String(sh?.label || '').trim() || secKey;
       if (repeat) {
         const rows = getRepeatRows(responses, secKey);
         const minR = sectionRepeatMinRows(sh);
@@ -5868,28 +6138,31 @@ export default function ChecklistEngine() {
           return;
         }
         const n = Math.max(rows.length, minR, 1);
+        const secPh = sectionPhraseForSubmitAlert(sectionTitleForMsg);
         for (const f of fields) {
           if (!isFieldVisible(f)) continue;
           for (let ri = 0; ri < n; ri++) {
             const ans = rows[ri]?.[f.id];
             if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) {
+              const fl = String(f.label || f.id || '').trim() || f.id;
               Alert.alert(
                 'Atenção',
                 f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                  ? `Valide a localização em «${f.label || f.id}» (instância ${ri + 1}, dentro da área) antes de concluir.`
-                  : `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório antes de concluir.`,
+                  ? `Valide a localização em «${fl}» (instância ${ri + 1}, dentro da área) ${secPh} antes de concluir.`
+                  : `O campo «${fl}» (instância ${ri + 1}) ${secPh} é obrigatório antes de concluir.`,
               );
               return;
             }
           }
         }
       } else {
-        if (!validateFlatFields(fields)) return;
+        if (!validateFlatFields(fields, sectionTitleForMsg)) return;
       }
     }
 
     setSubmitting(true);
     try {
+      const submitTaskId = String(resolvedTaskId || '').trim();
       const AuthSvc = require('../../src/services/auth').AuthService;
       let uEmail = 'unknown@empresa.com';
       try {
@@ -5904,7 +6177,7 @@ export default function ChecklistEngine() {
       let origMeta: any = {};
       let osNumMeta: string | undefined;
       try {
-          const origTask = await findCloudTaskById(String(taskId));
+          const origTask = submitTaskId ? await findCloudTaskById(submitTaskId) : null;
           if (origTask && origTask.metadata) {
              origMeta = {
                receivedAt: origTask.metadata.receivedAt,
@@ -5964,7 +6237,7 @@ export default function ChecklistEngine() {
           schemaAll,
           responses: finalResponses,
           submissionRevision: nextSubmissionRevisionRef.current,
-          taskId: String(taskId || ''),
+          taskId: submitTaskId,
           templateId: String(id),
           ownerEmail: ownerForStock,
           osNumber: ftForStockHistory,
@@ -5978,7 +6251,7 @@ export default function ChecklistEngine() {
           schemaAll,
           responses: finalResponses,
           submissionRevision: nextSubmissionRevisionRef.current,
-          taskId: String(taskId || ''),
+          taskId: submitTaskId,
           templateId: String(id),
           ownerEmail: ownerForStock,
           osNumber: ftForStockHistory,
@@ -5992,7 +6265,7 @@ export default function ChecklistEngine() {
           schemaAll,
           responses: finalResponses,
           submissionRevision: nextSubmissionRevisionRef.current,
-          taskId: String(taskId || ''),
+          taskId: submitTaskId,
           templateId: String(id),
           ownerEmail: ownerForStock,
         });
@@ -6005,7 +6278,7 @@ export default function ChecklistEngine() {
 
       const payload = {
         templateId: id,
-        taskId: taskId || '',
+        taskId: submitTaskId,
         ownerEmail: uEmail,
         responses: finalResponses,
         metadata: { 
@@ -6013,7 +6286,7 @@ export default function ChecklistEngine() {
             ...(origMeta.acceptedAt ? { acceptedAt: origMeta.acceptedAt } : {}),
             submissionRevision: nextSubmissionRevisionRef.current,
             submissionId: newSubmissionId(),
-            ...(taskId ? { executionId: String(taskId) } : {}),
+            ...(submitTaskId ? { executionId: submitTaskId } : {}),
             ...(osNumMeta ? { osNumber: osNumMeta } : {}),
             appVersion: '1.0',
             durationSeconds: formFillDurationSeconds,
@@ -6025,10 +6298,10 @@ export default function ChecklistEngine() {
         completedAt: new Date().toISOString()
       };
 
-      const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+      const draftKey = submitTaskId ? `@draft_tsk_${submitTaskId}` : `@draft_chk_${id}`;
       // Salva execução offline completa
-      if (taskId) {
-         await AsyncStorage.setItem(`@brspark_execution_${taskId}`, JSON.stringify(payload));
+      if (submitTaskId) {
+         await AsyncStorage.setItem(`@brspark_execution_${submitTaskId}`, JSON.stringify(payload));
       }
       
         console.log("Checklist concluído offline-first. Injetando no Outbox...");
@@ -6045,8 +6318,8 @@ export default function ChecklistEngine() {
         await AsyncStorage.removeItem(draftKey);
 
         // Após persistir payload na fila, atualiza estado local de cartão/abas.
-        if (taskId) {
-          const tid = String(taskId);
+        if (submitTaskId) {
+          const tid = submitTaskId;
           const completedItem = {
             id: tid,
             refId: String(id),
@@ -6094,11 +6367,13 @@ export default function ChecklistEngine() {
 
         // Volta ao estado IDLE e dispara cálculo de métricas da OS
         dataCollectionService.setState('IDLE', {
-          executionId: String(taskId || ''),
+          executionId: submitTaskId,
           ownerEmail: uEmail,
         }).catch(() => {});
         // Métricas calculadas em background — não bloqueia navegação
-        apiFetch(`/api/metrics/calculate/${taskId}`, { method: 'POST' }).catch(() => {});
+        if (submitTaskId) {
+          apiFetch(`/api/metrics/calculate/${submitTaskId}`, { method: 'POST' }).catch(() => {});
+        }
 
         router.back();
     } catch (err) {
@@ -6316,9 +6591,7 @@ export default function ChecklistEngine() {
       const visT = effectiveSchemaFieldType(field);
       if (visT === 'section_break' && !checkSectionBreak) return false;
       if (visT === 'hidden') return false;
-      /** Custos do técnico: só por API/rascunho/sync — nunca na tela de execução. */
-      if (visT === 'technician_finance') return false;
-      
+
       const rules = getAllRules();
       
       const showRules = rules.filter((r: any) => r.actions && r.actions.some((a: any) => a.type === 'SHOW' && a.targetId === field.id));
@@ -6345,7 +6618,11 @@ export default function ChecklistEngine() {
   };
 
   const isFieldRequired = (field: any) => {
-      if (effectiveSchemaFieldType(field) === 'leitura') return false;
+      if (
+        effectiveSchemaFieldType(field) === 'leitura' ||
+        effectiveSchemaFieldType(field) === 'form_complete_button'
+      )
+        return false;
       let isReq = field.required;
       const rules = getAllRules();
       
@@ -6419,8 +6696,8 @@ export default function ChecklistEngine() {
       _currentSectionIcon = String(f.icon || '').trim();
       _currentSectionIconLibrary = String(f.iconLibrary || 'Ionicons').trim() || 'Ionicons';
       _currentSectionIconColor = String(f.iconColor || '#7c3aed').trim() || '#7c3aed';
-    } else if (schT !== 'technician_finance') {
-      if (schT === 'leitura') {
+    } else {
+      if (schT === 'leitura' || schT === 'form_complete_button') {
         _curFields.push({ ...f, _globalIdx: undefined });
       } else {
         _curFields.push({ ...f, _globalIdx: _globalIndex++ });
@@ -6443,6 +6720,17 @@ export default function ChecklistEngine() {
 
   const pages = rawPages.filter(p => p.isVisible);
 
+  /** Hub com menu de etapas: várias páginas OU uma única etapa com seção repetível (precisa do + no card). */
+  const schemaDataForHub = template?.schemaData || [];
+  const hubStageMenuHasSteps =
+    pages.length > 1 ||
+    pages.some((p) => {
+      const oid = p.openingSectionId;
+      if (!oid || oid === '__preamble__' || oid === '__full__' || oid === '__wizard__') return false;
+      const sb = schemaDataForHub.find((x: any) => x.id === oid && x.type === 'section_break');
+      return !!(sb && sectionAllowsRepeat(sb));
+    });
+
   const fillMode: 'full' | 'wizard' | 'hybrid' = computeEffectiveFillModeFromTemplate(
     schema,
     template?.settings
@@ -6454,6 +6742,29 @@ export default function ChecklistEngine() {
   const appHubSectionOrder: 'free' | 'sequential' =
     template?.settings?.appHubSectionOrder === 'sequential' ? 'sequential' : 'free';
   const useSectionHub = appSectionStart === 'hub';
+
+  /** Com hub: botões «concluir» colocados no préâmbulo no builder aparecem só no menu de etapas, não dentro de um cartão. */
+  const preambleHubCompleteButtonFields = (() => {
+    if (!useSectionHub) return [] as any[];
+    const pg = pages.find((p) => p.openingSectionId === '__preamble__');
+    if (!pg) return [];
+    return (pg.fields || []).filter(
+      (f: any) =>
+        isFieldVisible(f) && effectiveSchemaFieldType(f) === 'form_complete_button'
+    );
+  })();
+  const preambleHubCompleteFieldIdSet = new Set(
+    preambleHubCompleteButtonFields.map((f: any) => f.id)
+  );
+  const hubPageShowsInStepMenu = (pg: (typeof pages)[number]) => {
+    if (pg.openingSectionId !== '__preamble__') return true;
+    const visibleFields = (pg.fields || []).filter((f) => isFieldVisible(f));
+    const nonComplete = visibleFields.filter(
+      (f) => effectiveSchemaFieldType(f) !== 'form_complete_button'
+    );
+    return nonComplete.length > 0;
+  };
+
   /** Com hub + lista completa, passamos a paginar por seção em vez do scroll único. */
   const paginateSectionsForLayout =
     effectiveFillMode !== 'full' || (useSectionHub && effectiveFillMode === 'full');
@@ -6520,7 +6831,7 @@ export default function ChecklistEngine() {
         opening = f;
         return;
       }
-      if (f.type === 'hidden' || f.type === 'technician_finance') return;
+      if (f.type === 'hidden') return;
       buf.push(f);
     });
     flush();
@@ -6538,8 +6849,8 @@ export default function ChecklistEngine() {
       setHubPicking(false);
       return;
     }
-    setHubPicking(pages.length > 1);
-  }, [useSectionHub, pages.length, id, taskId, template?.id]);
+    setHubPicking(hubStageMenuHasSteps);
+  }, [useSectionHub, hubStageMenuHasSteps, id, taskId, template?.id]);
 
   useEffect(() => {
     if (effectiveFillMode !== 'wizard') return;
@@ -6562,7 +6873,8 @@ export default function ChecklistEngine() {
       if (pendingFields.length === 0) return;
       const withIdx = pendingFields.map((f) => {
         const t = effectiveSchemaFieldType(f);
-        if (t === 'leitura') return { ...f, _globalIdx: undefined as number | undefined };
+        if (t === 'leitura' || t === 'form_complete_button')
+          return { ...f, _globalIdx: undefined as number | undefined };
         return { ...f, _globalIdx: g++ };
       });
       if (sectionHeader?.multiple) {
@@ -6576,7 +6888,7 @@ export default function ChecklistEngine() {
       if (f.type === 'section_break') {
         emit();
         sectionHeader = f;
-      } else if (f.type !== 'hidden' && f.type !== 'technician_finance') {
+      } else if (f.type !== 'hidden') {
         pendingFields.push(f);
       }
     }
@@ -6672,7 +6984,42 @@ export default function ChecklistEngine() {
     return true;
   };
 
-  const hubSectionSatisfied = (pageIdx: number) => {
+  /** Mínimo de linhas > 0 ou algum campo obrigatório (ou geofence em modo bloquear). */
+  const schemaPageHasHardRequirements = (pageIdx: number) => {
+    const p = pages[pageIdx];
+    if (!p) return false;
+    const openingId = p.openingSectionId || '__preamble__';
+    const sb =
+      openingId !== '__preamble__'
+        ? (template?.schemaData || []).find((x: any) => x.id === openingId && x.type === 'section_break')
+        : null;
+    if (sb && sectionAllowsRepeat(sb)) {
+      if (sectionRepeatMinRows(sb) > 0) return true;
+    }
+    for (const f of p.fields || []) {
+      if (!isFieldVisible(f)) continue;
+      if (fieldMustAnswerForProgress(f)) return true;
+    }
+    return false;
+  };
+
+  const wizardOpeningSectionHasHardRequirements = (openingId: string) => {
+    for (const step of wizardSteps) {
+      if (step.sectionOpeningId !== openingId) continue;
+      if (step.sectionRepeat?.sectionField) {
+        const sb = step.sectionRepeat.sectionField;
+        if (sectionRepeatMinRows(sb) > 0) return true;
+      }
+      for (const f of step.fields) {
+        if (!isFieldVisible(f)) continue;
+        if (fieldMustAnswerForProgress(f)) return true;
+      }
+    }
+    return false;
+  };
+
+  /** Critério de validação (bloqueio sequencial / regras) — sem exigir «tocou» em secções só opcionais. */
+  const hubSectionValidationComplete = (pageIdx: number) => {
     if (isRevisionVisitUi) {
       return sectionTimingFlagsForPage(pageIdx).ended;
     }
@@ -6683,10 +7030,62 @@ export default function ChecklistEngine() {
     return schemaPageFieldsComplete(pageIdx);
   };
 
+  /** Preenchimento real ou janela de tempo de secção (sem depender do estado «concluído» do hub). */
+  const hubSectionHasUserProgress = (pageIdx: number) => {
+    const p = pages[pageIdx];
+    if (!p) return false;
+    const timing = sectionTimingFlagsForPage(pageIdx);
+    if (isRevisionVisitUi) return timing.started && !timing.ended;
+    if (timing.started && !timing.ended) return true;
+    const openingId = p.openingSectionId || '__preamble__';
+    const sb =
+      openingId !== '__preamble__'
+        ? (template?.schemaData || []).find(
+            (x: any) => x.id === openingId && x.type === 'section_break'
+          )
+        : null;
+    if (sb && sectionAllowsRepeat(sb)) {
+      const rows = getRepeatRows(responses, sb.id);
+      for (let ri = 0; ri < rows.length; ri++) {
+        for (const f of p.fields || []) {
+          if (!isFieldVisible(f)) continue;
+          const ans = rows[ri]?.[f.id];
+          if (isFieldAnswerFilled(f, ans)) return true;
+        }
+      }
+      return false;
+    }
+    for (const f of p.fields || []) {
+      if (!isFieldVisible(f)) continue;
+      const ans = responses[f.id];
+      if (isFieldAnswerFilled(f, ans)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Etapa «concluída» no menu do hub (verde): validação OK e, se não há exigências duras
+   * (só opcionais / mínimo 0), só fica verde após haver preenchimento ou cronómetro de secção.
+   */
+  const hubSectionSatisfied = (pageIdx: number) => {
+    if (isRevisionVisitUi) {
+      return sectionTimingFlagsForPage(pageIdx).ended;
+    }
+    if (!hubSectionValidationComplete(pageIdx)) return false;
+    const hasHard =
+      effectiveFillMode === 'wizard'
+        ? wizardOpeningSectionHasHardRequirements(pages[pageIdx]?.openingSectionId || '__preamble__')
+        : schemaPageHasHardRequirements(pageIdx);
+    if (!hasHard) {
+      return hubSectionHasUserProgress(pageIdx);
+    }
+    return true;
+  };
+
   const hubSectionUnlocked = (pageIdx: number) => {
     if (appHubSectionOrder !== 'sequential') return true;
     for (let j = 0; j < pageIdx; j++) {
-      if (!hubSectionSatisfied(j)) return false;
+      if (!hubSectionValidationComplete(j)) return false;
     }
     return true;
   };
@@ -6695,6 +7094,12 @@ export default function ChecklistEngine() {
     const f = sectionTimingFlagsForPage(pageIdx);
     if (isRevisionVisitUi) return f.started;
     return f.started || f.ended;
+  };
+
+  /** Etapa iniciada mas ainda não satisfaz validação (para o hub estilo “em andamento”). */
+  const hubSectionHasPartialProgress = (pageIdx: number) => {
+    if (hubSectionSatisfied(pageIdx)) return false;
+    return hubSectionHasUserProgress(pageIdx);
   };
 
   const openHubSection = (pageIdx: number, opts?: { repeatRowIndex?: number }) => {
@@ -7379,7 +7784,7 @@ export default function ChecklistEngine() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          {useSectionHub && pages.length > 1 && !isReadOnly ? (
+          {useSectionHub && hubStageMenuHasSteps && !isReadOnly ? (
             <TouchableOpacity
               onPress={() => {
                 if (!hubPicking) setHubPicking(true);
@@ -7719,20 +8124,22 @@ export default function ChecklistEngine() {
             </View>
         )}
         <View pointerEvents={isReadOnly ? 'box-none' : 'auto'} style={{ gap: 16 }}>
-        {useSectionHub && hubPicking && pages.length > 1 ? (
-          <View style={{ gap: 12 }}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>
-              Etapas do formulário
-            </Text>
-            <Text style={{ fontSize: 13, color: '#64748b', marginTop: -6 }}>
-              {appHubSectionOrder === 'sequential'
-                ? 'Conclua cada etapa por ordem para desbloquear a seguinte.'
-                : 'Toque na etapa que quiser preencher — em qualquer ordem.'}
-            </Text>
+        {useSectionHub && hubPicking && hubStageMenuHasSteps ? (
+          <View style={{ gap: 14 }}>
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: C.slate, letterSpacing: -0.3 }}>
+                Etapas do formulário
+              </Text>
+              <Text style={{ fontSize: 14, color: C.textLight, lineHeight: 20 }}>
+                {appHubSectionOrder === 'sequential'
+                  ? 'Conclua cada etapa por ordem para desbloquear a seguinte.'
+                  : 'Toque na etapa que quiser preencher — em qualquer ordem.'}
+              </Text>
+            </View>
             {pages.map((pg, idx) => {
+              if (!hubPageShowsInStepMenu(pg)) return null;
               const done = hubSectionSatisfied(idx);
               const unlocked = hubSectionUnlocked(idx);
-              const timing = sectionTimingFlagsForPage(idx);
               const repeatStats = hubRepeatRowStats(idx);
               const isRepeatSection = repeatStats.enabled;
               const repeatCardKey = repeatStats.sectionId || String(pg.id || idx);
@@ -7744,27 +8151,65 @@ export default function ChecklistEngine() {
                   return { rowIndex: ri, started, done: doneRow, row };
                 });
               const repeatMenuExpanded = !!hubRepeatCardsExpanded[repeatCardKey];
-              const visualDone = timing.ended;
-              const visualStarted = timing.started && !timing.ended;
-              const cardBg = visualDone
-                ? '#dcfce7'
-                : visualStarted
-                  ? '#fef9c3'
-                  : unlocked
-                    ? '#ffffff'
-                    : '#f8fafc';
-              const cardBorder = visualDone ? '#86efac' : visualStarted ? '#facc15' : unlocked ? '#e2e8f0' : '#cbd5e1';
-              const iconBg = visualDone ? '#bbf7d0' : visualStarted ? '#fde68a' : '#f1f5f9';
+              const stageCompleted = done;
+              /** Amarelo: etapa aberta (cronómetro), campos preenchidos ou instâncias repetíveis criadas. */
+              const stageInProgressActive =
+                !stageCompleted &&
+                unlocked &&
+                (hubSectionHasPartialProgress(idx) ||
+                  hubSectionStarted(idx) ||
+                  (isRepeatSection && repeatStats.rawRows.length > 0));
+              const hubCardStatus: 'completed' | 'in_progress' | 'not_started' = stageCompleted
+                ? 'completed'
+                : !unlocked
+                  ? 'not_started'
+                  : stageInProgressActive
+                    ? 'in_progress'
+                    : 'not_started';
+              /** Verde / âmbar / azul (pendentes) — alinhado às cores da lista de OS; não usar warning.fg em bolinhas pequenas. */
+              const hubStatusFg =
+                hubCardStatus === 'completed'
+                  ? C.status.success.fg
+                  : hubCardStatus === 'in_progress'
+                    ? MEDIA_TAG_COLORS.DURING
+                    : MEDIA_TAG_COLORS.BEFORE;
+              const hubStatusBg =
+                hubCardStatus === 'completed'
+                  ? C.status.success.bg
+                  : hubCardStatus === 'in_progress'
+                    ? `${MEDIA_TAG_COLORS.DURING}18`
+                    : `${MEDIA_TAG_COLORS.BEFORE}14`;
+              const lockedHub = appHubSectionOrder === 'sequential' && !unlocked;
+              const iconTint = hubStatusFg;
+              const iconBoxBg = hubStatusBg;
+              const statusDotColor = hubStatusFg;
+              const hubCardShadow = Platform.select({
+                ios: {
+                  shadowColor: C.slate,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: themeDark ? 0.28 : 0.07,
+                  shadowRadius: 10,
+                },
+                android: { elevation: 3 },
+                default: {},
+              });
               return (
                 <View
                   key={String(pg.id || idx)}
                   style={{
                     gap: 10,
-                    padding: 16,
-                    borderRadius: 12,
-                    borderWidth: 2,
-                    borderColor: cardBorder,
-                    backgroundColor: cardBg,
+                    paddingVertical: 14,
+                    paddingHorizontal: 16,
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor:
+                      hubCardStatus === 'completed'
+                        ? C.status.success.border
+                        : hubCardStatus === 'in_progress'
+                          ? `${MEDIA_TAG_COLORS.DURING}55`
+                          : `${MEDIA_TAG_COLORS.BEFORE}50`,
+                    backgroundColor: C.cardWhite,
+                    ...hubCardShadow,
                   }}
                 >
                   <TouchableOpacity
@@ -7773,67 +8218,122 @@ export default function ChecklistEngine() {
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      gap: 12,
+                      gap: 14,
                     }}
                   >
                   <View
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      backgroundColor: iconBg,
+                      width: 48,
+                      height: 48,
+                      borderRadius: 14,
+                      backgroundColor: iconBoxBg,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    {appHubSectionOrder === 'sequential' && !unlocked ? (
-                      <Ionicons name="lock-closed-outline" size={22} color="#94a3b8" />
+                    {lockedHub ? (
+                      <Ionicons name="lock-closed-outline" size={24} color={iconTint} />
                     ) : pg.sectionIcon ? (
                       renderSchemaIcon(
                         {
                           icon: pg.sectionIcon,
                           iconLibrary: pg.sectionIconLibrary,
-                          iconColor: pg.sectionIconColor,
+                          iconColor: iconTint,
                         },
-                        20
+                        22
                       )
                     ) : (
                       renderSchemaIcon(
                         {
                           icon: isRepeatSection ? 'layers-outline' : 'albums-outline',
                           iconLibrary: 'Ionicons',
-                          iconColor: visualDone ? '#16a34a' : '#64748b',
+                          iconColor: iconTint,
                         },
-                        20
+                        22
                       )
                     )}
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }} numberOfLines={2}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: C.slate }} numberOfLines={2}>
                       {pg.pageTitle || `Etapa ${idx + 1}`}
                     </Text>
-                    <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                    {stageCompleted || stageInProgressActive ? (
+                      <View
+                        style={{
+                          alignSelf: 'flex-start',
+                          marginTop: 6,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 999,
+                          backgroundColor: stageCompleted ? C.status.success.bg : hubStatusBg,
+                        }}
+                      >
+                        {stageCompleted ? (
+                          <Ionicons name="checkmark" size={13} color={C.status.success.fg} />
+                        ) : (
+                          <View
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: 4,
+                              backgroundColor: hubStatusFg,
+                            }}
+                          />
+                        )}
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '800',
+                            letterSpacing: 0.6,
+                            color: stageCompleted ? C.status.success.fg : hubStatusFg,
+                          }}
+                        >
+                          {stageCompleted ? 'CONCLUÍDO' : 'EM ANDAMENTO'}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <Text style={{ fontSize: 12, color: C.textLight, marginTop: stageCompleted || stageInProgressActive ? 6 : 4 }}>
                       {isRepeatSection
                         ? `${repeatStats.rawRows.length} instância(s) criada(s)`
                         : `${(pg.fields || []).filter((x: any) => isFieldVisible(x)).length} campo(s) visível(eis)`}
                     </Text>
                     {isRepeatSection ? (
-                      <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      <Text style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>
                         {repeatStats.maxRows == null
                           ? `Mínimo ${repeatStats.minRows} · sem limite máximo`
                           : `Mínimo ${repeatStats.minRows} · máximo ${repeatStats.maxRows}`}
                       </Text>
                     ) : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: statusDotColor,
+                      }}
+                    />
+                    <Ionicons name="chevron-forward" size={20} color={C.textLight} />
+                  </View>
                   </TouchableOpacity>
                   {isRepeatSection && !isReadOnly ? (
                     <View
                       style={{
                         marginTop: 2,
-                        borderTopWidth: 1,
-                        borderTopColor: '#e2e8f0',
-                        paddingTop: 8,
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: C.border,
+                        paddingTop: 10,
                         gap: 8,
                       }}
                     >
@@ -7847,13 +8347,13 @@ export default function ChecklistEngine() {
                           }
                           style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
                         >
-                          <Text style={{ color: '#475569', fontSize: 12, fontWeight: '800' }}>
+                          <Text style={{ color: C.textSecondary, fontSize: 12, fontWeight: '800' }}>
                             {createdRows.length}
                           </Text>
                           <Ionicons
                             name={repeatMenuExpanded ? 'chevron-up' : 'chevron-down'}
                             size={16}
-                            color="#64748b"
+                            color={C.textLight}
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -7868,9 +8368,9 @@ export default function ChecklistEngine() {
                             borderRadius: 17,
                             alignItems: 'center',
                             justifyContent: 'center',
-                            borderWidth: 1,
-                            borderColor: unlocked ? '#fdba74' : '#e2e8f0',
-                            backgroundColor: unlocked ? '#fff7ed' : '#f8fafc',
+                            borderWidth: StyleSheet.hairlineWidth,
+                            borderColor: unlocked ? C.status.warning.border : C.border,
+                            backgroundColor: unlocked ? C.status.warning.bg : C.surfaceLow,
                             opacity:
                               !unlocked ||
                               (repeatStats.maxRows != null && repeatStats.rawRows.length >= repeatStats.maxRows)
@@ -7878,39 +8378,53 @@ export default function ChecklistEngine() {
                                 : 1,
                           }}
                         >
-                          <Ionicons name="add" size={20} color={unlocked ? '#ea580c' : '#94a3b8'} />
+                          <Ionicons name="add" size={20} color={unlocked ? C.accent : C.textLight} />
                         </TouchableOpacity>
                       </View>
                       {repeatMenuExpanded ? (
                         createdRows.length > 0 ? (
                           <View style={{ gap: 8 }}>
                             {createdRows.map((row) => {
-                              const childBg = row.done ? '#dcfce7' : row.started ? '#fef9c3' : '#ffffff';
-                              const childBorder = row.done ? '#86efac' : row.started ? '#facc15' : '#e2e8f0';
+                              const childBg = row.done
+                                ? C.status.success.bg
+                                : row.started
+                                  ? `${MEDIA_TAG_COLORS.DURING}18`
+                                  : `${MEDIA_TAG_COLORS.BEFORE}12`;
+                              const childBorder = row.done
+                                ? C.status.success.border
+                                : row.started
+                                  ? `${MEDIA_TAG_COLORS.DURING}55`
+                                  : `${MEDIA_TAG_COLORS.BEFORE}40`;
+                              const childDotColor = row.done
+                                ? C.status.success.fg
+                                : row.started
+                                  ? MEDIA_TAG_COLORS.DURING
+                                  : MEDIA_TAG_COLORS.BEFORE;
+                              const childIconTint = childDotColor;
                               return (
                               <TouchableOpacity
                                 key={`filled_${repeatCardKey}_${row.rowIndex}`}
                                 onPress={() => openHubSection(idx, { repeatRowIndex: row.rowIndex })}
                                 style={{
-                                  marginLeft: 14,
+                                  marginLeft: 8,
                                   flexDirection: 'row',
                                   alignItems: 'center',
                                   gap: 12,
                                   padding: 12,
-                                  borderRadius: 10,
-                                  borderWidth: 1,
+                                  borderRadius: 12,
+                                  borderWidth: StyleSheet.hairlineWidth,
                                   borderColor: childBorder,
                                   backgroundColor: childBg,
                                 }}
                               >
                                 <View
                                   style={{
-                                    width: 34,
-                                    height: 34,
-                                    borderRadius: 9,
-                                    backgroundColor: '#f8fafc',
-                                    borderWidth: 1,
-                                    borderColor: '#e2e8f0',
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 10,
+                                    backgroundColor: C.surfaceLow,
+                                    borderWidth: StyleSheet.hairlineWidth,
+                                    borderColor: C.border,
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                   }}
@@ -7920,12 +8434,12 @@ export default function ChecklistEngine() {
                                       {
                                         icon: pg.sectionIcon,
                                         iconLibrary: pg.sectionIconLibrary,
-                                        iconColor: pg.sectionIconColor,
+                                        iconColor: childIconTint,
                                       },
                                       16
                                     )
                                   ) : (
-                                    <Ionicons name="layers-outline" size={16} color="#64748b" />
+                                    <Ionicons name="layers-outline" size={16} color={childIconTint} />
                                   )}
                                 </View>
                                 <Text
@@ -7933,18 +8447,26 @@ export default function ChecklistEngine() {
                                     flex: 1,
                                     fontSize: 14,
                                     fontWeight: '800',
-                                    color: '#0f172a',
+                                    color: C.slate,
                                   }}
                                 >
                                   {pg.pageTitle || `Etapa ${idx + 1}`}
                                 </Text>
-                                <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+                                <View
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 5,
+                                    backgroundColor: childDotColor,
+                                  }}
+                                />
+                                <Ionicons name="chevron-forward" size={18} color={C.textLight} />
                               </TouchableOpacity>
                               );
                             })}
                           </View>
                         ) : (
-                          <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700' }}>
+                          <Text style={{ color: C.textLight, fontSize: 12, fontWeight: '700' }}>
                             Nenhuma instância criada ainda.
                           </Text>
                         )
@@ -7954,10 +8476,100 @@ export default function ChecklistEngine() {
                 </View>
               );
             })}
+            {preambleHubCompleteButtonFields.length > 0 ? (
+              <View style={{ marginTop: 6, gap: 10 }}>
+                {preambleHubCompleteButtonFields.map((field: any) =>
+                  !isReadOnly ? (
+                    <TouchableOpacity
+                      key={String(field.id)}
+                      style={[styles.submitBtn, { marginTop: 0 }]}
+                      onPress={() => {
+                        if (submitting) return;
+                        void submitExecution();
+                      }}
+                      disabled={submitting}
+                      accessibilityRole="button"
+                      accessibilityLabel={String(field.label || '').trim() || 'Concluir'}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color="#FFF" />
+                      ) : (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <Text style={styles.submitText}>
+                            {String(field.label || '').trim() || 'CONCLUIR'}
+                          </Text>
+                          {renderFormCompleteButtonGlyph(field, 22, true)}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ) : (
+                    <View
+                      key={String(field.id)}
+                      style={{
+                        padding: 14,
+                        alignItems: 'center',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                    >
+                      <Text style={{ color: '#64748B', fontWeight: '700', fontSize: 13 }}>
+                        {String(field.label || '').trim() || 'Concluir'}
+                      </Text>
+                    </View>
+                  )
+                )}
+              </View>
+            ) : null}
           </View>
         ) : null}
-        {!(useSectionHub && hubPicking && pages.length > 1)
+        {!(useSectionHub && hubPicking && hubStageMenuHasSteps)
           ? (() => {
+          const primaryFooterButtonLabel = () => {
+            if (effectiveFillMode === 'wizard') {
+              return wizardIndex < wizardSteps.length - 1 ? 'Próximo >' : 'CONCLUIR';
+            }
+            if (effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard') {
+              if (hybridInnerWizardIndex < hybridVisibleFields.length - 1) return 'Próximo >';
+              if (currentPage < displayPages.length - 1) return useSectionHub ? 'Concluir' : 'Avançar >';
+              return 'CONCLUIR';
+            }
+            if (currentPage < displayPages.length - 1) return useSectionHub ? 'Concluir' : 'Avançar >';
+            return 'CONCLUIR';
+          };
+          const runPrimaryFooterAction = () => {
+            if (isReadOnly || submitting) return;
+            if (effectiveFillMode === 'wizard') {
+              if (wizardIndex < wizardSteps.length - 1) handleWizardNext();
+              else void submitExecution();
+              return;
+            }
+            if (effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard') {
+              if (hybridInnerWizardIndex < hybridVisibleFields.length - 1) {
+                handleHybridInnerNext();
+              } else if (currentPage < displayPages.length - 1) {
+                if (useSectionHub) handleCompleteSectionToHub();
+                else handleNextPage();
+              } else {
+                void submitExecution();
+              }
+              return;
+            }
+            if (currentPage < displayPages.length - 1) {
+              if (useSectionHub) handleCompleteSectionToHub();
+              else handleNextPage();
+            } else {
+              void submitExecution();
+            }
+          };
           const renderFieldList = (fields: any[], scope: SectionRepeatScope | null) =>
             fields.map((fieldArg: any) => {
           const effFormT = effectiveSchemaFieldType(fieldArg);
@@ -7965,19 +8577,37 @@ export default function ChecklistEngine() {
           const vv = (fid: string) => getScopedFieldValue(responses, scope, fid);
           const hi = (fid: string, v: any) => handleInput(fid, v, scope);
           if (!isFieldVisible(field)) return null;
+          if (useSectionHub && preambleHubCompleteFieldIdSet.has(field.id)) return null;
 
           const renderFieldIcon = (f: any) => {
             return renderSchemaIcon(f, 24);
           };
 
+          const showLeadingFieldIcon =
+            !!field.icon && field.type !== 'form_complete_button';
           return (
-            <View key={field.id} style={[styles.card, { flexDirection: field.icon ? 'row' : 'column', alignItems: field.icon ? 'flex-start' : 'stretch' }]}>
-              {field.icon && (
-                 <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginRight: 12, marginTop: 2 }}>
+            <View
+              key={field.id}
+              style={[
+                styles.card,
+                {
+                  flexDirection: showLeadingFieldIcon ? 'row' : 'column',
+                  alignItems: showLeadingFieldIcon ? 'flex-start' : 'stretch',
+                },
+              ]}
+            >
+              {showLeadingFieldIcon ? (
+                 <View
+                   style={[
+                     { width: 44, height: 44, borderRadius: 10, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginRight: 12, marginTop: 2 },
+                     activityFieldIconStatusBox,
+                   ]}
+                 >
                      {renderFieldIcon(field)}
                  </View>
-              )}
+              ) : null}
               <View style={{ flex: 1 }}>
+                  {field.type === 'form_complete_button' ? null : (
                   <Text
                     style={[
                       styles.label,
@@ -8005,6 +8635,7 @@ export default function ChecklistEngine() {
                         <Text style={{ color: '#EF4444' }}> *</Text>
                       ) : null}
                   </Text>
+                  )}
                   {field.type !== 'leitura' && isFieldInstructionsVisible(field) ? (
                     <FieldHelpInstructions
                       plainDescription={field.description}
@@ -8015,6 +8646,45 @@ export default function ChecklistEngine() {
 
                   {field.type === 'leitura' ? (
                     <LeituraBlock contentHtml={effectiveLeituraContentHtml(vv(field.id), field.contentHtml)} />
+                  ) : null}
+
+                  {field.type === 'form_complete_button' && !isReadOnly ? (
+                    <TouchableOpacity
+                      style={[styles.submitBtn, { marginTop: 4 }]}
+                      onPress={runPrimaryFooterAction}
+                      disabled={submitting}
+                      accessibilityRole="button"
+                      accessibilityLabel={String(field.label || '').trim() || primaryFooterButtonLabel()}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color="#FFF" />
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                          <Text style={styles.submitText}>
+                            {String(field.label || '').trim() || primaryFooterButtonLabel()}
+                          </Text>
+                          {renderFormCompleteButtonGlyph(field, 22, true)}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ) : field.type === 'form_complete_button' && isReadOnly ? (
+                    <View
+                      style={{
+                        padding: 14,
+                        alignItems: 'center',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {renderFormCompleteButtonGlyph(field, 20, false)}
+                        <Text style={{ color: '#64748B', fontWeight: '700', fontSize: 13 }}>
+                          {String(field.label || '').trim() || primaryFooterButtonLabel()}
+                        </Text>
+                      </View>
+                    </View>
                   ) : null}
                   
                   {validatingFieldId === field.id && (
@@ -9775,11 +10445,12 @@ export default function ChecklistEngine() {
                              })
                              .catch(() => {});
                          } else {
+                           const taskDest = getDestFromTaskLike(currentTask);
                            dataCollectionService.setState('ARRIVED', {
                              executionId: String(taskId || ''),
                              ownerEmail: email || 'unknown',
-                             lat: currentTask?.locationLat ? parseFloat(String(currentTask.locationLat)) : undefined,
-                             lng: currentTask?.locationLng ? parseFloat(String(currentTask.locationLng)) : undefined,
+                             lat: taskDest?.lat,
+                             lng: taskDest?.lng,
                            }).catch(() => {});
                          }
                          setShowLiveMap(false);
@@ -9883,11 +10554,12 @@ export default function ChecklistEngine() {
                    try { insideZone = JSON.parse(resultStr || '{}').geofence?.insideZone; } catch {}
                    if (insideZone) {
                      const email = await AsyncStorage.getItem('@brspark_email');
+                     const taskDest = getDestFromTaskLike(currentTask);
                      dataCollectionService.setState('IN_SERVICE', {
                        executionId: String(taskId || ''),
                        ownerEmail: email || 'unknown',
-                       lat: currentTask?.locationLat ? parseFloat(currentTask.locationLat) : undefined,
-                       lng: currentTask?.locationLng ? parseFloat(currentTask.locationLng) : undefined,
+                       lat: taskDest?.lat,
+                       lng: taskDest?.lng,
                      }).catch(() => {});
                    }
                 })}>
@@ -10008,7 +10680,8 @@ export default function ChecklistEngine() {
                           const line = formatFieldValueForSignatureSummary(def, raw);
                           const thumbUris = collectSummaryThumbnailUris(def, raw);
                           const isGenericMediaLine =
-                            typeof line === 'string' && line.includes('Mídia ou anexo registado');
+                            typeof line === 'string' &&
+                            (line.includes('Mídia registada') || line.includes('Mídia ou anexo registado'));
                           const showValueText = thumbUris.length === 0 || !isGenericMediaLine;
                           const isLast = sidx === summaryIds.length - 1;
                           return (
@@ -10172,6 +10845,21 @@ export default function ChecklistEngine() {
                   onChange={(json) => hi(field.id, json)}
                   readOnly={isReadOnly}
                   userEmail={user?.email}
+                />
+              )}
+              {effectiveSchemaFieldType(field) === 'technician_finance_revenue' && (
+                <ChecklistTechnicianRevenueField
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json)}
+                  readOnly={isReadOnly}
+                />
+              )}
+              {effectiveSchemaFieldType(field) === 'technician_finance_expense' && (
+                <ChecklistTechnicianFinanceField
+                  value={vv(field.id)}
+                  onChange={(json) => hi(field.id, json)}
+                  readOnly={isReadOnly}
+                  mode="expense"
                 />
               )}
               {field.type !== 'hidden' && field.type !== 'leitura' && field.allowTechnicianComment ? (
@@ -10512,7 +11200,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Text style={styles.submitText}>CONCLUIR</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}
@@ -10562,7 +11250,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Text style={styles.submitText}>CONCLUIR</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}
@@ -10609,7 +11297,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR OS</Text>
+                      <Text style={styles.submitText}>CONCLUIR</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}

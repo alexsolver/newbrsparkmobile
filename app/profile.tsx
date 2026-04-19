@@ -24,6 +24,7 @@ import {
   canUseFieldWorkAppRole,
   canUseProviderMode,
   userHasCapability,
+  isB2CConsumerUser,
 } from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -38,6 +39,7 @@ import {
 } from '../src/services/syncService';
 import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
+import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -692,6 +694,18 @@ export default function ProfileScreen() {
     setShowAvatarModal(true);
   };
 
+  const { showProviderModeToggles, showBecomeProviderCta } = useMemo(() => {
+    const b2c = isB2CConsumerUser(user);
+    return {
+      showBecomeProviderCta: b2c,
+      showProviderModeToggles:
+        !b2c &&
+        (isFieldTaskEligibleRole(user?.role) ||
+          isTechnicianProfileActive(user) ||
+          canUseProviderMode(user)),
+    };
+  }, [user]);
+
   // ── Guest Mode ──────────────────────────────────────────────
   if (!user) {
     return (
@@ -831,7 +845,7 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {canUseProviderMode(user) || isFieldTaskEligibleRole(user.role) ? (
+        {showProviderModeToggles ? (
           <>
             <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
               <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
@@ -847,7 +861,10 @@ export default function ProfileScreen() {
             <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <TouchableOpacity
-                  onPress={() => setUserRole('CLIENT')}
+                  onPress={async () => {
+                    await setUserRole('CLIENT');
+                    router.replace(getPersonaHomeHref('client') as any);
+                  }}
                   style={{
                     backgroundColor: userRole === 'CLIENT' ? '#10B981' : '#F1F5F9',
                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
@@ -856,7 +873,7 @@ export default function ProfileScreen() {
                   <Text style={{ color: userRole === 'CLIENT' ? '#fff' : '#64748B', fontWeight: '800' }}>Cliente</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => {
+                  onPress={async () => {
                     if (!canUseProviderMode(user)) {
                       Alert.alert(
                         'Prestador indisponível',
@@ -864,7 +881,8 @@ export default function ProfileScreen() {
                       );
                       return;
                     }
-                    setUserRole('TECHNICIAN');
+                    await setUserRole('TECHNICIAN');
+                    router.replace(getPersonaHomeHref('provider') as any);
                   }}
                   style={{
                     backgroundColor: userRole === 'TECHNICIAN' ? '#D97706' : '#F1F5F9',
@@ -876,7 +894,7 @@ export default function ProfileScreen() {
               </View>
             </View>
           </>
-        ) : !user.technicianProfile && !isFieldTaskEligibleRole(user.role) ? (
+        ) : showBecomeProviderCta ? (
           <View style={{ marginTop: 12, marginBottom: 12, marginHorizontal: 16 }}>
             <TouchableOpacity onPress={handleBecomeTechnician} style={{ backgroundColor: '#D97706', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Quero ser um Prestador</Text>

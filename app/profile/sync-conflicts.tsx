@@ -24,7 +24,13 @@ function reasonLabel(reason: string): string {
   const r = String(reason || '').toLowerCase();
   if (r.includes('preflight_revision_mismatch')) return 'Revisão local diferente da revisão esperada no servidor';
   if (r.includes('server_revision_mismatch')) return 'Servidor recusou envio por conflito de revisão';
+  if (r.includes('media_upload_stuck')) return 'Mídia local não enviada após múltiplas tentativas de sincronização';
   return reason || 'Conflito de sincronização';
+}
+
+function isRevisionConflictReason(reason: string): boolean {
+  const r = String(reason || '').toLowerCase();
+  return r.includes('preflight_revision_mismatch') || r.includes('server_revision_mismatch');
 }
 
 function fmtWhen(ts: number): string {
@@ -200,10 +206,28 @@ export default function SyncConflictsScreen() {
                     <Text style={s.itemWhen}>{fmtWhen(row.at)}</Text>
                   </View>
                   <Text style={s.itemReason}>{reasonLabel(row.reason)}</Text>
-                  <Text style={s.itemMeta}>
-                    Revisão local: {row.submissionRevision ?? '-'} · servidor: {row.serverLastSubmittedRevision ?? '-'} · próximo esperado:{' '}
-                    {row.serverExpectedNext ?? '-'}
-                  </Text>
+                  {isRevisionConflictReason(row.reason) ? (
+                    <Text style={s.itemMeta}>
+                      Revisão local: {row.submissionRevision ?? '-'} · servidor: {row.serverLastSubmittedRevision ?? '-'} · próximo esperado:{' '}
+                      {row.serverExpectedNext ?? '-'}
+                    </Text>
+                  ) : null}
+                  {(() => {
+                    const md = row.payload?.metadata && typeof row.payload.metadata === 'object' ? row.payload.metadata : null;
+                    const attempts = Number(md?.__mediaUploadAttempts);
+                    const pending = Number(md?.__pendingLocalMediaCount);
+                    const hint = typeof md?.__lastMediaUploadHint === 'string' ? md.__lastMediaUploadHint.trim() : '';
+                    if (!Number.isFinite(attempts) && !Number.isFinite(pending)) return null;
+                    return (
+                      <View style={{ marginTop: 2 }}>
+                        <Text style={s.itemMeta}>
+                          Tentativas de upload: {Number.isFinite(attempts) ? Math.floor(attempts) : '-'} · arquivos locais pendentes:{' '}
+                          {Number.isFinite(pending) ? Math.floor(pending) : '-'}
+                        </Text>
+                        {hint ? <Text style={s.itemMeta}>{hint}</Text> : null}
+                      </View>
+                    );
+                  })()}
                   <View style={s.itemActions}>
                     <TouchableOpacity
                       style={[s.btnMiniPrimary, disabled ? s.btnDisabled : null]}
@@ -326,4 +350,3 @@ const s = StyleSheet.create({
   },
   btnMiniDangerText: { color: '#B91C1C', fontSize: 12, fontWeight: '800' },
 });
-

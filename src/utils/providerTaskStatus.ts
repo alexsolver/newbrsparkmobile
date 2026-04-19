@@ -78,10 +78,11 @@ export function effectiveProviderTaskStatus(
     return 'PENDING';
   }
   /**
-   * Cache local de concluídas pode ficar desatualizado após reabertura/reentrega;
-   * quando o servidor disser que está ativa, a fila ativa prevalece.
+   * `@brspark_executed_tasks`: conclusão offline-first. Enquanto o POST/sync não fechar a OS,
+   * o GET pode continuar a devolver IN_PROGRESS — sem isto o cartão volta à aba «Iniciadas» por minutos.
+   * Reabertura/revisão no painel: o pull remove o id do cache executado (`syncPolicy`); não confundir com sync pendente.
    */
-  if (completedIds.has(taskId) && !SERVER_ACTIVE_STATUSES.has(raw)) return 'COMPLETED';
+  if (completedIds.has(taskId)) return 'COMPLETED';
   const pausedByMeta =
     meta.executionPaused === true ||
     meta.executionPaused === 'true' ||

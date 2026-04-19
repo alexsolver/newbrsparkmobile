@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { getChildAssets } from '../database';
 import { useRouter } from 'expo-router';
+import { getAssetRootVisual } from '../assetKind';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -33,15 +34,13 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
   const [childrenExpanded, setChildrenExpanded] = useState(false);
   const [children, setChildren] = useState<Asset[]>([]);
 
-  const TYPE_CONFIG: Record<string, { icon: any; label: string; color: string; bg: string }> = {
-    TERRESTRIAL: { icon: 'car-outline',       label: t('asset.type.TERRESTRIAL'), color: '#904D00', bg: '#FFF7ED' },
-    REAL_ESTATE: { icon: 'business-outline',  label: t('asset.type.REAL_ESTATE'), color: '#FF8C00', bg: '#FFF8F1' },
-    AQUATIC:     { icon: 'boat-outline',      label: t('asset.type.AQUATIC'),     color: '#006B5C', bg: '#E0F2F1' },
-    SPECIAL:     { icon: 'star-outline',      label: t('asset.type.SPECIAL'),     color: '#70797C', bg: '#F3F4F5' },
-    OTHER:       { icon: 'cube-outline',      label: t('asset.type.OTHER'),       color: '#565E61', bg: '#F3F4F5' },
+  const v = getAssetRootVisual(asset.type);
+  const cfg = {
+    icon: v.icon,
+    label: t(`asset.type.${asset.type}` as any),
+    color: v.color,
+    bg: v.bg,
   };
-
-  const cfg = TYPE_CONFIG[asset.type] || TYPE_CONFIG.OTHER;
 
   // Photos can be strings (new.tsx) or {uri, description} objects (edit in [id].tsx)
   const rawPhotos: any[] = asset.details?.photos && asset.details.photos.length > 0
@@ -103,7 +102,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
 
           <View style={S.metaRow}>
             <View style={[S.typePill, { backgroundColor: cfg.bg }]}>
-              <Ionicons name={cfg.icon} size={10} color={cfg.color} />
+              <Ionicons name={cfg.icon as any} size={10} color={cfg.color} />
               <Text style={[S.typePillT, { color: cfg.color }]}>{cfg.label}</Text>
             </View>
             {asset.details?.inventoryId && (
@@ -201,7 +200,8 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
       {childrenExpanded && children.length > 0 && (
         <View style={S.childrenContainer}>
           {children.map((child, idx) => {
-            const childCfg = TYPE_CONFIG[child.type] || TYPE_CONFIG.OTHER;
+            const cv = getAssetRootVisual(child.type);
+            const childCfg = { ...cv, label: t(`asset.type.${child.type}` as any) };
             return (
               <TouchableOpacity
                 key={child.id}
@@ -210,7 +210,7 @@ export function AssetCard({ asset, onPress, onLongPress, hasStock, hasLowStock, 
                 activeOpacity={0.75}
               >
                 <View style={[S.childIcon, { backgroundColor: childCfg.bg }]}>
-                  <Ionicons name={childCfg.icon} size={14} color={childCfg.color} />
+                  <Ionicons name={childCfg.icon as any} size={14} color={childCfg.color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={S.childName} numberOfLines={1}>{child.title}</Text>

@@ -18,7 +18,17 @@ export interface AssetLocation {
 export interface Asset {
   id: string;
   title: string;
-  type: 'REAL_ESTATE' | 'TERRESTRIAL' | 'AQUATIC' | 'SPECIAL' | 'OTHER';
+  /** TERRESTRIAL: legado — tratado como MOBILITY na jornada e filtros */
+  type:
+    | 'REAL_ESTATE'
+    | 'TERRESTRIAL'
+    | 'MOBILITY'
+    | 'MACHINERY'
+    | 'AQUATIC'
+    | 'IT'
+    | 'COLLECTIONS'
+    | 'SPECIAL'
+    | 'OTHER';
   imageUrl?: string;
   status: 'MAINTENANCE OK' | 'INSURANCE RENEWAL SOON' | string;
   statusType: 'success' | 'warning';

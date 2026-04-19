@@ -8,14 +8,7 @@ import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
-
-const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
-  REAL_ESTATE: { icon: 'business-outline',  color: '#FF8C00' },
-  TERRESTRIAL: { icon: 'car-outline',       color: '#904D00' },
-  AQUATIC:     { icon: 'boat-outline',      color: '#006B5C' },
-  SPECIAL:     { icon: 'star-outline',      color: '#70797C' },
-  OTHER:       { icon: 'cube-outline',      color: '#565E61' },
-};
+import { getAssetRootIconColor } from '../../src/assetKind';
 
 interface TreeNode extends Asset {
   children: TreeNode[];
@@ -86,7 +79,7 @@ export default function AssetTreeScreen() {
   };
 
   const renderNode = ({ item }: { item: TreeNode }) => {
-    const cfg = TYPE_ICONS[item.type] || TYPE_ICONS.OTHER;
+    const cfg = getAssetRootIconColor(item.type);
     const isCollapsed = collapsed.has(item.id);
     const hasChildren = item.children.length > 0;
     const indent = item.depth * 20;
@@ -120,17 +113,14 @@ export default function AssetTreeScreen() {
 
         {/* Ícone do tipo */}
         <View style={[styles.typeIcon, { backgroundColor: cfg.color + '20' }]}>
-          <Ionicons name={cfg.icon} size={16} color={cfg.color} />
+          <Ionicons name={cfg.icon as any} size={16} color={cfg.color} />
         </View>
 
         {/* Info */}
         <View style={styles.nodeInfo}>
           <Text style={styles.nodeTitle} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.nodeSub}>
-            {item.type === 'TERRESTRIAL' ? t('newAsset.terrestrial') :
-             item.type === 'REAL_ESTATE' ? t('newAsset.realEstate') :
-             item.type === 'AQUATIC' ? t('newAsset.aquatic') :
-             item.type === 'SPECIAL' ? t('newAsset.special') : item.type}
+            {t(`asset.type.${item.type}` as any)}
             {hasChildren ? ` · ${item.children.length} ${item.children.length > 1 ? t('assetDetail.assetTree.subAssets') : t('assetDetail.assetTree.subAsset')}` : ''}
           </Text>
         </View>

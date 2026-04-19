@@ -314,7 +314,7 @@ router.get('/lookup-options/:preset', authUser, (req, res) => {
 
 // --- Checklist Templates (O Construtor Salva Aqui, O Celular Lê Daqui) ---
 
-// GET /api/checklists/templates (Mobile puxa os modelos)
+// GET /api/checklists/templates — modelos ativos (despacho, app); use ?includeArchived=1 no builder para ver inativos.
 router.get('/templates', async (req, res) => {
     try {
         const includeArchived =
@@ -420,16 +420,34 @@ router.post('/templates', async (req, res) => {
                 }
                 const effectiveFolder =
                     folderIdNorm !== undefined ? folderIdNorm : existing.folderId ?? null;
-                const dupUp = await findActiveDuplicateInFolder(prisma, {
-                    folderId: effectiveFolder,
-                    title: normTitleUp,
-                    excludeId: id,
-                });
-                if (dupUp) {
-                    return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
+                const bodyIsActive =
+                    req.body && typeof req.body.isActive === 'boolean' ? req.body.isActive : undefined;
+                const endingActive =
+                    bodyIsActive === undefined ? existing.isActive !== false : bodyIsActive;
+
+                let resolvedTitle = normTitleUp;
+                if (endingActive && existing.isActive === false) {
+                    const safeTitle = await ensureUniqueActiveTitleInFolder(prisma, {
+                        folderId: effectiveFolder,
+                        desiredTitle: normTitleUp,
+                        excludeId: id,
+                    });
+                    if (safeTitle && safeTitle !== normTitleUp) resolvedTitle = safeTitle;
                 }
+
+                if (endingActive) {
+                    const dupUp = await findActiveDuplicateInFolder(prisma, {
+                        folderId: effectiveFolder,
+                        title: resolvedTitle,
+                        excludeId: id,
+                    });
+                    if (dupUp) {
+                        return res.status(409).json({ error: DUPLICATE_TEMPLATE_TITLE_PT });
+                    }
+                }
+
                 const updateData = {
-                    title: normTitleUp,
+                    title: resolvedTitle,
                     description,
                     settings,
                     schemaData,
@@ -437,6 +455,9 @@ router.post('/templates', async (req, res) => {
                     version: Number(existing.version || 1) + 1,
                 };
                 if (folderIdNorm !== undefined) updateData.folderId = folderIdNorm;
+                if (bodyIsActive !== undefined) {
+                    updateData.isActive = bodyIsActive;
+                }
                 const updated = await prisma.$transaction(async (tx) => {
                     const saved = await tx.checklistTemplate.update({
                         where: { id },
@@ -448,7 +469,13 @@ router.post('/templates', async (req, res) => {
                     });
                     return saved;
                 });
-                scheduleChecklistTemplateEmbeddingSync(updated.id);
+                if (!updated.isActive) {
+                    prisma.checklistTemplateEmbedding
+                        .deleteMany({ where: { templateId: updated.id } })
+                        .catch(() => {});
+                } else {
+                    scheduleChecklistTemplateEmbeddingSync(updated.id);
+                }
                 return res.json(updated);
             }
         }
@@ -484,6 +511,9 @@ router.post('/templates', async (req, res) => {
             }
         }
 
+        const createIsActive =
+            req.body && typeof req.body.isActive === 'boolean' ? !!req.body.isActive : true;
+
         const created = await prisma.$transaction(async (tx) => {
             const row = await tx.checklistTemplate.create({
                 data: {
@@ -494,6 +524,7 @@ router.post('/templates', async (req, res) => {
                     schemaData,
                     metadata: metadata || {},
                     folderId: createFolderId,
+                    isActive: createIsActive,
                     ...(tenantIdForTpl ? { tenantId: tenantIdForTpl } : {}),
                 },
             });
@@ -503,7 +534,13 @@ router.post('/templates', async (req, res) => {
             });
             return row;
         });
-        scheduleChecklistTemplateEmbeddingSync(created.id);
+        if (!created.isActive) {
+            prisma.checklistTemplateEmbedding
+                .deleteMany({ where: { templateId: created.id } })
+                .catch(() => {});
+        } else {
+            scheduleChecklistTemplateEmbeddingSync(created.id);
+        }
         res.json(created);
     } catch (err) {
         console.error("POST /api/checklists/templates error:", err);
@@ -739,7 +776,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
         if (responses && typeof responses === 'object' && !Array.isArray(responses)) {
             if (inOpenRevisionVisit && !clearsReopenPending) {
                 const copy = { ...responses };
-                stripRevisionSessionEvidenceInPlace(copy, existing.template?.schemaData);
+                stripRevisionSessionEvidenceInPlace(copy, existing.template);
                 updateData.responses = copy;
             } else {
                 updateData.responses = responses;
@@ -866,6 +903,28 @@ router.post('/executions', authUser, async (req, res) => {
             typeof metaIn.submissionId === 'string' && metaIn.submissionId.trim() ? metaIn.submissionId.trim() : null;
         let clientRev = parseInt(String(metaIn.submissionRevision ?? req.body.submissionRevision ?? ''), 10);
         const completedAtD = completedAt ? new Date(completedAt) : new Date();
+        let existingTask = null;
+
+        if (taskId) {
+            existingTask = await prisma.checklistExecution.findUnique({
+                where: { id: taskId },
+                include: { template: true },
+            });
+            if (existingTask && !sameOwnerEmail(existingTask.ownerEmail, authEmail)) {
+                return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+            }
+            if (submissionId && existingTask) {
+                const dup = await prisma.checklistExecutionRevision.findUnique({
+                    where: { submissionId },
+                });
+                if (dup) {
+                    return res.json({ success: true, executionId: existingTask.id, idempotent: true });
+                }
+            }
+            if (!finalTemplateId && existingTask?.templateId) {
+                finalTemplateId = existingTask.templateId;
+            }
+        }
 
         /* Biometria facial pendente + visão IA pendente com URL já pública: completar no servidor antes de gravar a revisão. */
         if (responses && typeof responses === 'object' && !Array.isArray(responses) && req.user.tenantId && req.user.id) {
@@ -873,13 +932,6 @@ router.post('/executions', authUser, async (req, res) => {
             const { resolvePendingVisionAnalysisOnSync } = require('../lib/resolvePendingVisionOnSync');
             const { resolvePendingVoiceNotesOnSync } = require('../lib/resolvePendingVoiceNoteOnSync');
             let templateIdForMediaResolve = finalTemplateId;
-            if (taskId && !templateIdForMediaResolve) {
-                const exQuick = await prisma.checklistExecution.findUnique({
-                    where: { id: taskId },
-                    select: { templateId: true },
-                });
-                templateIdForMediaResolve = exQuick?.templateId || null;
-            }
             if (templateIdForMediaResolve) {
                 responses = cloneResponsesShallow(responses);
                 try {
@@ -924,24 +976,8 @@ router.post('/executions', authUser, async (req, res) => {
         // If the task was dispatched from the cloud, the mobile app sends taskId. 
         // We update the existing PENDING execution instead of creating a new one!
         if (taskId) {
-            const existing = await prisma.checklistExecution.findUnique({
-                where: { id: taskId },
-                include: { template: true },
-            });
+            const existing = existingTask;
             if (existing) {
-                if (!sameOwnerEmail(existing.ownerEmail, authEmail)) {
-                    return res.status(403).json({ error: 'Acesso negado a esta OS.' });
-                }
-
-                if (submissionId) {
-                    const dup = await prisma.checklistExecutionRevision.findUnique({
-                        where: { submissionId },
-                    });
-                    if (dup) {
-                        return res.json({ success: true, executionId: existing.id, idempotent: true });
-                    }
-                }
-
                 const lastSub = Number(existing.lastSubmittedRevision) || 0;
                 const expectedNext = lastSub + 1;
                 const stEx = String(existing.status || '').toUpperCase();
@@ -1249,6 +1285,39 @@ router.post('/dispatch', async (req, res) => {
             payload.expectedFormDurationMinutes,
         );
 
+        let dispatchFormIcon = null;
+        let dispatchFormIconLibrary = null;
+        if (loadedTemplate?.metadata != null) {
+            const tm =
+                typeof loadedTemplate.metadata === 'object' && !Array.isArray(loadedTemplate.metadata)
+                    ? loadedTemplate.metadata
+                    : {};
+            const ic = tm.icon != null ? String(tm.icon).trim() : '';
+            if (ic) {
+                dispatchFormIcon = ic;
+                dispatchFormIconLibrary =
+                    tm.iconLibrary != null && String(tm.iconLibrary).trim()
+                        ? String(tm.iconLibrary).trim()
+                        : 'Ionicons';
+            }
+        }
+
+        const rawLocationLat =
+          payload.locationLat !== undefined && payload.locationLat !== null && String(payload.locationLat).trim() !== ''
+            ? Number(payload.locationLat)
+            : null;
+        const rawLocationLng =
+          payload.locationLng !== undefined && payload.locationLng !== null && String(payload.locationLng).trim() !== ''
+            ? Number(payload.locationLng)
+            : null;
+        const rawLocationRadius =
+          payload.locationRadius !== undefined && payload.locationRadius !== null && String(payload.locationRadius).trim() !== ''
+            ? Number.parseInt(String(payload.locationRadius), 10)
+            : null;
+        const parsedLocationLat = rawLocationLat !== null && Number.isFinite(rawLocationLat) ? rawLocationLat : null;
+        const parsedLocationLng = rawLocationLng !== null && Number.isFinite(rawLocationLng) ? rawLocationLng : null;
+        const parsedLocationRadius = rawLocationRadius !== null && Number.isFinite(rawLocationRadius) ? rawLocationRadius : null;
+
         const osNumber = await allocateNextFtOsNumber(prisma);
         const execution = await prisma.checklistExecution.create({
             data: {
@@ -1260,9 +1329,9 @@ router.post('/dispatch', async (req, res) => {
                 scheduledStartAt: scheduledStart,
                 expectedFormDurationMinutes: snapExpectedMin,
                 // Geofencing Location
-                locationLat:      payload.locationLat      ? parseFloat(payload.locationLat)  : null,
-                locationLng:      payload.locationLng      ? parseFloat(payload.locationLng)  : null,
-                locationRadius:   payload.locationRadius   ? parseInt(payload.locationRadius) : null,
+                locationLat: parsedLocationLat,
+                locationLng: parsedLocationLng,
+                locationRadius: parsedLocationRadius,
                 locationAddress:  payload.locationAddress  || null,
                 locationZoneType: payload.locationZoneType || null,
                 locationPolygon:  payload.locationPolygon  || null,
@@ -1272,6 +1341,12 @@ router.post('/dispatch', async (req, res) => {
                     title: osTitle,
                     ...(formTemplateTitle ? { templateTitle: formTemplateTitle } : {}),
                     description: templateDesc,
+                    ...(dispatchFormIcon
+                        ? {
+                              icon: dispatchFormIcon,
+                              iconLibrary: dispatchFormIconLibrary || 'Ionicons',
+                          }
+                        : {}),
                 },
             }
         });

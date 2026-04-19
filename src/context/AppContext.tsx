@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { userHasCapability, type User } from '../services/auth';
+import type { User } from '../services/auth';
 
 export type AppMode = 'SERVICES' | 'ASSETS' | 'PROVIDER';
 
@@ -32,13 +32,23 @@ const AppContext = createContext<AppCtx>({
 });
 
 import { useAuth } from '../hooks/useAuth';
+import { usePersona } from './PersonaContext';
+import { canUseProviderMode } from '../services/auth';
 
-function shouldForceProviderMode(userRole: 'CLIENT' | 'TECHNICIAN', user: User | null | undefined): boolean {
-  return userRole === 'TECHNICIAN' && userHasCapability(user, 'mobile.mode.provider');
+function useShouldForceProviderMode(
+  _userRole: 'CLIENT' | 'TECHNICIAN',
+  user: User | null | undefined,
+  activePersona: 'client' | 'provider'
+): boolean {
+  return activePersona === 'provider' && canUseProviderMode(user);
 }
 
-function resolveDefaultMode(userRole: 'CLIENT' | 'TECHNICIAN', user: User | null | undefined): AppMode {
-  if (shouldForceProviderMode(userRole, user)) {
+function resolveDefaultMode(
+  userRole: 'CLIENT' | 'TECHNICIAN',
+  user: User | null | undefined,
+  activePersona: 'client' | 'provider'
+): AppMode {
+  if (useShouldForceProviderMode(userRole, user, activePersona)) {
     return 'PROVIDER';
   }
   return 'SERVICES';
@@ -47,33 +57,38 @@ function resolveDefaultMode(userRole: 'CLIENT' | 'TECHNICIAN', user: User | null
 function normalizeMode(
   nextMode: AppMode,
   userRole: 'CLIENT' | 'TECHNICIAN',
-  user: User | null | undefined
+  user: User | null | undefined,
+  activePersona: 'client' | 'provider'
 ): AppMode {
-  if (shouldForceProviderMode(userRole, user)) {
+  if (useShouldForceProviderMode(userRole, user, activePersona)) {
     return 'PROVIDER';
+  }
+  if (activePersona === 'client') {
+    return nextMode === 'PROVIDER' ? 'SERVICES' : nextMode;
   }
   return nextMode === 'PROVIDER' ? 'SERVICES' : nextMode;
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { userRole, user } = useAuth();
-  const [modeState, setModeState] = useState<AppMode>(() => resolveDefaultMode(userRole, user));
+  const { activePersona } = usePersona();
+  const [modeState, setModeState] = useState<AppMode>(() => resolveDefaultMode(userRole, user, activePersona));
   const guardRef = useRef<GuardRef>({ isDirty: false, onSave: null, labels: DEFAULT_LABELS });
-  const mode = normalizeMode(modeState, userRole, user);
+  const mode = normalizeMode(modeState, userRole, user, activePersona);
   const setMode = React.useCallback(
     (nextMode: AppMode) => {
-      setModeState(normalizeMode(nextMode, userRole, user));
+      setModeState(normalizeMode(nextMode, userRole, user, activePersona));
     },
-    [userRole, user]
+    [userRole, user, activePersona]
   );
 
   React.useEffect(() => {
-    const next = resolveDefaultMode(userRole, user);
+    const next = resolveDefaultMode(userRole, user, activePersona);
     setModeState((prev) => {
-      const normalizedPrev = normalizeMode(prev, userRole, user);
+      const normalizedPrev = normalizeMode(prev, userRole, user, activePersona);
       return normalizedPrev === next ? prev : next;
     });
-  }, [userRole, user]);
+  }, [userRole, user, activePersona]);
 
   return (
     <AppContext.Provider value={{ mode, setMode, guardRef }}>

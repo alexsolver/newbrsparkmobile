@@ -16,6 +16,12 @@ function effTypeOps(f) {
   return normTypeOps(raw);
 }
 
+/** Campo só de UI no app (sem resposta) — não entra no PDF. */
+export function fieldSkippedForPdfPreview(f) {
+  if (!f || typeof f !== 'object') return true;
+  return effTypeOps(f) === 'form_complete_button';
+}
+
 function resolveSectionLabelClient(field) {
   if (!field || typeof field !== 'object') return '';
   const meta = field.metadata && typeof field.metadata === 'object' ? field.metadata : null;
@@ -161,7 +167,11 @@ function buildPdfEntriesFromFieldList(task, fieldsList) {
   const template = task?.template || {};
   const repeatMapPdf = buildRepeatFieldMapFromTemplate(template);
   const fieldsPdfList = (fieldsList || []).filter(
-    (f) => f && f.type !== 'transit_start' && f.type !== 'transit_end',
+    (f) =>
+      f &&
+      f.type !== 'transit_start' &&
+      f.type !== 'transit_end' &&
+      !fieldSkippedForPdfPreview(f),
   );
   const pdfEntries = [];
   if (fieldsPdfList.length === 0) return pdfEntries;
@@ -262,7 +272,7 @@ export function buildPreviewPdfEntries(task, schemaFields) {
     tmplIds.size > 0 ? list.filter((f) => f && f.id && !tmplIds.has(f.id)) : [];
 
   const main = buildPdfEntriesFromFieldList(task, ordered);
-  const tail = orphans.map((fd0) => ({
+  const tail = orphans.filter((f) => !fieldSkippedForPdfPreview(f)).map((fd0) => ({
     id: fd0.id,
     fieldDef: fd0,
     row: null,

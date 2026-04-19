@@ -5,9 +5,9 @@
  * ADMIN_PANEL_PUBLIC_BASE_URL — origem/pasta onde está evaluation-survey.html, sem barra final.
  * Ex.: https://admin.empresa.com ou https://app.empresa.com/brspark/admin-panel
  *
- * Em desenvolvimento, se ADMIN_PANEL_PUBLIC_BASE_URL estiver vazio, usa o primeiro origin
- * de CORS_ORIGIN (ex.: Live Server do painel em http://localhost:5500).
- * Em produção só entra URL explícita — evita assumir que o origin CORS serve o HTML estático.
+ * Em desenvolvimento, sem URL explícita, usa a **mesma porta que o processo Node** (`PORT`, default 3001).
+ * Não usar `CORS_ORIGIN` como base: costuma listar outra porta (ex. 3002) ou o Live Server, gerando links errados.
+ * Em produção só entra URL explícita — evita assumir host público.
  */
 function normalizeBaseUrl(raw) {
   const s = String(raw || '').trim().replace(/\/+$/, '');
@@ -24,12 +24,11 @@ function normalizeBaseUrl(raw) {
 function resolveSurveyPublicBase() {
   const primary = normalizeBaseUrl(process.env.ADMIN_PANEL_PUBLIC_BASE_URL);
   if (primary) return primary;
+  const alias = normalizeBaseUrl(process.env.PUBLIC_PANEL_URL || process.env.ADMIN_PANEL_PUBLIC_URL);
+  if (alias) return alias;
   if (process.env.NODE_ENV === 'production') return '';
-  const corsFirst = String(process.env.CORS_ORIGIN || '')
-    .split(',')
-    .map((s) => s.trim())
-    .find((s) => s && s !== '*');
-  return normalizeBaseUrl(corsFirst || '');
+  const port = String(process.env.PORT || '3001').trim() || '3001';
+  return normalizeBaseUrl(`http://127.0.0.1:${port}`);
 }
 
 function buildClientSurveyLinks(publicToken) {

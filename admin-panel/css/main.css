@@ -200,6 +200,21 @@ body:has(> aside.sidebar) .main-content {
   transition: margin-left var(--transition);
 }
 
+/* Forms Builder — gaveta "Meus formulários": não cobrir o menu lateral fixo (alinhado ao conteúdo principal). */
+#forms-list-modal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-w);
+  z-index: 99999;
+  justify-content: flex-start;
+  align-items: stretch;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  transition: left var(--transition);
+}
+
 /* ── Top Bar ─────────────────────────────────────────────── */
 .topbar {
   height: 60px;
@@ -2139,6 +2154,9 @@ th.text-right {
   .sidebar.open { transform: translateX(0); }
   body:has(> aside.sidebar) {
     padding-left: 0;
+  }
+  #forms-list-modal {
+    left: 0;
   }
   .main-content { margin-left: 0; }
   body.sidebar-collapsed {

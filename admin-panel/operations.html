@@ -783,7 +783,7 @@
     <div class="report-tabs" id="detail-tabs">
       <button class="report-tab active" id="tab-info" onclick="switchTab('info')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Informações</button>
       <button class="report-tab" id="tab-report" onclick="switchTab('report')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
-      <button class="report-tab" id="tab-raw" onclick="switchTab('raw')"><ion-icon name="build-outline" style="vertical-align:-2px"></ion-icon> Debug (JSON)</button>
+      <button class="report-tab" id="tab-raw" onclick="switchTab('raw')"><ion-icon name="build-outline" style="vertical-align:-2px"></ion-icon> Dados técnicos</button>
     </div>
     <div class="modal-body" id="detail-modal-body" style="max-height:65vh;overflow-y:auto;"></div>
     <div class="modal-footer">
@@ -823,7 +823,7 @@
     <div class="report-tabs" id="revision-snapshot-tabs">
       <button type="button" class="report-tab active" id="rev-snap-tab-form" onclick="switchRevisionSnapshotTab('form')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
       <button type="button" class="report-tab" id="rev-snap-tab-meta" onclick="switchRevisionSnapshotTab('meta')"><ion-icon name="cloud-upload-outline" style="vertical-align:-2px"></ion-icon> Metadados do envio</button>
-      <button type="button" class="report-tab" id="rev-snap-tab-json" onclick="switchRevisionSnapshotTab('json')"><ion-icon name="code-outline" style="vertical-align:-2px"></ion-icon> Respostas (JSON)</button>
+      <button type="button" class="report-tab" id="rev-snap-tab-json" onclick="switchRevisionSnapshotTab('json')"><ion-icon name="code-outline" style="vertical-align:-2px"></ion-icon> Respostas (detalhe)</button>
     </div>
     <div class="modal-body" id="revision-snapshot-body" style="max-height:62vh;overflow-y:auto;"></div>
     <div class="modal-footer">
@@ -1136,7 +1136,13 @@ import {
   buildRepeatableMatrixReportHtml,
   buildVoiceNoteReportHtml,
   escapeHtmlAttr,
+  shouldEmbedHttpUrlAsImage,
 } from './js/report/pdfStandardBlocks.js';
+import {
+  formatBiometricAuditDetailHtml,
+  formatStructuredValueForReportHtml,
+  isBiometricAuditPayload,
+} from './js/biometricAuditReportFormat.js';
 import {
   opsT,
   applyOperationsStaticI18n,
@@ -1151,6 +1157,14 @@ import {
 import { getAdminUiLocale } from './js/user-pages-i18n.js';
 
 await initPage();
+
+/** Escape HTML — relatório / separador «Dados técnicos» (fora de `buildReportTab`). */
+const escHtmlModule = (t) =>
+  String(t ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
 function initOpsListLimitControl() {
   const sel = document.getElementById('ops-limit-select');
@@ -2402,7 +2416,7 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
       if (fitLayers.length) {
         const fg = L.featureGroup(fitLayers);
         if (fg.getBounds && fg.getBounds().isValid()) {
-          setTimeout(() => map.fitBounds(fg.getBounds(), { padding: [22, 22], maxZoom: 17 }), 200);
+          setTimeout(() => map.fitBounds(fg.getBounds(), { padding: [14, 14], maxZoom: 18 }), 200);
         }
       }
     } catch (err) {
@@ -2653,15 +2667,81 @@ function normalizeTraversedPathForReportOps(raw) {
   return out.length ? out : null;
 }
 
+/** Valores candidatos a payload de deslocamento (raiz + linhas de secção repetível). */
+function collectTransitCandidateValuesFromResponses(responses) {
+  const out = [];
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return out;
+  for (const [k, val] of Object.entries(responses)) {
+    if (k.startsWith('__section_repeat_') && Array.isArray(val)) {
+      for (let r = 0; r < val.length; r++) {
+        const row = val[r];
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const rv of Object.values(row)) {
+          if (rv != null && rv !== '') out.push(rv);
+        }
+      }
+      continue;
+    }
+    if (k.startsWith('__')) continue;
+    if (val != null && val !== '') out.push(val);
+  }
+  return out;
+}
+
+function normalizePanelFieldTypeOps(ft) {
+  return String(ft == null ? '' : ft)
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+/**
+ * Quando o template tem tipo errado (ex.: texto) mas o rótulo e a resposta são claramente foto / facial.
+ */
+function inferPhotoFieldTypeFromLabel(field, val) {
+  if (!field || typeof field !== 'object') return '';
+  const t = normalizePanelFieldTypeOps(field.type);
+  const lab = String(field.label || '');
+  const sample = Array.isArray(val) ? val.find((x) => x != null && String(x).trim() !== '') : val;
+  const s = sample != null ? String(sample) : '';
+  if (!(s.startsWith('http://') || s.startsWith('https://'))) return '';
+  if (t === 'facial_recognition' || t === 'photo' || t === 'photo_stamped') return '';
+  if (/\b(reconhecimento\s*facial|reconhecimento\s+facial|\bfacial\b|biometr)/i.test(lab)) {
+    return 'facial_recognition';
+  }
+  if (/\b(foto|photo|imagem|selfie|c[aâ]mera|camera)\b/i.test(lab)) return 'photo';
+  return '';
+}
+
+function effectiveFieldForReportRender(field, val) {
+  if (!field || typeof field !== 'object') return field;
+  const inferred = inferPhotoFieldTypeFromLabel(field, val);
+  if (!inferred) return field;
+  return Object.assign({}, field, { type: inferred });
+}
+
+/** Valor de resposta é CHEGADA (útil quando o tipo no template veio como `text` ou outro). */
+function isChegadaTransitPayloadOps(val) {
+  if (val == null || val === '') return false;
+  try {
+    const j =
+      typeof val === 'object' && val !== null && !Array.isArray(val) ? val : JSON.parse(String(val));
+    return String(j.action || '').toUpperCase() === 'CHEGADA';
+  } catch (e) {
+    return false;
+  }
+}
+
 /** Mesma lógica do PDF: SAÍDA/CHEGADA com timestamp para produtividade. */
 function extractTransitEndpointsForReport(responses) {
   let startGPS = null;
   let endGPS = null;
   if (!responses) return { startGPS, endGPS };
-  Object.values(responses).forEach((val) => {
+  const candidates = collectTransitCandidateValuesFromResponses(responses);
+  candidates.forEach((val) => {
     if (!val) return;
     try {
-      const j = typeof val === 'object' ? val : JSON.parse(val);
+      const j = typeof val === 'object' && val !== null && !Array.isArray(val) ? val : JSON.parse(val);
       const act = String(j.action || '').toUpperCase();
       if (act === 'SAIDA') {
         const lat = j.coordinates?.lat ?? j.lat;
@@ -2831,6 +2911,12 @@ function patrolRasterFitBoundsOps(refLatLng, traversedLatLng) {
     b = bboxFromLatLngListPdfOps(flat);
   }
   if (!b) return null;
+  var core = {
+    minLat: b.minLat,
+    maxLat: b.maxLat,
+    minLng: b.minLng,
+    maxLng: b.maxLng,
+  };
   var pad = 1.24;
   var clat = (b.minLat + b.maxLat) / 2;
   var clng = (b.minLng + b.maxLng) / 2;
@@ -2839,7 +2925,7 @@ function patrolRasterFitBoundsOps(refLatLng, traversedLatLng) {
   var minSpan = 0.00032;
   if (dlat < minSpan) dlat = minSpan;
   if (dlng < minSpan) dlng = minSpan;
-  return { clat: clat, clng: clng, dlat: dlat, dlng: dlng };
+  return { clat: clat, clng: clng, dlat: dlat, dlng: dlng, core: core };
 }
 
 function pickPatrolOsmZoomOps(dlat, dlng) {
@@ -2854,6 +2940,50 @@ function pickPatrolOsmZoomOps(dlat, dlng) {
   else if (d > 0.004) z = 15;
   else z = 16;
   return Math.min(18, z);
+}
+
+function pickPatrolOsmZoomFit3x3Ops(clat, clng, core) {
+  if (
+    !core ||
+    !isFinite(core.minLat) ||
+    !isFinite(core.maxLat) ||
+    !isFinite(core.minLng) ||
+    !isFinite(core.maxLng) ||
+    !isFinite(clat) ||
+    !isFinite(clng)
+  ) {
+    return 14;
+  }
+  var margin = 1.16;
+  var latSpan = Math.max(0, core.maxLat - core.minLat);
+  var lngSpan = Math.max(0, core.maxLng - core.minLng);
+  var minSpanDeg = 0.00042;
+  if (latSpan < minSpanDeg) latSpan = minSpanDeg;
+  if (lngSpan < minSpanDeg) lngSpan = minSpanDeg;
+  var midLat = (core.minLat + core.maxLat) / 2;
+  var midLng = (core.minLng + core.maxLng) / 2;
+  var hLat = (latSpan * margin) / 2;
+  var hLng = (lngSpan * margin) / 2;
+  var need = {
+    minLat: midLat - hLat,
+    maxLat: midLat + hLat,
+    minLng: midLng - hLng,
+    maxLng: midLng + hLng,
+  };
+  var eps = 1e-7;
+  for (var z = 18; z >= 9; z -= 1) {
+    var tile = lngLatToOsmTileOps(clng, clat, z);
+    var tb = patrolDisplayedTileBoundsOps(tile.x, tile.y, z);
+    if (
+      need.minLng >= tb.west - eps &&
+      need.maxLng <= tb.east + eps &&
+      need.minLat >= tb.south - eps &&
+      need.maxLat <= tb.north + eps
+    ) {
+      return z;
+    }
+  }
+  return 9;
 }
 
 function lngLatToOsmTileOps(lng, lat, z) {
@@ -3101,9 +3231,9 @@ function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng, zoneType
   if (!fit) return null;
   var clat = fit.clat;
   var clng = fit.clng;
-  var dlat = fit.dlat;
-  var dlng = fit.dlng;
-  var z = pickPatrolOsmZoomOps(dlat, dlng);
+  var z = fit.core
+    ? pickPatrolOsmZoomFit3x3Ops(clat, clng, fit.core)
+    : pickPatrolOsmZoomOps(fit.dlat, fit.dlng);
   var tile = lngLatToOsmTileOps(clng, clat, z);
   var cx = tile.x;
   var cy = tile.y;
@@ -3132,9 +3262,13 @@ function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng, zoneType
         ? 'Roxo: trecho A–B (referência KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
           th.colorAccent +
           ';font-weight:700">© OpenStreetMap contributors</a>.'
-        : 'Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
-          th.colorAccent +
-          ';font-weight:700">© OpenStreetMap contributors</a>.';
+        : zt === 'livre'
+          ? 'Azul: trilha GPS do deslocamento · ▶ início · ■ fim. Sem rota KML (desloc. livre ou ponto). Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+            th.colorAccent +
+            ';font-weight:700">© OpenStreetMap contributors</a>.'
+          : 'Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:' +
+            th.colorAccent +
+            ';font-weight:700">© OpenStreetMap contributors</a>.';
   return (
     '<div style="position:relative;width:100%;border-bottom:1px solid ' +
     th.colorBorder +
@@ -3155,7 +3289,10 @@ function buildPatrolOsmRasterMapHtmlOps(th, refLatLng, traversedLatLng, zoneType
 function buildOsmPatrolBrowseUrlOps(refLatLng, traversedLatLng) {
   var fit = patrolRasterFitBoundsOps(refLatLng, traversedLatLng);
   if (!fit) return null;
-  var z = Math.min(19, pickPatrolOsmZoomOps(fit.dlat, fit.dlng) + 1);
+  var zBase = fit.core
+    ? pickPatrolOsmZoomFit3x3Ops(fit.clat, fit.clng, fit.core)
+    : pickPatrolOsmZoomOps(fit.dlat, fit.dlng);
+  var z = Math.min(19, zBase + 1);
   return 'https://www.openstreetmap.org/#map=' + z + '/' + fit.clat.toFixed(6) + '/' + fit.clng.toFixed(6);
 }
 
@@ -3163,6 +3300,101 @@ function escUrlAttrOps(url) {
   return String(url || '')
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;');
+}
+
+function resolveTransitTrailForLivrePdfOps(startGPS, endGPS, tr) {
+  var path = Array.isArray(tr) ? tr : [];
+  var slat = startGPS != null && isFinite(Number(startGPS.lat)) ? Number(startGPS.lat) : null;
+  var slng = startGPS != null && isFinite(Number(startGPS.lng)) ? Number(startGPS.lng) : null;
+  var elat = endGPS != null && isFinite(Number(endGPS.lat)) ? Number(endGPS.lat) : null;
+  var elng = endGPS != null && isFinite(Number(endGPS.lng)) ? Number(endGPS.lng) : null;
+  if (path.length >= 2) return path;
+  if (path.length === 1) return path;
+  if (slat != null && slng != null && elat != null && elng != null) {
+    return [
+      [slat, slng],
+      [elat, elng],
+    ];
+  }
+  if (elat != null && elng != null) return [[elat, elng]];
+  if (slat != null && slng != null) return [[slat, slng]];
+  return [];
+}
+
+/** PDF Central: mapa só com trilha GPS (sem KML), alinhado a reportPdfPreview.js. */
+function buildLivreDisplacementMapPdfOps(th, task, startGPS, endGPS, escPdfFn) {
+  const escPdf =
+    typeof escPdfFn === 'function'
+      ? escPdfFn
+      : (s) =>
+          String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+  if (!task) return '';
+  var zt = String(task.locationZoneType || '').toLowerCase();
+  if (zt === 'route' || zt === 'polygon' || zt === 'segment') return '';
+  var trRaw = endGPS ? normalizeTraversedPathForReportOps(endGPS.traversedPath) || [] : [];
+  var trail = resolveTransitTrailForLivrePdfOps(startGPS, endGPS, trRaw);
+  if (trail.length === 0) return '';
+  var browseOsmUrl = buildOsmPatrolBrowseUrlOps([], trail);
+  var rasterMapInner = buildPatrolOsmRasterMapHtmlOps(th, [], trail, 'livre');
+  var hrefAttr = function (u) {
+    return String(u || '').replace(/"/g, '&quot;');
+  };
+  if (!rasterMapInner) {
+    return browseOsmUrl
+      ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid ' +
+          th.colorBorder +
+          ';border-radius:8px;background:#f8fafc;font-size:9px;color:' +
+          th.colorMuted +
+          '"><a href="' +
+          hrefAttr(browseOsmUrl) +
+          '" target="_blank" rel="noopener noreferrer" style="color:' +
+          th.colorAccent +
+          ';font-weight:800">Abrir percurso no OpenStreetMap</a></div>'
+      : '';
+  }
+  var estSource = trail.length >= 2 ? trail : trRaw.length >= 2 ? trRaw : null;
+  var estLen = polylineLengthTraversedPdfOps(estSource);
+  var distLine =
+    estLen != null
+      ? '<div style="margin-top:8px;font-size:10px;color:' +
+        th.colorText +
+        ';line-height:1.45"><strong>Distância (trilha GPS):</strong> ' +
+        escPdf(fmtPatrolDistanceMetersPdfOps(estLen)) +
+        '</div>'
+      : '';
+  var osmLinkRow =
+    browseOsmUrl
+      ? '<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ' +
+        th.colorBorder +
+        '"><a href="' +
+        hrefAttr(browseOsmUrl) +
+        '" target="_blank" rel="noopener noreferrer" style="color:' +
+        th.colorAccent +
+        ';font-weight:800">Abrir em tela cheia (OpenStreetMap)</a></div>'
+      : '';
+  return (
+    '<div style="margin-top:14px;padding:12px 14px;border:1px solid #bae6fd;border-radius:10px;background:linear-gradient(135deg,#f0f9ff 0%,#fff 100%);box-sizing:border-box">' +
+    '<div style="font-size:11px;font-weight:900;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+    '<ion-icon name="map-outline" style="font-size:18px;color:#0284c7"></ion-icon> PERCURSO REGISTRADO (GPS)</div>' +
+    '<div style="font-size:10px;color:' +
+    th.colorText +
+    ';line-height:1.45;margin-bottom:6px">Mapa de ruas com a trilha capturada no deslocamento (sem geometria KML no despacho).</div>' +
+    distLine +
+    '<div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ' +
+    th.colorBorder +
+    ';background:#e2e8f0">' +
+    osmLinkRow +
+    rasterMapInner +
+    '<div style="font-size:8px;color:' +
+    th.colorMuted +
+    ';padding:8px 10px;border-top:1px solid ' +
+    th.colorBorder +
+    ';background:#fff;line-height:1.45">Para zoom e detalhe, use &quot;Abrir em tela cheia&quot;. Legenda: trilha GPS (azul), início (▶) e fim (■) sobre os tiles OSM.</div>' +
+    '</div></div>'
+  );
 }
 
 /** PDF Central: geometria KML + trilha (alinhado a reportPdfPreview.js). */
@@ -3655,6 +3887,138 @@ function repeatSectionLabelFromTemplate(template, sectionId) {
   return 'Seção repetível';
 }
 
+/** Igualdade profunda para comparar snapshots de respostas (JSON). */
+function responsesValueEqual(a, b) {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  const ta = typeof a;
+  const tb = typeof b;
+  if (ta !== tb) return false;
+  if (ta !== 'object') return a === b;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!responsesValueEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const ka = Object.keys(a).sort();
+  const kb = Object.keys(b).sort();
+  if (ka.length !== kb.length) return false;
+  for (let i = 0; i < ka.length; i++) {
+    if (ka[i] !== kb[i]) return false;
+  }
+  for (const k of ka) {
+    if (!responsesValueEqual(a[k], b[k])) return false;
+  }
+  return true;
+}
+
+function reportDeltaTargetRevision(t) {
+  const lsr = Number(t && t.lastSubmittedRevision) || 0;
+  const vr =
+    t && t._viewingRevision != null && Number.isFinite(Number(t._viewingRevision))
+      ? Number(t._viewingRevision)
+      : null;
+  return vr != null ? vr : lsr;
+}
+
+function reportDeltaModeActive(t) {
+  const p = t && t._reportDeltaPrevResponses;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+  return reportDeltaTargetRevision(t) >= 2;
+}
+
+function reportDeltaOmitPlainField(t, fieldId) {
+  if (!reportDeltaModeActive(t)) return false;
+  const prev = t._reportDeltaPrevResponses;
+  const curr = (t && t.responses) || {};
+  return responsesValueEqual(prev[fieldId], curr[fieldId]);
+}
+
+function reportDeltaOmitRepeatField(t, sectionId, rowIndex, fieldId, row) {
+  if (!reportDeltaModeActive(t)) return false;
+  const prev = t._reportDeltaPrevResponses;
+  const prevRows = normalizeSectionRepeatRows(prev, sectionId);
+  const pr = prevRows[rowIndex];
+  if (!pr) return false;
+  return responsesValueEqual(pr[fieldId], row[fieldId]);
+}
+
+function reportDeltaOrphanKeyVisible(t, key) {
+  if (!reportDeltaModeActive(t)) return true;
+  const prev = t._reportDeltaPrevResponses;
+  const curr = (t && t.responses) || {};
+  if (typeof key === 'string' && key.endsWith('__biometric')) {
+    const base = key.slice(0, -'__biometric'.length);
+    if (!responsesValueEqual(prev[key], curr[key])) return true;
+    if (!responsesValueEqual(prev[base], curr[base])) return true;
+    return false;
+  }
+  return !responsesValueEqual(prev[key], curr[key]);
+}
+
+/**
+ * Carrega o snapshot da submissão anterior para comparar no relatório (só submissões 2+).
+ */
+async function attachReportDeltaPrevIfNeeded(taskId, taskObj) {
+  delete taskObj._reportDeltaPrevResponses;
+  const targetRev = reportDeltaTargetRevision(taskObj);
+  if (targetRev < 2) return taskObj;
+  try {
+    const r = await fetch(
+      `${CONFIG.API_BASE}/operations/tasks/${encodeURIComponent(taskId)}/revisions/${targetRev - 1}`,
+      { headers: CONFIG.headers() },
+    );
+    if (!r.ok) return taskObj;
+    const j = await r.json();
+    if (j.responses && typeof j.responses === 'object' && !Array.isArray(j.responses)) {
+      taskObj._reportDeltaPrevResponses = j.responses;
+    }
+  } catch (e) {
+    console.warn('[attachReportDeltaPrevIfNeeded]', e);
+  }
+  return taskObj;
+}
+
+/** Remove entradas PDF não alteradas e cabeçalhos de instância repetível sem campos visíveis. */
+function filterPdfEntriesForReportDelta(t, entries) {
+  if (!reportDeltaModeActive(t) || !Array.isArray(entries)) return entries;
+  const n = entries.length;
+  const keep = new Array(n).fill(true);
+  for (let i = 0; i < n; i++) {
+    const e = entries[i];
+    if (e.kind === '__repeat_hdr') {
+      keep[i] = false;
+      continue;
+    }
+    const { id, row, rowIdx, repeatSid } = e;
+    let omit = false;
+    if (repeatSid != null && row != null && rowIdx != null) {
+      omit = reportDeltaOmitRepeatField(t, repeatSid, rowIdx, id, row);
+    } else {
+      omit = reportDeltaOmitPlainField(t, id);
+    }
+    keep[i] = !omit;
+  }
+  for (let i = 0; i < n; i++) {
+    if (!entries[i] || entries[i].kind !== '__repeat_hdr') continue;
+    let j = i + 1;
+    let any = false;
+    while (j < n && entries[j].kind !== '__repeat_hdr') {
+      if (keep[j]) {
+        any = true;
+        break;
+      }
+      j++;
+    }
+    if (any) keep[i] = true;
+  }
+  return entries.filter((_, i) => keep[i]);
+}
+
 function sectionLabelsFromSchemaData(schemaData) {
   const map = Object.create(null);
   parseSchemaArrayOps(schemaData).forEach((f) => {
@@ -3962,7 +4326,7 @@ function buildInfoTab(t) {
     ${desc ? `<div class="report-field"><div class="report-field-label">Descrição</div><div class="report-field-value">${desc}</div></div>` : ''}
     ${gps ? `<div class="report-field">
       <div class="report-field-label"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Localização GPS</div>
-      <div class="report-field-value mono">${typeof gps === 'object' ? JSON.stringify(gps) : gps}</div>
+      <div class="report-field-value">${typeof gps === 'object' && gps !== null ? formatStructuredValueForReportHtml(gps, escI, 0, { borderColor: 'var(--border)', maxDepth: 8 }) : escI(String(gps))}</div>
     </div>` : ''}`;
 }
 
@@ -3985,7 +4349,10 @@ function buildReportTab(t) {
     ((ztReport === 'route' || ztReport === 'segment') && refLLReport.length >= 2);
   const showTransitMapSection =
     !!(startGPS || endGPS) &&
-    (hasRefReportMap || pathDataReportMap.length > 1 || (endGPS && Number.isFinite(Number(endGPS.lat))));
+    (hasRefReportMap ||
+      pathDataReportMap.length >= 1 ||
+      (endGPS && Number.isFinite(Number(endGPS.lat))) ||
+      (startGPS && Number.isFinite(Number(startGPS.lat))));
 
   if (!hasResp) {
     return `<div style="text-align:center;padding:40px 20px;color:var(--text3)">
@@ -4008,6 +4375,10 @@ function buildReportTab(t) {
     if (!cap) return '';
     return `<div style="font-size:11px;color:#475569;margin-top:6px;font-style:italic;line-height:1.35">Comentários: ${escHtml(cap)}</div>`;
   }
+
+  /** O painel web não carrega `file://`; sem isto o <img> falha e some em silêncio (onerror). */
+  const localMediaUnavailableOpsHtml = () =>
+    '<div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12px;color:#9a3412;line-height:1.45;font-weight:600">A imagem ficou só no dispositivo (URI local). Sincronize de novo com internet para enviar a mídia ao servidor — depois o relatório mostra a foto.</div>';
 
   // Render a single field value, handling special types
   // `fieldTypeOrField`: string (tipo), objeto campo do template, ou null (órfãos).
@@ -4048,12 +4419,24 @@ function buildReportTab(t) {
           let fname = base.split('/').pop() || 'anexo';
           try { fname = decodeURIComponent(fname); } catch (e) {}
           const fnameEsc = escHtml(fname);
-          return `<div style="margin-bottom:6px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download ${val.length > 1 ? 'anexo ' + (i + 1) + ' — ' : ''}${fnameEsc}</a>${capHtml}</div>`;
+          const showImg = shouldEmbedHttpUrlAsImage(s) && !s.startsWith('file://');
+          const imgPart = showImg
+            ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(s)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+            : '';
+          return `${imgPart}<div style="margin-bottom:6px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download ${val.length > 1 ? 'anexo ' + (i + 1) + ' — ' : ''}${fnameEsc}</a>${capHtml}</div>`;
         }
         if ((fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') && isUrl) {
+          if (s.startsWith('file://')) {
+            return `<div style="margin-top:8px">${localMediaUnavailableOpsHtml()}${capHtml}</div>`;
+          }
           const srcEsc = escapeHtmlAttr(s);
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div>${capHtml}</div>`;
+          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div>${capHtml}</div>`;
+        }
+        if (isUrl && shouldEmbedHttpUrlAsImage(s) && !s.startsWith('file://')) {
+          const srcEsc = escapeHtmlAttr(s);
+          const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir ${val.length > 1 ? 'anexo ' + (i + 1) : 'link'}</a></div>${capHtml}</div>`;
         }
         if (isUrl) {
           return `<div style="margin-bottom:4px"><a href="${s}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Anexo ${i+1}</a>${capHtml}</div>`;
@@ -4188,7 +4571,11 @@ function buildReportTab(t) {
         '</tbody></table></div>'
       );
     }
-    if (fieldType === 'technician_finance') {
+    if (
+      fieldType === 'technician_finance' ||
+      fieldType === 'technician_finance_expense' ||
+      fieldType === 'technician_finance_revenue'
+    ) {
       let fo = null;
       if (typeof val === 'object' && val !== null && !Array.isArray(val)) fo = val;
       else {
@@ -4252,6 +4639,15 @@ function buildReportTab(t) {
       buildVisionChecklistReportHtml(val, 'vision_ai_analysis', escHtml) ||
       buildVisionChecklistReportHtml(val, 'vision_checklist', escHtml);
     if (guessVis) return guessVis;
+    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+      if (isBiometricAuditPayload(val)) {
+        return formatBiometricAuditDetailHtml(val, escHtml, { borderColor: 'var(--border)' });
+      }
+      return formatStructuredValueForReportHtml(val, escHtml, 0, {
+        borderColor: 'var(--border)',
+        maxDepth: 8,
+      });
+    }
     const str = String(val);
     if (fieldType === 'file_upload' && (str.startsWith('http') || str.startsWith('file://'))) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
@@ -4259,7 +4655,11 @@ function buildReportTab(t) {
       const base = str.split('?')[0];
       let fname = base.split('/').pop() || 'anexo';
       try { fname = decodeURIComponent(fname); } catch (e) {}
-      return `<div><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download — ${escHtml(fname)}</a>${capHtml}</div>`;
+      const showImg = shouldEmbedHttpUrlAsImage(str) && !str.startsWith('file://');
+      const imgPart = showImg
+        ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(str)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+        : '';
+      return `${imgPart}<div><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download — ${escHtml(fname)}</a>${capHtml}</div>`;
     }
     /** Foto / reconhecimento facial guardados como string URI (não só array). */
     if (
@@ -4267,9 +4667,12 @@ function buildReportTab(t) {
       (str.startsWith('http') || str.startsWith('file://'))
     ) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
+      if (str.startsWith('file://')) {
+        return `<div style="margin-top:8px">${localMediaUnavailableOpsHtml()}${capHtml}</div>`;
+      }
       const srcEsc = escapeHtmlAttr(str);
       const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.style.display='none'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}</div>`;
+      return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}</div>`;
     }
     // Signature: SIG_V1|meta:{...}|path1|path2|...
     if (str.startsWith('SIG_V1|')) {
@@ -4319,8 +4722,17 @@ function buildReportTab(t) {
       } catch(e) {}
     }
     // Image/file URL (fotos já tratadas acima por tipo; aqui fallback genérico)
-    if (str.startsWith('http') || str.startsWith('file://')) {
+    if (str.startsWith('file://')) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
+      return `<div style="padding:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;font-weight:600">Arquivo ainda no dispositivo (URI local). Sincronize para enviar a mídia ao servidor e ver a imagem aqui.</div>${capHtml}`;
+    }
+    if (str.startsWith('http://') || str.startsWith('https://')) {
+      const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
+      if (shouldEmbedHttpUrlAsImage(str)) {
+        const srcEsc = escapeHtmlAttr(str);
+        const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver anexo</a></div>${capHtml}</div>`;
+      }
       return `<div><a href="${str}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>${capHtml}</div>`;
     }
     return str;
@@ -4328,9 +4740,18 @@ function buildReportTab(t) {
 
   // Se temos as configurações do template, renderiza com labels
   let items = '';
+  /** Mapa Leaflet inline após «Finalizar deslocamento»; se true, não duplicar no fim da página. */
+  let transitMapPlacedInline = false;
   if (Array.isArray(fields) && fields.length > 0) {
     const repeatMap = buildRepeatFieldMapFromTemplate(template);
-    const pushFieldInstance = (field, val, rowScope, instSuffix) => {
+    const pushFieldInstance = (field, val, rowScope, instSuffix, deltaCtx) => {
+      if (reportDeltaModeActive(t)) {
+        if (deltaCtx && deltaCtx.sectionId != null && deltaCtx.rowIndex != null && rowScope) {
+          if (reportDeltaOmitRepeatField(t, deltaCtx.sectionId, deltaCtx.rowIndex, field.id, rowScope)) return;
+        } else if (!rowScope) {
+          if (reportDeltaOmitPlainField(t, field.id)) return;
+        }
+      }
       let v = val;
       if (
         (v === undefined || v === null || v === '') &&
@@ -4349,13 +4770,31 @@ function buildReportTab(t) {
         if (Array.isArray(v)) return v.some((x) => x !== undefined && x !== null && String(x).trim() !== '');
         return true;
       })();
-      const displayHtml = renderFieldValue(v, field, responses, field.id, rowScope || undefined);
+      const displayHtml = renderFieldValue(
+        v,
+        effectiveFieldForReportRender(field, v),
+        responses,
+        field.id,
+        rowScope || undefined,
+      );
       const qHead = field.label || field.id;
       const qLab = instSuffix ? `${qHead} <span style="font-size:10px;font-weight:800;color:#6d28d9">(${instSuffix})</span>` : qHead;
       items += `<div class="report-response-item">
         <div class="report-response-q">${qLab}</div>
         <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
       </div>`;
+      if (
+        showTransitMapSection &&
+        !transitMapPlacedInline &&
+        (normalizePanelFieldTypeOps(field.type) === 'transit_end' || isChegadaTransitPayloadOps(v))
+      ) {
+        transitMapPlacedInline = true;
+        items += `<div class="report-section" style="margin:14px 0 8px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;clear:both">
+      <div class="report-section-title" style="margin-bottom:6px;font-size:13px"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Mapa do deslocamento</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45">Trilha GPS e referência de despacho (rota, trecho ou polígono), quando existirem.</div>
+      <div id="report-transit-map" style="width:100%;height:250px;border-radius:8px;border:1px solid #cbd5e1;z-index:1"></div>
+    </div>`;
+      }
       if (field.allowTechnicianComment) {
         const ck = '__comment_' + field.id;
         const cv = rowScope && typeof rowScope === 'object' ? rowScope[ck] : responses[ck];
@@ -4373,7 +4812,7 @@ function buildReportTab(t) {
     fieldSegments.forEach((seg) => {
       if (seg.kind === 'plain') {
         seg.fields.forEach((field) => {
-          pushFieldInstance(field, responses[field.id], null, '');
+          pushFieldInstance(field, responses[field.id], null, '', null);
         });
         return;
       }
@@ -4383,19 +4822,30 @@ function buildReportTab(t) {
       const secTitle = repeatSectionLabelFromTemplate(template, sectionId);
       if (rows.length === 0) {
         groupFields.forEach((field) => {
-          pushFieldInstance(field, responses[field.id], null, '');
+          pushFieldInstance(field, responses[field.id], null, '', null);
         });
       } else if (rows.length === 1) {
         const row = rows[0];
-        groupFields.forEach((field) => {
-          pushFieldInstance(field, row[field.id], row, '');
-        });
+        const dctx = { sectionId, rowIndex: 0 };
+        const skipRow =
+          reportDeltaModeActive(t) &&
+          groupFields.every((field) => reportDeltaOmitRepeatField(t, sectionId, 0, field.id, row));
+        if (!skipRow) {
+          groupFields.forEach((field) => {
+            pushFieldInstance(field, row[field.id], row, '', dctx);
+          });
+        }
       } else {
         rows.forEach((row, ri) => {
+          const dctx = { sectionId, rowIndex: ri };
+          const anyField =
+            !reportDeltaModeActive(t) ||
+            groupFields.some((field) => !reportDeltaOmitRepeatField(t, sectionId, ri, field.id, row));
+          if (!anyField) return;
           items += `<div class="report-repeat-instance" style="margin-bottom:14px;padding:12px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">`;
           items += `<div style="font-weight:800;color:#4f46e5;font-size:12px;margin-bottom:10px">${escHtml(secTitle)} · Instância ${ri + 1}</div>`;
           groupFields.forEach((field) => {
-            pushFieldInstance(field, row[field.id], row, '');
+            pushFieldInstance(field, row[field.id], row, '', dctx);
           });
           items += `</div>`;
         });
@@ -4407,37 +4857,36 @@ function buildReportTab(t) {
     Object.entries(responses).forEach(([key, val]) => {
       if (key.startsWith('__')) return;
       if (!templateFieldIds.includes(key)) {
-         /** Chave auxiliar do app: `{campo}__biometric` — mostrar foto do campo base + auditoria JSON. */
+         if (!reportDeltaOrphanKeyVisible(t, key)) return;
+         /** Chave auxiliar do app: `{campo}__biometric` — foto do campo base + auditoria formatada (sem JSON bruto). */
          if (typeof key === 'string' && key.endsWith('__biometric')) {
            const baseFieldId = key.slice(0, -'__biometric'.length);
            const photoRaw = responses[baseFieldId];
-           const baseInTemplate = templateFieldIds.includes(baseFieldId);
            let photoHtml = '';
-           if (!baseInTemplate) {
-             if (photoRaw != null && String(photoRaw).trim() !== '') {
-               photoHtml = renderFieldValue(photoRaw, 'facial_recognition', responses, baseFieldId, null);
-             } else {
-               photoHtml = '<em style="color:var(--text3)">(sem imagem no campo principal — só auditoria)</em>';
-             }
-           } else {
+           if (photoRaw != null && String(photoRaw).trim() !== '') {
              photoHtml =
-               '<div style="font-size:11px;color:#64748b;margin-bottom:8px">A foto desta captura aparece no campo do formulário acima. Abaixo: dados técnicos da validação biométrica.</div>';
+               '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Captura facial e auditoria técnica (FaceMatch):</div>' +
+               '<div style="margin-bottom:4px">' +
+               renderFieldValue(photoRaw, 'facial_recognition', responses, baseFieldId, null) +
+               '</div>';
+           } else {
+             photoHtml = '<em style="color:var(--text3)">(sem imagem no campo principal — só auditoria)</em>';
            }
-           let auditText = '';
+           let auditBlockHtml = '';
            try {
              const o = typeof val === 'string' ? JSON.parse(val) : val;
-             auditText = escHtml(JSON.stringify(o, null, 2));
+             auditBlockHtml =
+               '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (FaceMatch)</div>' +
+               formatBiometricAuditDetailHtml(o, escHtml, { borderColor: 'var(--border)' });
            } catch (e2) {
-             auditText = escHtml(String(val));
+             auditBlockHtml =
+               '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (FaceMatch)</div>' +
+               `<div style="margin-top:6px;font-size:12px;color:var(--text2)">${escHtml(String(val))}</div>`;
            }
-           const auditBlock =
-             '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (FaceMatch)</div>' +
-             '<pre style="margin-top:6px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word">' +
-             auditText +
-             '</pre>';
+           const auditBlock = auditBlockHtml;
            const qLabel = (baseFieldId || key) + ' · reconhecimento facial';
            items += `<div class="report-response-item">
-             <div class="report-response-q" style="color:var(--text3)">${escHtml(qLabel)} <span style="font-size:9px;font-weight:400;opacity:0.6">(Orfão)</span></div>
+             <div class="report-response-q" style="color:var(--text3)">${escHtml(qLabel)} <span style="font-size:9px;font-weight:400;opacity:0.6">(Órfão)</span></div>
              <div class="report-response-a">${photoHtml}${auditBlock}</div>
            </div>`;
            return;
@@ -4449,7 +4898,7 @@ function buildReportTab(t) {
          if (String(val).includes('"action":"CHEGADA"')) qLabel = 'Registro de GPS Coletado (Chegada)';
          
          items += `<div class="report-response-item">
-           <div class="report-response-q" style="color:var(--text3)">${qLabel} <span style="font-size:9px;font-weight:400;opacity:0.6">(Orfão)</span></div>
+           <div class="report-response-q" style="color:var(--text3)">${qLabel} <span style="font-size:9px;font-weight:400;opacity:0.6">(Órfão)</span></div>
            <div class="report-response-a">${displayHtml}</div>
          </div>`;
       }
@@ -4553,10 +5002,19 @@ function buildReportTab(t) {
     </div>
     
     <div class="report-section">
-      <div class="report-section-title"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Respostas do Formulário — ${Object.keys(responses).length} campo(s)</div>
-      ${items}
+      <div class="report-section-title"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> ${
+        reportDeltaModeActive(t)
+          ? `Alterações nesta submissão (face à submissão n.º ${reportDeltaTargetRevision(t) - 1})`
+          : `Respostas do Formulário — ${Object.keys(responses).length} campo(s)`
+      }</div>
+      ${
+        reportDeltaModeActive(t)
+          ? `<div style="font-size:11px;color:#3730a3;line-height:1.45;margin-bottom:10px;padding:10px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px">Só são listados os campos cujos valores <strong>mudaram</strong> em relação à submissão anterior. O relatório completo de cada envio continua disponível ao escolher essa submissão no seletor.</div>`
+          : ''
+      }
+      ${items || (reportDeltaModeActive(t) ? '<p style="color:var(--text3);font-size:12px">Nenhum campo de formulário alterado face à submissão anterior.</p>' : '')}
     </div>
-    ${showTransitMapSection ? `
+    ${showTransitMapSection && !transitMapPlacedInline ? `
     <div class="report-section">
       <div class="report-section-title"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Mapa de deslocamento e geometria (KML)</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:6px;line-height:1.45">Referência do despacho (rota, trecho ou polígono) e trilha GPS quando existirem.</div>
@@ -4564,23 +5022,23 @@ function buildReportTab(t) {
     </div>` : ''}
     ${t.gpsLocation ? `<div class="report-section">
       <div class="report-section-title"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Localização GPS (OS)</div>
-      <div class="report-field-value mono">${typeof t.gpsLocation === 'object' ? JSON.stringify(t.gpsLocation) : t.gpsLocation}</div>
+      <div class="report-field-value">${typeof t.gpsLocation === 'object' && t.gpsLocation !== null ? formatStructuredValueForReportHtml(t.gpsLocation, escHtml, 0, { borderColor: 'var(--border)', maxDepth: 8 }) : escHtml(String(t.gpsLocation))}</div>
     </div>` : ''}`;
 }
 
 function buildRawTab(t) {
   return `
     <div class="report-field">
-      <div class="report-field-label">Respostas (JSON)</div>
-      <pre class="report-field-value mono" style="max-height:200px;overflow-y:auto;white-space:pre-wrap">${JSON.stringify(t.responses || {}, null, 2)}</pre>
+      <div class="report-field-label">Respostas (dados técnicos)</div>
+      <div class="report-field-value" style="max-height:260px;overflow-y:auto">${formatStructuredValueForReportHtml(t.responses || {}, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 14 })}</div>
     </div>
     <div class="report-field">
       <div class="report-field-label">Metadata</div>
-      <pre class="report-field-value mono" style="max-height:120px;overflow-y:auto;white-space:pre-wrap">${JSON.stringify(t.metadata || {}, null, 2)}</pre>
+      <div class="report-field-value" style="max-height:200px;overflow-y:auto">${formatStructuredValueForReportHtml(t.metadata || {}, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 12 })}</div>
     </div>
     <div class="report-field">
       <div class="report-field-label">GPS</div>
-      <pre class="report-field-value mono">${JSON.stringify(t.gpsLocation || null, null, 2)}</pre>
+      <div class="report-field-value">${formatStructuredValueForReportHtml(t.gpsLocation ?? null, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 8 })}</div>
     </div>`;
 }
 
@@ -4773,9 +5231,21 @@ async function openDetailInternal(id, viewRevisionNumOrNull) {
     }
   }
   if (!t) return;
+  if (viewRevisionNumOrNull == null) {
+    delete t._viewingRevision;
+    delete t._snapshotCompletedAt;
+    delete t._snapshotSubmissionId;
+    delete t._snapshotBusinessMetrics;
+  }
   currentDetailId = id;
   _currentTask = t;
   _currentTab = t.status === 'COMPLETED' || t.status === 'SYNCED' ? 'report' : 'info';
+
+  if (viewRevisionNumOrNull == null) {
+    await attachReportDeltaPrevIfNeeded(id, t);
+  } else {
+    delete t._reportDeltaPrevResponses;
+  }
 
   applyDetailModalHeader(t);
   ['info', 'report', 'raw'].forEach((tab) => {
@@ -4837,6 +5307,7 @@ async function openDetailInternal(id, viewRevisionNumOrNull) {
       }
     }
 
+    await attachReportDeltaPrevIfNeeded(id, displayTask);
     _currentTask = displayTask;
     applyDetailModalHeader(displayTask);
     renderModalBody(displayTask);
@@ -5003,6 +5474,8 @@ window.printReport = async function() {
       }
     }
   } catch(e) { console.warn('[PDF] Could not refresh task data, using cached.', e); }
+
+  await attachReportDeltaPrevIfNeeded(t.id, t);
 
   let pdfRevisionList = [];
   try {
@@ -5499,7 +5972,16 @@ window.printReport = async function() {
     );
   }
 
-  pdfEntries.forEach((entry) => {
+  const pdfEntriesUse = filterPdfEntriesForReportDelta(t, pdfEntries);
+
+  if (reportDeltaModeActive(t) && mod.formResponses) {
+    responseHtml +=
+      '<div style="margin:0 0 14px;padding:10px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:10px;line-height:1.45;color:#312e81">PDF: apenas campos alterados nesta submissão (face à submissão n.º ' +
+      (reportDeltaTargetRevision(t) - 1) +
+      ').</div>';
+  }
+
+  pdfEntriesUse.forEach((entry) => {
       if (!mod.formResponses) return;
       if (entry.kind === '__repeat_hdr') {
         responseHtml +=
@@ -5510,7 +5992,11 @@ window.printReport = async function() {
           '</div>';
         return;
       }
-      const { id, fieldDef, row, rowIdx, repeatSid } = entry;
+      const { id, fieldDef: fieldDefRaw, row, rowIdx, repeatSid } = entry;
+      const fieldDef = effectiveFieldForReportRender(
+        fieldDefRaw,
+        row && typeof row === 'object' ? row[id] : responses[id],
+      );
       let fieldTimeIsoPdf = null;
       if (repeatSid != null && rowIdx != null) {
         fieldTimeIsoPdf = responses[`__time_${repeatSid}_r${rowIdx}_${id}`];
@@ -5670,7 +6156,12 @@ window.printReport = async function() {
               rowCells +
               '</tbody></table></div>';
           }
-      } else if (fieldDef && fieldDef.type === 'technician_finance') {
+      } else if (
+        fieldDef &&
+        (fieldDef.type === 'technician_finance' ||
+          fieldDef.type === 'technician_finance_expense' ||
+          fieldDef.type === 'technician_finance_revenue')
+      ) {
           let fmo = val;
           if (typeof val === 'string') {
             try { fmo = JSON.parse(val); } catch (e) { fmo = null; }
@@ -5730,7 +6221,15 @@ window.printReport = async function() {
                 let name = base.split('/').pop() || 'anexo';
                 try { name = decodeURIComponent(name); } catch (e2) {}
                 const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
-                return `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${idx}${escText(name)}</a></div>` + pdfMediaCapHtml(id, i, row);
+                const preview =
+                  shouldEmbedHttpUrlAsImage(u)
+                    ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+                    : '';
+                return (
+                  preview +
+                  `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${idx}${escText(name)}</a></div>` +
+                  pdfMediaCapHtml(id, i, row)
+                );
               })
               .join('');
           }
@@ -5947,7 +6446,9 @@ window.printReport = async function() {
           } else if (fieldDef && (fieldDef.type === 'dropdown' || fieldDef.type === 'radio')) {
               displayVal = `<span class="pdf-pill" style="background:${th.pillYesBg}">${escPdf(val)}</span>`;
           } else if (typeof val === 'object' && val !== null) {
-              displayVal = `<pre style="font-family:monospace;font-size:10px;white-space:pre-wrap">${JSON.stringify(val)}</pre>`;
+              displayVal = isBiometricAuditPayload(val)
+                ? formatBiometricAuditDetailHtml(val, escPdf, { forPdf: true, borderColor: '#e2e8f0' })
+                : formatStructuredValueForReportHtml(val, escPdf, 0, { borderColor: '#e2e8f0', maxDepth: 8 });
           }
           }
           }
@@ -6178,6 +6679,7 @@ window.printReport = async function() {
     </div>
     ${speedBadgeHtml}
     ${buildPatrolRoutePdfBlockOps(th, t, endGPS, escPdf)}
+    ${buildLivreDisplacementMapPdfOps(th, t, startGPS, endGPS, escPdf)}
   `
     : '';
 
@@ -6575,9 +7077,9 @@ function renderRevisionSnapshotBody() {
       () => window._revisionSnapshotTransitMap
     );
   } else if (tab === 'meta') {
-    body.innerHTML = `<pre class="report-field-value mono" style="white-space:pre-wrap;max-height:55vh;overflow:auto;padding:12px">${escForPre(JSON.stringify(data.metadataSnapshot ?? null, null, 2))}</pre>`;
+    body.innerHTML = `<div class="report-field-value" style="max-height:55vh;overflow:auto;padding:12px">${formatStructuredValueForReportHtml(data.metadataSnapshot ?? null, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 14 })}</div>`;
   } else {
-    body.innerHTML = `<pre class="report-field-value mono" style="white-space:pre-wrap;max-height:55vh;overflow:auto;padding:12px">${escForPre(JSON.stringify(data.responses ?? {}, null, 2))}</pre>`;
+    body.innerHTML = `<div class="report-field-value" style="max-height:55vh;overflow:auto;padding:12px">${formatStructuredValueForReportHtml(data.responses ?? {}, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 14 })}</div>`;
   }
 }
 
@@ -6638,7 +7140,9 @@ window.openRevisionSnapshotModal = async function (execId, revision) {
           ? data.responses
           : {},
       metadata: { ...baseMeta, ...snapMeta },
+      _viewingRevision: Number(revision) || null,
     };
+    await attachReportDeltaPrevIfNeeded(execId, fakeT);
     window._revisionSnapshotData = data;
     window._revisionSnapshotFakeTask = fakeT;
     renderRevisionSnapshotBody();
@@ -6729,7 +7233,7 @@ window.openDispatchModal = async function() {
   const sel = document.getElementById('d-template');
   sel.innerHTML = `<option value="">${opsT('ops_dispatch_template_ph')}</option>`;
   if (templates && Array.isArray(templates)) {
-    templates.filter(t => t.isActive).forEach(t => {
+    templates.filter(t => t && t.isActive !== false).forEach(t => {
       const st = t.settings && typeof t.settings === 'object' ? t.settings : {};
       const rawM = st.expectedFormDurationMinutes;
       let dataAttr = '';

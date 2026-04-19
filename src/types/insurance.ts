@@ -68,12 +68,19 @@ export const POLICY_TYPE_LABELS: Record<InsurancePolicyType, string> = {
 };
 
 // Tipos disponíveis por tipo de ativo
+const vehiclePolicies: InsurancePolicyType[] = ['AUTO_COMPREHENSIVE', 'THIRD_PARTY', 'TOW_ASSISTANCE', 'TRACKER', 'CIVIL_LIABILITY', 'OTHER'];
+const equipmentPolicies: InsurancePolicyType[] = ['EXTENDED_WARRANTY', 'THEFT', 'ALL_RISKS', 'CIVIL_LIABILITY', 'PATRIMONIAL', 'OTHER'];
+
 export const POLICY_TYPES_BY_ASSET: Record<string, InsurancePolicyType[]> = {
   REAL_ESTATE: ['RESIDENTIAL', 'COMMERCIAL', 'FIRE', 'FLOOD', 'LIABILITY', 'CONDO', 'PATRIMONIAL', 'OTHER'],
-  TERRESTRIAL: ['AUTO_COMPREHENSIVE', 'THIRD_PARTY', 'TOW_ASSISTANCE', 'TRACKER', 'CIVIL_LIABILITY', 'OTHER'],
-  AQUATIC:     ['HULL', 'PI', 'DPEM', 'ALL_RISKS', 'PATRIMONIAL', 'OTHER'],
-  SPECIAL:     ['EXTENDED_WARRANTY', 'THEFT', 'ALL_RISKS', 'CIVIL_LIABILITY', 'PATRIMONIAL', 'OTHER'],
-  OTHER:       ['EXTENDED_WARRANTY', 'THEFT', 'ALL_RISKS', 'CIVIL_LIABILITY', 'PATRIMONIAL', 'OTHER'],
+  TERRESTRIAL: vehiclePolicies,
+  MOBILITY: vehiclePolicies,
+  MACHINERY: equipmentPolicies,
+  IT: equipmentPolicies,
+  COLLECTIONS: equipmentPolicies,
+  AQUATIC: ['HULL', 'PI', 'DPEM', 'ALL_RISKS', 'PATRIMONIAL', 'OTHER'],
+  SPECIAL: equipmentPolicies,
+  OTHER: equipmentPolicies,
 };
 
 export const POLICY_STATUS_CONFIG: Record<InsurancePolicy['status'], { label: string; color: string; bg: string; icon: string }> = {

@@ -25,7 +25,15 @@ async function getAllPolicies(ownerEmail?: string): Promise<InsurancePolicy[]> {
   if (!ownerEmail) return [];
   const raw = await AsyncStorage.getItem(KEY(ownerEmail));
   if (!raw) return [];
-  return refreshStatuses(JSON.parse(raw));
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return refreshStatuses(parsed as InsurancePolicy[]);
+  } catch (e) {
+    console.warn('[InsuranceService] cache inválido, limpando entrada local:', e);
+    await AsyncStorage.removeItem(KEY(ownerEmail)).catch(() => {});
+    return [];
+  }
 }
 
 async function savePolicies(policies: InsurancePolicy[], ownerEmail: string): Promise<void> {

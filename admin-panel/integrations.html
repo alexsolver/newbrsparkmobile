@@ -275,6 +275,58 @@
 
       </div>
 
+      <!-- ── Pagamentos ──────────────────────────────────────── -->
+      <div class="section-title"><ion-icon name="card-outline"></ion-icon> <span id="integ-sec-payments">Pagamentos</span></div>
+      <div class="int-catalog" id="payment-catalog">
+        <div class="int-card" id="card-stripe">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#635BFF;color:#fff"><ion-icon name="card-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Stripe</div><div class="int-cat">Pagamentos</div></div>
+            <span class="int-status inactive" id="status-stripe" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Chave secreta (<code>sk_…</code>) para a API; publishable <code>pk_…</code> para o app/webhook no cliente; <code>whsec_…</code> para assinar eventos. O <strong>Testar</strong> chama <code>GET /v1/balance</code> (sem movimentar dinheiro). Guarde a secret key a cada alteração (o painel não a mostra depois de gravar).</div>
+          <div class="int-fields" id="fields-stripe">
+            <input class="form-control" id="key-stripe" type="password" placeholder="Chave secreta (sk_test_… ou sk_live_…)" autocomplete="off" />
+            <input class="form-control" id="pk-stripe" type="text" placeholder="Chave pública (pk_…) — opcional" autocomplete="off" />
+            <input class="form-control" id="whsec-stripe" type="password" placeholder="Assinatura webhooks (whsec_…) — opcional" autocomplete="off" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveStripe()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-stripe" style="display:none" onclick="testInt('stripe')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-stripe" style="display:none" onclick="deleteIntByName('Stripe')">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Identidade & KYC (Didit) ──────────────────────────── -->
+      <div class="section-title"><ion-icon name="id-card-outline"></ion-icon> <span id="integ-sec-identity">Identidade (KYC)</span></div>
+      <div class="int-catalog" id="identity-catalog">
+        <div class="int-card" id="card-didit">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0A1628;color:#3BC9FF">
+              <span style="font-weight:900;letter-spacing:-0.5px">D</span>
+            </div>
+            <div>
+              <div class="int-name">Didit</div>
+              <div class="int-cat" id="didit-cat-label">Identidade (didit.me)</div>
+            </div>
+            <span class="int-status inactive" id="status-didit" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">Plataforma de KYC, documentos, liveness e webhooks. Obtenha a <strong>API key</strong> e o <strong>Webhook secret</strong> no <a href="https://business.didit.me/" target="_blank" rel="noopener noreferrer">Didit Business Console</a> (API &amp; Webhooks). A API pública de verificação acede com o cabeçalho <code>x-api-key</code>. <strong>Testar</strong> chama a API com um <code>sessionId</code> inexistente (deve obter 404 = chave aceite) — não cria sessões. Guarde a API key em cada <strong>Salvar</strong>.</div>
+          <div class="int-fields" id="fields-didit">
+            <input class="form-control" id="key-didit" type="password" placeholder="x-api-key (cópia do consola Didit — Application)" autocomplete="off" />
+            <input class="form-control" id="url-didit" type="url" placeholder="Base URL padrão: https://verification.didit.me" value="https://verification.didit.me" />
+            <input class="form-control" id="workflow-didit" type="text" placeholder="ID do workflow (UUID do consola — opcional, para referência)" />
+            <input class="form-control" id="wh-didit" type="password" placeholder="Chave de assinatura de webhooks (no consola) — opcional" autocomplete="off" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveDidit()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-didit" style="display:none" onclick="testInt('didit')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-didit" style="display:none" onclick="deleteIntByName('Didit')">Remover</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Storage & Cloud ──────────────────────────────────── -->
       <div class="section-title"><ion-icon name="cloud-outline"></ion-icon> <span id="integ-sec-storage">Storage &amp; Cloud</span></div>
       <div class="int-catalog" id="storage-catalog">
@@ -510,6 +562,8 @@
     'AWS Rekognition':     { slug:'aws-rekog' },
     'Exadel CompreFace':   { slug:'compreface' },
     'Visão IA - YOLO': { slug:'vision-checklist' },
+    'Stripe': { slug: 'stripe' },
+    'Didit': { slug: 'didit' },
   };
 
   const VISION_CHECKLIST_INT_NAME = 'Visão IA - YOLO';
@@ -525,7 +579,7 @@
 
   // type → typeLabel legível para exibição
   const typeLabel = Object.fromEntries(
-    ['AI_LLM', 'EMAIL', 'STORAGE', 'WEBHOOK', 'ERP', 'PUSH', 'MAPS', 'VISION'].map((k) => [k, integTypeLabel(k)]),
+    ['AI_LLM', 'EMAIL', 'STORAGE', 'WEBHOOK', 'ERP', 'PUSH', 'MAPS', 'VISION', 'PAYMENT'].map((k) => [k, integTypeLabel(k)]),
   );
 
   let activeInts = {};   // name → integration object
@@ -698,6 +752,30 @@
       if (modelGa) modelGa.value = showModel;
     }
 
+    const keyStripe = document.getElementById('key-stripe');
+    if (keyStripe) keyStripe.value = '';
+    const whStripe = document.getElementById('whsec-stripe');
+    if (whStripe) whStripe.value = '';
+    const pkStripe = document.getElementById('pk-stripe');
+    if (pkStripe) {
+      const st = activeInts['Stripe'];
+      const m = st?.metadata && typeof st.metadata === 'object' ? st.metadata : null;
+      pkStripe.value = m && m.publishableKey != null ? String(m.publishableKey) : '';
+    }
+
+    const uDidit = document.getElementById('url-didit');
+    if (uDidit) uDidit.value = activeInts['Didit']?.baseUrl || 'https://verification.didit.me';
+    const keyDidit = document.getElementById('key-didit');
+    if (keyDidit) keyDidit.value = '';
+    const whDidit = document.getElementById('wh-didit');
+    if (whDidit) whDidit.value = '';
+    const wfDidit = document.getElementById('workflow-didit');
+    if (wfDidit) {
+      const m = activeInts['Didit']?.metadata;
+      const wid = m && typeof m === 'object' && m.workflowId != null ? String(m.workflowId) : '';
+      wfDidit.value = wid;
+    }
+
     let count = 0;
     Object.entries(CARD_MAP).forEach(([name, { slug }]) => {
       const intForCard =
@@ -862,6 +940,60 @@
   };
 
   // Dropbox — salva credenciais de OAuth2 Refresh
+  window.saveDidit = async () => {
+    if (!canManageIntegrations) return;
+    const key = document.getElementById('key-didit')?.value.trim() || '';
+    if (!key) return alert(integT('integ_alert_didit_key'));
+    const base = document.getElementById('url-didit')?.value.trim() || 'https://verification.didit.me';
+    const wid = document.getElementById('workflow-didit')?.value.trim() || '';
+    const wh = document.getElementById('wh-didit')?.value.trim() || '';
+    const metadata = wid ? { workflowId: wid } : null;
+    const body = {
+      type: 'WEBHOOK',
+      name: 'Didit',
+      status: 'ACTIVE',
+      baseUrl: base,
+      apiKey: key,
+      description: 'KYC/identidade (didit.me) — x-api-key no cabeçalho; consola: business.didit.me (API & Webhooks).',
+      ...(metadata ? { metadata } : {}),
+      ...(wh ? { webhookUrl: wh } : {}),
+    };
+    if (activeInts['Didit']) await CONFIG.del(`/integrations/${activeInts['Didit'].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_didit_saved'), true);
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
+
+  window.saveStripe = async () => {
+    if (!canManageIntegrations) return;
+    const sk = document.getElementById('key-stripe')?.value.trim() || '';
+    if (!sk) return alert(integT('integ_alert_stripe_secret'));
+    const pk = document.getElementById('pk-stripe')?.value.trim() || '';
+    const wh = document.getElementById('whsec-stripe')?.value.trim() || '';
+    const body = {
+      type: 'PAYMENT',
+      name: 'Stripe',
+      status: 'ACTIVE',
+      baseUrl: 'https://api.stripe.com',
+      apiKey: sk,
+      description: 'BrSpark — Stripe. Teste: GET /v1/balance com a chave secreta.',
+      ...(pk ? { metadata: { publishableKey: pk } } : {}),
+      ...(wh ? { webhookUrl: wh } : {}),
+    };
+    if (activeInts['Stripe']) await CONFIG.del(`/integrations/${activeInts['Stripe'].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_stripe_saved'), true);
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
+
   window.saveDropbox = async () => {
     if (!canManageIntegrations) return;
     const appKey = document.getElementById('key-app-dropbox').value.trim();

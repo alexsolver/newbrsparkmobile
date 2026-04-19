@@ -27,6 +27,21 @@ export interface StorageConfig {
   baseUrl?: string;
 }
 
+export class StorageUploadError extends Error {
+  code: string;
+  status?: number;
+  details?: string;
+  constructor(message: string, code: string, status?: number, details?: string) {
+    super(message);
+    this.name = 'StorageUploadError';
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
+
+const STORAGE_UPLOAD_MAX_BYTES = 24 * 1024 * 1024;
+
 // Cache em memória (TTL 5 min)
 let _storageConfigCache: { config: StorageConfig; ts: number } | null = null;
 
@@ -67,6 +82,21 @@ export async function uploadFile(localUri: string, remotePath: string): Promise<
     const mimeType = mimeMap[ext] || 'application/octet-stream';
     const filename  = remotePath.split('/').pop() || `file.${ext}`;
 
+    try {
+      const info = await FileSystem.getInfoAsync(localUri);
+      const sz = Number((info as any)?.size);
+      if (info?.exists && Number.isFinite(sz) && sz > STORAGE_UPLOAD_MAX_BYTES) {
+        throw new StorageUploadError(
+          `Arquivo excede limite prático do upload JSON/base64 (${Math.round(sz / (1024 * 1024))}MB).`,
+          'PAYLOAD_TOO_LARGE',
+          413
+        );
+      }
+    } catch (e) {
+      if (e instanceof StorageUploadError) throw e;
+      /* se falhar leitura de size, segue fluxo normal */
+    }
+
     // Lê o arquivo como base64
     const fileBase64 = await FileSystem.readAsStringAsync(localUri, {
       encoding: 'base64',
@@ -88,7 +118,16 @@ export async function uploadFile(localUri: string, remotePath: string): Promise<
     if (!res.ok) {
       const errText = await res.text();
       console.warn('[STORAGE] Upload falhou:', res.status, errText);
-      throw new Error(`Servidor RECUSOU o payload: ${res.status} - ${errText.slice(0,100)}`);
+      const maybeTooLarge =
+        res.status === 413 ||
+        /too\s*large|payload\s*large|entity\s*too\s*large|request\s*entity\s*too\s*large/i.test(errText);
+      const code = maybeTooLarge ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_HTTP_ERROR';
+      throw new StorageUploadError(
+        `Servidor recusou upload (${res.status}).`,
+        code,
+        res.status,
+        errText.slice(0, 600)
+      );
     }
 
     const json: UploadResult = await res.json();
@@ -97,7 +136,8 @@ export async function uploadFile(localUri: string, remotePath: string): Promise<
 
   } catch (e: any) {
     console.warn('[STORAGE] Upload erro:', e);
-    throw new Error(e.message || String(e));
+    if (e instanceof StorageUploadError) throw e;
+    throw new StorageUploadError(e?.message || String(e), 'UPLOAD_UNKNOWN');
   }
 }
 

@@ -15,6 +15,8 @@ import i18n from '../src/i18n';
 import { loadUnitPreference, loadNumberFormatPreference } from '../src/i18n/formatters';
 import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
+import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
+import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
@@ -38,6 +40,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   const { colors: C } = useTheme();
   const router = useRouter();
   const segments = useSegments();
+  const { activePersona } = usePersona();
   const globalParams = useGlobalSearchParams<{ techRegToken?: string }>();
   const pendingTechRegInvite =
     typeof globalParams.techRegToken === 'string' && globalParams.techRegToken.trim().length > 0;
@@ -46,21 +49,27 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     if (loading) return;
 
     const inAuthGroup  = segments[0] === 'auth';
-    const inTabs       = segments[0] === '(tabs)';
+    const inClient = segments[0] === '(client)';
+    const inProvider = segments[0] === '(provider)';
     const inProfile    = segments[0] === 'profile';
     const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
+    const inOtpJourney =
+      segments[0] === 'auth' &&
+      ['welcome', 'identifier', 'otp-verify', 'awaiting-approval', 'simulator', 'legal-sign'].includes(
+        (segments as string[])[1] || ''
+      );
     const inTechRegistration =
       segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
     const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
     const inProviderCatalog = segments[0] === 'provider-services';
     const isRoot       = !segments || !segments.length || !segments[0];
 
-    if (!user && !isRoot && !inAuthGroup && !inTabs && !inProfile && !inProviderCatalog) {
+    if (!user && !isRoot && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
       router.replace('/auth/login' as any);
       return;
     }
 
-    if (user && inAuthGroup && !inOnboarding && !inTechRegistration) {
+    if (user && inAuthGroup && !inOnboarding && !inTechRegistration && !inOtpJourney) {
       if (inLogin && pendingTechRegInvite) {
         return;
       }
@@ -70,12 +79,19 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
           if (!done) {
             router.replace('/auth/onboarding' as any);
           } else {
-            router.replace('/(tabs)' as any);
+            router.replace(getPersonaHomeHref(activePersona) as any);
           }
         })
         .catch(() => {});
     }
-  }, [user, loading, segments, pendingTechRegInvite]);
+
+    if (user && inClient && activePersona === 'provider') {
+      router.replace(getPersonaHomeHref('provider') as any);
+    }
+    if (user && inProvider && activePersona === 'client') {
+      router.replace(getPersonaHomeHref('client') as any);
+    }
+  }, [user, loading, segments, pendingTechRegInvite, activePersona, router]);
 
   if (loading) {
     return (
@@ -183,7 +199,9 @@ function MainLayout() {
               animation: 'slide_from_right',
             }}
           >
-            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(client)" />
+            <Stack.Screen name="(provider)" />
             <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
             <Stack.Screen name="profile" />
             <Stack.Screen name="provider-os-search" />
@@ -207,15 +225,17 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <I18nextProvider i18n={i18n}>
         <AuthProvider>
-          <ThemeProvider>
-            <AutomaticTimeGate>
-              <GpsIntegrityGate>
-                <AppProvider>
-                  <MainLayout />
-                </AppProvider>
-              </GpsIntegrityGate>
-            </AutomaticTimeGate>
-          </ThemeProvider>
+          <PersonaProvider>
+            <ThemeProvider>
+              <AutomaticTimeGate>
+                <GpsIntegrityGate>
+                  <AppProvider>
+                    <MainLayout />
+                  </AppProvider>
+                </GpsIntegrityGate>
+              </AutomaticTimeGate>
+            </ThemeProvider>
+          </PersonaProvider>
         </AuthProvider>
       </I18nextProvider>
     </GestureHandlerRootView>

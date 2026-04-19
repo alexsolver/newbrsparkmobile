@@ -9,9 +9,50 @@ const M = {
     ev_pageTitle: 'BrSpark Admin — Qualidade e avaliações',
     ev_bc_panel: 'Painel',
     ev_bc_page: 'Qualidade e avaliações',
-    ev_hero_title: 'Avaliações e Minha Produtividade',
+    ev_hero_title: 'Avaliações',
     ev_hero_sub_html:
-      'Controle de templates, regras de disparo (ex.: OS sincronizada), instâncias, disputas e ranking. O template <strong>CLIENT</strong> ativo com evento <strong>OS_SYNCED</strong> é o usado ao sincronizar uma OS (o registro mais recentemente atualizado prevalece).',
+      'Acompanhe o que os clientes responderam, resolva revisões e envie o link da pesquisa por e-mail ou notificação no telemóvel. O questionário é criado quando a OS é sincronizada; use <strong>Instâncias</strong> para convidar o cliente quando precisar.',
+    ev_ctx_eyebrow_scope: 'Onde estou',
+    ev_ctx_eyebrow_kpis: 'Números do período',
+    ev_ctx_eyebrow_focus: 'O que fazer aqui',
+    ev_ctx_scope_meta: 'Separador ativo: {tab}. Utilize as abas acima para mudar de vista.',
+    ev_ctx_chip_total: '{n} avaliações',
+    ev_ctx_chip_pend: '{n} pendentes',
+    ev_ctx_chip_crit: '{n} críticas',
+    ev_ctx_chip_avg: 'Média {n}',
+    ev_ctx_chip_rate: 'Resposta {n}%',
+    ev_ctx_focus_resumo: 'Veja de relance volume, atrasos e qualidade média.',
+    ev_ctx_focus_disputas: 'Analise pedidos de revisão do técnico e tome uma decisão registada.',
+    ev_ctx_focus_instances: 'Envie o convite ao cliente, copie o link ou veja a conversa para contexto.',
+    ev_ctx_focus_templates: 'Defina perguntas e regras; só um modelo CLIENT ativo com disparo em OS sincronizada é usado por OS.',
+    ev_ctx_focus_ranking: 'Compare técnicos pela média das notas no período.',
+    ev_g1_title: 'Resumo',
+    ev_g1_desc: 'Veja quantas avaliações existem, quantas faltam responder e a média geral.',
+    ev_g2_title: 'Instâncias',
+    ev_g2_desc: 'Para cada OS pendente, envie o convite ao cliente por e-mail ou app. Também pode copiar o link.',
+    ev_g3_title: 'Disputas',
+    ev_g3_desc: 'Se o técnico pedir revisão, veja a conversa e decida: manter, ajustar nota ou invalidar.',
+    ev_client_email_unknown: 'Não detetado na OS',
+    ev_btn_send_invite: 'Enviar convite',
+    ev_lbl_notify_email: 'E-mail do cliente',
+    ev_ph_client_email: 'cliente@empresa.com',
+    ev_lbl_notify_channels: 'Canais',
+    ev_notify_send: 'Enviar',
+    ev_th_inst_client: 'Cliente (e-mail)',
+    ev_notify_title: 'Enviar convite ao cliente',
+    ev_notify_meta: 'Modelo: {tpl} · OS: {os}',
+    ev_notify_email_detected: 'E-mail obtido dos dados da OS. Pode alterar antes de enviar.',
+    ev_notify_email_missing: 'Sem e-mail na OS: indique o e-mail do cliente abaixo para enviar por e-mail ou notificação na app.',
+    ev_notify_foot_hint: 'O push só chega a quem tem a app BrSpark instalada, com sessão iniciada com o mesmo e-mail. WhatsApp e SMS serão suportados numa próxima fase.',
+    ev_notify_lbl_email: 'E-mail (recomendado)',
+    ev_notify_lbl_push: 'Notificação no app do cliente',
+    ev_notify_lbl_wa: 'WhatsApp (em breve)',
+    ev_notify_lbl_sms: 'SMS (em breve)',
+    ev_notify_need_channel: 'Escolha pelo menos um canal (e-mail ou notificação).',
+    ev_notify_ok_email: 'E-mail enviado com sucesso.',
+    ev_notify_ok_push: 'Notificação enviada para a app do cliente.',
+    ev_notify_push_skip: 'Notificação: {reason}',
+    ev_notify_ok_generic: 'Pedido concluído.',
     ev_filter_tenant: 'Tenant',
     ev_tenant_all: 'Todos os tenants',
     ev_refresh: 'Atualizar',
@@ -34,24 +75,30 @@ const M = {
     ev_disputes_panel_title: 'Revisões / disputas',
     ev_disputes_hint_html:
       'Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.',
-    ev_th_tech: 'Técnico',
+    ev_th_tech: 'Técnico / OS',
     ev_th_os_note: 'OS / nota',
     ev_th_just: 'Justificativa',
+    ev_th_dispute_chat: 'Conversa',
     ev_th_actions: 'Ações',
     ev_inst_state_lbl: 'Estado instância',
     ev_inst_all: 'Todos',
-    ev_st_PENDING: 'Pendente',
-    ev_st_RESPONDED: 'Respondida',
+    ev_st_PENDING: 'Aguardando cliente',
+    ev_st_RESPONDED: 'Cliente respondeu',
     ev_st_IN_REVIEW: 'Em revisão',
-    ev_st_FINALIZED: 'Finalizada',
+    ev_st_FINALIZED: 'Encerrada',
+    ev_inst_badge_PENDING: 'Aguardando cliente',
+    ev_inst_badge_RESPONDED: 'Cliente respondeu',
+    ev_inst_badge_IN_REVIEW: 'Em revisão',
+    ev_inst_badge_FINALIZED: 'Encerrada',
+    ev_inst_badge_UNKNOWN: '—',
     ev_inst_panel_title: 'Instâncias recentes',
     ev_inst_hint_html:
-      'Instâncias <strong>PENDING</strong> mostram o URL completo do formulário web (<code>evaluation-survey.html</code>). Use copiar para enviar ao cliente ou pré-visualizar abaixo.',
+      'Em <strong>pendente</strong>, use <strong>Enviar convite</strong> para e-mail ou app, ou copie o link. O e-mail do cliente surge automaticamente quando está na OS; caso contrário, preencha no convite.',
     ev_th_status: 'Estado',
     ev_th_template: 'Template',
     ev_th_tech2: 'Técnico',
     ev_th_os: 'OS',
-    ev_th_url: 'URL do formulário web',
+    ev_th_url: 'Link do formulário',
     ev_preview_title: 'Pré-visualização do formulário (iframe)',
     ev_preview_close: 'Fechar',
     ev_preview_iframe_title: 'Formulário de avaliação ao cliente',
@@ -83,6 +130,18 @@ const M = {
     ev_trigger_os_synced: 'Criar avaliação quando a OS for sincronizada (SYNCED)',
     ev_trigger_hint_html:
       'Gravado em <code>triggerRules.events</code> (ex.: <code>OS_SYNCED</code>). Apenas templates <strong>CLIENT</strong> ativos com este evento e com perguntas são elegíveis; usa-se o mais recentemente atualizado.',
+    ev_tpl_survey_appearance_title: 'Aparência da pesquisa ao cliente',
+    ev_tpl_survey_appearance_hint_html:
+      'URL de imagem (HTTPS) e textos no formulário público <code>evaluation-survey.html</code> antes e depois do envio.',
+    ev_lbl_tpl_survey_logo: 'URL do logo (opcional)',
+    ev_lbl_tpl_msg_pre: 'Mensagem antes das perguntas',
+    ev_lbl_tpl_msg_post: 'Mensagem após o envio (agradecimento)',
+    ev_ph_tpl_msg_pre: 'Ex.: Sua opinião é muito importante para nós.',
+    ev_ph_tpl_msg_post: 'Ex.: Obrigado por dedicar seu tempo.',
+    ev_tpl_preview_survey: 'Pré-visualizar pesquisa',
+    ev_tpl_preview_survey_hint: 'Requer template já salvo (modo edição).',
+    ev_tpl_inline_preview_title: 'Pré-visualização',
+    ev_tpl_preview_need_save: 'Salve o template para obter um ID e abrir a pré-visualização.',
     ev_questions: 'Perguntas',
     ev_add_question: '+ Pergunta',
     ev_cancel: 'Cancelar',
@@ -151,9 +210,50 @@ const M = {
     ev_pageTitle: 'BrSpark Admin — Quality & evaluations',
     ev_bc_panel: 'Home',
     ev_bc_page: 'Quality & evaluations',
-    ev_hero_title: 'Evaluations & My Productivity',
+    ev_hero_title: 'Evaluations',
     ev_hero_sub_html:
-      'Manage templates, trigger rules (e.g. synced work order), instances, disputes and rankings. The active <strong>CLIENT</strong> template with <strong>OS_SYNCED</strong> is used when an WO syncs (the most recently updated record wins).',
+      'Track customer responses, resolve reviews, and send the survey link by email or mobile notification. The questionnaire is created when a work order syncs; use <strong>Instances</strong> to invite the customer when needed.',
+    ev_ctx_eyebrow_scope: 'Current scope',
+    ev_ctx_eyebrow_kpis: 'Period numbers',
+    ev_ctx_eyebrow_focus: 'What to do here',
+    ev_ctx_scope_meta: 'Active tab: {tab}. Use the tabs above to switch views.',
+    ev_ctx_chip_total: '{n} evaluations',
+    ev_ctx_chip_pend: '{n} pending',
+    ev_ctx_chip_crit: '{n} critical',
+    ev_ctx_chip_avg: 'Avg {n}',
+    ev_ctx_chip_rate: 'Response {n}%',
+    ev_ctx_focus_resumo: 'See volume, backlog, and overall quality at a glance.',
+    ev_ctx_focus_disputes: 'Review technician appeals and record a decision.',
+    ev_ctx_focus_instances: 'Send the invite, copy the link, or open the chat for context.',
+    ev_ctx_focus_templates: 'Define questions and rules; only one active CLIENT template with OS-sync trigger applies per work order.',
+    ev_ctx_focus_ranking: 'Compare technicians by average score in the period.',
+    ev_g1_title: 'Overview',
+    ev_g1_desc: 'See how many evaluations exist, how many are still pending, and the overall average.',
+    ev_g2_title: 'Instances',
+    ev_g2_desc: 'For each pending job, invite the customer by email or app. You can also copy the link.',
+    ev_g3_title: 'Disputes',
+    ev_g3_desc: 'If a technician requests a review, read the thread and decide: keep, adjust score, or invalidate.',
+    ev_client_email_unknown: 'Not on work order',
+    ev_btn_send_invite: 'Send invite',
+    ev_lbl_notify_email: 'Customer email',
+    ev_ph_client_email: 'customer@company.com',
+    ev_lbl_notify_channels: 'Channels',
+    ev_notify_send: 'Send',
+    ev_th_inst_client: 'Customer (email)',
+    ev_notify_title: 'Send invite to customer',
+    ev_notify_meta: 'Template: {tpl} · WO: {os}',
+    ev_notify_email_detected: 'Email taken from the work order. You may edit it before sending.',
+    ev_notify_email_missing: 'No email on the work order: enter the customer email below for email or app notification.',
+    ev_notify_foot_hint: 'Push only reaches users with the BrSpark app signed in with the same email. WhatsApp and SMS are planned next.',
+    ev_notify_lbl_email: 'Email (recommended)',
+    ev_notify_lbl_push: 'Customer app notification',
+    ev_notify_lbl_wa: 'WhatsApp (coming soon)',
+    ev_notify_lbl_sms: 'SMS (coming soon)',
+    ev_notify_need_channel: 'Choose at least one channel (email or notification).',
+    ev_notify_ok_email: 'Email sent successfully.',
+    ev_notify_ok_push: 'Notification sent to the customer app.',
+    ev_notify_push_skip: 'Notification: {reason}',
+    ev_notify_ok_generic: 'Request completed.',
     ev_filter_tenant: 'Tenant',
     ev_tenant_all: 'All tenants',
     ev_refresh: 'Refresh',
@@ -176,19 +276,25 @@ const M = {
     ev_disputes_panel_title: 'Reviews / disputes',
     ev_disputes_hint_html:
       'Use <strong>View conversation</strong> to list technician–client chat messages for the WO window (requires client email in execution metadata and an existing 1:1 room). Access is logged in audit.',
-    ev_th_tech: 'Technician',
+    ev_th_tech: 'Technician / WO',
     ev_th_os_note: 'WO / score',
     ev_th_just: 'Justification',
+    ev_th_dispute_chat: 'Chat',
     ev_th_actions: 'Actions',
     ev_inst_state_lbl: 'Instance status',
     ev_inst_all: 'All',
-    ev_st_PENDING: 'Pending',
-    ev_st_RESPONDED: 'Responded',
+    ev_st_PENDING: 'Waiting for customer',
+    ev_st_RESPONDED: 'Customer responded',
     ev_st_IN_REVIEW: 'In review',
-    ev_st_FINALIZED: 'Finalized',
+    ev_st_FINALIZED: 'Closed',
+    ev_inst_badge_PENDING: 'Waiting for customer',
+    ev_inst_badge_RESPONDED: 'Customer responded',
+    ev_inst_badge_IN_REVIEW: 'In review',
+    ev_inst_badge_FINALIZED: 'Closed',
+    ev_inst_badge_UNKNOWN: '—',
     ev_inst_panel_title: 'Recent instances',
     ev_inst_hint_html:
-      '<strong>PENDING</strong> instances show the full web survey URL (<code>evaluation-survey.html</code>). Copy to send to the client or preview below.',
+      'When <strong>pending</strong>, use <strong>Send invite</strong> for email or app, or copy the link. Customer email appears when present on the work order; otherwise enter it in the invite.',
     ev_th_status: 'Status',
     ev_th_template: 'Template',
     ev_th_tech2: 'Technician',
@@ -225,6 +331,18 @@ const M = {
     ev_trigger_os_synced: 'Create evaluation when the WO is synced (SYNCED)',
     ev_trigger_hint_html:
       'Stored in <code>triggerRules.events</code> (e.g. <code>OS_SYNCED</code>). Only active <strong>CLIENT</strong> templates with this event and questions are eligible; the most recently updated wins.',
+    ev_tpl_survey_appearance_title: 'Customer survey appearance',
+    ev_tpl_survey_appearance_hint_html:
+      'Image URL (HTTPS) and copy for the public form <code>evaluation-survey.html</code> before and after submit.',
+    ev_lbl_tpl_survey_logo: 'Logo URL (optional)',
+    ev_lbl_tpl_msg_pre: 'Message before questions',
+    ev_lbl_tpl_msg_post: 'Thank-you message after submit',
+    ev_ph_tpl_msg_pre: 'e.g. Your feedback matters to us.',
+    ev_ph_tpl_msg_post: 'e.g. Thank you for your time.',
+    ev_tpl_preview_survey: 'Preview survey',
+    ev_tpl_preview_survey_hint: 'Requires a saved template (edit mode).',
+    ev_tpl_inline_preview_title: 'Preview',
+    ev_tpl_preview_need_save: 'Save the template first to open the preview.',
     ev_questions: 'Questions',
     ev_add_question: '+ Question',
     ev_cancel: 'Cancel',
@@ -359,8 +477,8 @@ export function applyEvaluationsStaticI18n() {
   setText('ev-disputes-panel-title', 'ev_disputes_panel_title');
   setHtml('ev-disputes-hint', 'ev_disputes_hint_html');
   setText('ev-th-dispute-tech', 'ev_th_tech');
-  setText('ev-th-dispute-os', 'ev_th_os_note');
   setText('ev-th-dispute-just', 'ev_th_just');
+  setText('ev-th-dispute-chat', 'ev_th_dispute_chat');
   setText('ev-th-dispute-actions', 'ev_th_actions');
   setText('ev-inst-state-lbl', 'ev_inst_state_lbl');
   const isel = document.getElementById('instance-status-filter');
@@ -377,8 +495,6 @@ export function applyEvaluationsStaticI18n() {
   setHtml('ev-inst-hint', 'ev_inst_hint_html');
   setText('ev-th-inst-status', 'ev_th_status');
   setText('ev-th-inst-template', 'ev_th_template');
-  setText('ev-th-inst-tech', 'ev_th_tech2');
-  setText('ev-th-inst-os', 'ev_th_os');
   setText('ev-th-inst-url', 'ev_th_url');
   setText('ev-th-inst-actions', 'ev_th_actions');
   setText('ev-preview-title', 'ev_preview_title');
@@ -416,6 +532,20 @@ export function applyEvaluationsStaticI18n() {
   setText('ev-tpl-trigger-title', 'ev_trigger_rules');
   setText('ev-tpl-rule-os-text', 'ev_trigger_os_synced');
   setHtml('ev-tpl-trigger-hint', 'ev_trigger_hint_html');
+  setText('ev-tpl-survey-appearance-title', 'ev_tpl_survey_appearance_title');
+  setHtml('ev-tpl-survey-appearance-hint', 'ev_tpl_survey_appearance_hint_html');
+  setText('ev-lbl-tpl-survey-logo', 'ev_lbl_tpl_survey_logo');
+  setText('ev-lbl-tpl-msg-pre', 'ev_lbl_tpl_msg_pre');
+  setText('ev-lbl-tpl-msg-post', 'ev_lbl_tpl_msg_post');
+  const tpre = document.getElementById('tpl-msg-pre');
+  if (tpre) tpre.placeholder = evT('ev_ph_tpl_msg_pre');
+  const tpost = document.getElementById('tpl-msg-post');
+  if (tpost) tpost.placeholder = evT('ev_ph_tpl_msg_post');
+  setText('btn-tpl-preview-survey', 'ev_tpl_preview_survey');
+  setText('ev-tpl-preview-survey-hint', 'ev_tpl_preview_survey_hint');
+  setText('ev-tpl-inline-preview-title', 'ev_tpl_inline_preview_title');
+  const tifr = document.getElementById('tpl-inline-preview-iframe');
+  if (tifr) tifr.title = evT('ev_tpl_inline_preview_title');
   setText('ev-tpl-questions-lbl', 'ev_questions');
   setText('tpl-add-question', 'ev_add_question');
   setText('tpl-modal-cancel', 'ev_cancel');
@@ -434,4 +564,22 @@ export function applyEvaluationsStaticI18n() {
   setText('ev-loading-inst', 'ev_loading');
   setText('ev-loading-tpl', 'ev_loading');
   setText('ev-loading-ranking', 'ev_ranking_need_resumo');
+  setText('ev-g1-title', 'ev_g1_title');
+  setText('ev-g1-desc', 'ev_g1_desc');
+  setText('ev-g2-title', 'ev_g2_title');
+  setText('ev-g2-desc', 'ev_g2_desc');
+  setText('ev-g3-title', 'ev_g3_title');
+  setText('ev-g3-desc', 'ev_g3_desc');
+  setText('notify-modal-title', 'ev_notify_title');
+  setText('ev-lbl-notify-email', 'ev_lbl_notify_email');
+  const ne = document.getElementById('notify-email-override');
+  if (ne) ne.placeholder = evT('ev_ph_client_email');
+  setText('ev-lbl-notify-channels', 'ev_lbl_notify_channels');
+  setText('ev-notify-lbl-email', 'ev_notify_lbl_email');
+  setText('ev-notify-lbl-push', 'ev_notify_lbl_push');
+  setText('ev-notify-lbl-wa', 'ev_notify_lbl_wa');
+  setText('ev-notify-lbl-sms', 'ev_notify_lbl_sms');
+  setText('notify-modal-cancel', 'ev_cancel');
+  setText('notify-modal-send', 'ev_notify_send');
+  setText('ev-th-inst-client', 'ev_th_inst_client');
 }

@@ -18,6 +18,7 @@ import DatePickerButton from '../src/components/DatePickerButton';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useAuth } from '../src/hooks/useAuth';
 import { userHasCapability } from '../src/services/auth';
+import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import {
   loadProviderOsSearchRows,
   type ProviderOsSearchRow,
@@ -159,7 +160,7 @@ export function ProviderOsSearchScreen() {
 
   React.useEffect(() => {
     if (userRole !== 'TECHNICIAN' || !canOpenProviderOsSearch) {
-      router.replace('/(tabs)' as any);
+      router.replace(getPersonaHomeHref('client') as any);
       return;
     }
     reload();

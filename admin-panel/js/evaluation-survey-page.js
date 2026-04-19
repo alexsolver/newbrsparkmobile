@@ -1,16 +1,67 @@
 import { esvT, applySurveyStaticI18n } from './evaluation-survey-i18n.js';
+import { ensureAdminApiDetected, resolveApiBase } from './config.js';
 
 applySurveyStaticI18n();
 
-const API = window.location.origin + '/api';
-const params = new URLSearchParams(window.location.search);
-const token = params.get('token');
-const state = { form: null, answers: {} };
+/** Base da API (ex.: http://127.0.0.1:3001/api) */
+let apiBase = '';
+const urlParams = new URLSearchParams(window.location.search);
+const state = {
+  form: null,
+  answers: {},
+  previewMode: false,
+  token: null,
+};
 
 function showErr(msg) {
   const e = document.getElementById('err');
   e.style.display = msg ? 'block' : 'none';
   e.textContent = msg || '';
+}
+
+function isHttpUrl(s) {
+  return /^https?:\/\//i.test(String(s || '').trim());
+}
+
+function applyBranding(data) {
+  const logoWrap = document.getElementById('survey-logo-wrap');
+  const preEl = document.getElementById('survey-pre');
+  const brand = document.getElementById('survey-brand');
+  if (logoWrap) {
+    logoWrap.innerHTML = '';
+    logoWrap.style.display = 'none';
+    const u = data.surveyLogoUrl && String(data.surveyLogoUrl).trim();
+    if (u && isHttpUrl(u)) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = u;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.onerror = () => {
+        logoWrap.style.display = 'none';
+      };
+      img.onload = () => {
+        logoWrap.style.display = 'block';
+      };
+      logoWrap.appendChild(img);
+      logoWrap.style.display = 'block';
+    }
+  }
+  if (preEl) {
+    const pre = data.surveyMessagePre != null ? String(data.surveyMessagePre) : '';
+    if (pre.trim()) {
+      preEl.textContent = pre;
+      preEl.style.display = 'block';
+    } else {
+      preEl.textContent = '';
+      preEl.style.display = 'none';
+    }
+  }
+  if (brand) {
+    const showPre = preEl && preEl.style.display === 'block';
+    const showLogo = logoWrap && logoWrap.innerHTML !== '';
+    brand.style.display = showPre || showLogo ? 'block' : 'none';
+  }
 }
 
 function renderQuestion(q) {
@@ -95,38 +146,93 @@ function renderQuestion(q) {
   return wrap;
 }
 
+function renderSurveyUi(data) {
+  state.form = data;
+  state.answers = {};
+  const sub = document.getElementById('sub');
+  if (sub) {
+    sub.textContent =
+      (data.templateName || '') + (data.osNumber ? esvT('esv_os_prefix') + data.osNumber : '');
+    sub.style.display = 'block';
+  }
+  const root = document.getElementById('form-root');
+  root.innerHTML = '';
+  (data.questions || []).forEach((q) => root.appendChild(renderQuestion(q)));
+  const comment = document.createElement('div');
+  comment.className = 'card';
+  const cl = document.createElement('label');
+  cl.className = 'q';
+  cl.textContent = esvT('esv_comment_lbl');
+  comment.appendChild(cl);
+  const ta = document.createElement('textarea');
+  ta.id = 'comment';
+  ta.placeholder = esvT('esv_comment_ph');
+  if (state.previewMode) {
+    ta.disabled = true;
+    ta.placeholder = '';
+  }
+  comment.appendChild(ta);
+  root.appendChild(comment);
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.type = 'button';
+  btn.textContent = state.previewMode ? esvT('esv_preview_btn') : esvT('esv_submit');
+  btn.disabled = !!state.previewMode;
+  btn.onclick = () => submit(ta.value);
+  root.appendChild(btn);
+
+  applyBranding(data);
+
+  const banner = document.getElementById('survey-preview-banner');
+  if (banner) {
+    banner.style.display = state.previewMode ? 'block' : 'none';
+    banner.textContent = state.previewMode ? esvT('esv_preview_banner') : '';
+  }
+}
+
 async function load() {
-  if (!token) {
+  const previewTemplateId = urlParams.get('previewTemplate');
+  state.token = urlParams.get('token');
+
+  if (previewTemplateId) {
+    state.previewMode = true;
+    const jwt =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('brspark_admin_token') : '';
+    if (!jwt) {
+      document.getElementById('sub').textContent = '';
+      showErr(esvT('esv_preview_need_login'));
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${apiBase}/admin/evaluations/templates/${encodeURIComponent(previewTemplateId)}/preview-form`,
+        { headers: { Authorization: `Bearer ${jwt}`, Accept: 'application/json' } }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || esvT('esv_err_load'));
+      const title = document.getElementById('title');
+      if (title) {
+        title.textContent = `${esvT('esv_title')} ${esvT('esv_preview_badge')}`;
+      }
+      renderSurveyUi(data);
+    } catch (e) {
+      document.getElementById('sub').textContent = '';
+      showErr(e.message || esvT('esv_fail_load'));
+    }
+    return;
+  }
+
+  if (!state.token) {
     document.getElementById('sub').textContent = esvT('esv_invalid_link');
     return;
   }
   try {
-    const res = await fetch(API + '/evaluations/public/form?token=' + encodeURIComponent(token));
+    const res = await fetch(
+      `${apiBase}/evaluations/public/form?token=${encodeURIComponent(state.token)}`
+    );
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || esvT('esv_err_load'));
-    state.form = data;
-    document.getElementById('sub').textContent =
-      (data.templateName || '') + (data.osNumber ? esvT('esv_os_prefix') + data.osNumber : '');
-    const root = document.getElementById('form-root');
-    root.innerHTML = '';
-    (data.questions || []).forEach((q) => root.appendChild(renderQuestion(q)));
-    const comment = document.createElement('div');
-    comment.className = 'card';
-    const cl = document.createElement('label');
-    cl.className = 'q';
-    cl.textContent = esvT('esv_comment_lbl');
-    comment.appendChild(cl);
-    const ta = document.createElement('textarea');
-    ta.id = 'comment';
-    ta.placeholder = esvT('esv_comment_ph');
-    comment.appendChild(ta);
-    root.appendChild(comment);
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.type = 'button';
-    btn.textContent = esvT('esv_submit');
-    btn.onclick = () => submit(ta.value);
-    root.appendChild(btn);
+    renderSurveyUi(data);
   } catch (e) {
     document.getElementById('sub').textContent = '';
     showErr(e.message || esvT('esv_fail_load'));
@@ -134,6 +240,7 @@ async function load() {
 }
 
 async function submit(comment) {
+  if (state.previewMode) return;
   showErr('');
   const qs = state.form.questions || [];
   for (const q of qs) {
@@ -143,24 +250,49 @@ async function submit(comment) {
       return;
     }
   }
-  const btn = document.querySelector('.btn');
+  const btn = document.querySelector('#form-root .btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(API + '/evaluations/public/respond', {
+    const res = await fetch(`${apiBase}/evaluations/public/respond`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, answers: state.answers, comment: comment || undefined }),
+      body: JSON.stringify({
+        token: state.token,
+        answers: state.answers,
+        comment: comment || undefined,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || esvT('esv_err_submit'));
     document.getElementById('form-root').style.display = 'none';
     document.getElementById('sub').style.display = 'none';
-    document.getElementById('title').style.display = 'none';
-    document.getElementById('done').style.display = 'block';
+    const title = document.getElementById('title');
+    if (title) title.style.display = 'none';
+    const brand = document.getElementById('survey-brand');
+    if (brand) brand.style.display = 'none';
+    const banner = document.getElementById('survey-preview-banner');
+    if (banner) banner.style.display = 'none';
+    const done = document.getElementById('done');
+    const thanks =
+      state.form && state.form.surveyMessagePost && String(state.form.surveyMessagePost).trim()
+        ? String(state.form.surveyMessagePost).trim()
+        : esvT('esv_thanks');
+    done.textContent = thanks;
+    done.style.display = 'block';
   } catch (e) {
     showErr(e.message || esvT('esv_err_submit'));
     if (btn) btn.disabled = false;
   }
 }
 
-void load();
+async function boot() {
+  try {
+    await ensureAdminApiDetected();
+  } catch {
+    /* continua */
+  }
+  apiBase = resolveApiBase();
+  await load();
+}
+
+void boot();

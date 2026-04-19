@@ -42,7 +42,7 @@ router.post('/calculate/:executionId', async (req, res) => {
       : null;
 
     // ── Distância percorrida (se houver trilha) ──────────────────────────────
-    const locEvents = events.filter(e => e.lat && e.lng);
+    const locEvents = events.filter((e) => Number.isFinite(Number(e.lat)) && Number.isFinite(Number(e.lng)));
     let distanceKm = 0;
     const haversine = (lat1, lng1, lat2, lng2) => {
       const R = 6371, toRad = d => d * Math.PI / 180;

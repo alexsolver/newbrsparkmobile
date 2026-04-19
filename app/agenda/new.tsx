@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ const CATEGORIES: { label: string; value: EventCategory; color: string; icon: st
 
 export default function NewAgendaScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ prefillAssetId?: string }>();
   const { user } = useAuth();
   const assets = getLocalAssets(undefined, { includeMobileWarehouse: false }) || [];
   const { colors: C } = useTheme();
@@ -29,7 +30,15 @@ export default function NewAgendaScreen() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<EventCategory>('BOOKING');
   const [assetId, setAssetId] = useState<string>('');
-  
+
+  useEffect(() => {
+    const raw = params.prefillAssetId;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    if (id && String(id).trim()) {
+      setAssetId(String(id).trim());
+    }
+  }, [params.prefillAssetId]);
+
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
   
@@ -111,7 +120,7 @@ export default function NewAgendaScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name={selectedAsset ? "home" : "apps-outline"} size={20} color={selectedAsset ? C.status.info.fg : C.textSecondary} style={{ marginRight: 10 }} />
               <Text style={{ fontSize: 16, color: selectedAsset ? C.slate : C.textLight, fontWeight: selectedAsset ? '700' : '500' }}>
-                {selectedAsset ? selectedAsset.title : 'Selecione um Bem...'}
+                {selectedAsset ? selectedAsset.title : 'Selecione um ativo...'}
               </Text>
             </View>
             <Ionicons name="chevron-down" size={20} color={C.textLight} />
@@ -191,7 +200,7 @@ export default function NewAgendaScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Selecione o Bem</Text>
+              <Text style={styles.modalTitle}>Selecione o ativo</Text>
               <TouchableOpacity onPress={() => setShowAssetModal(false)}>
                 <Ionicons name="close" size={24} color={C.slate} />
               </TouchableOpacity>

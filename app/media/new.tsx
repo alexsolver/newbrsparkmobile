@@ -94,7 +94,7 @@ export default function NewMediaScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg }}>
           <Ionicons name="cube-outline" size={64} color={C.border} />
           <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, marginTop: space.lg, textAlign: 'center' }}>
-            Nenhum Bem cadastrado
+            Nenhum ativo cadastrado
           </Text>
           <Text style={{ fontSize: fontSize.sm, color: C.textSecondary, textAlign: 'center', marginTop: space.sm, lineHeight: 22, fontWeight: fontWeight.medium }}>
             Para organizar suas mídias e fotos, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.

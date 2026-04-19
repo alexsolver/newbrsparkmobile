@@ -8,7 +8,7 @@ import {
   Text,
   TouchableOpacity,
   Keyboard,
-  KeyboardAvoidingView, Platform} from 'react-native';
+  Platform} from 'react-native';
 import { getNumberFormat } from '../i18n/formatters';
 
 interface ValueInputProps {
@@ -19,6 +19,9 @@ interface ValueInputProps {
   currency?: boolean;
   currencySymbol?: string;
   editable?: boolean;
+  /** Keystrokes while focused (para ler valor ao guardar antes do blur). */
+  onDraftChange?: (raw: string) => void;
+  onEditingStateChange?: (editing: boolean) => void;
 }
 
 /**
@@ -31,7 +34,7 @@ interface ValueInputProps {
  *  "1.234,56"   → 1234.56  (dot = thousand, comma = decimal)
  *  "1,234.56"   → 1234.56  (comma = thousand, dot = decimal)
  */
-function parseRaw(raw: string): number {
+export function parseLocaleAmountString(raw: string): number {
   const cleaned = raw.replace(/[^\d,.-]/g, '').trim();
   if (!cleaned) return 0;
 
@@ -56,10 +59,11 @@ function parseRaw(raw: string): number {
   return parseFloat(normalized) || 0;
 }
 
+
 /** Format a number for display using the user's persisted number format prefs. */
 function formatDisplay(raw: string): string {
   if (!raw) return '';
-  const num = parseRaw(raw);
+  const num = parseLocaleAmountString(raw);
   if (isNaN(num)) return raw;
 
   const fmt = getNumberFormat();
@@ -99,6 +103,8 @@ export function ValueInput({
   currency = false,
   currencySymbol,
   editable = true,
+  onDraftChange,
+  onEditingStateChange,
 }: ValueInputProps) {
   const [focused, setFocused] = useState(false);
   const [rawValue, setRawValue] = useState(value ?? '');
@@ -120,16 +126,19 @@ export function ValueInput({
     : value ? formatDisplay(value) : '';
 
   const handleFocus = () => {
+    onEditingStateChange?.(true);
     // When focusing, show the last raw value the user typed (or the external value if first focus)
     setRawValue(value ?? '');
     setFocused(true);
   };
 
   const handleBlur = () => {
+    onDraftChange?.('');
+    onEditingStateChange?.(false);
     setFocused(false);
     if (!rawValue) return;
     // Parse raw → canonical JS number string → send to parent ONCE on blur
-    const num = parseRaw(rawValue);
+    const num = parseLocaleAmountString(rawValue);
     const canonical = num !== 0 ? String(num) : rawValue;
     onChangeText(canonical);
   };
@@ -138,7 +147,10 @@ export function ValueInput({
     <>
       <TextInput
         value={displayValue}
-        onChangeText={setRawValue}        // ← only updates internal state, NOT parent
+        onChangeText={(t) => {
+          setRawValue(t);
+          onDraftChange?.(t);
+        }}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onSubmitEditing={() => Keyboard.dismiss()}

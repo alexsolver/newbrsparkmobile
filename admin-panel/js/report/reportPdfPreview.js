@@ -30,8 +30,14 @@ import {
   buildVoiceNoteReportHtml,
   escapeHtmlAttr,
   parseCapturedAtFromPhotoUriPdf,
+  shouldEmbedHttpUrlAsImage,
 } from './pdfStandardBlocks.js';
-import { buildPreviewPdfEntries } from './pdfPreviewFormEntries.js';
+import {
+  formatBiometricAuditDetailHtml,
+  formatStructuredValueForReportHtml,
+  isBiometricAuditPayload,
+} from '../biometricAuditReportFormat.js';
+import { buildPreviewPdfEntries, fieldSkippedForPdfPreview } from './pdfPreviewFormEntries.js';
 import { formatServiceLocationInnerHtml } from './serviceLocationFormat.js';
 
 const esc = (s) =>
@@ -357,7 +363,12 @@ function formatSignatureSummaryPdfBlock(val, f, th, responses, row, schemaFields
           ? `<span class="pdf-pill" style="background:${th.pillYesBg}">Sim</span>`
           : `<span class="pdf-pill" style="background:${th.pillNoBg}">Não</span>`;
       } else if (typeof srcVal === 'object') {
-        inner = `<pre style="margin:0;font-size:9px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:${th.colorMuted};line-height:1.35">${esc(JSON.stringify(srcVal))}</pre>`;
+        inner = isBiometricAuditPayload(srcVal)
+          ? formatBiometricAuditDetailHtml(srcVal, esc, { forPdf: true, borderColor: th.colorBorder })
+          : formatStructuredValueForReportHtml(srcVal, esc, 0, {
+              maxDepth: 8,
+              borderColor: th.colorBorder,
+            });
       } else {
         inner = `<span>${esc(String(srcVal))}</span>`;
       }
@@ -435,7 +446,12 @@ function formatFileUploadPdfHtml(val, f, responses, row) {
         /* keep */
       }
       const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
+      const preview =
+        shouldEmbedHttpUrlAsImage(u)
+          ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+          : '';
       return (
+        preview +
         `<div style="margin-top:8px;font-size:13px;line-height:1.4"><a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;text-decoration:underline;word-break:break-all"><ion-icon name="document-attach-outline" style="vertical-align:-3px;font-size:17px"></ion-icon> Download — ${esc(idx)}${esc(name)}</a></div>` +
         pdfMediaCapPreview(id, i, responses, row)
       );
@@ -536,7 +552,11 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
     .trim()
     .replace(/[\s-]+/g, '_')
     .toLowerCase();
-  if (fType === 'technician_finance') {
+  if (
+    fType === 'technician_finance' ||
+    fType === 'technician_finance_expense' ||
+    fType === 'technician_finance_revenue'
+  ) {
     return formatTechnicianFinancePdfHtml(val, th);
   }
 
@@ -962,6 +982,13 @@ function patrolRasterFitBounds(refLatLng, traversedLatLng) {
   }
   if (!b) return null;
 
+  const core = {
+    minLat: b.minLat,
+    maxLat: b.maxLat,
+    minLng: b.minLng,
+    maxLng: b.maxLng,
+  };
+
   const pad = 1.24;
   const clat = (b.minLat + b.maxLat) / 2;
   const clng = (b.minLng + b.maxLng) / 2;
@@ -970,9 +997,10 @@ function patrolRasterFitBounds(refLatLng, traversedLatLng) {
   const minSpan = 0.00032;
   dlat = Math.max(dlat, minSpan);
   dlng = Math.max(dlng, minSpan);
-  return { clat, clng, dlat, dlng };
+  return { clat, clng, dlat, dlng, core };
 }
 
+/** Fallback por extensão em graus (percurso muito longo / mundo inteiro). */
 function pickPatrolOsmZoom(dlat, dlng) {
   const d = Math.max(dlat > 0 ? dlat : 0.00025, dlng > 0 ? dlng : 0.00025);
   let z;
@@ -985,6 +1013,55 @@ function pickPatrolOsmZoom(dlat, dlng) {
   else if (d > 0.004) z = 15;
   else z = 16;
   return Math.min(18, z);
+}
+
+/**
+ * Escolhe o maior z tal que o bbox do percurso (com margem) caiba na área geográfica
+ * coberta pelos 9 tiles 3×3 centrados em (clat, clng). Evita percursos curtos
+ * ficarem “pontinhos” no meio de um mapa muito afastado.
+ */
+function pickPatrolOsmZoomFit3x3(clat, clng, core) {
+  if (
+    !core ||
+    !Number.isFinite(core.minLat) ||
+    !Number.isFinite(core.maxLat) ||
+    !Number.isFinite(core.minLng) ||
+    !Number.isFinite(core.maxLng) ||
+    !Number.isFinite(clat) ||
+    !Number.isFinite(clng)
+  ) {
+    return 14;
+  }
+  const margin = 1.16;
+  let latSpan = Math.max(0, core.maxLat - core.minLat);
+  let lngSpan = Math.max(0, core.maxLng - core.minLng);
+  const minSpanDeg = 0.00042;
+  if (latSpan < minSpanDeg) latSpan = minSpanDeg;
+  if (lngSpan < minSpanDeg) lngSpan = minSpanDeg;
+  const midLat = (core.minLat + core.maxLat) / 2;
+  const midLng = (core.minLng + core.maxLng) / 2;
+  const hLat = (latSpan * margin) / 2;
+  const hLng = (lngSpan * margin) / 2;
+  const need = {
+    minLat: midLat - hLat,
+    maxLat: midLat + hLat,
+    minLng: midLng - hLng,
+    maxLng: midLng + hLng,
+  };
+  const eps = 1e-7;
+  for (let z = 18; z >= 9; z -= 1) {
+    const { x: cx, y: cy } = lngLatToOsmTile(clng, clat, z);
+    const tb = patrolDisplayedTileBounds(cx, cy, z);
+    if (
+      need.minLng >= tb.west - eps &&
+      need.maxLng <= tb.east + eps &&
+      need.minLat >= tb.south - eps &&
+      need.maxLat <= tb.north + eps
+    ) {
+      return z;
+    }
+  }
+  return 9;
 }
 
 /** Tile XYZ (Slippy Map) — mesmos tiles que o site OSM. */
@@ -1100,8 +1177,8 @@ function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z, zoneType) 
 function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng, zoneType) {
   const fit = patrolRasterFitBounds(refLatLng, traversedLatLng);
   if (!fit) return null;
-  const { clat, clng, dlat, dlng } = fit;
-  const z = pickPatrolOsmZoom(dlat, dlng);
+  const { clat, clng } = fit;
+  const z = fit.core ? pickPatrolOsmZoomFit3x3(clat, clng, fit.core) : pickPatrolOsmZoom(fit.dlat, fit.dlng);
   const { x: cx, y: cy, n } = lngLatToOsmTile(clng, clat, z);
   const imgs = [];
   for (let dy = -1; dy <= 1; dy++) {
@@ -1121,7 +1198,9 @@ function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng, zoneType) {
       ? `Polígono azul: área de serviço (KML) · Linha azul escura: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
       : zt === 'segment'
         ? `Roxo: trecho A–B (referência KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
-        : `Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`;
+        : zt === 'livre'
+          ? `Azul: trilha GPS do deslocamento · ▶ início · ■ fim. Sem rota de referência KML (desloc. livre ou ponto). Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
+          : `Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`;
   return `
     <div style="position:relative;width:100%;border-bottom:1px solid ${th.colorBorder};background:#d9dde0;overflow:hidden">
       <div style="display:flex;flex-wrap:wrap;width:100%;line-height:0;font-size:0">${imgs.join('')}</div>
@@ -1136,7 +1215,8 @@ function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng, zoneType) {
 function buildOsmPatrolBrowseUrl(refLatLng, traversedLatLng) {
   const fit = patrolRasterFitBounds(refLatLng, traversedLatLng);
   if (!fit) return null;
-  const z = Math.min(19, pickPatrolOsmZoom(fit.dlat, fit.dlng) + 1);
+  const zBase = fit.core ? pickPatrolOsmZoomFit3x3(fit.clat, fit.clng, fit.core) : pickPatrolOsmZoom(fit.dlat, fit.dlng);
+  const z = Math.min(19, zBase + 1);
   return `https://www.openstreetmap.org/#map=${z}/${fit.clat.toFixed(6)}/${fit.clng.toFixed(6)}`;
 }
 
@@ -1241,6 +1321,72 @@ function polylineLengthTraversedPdf(tr) {
     sum += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
   }
   return sum > 0 ? sum : null;
+}
+
+/**
+ * Trilha para mapa quando não há KML (desloc. livre / ponto): prioriza a polilinha GPS;
+ * se vazia, usa segmento saída→chegada; senão um único ponto com coordenada.
+ */
+function resolveTransitTrailForLivrePdf(startGPS, endGPS, tr) {
+  const path = Array.isArray(tr) ? tr : [];
+  const slat = startGPS != null && Number.isFinite(Number(startGPS.lat)) ? Number(startGPS.lat) : null;
+  const slng = startGPS != null && Number.isFinite(Number(startGPS.lng)) ? Number(startGPS.lng) : null;
+  const elat = endGPS != null && Number.isFinite(Number(endGPS.lat)) ? Number(endGPS.lat) : null;
+  const elng = endGPS != null && Number.isFinite(Number(endGPS.lng)) ? Number(endGPS.lng) : null;
+
+  if (path.length >= 2) return path;
+  if (path.length === 1) return path;
+  if (slat != null && slng != null && elat != null && elng != null) {
+    return [
+      [slat, slng],
+      [elat, elng],
+    ];
+  }
+  if (elat != null && elng != null) return [[elat, elng]];
+  if (slat != null && slng != null) return [[slat, slng]];
+  return [];
+}
+
+/** Mapa OSM só com trilha GPS (sem referência KML) — ex.: zona «livre» ou ponto no despacho. */
+function buildLivreDisplacementMapPdfPreview(th, task, startGPS, endGPS) {
+  if (!task) return '';
+  const zt = String(task.locationZoneType || '').toLowerCase();
+  if (zt === 'route' || zt === 'polygon' || zt === 'segment') return '';
+  const trRaw = endGPS ? normalizeTraversedPathForReport(endGPS.traversedPath) || [] : [];
+  const trail = resolveTransitTrailForLivrePdf(startGPS, endGPS, trRaw);
+  if (trail.length === 0) return '';
+
+  const browseOsmUrl = buildOsmPatrolBrowseUrl([], trail);
+  const rasterMapInner = buildPatrolOsmRasterMapHtml(th, [], trail, 'livre');
+  const hrefAttr = (u) => String(u || '').replace(/"/g, '&quot;');
+  if (!rasterMapInner) {
+    return browseOsmUrl
+      ? `<div style="margin-top:10px;padding:10px 12px;border:1px solid ${th.colorBorder};border-radius:8px;background:#f8fafc;font-size:9px;color:${th.colorMuted}"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir percurso no OpenStreetMap</a></div>`
+      : '';
+  }
+  const estSource = trail.length >= 2 ? trail : trRaw.length >= 2 ? trRaw : null;
+  const estLen = polylineLengthTraversedPdf(estSource);
+  const distLine =
+    estLen != null
+      ? `<div style="margin-top:8px;font-size:10px;color:${th.colorText};line-height:1.45"><strong>Distância (trilha GPS):</strong> ${esc(fmtPatrolDistanceMetersPdf(estLen))}</div>`
+      : '';
+  const osmLinkRow = browseOsmUrl
+    ? `<div style="font-size:9px;padding:8px 10px;background:#f1f5f9;border-bottom:1px solid ${th.colorBorder}"><a href="${hrefAttr(browseOsmUrl)}" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:800">Abrir em tela cheia (OpenStreetMap)</a></div>`
+    : '';
+  return `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid #bae6fd;border-radius:10px;background:linear-gradient(135deg,#f0f9ff 0%,#fff 100%);box-sizing:border-box">
+      <div style="font-size:11px;font-weight:900;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <ion-icon name="map-outline" style="font-size:18px;color:#0284c7"></ion-icon>
+        PERCURSO REGISTRADO (GPS)
+      </div>
+      <div style="font-size:10px;color:${th.colorText};line-height:1.45;margin-bottom:6px">Mapa de ruas com a trilha capturada no deslocamento (sem geometria KML no despacho).</div>
+      ${distLine}
+      <div style="margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid ${th.colorBorder};background:#e2e8f0">
+        ${osmLinkRow}
+        ${rasterMapInner}
+        <div style="font-size:8px;color:${th.colorMuted};padding:8px 10px;border-top:1px solid ${th.colorBorder};background:#fff;line-height:1.45">Para zoom e detalhe, use &quot;Abrir em tela cheia&quot;. Legenda: trilha GPS (azul), início (▶) e fim (■) sobre os tiles OSM.</div>
+      </div>
+    </div>`;
 }
 
 /**
@@ -1857,6 +2003,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     const f = entry.fieldDef;
     const id = entry.id;
     if (!f || !id) continue;
+    if (fieldSkippedForPdfPreview(f)) continue;
     if (!isFieldVisible(cfg, id, f.type)) continue;
     if (f.type === 'transit_start' || f.type === 'transit_end') continue;
     const pTypes = ['photo', 'photo_stamped', 'facial_recognition'];
@@ -1982,7 +2129,9 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
         .map((v) => `<span class="pdf-pill" style="background:${th.pillYesBg}">${esc(v)}</span>`)
         .join(' ');
     } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-      display = `<pre style="margin:0;font-size:9px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:${th.colorMuted};line-height:1.4">${esc(JSON.stringify(val, null, 2))}</pre>`;
+      display = isBiometricAuditPayload(val)
+        ? formatBiometricAuditDetailHtml(val, esc, { forPdf: true, borderColor: th.colorBorder })
+        : formatStructuredValueForReportHtml(val, esc, 0, { maxDepth: 8, borderColor: th.colorBorder });
     } else {
       display = `<span>${esc(val)}</span>`;
     }
@@ -2177,6 +2326,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     </div>
     ${buildSpeedBadgeHtmlPreview(stPrev, enPrev, t, th)}
     ${buildPatrolRoutePdfBlockPreview(th, t, enPrev)}
+    ${buildLivreDisplacementMapPdfPreview(th, t, stPrev, enPrev)}
   `
     : '';
 

@@ -4,6 +4,16 @@ import {
   saveTechFinanceEntryLocal,
 } from '../database';
 import type { TechnicianFinanceKind } from '../types/technicianFinance';
+import {
+  effectiveSchemaFieldType,
+  isTechnicianFinanceFieldType,
+  technicianFinanceFieldMode,
+} from '../services/checklistTemplateSchema';
+import {
+  buildRevenueEntryDescription,
+  parseTechnicianRevenueIntegrationValue,
+  type TechnicianRevenueIntLine,
+} from './technicianRevenueIntegrationValue';
 
 export type FinanceLine = {
   entryId?: string;
@@ -91,14 +101,82 @@ export async function applyTechnicianFinanceForSubmission(args: {
     rowSuffix: string
   ) => {
     const raw = read();
+    const mode = technicianFinanceFieldMode(field);
+
+    if (mode === 'revenue') {
+      const integ = parseTechnicianRevenueIntegrationValue(raw);
+      if (integ.version !== 2) {
+        return;
+      }
+      if (integ.financeAppliedRev != null && integ.financeAppliedRev === R) return;
+
+      const scopeSuffix = rowSuffix || '';
+      const toApply = integ.lines.filter((l) => l.decision === 'accepted' && l.amount > 0);
+      const keepIds: string[] = [];
+      const entryByInput = new Map<string, string>();
+
+      for (const line of toApply) {
+        let entryId = line.entryId?.trim() || '';
+        if (!entryId) {
+          entryId = `tech_fin_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        }
+        keepIds.push(entryId);
+        entryByInput.set(line.inputId, entryId);
+
+        const prev = getTechFinanceRowById(entryId);
+        const createdAt = prev?.createdAt || new Date().toISOString();
+        const desc = buildRevenueEntryDescription(line);
+
+        saveTechFinanceEntryLocal(
+          {
+            id: entryId,
+            kind: 'revenue',
+            amount: line.amount,
+            currency: 'BRL',
+            description: desc,
+            category_key: null,
+            taskId: taskId || null,
+            templateId: templateId || null,
+            fieldId: field.id,
+            scopeSuffix,
+            source: 'checklist',
+            createdAt,
+            owner_email: ownerEmail,
+          },
+          ownerEmail
+        );
+      }
+
+      deleteTechFinanceEntriesExceptIds(ownerEmail, taskId, field.id, scopeSuffix, keepIds);
+
+      const outLines: TechnicianRevenueIntLine[] = integ.lines.map((l) => {
+        const eid = entryByInput.get(l.inputId);
+        if (l.decision === 'accepted' && l.amount > 0 && eid) {
+          return { ...l, entryId: eid, decision: 'accepted' };
+        }
+        return { ...l, entryId: l.entryId };
+      });
+
+      const next = JSON.stringify({
+        v: 2,
+        source: 'technician_revenue_integration',
+        lines: outLines,
+        financeAppliedRev: R,
+      });
+      write(next);
+      return;
+    }
+
     const parsed = parseTechnicianFinanceValue(raw);
     if (parsed.financeAppliedRev != null && parsed.financeAppliedRev === R) return;
+
+    let linesToApply = parsed.lines.filter((l) => l.kind === 'expense');
 
     const scopeSuffix = rowSuffix || '';
     const keepIds: string[] = [];
     const nextLines: FinanceLine[] = [];
 
-    for (const line of parsed.lines) {
+    for (const line of linesToApply) {
       let entryId = line.entryId && String(line.entryId).trim() ? String(line.entryId).trim() : '';
       if (!entryId) {
         entryId = `tech_fin_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -165,7 +243,7 @@ export async function applyTechnicianFinanceForSubmission(args: {
 
       if (isRoot) {
         for (const f of fields) {
-          if (f.type !== 'technician_finance') continue;
+          if (!isTechnicianFinanceFieldType(effectiveSchemaFieldType(f))) continue;
           await runProcess(f, () => responses[f.id], (json) => { responses[f.id] = json; }, '');
         }
         continue;
@@ -180,7 +258,7 @@ export async function applyTechnicianFinanceForSubmission(args: {
           const row = row0 && typeof row0 === 'object' ? { ...row0 } : {};
           let rowMutated = false;
           for (const f of fields) {
-            if (f.type !== 'technician_finance') continue;
+            if (!isTechnicianFinanceFieldType(effectiveSchemaFieldType(f))) continue;
             await runProcess(
               f,
               () => row[f.id],
@@ -199,7 +277,7 @@ export async function applyTechnicianFinanceForSubmission(args: {
         if (mutated) responses[storageKey] = rows;
       } else {
         for (const f of fields) {
-          if (f.type !== 'technician_finance') continue;
+          if (!isTechnicianFinanceFieldType(effectiveSchemaFieldType(f))) continue;
           await runProcess(f, () => responses[f.id], (json) => { responses[f.id] = json; }, '');
         }
       }

@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../context/AppContext';
+import { usePersona } from '../context/PersonaContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -35,14 +36,14 @@ import { userHasCapability } from '../services/auth';
 
 const ADMIN_MENU_ITEMS = [
   { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
-  { id: 'asset', label: 'Bem', icon: 'business-outline', color: '#006B5C', route: '/asset/new' },
+  { id: 'asset', label: 'Ativo', icon: 'business-outline', color: '#006B5C', route: '/asset/new' },
   { id: 'expense', label: 'Financeiro', icon: 'wallet-outline', color: '#EF4444', route: '/costs/new' },
   { id: 'stock', label: 'Estoque', icon: 'cube-outline', color: '#F59E0B', route: '/stock/new' },
   { id: 'media', label: 'Mídia', icon: 'camera-outline', color: '#8B5CF6', route: '/media/new' },
   { id: 'docs', label: 'Arquivos', icon: 'folder-open-outline', color: '#3B82F6', route: '/documents/new' },
 ];
 
-/** Métricas da barra inferior — manter alinhado com `(tabs)/_layout.tsx`. */
+/** Métricas da barra inferior — alinhar a `src/navigation/MainTabsLayout.tsx` (cliente/prestador). */
 export const TAB_BAR_ICON_SIZE = 20;
 export const TAB_BAR_ROW_PADDING_TOP = 4;
 export const TAB_BAR_ROW_MIN_HEIGHT = 44;
@@ -242,6 +243,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
   const { mode } = useAppContext();
+  const { activePersona } = usePersona();
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isOnline } = useConnectivity(6000);
@@ -318,7 +320,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
     })();
   };
 
-  if (mode === 'PROVIDER' && canUseProviderQuickActions) {
+  if (activePersona === 'provider' && mode === 'PROVIDER' && canUseProviderQuickActions) {
     const triggerColor = isOpen ? C.slate : C.textSecondary;
     return (
       <View style={tabBarSlot ? listStyles.tabBarSlotRoot : listStyles.container}>
@@ -485,6 +487,24 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
             </ScrollView>
           </View>
         </Modal>
+      </View>
+    );
+  }
+
+  if (activePersona === 'client') {
+    return (
+      <View style={tabBarSlot ? radialStyles.tabBarSlotRoot : radialStyles.container}>
+        <AdminRadialFan
+          isOpen={isOpen}
+          closeMenu={closeMenu}
+          onToggle={() => setIsOpen((o) => !o)}
+          insetsBottom={insets.bottom}
+          textSecondary={C.textSecondary}
+          onItemPress={handlePress}
+          tabBarSlot={tabBarSlot}
+          triggerColor={isOpen ? C.slate : C.textSecondary}
+          triggerLabel={t('tabs.moreActions')}
+        />
       </View>
     );
   }

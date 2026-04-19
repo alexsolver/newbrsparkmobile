@@ -99,6 +99,40 @@ export function isLocationPickAnswerValid(raw: unknown): boolean {
   return true;
 }
 
+/** Texto multilinha para resumo de assinatura / relatórios (GPS + mapa). */
+export function summarizeLocationPickValue(raw: unknown): string {
+  const p = parsePayload(raw);
+  if (!p) return '—';
+  const lines: string[] = [];
+  if (p.capturedAt) {
+    const d = new Date(p.capturedAt);
+    if (Number.isFinite(d.getTime())) {
+      lines.push(
+        `Registrado em: ${d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}`
+      );
+    }
+  }
+  const accM =
+    p.gps.accuracy != null && Number.isFinite(Number(p.gps.accuracy)) && Number(p.gps.accuracy) > 0
+      ? ` (±${Math.round(Number(p.gps.accuracy))} m)`
+      : '';
+  lines.push(`GPS: ${p.gps.lat.toFixed(6)}, ${p.gps.lng.toFixed(6)}${accM}`);
+  const ag = (p.addressGps || '').trim();
+  if (ag && ag !== ASYNC_ADDRESS_PENDING) lines.push(`Endereço (GPS): ${ag}`);
+  const pinMoved =
+    Math.abs(p.pin.lat - p.gps.lat) > COORD_EPS * 20 ||
+    Math.abs(p.pin.lng - p.gps.lng) > COORD_EPS * 20;
+  if (pinMoved || (p.addressPin && p.addressPin.trim())) {
+    lines.push(`Mapa (alfinete): ${p.pin.lat.toFixed(6)}, ${p.pin.lng.toFixed(6)}`);
+    const ap = (p.addressPin || '').trim();
+    if (ap && ap !== ASYNC_ADDRESS_PENDING) lines.push(`Endereço (mapa): ${ap}`);
+  }
+  if (p.adjustmentPending === true) {
+    lines.push('Atenção: ajuste no mapa pendente de confirmação.');
+  }
+  return lines.join('\n');
+}
+
 async function reverseLabel(lat: number, lng: number): Promise<string | undefined> {
   try {
     const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });

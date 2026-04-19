@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../../src/theme/ThemeContext';
-import { Header } from '../../../src/components/Header';
+import { ScreenSubheader } from '../../../src/components/ScreenSubheader';
+import { ValueInput, parseLocaleAmountString } from '../../../src/components/ValueInput';
 import { TechnicianExpenseCategoryChips } from '../../../src/components/TechnicianExpenseCategoryChips';
 import { TechnicianFinanceService } from '../../../src/services/technicianFinanceService';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -54,6 +56,7 @@ function baseDescriptionWithoutRateio(desc?: string): string {
 }
 
 export default function EditTechnicianFinanceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { ids: idsParam } = useLocalSearchParams<{ ids?: string }>();
   const { colors: C } = useTheme();
@@ -82,6 +85,8 @@ export default function EditTechnicianFinanceScreen() {
   /** Despesa com OS guardada: valor/descrição/anexos fechados até revisão. */
   const [expenseValueLockActive, setExpenseValueLockActive] = useState(false);
   const [categoryKey, setCategoryKey] = useState<string | null>(null);
+  const amountDraftRef = useRef('');
+  const amountEditingRef = useRef(false);
 
   const valueFieldsLocked = expenseValueLockActive && !financeValueUnlocked;
 
@@ -167,7 +172,7 @@ export default function EditTechnicianFinanceScreen() {
         if (!cancelled) {
           const unlocked = parts.length > 0 && parts.every((p) => p.financeValueUnlocked === true);
           setKind(k0);
-          setAmountStr(String(total).replace('.', ','));
+          setAmountStr(String(total));
           setDescription(desc0);
           setSelectedOsIds(osOrder);
           setAttachments(atts);
@@ -293,7 +298,11 @@ export default function EditTechnicianFinanceScreen() {
 
   const handleSave = async () => {
     if (blocked || entryIds.length === 0) return;
-    const amount = Math.max(0, Number(String(amountStr).replace(',', '.')) || 0);
+    const rawSrc =
+      amountEditingRef.current && amountDraftRef.current.trim() !== ''
+        ? amountDraftRef.current
+        : amountStr;
+    const amount = Math.max(0, parseLocaleAmountString(rawSrc));
     if (amount <= 0) {
       Alert.alert('Atenção', 'Indique um valor maior que zero.');
       return;
@@ -331,7 +340,13 @@ export default function EditTechnicianFinanceScreen() {
     return (
       <View style={[styles.container, { backgroundColor: C.background, justifyContent: 'center' }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
+        <ScreenSubheader
+          title={screenTitle}
+          subtitle={t('technicianMobile.financeEditSubtitle')}
+          onBack={() => router.back()}
+          onRightPress={() => void refreshLinkableOs()}
+          rightLoading={linkableLoading}
+        />
         <ActivityIndicator color="#0f766e" style={{ marginTop: 24 }} />
       </View>
     );
@@ -341,7 +356,13 @@ export default function EditTechnicianFinanceScreen() {
     return (
       <View style={[styles.container, { backgroundColor: C.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
+        <ScreenSubheader
+          title={screenTitle}
+          subtitle={t('technicianMobile.financeEditSubtitle')}
+          onBack={() => router.back()}
+          onRightPress={() => void refreshLinkableOs()}
+          rightLoading={linkableLoading}
+        />
       </View>
     );
   }
@@ -352,7 +373,13 @@ export default function EditTechnicianFinanceScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title={screenTitle} leftIcon="arrow-back" onLeftPress={() => router.back()} />
+      <ScreenSubheader
+        title={screenTitle}
+        subtitle={t('technicianMobile.financeEditSubtitle')}
+        onBack={() => router.back()}
+        onRightPress={() => void refreshLinkableOs()}
+        rightLoading={linkableLoading}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.hint}>
@@ -382,13 +409,19 @@ export default function EditTechnicianFinanceScreen() {
         </View>
 
         <Text style={styles.lbl}>Valor (R$)</Text>
-        <TextInput
-          style={[styles.input, valueFieldsLocked && styles.inputDisabled]}
-          keyboardType="decimal-pad"
+        <ValueInput
+          style={valueFieldsLocked ? [styles.input, styles.inputDisabled] : styles.input}
           placeholder="0,00"
-          placeholderTextColor="#94a3b8"
+          currency
+          currencySymbol="R$"
           value={amountStr}
           onChangeText={setAmountStr}
+          onDraftChange={(t) => {
+            amountDraftRef.current = t;
+          }}
+          onEditingStateChange={(editing) => {
+            amountEditingRef.current = editing;
+          }}
           editable={!valueFieldsLocked}
         />
 

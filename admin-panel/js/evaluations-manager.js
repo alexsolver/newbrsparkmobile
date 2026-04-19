@@ -21,8 +21,38 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Tenant ativo no painel (modo tenant) — necessário para «Novo template» sem lista global de tenants. */
+function resolvePanelTenantId() {
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    if (sessionStorage.getItem('brspark_panel_mode') !== 'tenant') return null;
+    const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+    return t?.id && String(t.id).trim() ? String(t.id).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rótulo legível para estado da instância (evita PENDING/IN_REVIEW na UI). */
+function instanceStatusLabel(code) {
+  const c = String(code || 'UNKNOWN').toUpperCase();
+  return evT(`ev_inst_badge_${c}`);
+}
+
+function instanceBadgeClass(code) {
+  const s = String(code || '').toUpperCase();
+  if (s === 'PENDING') return 'badge-amber';
+  if (s === 'IN_REVIEW') return 'badge-blue';
+  if (s === 'RESPONDED') return 'badge-green';
+  if (s === 'FINALIZED') return 'badge-gray';
+  return 'badge-gray';
+}
+
 /** Última transcrição carregada (para exportar/baixar JSON). */
 let lastChatTranscriptPayload = null;
+
+/** Metadados do convite aberto no modal (pré-preenchimento). */
+let lastNotifyContext = { instanceId: '', clientEmailGuess: '', osLabel: '', templateName: '' };
 
 function formatChatTranscriptText(data) {
   if (!data || typeof data !== 'object') return '';
@@ -143,6 +173,11 @@ function withSurveyLang(url) {
   }
 }
 
+/**
+ * Pré-visualização no iframe: tem de ser **mesma origem** que esta página.
+ * Se usarmos `clientSurveyFullUrl` de outro host/porta (ex.: ADMIN_PANEL_PUBLIC_BASE_URL),
+ * o browser bloqueia o iframe (política de frame / origem cruzada).
+ */
 function showSurveyPreview(url) {
   const wrap = document.getElementById('eval-survey-preview');
   const iframe = document.getElementById('eval-survey-iframe');
@@ -152,11 +187,68 @@ function showSurveyPreview(url) {
   requestAnimationFrame(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 }
 
+/** URL do formulário na mesma origem do painel — adequada a iframes (requer token). */
+function buildSameOriginSurveyPreviewUrl(publicToken) {
+  const o = typeof window !== 'undefined' ? window.location.origin : '';
+  if (!publicToken || !o || !/^https?:\/\//i.test(o)) return '';
+  return withSurveyLang(`${o}/evaluation-survey.html?token=${encodeURIComponent(publicToken)}`);
+}
+
 function hideSurveyPreview() {
   const wrap = document.getElementById('eval-survey-preview');
   const iframe = document.getElementById('eval-survey-iframe');
   if (iframe) iframe.src = 'about:blank';
   if (wrap) wrap.hidden = true;
+}
+
+function tplLogoUrlLooksPublic(u) {
+  const s = String(u || '').trim();
+  return /^https:\/\//i.test(s) || /^http:\/\/localhost/i.test(s) || /^http:\/\/127\.0\.0\.1/i.test(s);
+}
+
+function updateTplLogoPreview() {
+  const input = document.getElementById('tpl-survey-logo');
+  const wrap = document.getElementById('tpl-survey-logo-preview-wrap');
+  const img = document.getElementById('tpl-survey-logo-preview-img');
+  if (!input || !wrap || !img) return;
+  const u = input.value.trim();
+  if (u && tplLogoUrlLooksPublic(u)) {
+    img.src = u;
+    img.onload = () => {
+      wrap.style.display = 'block';
+    };
+    img.onerror = () => {
+      wrap.style.display = 'none';
+    };
+  } else {
+    wrap.style.display = 'none';
+    img.removeAttribute('src');
+  }
+}
+
+function hideTplInlinePreview() {
+  const wrap = document.getElementById('tpl-inline-preview-wrap');
+  const iframe = document.getElementById('tpl-inline-preview-iframe');
+  if (iframe) iframe.src = 'about:blank';
+  if (wrap) wrap.hidden = true;
+}
+
+function openTemplateSurveyPreviewFromModal() {
+  if (!canManageEvaluationTemplates) return;
+  const id = document.getElementById('tpl-edit-id')?.value?.trim();
+  if (!id) {
+    alert(evT('ev_tpl_preview_need_save'));
+    return;
+  }
+  const wrap = document.getElementById('tpl-inline-preview-wrap');
+  const iframe = document.getElementById('tpl-inline-preview-iframe');
+  if (!wrap || !iframe) return;
+  const o = typeof window !== 'undefined' ? window.location.origin : '';
+  if (!o || !/^https?:/i.test(o)) return;
+  const lang = getAdminUiLocale();
+  iframe.src = `${o}/evaluation-survey.html?previewTemplate=${encodeURIComponent(id)}&lang=${encodeURIComponent(lang)}`;
+  wrap.hidden = false;
+  requestAnimationFrame(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 }
 
 function openModal(overlayId) {
@@ -230,6 +322,27 @@ async function loadTenantsIntoFilter() {
   if (!tenantSel) return;
   if (!canCrossTenantEvaluations) {
     tenantSel.closest('.filter-field')?.setAttribute('style', 'display:none');
+    if (tplTenant) {
+      const singleId = resolvePanelTenantId();
+      tplTenant.innerHTML = '';
+      if (singleId) {
+        let label = singleId.slice(0, 48);
+        try {
+          const raw = sessionStorage.getItem('brspark_panel_tenant');
+          const t = raw ? JSON.parse(raw) : {};
+          if (t && (t.name || t.email)) label = String(t.name || t.email).slice(0, 48);
+        } catch {
+          /* ignore */
+        }
+        const opt = document.createElement('option');
+        opt.value = singleId;
+        opt.textContent = label;
+        tplTenant.appendChild(opt);
+        tplTenant.value = singleId;
+      } else {
+        tplTenant.innerHTML = `<option value="">${esc(evT('ev_tenant_pick'))}</option>`;
+      }
+    }
     return;
   }
   const res = await CONFIG.get('/tenants?limit=500');
@@ -292,45 +405,48 @@ async function loadAnalytics() {
 function paintEvaluationsContextBar(metrics = null) {
   const bar = document.getElementById('ev-context-bar');
   if (!bar) return;
-  const tenantLabel = document.getElementById('filter-tenant')?.selectedOptions?.[0]?.textContent || 'Todos os tenants';
-  const activeTab =
-    document.querySelector('.eval-tab.eval-tab-active')?.textContent?.trim() || 'Resumo';
+  const tenantLabel = document.getElementById('filter-tenant')?.selectedOptions?.[0]?.textContent || evT('ev_tenant_all');
+  const tabKey =
+    document.querySelector('.eval-tab.eval-tab-active')?.dataset?.tab || 'resumo';
+  const activeTabLabel =
+    document.querySelector('.eval-tab.eval-tab-active')?.textContent?.trim() || evT('ev_tab_resumo');
   const total = metrics?.total ?? document.getElementById('st-total')?.textContent ?? '—';
   const pending = metrics?.pending ?? document.getElementById('st-pend')?.textContent ?? '—';
   const average = metrics?.average ?? document.getElementById('st-avg')?.textContent ?? '—';
   const critical = metrics?.critical ?? document.getElementById('st-crit')?.textContent ?? '—';
   const rate = metrics?.responseRate ?? document.getElementById('st-rate')?.textContent ?? '—';
 
+  const focusHint =
+    tabKey === 'disputas'
+      ? evT('ev_ctx_focus_disputes')
+      : tabKey === 'instancias'
+        ? evT('ev_ctx_focus_instances')
+        : tabKey === 'templates'
+          ? evT('ev_ctx_focus_templates')
+          : tabKey === 'ranking'
+            ? evT('ev_ctx_focus_ranking')
+            : evT('ev_ctx_focus_resumo');
+
   bar.innerHTML = `
     <div class="eval-context-card">
-      <div class="eval-context-card__eyebrow">Escopo atual</div>
+      <div class="eval-context-card__eyebrow">${esc(evT('ev_ctx_eyebrow_scope'))}</div>
       <div class="eval-context-card__title">${esc(tenantLabel)}</div>
-      <div class="eval-context-card__meta">Aba ativa: <strong>${esc(activeTab)}</strong>. Use esta visão para alternar entre qualidade, revisão, instâncias e templates.</div>
+      <div class="eval-context-card__meta">${esc(evT('ev_ctx_scope_meta', { tab: activeTabLabel }))}</div>
     </div>
     <div class="eval-context-card">
-      <div class="eval-context-card__eyebrow">Leitura rápida</div>
+      <div class="eval-context-card__eyebrow">${esc(evT('ev_ctx_eyebrow_kpis'))}</div>
       <div class="eval-context-card__chips">
-        <span class="eval-context-chip">${esc(String(total))} instâncias</span>
-        <span class="eval-context-chip">${esc(String(pending))} pendentes</span>
-        <span class="eval-context-chip">${esc(String(critical))} críticas</span>
-        <span class="eval-context-chip">Média ${esc(String(average))}</span>
-        <span class="eval-context-chip">Resposta ${esc(String(rate))}%</span>
+        <span class="eval-context-chip">${evT('ev_ctx_chip_total', { n: String(total) })}</span>
+        <span class="eval-context-chip">${evT('ev_ctx_chip_pend', { n: String(pending) })}</span>
+        <span class="eval-context-chip">${evT('ev_ctx_chip_crit', { n: String(critical) })}</span>
+        <span class="eval-context-chip">${evT('ev_ctx_chip_avg', { n: String(average) })}</span>
+        <span class="eval-context-chip">${evT('ev_ctx_chip_rate', { n: String(rate) })}</span>
       </div>
     </div>
     <div class="eval-context-card">
-      <div class="eval-context-card__eyebrow">Foco operacional</div>
-      <div class="eval-context-card__title">${esc(activeTab)}</div>
-      <div class="eval-context-card__meta">${
-        activeTab === 'Disputas'
-          ? 'Resolva conflitos com contexto e auditoria.'
-          : activeTab === 'Instâncias'
-            ? 'Acompanhe disparos, links e respostas.'
-            : activeTab === 'Templates'
-              ? 'Mantenha regras e questionários ativos.'
-              : activeTab === 'Ranking técnicos'
-                ? 'Observe desempenho consolidado do período.'
-                : 'Acompanhe a saúde geral da jornada de avaliação.'
-      }</div>
+      <div class="eval-context-card__eyebrow">${esc(evT('ev_ctx_eyebrow_focus'))}</div>
+      <div class="eval-context-card__title">${esc(activeTabLabel)}</div>
+      <div class="eval-context-card__meta">${esc(focusHint)}</div>
     </div>`;
 }
 
@@ -465,18 +581,28 @@ async function loadInstances() {
         (x.publicToken ? `${origin}/evaluation-survey.html?token=${encodeURIComponent(x.publicToken)}` : '');
       const href = hrefRaw ? withSurveyLang(hrefRaw) : '';
       const enc = href ? encodeURIComponent(href) : '';
+      const previewUrl = x.publicToken ? buildSameOriginSurveyPreviewUrl(x.publicToken) : '';
+      const encPreview = previewUrl ? encodeURIComponent(previewUrl) : '';
       const urlCell = href
-        ? `<input type="text" readonly class="form-control inst-url-input" value="${esc(href)}" aria-label="URL do formulário web" />
+        ? `<input type="text" readonly class="form-control inst-url-input" value="${esc(href)}" aria-label="${esc(evT('ev_th_url'))}" />
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <a class="btn btn-sm btn-primary" href="${esc(href)}" target="_blank" rel="noopener">${esc(evT('ev_btn_open'))}</a>
             <button type="button" class="btn btn-sm btn-survey-copy" data-enc="${enc}">${esc(evT('ev_btn_copy_url'))}</button>
-            <button type="button" class="btn btn-sm btn-survey-preview" data-enc="${enc}">${esc(evT('ev_btn_preview'))}</button>
+            <button type="button" class="btn btn-sm btn-survey-preview" data-preview="${encPreview}" ${!encPreview ? 'disabled' : ''}>${esc(evT('ev_btn_preview'))}</button>
           </div>`
         : '<span style="color:var(--text3)">—</span>';
       const regen =
         x.status === 'PENDING' && canManageEvaluationTemplates
           ? `<button type="button" class="btn btn-sm" data-regen="${esc(x.id)}">${esc(evT('ev_btn_regen'))}</button>`
           : '—';
+      const clientMail = (x.clientEmailGuess && String(x.clientEmailGuess).trim()) || '';
+      const clientCell = clientMail
+        ? `<span class="list-cell-title" style="font-size:13px">${esc(clientMail)}</span>`
+        : `<span style="color:var(--text3);font-size:12px">${esc(evT('ev_client_email_unknown'))}</span>`;
+      const canNotify = x.status === 'PENDING' && href && canManageEvaluationTemplates;
+      const notifyBtn = canNotify
+        ? `<button type="button" class="btn btn-sm btn-primary btn-notify-invite" data-nid="${esc(x.id)}" data-em="${encodeURIComponent(clientMail)}" data-os="${esc(x.osNumber || '')}" data-tpl="${esc(x.templateName || '')}">${esc(evT('ev_btn_send_invite'))}</button>`
+        : '';
       return `<tr data-instance-id="${esc(x.id)}">
         <td>
           <div class="list-cell-stack">
@@ -484,11 +610,11 @@ async function loadInstances() {
             <span class="list-cell-sub">${esc(x.technicianEmail)} · OS ${esc(x.osNumber || '—')}</span>
           </div>
         </td>
-        <td><span class="badge badge-gray">${esc(x.status)}</span></td>
-        <td class="table-subtle">${href ? 'Disponível' : 'Indisponível'}</td>
+        <td>${clientCell}</td>
+        <td><span class="badge ${instanceBadgeClass(x.status)}">${esc(instanceStatusLabel(x.status))}</span></td>
         <td>${urlCell}</td>
         <td class="table-actions">${regen}</td>
-        <td class="text-right table-actions"><button type="button" class="btn btn-sm btn-inst-chat">${esc(evT('ev_btn_chat'))}</button></td>
+        <td class="text-right table-actions" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${notifyBtn}<button type="button" class="btn btn-sm btn-inst-chat">${esc(evT('ev_btn_chat'))}</button></td>
       </tr>`;
     })
     .join('');
@@ -499,6 +625,85 @@ async function loadInstances() {
       loadInstances();
     };
   });
+
+  tb.querySelectorAll('.btn-notify-invite').forEach((btn) => {
+    btn.onclick = () => {
+      if (!canManageEvaluationTemplates) return;
+      const rawEm = btn.getAttribute('data-em') || '';
+      let em = '';
+      try {
+        em = rawEm ? decodeURIComponent(rawEm) : '';
+      } catch {
+        em = rawEm;
+      }
+      openNotifyModal({
+        instanceId: btn.getAttribute('data-nid') || '',
+        clientEmailGuess: em,
+        osLabel: btn.getAttribute('data-os') || '',
+        templateName: btn.getAttribute('data-tpl') || '',
+      });
+    };
+  });
+}
+
+function openNotifyModal(ctx) {
+  lastNotifyContext = {
+    instanceId: ctx.instanceId || '',
+    clientEmailGuess: ctx.clientEmailGuess || '',
+    osLabel: ctx.osLabel || '',
+    templateName: ctx.templateName || '',
+  };
+  document.getElementById('notify-modal-instance-id').value = lastNotifyContext.instanceId;
+  const emailIn = document.getElementById('notify-email-override');
+  if (emailIn) emailIn.value = lastNotifyContext.clientEmailGuess;
+  const meta = document.getElementById('notify-modal-meta');
+  if (meta) {
+    meta.textContent = evT('ev_notify_meta', {
+      tpl: lastNotifyContext.templateName || '—',
+      os: lastNotifyContext.osLabel || '—',
+    });
+  }
+  const hint = document.getElementById('notify-email-hint');
+  if (hint) {
+    hint.textContent = lastNotifyContext.clientEmailGuess
+      ? evT('ev_notify_email_detected')
+      : evT('ev_notify_email_missing');
+  }
+  const foot = document.getElementById('notify-modal-foot');
+  if (foot) foot.textContent = evT('ev_notify_foot_hint');
+  const chE = document.getElementById('notify-ch-email');
+  const chP = document.getElementById('notify-ch-push');
+  if (chE) chE.checked = true;
+  if (chP) chP.checked = false;
+  openModal('notify-modal-overlay');
+}
+
+async function submitNotifyModal() {
+  if (!canManageEvaluationTemplates) return;
+  const id = document.getElementById('notify-modal-instance-id')?.value?.trim();
+  if (!id) return;
+  const emailTo = document.getElementById('notify-email-override')?.value?.trim() || '';
+  const channels = [];
+  if (document.getElementById('notify-ch-email')?.checked) channels.push('email');
+  if (document.getElementById('notify-ch-push')?.checked) channels.push('push');
+  if (!channels.length) {
+    alert(evT('ev_notify_need_channel'));
+    return;
+  }
+  const body = { channels, ...(emailTo ? { emailTo } : {}) };
+  const res = await CONFIG.post('/admin/evaluations/instances/' + encodeURIComponent(id) + '/notify', body);
+  if (res?.error) {
+    alert(res.error);
+    return;
+  }
+  closeModal('notify-modal-overlay');
+  const r = res?.results || {};
+  const parts = [];
+  if (r.email?.ok) parts.push(evT('ev_notify_ok_email'));
+  if (r.push?.ok) parts.push(evT('ev_notify_ok_push'));
+  if (r.push?.skipped && r.push?.reason) parts.push(evT('ev_notify_push_skip', { reason: r.push.reason }));
+  alert(parts.length ? parts.join('\n\n') : evT('ev_notify_ok_generic'));
+  loadInstances();
 }
 
 async function loadTemplatesTable() {
@@ -562,6 +767,14 @@ async function openTemplateModal(id) {
     (t.questions || []).forEach((q) => addQuestionRow(q));
     document.getElementById('tpl-instances-hint').textContent =
       t._count?.instances > 0 ? evT('ev_tpl_instances_hint', { n: t._count.instances }) : '';
+    const logoIn = document.getElementById('tpl-survey-logo');
+    const preIn = document.getElementById('tpl-msg-pre');
+    const postIn = document.getElementById('tpl-msg-post');
+    if (logoIn) logoIn.value = t.surveyLogoUrl || '';
+    if (preIn) preIn.value = t.surveyMessagePre || '';
+    if (postIn) postIn.value = t.surveyMessagePost || '';
+    updateTplLogoPreview();
+    hideTplInlinePreview();
   } else {
     title.textContent = evT('ev_tpl_title_new');
     document.getElementById('tpl-edit-id').value = '';
@@ -573,8 +786,23 @@ async function openTemplateModal(id) {
       tenantSel.disabled = false;
       const ft = document.getElementById('filter-tenant')?.value;
       if (ft) tenantSel.value = ft;
+      else if (!canCrossTenantEvaluations) {
+        const tid = resolvePanelTenantId();
+        if (tid) tenantSel.value = tid;
+      }
+      if (!canCrossTenantEvaluations && resolvePanelTenantId()) {
+        tenantSel.disabled = true;
+      }
     }
     document.getElementById('tpl-instances-hint').textContent = '';
+    const logoIn = document.getElementById('tpl-survey-logo');
+    const preIn = document.getElementById('tpl-msg-pre');
+    const postIn = document.getElementById('tpl-msg-post');
+    if (logoIn) logoIn.value = '';
+    if (preIn) preIn.value = '';
+    if (postIn) postIn.value = '';
+    updateTplLogoPreview();
+    hideTplInlinePreview();
     addQuestionRow({ text: evT('ev_default_q1'), type: 'RATING', categoryKey: 'qualidade', weight: 1 });
     addQuestionRow({ text: evT('ev_default_q2'), type: 'RATING', categoryKey: 'prazo', weight: 1 });
     addQuestionRow({ text: evT('ev_default_q3'), type: 'RATING', categoryKey: 'atendimento', weight: 1 });
@@ -588,7 +816,10 @@ async function saveTemplateModal() {
   const name = document.getElementById('tpl-name').value.trim();
   const type = document.getElementById('tpl-type').value;
   const active = document.getElementById('tpl-active').checked;
-  const tenantId = document.getElementById('tpl-tenant')?.value;
+  let tenantId = document.getElementById('tpl-tenant')?.value?.trim() || '';
+  if (!editId && !tenantId) {
+    tenantId = resolvePanelTenantId() || '';
+  }
   const questions = collectQuestions();
   if (!name) {
     alert(evT('ev_alert_name_tpl'));
@@ -603,12 +834,18 @@ async function saveTemplateModal() {
     return;
   }
   const triggerRules = triggerRulesFromForm();
+  const surveyLogoUrl = document.getElementById('tpl-survey-logo')?.value?.trim() ?? '';
+  const surveyMessagePre = document.getElementById('tpl-msg-pre')?.value ?? '';
+  const surveyMessagePost = document.getElementById('tpl-msg-post')?.value ?? '';
   if (editId) {
     const res = await CONFIG.patch('/admin/evaluations/templates/' + encodeURIComponent(editId), {
       name,
       active,
       triggerRules,
       questions,
+      surveyLogoUrl,
+      surveyMessagePre,
+      surveyMessagePost,
     });
     if (res?.error) {
       alert(res.error);
@@ -622,6 +859,9 @@ async function saveTemplateModal() {
       active,
       triggerRules,
       questions,
+      surveyLogoUrl,
+      surveyMessagePre,
+      surveyMessagePost,
     });
     if (res?.error) {
       alert(res.error);
@@ -657,6 +897,11 @@ export async function bootEvaluationsPage() {
     addQuestionRow({ type: 'RATING' });
   });
   document.getElementById('tpl-modal-save')?.addEventListener('click', saveTemplateModal);
+  document.getElementById('tpl-survey-logo')?.addEventListener('input', updateTplLogoPreview);
+  document.getElementById('btn-tpl-preview-survey')?.addEventListener('click', () => {
+    if (!canManageEvaluationTemplates) return;
+    openTemplateSurveyPreviewFromModal();
+  });
   document.getElementById('tpl-modal-cancel')?.addEventListener('click', () => closeModal('tpl-modal-overlay'));
   document.getElementById('tpl-modal-overlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'tpl-modal-overlay') closeModal('tpl-modal-overlay');
@@ -698,12 +943,19 @@ export async function bootEvaluationsPage() {
       );
       return;
     }
-    if (prevBtn?.getAttribute('data-enc')) {
-      showSurveyPreview(decodeURIComponent(prevBtn.getAttribute('data-enc')));
+    const prevEnc = prevBtn?.getAttribute('data-preview');
+    if (prevBtn && prevEnc) {
+      showSurveyPreview(decodeURIComponent(prevEnc));
     }
   });
 
   document.getElementById('eval-survey-preview-close')?.addEventListener('click', hideSurveyPreview);
+
+  document.getElementById('notify-modal-cancel')?.addEventListener('click', () => closeModal('notify-modal-overlay'));
+  document.getElementById('notify-modal-send')?.addEventListener('click', () => void submitNotifyModal());
+  document.getElementById('notify-modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'notify-modal-overlay') closeModal('notify-modal-overlay');
+  });
 
   showTab('resumo');
   await refreshAll();

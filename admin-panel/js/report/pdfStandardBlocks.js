@@ -9,6 +9,24 @@ export function escapeHtmlAttr(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** PDF / anexos: extensões que não devem ser tratadas como `<img>`. */
+export function isClearlyNonImageHttpUrl(s) {
+  const u = String(s ?? '').trim();
+  if (!u.startsWith('http://') && !u.startsWith('https://')) return false;
+  const path = (u.split(/[?#]/)[0] || '').toLowerCase();
+  return /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|csv|txt|mp4|webm|mov|mpe?g|mp3|wav|m4a|ogg)(\?|$)/i.test(
+    path,
+  );
+}
+
+/** `data:image/*`, ou HTTP(S) que não é claramente documento/vídeo — usar `<img>` no relatório. */
+export function shouldEmbedHttpUrlAsImage(s) {
+  const u = String(s ?? '').trim();
+  if (u.startsWith('data:image/')) return true;
+  if (!u.startsWith('http://') && !u.startsWith('https://')) return false;
+  return !isClearlyNonImageHttpUrl(u);
+}
+
 /** Data/hora da captura na query `capturedAt` (igual ao app / fotos carimbadas). */
 export function parseCapturedAtFromPhotoUriPdf(uri) {
   try {
@@ -382,6 +400,13 @@ function looksLikeVisionPayloadObject(o) {
     'mediaUrl',
     'uploadedUri',
     'imageUri',
+    'url',
+    'downloadUrl',
+    'attachmentUrl',
+    'photoUrl',
+    'thumbnailUrl',
+    'previewUrl',
+    'src',
     'mediaMimeType',
     'mediaFileName',
     'answers',
@@ -393,6 +418,30 @@ function looksLikeVisionPayloadObject(o) {
     'captureAddr',
   ];
   return keys.some((k) => Object.prototype.hasOwnProperty.call(o, k));
+}
+
+function collectVisionHttpsUriCandidates(o) {
+  if (!o || typeof o !== 'object') return [];
+  const keys = [
+    'localUri',
+    'remoteUri',
+    'publicUrl',
+    'mediaUrl',
+    'uploadedUri',
+    'imageUri',
+    'url',
+    'downloadUrl',
+    'attachmentUrl',
+    'photoUrl',
+    'thumbnailUrl',
+    'previewUrl',
+    'src',
+  ];
+  const out = [];
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(o, k)) out.push(o[k]);
+  }
+  return out;
 }
 
 function parseVisionPayloadCandidate(val) {
@@ -434,14 +483,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
   }
 
   const rawLocal = o.localUri != null ? String(o.localUri).trim() : '';
-  const httpsPrimary = pickFirstHttpsMediaUri(
-    o.localUri,
-    o.remoteUri,
-    o.publicUrl,
-    o.mediaUrl,
-    o.uploadedUri,
-    o.imageUri,
-  );
+  const httpsPrimary = pickFirstHttpsMediaUri(...collectVisionHttpsUriCandidates(o));
   const rawSlots = Array.isArray(o.gridSlotUris) ? o.gridSlotUris : [];
   const slots = rawSlots.map((u) => String(u || '').trim()).filter(Boolean);
   const answers = (() => {
@@ -492,7 +534,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
       let inner;
       if (slotHttps) {
         const srcEsc = escapeHtmlAttr(slotHttps);
-        inner = `<img src="${srcEsc}" alt="" style="width:100%;max-height:140px;object-fit:cover;display:block" onerror="this.style.display='none'"/>`;
+        inner = `<img src="${srcEsc}" alt="" style="width:100%;max-height:140px;object-fit:cover;display:block" onerror="this.onerror=null;this.src='https://placehold.co/320x160/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>`;
       } else if (u.startsWith('file://') || u.startsWith('content://')) {
         inner = localMediaUnavailableHtml(escHtml);
       } else {
@@ -522,7 +564,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
       if (httpsPrimary) {
         const srcEsc = escapeHtmlAttr(httpsPrimary);
         const hrefEsc = escapeHtmlAttr(httpsPrimary);
-        const innerImg = `<img src="${srcEsc}" alt="" style="max-width:100%;max-height:300px;width:100%;height:auto;object-fit:contain;display:block" onerror="this.style.display='none'"/>`;
+        const innerImg = `<img src="${srcEsc}" alt="" style="max-width:100%;max-height:300px;width:100%;height:auto;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/560x320/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>`;
         html += wrapVisionStampedMedia(innerImg, mainStamp, escHtml, 'vision', mainGeo);
         html += `<div style="font-size:11px;margin-top:6px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600">Abrir mídia</a></div>`;
       } else {
@@ -785,7 +827,7 @@ export function buildImageAnnotationReportHtml(val, escHtml) {
   if (httpsUri) {
     const srcEsc = escapeHtmlAttr(httpsUri);
     inner = `<div class="pdf-image-annot-stack" style="display:grid;width:100%;max-width:100%;align-items:start;justify-items:stretch;line-height:0">
-      <img src="${srcEsc}" alt="" style="grid-area:1/1;width:100%;max-height:320px;height:auto;object-fit:contain;display:block;vertical-align:top" onerror="this.style.display='none'"/>
+      <img src="${srcEsc}" alt="" style="grid-area:1/1;width:100%;max-height:320px;height:auto;object-fit:contain;display:block;vertical-align:top" onerror="this.onerror=null;this.src='https://placehold.co/560x320/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>
       ${svgOverlay}
     </div>`;
   } else {

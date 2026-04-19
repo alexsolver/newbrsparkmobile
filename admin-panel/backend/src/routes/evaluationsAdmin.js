@@ -8,10 +8,38 @@ const { pushToUserById } = require('../lib/evaluationPush');
 const { newPublicTokenFields } = require('../lib/evaluationTrigger');
 const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
 const { buildChatTranscriptForEvaluationInstance } = require('../lib/disputeChatTranscript');
+const { extractClientEmailFromMetadata } = require('../lib/technicianClientChatGate');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 
 const router = express.Router();
 
 const QUESTION_TYPES = ['RATING', 'NPS', 'BOOLEAN', 'TEXT', 'MULTIPLE_CHOICE'];
+
+function normalizeSurveyBranding(body) {
+  const u = body?.surveyLogoUrl;
+  const surveyLogoUrl =
+    u != null && String(u).trim() !== '' ? String(u).trim().slice(0, 2048) : null;
+  const pre = body?.surveyMessagePre;
+  const surveyMessagePre =
+    pre != null && String(pre).trim() !== '' ? String(pre).slice(0, 12000) : null;
+  const post = body?.surveyMessagePost;
+  const surveyMessagePost =
+    post != null && String(post).trim() !== '' ? String(post).slice(0, 12000) : null;
+  return { surveyLogoUrl, surveyMessagePre, surveyMessagePost };
+}
+
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Apenas para atributo href (URLs) — não usar escHtml que codifica &. */
+function escHrefAttr(url) {
+  return String(url ?? '').replace(/"/g, '&quot;');
+}
 
 /**
  * Sincroniza perguntas do template: atualiza por id, cria novas, remove as que saíram do payload
@@ -99,6 +127,8 @@ router.post('/templates', express.json(), async (req, res) => {
     const t = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!t) return res.status(404).json({ error: 'Tenant não encontrado.' });
 
+    const branding = normalizeSurveyBranding(req.body);
+
     const created = await prisma.$transaction(async (tx) => {
       const tpl = await tx.evaluationTemplate.create({
         data: {
@@ -107,6 +137,7 @@ router.post('/templates', express.json(), async (req, res) => {
           type,
           active: active !== false,
           triggerRules: req.body.triggerRules || {},
+          ...branding,
         },
       });
       const qs = Array.isArray(questions) ? questions : [];
@@ -146,6 +177,44 @@ router.post('/templates', express.json(), async (req, res) => {
   }
 });
 
+/**
+ * Pré-visualização autenticada: mesmo formato que GET /evaluations/public/form (sem token real).
+ */
+router.get('/templates/:id/preview-form', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const t = await prisma.evaluationTemplate.findUnique({
+      where: { id },
+      include: { questions: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!t) return res.status(404).json({ error: 'Template não encontrado.' });
+
+    const questions = (t.questions || []).map((q) => ({
+      id: q.id,
+      text: q.text,
+      type: q.type,
+      required: q.required,
+      options: q.options,
+      sortOrder: q.sortOrder,
+    }));
+
+    res.json({
+      previewMode: true,
+      instanceId: 'preview',
+      templateName: t.name || 'Avaliação',
+      osNumber: null,
+      expiresAt: null,
+      questions,
+      surveyLogoUrl: t.surveyLogoUrl || null,
+      surveyMessagePre: t.surveyMessagePre || null,
+      surveyMessagePost: t.surveyMessagePost || null,
+    });
+  } catch (err) {
+    console.error('admin GET templates/:id/preview-form', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -172,6 +241,13 @@ router.patch('/templates/:id', express.json(), async (req, res) => {
     const existing = await prisma.evaluationTemplate.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Template não encontrado.' });
 
+    const hasBranding =
+      req.body &&
+      ('surveyLogoUrl' in req.body ||
+        'surveyMessagePre' in req.body ||
+        'surveyMessagePost' in req.body);
+    const branding = hasBranding ? normalizeSurveyBranding(req.body) : null;
+
     const fresh = await prisma.$transaction(async (tx) => {
       await tx.evaluationTemplate.update({
         where: { id },
@@ -179,6 +255,13 @@ router.patch('/templates/:id', express.json(), async (req, res) => {
           ...(name != null ? { name: String(name).trim() } : {}),
           ...(active != null ? { active: !!active } : {}),
           ...(triggerRules != null ? { triggerRules } : {}),
+          ...(branding
+            ? {
+                surveyLogoUrl: branding.surveyLogoUrl,
+                surveyMessagePre: branding.surveyMessagePre,
+                surveyMessagePost: branding.surveyMessagePost,
+              }
+            : {}),
         },
       });
       if (questions !== undefined) {
@@ -224,7 +307,8 @@ router.get('/instances', async (req, res) => {
       include: {
         template: { select: { name: true } },
         technician: { select: { name: true, email: true } },
-        execution: { select: { osNumber: true } },
+        tenant: { select: { name: true } },
+        execution: { select: { osNumber: true, metadata: true } },
         score: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -235,12 +319,14 @@ router.get('/instances', async (req, res) => {
         const pending = r.status === 'PENDING';
         const tok = pending ? r.publicToken : null;
         const links = tok ? buildClientSurveyLinks(tok) : { relativePath: null, fullUrl: null };
+        const clientEmailGuess = extractClientEmailFromMetadata(r.execution?.metadata);
         return {
           id: r.id,
           tenantId: r.tenantId,
           status: r.status,
           createdAt: r.createdAt,
           templateName: r.template?.name,
+          tenantName: r.tenant?.name,
           technicianEmail: r.technician?.email,
           technicianName: r.technician?.name,
           osNumber: r.execution?.osNumber,
@@ -249,6 +335,7 @@ router.get('/instances', async (req, res) => {
           publicTokenExpiresAt: pending ? r.publicTokenExpiresAt : null,
           clientSurveyFullUrl: links.fullUrl,
           clientSurveyRelativePath: links.relativePath,
+          clientEmailGuess,
         };
       }),
     });
@@ -282,6 +369,166 @@ router.post('/instances/:id/regenerate-token', async (req, res) => {
     res.json({ ok: true, publicToken: updated.publicToken, publicTokenExpiresAt: updated.publicTokenExpiresAt });
   } catch (err) {
     console.error('admin regenerate token', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Convida o cliente a responder a pesquisa: e-mail (transacional) e/ou push no app (utilizador USER com mesmo e-mail).
+ * WhatsApp/SMS: reservado para integração futura (não implementado).
+ */
+router.post('/instances/:id/notify', express.json(), async (req, res) => {
+  try {
+    const rawCh = req.body?.channels;
+    const channels = Array.isArray(rawCh)
+      ? rawCh.map((c) => String(c).toLowerCase())
+      : ['email'];
+    const wantEmail = channels.includes('email');
+    const wantPush = channels.includes('push');
+    if (!wantEmail && !wantPush) {
+      return res.status(400).json({ error: 'Indique pelo menos um canal: email ou push.' });
+    }
+
+    const emailOverride =
+      typeof req.body?.emailTo === 'string' && String(req.body.emailTo).trim()
+        ? String(req.body.emailTo).trim().toLowerCase()
+        : null;
+
+    const inst = await prisma.evaluationInstance.findUnique({
+      where: { id: req.params.id },
+      include: {
+        execution: { select: { osNumber: true, metadata: true } },
+        template: { select: { name: true } },
+        tenant: { select: { name: true } },
+      },
+    });
+    if (!inst) return res.status(404).json({ error: 'Instância não encontrada.' });
+    if (inst.status !== 'PENDING' || !inst.publicToken) {
+      return res.status(400).json({ error: 'Só é possível convidar enquanto a avaliação estiver pendente e com link ativo.' });
+    }
+
+    const links = buildClientSurveyLinks(inst.publicToken);
+    const surveyUrl = links.fullUrl;
+    if (!surveyUrl) {
+      return res.status(503).json({
+        error:
+          'URL pública do formulário não configurada. Defina ADMIN_PANEL_PUBLIC_BASE_URL no servidor (pasta onde está evaluation-survey.html, sem barra no final).',
+      });
+    }
+
+    const fromMeta = extractClientEmailFromMetadata(inst.execution?.metadata);
+    const targetEmail = emailOverride || fromMeta;
+    const results = { email: null, push: null };
+
+    const osLabel = inst.execution?.osNumber != null ? String(inst.execution.osNumber) : '—';
+    const tenantLabel = inst.tenant?.name || 'BrSpark';
+    const tplName = inst.template?.name || 'Avaliação de serviço';
+
+    if (wantEmail) {
+      if (!targetEmail || !targetEmail.includes('@')) {
+        return res.status(400).json({
+          error:
+            'E-mail do cliente não encontrado na OS. Preencha o campo de e-mail no convite ou complete o despacho da OS com o e-mail do cliente.',
+        });
+      }
+      const subject = `${tenantLabel} — Avalie o atendimento (OS ${osLabel})`;
+      const text = [
+        `Olá,`,
+        ``,
+        `Convidamo-lo a avaliar o serviço (${tplName}). Ordem de serviço: ${osLabel}.`,
+        `Abra o link no telemóvel ou computador:`,
+        surveyUrl,
+        ``,
+        `Obrigado,`,
+        tenantLabel,
+      ].join('\n');
+      const html = `<p>Olá,</p>
+<p>Convidamo-lo a avaliar o serviço <strong>${escHtml(tplName)}</strong>. Ordem de serviço: <strong>${escHtml(
+        osLabel,
+      )}</strong>.</p>
+<p><a href="${escHrefAttr(surveyUrl)}">Responder avaliação</a></p>
+<p style="font-size:12px;color:#64748b">Se o botão não funcionar, copie e cole este endereço no navegador:<br/>${escHtml(
+        surveyUrl,
+      )}</p>`;
+
+      const sent = await sendTransactionalEmailWithFallback({
+        to: targetEmail,
+        subject,
+        text,
+        html,
+      });
+      const ok = !!(sent.send && sent.send.ok);
+      results.email = {
+        ok,
+        provider: sent.provider,
+        to: targetEmail,
+        error: ok ? null : sent.send?.error || sent.send?.reason || 'Falha ao enviar e-mail.',
+      };
+      if (!ok) {
+        return res.status(502).json({
+          error: results.email.error || 'Não foi possível enviar o e-mail (verifique MailerSend/Nylas no servidor).',
+          results,
+        });
+      }
+    }
+
+    if (wantPush) {
+      const pushEmail = targetEmail;
+      if (!pushEmail || !pushEmail.includes('@')) {
+        results.push = {
+          skipped: true,
+          reason:
+            'É necessário um e-mail para localizar o cliente na app. Use o e-mail detetado na OS ou preencha o campo no convite.',
+        };
+      } else {
+        const clientUser = await prisma.user.findFirst({
+          where: {
+            tenantId: inst.tenantId,
+            email: { equals: pushEmail, mode: 'insensitive' },
+            role: 'USER',
+          },
+          select: { id: true },
+        });
+        if (!clientUser) {
+          results.push = {
+            skipped: true,
+            reason:
+              'Não existe utilizador «cliente» (app) com este e-mail neste tenant. O cliente pode responder pelo link enviado por e-mail ou partilhado manualmente.',
+          };
+        } else {
+          await pushToUserById(clientUser.id, {
+            title: `${tenantLabel} — Avalie o serviço`,
+            body: `Toque para responder à avaliação da OS ${osLabel}.`,
+            data: {
+              type: 'EVALUATION_CLIENT_SURVEY_INVITE',
+              evaluationInstanceId: inst.id,
+              surveyUrl,
+              publicToken: inst.publicToken,
+            },
+          });
+          results.push = { ok: true, userId: clientUser.id };
+        }
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        ...auditActor(req),
+        tenantId: inst.tenantId,
+        action: 'EVALUATION_INSTANCE_CLIENT_NOTIFY',
+        resource: inst.id,
+        category: 'DATA',
+        metadata: {
+          channels: { email: wantEmail, push: wantPush },
+          emailTo: wantEmail ? targetEmail : null,
+          pushSkipped: results.push && results.push.skipped,
+        },
+      },
+    });
+
+    res.json({ ok: true, results, surveyUrl, clientEmailUsed: targetEmail || null });
+  } catch (err) {
+    console.error('admin POST instances/:id/notify', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -9,6 +9,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { getAssetNotes, deleteAssetNoteLocal, getLocalAssets } from '../../src/database';
 import { AssetNote } from '../../src/types/note';
 import { Asset } from '../../src/types/asset';
+import { getAssetRootIconColor } from '../../src/assetKind';
 
 const NOTES_ACCENT = MEDIA_TAG_COLORS.WARRANTY;
 
@@ -99,7 +100,7 @@ export default function AssetNotesListScreen() {
     <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: C.background }}>
       <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, alignItems: 'center', backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.divider }}>
         {asset ? (() => {
-          const typeIcon = TYPE_ICONS[asset.type] || TYPE_ICONS.OTHER;
+          const typeIcon = TYPE_ICONS[asset.type] || getAssetRootIconColor(asset.type);
           const iconName = asset.details?.customIcon || typeIcon.icon;
           const iconColor = asset.details?.customColor || typeIcon.color;
           return (

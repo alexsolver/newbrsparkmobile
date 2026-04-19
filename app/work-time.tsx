@@ -20,6 +20,8 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useAuth } from '../src/hooks/useAuth';
+import { usePersona } from '../src/context/PersonaContext';
+import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { collectPunchInputs, isLikelyOnline, type CollectedPunch } from '../src/lib/workTimePunchCollect';
 import { computeJourneyUiState, type WorkTimeJourneyPhase } from '../src/lib/workTimeJourney';
 import {
@@ -211,6 +213,7 @@ export default function WorkTimeScreen() {
   const { colors: C, dark: themeDark } = useTheme();
   const styles = useMemo(() => createStyles(C, themeDark), [C, themeDark]);
   const { user } = useAuth();
+  const { activePersona } = usePersona();
   const accountRole = String(user?.role || '').toUpperCase();
   const canAccessWorkTime = userHasCapability(user, 'mobile.workTime.access');
   const insets = useSafeAreaInsets();
@@ -233,8 +236,8 @@ export default function WorkTimeScreen() {
 
   React.useEffect(() => {
     if (canAccessWorkTime) return;
-    router.replace('/(tabs)' as any);
-  }, [canAccessWorkTime, router]);
+    router.replace(getPersonaHomeHref(activePersona) as any);
+  }, [canAccessWorkTime, activePersona, router]);
 
   const loadAll = useCallback(async () => {
     try {

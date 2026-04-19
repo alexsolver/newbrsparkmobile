@@ -741,12 +741,21 @@ function buildPreviewSchemaFromLoadedTask(found) {
       ? found.responses
       : {};
   const fromTpl = Array.isArray(found.template?.fields)
-    ? found.template.fields.map((f) => ({
-        id: f.id,
-        label: (f.label && String(f.label).trim()) || f.id,
-        type: f.type || f.fieldType || 'text',
-        allowTechnicianComment: !!f.allowTechnicianComment,
-      }))
+    ? found.template.fields
+        .filter((f) => {
+          if (!f) return false;
+          const t = String(f.type || f.fieldType || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[\s-]+/g, '_');
+          return t !== 'form_complete_button';
+        })
+        .map((f) => ({
+          id: f.id,
+          label: (f.label && String(f.label).trim()) || f.id,
+          type: f.type || f.fieldType || 'text',
+          allowTechnicianComment: !!f.allowTechnicianComment,
+        }))
     : [];
   const seen = new Set(fromTpl.map((x) => x.id));
   const orphans = [];
@@ -899,7 +908,10 @@ function readFieldsFromDom() {
   for (const f of previewSchema) {
     const vis = document.getElementById(`fld-vis-${f.id}`);
     const lab = document.getElementById(`fld-lab-${f.id}`);
-    const isTechFin = f.type === 'technician_finance';
+    const isTechFin =
+      f.type === 'technician_finance' ||
+      f.type === 'technician_finance_expense' ||
+      f.type === 'technician_finance_revenue';
     const visible = vis ? vis.checked : isTechFin ? false : true;
     const label = lab && lab.value.trim() ? lab.value.trim() : undefined;
     if (isTechFin) {
@@ -922,7 +934,10 @@ function renderFieldRows(seed) {
   host.innerHTML = previewSchema
     .map((f) => {
       const fc = seedFields[f.id];
-      const isTechFin = f.type === 'technician_finance';
+      const isTechFin =
+      f.type === 'technician_finance' ||
+      f.type === 'technician_finance_expense' ||
+      f.type === 'technician_finance_revenue';
       const defaultVis = isTechFin ? false : true;
       const vis =
         fc && Object.prototype.hasOwnProperty.call(fc, 'visible') ? !!fc.visible : defaultVis;

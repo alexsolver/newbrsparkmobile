@@ -21,12 +21,20 @@ function maskIntegrationSecret(v) {
 router.get('/', async (_req, res) => {
   try {
     const integrations = await prisma.integration.findMany({ orderBy: { type: 'asc' } });
-    res.json(integrations.map(i => ({
-      ...i,
-      apiKey: maskIntegrationSecret(i.apiKey),
-      comprefaceDetectionKey: maskIntegrationSecret(i.comprefaceDetectionKey),
-      comprefaceVerificationKey: maskIntegrationSecret(i.comprefaceVerificationKey),
-    })));
+    res.json(
+      integrations.map((i) => {
+        const row = {
+          ...i,
+          apiKey: maskIntegrationSecret(i.apiKey),
+          comprefaceDetectionKey: maskIntegrationSecret(i.comprefaceDetectionKey),
+          comprefaceVerificationKey: maskIntegrationSecret(i.comprefaceVerificationKey),
+        };
+        if ((i.name === 'Stripe' || i.name === 'Didit') && i.webhookUrl) {
+          row.webhookUrl = maskIntegrationSecret(i.webhookUrl);
+        }
+        return row;
+      }),
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -81,6 +89,17 @@ router.post('/', async (req, res) => {
       resolvedBase = normalizeGoogleGenerativeLanguageBaseUrl(baseUrl);
     } else if (name === 'MailerSend') {
       resolvedBase = normalizeMailerSendApiBaseUrl(baseUrl);
+    } else if (name === 'Stripe') {
+      resolvedBase = 'https://api.stripe.com';
+    } else if (name === 'Didit' && (baseUrl == null || !String(baseUrl).trim())) {
+      resolvedBase = 'https://verification.didit.me';
+    } else if (name === 'Didit' && baseUrl) {
+      try {
+        const u = new URL(String(baseUrl).trim().replace(/\/+$/g, ''));
+        resolvedBase = u.origin;
+      } catch {
+        resolvedBase = 'https://verification.didit.me';
+      }
     }
     const integration = await prisma.integration.create({
       data: {
@@ -105,6 +124,10 @@ router.post('/', async (req, res) => {
       apiKey: integration.apiKey ? '••••••••' : null,
       comprefaceDetectionKey: integration.comprefaceDetectionKey ? '••••••••' : null,
       comprefaceVerificationKey: integration.comprefaceVerificationKey ? '••••••••' : null,
+      webhookUrl:
+        (integration.name === 'Stripe' || integration.name === 'Didit') && integration.webhookUrl
+          ? maskIntegrationSecret(integration.webhookUrl)
+          : integration.webhookUrl,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -129,6 +152,13 @@ router.patch('/:id', async (req, res) => {
       data = { ...data, baseUrl: normalizeGoogleGenerativeLanguageBaseUrl(data.baseUrl) };
     } else if (existing.name === 'MailerSend' && Object.prototype.hasOwnProperty.call(data, 'baseUrl')) {
       data = { ...data, baseUrl: normalizeMailerSendApiBaseUrl(data.baseUrl) };
+    } else if (existing.name === 'Stripe' && data.baseUrl) {
+      data = { ...data, baseUrl: 'https://api.stripe.com' };
+    } else if (existing.name === 'Didit' && data.baseUrl) {
+      try {
+        const u = new URL(String(data.baseUrl).trim().replace(/\/+$/g, ''));
+        data = { ...data, baseUrl: u.origin };
+      } catch { /* manter */ }
     }
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({
@@ -136,6 +166,10 @@ router.patch('/:id', async (req, res) => {
       apiKey: integration.apiKey ? '••••••••' : null,
       comprefaceDetectionKey: integration.comprefaceDetectionKey ? '••••••••' : null,
       comprefaceVerificationKey: integration.comprefaceVerificationKey ? '••••••••' : null,
+      webhookUrl:
+        (integration.name === 'Stripe' || integration.name === 'Didit') && integration.webhookUrl
+          ? maskIntegrationSecret(integration.webhookUrl)
+          : integration.webhookUrl,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

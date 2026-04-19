@@ -39,6 +39,12 @@ const M = {
     esv_required: 'Responda todas as perguntas obrigatórias.',
     esv_thanks: 'Obrigado. Sua avaliação foi registrada.',
     esv_os_prefix: ' · OS ',
+    esv_preview_banner:
+      'Modo pré-visualização: as respostas não são gravadas. Use para conferir logo e textos do template.',
+    esv_preview_btn: 'Pré-visualização (não envia)',
+    esv_preview_need_login:
+      'Abra esta página a partir do painel administrativo (sessão ativa) ou use o link com token do cliente.',
+    esv_preview_badge: '(pré-visualização)',
   },
   'en-US': {
     esv_pageTitle: 'Service evaluation — BrSpark',
@@ -58,6 +64,12 @@ const M = {
     esv_required: 'Please answer all required questions.',
     esv_thanks: 'Thank you. Your evaluation was saved.',
     esv_os_prefix: ' · WO ',
+    esv_preview_banner:
+      'Preview mode: answers are not saved. Use this to check the template logo and copy.',
+    esv_preview_btn: 'Preview (does not submit)',
+    esv_preview_need_login:
+      'Open this page from the admin panel (active session) or use the customer link with a token.',
+    esv_preview_badge: '(preview)',
   },
 };
 

@@ -37,8 +37,35 @@ import DatePickerButton from '../../src/components/DatePickerButton';
 import { LocationGroupCard } from '../../src/components/LocationGroupCard';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePersona } from '../../src/context/PersonaContext';
+import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatDistance, formatNumber } from '../../src/i18n/formatters';
-import { ValueInput } from '../../src/components/ValueInput';
+import { ValueInput, parseLocaleAmountString } from '../../src/components/ValueInput';
+import {
+  isModuleVisible,
+  getKindById,
+  validateTemplate,
+  getAssetFormBlock,
+  getAssetRootVisual,
+  getAssetRootIconColor,
+  ASSET_ROOT_TYPE_IDS_FOR_EDIT,
+} from '../../src/assetKind';
+import { AssetTemplateFieldGroup } from '../../src/components/AssetTemplateFieldGroup';
+import { ASSET_ICON_LIBRARY } from '../../src/asset/assetIconLibrary';
+import {
+  expandVisibilityForEdit,
+  moduleSelectionToWhitelist,
+  MODULE_I18N_BY_ID,
+  OPTIONAL_ASSET_MODULE_IDS,
+} from '../../src/asset/assetModuleRegistry';
+import {
+  WarrantiesContractsModule,
+  ComplianceCertModule,
+  ReadingsConsumptionModule,
+  ValuationDepreciationModule,
+  ServiceUsageHistoryModule,
+  AssetAgendaShortcutModule,
+} from '../../src/components/assetModules/AssetExtensionModules';
 
 
 
@@ -57,47 +84,14 @@ const getModules = (t: any, C: ColorPalette) => [
 
   { id: 'history',   title: t('modules.history'),        subtitle: t('modules.historySub'),         icon: 'time-outline' as const,                color: C.slate },
 
-  { id: 'notes',     title: 'Anotações',                 subtitle: 'Registros e checklists',        icon: 'document-text-outline' as const,       color: MEDIA_TAG_COLORS.WARRANTY },
-];
+  { id: 'notes',     title: t('modules.notes'),          subtitle: t('modules.notesSub'),          icon: 'document-text-outline' as const,       color: MEDIA_TAG_COLORS.WARRANTY },
 
-const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
-  TERRESTRIAL: { icon: 'car-outline',       color: '#904D00' },
-  REAL_ESTATE: { icon: 'business-outline',  color: '#FF8C00' },
-  AQUATIC:     { icon: 'boat-outline',      color: '#006B5C' },
-  SPECIAL:     { icon: 'star-outline',      color: '#70797C' },
-  OTHER:       { icon: 'cube-outline',      color: '#565E61' },
-};
-
-const ICON_LIBRARY = [
-  { icon: 'home-outline' },           { icon: 'business-outline' },
-  { icon: 'storefront-outline' },     { icon: 'bed-outline' },
-  { icon: 'library-outline' },        { icon: 'school-outline' },
-  { icon: 'medkit-outline' },         { icon: 'fitness-outline' },
-  { icon: 'basketball-outline' },     { icon: 'car-outline' },
-  { icon: 'car-sport-outline' },      { icon: 'bus-outline' },
-  { icon: 'train-outline' },          { icon: 'bicycle-outline' },
-  { icon: 'boat-outline' },           { icon: 'airplane-outline' },
-  { icon: 'rocket-outline' },         { icon: 'wallet-outline' },
-  { icon: 'cash-outline' },           { icon: 'card-outline' },
-  { icon: 'trending-up-outline' },    { icon: 'diamond-outline' },
-  { icon: 'gift-outline' },           { icon: 'desktop-outline' },
-  { icon: 'laptop-outline' },         { icon: 'phone-portrait-outline' },
-  { icon: 'server-outline' },         { icon: 'hardware-chip-outline' },
-  { icon: 'camera-outline' },         { icon: 'tv-outline' },
-  { icon: 'headset-outline' },        { icon: 'print-outline' },
-  { icon: 'leaf-outline' },           { icon: 'flower-outline' },
-  { icon: 'earth-outline' },          { icon: 'water-outline' },
-  { icon: 'flame-outline' },          { icon: 'sunny-outline' },
-  { icon: 'cloud-outline' },          { icon: 'briefcase-outline' },
-  { icon: 'cube-outline' },           { icon: 'star-outline' },
-  { icon: 'bookmark-outline' },       { icon: 'shield-outline' },
-  { icon: 'key-outline' },            { icon: 'lock-closed-outline' },
-  { icon: 'construct-outline' },      { icon: 'hammer-outline' },
-  { icon: 'flask-outline' },          { icon: 'paw-outline' },
-  { icon: 'pizza-outline' },          { icon: 'musical-notes-outline' },
-  { icon: 'image-outline' },          { icon: 'ribbon-outline' },
-  { icon: 'archive-outline' },        { icon: 'barbell-outline' },
-  { icon: 'color-palette-outline' },  { icon: 'golf-outline' },
+  { id: 'warranties', title: t('modules.warranties'),    subtitle: t('modules.warrantiesSub'),    icon: 'document-attach-outline' as const,     color: C.primary },
+  { id: 'compliance', title: t('modules.compliance'),    subtitle: t('modules.complianceSub'),    icon: 'ribbon-outline' as const,                color: C.accent },
+  { id: 'readings',   title: t('modules.readings'),      subtitle: t('modules.readingsSub'),      icon: 'pulse-outline' as const,                 color: C.primary },
+  { id: 'valuation',  title: t('modules.valuation'),     subtitle: t('modules.valuationSub'),     icon: 'analytics-outline' as const,             color: C.accent },
+  { id: 'serviceHistory', title: t('modules.serviceHistory'), subtitle: t('modules.serviceHistorySub'), icon: 'construct-outline' as const,       color: C.primary },
+  { id: 'agenda',     title: t('modules.agenda'),        subtitle: t('modules.agendaSub'),        icon: 'calendar-outline' as const,               color: C.slate },
 ];
 
 const COLOR_PRESETS = ['#FF8C00','#10B981','#3B82F6','#EF4444','#8B5CF6','#F59E0B','#EC4899','#14B8A6','#64748B','#1a1a1a'];
@@ -205,6 +199,7 @@ function createAssetDetailStyles(C: ColorPalette) {
 export default function AssetDetailScreen() {
   const { id, module: moduleParam, action, ocrAmount, ocrDesc } = useLocalSearchParams<{ id: string; module?: string; action?: string; ocrAmount?: string; ocrDesc?: string }>();
   const { user } = useAuth();
+  const { activePersona } = usePersona();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createAssetDetailStyles(C), [C]);
   const activeModule = moduleParam || null;
@@ -212,6 +207,14 @@ export default function AssetDetailScreen() {
   const { t } = useTranslation();
   const MODULES = useMemo(() => getModules(t, C), [t, C]);
   const [asset, setAsset] = useState<Asset | null>(null);
+  const visibleModules = useMemo(
+    () =>
+      MODULES.filter((m) =>
+        isModuleVisible(m.id, asset?.details?.moduleVisibility as any, asset?.details?.moduleVisibilityMode as any)
+      ),
+    [MODULES, asset?.details?.moduleVisibility, asset?.details?.moduleVisibilityMode]
+  );
+  const [modulePickerVisible, setModulePickerVisible] = useState(false);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
   const [revenueCategories, setRevenueCategories] = useState<string[]>([]);
   const [aiModalVisible, setAiModalVisible] = useState(false);
@@ -306,6 +309,7 @@ export default function AssetDetailScreen() {
   const VAULT_PIN = '1234';
   const isExpoGo = Constants.appOwnership === 'expo';
   const [linkModalVisible, setLinkModalVisible] = useState(false);
+  const [rootTypePickerVisible, setRootTypePickerVisible] = useState(false);
   const [subLocPickerVisible, setSubLocPickerVisible] = useState(false);
   const [pendingSubLocAssetId, setPendingSubLocAssetId] = useState<string | null>(null);
   const [hierPage, setHierPage] = useState(0);
@@ -326,6 +330,7 @@ export default function AssetDetailScreen() {
   const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
   const [tempIcon, setTempIcon] = useState('');
   const [tempColor, setTempColor] = useState('');
+  const [iconPickerFilter, setIconPickerFilter] = useState('');
 
   const [newRecord, setNewRecord] = useState<Partial<DirectExpense>>({
     category: 'OUTROS', amount: 0, date: new Date().toISOString().split('T')[0], status: 'PENDING', type: 'EXPENSE', assetId: id as string
@@ -333,13 +338,21 @@ export default function AssetDetailScreen() {
   const [newRec, setNewRec] = useState<Partial<RecurringCost>>({
     frequency: 'MONTHLY', status: 'ACTIVE', type: 'EXPENSE', amount: 0, assetId: id as string, nextDueDate: new Date().toISOString().split('T')[0], alertDaysBefore: 1
   });
+
   const [budgetLimit, setBudgetLimit] = useState('');
   const [recurringExpanded, setRecurringExpanded] = useState(false);
   const [allRecurringCosts, setAllRecurringCosts] = useState<RecurringCost[]>([]);
 
   const [newExp, setNewExp] = useState({ description: '', amount: '', category: 'MANUTENÇÃO' });
 
-
+  const recordAmountDraftRef = useRef('');
+  const recordAmountEditingRef = useRef(false);
+  const recAmountDraftRef = useRef('');
+  const recAmountEditingRef = useRef(false);
+  const expAmountDraftRef = useRef('');
+  const expAmountEditingRef = useRef(false);
+  const budgetAmountDraftRef = useRef('');
+  const budgetAmountEditingRef = useRef(false);
 
   const handleAddSubAsset = () => {
     if (!asset) return;
@@ -365,14 +378,22 @@ export default function AssetDetailScreen() {
      title: '', inventoryId: '', brand: '', model: '', serialNumber: '', costCenter: '', acquisitionValue: '',
      cep: '', street: '', streetNumber: '', complement: '', neighborhood: '', city: '', state: '',
      gpsCoordinates: '', owner: '', department: '', customFields: [], photos: [],
-     status: '', statusType: 'success', customStatuses: [] as string[]
+     status: '', statusType: 'success', customStatuses: [] as string[],
+     templateValues: {} as Record<string, string | number | boolean>,
+     assetKindId: null as string | null,
+     industryContextId: null as string | null,
   });
 
   const handleSaveRecord = async () => {
-    if (!newRecord.amount || !newRecord.description) return Alert.alert(t('common.attention'), t('common.fillRequired'));
+    const rawAmt =
+      recordAmountEditingRef.current && recordAmountDraftRef.current.trim() !== ''
+        ? recordAmountDraftRef.current
+        : String(newRecord.amount ?? '');
+    const amountNum = parseLocaleAmountString(rawAmt);
+    if (!amountNum || !newRecord.description) return Alert.alert(t('common.attention'), t('common.fillRequired'));
     if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
     const id = editingRecord?.id ?? `exp-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    await CostService.saveExpense({ ...newRecord as DirectExpense, id }, user.email);
+    await CostService.saveExpense({ ...(newRecord as DirectExpense), id, amount: amountNum }, user.email);
     setExpModalVisible(false);
     setRecordModalVisible(false);
     setEditingRecord(null);
@@ -417,10 +438,15 @@ export default function AssetDetailScreen() {
   };
 
   const handleSaveRecurring = async () => {
-    if (!newRec.amount || !newRec.description || !newRec.nextDueDate) return Alert.alert(t('common.attention'), t('common.fillRequired'));
+    const rawAmt =
+      recAmountEditingRef.current && recAmountDraftRef.current.trim() !== ''
+        ? recAmountDraftRef.current
+        : String(newRec.amount ?? '');
+    const amountNum = parseLocaleAmountString(rawAmt);
+    if (!amountNum || !newRec.description || !newRec.nextDueDate) return Alert.alert(t('common.attention'), t('common.fillRequired'));
     if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
     const id = editingRec?.id ?? `rec-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    await CostService.saveRecurringCost({ ...newRec as RecurringCost, id }, user.email);
+    await CostService.saveRecurringCost({ ...(newRec as RecurringCost), id, amount: amountNum }, user.email);
     setRecurringModalVisible(false);
     setEditingRec(null);
     loadAssetData();
@@ -512,23 +538,36 @@ export default function AssetDetailScreen() {
 
 
   const handleSaveBudget = async () => {
-    if (!budgetLimit || !asset || !user?.email) return;
-    await CostService.saveBudget({ id: Math.random().toString(36).substring(7), assetId: asset.id, monthlyLimit: parseFloat(budgetLimit) || 0, category: 'GERAL' }, user.email);
+    if (!asset || !user?.email) return;
+    const raw =
+      budgetAmountEditingRef.current && budgetAmountDraftRef.current.trim() !== ''
+        ? budgetAmountDraftRef.current
+        : budgetLimit;
+    const lim = parseLocaleAmountString(raw);
+    if (!lim) return;
+    await CostService.saveBudget(
+      { id: Math.random().toString(36).substring(7), assetId: asset.id, monthlyLimit: lim, category: 'GERAL' },
+      user.email
+    );
     setBudgetModalVisible(false);
     loadAssetData();
   };
 
 
   const handleSaveExp = async () => {
-
-    if (!newExp.description || !newExp.amount || !asset) return Alert.alert(t('common.attention'), t('common.fillRequired'));
+    const rawAmt =
+      expAmountEditingRef.current && expAmountDraftRef.current.trim() !== ''
+        ? expAmountDraftRef.current
+        : newExp.amount;
+    const amountVal = parseLocaleAmountString(rawAmt);
+    if (!newExp.description || !amountVal || !asset) return Alert.alert(t('common.attention'), t('common.fillRequired'));
     try {
       if (!user?.email) return Alert.alert(t('common.error'), t('auth.sessionExpired'));
       await CostService.saveExpense({
         id: Math.random().toString(36).substring(7),
         assetId: asset.id,
         category: newExp.category,
-        amount: parseFloat(newExp.amount.replace(',','.')) || 0,
+        amount: amountVal,
         date: new Date().toISOString().split('T')[0],
         description: newExp.description,
         status: 'PENDING',
@@ -551,6 +590,18 @@ export default function AssetDetailScreen() {
   const [fetchingCep, setFetchingCep] = useState(false);
   const [fetchingGps, setFetchingGps] = useState(false);
 
+  const filteredAssetIcons = useMemo(() => {
+    const q = iconPickerFilter.trim().toLowerCase();
+    if (!q) return ASSET_ICON_LIBRARY;
+    return ASSET_ICON_LIBRARY.filter(
+      (e) => e.label.toLowerCase().includes(q) || e.icon.toLowerCase().includes(q)
+    );
+  }, [iconPickerFilter]);
+
+  useEffect(() => {
+    if (avatarPickerVisible) setIconPickerFilter('');
+  }, [avatarPickerVisible]);
+
   const loadAssetData = useCallback(() => {
     const localDb = getLocalAssets(user?.email || '');
     const found = localDb.find(a => a.id === id);
@@ -561,6 +612,23 @@ export default function AssetDetailScreen() {
       // Auto-default to consolidated when asset has children
       if (foundChildren.length > 0) setCostScope('consolidated');
       setAncestors(getAssetAncestors(found.id, user?.email || ''));
+      const rawTv = (found.details?.templateValues || {}) as Record<string, string>;
+      const kindId = (found.details?.assetKindId as string) || null;
+      const kdef = getKindById(kindId);
+      const templateValues: Record<string, string | number | boolean> = {};
+      for (const f of kdef?.fieldSchema || []) {
+        const v = rawTv[f.id];
+        if (f.type === 'boolean') {
+          templateValues[f.id] = v === '1' || v === 'true';
+        } else {
+          templateValues[f.id] = v != null && v !== undefined ? String(v) : '';
+        }
+      }
+      for (const key of Object.keys(rawTv)) {
+        if (templateValues[key] === undefined) {
+          templateValues[key] = rawTv[key] != null ? String(rawTv[key]) : '';
+        }
+      }
       setEditForm({
          title: found.title || '',
          inventoryId: found.details?.inventoryId || '',
@@ -585,6 +653,10 @@ export default function AssetDetailScreen() {
          statusType: found.statusType || "success",
          type: found.type || 'OTHER',
          customStatuses: (found as any).customStatuses || [],
+         templateValues,
+         assetKindId: kindId,
+         industryContextId: (found.details?.industryContextId as string) || null,
+         moduleVisibilityMap: expandVisibilityForEdit(found),
       });
       setIsDirty(false);
       guardRef.current.isDirty = false; // data load — not a user edit
@@ -744,16 +816,28 @@ export default function AssetDetailScreen() {
     ApiService.sync(user?.email || '');
   };
 
-  const currentTypeConfig = asset ? {
-    TERRESTRIAL: { icon: 'car-outline' as const,       color: '#904D00', bg: '#FFF7ED' },
-    REAL_ESTATE: { icon: 'business-outline' as const,  color: '#FF8C00', bg: '#FFF8F1' },
-    AQUATIC:     { icon: 'boat-outline' as const,      color: '#006B5C', bg: '#E0F2F1' },
-    SPECIAL:     { icon: 'star-outline' as const,      color: '#70797C', bg: '#F3F4F5' },
-    OTHER:       { icon: 'cube-outline' as const,      color: '#565E61', bg: '#F3F4F5' },
-  }[asset.type] || { icon: 'cube-outline' as const, color: '#565E61', bg: '#F3F4F5' } : null;
+  const currentTypeConfig = asset
+    ? (() => {
+        const v = getAssetRootVisual(asset.type);
+        return { icon: v.icon, color: v.color, bg: v.bg };
+      })()
+    : null;
 
   const handleSaveInfo = useCallback(() => {
     if (!asset) return;
+    const k = getKindById(editForm.assetKindId);
+    const vFail = validateTemplate(k, editForm.templateValues || {});
+    if (vFail) {
+      Alert.alert(t('common.attention'), t('assetJourney.missingField') as any);
+      return;
+    }
+    const templateSerialized: Record<string, string> = {};
+    for (const key of Object.keys(editForm.templateValues || {})) {
+      const v = editForm.templateValues[key];
+      if (v !== undefined && v !== null) {
+        templateSerialized[key] = typeof v === 'boolean' ? (v ? '1' : '0') : String(v);
+      }
+    }
     const updated = {
        ...asset,
        title: editForm.title,
@@ -778,7 +862,16 @@ export default function AssetDetailScreen() {
           owner: editForm.owner,
           department: editForm.department,
           customFields: editForm.customFields,
-          photos: editForm.photos
+          photos: editForm.photos,
+          templateValues: Object.keys(templateSerialized).length ? templateSerialized : undefined,
+          assetKindId: editForm.assetKindId || undefined,
+          industryContextId: editForm.industryContextId || undefined,
+          ...(editForm.moduleVisibilityMap && Object.keys(editForm.moduleVisibilityMap).length > 0
+            ? {
+                moduleVisibility: moduleSelectionToWhitelist(editForm.moduleVisibilityMap),
+                moduleVisibilityMode: 'whitelist' as const,
+              }
+            : {}),
        },
        status: editForm.status,
        statusType: editForm.statusType
@@ -906,7 +999,7 @@ export default function AssetDetailScreen() {
               softDeleteAssetLocal(asset.id, user?.email || '');
               queueOfflineAction('DELETE_ASSET', { id: asset.id }, user?.email || '');
               ApiService.sync(user?.email || '');
-              router.push('/(tabs)' as any);
+              router.push(getPersonaHomeHref(activePersona) as any);
            }
          }
       ]
@@ -938,22 +1031,40 @@ export default function AssetDetailScreen() {
                       />
             
             <Text style={styles.modLabel}>{t('newAsset.type')}</Text>
-            <TouchableOpacity style={styles.modInput} onPress={() => {
-              Alert.alert(t('newAsset.type'), t('newAsset.selectType'), [
-                { text: t('asset.type.REAL_ESTATE'), onPress: () => changeForm({ type: 'REAL_ESTATE'}) },
-                { text: t('asset.type.TERRESTRIAL'), onPress: () => changeForm({ type: 'TERRESTRIAL'}) },
-                { text: t('asset.type.AQUATIC'), onPress: () => changeForm({ type: 'AQUATIC'}) },
-                { text: t('asset.type.SPECIAL'), onPress: () => changeForm({ type: 'SPECIAL'}) },
-                { text: t('asset.type.OTHER'), onPress: () => changeForm({ type: 'OTHER'}) },
-                { text: t('common.cancel'), style: 'cancel' }
-              ]);
-            }}>
-              <Text style={{color: C.slate, fontWeight: '700'}}>{t(`asset.type.${editForm.type}`)}</Text>
+            <TouchableOpacity style={styles.modInput} onPress={() => setRootTypePickerVisible(true)}>
+              <Text style={{color: C.slate, fontWeight: '700'}}>{t(`asset.type.${editForm.type}` as any)}</Text>
             </TouchableOpacity>
 
-            {editForm.type === 'REAL_ESTATE' ? (
+            <Modal visible={rootTypePickerVisible} transparent animationType="fade" onRequestClose={() => setRootTypePickerVisible(false)}>
+              <TouchableWithoutFeedback onPress={() => setRootTypePickerVisible(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ backgroundColor: C.cardWhite, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingBottom: 28, maxHeight: '72%' }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: C.slate, padding: 18, paddingBottom: 8 }}>{t('newAsset.selectType')}</Text>
+                      <FlatList
+                        data={ASSET_ROOT_TYPE_IDS_FOR_EDIT}
+                        keyExtractor={(id) => id}
+                        renderItem={({ item: id }) => (
+                          <TouchableOpacity
+                            style={{ paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.divider }}
+                            onPress={() => {
+                              changeForm({ type: id });
+                              setRootTypePickerVisible(false);
+                            }}
+                          >
+                            <Text style={{ fontSize: 15, fontWeight: '700', color: C.slate }}>{t(`asset.type.${id}` as any)}</Text>
+                          </TouchableOpacity>
+                        )}
+                      />
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              </TouchableWithoutFeedback>
+            </Modal>
+
+            {getAssetFormBlock(editForm.type) === 'realEstate' ? (
               <></>
-            ) : editForm.type === 'TERRESTRIAL' ? (
+            ) : getAssetFormBlock(editForm.type) === 'vehicleLike' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -971,7 +1082,7 @@ export default function AssetDetailScreen() {
                 <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>changeForm({ serialNumber:t})} placeholder={t('newAsset.chassisPlaceholder')} returnKeyType="done"
                       />
               </>
-            ) : editForm.type === 'AQUATIC' ? (
+            ) : getAssetFormBlock(editForm.type) === 'aquatic' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -989,7 +1100,7 @@ export default function AssetDetailScreen() {
                 <TextInput style={styles.modInput} value={editForm.serialNumber} onChangeText={(t)=>changeForm({ serialNumber:t})} placeholder={t('newAsset.serialPlaceholder')} returnKeyType="done"
                       />
               </>
-            ) : editForm.type === 'SPECIAL' ? (
+            ) : getAssetFormBlock(editForm.type) === 'collectionLike' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -1008,6 +1119,12 @@ export default function AssetDetailScreen() {
                       />
               </>
             ) : null}
+
+            <AssetTemplateFieldGroup
+              kind={getKindById(editForm.assetKindId)}
+              values={editForm.templateValues || {}}
+              onChange={(next) => changeForm({ templateValues: next })}
+            />
 
             <View style={[styles.formSectionHeader, {marginTop: 16}]}>
                <Ionicons name="cash-outline" size={18} color={C.slate} />
@@ -1281,6 +1398,77 @@ export default function AssetDetailScreen() {
              </View>
             ))}
 
+
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 16,
+                padding: 14,
+                backgroundColor: C.surfaceLow,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: C.border,
+              }}
+              onPress={() => setModulePickerVisible(true)}
+            >
+              <Ionicons name="layers-outline" size={20} color={C.primary} />
+              <Text style={{ fontWeight: '800', color: C.primary, flex: 1, fontSize: 13 }}>{t('assetDetail.manageModules')}</Text>
+              <Ionicons name="chevron-forward" size={18} color={C.border} />
+            </TouchableOpacity>
+
+            <Modal visible={modulePickerVisible} transparent animationType="slide" onRequestClose={() => setModulePickerVisible(false)}>
+              <TouchableWithoutFeedback onPress={() => setModulePickerVisible(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+                  <TouchableWithoutFeedback>
+                    <View style={{ backgroundColor: C.cardWhite, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, maxHeight: '85%' }}>
+                      <Text style={{ fontSize: 16, fontWeight: '900', color: C.slate, marginBottom: 12 }}>{t('assetDetail.manageModules')}</Text>
+                      <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+                        {OPTIONAL_ASSET_MODULE_IDS.map((mid) => {
+                          const lab = MODULE_I18N_BY_ID[mid];
+                          return (
+                          <View
+                            key={mid}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              paddingVertical: 12,
+                              borderBottomWidth: StyleSheet.hairlineWidth,
+                              borderBottomColor: C.border,
+                            }}
+                          >
+                            <View style={{ flex: 1, paddingRight: 12 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>{t(lab.titleKey as any)}</Text>
+                              <Text style={{ fontSize: 9, color: C.textSecondary, marginTop: 2 }} numberOfLines={2}>
+                                {t(lab.subtitleKey as any)}
+                              </Text>
+                            </View>
+                            <Switch
+                              value={editForm.moduleVisibilityMap?.[mid] === true}
+                              onValueChange={(v) =>
+                                changeForm({
+                                  moduleVisibilityMap: { ...(editForm.moduleVisibilityMap || {}), [mid]: v },
+                                })
+                              }
+                              trackColor={{ false: C.border, true: C.primary }}
+                            />
+                          </View>
+                        );
+                        })}
+                      </ScrollView>
+                      <TouchableOpacity
+                        style={[styles.saveBtn, { marginTop: 12, marginBottom: 8 }]}
+                        onPress={() => setModulePickerVisible(false)}
+                      >
+                        <Text style={styles.saveBtnText}>{t('common.close')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              </TouchableWithoutFeedback>
+            </Modal>
 
             <TouchableOpacity style={[styles.saveBtn, { marginBottom: 40 }]} onPress={handleSaveInfo}>
                <Ionicons name="checkmark-circle" size={24} color="#fff" style={{marginRight: 8}} />
@@ -2054,7 +2242,7 @@ export default function AssetDetailScreen() {
                         setLinkModalVisible(true);
                       }}
                       onUnlinkItem={c => {
-                        Alert.alert('Desvincular bem', `Desvincular "${c.title}" deste bem?`, [
+                        Alert.alert('Desvincular ativo', `Desvincular "${c.title}" deste ativo?`, [
                           { text: 'Cancelar', style: 'cancel' },
                           { text: 'Desvincular', style: 'destructive', onPress: () => {
                             if (user?.email) {
@@ -2151,6 +2339,18 @@ export default function AssetDetailScreen() {
         return (
           <InsuranceModule assetId={asset.id} assetType={asset.type} />
         );
+      case 'warranties':
+        return <WarrantiesContractsModule assetId={asset.id} />;
+      case 'compliance':
+        return <ComplianceCertModule assetId={asset.id} />;
+      case 'readings':
+        return <ReadingsConsumptionModule assetId={asset.id} />;
+      case 'valuation':
+        return <ValuationDepreciationModule assetId={asset.id} />;
+      case 'serviceHistory':
+        return <ServiceUsageHistoryModule assetId={asset.id} />;
+      case 'agenda':
+        return <AssetAgendaShortcutModule assetId={asset.id} />;
       case 'stock':
         return (
           <StockModule assetId={asset.id} />
@@ -2204,7 +2404,7 @@ export default function AssetDetailScreen() {
       >
         {/* FIXED ASSET HEADER */}
         {asset && (() => {
-          const typeIcon = TYPE_ICONS[asset.type] || TYPE_ICONS.OTHER;
+          const typeIcon = getAssetRootIconColor(asset.type);
           const iconName = asset.details?.customIcon || typeIcon.icon;
           const iconColor = asset.details?.customColor || typeIcon.color;
           return (
@@ -2346,7 +2546,7 @@ export default function AssetDetailScreen() {
 
               {/* Module List Section (Mapped from official MODULES) */}
               <View style={{ paddingHorizontal: 20, paddingBottom: 100, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 }}>
-                {MODULES.map((item, idx) => {
+                {visibleModules.map((item, idx) => {
                   let sub = '';
                   if (item.id === 'maint') sub = 'Última há 2 dias';
                   else if (item.id === 'costs') sub = (costSummary?.totalBudget ?? 0) > 0 ? `Consumo: ${((totalExp / costSummary!.totalBudget!) * 100).toFixed(0)}% do budget` : 'Gestão de despesas';
@@ -2397,7 +2597,7 @@ export default function AssetDetailScreen() {
               >
                 <Ionicons name="trash-outline" size={18} color="#CBD5E1" />
                 <Text style={{ fontSize: 11, color: '#CBD5E1', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Excluir Bem
+                  Excluir ativo
                 </Text>
               </TouchableOpacity>
 
@@ -2559,7 +2759,7 @@ export default function AssetDetailScreen() {
                        }}
                     >
                       <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: C.surfaceLow, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
-                        <Ionicons name={TYPE_ICONS[a.type]?.icon || 'cube'} size={24} color={TYPE_ICONS[a.type]?.color || C.slate} />
+                        <Ionicons name={(getAssetRootIconColor(a.type).icon || 'cube') as any} size={24} color={getAssetRootIconColor(a.type).color || C.slate} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 13, fontWeight: '900', color: C.slate, textTransform: 'uppercase' }}>{a.title}</Text>
@@ -2617,8 +2817,15 @@ export default function AssetDetailScreen() {
                     style={{backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, fontSize: 14, fontWeight: '700', borderWidth: 1, borderColor: C.border}}
                     value={newExp.amount}
                     onChangeText={v => setNewExp({...newExp, amount: v})}
+                    onDraftChange={(t) => {
+                      expAmountDraftRef.current = t;
+                    }}
+                    onEditingStateChange={(editing) => {
+                      expAmountEditingRef.current = editing;
+                    }}
                     placeholder="0,00"
                     currency
+                    currencySymbol="R$"
                    />
                  </View>
                  <View style={{flex:1}}>
@@ -2862,9 +3069,16 @@ export default function AssetDetailScreen() {
                       <ValueInput
                         style={styles.input}
                         value={String(newRecord.amount || '')}
-                        onChangeText={v => setNewRecord({...newRecord, amount: parseFloat(v) || 0})}
+                        onChangeText={v => setNewRecord({ ...newRecord, amount: parseLocaleAmountString(v) })}
+                        onDraftChange={(t) => {
+                          recordAmountDraftRef.current = t;
+                        }}
+                        onEditingStateChange={(editing) => {
+                          recordAmountEditingRef.current = editing;
+                        }}
                         placeholder="0,00"
                         currency
+                        currencySymbol="R$"
                       />
                     </View>
                     <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: newRecord.type === 'REVENUE' ? '#10B981' : C.accent, marginBottom: 40}]} onPress={handleSaveRecord}>
@@ -2912,7 +3126,22 @@ export default function AssetDetailScreen() {
                    onChange={(d) => setNewRec({ ...newRec, nextDueDate: d })}
                  />
                </View>
-               <View style={styles.inputG}><Text style={styles.inputL}>{t("assetDetail.valueAmount")}</Text><ValueInput style={styles.input} value={String(newRec.amount || '')} onChangeText={v => setNewRec({...newRec, amount: parseFloat(v) || 0})} currency /></View>
+               <View style={styles.inputG}>
+                 <Text style={styles.inputL}>{t('assetDetail.valueAmount')}</Text>
+                 <ValueInput
+                   style={styles.input}
+                   value={String(newRec.amount || '')}
+                   onChangeText={v => setNewRec({ ...newRec, amount: parseLocaleAmountString(v) })}
+                   onDraftChange={(t) => {
+                     recAmountDraftRef.current = t;
+                   }}
+                   onEditingStateChange={(editing) => {
+                     recAmountEditingRef.current = editing;
+                   }}
+                   currency
+                   currencySymbol="R$"
+                 />
+               </View>
                <View style={styles.inputG}><Text style={styles.inputL}>{t('assetDetail.frequency')}</Text><View style={{flexDirection:'row', gap:10}}>{['WEEKLY','MONTHLY','YEARLY'].map(f => (<TouchableOpacity key={f} style={[styles.pChip, newRec.frequency === f && styles.pChipA]} onPress={()=>setNewRec({...newRec, frequency:f as any})}><Text style={[styles.pChipT, newRec.frequency === f && styles.pChipTA]}>{f}</Text></TouchableOpacity>))}</View></View>
                
                 <View style={styles.inputG}>
@@ -2961,7 +3190,23 @@ export default function AssetDetailScreen() {
         <View style={styles.modalO2}><View style={[styles.modalC2, { marginBottom: '50%' }]}>
            <View style={styles.modalH2}><Text style={styles.modalT}>{t('assetDetail.monthlyBudget')}</Text><TouchableOpacity onPress={() => setBudgetModalVisible(false)}><Ionicons name="close" size={24} color={C.slate} /></TouchableOpacity></View>
            <Text style={styles.assetName}>{asset.title}</Text>
-           <View style={[styles.inputG, {marginTop:15}]}><Text style={styles.inputL}>{t('assetDetail.spendingLimit')}</Text><ValueInput style={styles.input} value={budgetLimit} onChangeText={setBudgetLimit} placeholder="5000" currency /></View>
+           <View style={[styles.inputG, {marginTop:15}]}>
+             <Text style={styles.inputL}>{t('assetDetail.spendingLimit')}</Text>
+             <ValueInput
+               style={styles.input}
+               value={budgetLimit}
+               onChangeText={setBudgetLimit}
+               onDraftChange={(t) => {
+                 budgetAmountDraftRef.current = t;
+               }}
+               onEditingStateChange={(editing) => {
+                 budgetAmountEditingRef.current = editing;
+               }}
+               placeholder="5000"
+               currency
+               currencySymbol="R$"
+             />
+           </View>
            <TouchableOpacity style={styles.confirmBtn} onPress={handleSaveBudget}><Text style={styles.confirmText} numberOfLines={1} adjustsFontSizeToFit>{t('assetDetail.defineBudget')}</Text></TouchableOpacity>
         </View></View>
         </KeyboardAvoidingView>
@@ -3006,6 +3251,19 @@ export default function AssetDetailScreen() {
               ))}
             </View>
           </View>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.divider }}>
+            <Text style={{ fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>BUSCAR NA BIBLIOTECA</Text>
+            <TextInput
+              value={iconPickerFilter}
+              onChangeText={setIconPickerFilter}
+              placeholder="Nome ou palavra-chave…"
+              placeholderTextColor={C.textLight}
+              style={{ borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 13, backgroundColor: C.surfaceLow, color: C.primary, fontWeight: '600' }}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
           {tempIcon ? (
             <View style={{ alignItems: 'center', paddingVertical: 16, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}>
               <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: (tempColor || C.primary) + '18', justifyContent: 'center', alignItems: 'center' }}>
@@ -3015,19 +3273,27 @@ export default function AssetDetailScreen() {
             </View>
           ) : null}
           <FlatList
-            data={ICON_LIBRARY}
+            data={filteredAssetIcons}
             keyExtractor={item => item.icon}
             numColumns={4}
             contentContainerStyle={{ padding: 14, gap: 10 }}
             columnWrapperStyle={{ gap: 10 }}
+            ListEmptyComponent={
+              <Text style={{ textAlign: 'center', color: C.textSecondary, paddingVertical: 20, fontWeight: '600', fontSize: 12 }}>
+                Nenhum ícone para este termo.
+              </Text>
+            }
             renderItem={({ item }) => {
               const sel = tempIcon === item.icon;
               return (
                 <TouchableOpacity
                   onPress={() => setTempIcon(item.icon)}
-                  style={{ flex: 1, alignItems: 'center', padding: 10, borderRadius: 12, backgroundColor: sel ? (tempColor || C.primary) + '18' : C.cardWhite, borderWidth: sel ? 1.5 : 1, borderColor: sel ? (tempColor || C.primary) : C.border }}
+                  style={{ flex: 1, alignItems: 'center', padding: 8, borderRadius: 12, backgroundColor: sel ? (tempColor || C.primary) + '18' : C.cardWhite, borderWidth: sel ? 1.5 : 1, borderColor: sel ? (tempColor || C.primary) : C.border }}
                 >
                   <Ionicons name={item.icon as any} size={26} color={sel ? (tempColor || C.primary) : C.slate} />
+                  <Text style={{ fontSize: 7, fontWeight: '700', color: sel ? (tempColor || C.primary) : C.textSecondary, marginTop: 4, textAlign: 'center' }} numberOfLines={2}>
+                    {item.label}
+                  </Text>
                 </TouchableOpacity>
               );
             }}

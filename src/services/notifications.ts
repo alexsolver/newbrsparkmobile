@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
 import { getLocalAssets, getVenueStockItemsOnly, getLocalTechStockItems } from '../database';
+import { AssetExtensionsService } from './assetExtensionsService';
 import {
   ANDROID_CHANNEL_CLIENT,
   ANDROID_CHANNEL_TECH,
@@ -107,6 +108,9 @@ Notifications.setNotificationHandler({
 });
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
+/** Concha CLIENTE vs PRESTADOR — listas de alertas independentes (não misturar). */
+export type NotificationPersona = 'client' | 'provider';
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -114,11 +118,18 @@ export interface AppNotification {
   category: 'maintenance' | 'expiry' | 'sync' | 'alert' | 'info' | 'evaluation';
   read: boolean;
   timestamp: number;
+  /** Qual módulo de alertas exibe este item (cliente ≠ prestador). */
+  personaScope: NotificationPersona;
   assetId?: string;
   assetTitle?: string;
   /** Navegação para detalhe em Desempenho */
   evaluationInstanceId?: string;
+  /** Convite à pesquisa (cliente): abrir no browser em vez de Desempenho */
+  surveyUrl?: string;
 }
+
+const READ_NOTIFICATIONS_LEGACY_KEY = '@brspark_read_notifications';
+const READ_NOTIFICATIONS_V2_KEY = '@brspark_read_notifications_v2';
 
 // ─── Storage local em memória (vazio por padrão) ───────────────────────
 let _notifications: AppNotification[] = [];
@@ -127,37 +138,43 @@ let _listeners: Array<() => void> = [];
 
 // ─── API Pública do Serviço ────────────────────────────────────────────────────
 export const NotificationService = {
-  getAll(): AppNotification[] {
-    return [..._notifications].sort((a, b) => b.timestamp - a.timestamp);
+  getAll(persona: NotificationPersona): AppNotification[] {
+    return [..._notifications]
+      .filter((n) => n.personaScope === persona)
+      .sort((a, b) => b.timestamp - a.timestamp);
   },
 
-  getUnreadCount(): number {
-    return _notifications.filter(n => !n.read).length;
+  getUnreadCount(persona: NotificationPersona): number {
+    return _notifications.filter((n) => n.personaScope === persona && !n.read).length;
   },
 
-  async markAsRead(id: string) {
-    _notifications = _notifications.map(n => n.id === id ? { ...n, read: true } : n);
-    _listeners.forEach(l => l());
+  async markAsRead(id: string, persona: NotificationPersona) {
+    _notifications = _notifications.map((n) =>
+      n.id === id && n.personaScope === persona ? { ...n, read: true } : n
+    );
+    _listeners.forEach((l) => l());
     await NotificationService.saveReadStates();
   },
 
-  async markAllAsRead() {
-    _notifications = _notifications.map(n => ({ ...n, read: true }));
-    _listeners.forEach(l => l());
+  async markAllAsRead(persona: NotificationPersona) {
+    _notifications = _notifications.map((n) =>
+      n.personaScope === persona ? { ...n, read: true } : n
+    );
+    _listeners.forEach((l) => l());
     await NotificationService.saveReadStates();
   },
 
   async saveReadStates() {
     try {
-      const readIds = _notifications.filter(n => n.read).map(n => n.id);
-      await AsyncStorage.setItem('@brspark_read_notifications', JSON.stringify(readIds));
-    } catch(e) {}
+      const readIds = _notifications.filter((n) => n.read).map((n) => n.id);
+      await AsyncStorage.setItem(READ_NOTIFICATIONS_V2_KEY, JSON.stringify(readIds));
+    } catch (e) {}
   },
 
   async syncRealNotifications(userEmail: string) {
     let generated: AppNotification[] = [];
 
-    // 1. Pending Shares
+    // 1. Pending Shares — módulo cliente
     try {
       const res = await apiFetch('/api/shares/pending');
       if (res.ok) {
@@ -166,17 +183,18 @@ export const NotificationService = {
           generated.push({
             id: `share_${p.id}`,
             title: 'Convite de Compartilhamento',
-            body: `${p.ownerEmail} quer compartilhar o bem "${p.asset?.title || 'Ativo'}" com você.`,
+            body: `${p.ownerEmail} quer compartilhar o ativo "${p.asset?.title || '—'}" com você.`,
             category: 'info',
             read: false,
             timestamp: new Date(p.createdAt || Date.now()).getTime(),
-            assetId: p.assetId
+            personaScope: 'client',
+            assetId: p.assetId,
           });
         });
       }
-    } catch(e) {}
+    } catch (e) {}
 
-    // 2. Low Stock — bens (locais de ativo)
+    // 2. Low Stock — bens (locais de ativo) — cliente
     const stockItems = getVenueStockItemsOnly(userEmail);
     stockItems.forEach((item) => {
       if (item.currentStock <= item.minStock) {
@@ -187,12 +205,13 @@ export const NotificationService = {
           category: 'alert',
           read: false,
           timestamp: Date.now() - 3600000,
+          personaScope: 'client',
           assetId: item.locationId,
         });
       }
     });
 
-    // 2b. Low Stock — estoque técnico (sem vínculo a bem)
+    // 2b. Low Stock — estoque técnico — prestador
     const techItems = getLocalTechStockItems(userEmail);
     techItems.forEach((item) => {
       if (item.currentStock <= item.minStock) {
@@ -203,11 +222,12 @@ export const NotificationService = {
           category: 'alert',
           read: false,
           timestamp: Date.now() - 3500000,
+          personaScope: 'provider',
         });
       }
     });
 
-    // 2c. Avaliações — críticas pendentes de confirmação (ciência)
+    // 2c. Avaliações — ciência (fluxo técnico) — prestador
     try {
       const evRes = await apiFetch('/api/evaluations/me/instances');
       if (evRes.ok) {
@@ -230,6 +250,7 @@ export const NotificationService = {
             category: 'evaluation',
             read: false,
             timestamp: new Date(it.createdAt || Date.now()).getTime(),
+            personaScope: 'provider',
             evaluationInstanceId: it.id,
           });
         }
@@ -238,10 +259,9 @@ export const NotificationService = {
       /* offline / não autenticado */
     }
 
-    // 3. Maintenance / Warning Assets
+    // 3. Maintenance / Warning Assets — visão gestão do bem (cliente)
     const assets = getLocalAssets(userEmail, { includeMobileWarehouse: false });
-    assets.forEach(asset => {
-      // Ignorar caso o status seja resolvido
+    assets.forEach((asset) => {
       if (asset.statusType === 'warning') {
         generated.push({
           id: `asset_status_${asset.id}`,
@@ -250,10 +270,43 @@ export const NotificationService = {
           category: 'maintenance',
           read: false,
           timestamp: Date.now() - 7200000,
-          assetId: asset.id
+          personaScope: 'client',
+          assetId: asset.id,
         });
       }
     });
+
+    // 3b. Conformidade — cliente
+    try {
+      await AssetExtensionsService.rescheduleAllComplianceNotifications(userEmail);
+      const compDocs = await AssetExtensionsService.getAllComplianceDocuments(userEmail);
+      const nowMs = Date.now();
+      const dayMs = 86400000;
+      for (const d of compDocs) {
+        if (!d.validUntil?.trim()) continue;
+        const exp = new Date(d.validUntil.trim() + 'T12:00:00');
+        if (Number.isNaN(exp.getTime())) continue;
+        const diffDays = Math.ceil((exp.getTime() - nowMs) / dayMs);
+        if (diffDays > 30) continue;
+        const title = diffDays < 0 ? 'Conformidade vencida' : 'Conformidade a vencer';
+        const body =
+          diffDays < 0
+            ? `"${d.title}" — vencimento ${d.validUntil}.`
+            : `"${d.title}" vence em ${diffDays} dia(s) (${d.validUntil}).`;
+        generated.push({
+          id: `compliance_inapp_${d.id}`,
+          title,
+          body,
+          category: 'expiry',
+          read: false,
+          timestamp: exp.getTime(),
+          personaScope: 'client',
+          assetId: d.assetId,
+        });
+      }
+    } catch (e) {
+      /* offline / storage */
+    }
 
     // 4. Pending Chat Contacts — NOT added to alerts module
     // Chat notifications are handled exclusively via push + chat badge.
@@ -262,20 +315,28 @@ export const NotificationService = {
     // 5. Unread Chat Messages — NOT added to alerts module
     // Same reason: only push + chat icon badge.
 
-    // Try to load read state from AsyncStorage
+    let readStates: string[] = [];
     try {
-      const readStatesStr = await AsyncStorage.getItem('@brspark_read_notifications');
-      if (readStatesStr) {
-        const readStates: string[] = JSON.parse(readStatesStr);
-        generated = generated.map(notif => readStates.includes(notif.id) ? { ...notif, read: true } : notif);
+      const v2 = await AsyncStorage.getItem(READ_NOTIFICATIONS_V2_KEY);
+      if (v2) {
+        readStates = JSON.parse(v2);
+      } else {
+        const legacy = await AsyncStorage.getItem(READ_NOTIFICATIONS_LEGACY_KEY);
+        if (legacy) {
+          readStates = JSON.parse(legacy);
+          await AsyncStorage.setItem(READ_NOTIFICATIONS_V2_KEY, legacy).catch(() => {});
+        }
       }
-    } catch(e) {}
+    } catch (e) {}
+    if (Array.isArray(readStates)) {
+      generated = generated.map((notif) =>
+        readStates.includes(notif.id) ? { ...notif, read: true } : notif
+      );
+    }
 
-    // Add dynamically created manual push configs if existed
-    const manualPushes = _notifications.filter(n => n.id.startsWith('n_'));
+    const manualPushes = _notifications.filter((n) => n.id.startsWith('n_'));
 
-    // Merge generated with any manual push, unique by ID
-    const all = [...generated, ...manualPushes].sort((a,b) => b.timestamp - a.timestamp);
+    const all = [...generated, ...manualPushes].sort((a, b) => b.timestamp - a.timestamp);
     
     // Deduplicate logic just in case
     const uniqueIds = new Set();
@@ -291,17 +352,30 @@ export const NotificationService = {
     _listeners.forEach(l => l());
   },
 
-  addNotification(notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) {
+  addNotification(
+    notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'> & {
+      /** Evita duplicados do mesmo convite (ex.: pesquisa por instância). */
+      fixedId?: string;
+      /** Push remoto já mostrou o alerta — não dispara segundo banner local. */
+      suppressLocalBanner?: boolean;
+    },
+  ) {
+    const { fixedId, suppressLocalBanner, ...rest } = notification;
+    const id = fixedId ?? `n_${Date.now()}`;
     const newNotif: AppNotification = {
-      ...notification,
-      id: `n_${Date.now()}`,
+      ...(rest as Omit<AppNotification, 'id' | 'timestamp' | 'read'>),
+      id,
       timestamp: Date.now(),
       read: false,
     };
+    _notifications = _notifications.filter(
+      (n) => !(n.id === id && n.personaScope === newNotif.personaScope)
+    );
     _notifications = [newNotif, ..._notifications];
-    _listeners.forEach(l => l());
-    // Dispara push local
-    void NotificationService.scheduleLocalPush(notification.title, notification.body).catch(() => {});
+    _listeners.forEach((l) => l());
+    if (!suppressLocalBanner) {
+      void NotificationService.scheduleLocalPush(newNotif.title, newNotif.body).catch(() => {});
+    }
   },
 
   subscribe(listener: () => void) {

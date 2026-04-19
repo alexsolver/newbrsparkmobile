@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { CostService } from '../../src/services/costService';
 import { getRootAssets, getLocalAssets } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
-import { ValueInput } from '../../src/components/ValueInput';
+import { ValueInput, parseLocaleAmountString } from '../../src/components/ValueInput';
 import DatePickerButton from '../../src/components/DatePickerButton';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -53,7 +53,7 @@ export default function NewCostScreen() {
     if (!user?.email) return;
 
     if (!selectedAsset) {
-      Alert.alert('Atenção', 'Você precisa selecionar um Bem para este lançamento.', [{ text: 'OK', onPress: () => {} }]);
+      Alert.alert('Atenção', 'Você precisa selecionar um ativo para este lançamento.', [{ text: 'OK', onPress: () => {} }]);
       return;
     }
 
@@ -81,7 +81,7 @@ export default function NewCostScreen() {
         }, user.email);
       }
       else if (transactionType === 'budget') {
-        const val = parseFloat(budgetLimit) || 0;
+        const val = parseLocaleAmountString(budgetLimit) || 0;
         if (val <= 0) {
            Alert.alert('Atenção', 'Defina um limite válido maior que zero.');
            return;
@@ -111,7 +111,7 @@ export default function NewCostScreen() {
       if (transactionType === 'recurring') return t('assetDetail.scheduleRecurring') || 'Agendar Recorrência';
       if (transactionType === 'budget') return t('assetDetail.monthlyBudget') || 'Definir Budget';
     }
-    if (step === 4) return 'Vincular Bem';
+    if (step === 4) return 'Vincular ativo';
     return '';
   };
 
@@ -156,7 +156,7 @@ export default function NewCostScreen() {
                <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 }}>
                  <Ionicons name="cube-outline" size={64} color={C.border} />
                  <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>
-                   Nenhum Bem cadastrado
+                   Nenhum ativo cadastrado
                  </Text>
                  <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
                    Para organizar suas finanças, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
@@ -288,7 +288,7 @@ export default function NewCostScreen() {
 
                 <View style={styles.inputG}>
                   <Text style={styles.inputL}>{t('assetDetail.valueAmount') || 'VALOR'}</Text>
-                  <ValueInput style={styles.input} value={String(newRecord.amount || '')} onChangeText={v => setNewRecord({...newRecord, amount: parseFloat(v) || 0})} placeholder="0,00" currency />
+                  <ValueInput style={styles.input} value={String(newRecord.amount || '')} onChangeText={v => setNewRecord({ ...newRecord, amount: parseLocaleAmountString(v) })} placeholder="0,00" currency />
                 </View>
 
                 <TouchableOpacity style={[styles.nextBtn, {backgroundColor: newRecord.type === 'REVENUE' ? C.success.text : C.destructive}]} onPress={() => setStep(4)}>
@@ -319,7 +319,7 @@ export default function NewCostScreen() {
 
                 <View style={styles.inputG}>
                   <Text style={styles.inputL}>{t("assetDetail.valueAmount") || 'VALOR DA PARCELA'}</Text>
-                  <ValueInput style={styles.input} value={String(newRec.amount || '')} onChangeText={v => setNewRec({...newRec, amount: parseFloat(v) || 0})} currency placeholder="0,00" />
+                  <ValueInput style={styles.input} value={String(newRec.amount || '')} onChangeText={v => setNewRec({ ...newRec, amount: parseLocaleAmountString(v) })} currency placeholder="0,00" />
                 </View>
 
                 <View style={styles.inputG}>
@@ -383,7 +383,7 @@ export default function NewCostScreen() {
         {/* ======================= STEP 4: SELECT ASSET ======================= */}
         {step === 4 && (
           <View style={{ paddingTop: 20 }}>
-            <Text style={styles.sectionTitle}>A qual Bem este lançamento pertence?</Text>
+            <Text style={styles.sectionTitle}>A que ativo pertence este lançamento?</Text>
             <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 24 }}>Escolha um ativo para vincular este registro.</Text>
 
             {assets.map(a => (

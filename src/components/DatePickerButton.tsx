@@ -1,27 +1,22 @@
 /**
- * DatePickerButton — Native date picker with quick-select chips.
- * Replaces all YYYY-MM-DD TextInput fields in the app.
- *
- * Props:
- *  - value: string (YYYY-MM-DD)
- *  - onChange: (iso: string) => void
- *  - label?: string
- *  - accentColor?: string
- *  - minDate?: Date
+ * DatePickerButton — Seletor de data com chips rápidos e calendário nativo.
+ * Valor interno: YYYY-MM-DD; exibição conforme localidade da app.
  */
-import React, { useState } from 'react';
-import {
-  View, Text, TouchableOpacity, Platform, ScrollView, Modal,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, Platform, ScrollView, Modal } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { getCurrentLanguage } from '../i18n';
 
 interface Props {
-  value: string | undefined;  // YYYY-MM-DD
+  value: string | undefined;
   onChange: (iso: string) => void;
   label?: string;
   accentColor?: string;
   minDate?: Date;
+  /** Oculta os chips (Hoje, +7d, …) */
+  hideQuickChips?: boolean;
 }
 
 const PALETTE = {
@@ -33,13 +28,11 @@ const PALETTE = {
   chipText: '#475569',
 };
 
-/** Parse a YYYY-MM-DD string safely (interprets as local midnight) */
 function parseLocal(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-/** Format a Date to YYYY-MM-DD */
 function toISO(date: Date): string {
   return [
     date.getFullYear(),
@@ -48,15 +41,21 @@ function toISO(date: Date): string {
   ].join('-');
 }
 
-/** Format a YYYY-MM-DD string for display: "24 de março de 2025" */
-function display(iso: string): string {
-  if (!iso) return '—';
+function formatForLocale(iso: string, locale: string): string {
+  if (!iso || iso.length < 10) return '';
   try {
-    return parseLocal(iso).toLocaleDateString('pt-BR', {
-      day: 'numeric', month: 'long', year: 'numeric',
-    });
+    const d = parseLocal(iso);
+    return d.toLocaleDateString(locale, { dateStyle: 'medium' });
   } catch {
-    return iso;
+    try {
+      return parseLocal(iso).toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return iso;
+    }
   }
 }
 
@@ -71,133 +70,177 @@ function addMonths(base: Date, n: number): Date {
   return d;
 }
 
-const CHIPS = [
-  { label: 'Hoje',   fn: (t: Date) => t },
-  { label: 'Amanhã', fn: (t: Date) => addDays(t, 1) },
-  { label: '+7d',    fn: (t: Date) => addDays(t, 7) },
-  { label: '+30d',   fn: (t: Date) => addDays(t, 30) },
-  { label: '+1 mês', fn: (t: Date) => addMonths(t, 1) },
-];
-
 export default function DatePickerButton({
   value,
   onChange,
   label,
   accentColor = '#6366F1',
   minDate,
+  hideQuickChips = false,
 }: Props) {
+  const { t } = useTranslation();
   const [showPicker, setShowPicker] = useState(false);
+  const locale = getCurrentLanguage();
 
-  const currentDate = (value && value.length >= 10) ? parseLocal(value) : new Date();
+  const chips = useMemo(
+    () => [
+      { id: 'today', label: t('datePicker.chipToday'), fn: (base: Date) => base },
+      { id: 'tomorrow', label: t('datePicker.chipTomorrow'), fn: (base: Date) => addDays(base, 1) },
+      { id: 'p7', label: t('datePicker.chipPlus7'), fn: (base: Date) => addDays(base, 7) },
+      { id: 'p30', label: t('datePicker.chipPlus30'), fn: (base: Date) => addDays(base, 30) },
+      { id: 'p1m', label: t('datePicker.chipPlus1Month'), fn: (base: Date) => addMonths(base, 1) },
+    ],
+    [t]
+  );
 
-  const handleChange = (_: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS === 'android') setShowPicker(false);
+  const currentDate = value && value.length >= 10 ? parseLocal(value) : new Date();
+
+  const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+      if (event.type === 'dismissed') return;
+    }
     if (selected) onChange(toISO(selected));
   };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const displayText =
+    value && value.length >= 10 ? formatForLocale(value, locale) : t('datePicker.placeholder');
+
+  const pickerDisplay =
+    Platform.OS === 'ios' ? ('inline' as const) : ('calendar' as const);
+
   return (
     <View style={{ marginBottom: 2 }}>
-      {label && (
-        <Text style={{ fontSize: 10, fontWeight: '900', color: PALETTE.sub, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>
+      {label ? (
+        <Text
+          style={{
+            fontSize: 10,
+            fontWeight: '900',
+            color: PALETTE.sub,
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+            marginBottom: 6,
+          }}
+        >
           {label}
         </Text>
-      )}
+      ) : null}
 
-      {/* Quick chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 6 }} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
-        {CHIPS.map(chip => {
-          const targetDate = chip.fn(today);
-          const targetISO = toISO(targetDate);
-          const isActive = value === targetISO;
-          return (
-            <TouchableOpacity
-              key={chip.label}
-              onPress={() => onChange(targetISO)}
-              style={{
-                paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16,
-                backgroundColor: isActive ? accentColor : PALETTE.chip,
-                borderWidth: 1,
-                borderColor: isActive ? accentColor : PALETTE.border,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '800', color: isActive ? '#fff' : PALETTE.chipText }}>
-                {chip.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {!hideQuickChips ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 6 }}
+          contentContainerStyle={{ gap: 6 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {chips.map((chip) => {
+            const targetDate = chip.fn(today);
+            const targetISO = toISO(targetDate);
+            const isActive = value === targetISO;
+            return (
+              <TouchableOpacity
+                key={chip.id}
+                onPress={() => onChange(targetISO)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                  borderRadius: 16,
+                  backgroundColor: isActive ? accentColor : PALETTE.chip,
+                  borderWidth: 1,
+                  borderColor: isActive ? accentColor : PALETTE.border,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '800', color: isActive ? '#fff' : PALETTE.chipText }}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : null}
 
-      {/* Date trigger button */}
       <TouchableOpacity
         onPress={() => setShowPicker(true)}
         activeOpacity={0.75}
         style={{
-          flexDirection: 'row', alignItems: 'center', gap: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
           backgroundColor: PALETTE.bg,
-          borderRadius: 12, borderWidth: 1, borderColor: showPicker ? accentColor : PALETTE.border,
-          paddingHorizontal: 14, paddingVertical: 11,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: showPicker ? accentColor : PALETTE.border,
+          paddingHorizontal: 14,
+          paddingVertical: 11,
         }}
       >
         <Ionicons name="calendar-outline" size={18} color={accentColor} />
-        <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: PALETTE.text }}>
-          {display(value ?? '')}
-        </Text>
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: PALETTE.text }}>{displayText}</Text>
         <Ionicons name="chevron-down" size={14} color={PALETTE.sub} />
       </TouchableOpacity>
 
-      {/* Native picker — Android: auto-dialog; iOS: bottom sheet modal */}
-      {Platform.OS === 'android' && showPicker && (
+      {Platform.OS === 'android' && showPicker ? (
         <DateTimePicker
           mode="date"
-          display="default"
+          display={pickerDisplay}
           value={currentDate}
           minimumDate={minDate}
           onChange={handleChange}
+          locale={locale}
         />
-      )}
+      ) : null}
 
-      {Platform.OS === 'ios' && (
-        <Modal
-          transparent
-          visible={showPicker}
-          animationType="slide"
-          onRequestClose={() => setShowPicker(false)}
-        >
+      {Platform.OS === 'ios' ? (
+        <Modal transparent visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
           <TouchableOpacity
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }}
             activeOpacity={1}
             onPress={() => setShowPicker(false)}
           />
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 }}>
-            {/* Handle + header */}
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              paddingBottom: 28,
+            }}
+          >
             <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0' }} />
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+              }}
+            >
               <TouchableOpacity onPress={() => setShowPicker(false)}>
-                <Text style={{ fontSize: 14, color: '#94A3B8', fontWeight: '700' }}>Cancelar</Text>
+                <Text style={{ fontSize: 14, color: '#94A3B8', fontWeight: '700' }}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <Text style={{ fontSize: 14, fontWeight: '900', color: '#1E293B' }}>Selecionar data</Text>
+              <Text style={{ fontSize: 14, fontWeight: '900', color: '#1E293B' }}>{t('datePicker.selectDate')}</Text>
               <TouchableOpacity onPress={() => setShowPicker(false)}>
-                <Text style={{ fontSize: 14, color: accentColor, fontWeight: '900' }}>OK</Text>
+                <Text style={{ fontSize: 14, color: accentColor, fontWeight: '900' }}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
             <DateTimePicker
               mode="date"
-              display="spinner"
+              display={pickerDisplay}
               value={currentDate}
               minimumDate={minDate}
               onChange={handleChange}
-              locale="pt-BR"
-              style={{ height: 200 }}
+              locale={locale}
+              style={{ height: Platform.OS === 'ios' ? 380 : 200 }}
             />
           </View>
         </Modal>
-      )}
+      ) : null}
     </View>
   );
 }

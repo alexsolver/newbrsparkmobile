@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Switch, ActivityIndicator, Modal, FlatList , KeyboardAvoidingView, Platform} from 'react-native';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { ColorPalette } from '../../src/theme/colors';
@@ -6,7 +6,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { ValueInput } from '../../src/components/ValueInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { saveAssetsLocal, getLocalAssets, queueOfflineAction, logAssetHistory, getAssetTypes, saveAssetTypes } from '../../src/database';
+import { saveAssetsLocal, getLocalAssets, queueOfflineAction, logAssetHistory } from '../../src/database';
 import { Asset } from '../../src/types/asset';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -14,71 +14,23 @@ import { ApiService } from '../../src/services/api';
 import { pushSyncQueue } from '../../src/services/syncService';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
-
-const ICON_LIBRARY = [
-  { icon: 'home-outline',           label: 'Casa' },
-  { icon: 'business-outline',       label: 'Prédio' },
-  { icon: 'storefront-outline',     label: 'Loja' },
-  { icon: 'bed-outline',            label: 'Quarto' },
-  { icon: 'library-outline',        label: 'Biblioteca' },
-  { icon: 'school-outline',         label: 'Escola' },
-  { icon: 'medkit-outline',         label: 'Saúde' },
-  { icon: 'fitness-outline',        label: 'Academia' },
-  { icon: 'basketball-outline',     label: 'Esporte' },
-  { icon: 'golf-outline',           label: 'Golfe' },
-  { icon: 'car-outline',            label: 'Carro' },
-  { icon: 'car-sport-outline',      label: 'Esportivo' },
-  { icon: 'bus-outline',            label: 'Ônibus' },
-  { icon: 'train-outline',          label: 'Trem' },
-  { icon: 'bicycle-outline',        label: 'Bicicleta' },
-  { icon: 'boat-outline',           label: 'Barco' },
-  { icon: 'airplane-outline',       label: 'Avião' },
-  { icon: 'rocket-outline',         label: 'Foguete' },
-  { icon: 'wallet-outline',         label: 'Carteira' },
-  { icon: 'cash-outline',           label: 'Dinheiro' },
-  { icon: 'card-outline',           label: 'Cartão' },
-  { icon: 'trending-up-outline',    label: 'Investo' },
-  { icon: 'diamond-outline',        label: 'Joia' },
-  { icon: 'gift-outline',           label: 'Presente' },
-  { icon: 'desktop-outline',        label: 'Monitor' },
-  { icon: 'laptop-outline',         label: 'Laptop' },
-  { icon: 'phone-portrait-outline', label: 'Celular' },
-  { icon: 'tablet-portrait-outline',label: 'Tablet' },
-  { icon: 'server-outline',         label: 'Servidor' },
-  { icon: 'hardware-chip-outline',  label: 'Chip' },
-  { icon: 'camera-outline',         label: 'Câmera' },
-  { icon: 'tv-outline',             label: 'TV' },
-  { icon: 'headset-outline',        label: 'Áudio' },
-  { icon: 'print-outline',          label: 'Impressora' },
-  { icon: 'leaf-outline',           label: 'Planta' },
-  { icon: 'flower-outline',         label: 'Flor' },
-  { icon: 'earth-outline',          label: 'Terra' },
-  { icon: 'water-outline',          label: 'Água' },
-  { icon: 'flame-outline',          label: 'Energia' },
-  { icon: 'sunny-outline',          label: 'Solar' },
-  { icon: 'cloud-outline',          label: 'Nuvem' },
-  { icon: 'snow-outline',           label: 'Frio' },
-  { icon: 'briefcase-outline',      label: 'Maleta' },
-  { icon: 'cube-outline',           label: 'Cubo' },
-  { icon: 'star-outline',           label: 'Estrela' },
-  { icon: 'bookmark-outline',       label: 'Marcador' },
-  { icon: 'shield-outline',         label: 'Escudo' },
-  { icon: 'key-outline',            label: 'Chave' },
-  { icon: 'lock-closed-outline',    label: 'Cadeado' },
-  { icon: 'construct-outline',      label: 'Manutenção' },
-  { icon: 'hammer-outline',         label: 'Martelo' },
-  { icon: 'builds-outline',         label: 'Industrial' },
-  { icon: 'flask-outline',          label: 'Laboratório' },
-  { icon: 'paw-outline',            label: 'Animal' },
-  { icon: 'pizza-outline',          label: 'Alimentação' },
-  { icon: 'wine-outline',           label: 'Bebida' },
-  { icon: 'musical-notes-outline',  label: 'Música' },
-  { icon: 'image-outline',          label: 'Arte' },
-  { icon: 'ribbon-outline',         label: 'Prêmio' },
-  { icon: 'archive-outline',        label: 'Arquivo' },
-  { icon: 'barbell-outline',        label: 'Musculação' },
-  { icon: 'color-palette-outline',  label: 'Design' },
-];
+import { usePersona } from '../../src/context/PersonaContext';
+import { getPersonaTabHref } from '../../src/navigation/personaRouting';
+import {
+  getContextsForRoot,
+  listKindsForJourney,
+  getKindById,
+  validateTemplate,
+  getAssetFormBlock,
+} from '../../src/assetKind';
+import { AssetTemplateFieldGroup } from '../../src/components/AssetTemplateFieldGroup';
+import { ASSET_ICON_LIBRARY } from '../../src/asset/assetIconLibrary';
+import {
+  buildDefaultModuleSelectionForNewAsset,
+  moduleSelectionToWhitelist,
+  MODULE_I18N_BY_ID,
+  OPTIONAL_ASSET_MODULE_IDS,
+} from '../../src/asset/assetModuleRegistry';
 
 const COLOR_PRESETS = ['#FF8C00','#10B981','#3B82F6','#EF4444','#8B5CF6','#F59E0B','#EC4899','#14B8A6','#64748B','#000000'];
 
@@ -92,19 +44,60 @@ export default function NewAssetScreen() {
   const { colors: C } = useTheme();
   const styles = useMemo(() => createNewAssetStyles(C), [C]);
 
+  const { activePersona } = usePersona();
   const [type, setType] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [assetTypes, setAssetTypes] = useState<any[]>([]);
+  const [industryContextId, setIndustryContextId] = useState<string | null>(null);
+  const [selectedKindId, setSelectedKindId] = useState<string | null>(null);
+  const [templateValues, setTemplateValues] = useState<Record<string, string | number | boolean>>({});
+  const [kindSearch, setKindSearch] = useState('');
 
   React.useEffect(() => {
     const SEED_TYPES = [
       { id: 'REAL_ESTATE', titleKey: 'newAsset.realEstate', subtitleKey: 'newAsset.realEstateSub', icon: 'business-outline', color: '#FF8C00' },
-      { id: 'TERRESTRIAL', titleKey: 'newAsset.terrestrial', subtitleKey: 'newAsset.terrestrialSub', icon: 'car-outline', color: '#904D00' },
-      { id: 'AQUATIC',     titleKey: 'newAsset.aquatic',     subtitleKey: 'newAsset.aquaticSub',     icon: 'boat-outline',     color: '#006B5C' },
-      { id: 'SPECIAL',     titleKey: 'newAsset.special',     subtitleKey: 'newAsset.specialSub',     icon: 'star-outline',     color: '#565E61' },
+      { id: 'MOBILITY', titleKey: 'newAsset.mobility', subtitleKey: 'newAsset.mobilitySub', icon: 'car-outline', color: '#904D00' },
+      { id: 'MACHINERY', titleKey: 'newAsset.machinery', subtitleKey: 'newAsset.machinerySub', icon: 'construct-outline', color: '#64748B' },
+      { id: 'AQUATIC', titleKey: 'newAsset.aquatic', subtitleKey: 'newAsset.aquaticSub', icon: 'boat-outline', color: '#006B5C' },
+      { id: 'IT', titleKey: 'newAsset.it', subtitleKey: 'newAsset.itSub', icon: 'hardware-chip-outline', color: '#4338CA' },
+      { id: 'COLLECTIONS', titleKey: 'newAsset.collections', subtitleKey: 'newAsset.collectionsSub', icon: 'diamond-outline', color: '#A16207' },
+      { id: 'OTHER', titleKey: 'newAsset.otherRoot', subtitleKey: 'newAsset.otherRootSub', icon: 'cube-outline', color: '#565E61' },
     ];
     setAssetTypes(SEED_TYPES);
   }, []);
+
+  const availableContexts = useMemo(
+    () => (type ? getContextsForRoot(type as any) : []),
+    [type]
+  );
+  const kindOptions = useMemo(
+    () => (type && industryContextId ? listKindsForJourney(type as any, industryContextId) : []),
+    [type, industryContextId]
+  );
+  const filteredKinds = useMemo(() => {
+    const q = kindSearch.trim().toLowerCase();
+    if (!q) return kindOptions;
+    return kindOptions.filter((k) => {
+      const label = t(k.labelKey).toLowerCase();
+      const sub = t(k.shortDescKey).toLowerCase();
+      return k.searchTokens.includes(q) || label.includes(q) || sub.includes(q);
+    });
+  }, [kindOptions, kindSearch, t]);
+  const selectedKind = getKindById(selectedKindId);
+
+  const goBackStep = useCallback(() => {
+    if (step === 6) setStep(5);
+    else if (step === 5) setStep(4);
+    else if (step === 4) setStep(3);
+    else if (step === 3) {
+      setStep(2);
+      setSelectedKindId(null);
+      setTemplateValues({});
+    } else if (step === 2) {
+      setStep(1);
+      setIndustryContextId(null);
+    } else router.back();
+  }, [step, router]);
 
   // Core Fields
   const [title, setTitle] = useState('');
@@ -138,6 +131,21 @@ export default function NewAssetScreen() {
   const [customIcon, setCustomIcon] = useState('');
   const [customColor, setCustomColor] = useState('');
   const [iconPickerVisible, setIconPickerVisible] = useState(false);
+  const [iconSearch, setIconSearch] = useState('');
+
+  const filteredIconLibrary = useMemo(() => {
+    const q = iconSearch.trim().toLowerCase();
+    if (!q) return ASSET_ICON_LIBRARY;
+    return ASSET_ICON_LIBRARY.filter(
+      (e) => e.label.toLowerCase().includes(q) || e.icon.toLowerCase().includes(q)
+    );
+  }, [iconSearch]);
+
+  useEffect(() => {
+    if (!iconPickerVisible) setIconSearch('');
+  }, [iconPickerVisible]);
+
+  const [moduleSelection, setModuleSelection] = useState<Record<string, boolean>>({});
 
   const fetchCepData = async () => {
      if (cep.length < 8) return;
@@ -246,17 +254,32 @@ export default function NewAssetScreen() {
       return;
     }
 
+    const k = getKindById(selectedKindId);
+    const fieldFail = validateTemplate(k, templateValues);
+    if (fieldFail) {
+      Alert.alert(t('common.attention'), t('assetJourney.missingField'));
+      return;
+    }
+
     // Verificar duplicatas de nome
     const existing = getLocalAssets(user?.email || '', { includeMobileWarehouse: false });
-    const duplicate = existing.find(a => a.title.toLowerCase().trim() === title.toLowerCase().trim());
+    const duplicate = existing.find((a) => a.title.toLowerCase().trim() === title.toLowerCase().trim());
     if (duplicate) {
       Alert.alert(t('newAsset.duplicate'), t('newAsset.duplicateMsg', { title: duplicate.title }));
       return;
     }
-    
+
     // Gerando ID interno
-    const newId = "brsp-" + Math.random().toString().substring(2, 8);
-    
+    const newId = 'brsp-' + Math.random().toString().substring(2, 8);
+
+    const templateSerialized: Record<string, string> = {};
+    for (const key of Object.keys(templateValues)) {
+      const v = templateValues[key];
+      if (v !== undefined && v !== null) {
+        templateSerialized[key] = typeof v === 'boolean' ? (v ? '1' : '0') : String(v);
+      }
+    }
+
     const newAsset: Asset = {
       id: newId,
       title,
@@ -265,30 +288,61 @@ export default function NewAssetScreen() {
       statusType: 'success',
       parentId: parentId || null,
       imageUrl: photos.length > 0 ? photos[0] : undefined,
-      details: {
-        inventoryId, brand, model, serialNumber,
-        costCenter, acquisitionValue,
-        cep, street, streetNumber, complement, neighborhood, city, state,
-        gpsCoordinates, owner, department, customFields, photos,
+        details: {
+        inventoryId,
+        brand,
+        model,
+        serialNumber,
+        costCenter,
+        acquisitionValue,
+        cep,
+        street,
+        streetNumber,
+        complement,
+        neighborhood,
+        city,
+        state,
+        gpsCoordinates,
+        owner,
+        department,
+        customFields,
+        photos,
         customIcon: customIcon || undefined,
         customColor: customColor || undefined,
-      }
+        assetKindId: selectedKindId || undefined,
+        industryContextId: industryContextId || undefined,
+        templateValues: Object.keys(templateSerialized).length ? templateSerialized : undefined,
+        moduleVisibility: moduleSelectionToWhitelist(moduleSelection),
+        moduleVisibilityMode: 'whitelist' as const,
+      },
     };
 
-    // Insere apenas o novo ativo (INSERT OR REPLACE é idempotente)
     saveAssetsLocal([newAsset], user?.email || '');
     queueOfflineAction('CREATE_ASSET', newAsset, user?.email || '');
-    logAssetHistory(newId, t('newAsset.onboarding'),
+    logAssetHistory(
+      newId,
+      t('newAsset.onboarding'),
       parentId
         ? t('newAsset.subAssetLinked', { parent: parentTitle || parentId })
-        : t('newAsset.corporateEntry'));
-    
-    // Eagerly push the queue so it saves before any possibility of user logging out
+        : t('newAsset.corporateEntry')
+    );
+
     await pushSyncQueue(user?.email || '');
-    // Background sync the rest, no block
     ApiService.sync(user?.email || '');
-    
-    router.back();
+
+    if (k?.maintenanceIntervalMonths && k?.maintenanceHintKey) {
+      Alert.alert(t('assetJourney.postSaveTitle'), t(k.maintenanceHintKey, { months: k.maintenanceIntervalMonths }), [
+        { text: t('assetJourney.doneBack'), style: 'cancel', onPress: () => router.back() },
+        {
+          text: t('assetJourney.viewProviders'),
+          onPress: () => {
+            router.replace(getPersonaTabHref(activePersona, 'services') as any);
+          },
+        },
+      ]);
+    } else {
+      router.back();
+    }
   };
 
   // UX de Add Custom Field Options
@@ -345,16 +399,26 @@ export default function NewAssetScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: true }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { 
-          if (step === 3) setStep(2);
-          else if (step === 2) { setStep(1); setType(null); }
-          else router.back();
+        <TouchableOpacity onPress={() => {
+          if (step === 1) { setType(null); router.back(); }
+          else goBackStep();
         }} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={C.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-          {parentId ? t('newAsset.subAssetOf', { parent: parentTitle || '...' }) : t('newAsset.title')}
-        </Text>
+        <View style={{ flex: 1, marginHorizontal: 8, alignItems: 'center' }}>
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {parentId ? t('newAsset.subAssetOf', { parent: parentTitle || '...' }) : t('newAsset.title')}
+          </Text>
+          {step > 1 && type && (
+            <Text style={{ fontSize: 8, color: C.textSecondary, fontWeight: '700', marginTop: 2, textAlign: 'center' }} numberOfLines={2}>
+              {t('assetJourney.breadcrumb' as any, {
+                root: t(assetTypes.find((a) => a.id === type)?.titleKey || ''),
+                ctx: industryContextId ? t(`assetJourney.context.${industryContextId}` as any) : '—',
+                kind: selectedKind ? t(selectedKind.labelKey) : t('assetJourney.generic'),
+              })}
+            </Text>
+          )}
+        </View>
         <View style={{ width: 32 }} />
       </View>
 
@@ -395,8 +459,111 @@ export default function NewAssetScreen() {
           </View>
         )}
 
-        {/* PASSO 2: ÍCone e Foto */}
         {step === 2 && type && (
+          <View>
+            <Text style={styles.sectionTitle}>{t('assetJourney.segmentTitle')}</Text>
+            <Text style={styles.sectionDesc}>{t('assetJourney.segmentDesc')}</Text>
+            <View style={styles.gridContainer}>
+              {availableContexts.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.gridItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setIndustryContextId(c.id);
+                    setStep(3);
+                    setKindSearch('');
+                  }}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: c.color + '15' }]}>
+                    <Ionicons name={c.icon as any} size={36} color={c.color} />
+                  </View>
+                  <Text style={styles.modTitle}>{t(c.labelKey)}</Text>
+                  <Text style={styles.modSubtitle}>{t(c.descKey)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {step === 3 && type && industryContextId && (
+          <View style={styles.formContainer}>
+            <Text style={styles.sectionTitle}>{t('assetJourney.kindSearchTitle')}</Text>
+            <Text style={{ fontSize: 10, color: C.textSecondary, marginBottom: 12, fontWeight: '600' }}>{t('assetJourney.kindSearchDesc')}</Text>
+            <TextInput
+              style={styles.modInput}
+              value={kindSearch}
+              onChangeText={setKindSearch}
+              placeholder={t('assetJourney.kindSearchPh')}
+              returnKeyType="search"
+            />
+            {filteredKinds.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: C.textSecondary, marginTop: 20 }}>{t('assetJourney.noKinds')}</Text>
+            ) : (
+              <View style={{ marginTop: 12, maxHeight: 340 }}>
+                {filteredKinds.map((k) => (
+                  <TouchableOpacity
+                    key={k.id}
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 14,
+                      backgroundColor: C.cardWhite,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: C.border,
+                      marginBottom: 10,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                    onPress={() => {
+                      setSelectedKindId(k.id);
+                      setTemplateValues({});
+                      if (!title.trim()) setTitle(t(k.labelKey));
+                      setCustomIcon((k.icon as any) || customIcon);
+                      setCustomColor(k.color || customColor);
+                      setStep(4);
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
+                        backgroundColor: k.color + '18',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Ionicons name={k.icon as any} size={22} color={k.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '900', color: C.primary }}>{t(k.labelKey)}</Text>
+                      <Text style={{ fontSize: 9, color: C.textSecondary, fontWeight: '600', marginTop: 2 }} numberOfLines={2}>
+                        {t(k.shortDescKey)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.genericCtaBtn}
+              activeOpacity={0.88}
+              onPress={() => {
+                setSelectedKindId(null);
+                setTemplateValues({});
+                setStep(4);
+              }}
+            >
+              <Ionicons name="layers-outline" size={20} color={C.primary} style={{ marginRight: 10 }} />
+              <Text style={styles.genericCtaBtnText}>{t('assetJourney.genericCta')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Identidade: nome e ícone */}
+        {step === 4 && type && (
           <View style={styles.formContainer}>
             <View style={styles.selectedTypeBadge}>
                <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={C.primary} />
@@ -417,7 +584,7 @@ export default function NewAssetScreen() {
                <Ionicons name="color-palette-outline" size={18} color={C.primary} />
                <Text style={styles.formSectionTitle}>Identidade Visual</Text>
             </View>
-            <Text style={{fontSize: 10, color: C.textSecondary, marginBottom: 20, marginTop: 4, fontWeight: '700'}}>Escolha um ícone e uma cor que represente este bem.</Text>
+            <Text style={{fontSize: 10, color: C.textSecondary, marginBottom: 20, marginTop: 4, fontWeight: '700'}}>Escolha um ícone e uma cor que represente este ativo.</Text>
 
             {/* Icon Picker Button */}
             <TouchableOpacity
@@ -439,33 +606,100 @@ export default function NewAssetScreen() {
               <Ionicons name="chevron-forward" size={18} color={C.border} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.submitBtn} onPress={() => {
-              if (!title.trim()) {
-                Alert.alert(t('newAsset.requiredAttention'), t('newAsset.requiredAttentionMsg'));
-                return;
-              }
-              setStep(3);
-            }}>
-              <Text style={styles.submitBtnText}>Continuar para a Ficha</Text>
-              <Ionicons name="arrow-forward" size={18} color={C.cardWhite} style={{marginLeft: 8}}/>
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={() => {
+                if (!title.trim()) {
+                  Alert.alert(t('newAsset.requiredAttention'), t('newAsset.requiredAttentionMsg'));
+                  return;
+                }
+                setModuleSelection(buildDefaultModuleSelectionForNewAsset(type as any, getKindById(selectedKindId)));
+                setStep(5);
+              }}
+            >
+              <Text style={styles.submitBtnText}>{t('assetJourney.toModules')}</Text>
+              <Ionicons name="arrow-forward" size={18} color={C.cardWhite} style={{ marginLeft: 8 }} />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* PASSO 3: JORNADA DE CADASTRO (Ficha COMPLETA) */}
-        {step === 3 && type && (
+        {/* Módulos do ativo */}
+        {step === 5 && type && (
+          <View style={styles.formContainer}>
+            <Text style={styles.sectionTitle}>{t('assetJourney.modulesTitle')}</Text>
+            <Text style={styles.sectionDesc}>{t('assetJourney.modulesDesc')}</Text>
+            <Text style={{ fontSize: 10, color: C.textSecondary, marginBottom: 12, fontWeight: '600' }}>
+              {t('assetJourney.modulesHint')}
+            </Text>
+            {OPTIONAL_ASSET_MODULE_IDS.map((mid) => {
+              const lab = MODULE_I18N_BY_ID[mid];
+              return (
+              <View
+                key={mid}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 12,
+                  paddingHorizontal: 4,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: C.border,
+                }}
+              >
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>{t(lab.titleKey as any)}</Text>
+                  <Text style={{ fontSize: 9, color: C.textSecondary, marginTop: 2, fontWeight: '600' }} numberOfLines={2}>
+                    {t(lab.subtitleKey as any)}
+                  </Text>
+                </View>
+                <Switch
+                  value={moduleSelection[mid] === true}
+                  onValueChange={(v) => setModuleSelection((prev) => ({ ...prev, [mid]: v }))}
+                  trackColor={{ false: C.border, true: C.primary }}
+                />
+              </View>
+            );
+            })}
+            <TouchableOpacity
+              style={[styles.submitBtn, { marginTop: 20 }]}
+              onPress={() => setStep(6)}
+            >
+              <Text style={styles.submitBtnText}>{t('assetJourney.toSheet')}</Text>
+              <Ionicons name="arrow-forward" size={18} color={C.cardWhite} style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Ficha completa */}
+        {step === 6 && type && (
           <View style={styles.formContainer}>
             <View style={styles.selectedTypeBadge}>
-               <Ionicons name={assetTypes.find(t=>t.id===type)?.icon as any} size={20} color={C.primary} />
-               <Text style={{fontWeight: '900', color: C.primary, marginLeft: 8, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5}}>
-                  {t('newAsset.selectedCategory')}: {t(assetTypes.find(t2=>t2.id===type)?.titleKey || '')}
-               </Text>
+              <Ionicons name={assetTypes.find((x) => x.id === type)?.icon as any} size={20} color={C.primary} />
+              <Text
+                style={{
+                  fontWeight: '900',
+                  color: C.primary,
+                  marginLeft: 8,
+                  textTransform: 'uppercase',
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                }}
+              >
+                {t('newAsset.selectedCategory')}: {t(assetTypes.find((a) => a.id === type)?.titleKey || '')}
+                {industryContextId
+                  ? ` · ${t(`assetJourney.context.${industryContextId}` as any)}`
+                  : ''}
+                {selectedKind
+                  ? ` · ${t(selectedKind.labelKey)}`
+                  : ` · ${t('assetJourney.generic')}`}
+              </Text>
             </View>
 
-            {/* HEADER 1: Dados Mestres */}
+            <AssetTemplateFieldGroup kind={selectedKind} values={templateValues} onChange={setTemplateValues} />
+
             <View style={styles.formSectionHeader}>
-               <Ionicons name="barcode-outline" size={18} color={C.primary} />
-               <Text style={styles.formSectionTitle}>Identificadores</Text>
+              <Ionicons name="barcode-outline" size={18} color={C.primary} />
+              <Text style={styles.formSectionTitle}>Identificadores</Text>
             </View>
 
             <Text style={styles.modLabel}>{t('newAsset.inventoryCode')}</Text>
@@ -473,7 +707,7 @@ export default function NewAssetScreen() {
                       />
 
             {/* Campos Dinâmicos por Tipo de Ativo (Polimorfismo Brspark) */}
-            {type === 'REAL_ESTATE' ? (
+            {getAssetFormBlock(type) === 'realEstate' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -491,7 +725,7 @@ export default function NewAssetScreen() {
                 <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder={t('newAsset.useTypePlaceholder')} returnKeyType="done"
                       />
               </>
-            ) : type === 'TERRESTRIAL' ? (
+            ) : getAssetFormBlock(type) === 'vehicleLike' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -509,7 +743,7 @@ export default function NewAssetScreen() {
                 <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder={t('newAsset.chassisPlaceholder')} returnKeyType="done"
                       />
               </>
-            ) : type === 'AQUATIC' ? (
+            ) : getAssetFormBlock(type) === 'aquatic' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -527,7 +761,7 @@ export default function NewAssetScreen() {
                 <TextInput style={styles.modInput} value={serialNumber} onChangeText={setSerialNumber} placeholder={t('newAsset.serialPlaceholder')} returnKeyType="done"
                       />
               </>
-            ) : type === 'SPECIAL' ? (
+            ) : getAssetFormBlock(type) === 'collectionLike' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>
                    <View style={{flex: 1}}>
@@ -749,6 +983,20 @@ export default function NewAssetScreen() {
             </View>
           </View>
 
+          <View style={{ paddingHorizontal: 20, paddingBottom: 12, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.divider }}>
+            <Text style={{ fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>BUSCAR NA BIBLIOTECA</Text>
+            <TextInput
+              value={iconSearch}
+              onChangeText={setIconSearch}
+              placeholder="Nome ou palavra (ex.: barco, saúde, wifi…)"
+              placeholderTextColor={C.textLight}
+              style={{ borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 13, backgroundColor: C.surfaceLow, color: C.primary, fontWeight: '600' }}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
           {/* Preview */}
           {customIcon ? (
             <View style={{ alignItems: 'center', paddingVertical: 20, backgroundColor: C.cardWhite, borderBottomWidth: 1, borderBottomColor: C.border }}>
@@ -761,8 +1009,13 @@ export default function NewAssetScreen() {
 
           {/* Icon Grid */}
           <FlatList
-            data={ICON_LIBRARY}
+            data={filteredIconLibrary}
             keyExtractor={item => item.icon}
+            ListEmptyComponent={
+              <Text style={{ textAlign: 'center', color: C.textSecondary, paddingVertical: 24, fontWeight: '600' }}>
+                Nenhum ícone para “{iconSearch.trim()}”. Tente outro termo.
+              </Text>
+            }
             numColumns={4}
             contentContainerStyle={{ padding: 16, gap: 12 }}
             columnWrapperStyle={{ gap: 12 }}
@@ -834,6 +1087,28 @@ function createNewAssetStyles(C: ColorPalette) {
   
   submitBtn: { backgroundColor: C.branding, borderRadius: 12, paddingVertical: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: C.branding, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   submitBtnText: { color: C.cardWhite, fontSize: 13, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  /** Secundário: borda laranja / fundo claro — alinhado ao restante da tela (sem slate) */
+  genericCtaBtn: {
+    marginTop: 16,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.primary + '0A',
+    borderWidth: 1.5,
+    borderColor: C.primary + '55',
+  },
+  genericCtaBtnText: {
+    flex: 1,
+    color: C.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
   
   // Fotos Slider da Vistoria
   photoThumb: { width: 110, height: 110, borderRadius: 12, marginRight: 12, backgroundColor: C.surfaceLow },

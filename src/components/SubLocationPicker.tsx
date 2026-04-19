@@ -159,6 +159,30 @@ const ROOMS_BY_TYPE: Record<string, RoomPreset[]> = {
     { icon: 'flash-outline',              label: 'Motor' },
     { icon: 'pencil-outline',             label: 'Outro...', isCustom: true },
   ],
+  MOBILITY: [
+    { icon: 'car-sport-outline',          label: 'Porta-Malas' },
+    { icon: 'tablet-portrait-outline',    label: 'Painel' },
+    { icon: 'cube-outline',               label: 'Interior' },
+    { icon: 'flash-outline',              label: 'Motor' },
+    { icon: 'pencil-outline',             label: 'Outro...', isCustom: true },
+  ],
+  MACHINERY: [
+    { icon: 'construct-outline',          label: 'Área operacional' },
+    { icon: 'cube-outline',               label: 'Compartimento' },
+    { icon: 'flash-outline',              label: 'Motor / Acionamento' },
+    { icon: 'pencil-outline',             label: 'Outro...', isCustom: true },
+  ],
+  IT: [
+    { icon: 'server-outline',             label: 'Rack / Gabinete' },
+    { icon: 'hardware-chip-outline',      label: 'Sala técnica' },
+    { icon: 'desktop-outline',            label: 'Posto de trabalho' },
+    { icon: 'pencil-outline',             label: 'Outro...', isCustom: true },
+  ],
+  COLLECTIONS: [
+    { icon: 'diamond-outline',            label: 'Vitrine / Exposição' },
+    { icon: 'archive-outline',            label: 'Reserva / Depósito' },
+    { icon: 'pencil-outline',             label: 'Outro...', isCustom: true },
+  ],
   SPECIAL: [
     { icon: 'cube-outline',   label: 'Compartimento A' },
     { icon: 'cube-outline',   label: 'Compartimento B' },
@@ -188,7 +212,10 @@ export function SubLocationPicker({
 }: SubLocationPickerProps) {
   const { colors: C } = useTheme();
   const S = useMemo(() => createSubLocationStyles(C), [C]);
-  const presets = ROOMS_BY_TYPE[parentType] || ROOMS_BY_TYPE.OTHER;
+  const presets =
+    ROOMS_BY_TYPE[parentType] ||
+    (parentType === 'TERRESTRIAL' ? ROOMS_BY_TYPE.MOBILITY : undefined) ||
+    ROOMS_BY_TYPE.OTHER;
 
   const [step,         setStep]         = useState<1 | 2 | 3>(1);
   const [floor,        setFloor]        = useState(initialValue?.floor || '');
@@ -250,7 +277,7 @@ export function SubLocationPicker({
           {/* Header */}
           <View style={S.header}>
             <View style={{ flex: 1 }}>
-              <Text style={S.headerTitle}>📍 Onde está este bem?</Text>
+              <Text style={S.headerTitle}>📍 Onde está este ativo?</Text>
               {childTitle ? <Text style={S.headerSub} numberOfLines={1}>{childTitle}</Text> : null}
             </View>
             <TouchableOpacity onPress={handleClose} style={S.closeBtn}>

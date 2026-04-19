@@ -7,6 +7,7 @@ const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
+const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
 
 const publicRouter = express.Router();
@@ -260,6 +261,16 @@ publicRouter.post('/me/onboarding/submit', authUser, express.json(), async (req,
         resolvedAt: null,
       },
     });
+    deliverBrsparkLaravelEvent({
+      type: EVENT_TYPES.ONBOARDING_SUBMITTED,
+      idempotencyKey: `onboarding-${updated.id}-submitted`,
+      payload: {
+        userId: String(req.user.id),
+        applicationId: updated.id,
+        providerIdentityId: String(providerIdentity.id),
+        status: updated.status,
+      },
+    }).catch((e) => console.warn('[providers] sync onboarding.submitted', e));
     return res.json({ ok: true, status: updated.status, submittedAt: updated.submittedAt });
   } catch (err) {
     return res.status(500).json({ error: err.message });
