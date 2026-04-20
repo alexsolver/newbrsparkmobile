@@ -64,9 +64,12 @@ let isSyncing = false;
 let pendingSyncRequested = false;
 let pendingSyncOwnerEmail: string | undefined = undefined;
 
-const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
+export const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
 const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
 const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
+/** Último ciclo `fullSync` que correu até ao fim (ms epoch); atualizado no final de `fullSync`. */
+export const LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY = '@brspark_last_successful_full_sync_at_ms';
+const TELEMETRY_OUTBOX_KEY = '@brspark_telemetry_outbox';
 const MEDIA_STUCK_ATTEMPT_THRESHOLD = 3;
 
 function normalizeStoredId(v: unknown): string {
@@ -2828,9 +2831,8 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
  * Chamado por pushSyncQueue antes de qualquer outro dado.
  */
 export async function pushTelemetryBatch(): Promise<void> {
-  const TELEMETRY_KEY = '@brspark_telemetry_outbox';
   try {
-    const raw = await AsyncStorage.getItem(TELEMETRY_KEY);
+    const raw = await AsyncStorage.getItem(TELEMETRY_OUTBOX_KEY);
     if (!raw) return;
     let events: unknown;
     try {
